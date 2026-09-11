@@ -1,4 +1,4 @@
-# BUILD.md — CGPT Approval Bridge (CAB)
+# BUILD.md — Codex Approval Bridge (CAB)
 
 ## 1. Objet
 
