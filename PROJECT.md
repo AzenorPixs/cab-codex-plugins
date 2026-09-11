@@ -76,7 +76,7 @@ CAB observe OpenCode par une voie SSE directe indépendante du cycle MCP. Cette 
 
 ### 5.4 Plugin Codex
 
-Le plugin regroupe la skill `cgpt-approval-bridge`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex.
+Le plugin regroupe la skill `cgpt-approval-bridge`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex. Sa marketplace est versionnée à la racine du dépôt dans `.agents/plugins/marketplace.json` et le plugin dans `plugins/cab-approval-bridge/`.
 
 ### 5.5 Commande `/cab`
 

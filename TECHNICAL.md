@@ -8,19 +8,18 @@ Ce document décrit le fonctionnement technique de CAB. Il complète `PROJECT.md
 
 ```text
 CAB/
+├── .agents/plugins/marketplace.json
+├── plugins/cab-approval-bridge/
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/approval-bridge/SKILL.md
+│   └── scripts/
+│       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-healthcheck.mjs
+│       └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── src/
 │   ├── cgpt_approval_bridge_server.py
 │   ├── cgpt_approval_bridge_router.py
 │   └── cgpt_approval_bridge_journal.py
-├── cab-codex-plugins/
-│   ├── .agents/plugins/marketplace.json
-│   └── plugins/cab-approval-bridge/
-│       ├── .codex-plugin/plugin.json
-│       ├── skills/approval-bridge/SKILL.md
-│       └── scripts/
-│           ├── cgpt-approval-bridge-controller.mjs
-│           ├── cgpt-approval-bridge-healthcheck.mjs
-│           └── cgpt-approval-bridge-opencode-sse-client.mjs
 └── .codex/commands/cab.md
 ```
 

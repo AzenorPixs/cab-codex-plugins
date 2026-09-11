@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 const controllerPath = fileURLToPath(
   new URL(
-    "../cab-codex-plugins/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+    "../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
     import.meta.url
   )
 );

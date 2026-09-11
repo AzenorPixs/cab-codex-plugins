@@ -64,12 +64,11 @@ OpenCode ni arrêter le broker MCP géré par OpenCode.
 CAB/
 ├── src/                       # bridge Python
 ├── .codex/commands/cab.md     # commande /cab
-├── cab-codex-plugins/         # marketplace et plugin Codex
-│   ├── .agents/plugins/marketplace.json
-│   └── plugins/cab-approval-bridge/
-│       ├── .codex-plugin/plugin.json
-│       ├── skills/approval-bridge/SKILL.md
-│       └── scripts/
+├── .agents/plugins/marketplace.json # marketplace Codex
+├── plugins/cab-approval-bridge/     # plugin Codex
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/approval-bridge/SKILL.md
+│   └── scripts/
 ├── PROJECT.md                 # architecture générale
 ├── TECHNICAL.md               # fonctionnement technique
 ├── BUILD.md                   # construction et distribution
@@ -166,11 +165,15 @@ CAB expose quatre états :
 
 ## Distribution
 
-Le dépôt contient directement les sources du bridge et du plugin Codex.
+Le dépôt contient directement les sources du bridge et du plugin Codex. La
+marketplace est définie dans `.agents/plugins/marketplace.json` et référence
+le plugin situé dans `plugins/cab-approval-bridge/`.
 
 Aucun paquet Debian ni image Docker CAB n'est actuellement défini. Ces modes pourront être ajoutés ultérieurement après spécification.
 
-Aucun catalogue marketplace n'est actuellement distribué. Le canal de publication du plugin devra être choisi et validé contre le mécanisme Codex retenu avant une release publique.
+Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
+racine, puis importez et synchronisez-le depuis l'administration de votre
+espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker et du plugin est `0.61.0`. Le plugin ajoute un cachebuster Codex pour les installations locales.
 

@@ -6,7 +6,7 @@ Cette capacité définit l'intégration locale de CAB dans Codex et les conditio
 ## Requirements
 
 ### Requirement: Plugin Codex structuré
-Le plugin CAB SHALL être distribué depuis `cab-codex-plugins/`, avec une
+Le plugin CAB SHALL être distribué depuis la racine du dépôt, avec une
 marketplace dans `.agents/plugins/marketplace.json` et un plugin dans
 `plugins/cab-approval-bridge/`. Ce plugin SHALL fournir un manifeste
 `.codex-plugin/plugin.json`, la skill CAB et les scripts de contrôleur,
@@ -18,7 +18,7 @@ healthcheck et SSE dans une arborescence distribuable cohérente.
 
 #### Scenario: Localisation du plugin
 - **WHEN** une distribution CAB est préparée
-- **THEN** la marketplace et le plugin sont pris depuis `cab-codex-plugins/` sans déplacement sous `.codex/`
+- **THEN** la marketplace et le plugin sont pris depuis la racine du dépôt, sans déplacement sous `.codex/`
 
 ### Requirement: Commande de pilotage sûre
 La commande Codex `/cab` SHALL être versionnée dans
