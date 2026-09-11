@@ -15,9 +15,17 @@ Aucun Dockerfile ni format de paquet système n'est actuellement défini dans le
 ```text
 CAB/
 ├── src/                 # bridge Python
+├── cab-codex-plugins/    # marketplace et plugin distribuable Codex
+│   ├── .agents/plugins/marketplace.json
+│   └── plugins/cab-approval-bridge/
+│       ├── .codex-plugin/plugin.json
+│       ├── skills/approval-bridge/SKILL.md
+│       └── scripts/
+│           ├── cgpt-approval-bridge-controller.mjs
+│           ├── cgpt-approval-bridge-healthcheck.mjs
+│           └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── codex/
-│   ├── commands/        # commande /cab
-│   └── plugin/          # plugin distribuable Codex
+│   └── commands/        # commande /cab
 ├── PROJECT.md
 ├── TECHNICAL.md
 ├── BUILD.md
@@ -71,21 +79,24 @@ Le broker doit disposer d'un espace persistant en écriture pour son magasin, so
 
 ## 6. Installation du plugin Codex
 
-La source du plugin se trouve sous :
+La source de la marketplace et du plugin se trouve sous :
 
 ```text
-codex/plugin/
+cab-codex-plugins/
 ```
 
-Elle contient :
+Le plugin publié se trouve sous :
 
 ```text
+cab-codex-plugins/plugins/cab-approval-bridge/
 .codex-plugin/plugin.json
-skills/cgpt-approval-bridge/SKILL.md
+skills/approval-bridge/SKILL.md
 scripts/cgpt-approval-bridge-controller.mjs
 scripts/cgpt-approval-bridge-healthcheck.mjs
 scripts/cgpt-approval-bridge-opencode-sse-client.mjs
 ```
+
+Le catalogue `cab-codex-plugins/.agents/plugins/marketplace.json` référence ce plugin.
 
 La commande `/cab` est maintenue séparément dans :
 

@@ -1,0 +1,20 @@
+{
+  "name": "cab_codex_plugins",
+  "interface": {
+    "displayName": "Cab Codex Plugins"
+  },
+  "plugins": [
+    {
+      "name": "cab-approval-bridge",
+      "source": {
+        "source": "local",
+        "path": "./plugins/cab-approval-bridge"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

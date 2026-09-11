@@ -1,5 +1,5 @@
 ---
-name: cgpt-approval-bridge
+name: approval-bridge
 description: Met en place, teste et supervise le dialogue OpenCode–CGPT via broker MCP stdio, contrôleur local et SSE OpenCode, sans déléguer les décisions.
 ---
 
