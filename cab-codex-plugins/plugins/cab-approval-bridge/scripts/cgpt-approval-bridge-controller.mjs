@@ -1,8 +1,18 @@
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
+import { isAbsolute } from "node:path";
 import readline from "node:readline";
 
 const workspace = process.env.OC_CGPT_WORKSPACE;
+const allowedStatusHosts = new Set([
+  "127.0.0.1",
+  "::1",
+]);
+const allowedWorkspaces = new Set([
+  "/workspace",
+  "/home/devops/datas/cab",
+]);
+
 if (process.env.OC_CGPT_OUTSIDE_SANDBOX !== "1") {
   throw new Error(
     "Le contrôleur CGPT doit être exécuté hors sandbox (OC_CGPT_OUTSIDE_SANDBOX=1)."
@@ -21,6 +31,18 @@ const reconnectMs = Number(process.env.OC_CGPT_RECONNECT_MS || "1000");
 if (!workspace) {
   throw new Error(
     "OC_CGPT_WORKSPACE doit désigner la racine absolue autorisée du projet."
+  );
+}
+
+if (!isAbsolute(workspace) || !allowedWorkspaces.has(workspace)) {
+  throw new Error(
+    "OC_CGPT_WORKSPACE doit être une racine CAB absolue autorisée."
+  );
+}
+
+if (!allowedStatusHosts.has(statusHost)) {
+  throw new Error(
+    "OC_CGPT_STATUS_HOST doit être une adresse loopback autorisée."
   );
 }
 

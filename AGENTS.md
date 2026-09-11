@@ -3,15 +3,20 @@
 ## 1. Contexte
 
 * Projet : `CGPT Approval Bridge` ;
-* Racine : `/workspace` ;
+* Racine pour les agents conteneurisé : `/workspace` ;
+* Racine pour les agents non conteneurisé : `/home/devops/datas/cab` ;
 * Règles de sécurité et de travails des LLM : `AGENTS.md` ;
 * Objectifs et architecture du projet : `PROJECT.md` ;
 * Cadrage technique : `TECHNICAL.md` ;
-* Cadrage de conteneurisation : `BUILD.md` ;
+* Cadrage de déploiement : `BUILD.md` 
 
-Toutes les opérations DOIVENT être réalisées relativement à `/workspace`.
+Les deux racines désignent le même projet lorsqu'un montage conteneurisé est
+configuré. Toute opération DOIT utiliser la racine correspondant à son
+environnement d'exécution : `/workspace` pour un agent conteneurisé ou
+`/home/devops/datas/cab` pour un agent non conteneurisé.
 
-L'agent NE DOIT PAS créer, modifier ou supprimer de fichier hors de `/workspace` sans validation explicite du développeur.
+L'agent NE DOIT PAS créer, modifier ou supprimer de fichier hors de la racine
+applicable à son environnement sans validation explicite du développeur.
 
 TECHNICAL.md et BUILD.md ne sont pas nécessairement présents, et restent complémentaires et optionnelles.
 
