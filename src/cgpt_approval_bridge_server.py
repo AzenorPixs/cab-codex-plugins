@@ -2306,19 +2306,19 @@ def decision_fingerprint(decision):
 
 
 def controller_decision(item):
-    approval_id = item.get(
-        "approval_id",
+    request_id = item.get(
+        "requestId",
         "",
     )
 
-    if not approval_id:
+    if not request_id:
         return None
 
     url = (
         controller_url()
         + "/decision/"
         + parse.quote(
-            approval_id,
+            request_id,
             safe="",
         )
     )
@@ -2705,6 +2705,10 @@ def validate_controller_decision(
         "approval_id"
     )
 
+    request_id = item.get(
+        "requestId"
+    )
+
     change_id = item.get(
         "change_id"
     )
@@ -2722,24 +2726,30 @@ def validate_controller_decision(
     )
 
     if (
-        decision_approval_id is not None
-        and decision_approval_id
-        != approval_id
-    ):
-        return False
-
-    if (
-        decision_request_id is not None
-        and not request_id_matches_item(
-            item,
-            decision_request_id,
+        not isinstance(
+            approval_id,
+            str,
         )
+        or not approval_id
+        or not isinstance(
+            request_id,
+            str,
+        )
+        or not request_id
+        or not isinstance(
+            change_id,
+            str,
+        )
+        or not change_id
     ):
         return False
 
     if (
-        decision_change_id is not None
-        and decision_change_id
+        decision_approval_id
+        != approval_id
+        or decision_request_id
+        != request_id
+        or decision_change_id
         != change_id
     ):
         return False

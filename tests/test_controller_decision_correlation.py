@@ -1,0 +1,121 @@
+import json
+import sys
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+sys.path.insert(
+    0,
+    str(
+        Path(__file__).resolve().parents[1]
+        / "src"
+    ),
+)
+
+import cgpt_approval_bridge_server as bridge
+
+
+class FakeResponse:
+    status = 200
+
+    def __init__(self, payload):
+        self.payload = payload
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
+    def read(self):
+        return json.dumps(
+            self.payload
+        ).encode("utf-8")
+
+
+class ControllerDecisionCorrelationTest(
+    unittest.TestCase,
+):
+    def setUp(self):
+        self.item = {
+            "approval_id": "approval-123",
+            "change_id": "change-789",
+            "requestId": "request-456",
+        }
+
+    def test_poll_uses_request_id(self):
+        observed = []
+        payload = {
+            "approval_id": "approval-123",
+            "change_id": "change-789",
+            "decision": "approved",
+            "requestId": "request-456",
+        }
+
+        def fake_urlopen(url, timeout):
+            observed.append((url, timeout))
+            return FakeResponse(payload)
+
+        with (
+            patch.object(
+                bridge,
+                "controller_url",
+                return_value="http://controller",
+            ),
+            patch.object(
+                bridge.request,
+                "urlopen",
+                side_effect=fake_urlopen,
+            ),
+            patch.object(bridge, "journal_controller_event"),
+            patch.object(bridge, "note_session_activity"),
+        ):
+            decision = bridge.controller_decision(self.item)
+
+        self.assertEqual(
+            observed[0][0],
+            "http://controller/decision/request-456",
+        )
+        self.assertEqual(decision, payload)
+
+    def test_requires_all_matching_identifiers(self):
+        matching = {
+            "approval_id": "approval-123",
+            "change_id": "change-789",
+            "decision": "approved",
+            "requestId": "request-456",
+        }
+
+        self.assertTrue(
+            bridge.validate_controller_decision(
+                self.item,
+                matching,
+            )
+        )
+
+        for field in (
+            "approval_id",
+            "change_id",
+            "requestId",
+        ):
+            incomplete = matching.copy()
+            incomplete.pop(field)
+            self.assertFalse(
+                bridge.validate_controller_decision(
+                    self.item,
+                    incomplete,
+                )
+            )
+
+        mismatched = matching.copy()
+        mismatched["approval_id"] = "approval-999"
+        self.assertFalse(
+            bridge.validate_controller_decision(
+                self.item,
+                mismatched,
+            )
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()
