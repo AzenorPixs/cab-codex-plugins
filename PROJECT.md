@@ -142,7 +142,40 @@ CAB peut évoluer vers de nouveaux diagnostics, remédiations contrôlées, méc
 
 CAB n'a pas vocation à remplacer OpenCode ou CGPT, fournir un système d'authentification, exposer un MCP public, modifier automatiquement le code d'un projet, approuver implicitement une action ou stocker des secrets applicatifs.
 
-## 13. Documents complémentaires
+## 14. Chaîne de développement
+
+Outils :
+
+* OpenSpec : spécifications ;
+* OpenCode : agent de codage ;
+* Codex    : orchestrateur ;
+* Git local et distant : versionnement ;
+* VS Code / Geany : développement ;
+
+Architecture :
+
+```text
+                    Développeur
+                        │
+            interaction / validation
+                        │
+             ┌──────────┴──────────┐
+             ▼                     ▼
+         OpenCode               Codex
+      Agent de codage        Orchestrateur
+             ▲                     │
+             └──── Bridge MCP ─────┘
+                                   │
+                                   ▼
+                                  GPT
+                     Analyse / Revue / Validation
+```
+
+OpenCode reste l'agent de codage du projet.
+
+Codex intervient en analyse, en revue de code, et en validateur.
+
+## 15. Documents complémentaires
 
 - `AGENTS.md` : règles applicables aux agents ;
 - `TECHNICAL.md` : fonctionnement technique et configuration ;
@@ -150,3 +183,5 @@ CAB n'a pas vocation à remplacer OpenCode ou CGPT, fournir un système d'authen
 - `README.md` : présentation publique synthétique ;
 - `CHANGELOG.md` : historique des évolutions ;
 - `openspec/specs/` : contrats fonctionnels et techniques normatifs.
+
+## 16. Documentation officiel
