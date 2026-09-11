@@ -79,8 +79,8 @@ OpenCode ni arrêter le broker MCP géré par OpenCode.
 
 ```text
 CAB/
-├── src/                       # bridge Python
-├── .codex/commands/cab.md     # commande /cab
+├── src/                       # bridge Python initié par OpenCode
+├── .codex/commands/cab.md     # commande /cab pour Codex
 ├── .agents/plugins/marketplace.json # marketplace Codex
 ├── plugins/cab-approval-bridge/     # plugin Codex
 │   ├── .codex-plugin/plugin.json
@@ -89,7 +89,7 @@ CAB/
 ├── PROJECT.md                 # architecture générale
 ├── TECHNICAL.md               # fonctionnement technique
 ├── BUILD.md                   # construction et distribution
-└── CHANGELOG.md
+└── CHANGELOG.md               # Suivi de versions
 ```
 
 ## Prérequis
@@ -185,8 +185,6 @@ CAB expose quatre états :
 Le dépôt contient directement les sources du bridge et du plugin Codex. La
 marketplace est définie dans `.agents/plugins/marketplace.json` et référence
 le plugin situé dans `plugins/cab-approval-bridge/`.
-
-Aucun paquet Debian ni image Docker CAB n'est actuellement défini. Ces modes pourront être ajoutés ultérieurement après spécification.
 
 Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
