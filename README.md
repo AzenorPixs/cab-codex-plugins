@@ -1,4 +1,4 @@
-# Codex Approval Bridge — CAB
+# Codex Approval Bridge — CAB - 100% IA
 
 **CAB - Codex-Approval-Bridge** relie OpenCode et Codex pour fournir un cycle de validation explicite, persistant, observable et résilient.
 
