@@ -27,9 +27,7 @@
 	},
 	"permission": {
 		"*": "ask",
-		"cgpt-validation_request_validation": "allow",
-		"cgpt-validation_poll_approval": "allow",
-		"cgpt-validation_get_approval": "allow",
+		"cgpt-validation_*": "allow",
 		"skill": {
 			"*": "ask",
 			"openspec-*": "allow"
@@ -42,12 +40,6 @@
 			"bash -n *": "allow",
 			"cat": "allow",
 			"cat *": "allow",
-			"cgpt-validation_request_validation": "allow",
-			"cgpt-validation_request_validation *": "allow",
-			"cgpt-validation_poll_approval": "allow",
-			"cgpt-validation_poll_approval *": "allow",
-			"cgpt-validation_get_approval": "allow",
-			"cgpt-validation_get_approval *": "allow",
 			"chmod": "ask",
 			"chmod *": "ask",
 			"chown": "ask",

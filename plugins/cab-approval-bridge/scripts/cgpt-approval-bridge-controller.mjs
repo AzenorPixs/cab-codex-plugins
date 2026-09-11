@@ -56,6 +56,7 @@ const turns = new Map();
 const active = new Map();
 const answered = new Set();
 const httpDecisions = new Map();
+const validations = new Map();
 
 const status = {
   startedAt: new Date().toISOString(),
@@ -437,6 +438,10 @@ async function handleValidation(request) {
     !request ||
     typeof request.requestId !==
       "string" ||
+    typeof request.approvalId !==
+      "string" ||
+    typeof request.changeId !==
+      "string" ||
     typeof request.summary !== "string"
   ) {
     return;
@@ -494,10 +499,12 @@ async function handleValidation(request) {
       );
     }
 
-    httpDecisions.set(
-      request.requestId,
-      decision
-    );
+    httpDecisions.set(request.requestId, {
+      ...decision,
+      requestId: request.requestId,
+      approval_id: request.approvalId,
+      change_id: request.changeId,
+    });
 
     answered.add(
       request.requestId
@@ -806,16 +813,37 @@ createServer(
           payload.approval;
 
         const requestId =
-          approval?.requestId ||
+          approval?.requestId;
+
+        const approvalId =
           approval?.approval_id;
+
+        const changeId =
+          approval?.change_id;
 
         if (
           !requestId ||
-          typeof requestId !==
-            "string"
+          typeof requestId !== "string" ||
+          !approvalId ||
+          typeof approvalId !== "string" ||
+          !changeId ||
+          typeof changeId !== "string"
         ) {
           throw new Error(
-            "requestId absent."
+            "Identifiants de validation absents."
+          );
+        }
+
+        const previous =
+          validations.get(requestId);
+
+        if (
+          previous &&
+          (previous.approvalId !== approvalId ||
+            previous.changeId !== changeId)
+        ) {
+          throw new Error(
+            "requestId déjà associé à une autre validation."
           );
         }
 
@@ -839,10 +867,23 @@ createServer(
                 ? approval.title
                 : "Validation OpenCode";
 
-          void handleValidation({
+          const validation = {
             requestId,
+            approvalId,
+            changeId,
             summary,
-          });
+          };
+
+          validations.set(
+            requestId,
+            validation
+          );
+
+          void handleValidation(validation);
+        } else if (!previous) {
+          throw new Error(
+            "Validation existante sans identité corrélée."
+          );
         }
 
         response.writeHead(
@@ -943,10 +984,23 @@ createServer(
             );
           }
 
-          httpDecisions.set(
+          const validation =
+            validations.get(requestId);
+
+          if (!validation) {
+            throw new Error(
+              "Validation inconnue."
+            );
+          }
+
+          httpDecisions.set(requestId, {
+            ...decision,
             requestId,
-            decision
-          );
+            approval_id:
+              validation.approvalId,
+            change_id:
+              validation.changeId,
+          });
 
           const entry =
             active.get(requestId);
