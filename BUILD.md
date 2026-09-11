@@ -16,16 +16,15 @@ Aucun Dockerfile ni format de paquet système n'est actuellement défini dans le
 
 ```text
 CAB/
+├── .agents/plugins/marketplace.json # marketplace Codex distribuable
+├── plugins/cab-approval-bridge/      # plugin Codex distribuable
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/approval-bridge/SKILL.md
+│   └── scripts/
+│       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-healthcheck.mjs
+│       └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── src/                 # bridge Python
-├── cab-codex-plugins/    # marketplace et plugin distribuable Codex
-│   ├── .agents/plugins/marketplace.json
-│   └── plugins/cab-approval-bridge/
-│       ├── .codex-plugin/plugin.json
-│       ├── skills/approval-bridge/SKILL.md
-│       └── scripts/
-│           ├── cgpt-approval-bridge-controller.mjs
-│           ├── cgpt-approval-bridge-healthcheck.mjs
-│           └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── .codex/
 │   └── commands/        # commande /cab
 ├── PROJECT.md
@@ -81,16 +80,17 @@ Le broker doit disposer d'un espace persistant en écriture pour son magasin, so
 
 ## 6. Installation du plugin Codex
 
-La source de la marketplace et du plugin se trouve sous :
+La source de la marketplace et du plugin se trouve à la racine du dépôt :
 
 ```text
-cab-codex-plugins/
+.agents/plugins/marketplace.json
+plugins/cab-approval-bridge/
 ```
 
 Le plugin publié se trouve sous :
 
 ```text
-cab-codex-plugins/plugins/cab-approval-bridge/
+plugins/cab-approval-bridge/
 .codex-plugin/plugin.json
 skills/approval-bridge/SKILL.md
 scripts/cgpt-approval-bridge-controller.mjs
@@ -98,7 +98,7 @@ scripts/cgpt-approval-bridge-healthcheck.mjs
 scripts/cgpt-approval-bridge-opencode-sse-client.mjs
 ```
 
-Le catalogue `cab-codex-plugins/.agents/plugins/marketplace.json` référence ce plugin.
+Le catalogue `.agents/plugins/marketplace.json` référence ce plugin.
 
 La commande Codex `/cab` est maintenue séparément dans :
 
@@ -128,7 +128,11 @@ Les numéros de version du broker et du plugin doivent être synchronisés ou le
 
 ## 8. Publication du plugin
 
-Aucun catalogue marketplace n'est actuellement distribué avec CAB. Le canal de publication et son format devront être retenus et validés contre la documentation Codex avant une release publique ; ils ne doivent pas être simulés par un manifeste vide.
+CAB distribue une marketplace Codex dans `.agents/plugins/marketplace.json`.
+Pour une marketplace GitHub privée, ce fichier et `plugins/` doivent être
+publiés à la racine d'un dépôt GitHub privé. L'administrateur de l'espace de
+travail importe ensuite ce dépôt et le synchronise ; le compte GitHub connecté
+doit disposer d'un accès en lecture au dépôt.
 
 ## 9. Forge et distribution Git
 
