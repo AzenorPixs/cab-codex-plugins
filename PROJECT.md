@@ -80,9 +80,15 @@ Le plugin regroupe la skill `cgpt-approval-bridge`, les scripts du contrôleur e
 
 ### 5.5 Commande `/cab`
 
-- `/cab start` : initialiser ou reprendre le dispositif ;
-- `/cab test` : vérifier le chemin complet de validation ;
-- `/cab stop` : arrêter les ressources CAB concernées sans arrêter arbitrairement OpenCode.
+`/cab` est une commande destinée à l'agent Codex et versionnée avec CAB dans
+`.codex/commands/cab.md`. Elle orchestre l'exploitation du dispositif de
+communication entre le broker MCP et l'agent Codex ; elle ne rend aucune
+décision d'approbation.
+
+- `/cab start` : initialise ou reprend le contrôleur et la supervision CAB ;
+- `/cab test` : vérifie le chemin complet de validation ;
+- `/cab stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
+  arrêter OpenCode ni le broker MCP géré par OpenCode.
 
 ## 6. Readiness
 
@@ -123,7 +129,8 @@ OpenSpec est la source de vérité normative des capacités CAB. La décompositi
 - `approval-persistence` : magasin durable, journal intègre et reprise ;
 - `controller-transport` : contrôleur CGPT local et contrat HTTP ;
 - `supervision-remediation` : readiness, SSE et remédiations contrôlées ;
-- `codex-integration-distribution` : plugin Codex, commande `/cab` et distribution.
+- `codex-integration-distribution` : plugin Codex, commande d'orchestration
+  `/cab` et distribution.
 
 Les spécifications détaillent les comportements attendus ; ce document conserve le cadrage architectural général.
 

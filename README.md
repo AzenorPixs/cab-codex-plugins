@@ -40,26 +40,36 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Commande `/cab`
 
+`/cab` est une commande de l'agent Codex versionnée avec CAB. Elle orchestre
+la communication entre le broker MCP et l'agent Codex ; elle ne prend jamais
+de décision d'approbation.
+
 ```text
 /cab start
 /cab test
 /cab stop
 ```
 
-`/cab start` initialise et vérifie le dispositif.
+`/cab start` initialise ou reprend le contrôleur et la supervision CAB, puis
+vérifie le dispositif.
 
 `/cab test` réalise un test non destructif du chemin complet OpenCode → MCP → CAB → CGPT → CAB → OpenCode.
 
-`/cab stop` arrête les ressources de supervision CAB sans fermer arbitrairement OpenCode.
+`/cab stop` arrête uniquement les ressources CAB qu'elle a créées, sans fermer
+OpenCode ni arrêter le broker MCP géré par OpenCode.
 
 ## Organisation du dépôt
 
 ```text
 CAB/
 ├── src/                       # bridge Python
-├── codex/
-│   ├── commands/cab.md        # commande /cab
-│   └── plugin/                # plugin + skill + scripts
+├── .codex/commands/cab.md     # commande /cab
+├── cab-codex-plugins/         # marketplace et plugin Codex
+│   ├── .agents/plugins/marketplace.json
+│   └── plugins/cab-approval-bridge/
+│       ├── .codex-plugin/plugin.json
+│       ├── skills/approval-bridge/SKILL.md
+│       └── scripts/
 ├── PROJECT.md                 # architecture générale
 ├── TECHNICAL.md               # fonctionnement technique
 ├── BUILD.md                   # construction et distribution
@@ -123,10 +133,10 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 
 | Variable | Rôle |
 |---|---|
-| `OC_CGPT_WORKSPACE` | workspace autorisé |
+| `OC_CGPT_WORKSPACE` | workspace CAB autorisé : `/workspace` ou `/home/devops/datas/cab` |
 | `OC_CGPT_OUTSIDE_SANDBOX` | impose l'exécution hors sandbox |
 | `OC_CGPT_OPENCODE_URL` | URL locale OpenCode |
-| `OC_CGPT_STATUS_HOST` | adresse d'écoute du contrôleur |
+| `OC_CGPT_STATUS_HOST` | adresse loopback du contrôleur : `127.0.0.1` ou `::1` |
 | `OC_CGPT_STATUS_PORT` | port local du contrôleur |
 | `OC_CGPT_RECONNECT_MS` | délai de reconnexion SSE |
 | `OC_CGPT_CONTROLLER_URL` | endpoint de statut utilisé par le healthcheck |

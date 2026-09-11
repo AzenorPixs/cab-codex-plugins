@@ -21,8 +21,11 @@ CAB/
 │           ├── cgpt-approval-bridge-controller.mjs
 │           ├── cgpt-approval-bridge-healthcheck.mjs
 │           └── cgpt-approval-bridge-opencode-sse-client.mjs
-└── codex/commands/cab.md
+└── .codex/commands/cab.md
 ```
+
+`.codex/commands/cab.md` est la définition versionnée de la commande Codex
+`/cab`. Elle n'est ni un serveur MCP ni un mécanisme de décision métier.
 
 ## 3. Broker MCP
 
@@ -88,9 +91,18 @@ Une absence de décision ne vaut jamais approbation.
 
 ## 7. Contrôleur CGPT
 
-Le contrôleur est un programme Node.js exécuté hors sandbox. Il exige `OC_CGPT_OUTSIDE_SANDBOX=1` et un workspace autorisé, lance `codex app-server`, crée un thread Codex en lecture seule, reçoit les demandes du broker, obtient une décision structurée, conserve les décisions pour le sondage du broker, expose une interface HTTP locale et supervise le SSE direct OpenCode.
+Le contrôleur est un programme Node.js exécuté hors sandbox. Il exige
+`OC_CGPT_OUTSIDE_SANDBOX=1` et un workspace CAB absolu autorisé (`/workspace`
+ou `/home/devops/datas/cab`), lance `codex app-server`, crée un thread Codex en
+lecture seule, reçoit les demandes du broker, obtient une décision structurée,
+conserve les décisions pour le sondage du broker, expose une interface HTTP
+locale et supervise le SSE direct OpenCode.
 
-L'interface locale écoute par défaut sur `127.0.0.1:8788`. Ce port n'est pas un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST /validation/request` et `GET` ou `POST /decision/<requestId>` ; les décisions admises sont `approved`, `rejected` et `needs_clarification`.
+L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
+admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas
+un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST
+/validation/request` et `GET` ou `POST /decision/<requestId>` ; les décisions
+admises sont `approved`, `rejected` et `needs_clarification`.
 
 ## 8. Supervision OpenCode
 
@@ -181,10 +193,10 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 
 ## 15. Variables du contrôleur et du healthcheck
 
-- `OC_CGPT_WORKSPACE`
+- `OC_CGPT_WORKSPACE` : `/workspace` ou `/home/devops/datas/cab` uniquement
 - `OC_CGPT_OUTSIDE_SANDBOX`
 - `OC_CGPT_OPENCODE_URL`
-- `OC_CGPT_STATUS_HOST`
+- `OC_CGPT_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
 - `OC_CGPT_STATUS_PORT`
 - `OC_CGPT_RECONNECT_MS`
 - `OC_CGPT_CONTROLLER_URL`
@@ -193,9 +205,17 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 
 ## 16. Commande `/cab`
 
-- `/cab start` initialise et vérifie le dispositif ;
-- `/cab test` réalise un test non destructif ;
-- `/cab stop` retire les ressources CAB sans arrêter directement le broker géré par OpenCode ni fermer arbitrairement OpenCode.
+La commande Codex `/cab`, définie dans `.codex/commands/cab.md`, orchestre le
+cycle de vie des ressources de communication CAB. Elle ne remplace pas le
+broker, ne rend pas de décision d'approbation et ne modifie pas le projet
+piloté.
+
+- `/cab start` initialise ou reprend le contrôleur et la supervision, puis
+  vérifie le dispositif ;
+- `/cab test` réalise un test non destructif du chemin de validation complet ;
+- `/cab stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
+  doit ni arrêter directement le broker géré par OpenCode ni fermer
+  arbitrairement OpenCode.
 
 ## 17. Secrets
 

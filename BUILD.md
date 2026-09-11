@@ -6,7 +6,9 @@ Ce document définit le cadrage de construction, d'installation, de packaging et
 
 ## 2. État actuel de la distribution
 
-CAB est actuellement un dépôt source autonome comprenant le broker Python, le plugin Codex, la skill, la commande `/cab` et les scripts Node.js de contrôle et de supervision.
+CAB est actuellement un dépôt source autonome comprenant le broker Python, le
+plugin Codex, la skill, la commande Codex versionnée `/cab` et les scripts
+Node.js de contrôle et de supervision.
 
 Aucun Dockerfile ni format de paquet système n'est actuellement défini dans les sources CAB. Une image Docker ou un paquet Debian ne constitue donc pas encore un mode de distribution du projet.
 
@@ -24,7 +26,7 @@ CAB/
 │           ├── cgpt-approval-bridge-controller.mjs
 │           ├── cgpt-approval-bridge-healthcheck.mjs
 │           └── cgpt-approval-bridge-opencode-sse-client.mjs
-├── codex/
+├── .codex/
 │   └── commands/        # commande /cab
 ├── PROJECT.md
 ├── TECHNICAL.md
@@ -98,11 +100,15 @@ scripts/cgpt-approval-bridge-opencode-sse-client.mjs
 
 Le catalogue `cab-codex-plugins/.agents/plugins/marketplace.json` référence ce plugin.
 
-La commande `/cab` est maintenue séparément dans :
+La commande Codex `/cab` est maintenue séparément dans :
 
 ```text
-codex/commands/cab.md
+.codex/commands/cab.md
 ```
+
+Cet artefact orchestre `start`, `test` et `stop` pour les ressources CAB. Il
+doit être distribué et installé avec son plugin et sa skill, sans prendre en
+charge la décision métier ni le cycle de vie direct du broker MCP OpenCode.
 
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.
 
