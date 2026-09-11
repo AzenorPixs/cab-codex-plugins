@@ -1,14 +1,14 @@
-# PROJECT.md — CGPT Approval Bridge (CAB)
+# PROJECT.md — Codex Approval Bridge (CAB)
 
 ## 1. Objet
 
-CGPT Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **CGPT**.
+Codex Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **Codex**.
 
-CAB permet à OpenCode de soumettre à CGPT des demandes de validation explicites pendant une session de travail, puis de recevoir une décision corrélée. Le pont transporte, persiste et supervise ces échanges sans décider à la place de CGPT et sans modifier le projet piloté.
+CAB permet à OpenCode de soumettre à Codex des demandes de validation explicites pendant une session de travail, puis de recevoir une décision corrélée. Le pont transporte, persiste et supervise ces échanges sans décider à la place de Codex et sans modifier le projet piloté.
 
 ## 2. Finalité
 
-CAB vise un pilotage OpenCode–CGPT explicite, observable, traçable, persistant, résilient aux interruptions, contrôlable et indépendant du projet suivi.
+CAB vise un pilotage OpenCode–Codex explicite, observable, traçable, persistant, résilient aux interruptions, contrôlable et indépendant du projet suivi.
 
 CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni un moteur de décision autonome, ni une source de vérité fonctionnelle du projet piloté.
 
@@ -18,14 +18,14 @@ CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni u
 
 1. **OpenCode** réalise le travail et émet les demandes de validation.
 2. **Le broker CAB** transporte, corrèle, persiste et restitue les validations.
-3. **Le contrôleur CGPT** sollicite CGPT et conserve la décision destinée au broker.
+3. **Le contrôleur Codex** sollicite Codex et conserve la décision destinée au broker.
 4. **La supervision CAB** observe l'ensemble et expose un état synthétique.
 
 ### 3.2 Broker neutre
 
 Le broker peut recevoir, corréler, persister, notifier, récupérer une décision, la restituer et effectuer des remédiations techniques explicitement autorisées.
 
-Il ne doit jamais décider à la place de CGPT, transformer une absence de réponse en approbation, modifier le projet OpenCode ou lancer un travail de développement.
+Il ne doit jamais décider à la place de Codex, transformer une absence de réponse en approbation, modifier le projet OpenCode ou lancer un travail de développement.
 
 ### 3.3 Corrélation explicite
 
@@ -46,14 +46,14 @@ OpenCode
    │
    │ MCP stdio local
    ▼
-CGPT Approval Bridge
+Codex Approval Bridge
    │
    │ HTTP local
    ▼
-Contrôleur CGPT
+Contrôleur Codex
    │
    ▼
-CGPT / Codex App Server
+Codex / Codex App Server
 
 OpenCode ───────── SSE HTTP direct ─────────► supervision CAB
 ```
@@ -66,9 +66,9 @@ Le transport entre OpenCode et le broker est exclusivement **MCP stdio local**. 
 
 Le broker constitue le cœur de CAB. Il gère les validations, la corrélation, la persistance, le journal, les expirations, la reprise, la readiness, le diagnostic et les remédiations techniques contrôlées.
 
-### 5.2 Contrôleur CGPT
+### 5.2 Contrôleur Codex
 
-Le contrôleur reçoit les demandes du broker, sollicite CGPT dans un contexte de validation dédié et rend les décisions disponibles au broker. Il ne remplace pas le broker et ne modifie pas le projet suivi.
+Le contrôleur reçoit les demandes du broker, sollicite Codex dans un contexte de validation dédié et rend les décisions disponibles au broker. Il ne remplace pas le broker et ne modifie pas le projet suivi.
 
 ### 5.3 Supervision
 
@@ -84,7 +84,7 @@ Le plugin regroupe la skill `cgpt-approval-bridge`, les scripts du contrôleur e
 `.codex/commands/cab.md`. Elle orchestre l'exploitation du dispositif de
 communication entre le broker MCP et l'agent Codex ; elle ne rend aucune
 décision d'approbation.
-
+TECHNICAL.md — protocoles, persistance, supervision et configuration 
 - `/cab start` : initialise ou reprend le contrôleur et la supervision CAB ;
 - `/cab test` : vérifie le chemin complet de validation ;
 - `/cab stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
@@ -127,7 +127,7 @@ OpenSpec est la source de vérité normative des capacités CAB. La décompositi
 
 - `approval-workflow` : demandes, corrélation et décisions explicites ;
 - `approval-persistence` : magasin durable, journal intègre et reprise ;
-- `controller-transport` : contrôleur CGPT local et contrat HTTP ;
+- `controller-transport` : contrôleur Codex local et contrat HTTP ;
 - `supervision-remediation` : readiness, SSE et remédiations contrôlées ;
 - `codex-integration-distribution` : plugin Codex, commande d'orchestration
   `/cab` et distribution.
@@ -140,7 +140,7 @@ CAB peut évoluer vers de nouveaux diagnostics, remédiations contrôlées, méc
 
 ## 13. Hors périmètre
 
-CAB n'a pas vocation à remplacer OpenCode ou CGPT, fournir un système d'authentification, exposer un MCP public, modifier automatiquement le code d'un projet, approuver implicitement une action ou stocker des secrets applicatifs.
+CAB n'a pas vocation à remplacer OpenCode ou Codex, fournir un système d'authentification, exposer un MCP public, modifier automatiquement le code d'un projet, approuver implicitement une action ou stocker des secrets applicatifs.
 
 ## 14. Chaîne de développement
 

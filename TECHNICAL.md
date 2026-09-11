@@ -1,4 +1,4 @@
-# TECHNICAL.md — CGPT Approval Bridge (CAB)
+# TECHNICAL.md — Codex Approval Bridge (CAB)
 
 ## 1. Objet
 
@@ -80,7 +80,7 @@ OpenCode
   → request_validation
   → broker : validation + requestId + persistance PENDING
   → POST local vers le contrôleur
-  → décision CGPT
+  → décision Codex
   → GET /decision/<requestId> par le broker
   → corrélation + persistance + journal
   → réponse MCP corrélée vers OpenCode
@@ -88,10 +88,10 @@ OpenCode
 
 Une absence de décision ne vaut jamais approbation.
 
-## 7. Contrôleur CGPT
+## 7. Contrôleur Codex
 
 Le contrôleur est un programme Node.js exécuté hors sandbox. Il exige
-`OC_CGPT_OUTSIDE_SANDBOX=1` et un workspace CAB absolu autorisé (`/workspace`
+`OC_Codex_OUTSIDE_SANDBOX=1` et un workspace CAB absolu autorisé (`/workspace`
 ou `/home/devops/datas/cab`), lance `codex app-server`, crée un thread Codex en
 lecture seule, reçoit les demandes du broker, obtient une décision structurée,
 conserve les décisions pour le sondage du broker, expose une interface HTTP
@@ -158,48 +158,48 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 
 ### Persistance et journal
 
-- `CGPT_APPROVAL_STORE`
-- `CGPT_APPROVAL_JOURNAL`
-- `CGPT_BROKER_INSTANCE_LOCK`
-- `CGPT_JOURNAL_HMAC_KEY`
-- `CGPT_JOURNAL_HMAC_KEY_ID`
-- `CGPT_JOURNAL_HMAC_PREVIOUS_KEYS`
-- `CGPT_JOURNAL_CHECKPOINT_PATH`
+- `Codex_APPROVAL_STORE`
+- `Codex_APPROVAL_JOURNAL`
+- `Codex_BROKER_INSTANCE_LOCK`
+- `Codex_JOURNAL_HMAC_KEY`
+- `Codex_JOURNAL_HMAC_KEY_ID`
+- `Codex_JOURNAL_HMAC_PREVIOUS_KEYS`
+- `Codex_JOURNAL_CHECKPOINT_PATH`
 
 ### Contrôleur
 
-- `CGPT_CONTROLLER_URL`
+- `Codex_CONTROLLER_URL`
 
 ### Watchdogs
 
-- `CGPT_PENDING_WATCHDOG_INTERVAL`
-- `CGPT_PENDING_WATCHDOG_WARNING`
-- `CGPT_PENDING_WATCHDOG_STALLED`
-- `CGPT_SESSION_WATCHDOG_INTERVAL`
-- `CGPT_SESSION_WATCHDOG_WARNING`
-- `CGPT_SESSION_WATCHDOG_STALLED`
+- `Codex_PENDING_WATCHDOG_INTERVAL`
+- `Codex_PENDING_WATCHDOG_WARNING`
+- `Codex_PENDING_WATCHDOG_STALLED`
+- `Codex_SESSION_WATCHDOG_INTERVAL`
+- `Codex_SESSION_WATCHDOG_WARNING`
+- `Codex_SESSION_WATCHDOG_STALLED`
 
 ### Remédiation
 
-- `CGPT_REMEDIATION_ORPHAN_TIMEOUT`
-- `CGPT_AUTO_REMEDIATION_ENABLE`
-- `CGPT_AUTO_REMEDIATION_ACTIONS`
-- `CGPT_AUTO_REMEDIATION_INTERVAL`
-- `CGPT_AUTO_REMEDIATION_CB_FAILURE_THRESHOLD`
-- `CGPT_AUTO_REMEDIATION_CB_FAILURE_WINDOW`
-- `CGPT_AUTO_REMEDIATION_CB_OPEN_SECONDS`
-- `CGPT_AUTO_REMEDIATION_CB_STATE_PATH`
+- `Codex_REMEDIATION_ORPHAN_TIMEOUT`
+- `Codex_AUTO_REMEDIATION_ENABLE`
+- `Codex_AUTO_REMEDIATION_ACTIONS`
+- `Codex_AUTO_REMEDIATION_INTERVAL`
+- `Codex_AUTO_REMEDIATION_CB_FAILURE_THRESHOLD`
+- `Codex_AUTO_REMEDIATION_CB_FAILURE_WINDOW`
+- `Codex_AUTO_REMEDIATION_CB_OPEN_SECONDS`
+- `Codex_AUTO_REMEDIATION_CB_STATE_PATH`
 
 ## 15. Variables du contrôleur et du healthcheck
 
-- `OC_CGPT_WORKSPACE` : `/workspace` ou `/home/devops/datas/cab` uniquement
-- `OC_CGPT_OUTSIDE_SANDBOX`
-- `OC_CGPT_OPENCODE_URL`
-- `OC_CGPT_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
-- `OC_CGPT_STATUS_PORT`
-- `OC_CGPT_RECONNECT_MS`
-- `OC_CGPT_CONTROLLER_URL`
-- `OC_CGPT_READINESS_MAX_AGE_MS`
+- `OC_Codex_WORKSPACE` : `/workspace` ou `/home/devops/datas/cab` uniquement
+- `OC_Codex_OUTSIDE_SANDBOX`
+- `OC_Codex_OPENCODE_URL`
+- `OC_Codex_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
+- `OC_Codex_STATUS_PORT`
+- `OC_Codex_RECONNECT_MS`
+- `OC_Codex_CONTROLLER_URL`
+- `OC_Codex_READINESS_MAX_AGE_MS`
 - `CODEX_COMMAND`
 
 ## 16. Commande `/cab`
