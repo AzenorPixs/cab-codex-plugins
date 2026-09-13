@@ -352,3 +352,107 @@ test("réconcilie une permission native corrélée apparue après la décision",
     { id: "permission-123", body: { response: "once" } },
   ]);
 });
+
+test("conserve une décision manuelle rejected face à une décision automatique tardive", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "cab-controller-race-test-"));
+  const fakeCodex = join(directory, "fake-codex.cjs");
+  const port = await availablePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  writeFileSync(
+    fakeCodex,
+    [
+      "#!/usr/bin/env node",
+      "const readline = require('node:readline');",
+      "readline.createInterface({ input: process.stdin }).on('line', (line) => {",
+      "  const message = JSON.parse(line);",
+      "  if (message.method === 'thread/start') {",
+      "    process.stdout.write(JSON.stringify({ id: message.id, result: { thread: { id: 'test-thread' } } }) + '\\n');",
+      "    return;",
+      "  }",
+      "  if (message.method === 'turn/start') {",
+      "    const turnId = 'test-turn';",
+      "    process.stdout.write(JSON.stringify({ id: message.id, result: { turn: { id: turnId } } }) + '\\n');",
+      "    setTimeout(() => {",
+      "      const decision = JSON.stringify({ decision: 'approved', rationale: 'Différée.', instructions: 'Approbation automatique.' });",
+      "      process.stdout.write(JSON.stringify({ method: 'item/completed', params: { turnId, item: { type: 'agentMessage', text: decision } } }) + '\\n');",
+      "      process.stdout.write(JSON.stringify({ method: 'turn/completed', params: { turn: { id: turnId, status: 'completed' } } }) + '\\n');",
+      "    }, 500);",
+      "  }",
+      "});",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+
+  const controller = spawn(
+    process.execPath,
+    [controllerPath],
+    {
+      env: {
+        ...process.env,
+        CODEX_COMMAND: fakeCodex,
+        OC_CGPT_OPENCODE_URL: "http://127.0.0.1:9",
+        OC_CGPT_OUTSIDE_SANDBOX: "1",
+        OC_CGPT_RECONNECT_MS: "60000",
+        OC_CGPT_STATUS_HOST: "127.0.0.1",
+        OC_CGPT_STATUS_PORT: String(port),
+        OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
+      },
+      stdio: "ignore",
+    }
+  );
+
+  context.after(() => {
+    controller.kill("SIGTERM");
+    rmSync(directory, { force: true, recursive: true });
+  });
+
+  await waitForStatus(baseUrl);
+
+  const requestId = "req-cab-manual-decision-race-test-003";
+
+  const validation = {
+    approval: {
+      approval_id: "apr-cab-manual-decision-race-test-003",
+      change_id: "fix-manual-decision-overwrite",
+      requestId,
+      summary: "Course décision manuelle contre automatique.",
+    },
+  };
+
+  const requestResponse = await fetch(`${baseUrl}/validation/request`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(validation),
+  });
+
+  assert.equal(requestResponse.status, 202);
+
+  await delay(150);
+
+  const manualDecision = {
+    decision: "rejected",
+    instructions: "Refus manuel pendant la décision.",
+    rationale: "Course.",
+  };
+
+  const decisionResponse = await fetch(`${baseUrl}/decision/${requestId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(manualDecision),
+  });
+
+  assert.equal(decisionResponse.status, 201);
+
+  await delay(900);
+
+  const readResponse = await fetch(`${baseUrl}/decision/${requestId}`);
+
+  assert.equal(readResponse.status, 200);
+  assert.deepEqual(await readResponse.json(), {
+    ...manualDecision,
+    approval_id: "apr-cab-manual-decision-race-test-003",
+    change_id: "fix-manual-decision-overwrite",
+    requestId,
+  });
+});

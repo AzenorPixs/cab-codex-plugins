@@ -777,6 +777,17 @@ async function handleValidation(request) {
       );
     }
 
+    if (
+      httpDecisions.has(
+        request.requestId
+      ) ||
+      answered.has(
+        request.requestId
+      )
+    ) {
+      return;
+    }
+
     httpDecisions.set(request.requestId, {
       ...decision,
       requestId: request.requestId,
