@@ -110,6 +110,11 @@ Cet artefact orchestre `start`, `test` et `stop` pour les ressources CAB. Il
 doit être distribué et installé avec son plugin et sa skill, sans prendre en
 charge la décision métier ni le cycle de vie direct du broker MCP OpenCode.
 
+La vérification d'intégration de la release doit confirmer que `/cab start`
+observe l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que
+`/cab test` utilise la session de codage persistante créée ou reprise au
+démarrage.
+
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.
 
 ## 7. Versionnement
@@ -161,7 +166,8 @@ Avant publication :
 2. vérifier la syntaxe JavaScript ;
 3. valider `.codex-plugin/plugin.json` ;
 4. exécuter les tests CAB applicables ;
-5. vérifier `/cab test` dans un environnement d'intégration ;
+5. vérifier `/cab start` et `/cab test` dans un environnement d'intégration,
+   avec une session persistante et un MCP `cgpt-validation` connecté ;
 6. vérifier l'absence de secret ;
 7. vérifier que les caches et états runtime sont absents ;
 8. vérifier la cohérence des versions ;

@@ -1,11 +1,11 @@
 ---
 name: approval-bridge
-description: Met en place, teste et supervise le dialogue OpenCode–CGPT via broker MCP stdio, contrôleur local et SSE OpenCode, sans déléguer les décisions.
+description: Met en place, teste et supervise le dialogue OpenCode–Codex via broker MCP stdio, contrôleur local et SSE OpenCode, sans déléguer les décisions.
 ---
 
-# CGPT Approval Bridge
+# Codex Approval Bridge
 
-Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par CGPT.
+Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par Codex.
 
 ## Invariants
 
@@ -17,11 +17,13 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - Ne déclarer une étape validée qu’avec une preuve observée dans la session courante.
 - `broker_readiness` est l’interface synthétique de supervision.
 - `broker_health` reste réservé au diagnostic détaillé.
-- Le contrôleur `scripts/cgpt-approval-bridge-controller.mjs` s’exécute exclusivement hors sandbox avec `OC_CGPT_OUTSIDE_SANDBOX=1`.
+- Le contrôleur `../../scripts/cgpt-approval-bridge-controller.mjs` (chemin relatif à ce `SKILL.md`) s’exécute exclusivement hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1`. L’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté.
 - Le contrôleur n’écoute que `127.0.0.1`.
 - OpenCode est observé indépendamment via son SSE HTTP direct.
 - Après reconnexion SSE ou divergence, réconcilier l’état réel par HTTP auprès d’OpenCode.
 - Les validations normales passent par MCP stdio.
+- L’état `GET /mcp` du serveur OpenCode est la source de vérité de connexion MCP pour les sessions persistantes ; une sortie CLI ne peut pas s’y substituer.
+- Une session de codage persistante est créée ou réutilisée avec l’API native OpenCode après confirmation de `cgpt-validation: connected`. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
 - Ne jamais lire, journaliser ou afficher de secret.
 
 ## Environnement Pixs / Devops
@@ -34,18 +36,20 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 
 1. Vérifier `GET /global/health` d’OpenCode.
 2. Vérifier que `cgpt-validation` est déclaré comme MCP local `stdio`.
-3. Vérifier que le MCP est connecté.
-4. Appeler `broker_readiness`.
-5. Interpréter `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`.
-6. Démarrer ou réutiliser `scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_CGPT_OUTSIDE_SANDBOX=1`.
-7. Vérifier le statut local du contrôleur.
-8. Démarrer ou maintenir le SSE direct OpenCode.
-9. Réconcilier l’état OpenCode via HTTP après chaque reconnexion ou divergence.
-10. Vérifier qu’aucune approbation parasite n’est en attente.
-11. Tester `request_validation` avec un `requestId` inédit.
-12. Rendre une décision CGPT explicite unique.
-13. Vérifier la réponse MCP corrélée reçue par OpenCode.
-14. Créer le heartbeat de trente secondes uniquement après validation complète.
+3. Vérifier `GET /mcp` et exiger `cgpt-validation: connected`.
+4. Si ce statut est absent ou en échec, exécuter seulement la récupération contrôlée `POST /instance/dispose`, puis attendre `/global/health` et `/mcp` sains. Ne jamais tuer ou lancer directement le broker, qui appartient à OpenCode.
+5. Démarrer ou réutiliser `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`).
+6. Vérifier le statut local du contrôleur.
+7. Démarrer ou maintenir le SSE direct OpenCode.
+8. Créer ou réutiliser une session OpenCode persistante via `POST /session`, conserver son identifiant et adresser tous les mandats par `POST /session/<id>/message`.
+9. Appeler `broker_readiness` dans cette session, sans accès au projet.
+10. Interpréter `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`.
+11. Réconcilier l’état OpenCode via HTTP après chaque reconnexion ou divergence, puis revalider `/mcp` avant tout mandat.
+12. Vérifier qu’aucune approbation parasite n’est en attente.
+13. Tester `request_validation` avec un `requestId` inédit dans la session persistante.
+14. Rendre une décision Codex explicite unique.
+15. Vérifier la réponse MCP corrélée reçue par OpenCode dans cette session.
+16. Créer le heartbeat de trente secondes uniquement après validation complète.
 
 ## Readiness
 

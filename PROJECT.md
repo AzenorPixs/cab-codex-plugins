@@ -84,9 +84,10 @@ Le plugin regroupe la skill `cgpt-approval-bridge`, les scripts du contrôleur e
 `.codex/commands/cab.md`. Elle orchestre l'exploitation du dispositif de
 communication entre le broker MCP et l'agent Codex ; elle ne rend aucune
 décision d'approbation.
-TECHNICAL.md — protocoles, persistance, supervision et configuration 
-- `/cab start` : initialise ou reprend le contrôleur et la supervision CAB ;
-- `/cab test` : vérifie le chemin complet de validation ;
+
+- `/cab start` : vérifie le MCP actif, initialise ou reprend le contrôleur et
+  la supervision, puis crée ou réutilise la session de codage persistante ;
+- `/cab test` : vérifie le chemin complet de validation dans cette session ;
 - `/cab stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
   arrêter OpenCode ni le broker MCP géré par OpenCode.
 

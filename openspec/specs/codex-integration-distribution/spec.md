@@ -28,13 +28,25 @@ Codex, sans rendre de décision d'approbation ni modifier le projet piloté.
 Elle SHALL préserver OpenCode et le broker MCP géré par OpenCode lors de
 l'arrêt.
 
+Avant de créer une session de codage, `/cab start` SHALL consulter `GET /mcp`
+du serveur OpenCode et exiger que `cgpt-validation` soit `connected`. En cas
+d'échec, elle MAY réinitialiser l'instance par `POST /instance/dispose`, puis
+SHALL attendre un état sain ; elle SHALL ne jamais démarrer ni arrêter le
+broker directement. Après ce contrôle, elle SHALL créer ou réutiliser une
+session OpenCode persistante et SHALL transmettre les mandats par la
+messagerie native de cette session.
+
 #### Scenario: Démarrage CAB
 - **WHEN** `/cab start` est exécutée
-- **THEN** elle initialise ou reprend le contrôleur et la supervision CAB sans prendre de décision métier
+- **THEN** elle vérifie `/mcp`, initialise ou reprend le contrôleur et la supervision CAB, puis crée ou réutilise une session persistante sans prendre de décision métier
+
+#### Scenario: MCP non connecté
+- **WHEN** `GET /mcp` ne présente pas `cgpt-validation` comme `connected`
+- **THEN** `/cab start` réinitialise seulement l'instance OpenCode, attend une preuve de connexion et échoue sans créer de session si cette preuve reste absente
 
 #### Scenario: Test CAB
 - **WHEN** `/cab test` est exécutée
-- **THEN** elle vérifie le chemin de validation complet sans modifier le projet piloté
+- **THEN** elle vérifie le chemin de validation complet dans la session persistante, sans modifier le projet piloté
 
 #### Scenario: Arrêt CAB
 - **WHEN** `/cab stop` est exécutée

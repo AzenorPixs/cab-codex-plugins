@@ -67,10 +67,12 @@ de décision d'approbation.
 /cab stop
 ```
 
-`/cab start` initialise ou reprend le contrôleur et la supervision CAB, puis
-vérifie le dispositif.
+`/cab start` vérifie le MCP actif par `/mcp`, initialise ou reprend le
+contrôleur et la supervision CAB, puis crée ou réutilise une session de codage
+persistante visible dans OpenCode.
 
-`/cab test` réalise un test non destructif du chemin complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
+`/cab test` réalise, dans cette même session, un test non destructif du chemin
+complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
 
 `/cab stop` arrête uniquement les ressources CAB qu'elle a créées, sans fermer
 OpenCode ni arrêter le broker MCP géré par OpenCode.
@@ -112,38 +114,38 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 
 | Variable | Rôle |
 |---|---|
-| `Codex_CONTROLLER_URL` | URL locale du contrôleur |
-| `Codex_APPROVAL_STORE` | magasin persistant des approbations |
-| `Codex_APPROVAL_JOURNAL` | journal append-only |
-| `Codex_BROKER_INSTANCE_LOCK` | verrou d'instance |
-| `Codex_JOURNAL_HMAC_KEY` | clé optionnelle du checkpoint HMAC |
-| `Codex_JOURNAL_HMAC_KEY_ID` | identifiant de la clé HMAC |
-| `Codex_JOURNAL_HMAC_PREVIOUS_KEYS` | anciennes clés autorisées en vérification |
-| `Codex_JOURNAL_CHECKPOINT_PATH` | chemin du checkpoint |
+| `CGPT_CONTROLLER_URL` | URL locale du contrôleur |
+| `CGPT_APPROVAL_STORE` | magasin persistant des approbations |
+| `CGPT_APPROVAL_JOURNAL` | journal append-only |
+| `CGPT_BROKER_INSTANCE_LOCK` | verrou d'instance |
+| `CGPT_JOURNAL_HMAC_KEY` | clé optionnelle du checkpoint HMAC |
+| `CGPT_JOURNAL_HMAC_KEY_ID` | identifiant de la clé HMAC |
+| `CGPT_JOURNAL_HMAC_PREVIOUS_KEYS` | anciennes clés autorisées en vérification |
+| `CGPT_JOURNAL_CHECKPOINT_PATH` | chemin du checkpoint |
 
 ### Watchdogs
 
 | Variable | Rôle |
 |---|---|
-| `Codex_PENDING_WATCHDOG_INTERVAL` | fréquence du watchdog PENDING |
-| `Codex_PENDING_WATCHDOG_WARNING` | seuil de dégradation PENDING |
-| `Codex_PENDING_WATCHDOG_STALLED` | seuil de blocage PENDING |
-| `Codex_SESSION_WATCHDOG_INTERVAL` | fréquence du watchdog session |
-| `Codex_SESSION_WATCHDOG_WARNING` | seuil de dégradation session |
-| `Codex_SESSION_WATCHDOG_STALLED` | seuil de blocage session |
+| `CGPT_PENDING_WATCHDOG_INTERVAL` | fréquence du watchdog PENDING |
+| `CGPT_PENDING_WATCHDOG_WARNING` | seuil de dégradation PENDING |
+| `CGPT_PENDING_WATCHDOG_STALLED` | seuil de blocage PENDING |
+| `CGPT_SESSION_WATCHDOG_INTERVAL` | fréquence du watchdog session |
+| `CGPT_SESSION_WATCHDOG_WARNING` | seuil de dégradation session |
+| `CGPT_SESSION_WATCHDOG_STALLED` | seuil de blocage session |
 
 ### Auto-remédiation
 
 | Variable | Rôle |
 |---|---|
-| `Codex_AUTO_REMEDIATION_ENABLE` | activation globale, désactivée par défaut |
-| `Codex_AUTO_REMEDIATION_ACTIONS` | allowlist des actions |
-| `Codex_AUTO_REMEDIATION_INTERVAL` | fréquence de l'ordonnanceur |
-| `Codex_AUTO_REMEDIATION_CB_FAILURE_THRESHOLD` | seuil d'ouverture du circuit breaker |
-| `Codex_AUTO_REMEDIATION_CB_FAILURE_WINDOW` | fenêtre des échecs |
-| `Codex_AUTO_REMEDIATION_CB_OPEN_SECONDS` | durée OPEN |
-| `Codex_AUTO_REMEDIATION_CB_STATE_PATH` | état persistant du circuit breaker |
-| `Codex_REMEDIATION_ORPHAN_TIMEOUT` | délai des tentatives orphelines |
+| `CGPT_AUTO_REMEDIATION_ENABLE` | activation globale, désactivée par défaut |
+| `CGPT_AUTO_REMEDIATION_ACTIONS` | allowlist des actions |
+| `CGPT_AUTO_REMEDIATION_INTERVAL` | fréquence de l'ordonnanceur |
+| `CGPT_AUTO_REMEDIATION_CB_FAILURE_THRESHOLD` | seuil d'ouverture du circuit breaker |
+| `CGPT_AUTO_REMEDIATION_CB_FAILURE_WINDOW` | fenêtre des échecs |
+| `CGPT_AUTO_REMEDIATION_CB_OPEN_SECONDS` | durée OPEN |
+| `CGPT_AUTO_REMEDIATION_CB_STATE_PATH` | état persistant du circuit breaker |
+| `CGPT_REMEDIATION_ORPHAN_TIMEOUT` | délai des tentatives orphelines |
 
 ### Contrôleur et supervision
 
@@ -158,6 +160,9 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 | `OC_Codex_CONTROLLER_URL` | endpoint de statut utilisé par le healthcheck |
 | `OC_Codex_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readiness |
 | `CODEX_COMMAND` | commande utilisée pour Codex App Server |
+
+Les noms historiques équivalents préfixés `OC_CGPT_` restent acceptés pour la
+compatibilité avec les installations existantes.
 
 Les secrets doivent rester hors du dépôt Git et des journaux.
 

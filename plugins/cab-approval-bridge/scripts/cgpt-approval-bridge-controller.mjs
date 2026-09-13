@@ -3,7 +3,12 @@ import { createServer } from "node:http";
 import { isAbsolute } from "node:path";
 import readline from "node:readline";
 
-const workspace = process.env.OC_CGPT_WORKSPACE;
+function envValue(name) {
+  const legacyName = name.replace("OC_Codex_", "OC_CGPT_");
+  return process.env[name] || process.env[legacyName];
+}
+
+const workspace = envValue("OC_Codex_WORKSPACE");
 const allowedStatusHosts = new Set([
   "127.0.0.1",
   "::1",
@@ -13,36 +18,36 @@ const allowedWorkspaces = new Set([
   "/home/devops/datas/cab",
 ]);
 
-if (process.env.OC_CGPT_OUTSIDE_SANDBOX !== "1") {
+if (envValue("OC_Codex_OUTSIDE_SANDBOX") !== "1") {
   throw new Error(
-    "Le contrôleur CGPT doit être exécuté hors sandbox (OC_CGPT_OUTSIDE_SANDBOX=1)."
+    "Le contrôleur Codex doit être exécuté hors sandbox (OC_Codex_OUTSIDE_SANDBOX=1 ; alias OC_CGPT_OUTSIDE_SANDBOX accepté)."
   );
 }
 
 const opencodeUrl = (
-  process.env.OC_CGPT_OPENCODE_URL || "http://127.0.0.1:4096"
+  envValue("OC_Codex_OPENCODE_URL") || "http://127.0.0.1:4096"
 ).replace(/\/$/, "");
 
 const codexCommand = process.env.CODEX_COMMAND || "codex";
-const statusHost = process.env.OC_CGPT_STATUS_HOST || "127.0.0.1";
-const statusPort = Number(process.env.OC_CGPT_STATUS_PORT || "8788");
-const reconnectMs = Number(process.env.OC_CGPT_RECONNECT_MS || "1000");
+const statusHost = envValue("OC_Codex_STATUS_HOST") || "127.0.0.1";
+const statusPort = Number(envValue("OC_Codex_STATUS_PORT") || "8788");
+const reconnectMs = Number(envValue("OC_Codex_RECONNECT_MS") || "1000");
 
 if (!workspace) {
   throw new Error(
-    "OC_CGPT_WORKSPACE doit désigner la racine absolue autorisée du projet."
+    "OC_Codex_WORKSPACE doit désigner la racine absolue autorisée du projet."
   );
 }
 
 if (!isAbsolute(workspace) || !allowedWorkspaces.has(workspace)) {
   throw new Error(
-    "OC_CGPT_WORKSPACE doit être une racine CAB absolue autorisée."
+    "OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée."
   );
 }
 
 if (!allowedStatusHosts.has(statusHost)) {
   throw new Error(
-    "OC_CGPT_STATUS_HOST doit être une adresse loopback autorisée."
+    "OC_Codex_STATUS_HOST doit être une adresse loopback autorisée."
   );
 }
 

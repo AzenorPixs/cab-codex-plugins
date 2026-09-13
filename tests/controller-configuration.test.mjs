@@ -78,7 +78,7 @@ test("refuse une interface contrôleur non loopback", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /OC_CGPT_STATUS_HOST doit être une adresse loopback autorisée/
+    /OC_Codex_STATUS_HOST doit être une adresse loopback autorisée/
   );
 });
 
@@ -95,7 +95,7 @@ for (const workspace of [
     assert.notEqual(result.status, 0);
     assert.match(
       result.stderr,
-      /OC_CGPT_STATUS_HOST doit être une adresse loopback autorisée/
+      /OC_Codex_STATUS_HOST doit être une adresse loopback autorisée/
     );
   });
 }
@@ -108,7 +108,7 @@ test("refuse un workspace relatif", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /OC_CGPT_WORKSPACE doit être une racine CAB absolue autorisée/
+    /OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée/
   );
 });
 
@@ -120,7 +120,7 @@ test("refuse un workspace absolu hors CAB", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /OC_CGPT_WORKSPACE doit être une racine CAB absolue autorisée/
+    /OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée/
   );
 });
 
