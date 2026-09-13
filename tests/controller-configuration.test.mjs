@@ -223,16 +223,22 @@ test("propage les trois identifiants à une décision manuelle", async (context)
   });
 });
 
-test("acquitte une permission native exactement incluse dans un périmètre approuvé", async (context) => {
+test("transmet une décision explicite à une seule permission native corrélée", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-scope-test-"));
   const fakeCodex = join(directory, "fake-codex.cjs");
   const controllerPort = await availablePort();
   const opencodePort = await availablePort();
   const controllerUrl = `http://127.0.0.1:${controllerPort}`;
-  let replied = null;
+  const replies = [];
   let permissions = [
     {
       id: "permission-123",
+      sessionID: "ses_scope_test",
+      permission: "edit",
+      metadata: { filepath: "/workspace/BUILD.md" },
+    },
+    {
+      id: "permission-124",
       sessionID: "ses_scope_test",
       permission: "edit",
       metadata: { filepath: "/workspace/BUILD.md" },
@@ -258,9 +264,11 @@ test("acquitte une permission native exactement incluse dans un périmètre appr
       return;
     }
 
-    if (request.url.startsWith("/session/ses_scope_test/permissions/permission-123")) {
-      replied = JSON.parse(Buffer.concat(body).toString("utf8"));
-      permissions = [];
+    if (request.url.startsWith("/session/ses_scope_test/permissions/")) {
+      replies.push({
+        id: request.url.split("/").at(-1).split("?")[0],
+        body: JSON.parse(Buffer.concat(body).toString("utf8")),
+      });
       response.writeHead(200, { "content-type": "application/json" });
       response.end("true");
       return;
@@ -332,9 +340,11 @@ test("acquitte une permission native exactement incluse dans un périmètre appr
 
   assert.equal(decision.status, 201);
 
-  for (let attempt = 0; attempt < 20 && !replied; attempt += 1) {
+  for (let attempt = 0; attempt < 20 && replies.length === 0; attempt += 1) {
     await delay(25);
   }
 
-  assert.deepEqual(replied, { response: "once" });
+  assert.deepEqual(replies, [
+    { id: "permission-123", body: { response: "once" } },
+  ]);
 });

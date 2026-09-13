@@ -4,6 +4,9 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Passage à des mandats unitaires : Codex pilote et valide chaque opération
+  OpenCode, y compris l’archivage OpenSpec ; CAB ne transmet qu’une décision
+  corrélée à une permission native unique.
 - Alignement du plugin, de la commande `/cab` et des cadrages sur la session
   OpenCode persistante et l'état MCP natif `/mcp`.
 - Correction de la documentation des variables du broker vers les noms

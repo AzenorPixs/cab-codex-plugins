@@ -168,10 +168,13 @@ Avant publication :
 4. exécuter les tests CAB applicables ;
 5. vérifier `/cab start` et `/cab test` dans un environnement d'intégration,
    avec une session persistante et un MCP `cgpt-validation` connecté ;
-6. vérifier l'absence de secret ;
-7. vérifier que les caches et états runtime sont absents ;
-8. vérifier la cohérence des versions ;
-9. mettre à jour `CHANGELOG.md` et `README.md`.
+6. vérifier qu’une décision `approved` ne transmet qu’un mandat unitaire à une
+   seule permission native corrélée, et qu’un second mandat reste en attente
+   d’une nouvelle décision Codex ;
+7. vérifier l'absence de secret ;
+8. vérifier que les caches et états runtime sont absents ;
+9. vérifier la cohérence des versions ;
+10. mettre à jour `CHANGELOG.md` et `README.md`.
 
 ## 12. Packaging système futur
 

@@ -94,19 +94,20 @@ Une simple réponse HTTP, un ancien état MCP ou une ancienne session de test ne
 Exécute un job piloté dans la session persistante après un `/cab start` et un
 `/cab test` réussis.
 
-1. Constitue un contrat de job unique : `requestId`, `approval_id`, `change_id`,
-   objectif, session OpenCode, répertoire cible, fichiers relatifs autorisés,
-   commandes exactes autorisées et critères de fin.
-2. Demande la validation CAB de ce contrat complet avant tout mandat d’écriture
-   ou de commande. Aucun périmètre non déclaré ne peut être ajouté après cette
-   validation.
-3. Après réponse MCP `approved` corrélée, le broker transmet ce périmètre au
-   contrôleur. Le contrôleur répond alors automatiquement aux seules permissions
-   natives OpenCode de cette session correspondant exactement à un fichier ou à
-   une commande du contrat, avec la réponse native `once`.
-4. Une permission hors session, hors fichier, hors commande ou hors contrat
-   reste en attente et doit être remontée comme écart ; elle n’est jamais
-   acquittée par CAB.
+1. Constitue un contrat de job : objectif, session OpenCode, répertoire cible,
+   limites fonctionnelles et critères de fin. Ce contrat ne vaut jamais une
+   décision d’approbation d’action.
+2. Avant chaque édition, commande Bash, commande système ou commande OpenSpec
+   qui exige une permission native, l’agent de codage crée un mandat CAB
+   unitaire : `requestId`, `approval_id`, `change_id`, session, répertoire,
+   résumé et exactement un fichier relatif ou une commande complète.
+3. Codex examine chaque mandat dans la session persistante et rend une décision
+   explicite, unique et corrélée. Après une décision `approved`, CAB répond
+   `once` à la seule permission native OpenCode correspondante, puis consomme
+   ce mandat.
+4. Une seconde permission, une autre commande, un autre fichier ou une demande
+   sans décision corrélée reste en attente. CAB ne l’acquitte jamais seul et
+   l’écart est remonté à l’orchestrateur.
 5. Après chaque tour de l’agent de codage, contrôle la session persistante. Si
    le contrat n’est pas terminal, envoie le mandat suivant sans créer de session
    éphémère et sans conclure la réponse Codex.

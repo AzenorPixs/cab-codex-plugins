@@ -6,6 +6,12 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
+Codex est l’orchestrateur et le validateur de la session : il pilote les
+mandats du démarrage à la clôture et rend une décision explicite pour chaque
+opération nécessitant une permission OpenCode. CAB transmet cette décision,
+mais ne l’invente jamais. L’archivage OpenSpec est un mandat séparé, décidé
+après contrôle de la cohérence et des validations.
+
 ```text
                     Développeur
                         │
@@ -64,6 +70,7 @@ de décision d'approbation.
 ```text
 /cab start
 /cab test
+/cab run
 /cab stop
 ```
 
@@ -73,6 +80,11 @@ persistante visible dans OpenCode.
 
 `/cab test` réalise, dans cette même session, un test non destructif du chemin
 complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
+
+`/cab run` maintient le job dans cette session. Chaque édition, commande Bash,
+commande système, commande OpenSpec ou opération d’archivage est soumise par
+OpenCode comme mandat unitaire, puis exécutée seulement après une décision
+Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
 
 `/cab stop` arrête uniquement les ressources CAB qu'elle a créées, sans fermer
 OpenCode ni arrêter le broker MCP géré par OpenCode.
