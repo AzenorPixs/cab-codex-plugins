@@ -63,6 +63,7 @@ const answered = new Set();
 const httpDecisions = new Map();
 const validations = new Map();
 const reconcilingPermissions = new Set();
+const unmatchedNativePermissions = new Map();
 
 const status = {
   startedAt: new Date().toISOString(),
@@ -98,6 +99,10 @@ function publicStatus() {
         requestId,
         receivedAt,
       })
+    ),
+    unmatchedNativePermissionCount: unmatchedNativePermissions.size,
+    unmatchedNativePermissions: Array.from(
+      unmatchedNativePermissions.values()
     ),
     lastEvent: status.lastEvent,
   };
@@ -171,6 +176,104 @@ function matchesApprovedOperation(permission, operation) {
     permission.permission === "bash" &&
     typeof permission.metadata?.command === "string" &&
     permission.metadata.command === operation.target
+  );
+}
+
+function nativePermissionSummary(permission) {
+  if (
+    !permission ||
+    typeof permission.id !== "string" ||
+    !permission.id ||
+    typeof permission.sessionID !== "string" ||
+    !permission.sessionID ||
+    typeof permission.permission !== "string" ||
+    !permission.permission
+  ) {
+    return null;
+  }
+
+  return {
+    id: permission.id,
+    sessionId: permission.sessionID,
+    permission: permission.permission,
+  };
+}
+
+function isCorrelatedNativePermission(permission) {
+  for (const validation of validations.values()) {
+    if (matchesApprovedOperation(permission, validation.operation)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function hasSameNativePermissions(next) {
+  if (next.size !== unmatchedNativePermissions.size) {
+    return false;
+  }
+
+  for (const [id, permission] of next) {
+    const previous = unmatchedNativePermissions.get(id);
+
+    if (
+      !previous ||
+      previous.sessionId !== permission.sessionId ||
+      previous.permission !== permission.permission
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+async function reconcileNativePermissions() {
+  const response = await fetch(
+    `${opencodeUrl}/permission?directory=${encodeURIComponent(workspace)}`,
+    { signal: AbortSignal.timeout(10_000) }
+  );
+
+  if (!response.ok) {
+    throw new Error(`OpenCode permissions HTTP ${response.status}.`);
+  }
+
+  const permissions = await response.json();
+
+  if (!Array.isArray(permissions)) {
+    throw new Error("Liste de permissions OpenCode invalide.");
+  }
+
+  const next = new Map();
+
+  for (const permission of permissions) {
+    if (isCorrelatedNativePermission(permission)) {
+      continue;
+    }
+
+    const summary = nativePermissionSummary(permission);
+
+    if (summary) {
+      next.set(summary.id, summary);
+    }
+  }
+
+  if (hasSameNativePermissions(next)) {
+    return;
+  }
+
+  unmatchedNativePermissions.clear();
+
+  for (const [id, permission] of next) {
+    unmatchedNativePermissions.set(id, permission);
+  }
+
+  updateStatus(
+    next.size > 0
+      ? "opencode-unmatched-native-permissions"
+      : "opencode-unmatched-native-permissions-cleared",
+    { count: next.size }
   );
 }
 
@@ -255,6 +358,11 @@ function reconcileApprovedOperations() {
 function startPermissionReconciliation() {
   setInterval(() => {
     reconcileApprovedOperations();
+    void reconcileNativePermissions().catch((cause) => {
+      updateStatus("opencode-permission-observation-failed", {
+        error: cause.message,
+      });
+    });
   }, reconnectMs);
 }
 
@@ -506,7 +614,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.0.0",
+      version: "0.67.0",
     },
   });
 
@@ -748,25 +856,11 @@ async function reconcileOpenCode() {
     );
   }
 
-  const permissions = await fetch(
-    `${opencodeUrl}/permission?directory=${encodeURIComponent(
-      workspace
-    )}`,
-    {
-      signal:
-        AbortSignal.timeout(10_000),
-    }
-  );
-
-  if (!permissions.ok) {
-    throw new Error(
-      `OpenCode permissions HTTP ${permissions.status}.`
-    );
-  }
-
   updateStatus(
     "opencode-reconciled"
   );
+
+  await reconcileNativePermissions();
 }
 
 async function consumeOpenCodeEvents() {
