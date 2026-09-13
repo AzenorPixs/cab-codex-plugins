@@ -223,27 +223,14 @@ test("propage les trois identifiants à une décision manuelle", async (context)
   });
 });
 
-test("transmet une décision explicite à une seule permission native corrélée", async (context) => {
+test("réconcilie une permission native corrélée apparue après la décision", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-scope-test-"));
   const fakeCodex = join(directory, "fake-codex.cjs");
   const controllerPort = await availablePort();
   const opencodePort = await availablePort();
   const controllerUrl = `http://127.0.0.1:${controllerPort}`;
   const replies = [];
-  let permissions = [
-    {
-      id: "permission-123",
-      sessionID: "ses_scope_test",
-      permission: "edit",
-      metadata: { filepath: "/workspace/BUILD.md" },
-    },
-    {
-      id: "permission-124",
-      sessionID: "ses_scope_test",
-      permission: "edit",
-      metadata: { filepath: "/workspace/BUILD.md" },
-    },
-  ];
+  let permissions = [];
 
   const opencode = createServer(async (request, response) => {
     const body = [];
@@ -293,7 +280,7 @@ test("transmet une décision explicite à une seule permission native corrélée
       CODEX_COMMAND: fakeCodex,
       OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
       OC_CGPT_OUTSIDE_SANDBOX: "1",
-      OC_CGPT_RECONNECT_MS: "60000",
+      OC_CGPT_RECONNECT_MS: "25",
       OC_CGPT_STATUS_HOST: "127.0.0.1",
       OC_CGPT_STATUS_PORT: String(controllerPort),
       OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
@@ -340,7 +327,24 @@ test("transmet une décision explicite à une seule permission native corrélée
 
   assert.equal(decision.status, 201);
 
-  for (let attempt = 0; attempt < 20 && replies.length === 0; attempt += 1) {
+  await delay(50);
+
+  permissions = [
+    {
+      id: "permission-123",
+      sessionID: "ses_scope_test",
+      permission: "edit",
+      metadata: { filepath: "/workspace/BUILD.md" },
+    },
+    {
+      id: "permission-124",
+      sessionID: "ses_scope_test",
+      permission: "edit",
+      metadata: { filepath: "/workspace/BUILD.md" },
+    },
+  ];
+
+  for (let attempt = 0; attempt < 40 && replies.length === 0; attempt += 1) {
     await delay(25);
   }
 

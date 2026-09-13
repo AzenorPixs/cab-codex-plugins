@@ -252,6 +252,12 @@ function reconcileApprovedOperations() {
   }
 }
 
+function startPermissionReconciliation() {
+  setInterval(() => {
+    reconcileApprovedOperations();
+  }, reconnectMs);
+}
+
 function sendCodex(method, params) {
   const id = nextId++;
 
@@ -793,6 +799,8 @@ async function consumeOpenCodeEvents() {
       "opencode-sse-connected"
     );
 
+    reconcileApprovedOperations();
+
     const reader =
       response.body.getReader();
 
@@ -1272,6 +1280,7 @@ createServer(
     );
 
     startCodex();
+    startPermissionReconciliation();
     void consumeOpenCodeEvents();
   }
 );
