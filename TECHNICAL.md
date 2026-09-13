@@ -97,6 +97,8 @@ lecture seule, reçoit les demandes du broker, obtient une décision structurée
 conserve les décisions pour le sondage du broker, expose une interface HTTP
 locale et supervise le SSE direct OpenCode.
 
+`OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
+
 L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
 admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas
 un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST
@@ -108,10 +110,22 @@ admises sont `approved`, `rejected` et `needs_clarification`.
 ```text
 OpenCode : http://127.0.0.1:4096
 Health   : /global/health
+MCP      : /mcp
 SSE      : /global/event
 ```
 
 Après reconnexion ou divergence, le contrôleur réconcilie l'état via HTTP et consulte les permissions OpenCode.
+
+L'état `GET /mcp` du serveur OpenCode est l'autorité de connexion du broker
+pour les sessions persistantes. Si `cgpt-validation` n'est pas `connected`, CAB
+réinitialise l'instance OpenCode par `POST /instance/dispose`, attend une
+nouvelle healthcheck et ne crée aucune session avant le rétablissement. CAB ne
+termine ni ne démarre directement le broker, qui est détenu par OpenCode.
+
+Après ce contrôle, CAB crée ou réutilise une session de codage persistante par
+`POST /session` et transmet les mandats uniquement par
+`POST /session/<id>/message`. Le test de bout en bout et le travail ultérieur
+restent dans cette session visible du développeur.
 
 ## 9. Readiness et healthcheck
 
@@ -158,37 +172,37 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 
 ### Persistance et journal
 
-- `Codex_APPROVAL_STORE`
-- `Codex_APPROVAL_JOURNAL`
-- `Codex_BROKER_INSTANCE_LOCK`
-- `Codex_JOURNAL_HMAC_KEY`
-- `Codex_JOURNAL_HMAC_KEY_ID`
-- `Codex_JOURNAL_HMAC_PREVIOUS_KEYS`
-- `Codex_JOURNAL_CHECKPOINT_PATH`
+- `CGPT_APPROVAL_STORE`
+- `CGPT_APPROVAL_JOURNAL`
+- `CGPT_BROKER_INSTANCE_LOCK`
+- `CGPT_JOURNAL_HMAC_KEY`
+- `CGPT_JOURNAL_HMAC_KEY_ID`
+- `CGPT_JOURNAL_HMAC_PREVIOUS_KEYS`
+- `CGPT_JOURNAL_CHECKPOINT_PATH`
 
 ### Contrôleur
 
-- `Codex_CONTROLLER_URL`
+- `CGPT_CONTROLLER_URL`
 
 ### Watchdogs
 
-- `Codex_PENDING_WATCHDOG_INTERVAL`
-- `Codex_PENDING_WATCHDOG_WARNING`
-- `Codex_PENDING_WATCHDOG_STALLED`
-- `Codex_SESSION_WATCHDOG_INTERVAL`
-- `Codex_SESSION_WATCHDOG_WARNING`
-- `Codex_SESSION_WATCHDOG_STALLED`
+- `CGPT_PENDING_WATCHDOG_INTERVAL`
+- `CGPT_PENDING_WATCHDOG_WARNING`
+- `CGPT_PENDING_WATCHDOG_STALLED`
+- `CGPT_SESSION_WATCHDOG_INTERVAL`
+- `CGPT_SESSION_WATCHDOG_WARNING`
+- `CGPT_SESSION_WATCHDOG_STALLED`
 
 ### Remédiation
 
-- `Codex_REMEDIATION_ORPHAN_TIMEOUT`
-- `Codex_AUTO_REMEDIATION_ENABLE`
-- `Codex_AUTO_REMEDIATION_ACTIONS`
-- `Codex_AUTO_REMEDIATION_INTERVAL`
-- `Codex_AUTO_REMEDIATION_CB_FAILURE_THRESHOLD`
-- `Codex_AUTO_REMEDIATION_CB_FAILURE_WINDOW`
-- `Codex_AUTO_REMEDIATION_CB_OPEN_SECONDS`
-- `Codex_AUTO_REMEDIATION_CB_STATE_PATH`
+- `CGPT_REMEDIATION_ORPHAN_TIMEOUT`
+- `CGPT_AUTO_REMEDIATION_ENABLE`
+- `CGPT_AUTO_REMEDIATION_ACTIONS`
+- `CGPT_AUTO_REMEDIATION_INTERVAL`
+- `CGPT_AUTO_REMEDIATION_CB_FAILURE_THRESHOLD`
+- `CGPT_AUTO_REMEDIATION_CB_FAILURE_WINDOW`
+- `CGPT_AUTO_REMEDIATION_CB_OPEN_SECONDS`
+- `CGPT_AUTO_REMEDIATION_CB_STATE_PATH`
 
 ## 15. Variables du contrôleur et du healthcheck
 
@@ -202,6 +216,9 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 - `OC_Codex_READINESS_MAX_AGE_MS`
 - `CODEX_COMMAND`
 
+Les variables historiques équivalentes préfixées `OC_CGPT_` restent admises
+par le contrôleur et le healthcheck pour préserver les installations existantes.
+
 ## 16. Commande `/cab`
 
 La commande Codex `/cab`, définie dans `.codex/commands/cab.md`, orchestre le
@@ -209,9 +226,10 @@ cycle de vie des ressources de communication CAB. Elle ne remplace pas le
 broker, ne rend pas de décision d'approbation et ne modifie pas le projet
 piloté.
 
-- `/cab start` initialise ou reprend le contrôleur et la supervision, puis
-  vérifie le dispositif ;
-- `/cab test` réalise un test non destructif du chemin de validation complet ;
+- `/cab start` vérifie `/mcp`, initialise ou reprend le contrôleur et la
+  supervision, puis crée ou réutilise une session de codage persistante ;
+- `/cab test` réalise un test non destructif du chemin de validation complet
+  dans cette même session ;
 - `/cab stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.

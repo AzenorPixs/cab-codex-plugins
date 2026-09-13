@@ -1,14 +1,17 @@
-# AGENTS.md — CGPT Approval Bridge
+# AGENTS.md — Codex Approval Bridge
+
+Version : 0.3
 
 ## 1. Contexte
 
-* Projet : `CGPT Approval Bridge` ;
+* Projet : `Codex Approval Bridge` ;
 * Racine pour les agents conteneurisé : `/workspace` ;
 * Racine pour les agents non conteneurisé : `/home/devops/datas/cab` ;
 * Règles de sécurité et de travails des LLM : `AGENTS.md` ;
 * Objectifs et architecture du projet : `PROJECT.md` ;
 * Cadrage technique : `TECHNICAL.md` ;
-* Cadrage de déploiement : `BUILD.md` 
+* Cadrage de déploiement : `BUILD.md` ;
+* Envrionnement de développement : `DEVOPS.md` ;
 
 Les deux racines désignent le même projet lorsqu'un montage conteneurisé est
 configuré. Toute opération DOIT utiliser la racine correspondant à son
@@ -29,9 +32,10 @@ En cas de contradiction, appliquer cet ordre :
 3. Règles de sécurité et de travails des LLM : `AGENTS.md` ;
 4. Objectifs et architecture du projet : `PROJECT.md` ;
 5. Cadrage technique : `TECHNICAL.md` ;
-6. Cadrage de conteneurisation : `BUILD.md` ;
-7. documentation officielle du projet ;
-8. code existant.
+6. Cadrage de déploiement : `BUILD.md` ;
+7. Environnement de développement : `DEVOPS.md` ;
+8. documentation officielle du projet ;
+9. code existant.
 
 Une spécification OpenSpec validée prévaut sur un code contradictoire.
 
@@ -49,11 +53,12 @@ Avant toute intervention, l'agent DOIT lire uniquement ce qui est nécessaire, d
 
 1. `AGENTS.md` ;
 2. `PROJECT.md` ;
-2. `TECHNICAL.md` ;
-2. `BUILD.md` ;
-3. spécifications ou évolution OpenSpec applicables ;
-4. conventions applicables du projet ;
-5. code et documentation concernés.
+3. `TECHNICAL.md` ;
+4. `BUILD.md` ;
+5. `DEVOPS.md` ;
+6. spécifications ou évolution OpenSpec applicables ;
+7. conventions applicables du projet ;
+8. code et documentation concernés.
 
 L'agent DOIT privilégier :
 
@@ -182,6 +187,12 @@ Toute modification de la configuration OpenCode nécessite une validation explic
 
 L'agent DOIT préserver l'arborescence et les conventions existantes.
 
+Toute référence à un prompt renvoie automatiquement au dossier `PROMPTS/` du
+projet, et à son INDEX.md pour la liste des prompts disponible.
+Ce dossier et son contenu ne sont pas versionnés et sont protégés :
+leur création, modification, déplacement ou suppression nécessite une
+validation explicite du développeur.
+
 Le renommage, déplacement ou la suppression d'un fichier ou répertoire nécessite une validation explicite du développeur.
 
 Lorsqu'un fichier semble inutilisé, l'agent DOIT le signaler avant toute suppression.
@@ -195,6 +206,8 @@ Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimé
 * `.gitignore`
 * `AGENTS.md`
 * `BUILD.md`
+* `CHANGELOG.md`
+* `DEVOPS.md`
 * `LICENSE`
 * `PROJECT.md`
 * `README.md`
@@ -282,6 +295,8 @@ Les inclusions suivantes prévalent sur les exclusions générales et PEUVENT ê
 .gitignore
 AGENTS.md
 BUILD.md
+CHANGELOG.md
+DEVOPS.md
 LICENSE
 PROJECT.md
 README.md
