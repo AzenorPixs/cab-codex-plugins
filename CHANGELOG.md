@@ -4,6 +4,8 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Correction de la validation des mandats unitaires : une commande unique peut
+  désormais être validée avec une liste `files` vide.
 - Passage à des mandats unitaires : Codex pilote et valide chaque opération
   OpenCode, y compris l’archivage OpenSpec ; CAB ne transmet qu’une décision
   corrélée à une permission native unique.

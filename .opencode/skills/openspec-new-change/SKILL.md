@@ -56,7 +56,7 @@ Start a new change using the experimental artifact-driven approach.
    ```bash
    openspec instructions <first-artifact-id> --change "<name>"
    ```
-   This outputs the template and context for creating the first artifact.
+   This outputs the cab and context for creating the first artifact.
 
 6. **STOP and wait for user direction**
 
@@ -66,12 +66,12 @@ After completing the steps, summarize:
 - Change name and location
 - Schema/workflow being used and its artifact sequence
 - Current status (0/N artifacts complete)
-- The template for the first artifact
+- The cab for the first artifact
 - Prompt: "Ready to create the first artifact? Just describe what this change is about and I'll draft it, or ask me to continue."
 
 **Guardrails**
 - Do NOT create any artifacts yet - just show the instructions
-- Do NOT advance beyond showing the first artifact template
+- Do NOT advance beyond showing the first artifact cab
 - If the name is invalid (not kebab-case), ask for a valid name
 - If a change with that name already exists, suggest continuing that change instead
 - Pass --schema if using a non-default workflow
