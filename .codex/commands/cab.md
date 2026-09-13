@@ -16,11 +16,17 @@ Ne jamais clore la réponse, arrêter le pilotage ou déclarer le travail termin
 
 Conserver le contexte initial du job comme source de vérité pendant toute la session : objectif, périmètre, spécifications OpenSpec, critères de validation, interdictions et délégations.
 
+Un tour OpenCode achevé n’est jamais une fin de job. Tant que le job n’est ni
+terminé, ni bloqué, ni explicitement arrêté, lire son dernier résultat dans la
+session persistante et transmettre le mandat suivant dans cette même session.
+Ne jamais envoyer de réponse finale au développeur pendant cet état RUN.
+
 ## Syntaxe
 
 Les seules sous-commandes admises sont :
 
 - `/cab start`
+- `/cab run`
 - `/cab stop`
 - `/cab test`
 
@@ -82,6 +88,32 @@ Le broker :
 18. Avant le premier pilotage réel après démarrage, exécute obligatoirement `/cab test`.
 
 Une simple réponse HTTP, un ancien état MCP ou une ancienne session de test ne suffit jamais à déclarer `CAB_ACTIF`.
+
+## `/cab run`
+
+Exécute un job piloté dans la session persistante après un `/cab start` et un
+`/cab test` réussis.
+
+1. Constitue un contrat de job unique : `requestId`, `approval_id`, `change_id`,
+   objectif, session OpenCode, répertoire cible, fichiers relatifs autorisés,
+   commandes exactes autorisées et critères de fin.
+2. Demande la validation CAB de ce contrat complet avant tout mandat d’écriture
+   ou de commande. Aucun périmètre non déclaré ne peut être ajouté après cette
+   validation.
+3. Après réponse MCP `approved` corrélée, le broker transmet ce périmètre au
+   contrôleur. Le contrôleur répond alors automatiquement aux seules permissions
+   natives OpenCode de cette session correspondant exactement à un fichier ou à
+   une commande du contrat, avec la réponse native `once`.
+4. Une permission hors session, hors fichier, hors commande ou hors contrat
+   reste en attente et doit être remontée comme écart ; elle n’est jamais
+   acquittée par CAB.
+5. Après chaque tour de l’agent de codage, contrôle la session persistante. Si
+   le contrat n’est pas terminal, envoie le mandat suivant sans créer de session
+   éphémère et sans conclure la réponse Codex.
+6. Le job devient terminal uniquement si tous ses critères sont satisfaits, si
+   CAB retourne `BLOCKED` ou `HUMAN_REQUIRED`, ou si le développeur l’arrête
+   explicitement. À ce moment seulement, publie le bilan final puis clôture le
+   contrat côté CAB.
 
 ## `/cab test`
 

@@ -222,3 +222,119 @@ test("propage les trois identifiants à une décision manuelle", async (context)
     requestId: "request-test-456",
   });
 });
+
+test("acquitte une permission native exactement incluse dans un périmètre approuvé", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "cab-controller-scope-test-"));
+  const fakeCodex = join(directory, "fake-codex.cjs");
+  const controllerPort = await availablePort();
+  const opencodePort = await availablePort();
+  const controllerUrl = `http://127.0.0.1:${controllerPort}`;
+  let replied = null;
+  let permissions = [
+    {
+      id: "permission-123",
+      sessionID: "ses_scope_test",
+      permission: "edit",
+      metadata: { filepath: "/workspace/BUILD.md" },
+    },
+  ];
+
+  const opencode = createServer(async (request, response) => {
+    const body = [];
+
+    for await (const chunk of request) {
+      body.push(chunk);
+    }
+
+    if (request.url.startsWith("/global/health")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ healthy: true }));
+      return;
+    }
+
+    if (request.url.startsWith("/permission")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(permissions));
+      return;
+    }
+
+    if (request.url.startsWith("/session/ses_scope_test/permissions/permission-123")) {
+      replied = JSON.parse(Buffer.concat(body).toString("utf8"));
+      permissions = [];
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("true");
+      return;
+    }
+
+    response.writeHead(404).end();
+  });
+
+  await new Promise((resolve) => {
+    opencode.listen(opencodePort, "127.0.0.1", resolve);
+  });
+
+  writeFileSync(
+    fakeCodex,
+    "#!/usr/bin/env node\nprocess.stdin.resume();\n",
+    { mode: 0o755 }
+  );
+
+  const controller = spawn(process.execPath, [controllerPath], {
+    env: {
+      ...process.env,
+      CODEX_COMMAND: fakeCodex,
+      OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
+      OC_CGPT_OUTSIDE_SANDBOX: "1",
+      OC_CGPT_RECONNECT_MS: "60000",
+      OC_CGPT_STATUS_HOST: "127.0.0.1",
+      OC_CGPT_STATUS_PORT: String(controllerPort),
+      OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
+    },
+    stdio: "ignore",
+  });
+
+  context.after(async () => {
+    controller.kill("SIGTERM");
+    await new Promise((resolve) => opencode.close(resolve));
+    rmSync(directory, { force: true, recursive: true });
+  });
+
+  await waitForStatus(controllerUrl);
+
+  const validation = await fetch(`${controllerUrl}/validation/request`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      approval: {
+        approval_id: "approval-scope-123",
+        change_id: "change-scope-789",
+        requestId: "request-scope-456",
+        summary: "Test de périmètre.",
+        session_id: "ses_scope_test",
+        directory: "/workspace",
+        files: ["BUILD.md"],
+        commands: [],
+      },
+    }),
+  });
+
+  assert.equal(validation.status, 202);
+
+  const decision = await fetch(`${controllerUrl}/decision/request-scope-456`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      decision: "approved",
+      instructions: "Dans le périmètre.",
+      rationale: "Test.",
+    }),
+  });
+
+  assert.equal(decision.status, 201);
+
+  for (let attempt = 0; attempt < 20 && !replied; attempt += 1) {
+    await delay(25);
+  }
+
+  assert.deepEqual(replied, { response: "once" });
+});

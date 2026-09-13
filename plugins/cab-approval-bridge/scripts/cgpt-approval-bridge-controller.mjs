@@ -62,6 +62,7 @@ const active = new Map();
 const answered = new Set();
 const httpDecisions = new Map();
 const validations = new Map();
+const reconcilingPermissions = new Set();
 
 const status = {
   startedAt: new Date().toISOString(),
@@ -100,6 +101,150 @@ function publicStatus() {
     ),
     lastEvent: status.lastEvent,
   };
+}
+
+function approvedScope(approval) {
+  const sessionId = approval?.session_id;
+  const directory = approval?.directory;
+  const files = approval?.files;
+  const commands = approval?.commands;
+
+  if (
+    typeof sessionId !== "string" ||
+    typeof directory !== "string" ||
+    !sessionId.startsWith("ses_") ||
+    !directory.startsWith("/")
+  ) {
+    return null;
+  }
+
+  if (!Array.isArray(files) || !Array.isArray(commands)) {
+    throw new Error("Périmètre de job incomplet.");
+  }
+
+  const validFile = (file) =>
+    typeof file === "string" &&
+    file &&
+    !file.startsWith("/") &&
+    file !== ".." &&
+    !file.startsWith("../");
+  const validCommand = (command) =>
+    typeof command === "string" &&
+    command &&
+    command.length <= 2_000;
+
+  if (
+    files.length === 0 ||
+    !files.every(validFile) ||
+    !commands.every(validCommand)
+  ) {
+    throw new Error("Périmètre de job invalide.");
+  }
+
+  return {
+    sessionId,
+    directory,
+    files: new Set(files),
+    commands: new Set(commands),
+  };
+}
+
+function matchesApprovedScope(permission, scope) {
+  if (!scope || permission.sessionID !== scope.sessionId) {
+    return false;
+  }
+
+  if (permission.permission === "edit") {
+    const filePath = permission.metadata?.filepath;
+    const prefix = `${scope.directory}/`;
+
+    return (
+      typeof filePath === "string" &&
+      filePath.startsWith(prefix) &&
+      scope.files.has(filePath.slice(prefix.length))
+    );
+  }
+
+  return (
+    permission.permission === "bash" &&
+    typeof permission.metadata?.command === "string" &&
+    scope.commands.has(permission.metadata.command)
+  );
+}
+
+async function approveScopedPermissions(validation) {
+  if (
+    !validation.scope ||
+    reconcilingPermissions.has(validation.requestId)
+  ) {
+    return;
+  }
+
+  reconcilingPermissions.add(validation.requestId);
+
+  try {
+
+    const response = await fetch(
+    `${opencodeUrl}/permission?directory=${encodeURIComponent(
+      validation.scope.directory
+    )}`,
+    { signal: AbortSignal.timeout(10_000) }
+  );
+
+    if (!response.ok) {
+      throw new Error(`OpenCode permissions HTTP ${response.status}.`);
+    }
+
+    const permissions = await response.json();
+
+    if (!Array.isArray(permissions)) {
+      throw new Error("Liste de permissions OpenCode invalide.");
+    }
+
+    for (const permission of permissions) {
+      if (!matchesApprovedScope(permission, validation.scope)) {
+        continue;
+      }
+
+      const reply = await fetch(
+      `${opencodeUrl}/session/${encodeURIComponent(
+        validation.scope.sessionId
+      )}/permissions/${encodeURIComponent(permission.id)}?directory=${encodeURIComponent(
+        validation.scope.directory
+      )}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ response: "once" }),
+        signal: AbortSignal.timeout(10_000),
+      }
+    );
+
+      if (!reply.ok || !(await reply.json())) {
+        throw new Error(`Réponse permission OpenCode HTTP ${reply.status}.`);
+      }
+
+      updateStatus("opencode-permission-approved", {
+        requestId: validation.requestId,
+        permission: permission.permission,
+      });
+    }
+  } finally {
+    reconcilingPermissions.delete(validation.requestId);
+  }
+}
+
+function reconcileApprovedPermissions() {
+  for (const validation of validations.values()) {
+    if (httpDecisions.get(validation.requestId)?.decision === "approved") {
+      void approveScopedPermissions(validation).catch((cause) => {
+        updateStatus("opencode-permission-reconciliation-failed", {
+          requestId: validation.requestId,
+          error: cause.message,
+        });
+      });
+    }
+  }
 }
 
 function sendCodex(method, params) {
@@ -490,6 +635,14 @@ async function handleValidation(request) {
       sessionId: "oc-mcp",
       requestId: request.requestId,
       summary: request.summary,
+      scope: request.scope
+        ? {
+            sessionId: request.scope.sessionId,
+            directory: request.scope.directory,
+            files: [...request.scope.files],
+            commands: [...request.scope.commands],
+          }
+        : null,
     });
 
     if (
@@ -524,6 +677,20 @@ async function handleValidation(request) {
           decision.decision,
       }
     );
+
+    if (decision.decision === "approved") {
+      try {
+        await approveScopedPermissions(request);
+      } catch (cause) {
+        updateStatus(
+          "opencode-permission-reconciliation-failed",
+          {
+            requestId: request.requestId,
+            error: cause.message,
+          }
+        );
+      }
+    }
   } catch (cause) {
     updateStatus(
       "validation-failed",
@@ -674,6 +841,8 @@ async function consumeOpenCodeEvents() {
                 "unknown",
             }
           );
+
+          reconcileApprovedPermissions();
         } catch {
           updateStatus(
             "opencode-sse-invalid-event"
@@ -877,6 +1046,7 @@ createServer(
             approvalId,
             changeId,
             summary,
+            scope: approvedScope(approval),
           };
 
           validations.set(
@@ -1034,6 +1204,18 @@ createServer(
                 decision.decision,
             }
           );
+
+          if (decision.decision === "approved") {
+            void approveScopedPermissions(validation).catch((cause) => {
+              updateStatus(
+                "opencode-permission-reconciliation-failed",
+                {
+                  requestId,
+                  error: cause.message,
+                }
+              );
+            });
+          }
 
           response.writeHead(
             201,

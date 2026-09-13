@@ -24,6 +24,8 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - Les validations normales passent par MCP stdio.
 - L’état `GET /mcp` du serveur OpenCode est la source de vérité de connexion MCP pour les sessions persistantes ; une sortie CLI ne peut pas s’y substituer.
 - Une session de codage persistante est créée ou réutilisée avec l’API native OpenCode après confirmation de `cgpt-validation: connected`. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
+- Un mandat de job validé contient obligatoirement l’identifiant de cette session, son répertoire cible, les fichiers relatifs et les commandes exactes autorisés. Après une décision CAB `approved` corrélée, le contrôleur peut répondre `once` aux seules permissions natives OpenCode qui correspondent exactement à ce périmètre.
+- La fin d’un tour OpenCode ne constitue pas la fin du job : conserver la boucle de pilotage et transmettre le mandat suivant dans la même session jusqu’à un état terminal explicite.
 - Ne jamais lire, journaliser ou afficher de secret.
 
 ## Environnement Pixs / Devops
@@ -50,6 +52,22 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 14. Rendre une décision Codex explicite unique.
 15. Vérifier la réponse MCP corrélée reçue par OpenCode dans cette session.
 16. Créer le heartbeat de trente secondes uniquement après validation complète.
+
+## Contrat de job piloté
+
+Avant le premier mandat d’écriture ou de commande, soumettre une unique
+`request_validation` contenant `requestId`, `approval_id`, `change_id`,
+`session_id`, `directory`, `files`, `commands` et le résumé du périmètre.
+
+`files` contient seulement des chemins relatifs au répertoire cible.
+`commands` contient les chaînes de commande complètes, exactement telles
+qu’OpenCode les soumettra à sa permission native. Ne pas autoriser de glob,
+de préfixe ou de commande implicite.
+
+Après l’approbation corrélée, superviser la session persistante. Relancer le
+mandat suivant après chaque tour tant que les critères de fin ne sont pas
+atteints. Une demande native hors périmètre, un état `BLOCKED`, un état
+`HUMAN_REQUIRED` ou une divergence arrête cette boucle et doit être signalé.
 
 ## Readiness
 

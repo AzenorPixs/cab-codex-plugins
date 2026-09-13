@@ -3317,6 +3317,9 @@ def validate_existing_approval(
     title,
     files,
     request_id,
+    session_id,
+    directory,
+    commands,
 ):
     if item.get(
         "change_id"
@@ -3331,6 +3334,15 @@ def validate_existing_approval(
     if item.get(
         "files"
     ) != files:
+        return False
+
+    if item.get("session_id", "") != session_id:
+        return False
+
+    if item.get("directory", "") != directory:
+        return False
+
+    if item.get("commands", []) != commands:
         return False
 
     if (
@@ -3380,6 +3392,50 @@ def do_propose(args):
         "requestId",
         100,
     )
+
+    session_id = optional_str(
+        args,
+        "session_id",
+        200,
+    )
+
+    directory = optional_str(
+        args,
+        "directory",
+        500,
+    )
+
+    commands = args.get("commands", [])
+
+    if not isinstance(commands, list) or any(
+        not isinstance(command, str)
+        or not command
+        or len(command) > 2000
+        for command in commands
+    ):
+        raise ValidationError("parametre 'commands' : liste de chaines")
+
+    if bool(session_id) != bool(directory):
+        raise ValidationError(
+            "session_id et directory doivent etre fournis ensemble"
+        )
+
+    if session_id:
+        if not session_id.startswith("ses_"):
+            raise ValidationError("parametre 'session_id' invalide")
+
+        if not directory.startswith("/"):
+            raise ValidationError("parametre 'directory' invalide")
+
+        if any(
+            path.startswith("/")
+            or path == ".."
+            or path.startswith("../")
+            for path in files
+        ):
+            raise ValidationError(
+                "files doit contenir des chemins relatifs sans remontee"
+            )
 
     ttl = args.get(
         "ttl_seconds",
@@ -3491,6 +3547,9 @@ def do_propose(args):
                 title,
                 files,
                 request_id,
+                session_id,
+                directory,
+                commands,
             ):
                 raise ValidationError(
                     "retry incompatible avec "
@@ -3556,6 +3615,9 @@ def do_propose(args):
                 "change_id": change_id,
                 "title": title,
                 "files": files,
+                "session_id": session_id,
+                "directory": directory,
+                "commands": commands,
                 "summary": summary,
                 "status": "PENDING",
                 "requester": "OC",
@@ -8076,6 +8138,18 @@ APPROVAL_REQUEST_PROPERTIES = {
     },
     "requestId": {
         "type": "string",
+    },
+    "session_id": {
+        "type": "string",
+    },
+    "directory": {
+        "type": "string",
+    },
+    "commands": {
+        "type": "array",
+        "items": {
+            "type": "string",
+        },
     },
     "ttl_seconds": {
         "type": "integer",
