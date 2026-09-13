@@ -24,9 +24,35 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - Les validations normales passent par MCP stdio.
 - L’état `GET /mcp` du serveur OpenCode est la source de vérité de connexion MCP pour les sessions persistantes ; une sortie CLI ne peut pas s’y substituer.
 - Une session de codage persistante est créée ou réutilisée avec l’API native OpenCode après confirmation de `cgpt-validation: connected`. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
-- Un mandat de job validé contient obligatoirement l’identifiant de cette session, son répertoire cible, les fichiers relatifs et les commandes exactes autorisés. Après une décision CAB `approved` corrélée, le contrôleur peut répondre `once` aux seules permissions natives OpenCode qui correspondent exactement à ce périmètre.
+- Chaque opération OpenCode nécessitant une permission native constitue un mandat unitaire. Avant cette opération, l’agent soumet `request_validation` avec l’identifiant de session, le répertoire cible et exactement un fichier relatif ou une commande complète. Le contrôleur ne transmet `once` qu’après une décision CAB `approved` explicite et corrélée à ce mandat unique ; cette décision est consommée après une seule permission native correspondante.
 - La fin d’un tour OpenCode ne constitue pas la fin du job : conserver la boucle de pilotage et transmettre le mandat suivant dans la même session jusqu’à un état terminal explicite.
 - Ne jamais lire, journaliser ou afficher de secret.
+
+## Rôle non déléguable de l’orchestrateur
+
+L’orchestrateur Codex pilote la session de codage persistante depuis `/cab start`
+jusqu’à son état terminal explicite. Il fixe les mandats, observe leur exécution,
+contrôle leurs résultats et décide de la poursuite, de la correction, du refus,
+de la suspension ou de la clôture du job.
+
+Il est l’unique validateur opérationnel de chaque décision de la session. Toute
+édition, commande Bash ou système, commande OpenSpec, test à effet de bord,
+correction ou opération d’archivage OpenSpec fait l’objet d’un mandat unitaire
+soumis à son examen et à sa décision explicite, corrélée et visible dans la
+session persistante. Le feu vert initial du développeur autorise ce pilotage ;
+il ne remplace jamais les décisions de l’orchestrateur.
+
+L’agent de codage réalise les mandats validés, mais ne les autorise pas lui-même
+et ne décide ni d’un élargissement de périmètre ni d’un archivage OpenSpec.
+CAB est un transport neutre : il ne décide jamais. Après une décision
+`approved` de l’orchestrateur, il ne fait que transmettre cette décision à
+l’unique permission native OpenCode corrélée.
+
+L’archivage OpenSpec est un mandat distinct. L’orchestrateur ne l’approuve
+qu’après avoir vérifié les critères d’acceptation, les validations applicables,
+la cohérence entre implémentation, spécifications et cadrages, ainsi que
+l’absence de blocage connu. Cette décision clôt le cycle OpenSpec ciblé ; elle
+ne vaut jamais autorisation d’archiver un autre changement.
 
 ## Environnement Pixs / Devops
 
@@ -53,21 +79,27 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 15. Vérifier la réponse MCP corrélée reçue par OpenCode dans cette session.
 16. Créer le heartbeat de trente secondes uniquement après validation complète.
 
-## Contrat de job piloté
+## Mandats unitaires d’un job piloté
 
-Avant le premier mandat d’écriture ou de commande, soumettre une unique
-`request_validation` contenant `requestId`, `approval_id`, `change_id`,
-`session_id`, `directory`, `files`, `commands` et le résumé du périmètre.
+Le contrat de job fixe seulement l’objectif, les critères de fin et les
+limites fonctionnelles. Il ne vaut jamais approbation d’écriture ou de
+commande.
 
-`files` contient seulement des chemins relatifs au répertoire cible.
-`commands` contient les chaînes de commande complètes, exactement telles
-qu’OpenCode les soumettra à sa permission native. Ne pas autoriser de glob,
-de préfixe ou de commande implicite.
+Avant chaque action qui déclenche une permission native OpenCode, soumettre un
+nouveau `request_validation` avec un `requestId`, un `approval_id`, un
+`change_id`, l’identifiant de la session, son répertoire cible et un résumé
+compréhensible. Le mandat contient exactement l’un des deux objets suivants :
 
-Après l’approbation corrélée, superviser la session persistante. Relancer le
-mandat suivant après chaque tour tant que les critères de fin ne sont pas
-atteints. Une demande native hors périmètre, un état `BLOCKED`, un état
-`HUMAN_REQUIRED` ou une divergence arrête cette boucle et doit être signalé.
+- un seul chemin relatif dans `files` et une liste `commands` vide pour une édition ;
+- une liste `files` vide et une seule commande complète dans `commands` pour Bash ou OpenSpec.
+
+Ne jamais grouper plusieurs fichiers, commandes, glob, préfixe ou commande
+implicite. Attendre la décision explicite et corrélée de Codex. Si elle est
+`approved`, CAB transmet cette unique décision à la permission native
+correspondante et la consomme. Une seconde permission, même identique, exige
+un nouveau mandat. Une demande non corrélée, `rejected`,
+`needs_clarification`, `BLOCKED`, `HUMAN_REQUIRED` ou divergente suspend le
+job et reste signalée dans la session persistante.
 
 ## Readiness
 

@@ -27,15 +27,30 @@ Le broker peut recevoir, corréler, persister, notifier, récupérer une décisi
 
 Il ne doit jamais décider à la place de Codex, transformer une absence de réponse en approbation, modifier le projet OpenCode ou lancer un travail de développement.
 
-### 3.3 Corrélation explicite
+### 3.3 Orchestrateur validateur
+
+Codex est l’orchestrateur de la session de codage persistante. Il la pilote du
+démarrage jusqu’à son état terminal : il confie les mandats, examine leurs
+résultats, décide de la poursuite, de la correction, du refus ou de la
+suspension, puis prononce la clôture.
+
+Toute opération nécessitant une permission OpenCode est un mandat unitaire
+soumis à sa décision explicite et corrélée : édition, commande Bash ou système,
+commande OpenSpec, test à effet de bord, correction ou archivage OpenSpec.
+L’agent de codage exécute les mandats approuvés sans décider lui-même de leur
+validité ni d’un élargissement de périmètre. Un archivage OpenSpec reste un
+mandat distinct, décidé seulement après vérification des critères d’acceptation,
+des validations et de la cohérence finale.
+
+### 3.4 Corrélation explicite
 
 Chaque demande est corrélée par un `requestId` stable. Une décision doit correspondre à la demande exacte qui l'a provoquée. Une décision déjà consommée ne doit pas pouvoir être remplacée par une décision contradictoire.
 
-### 3.4 Persistance et traçabilité
+### 3.5 Persistance et traçabilité
 
 CAB conserve l'état courant des approbations, leur historique, les éléments nécessaires à la reprise après interruption et les informations de diagnostic.
 
-### 3.5 Supervision indépendante
+### 3.6 Supervision indépendante
 
 CAB distingue disponibilité des processus, activité des transports et progression métier réelle. Un processus vivant ou un échange réseau actif ne suffit pas à déclarer le système sain.
 
@@ -70,6 +85,11 @@ Le broker constitue le cœur de CAB. Il gère les validations, la corrélation, 
 
 Le contrôleur reçoit les demandes du broker, sollicite Codex dans un contexte de validation dédié et rend les décisions disponibles au broker. Il ne remplace pas le broker et ne modifie pas le projet suivi.
 
+Après une décision explicite `approved`, il transmet uniquement cette décision
+à l’unique permission native OpenCode corrélée, puis la considère consommée.
+Il ne peut jamais transformer un objectif de job ou une liste de fichiers et de
+commandes en approbation générale.
+
 ### 5.3 Supervision
 
 CAB observe OpenCode par une voie SSE directe indépendante du cycle MCP. Cette voie sert à confirmer l'activité réelle et à réconcilier l'état après reconnexion ou divergence.
@@ -88,6 +108,8 @@ décision d'approbation.
 - `/cab start` : vérifie le MCP actif, initialise ou reprend le contrôleur et
   la supervision, puis crée ou réutilise la session de codage persistante ;
 - `/cab test` : vérifie le chemin complet de validation dans cette session ;
+- `/cab run` : maintient le job piloté et ses mandats unitaires dans cette
+  même session ;
 - `/cab stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
   arrêter OpenCode ni le broker MCP géré par OpenCode.
 

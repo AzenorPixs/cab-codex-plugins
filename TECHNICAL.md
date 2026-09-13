@@ -77,16 +77,25 @@ EXPIRED
 
 ```text
 OpenCode
-  → request_validation
+  → request_validation pour un mandat unitaire
   → broker : validation + requestId + persistance PENDING
   → POST local vers le contrôleur
-  → décision Codex
+  → décision explicite Codex
   → GET /decision/<requestId> par le broker
   → corrélation + persistance + journal
   → réponse MCP corrélée vers OpenCode
+  → une permission native OpenCode correspondante, consommée une fois
 ```
 
 Une absence de décision ne vaut jamais approbation.
+
+Un mandat qui attend une permission native contient l’identifiant de session,
+le répertoire cible et exactement un fichier relatif pour une édition, ou une
+commande complète pour Bash, système ou OpenSpec. Après une décision
+`approved`, le contrôleur ne répond `once` qu’à cette permission corrélée et
+consomme le mandat. Un second fichier, une seconde commande ou une seconde
+permission exige un nouveau `request_validation` et une nouvelle décision
+Codex.
 
 ## 7. Contrôleur Codex
 
@@ -96,6 +105,12 @@ ou `/home/devops/datas/cab`), lance `codex app-server`, crée un thread Codex en
 lecture seule, reçoit les demandes du broker, obtient une décision structurée,
 conserve les décisions pour le sondage du broker, expose une interface HTTP
 locale et supervise le SSE direct OpenCode.
+
+Codex y assume le rôle d’orchestrateur et de validateur de bout en bout : il
+évalue chaque mandat, sans déléguer sa décision au broker ni à une portée de
+job. L’archivage OpenSpec est traité comme un mandat distinct, approuvé
+seulement après contrôle de son éligibilité, des validations et de la
+cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
 
