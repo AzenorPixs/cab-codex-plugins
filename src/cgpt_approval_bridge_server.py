@@ -67,7 +67,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "0.61.0"
+SERVER_VERSION = "0.63.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -3123,6 +3123,7 @@ def require_list_str(
     args,
     name,
     max_items=50,
+    allow_empty=False,
 ):
     value = args.get(
         name
@@ -3133,7 +3134,10 @@ def require_list_str(
             value,
             list,
         )
-        or not value
+        or (
+            not allow_empty
+            and not value
+        )
     ):
         raise ValidationError(
             "parametre '%s' : liste non vide obligatoire"
@@ -3168,6 +3172,45 @@ def require_list_str(
         )
 
     return result
+
+
+def validate_unitary_operation(
+    args,
+):
+    operation_args = dict(
+        args
+    )
+    operation_args.setdefault(
+        "commands",
+        [],
+    )
+
+    files = require_list_str(
+        operation_args,
+        "files",
+        max_items=1,
+        allow_empty=True,
+    )
+
+    commands = require_list_str(
+        operation_args,
+        "commands",
+        max_items=1,
+        allow_empty=True,
+    )
+
+    if (
+        len(files) != 1
+        and len(commands) != 1
+    ) or (
+        files
+        and commands
+    ):
+        raise ValidationError(
+            "un mandat doit contenir un fichier ou une commande unique"
+        )
+
+    return files, commands
 
 
 def validate_wait_parameters(
@@ -3370,9 +3413,8 @@ def do_propose(args):
         300,
     )
 
-    files = require_list_str(
+    files, commands = validate_unitary_operation(
         args,
-        "files",
     )
 
     summary = optional_str(
@@ -3404,16 +3446,6 @@ def do_propose(args):
         "directory",
         500,
     )
-
-    commands = args.get("commands", [])
-
-    if not isinstance(commands, list) or any(
-        not isinstance(command, str)
-        or not command
-        or len(command) > 2000
-        for command in commands
-    ):
-        raise ValidationError("parametre 'commands' : liste de chaines")
 
     if bool(session_id) != bool(directory):
         raise ValidationError(

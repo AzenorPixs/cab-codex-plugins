@@ -117,5 +117,42 @@ class ControllerDecisionCorrelationTest(
         )
 
 
+class UnitaryOperationValidationTest(
+    unittest.TestCase,
+):
+    def test_accepts_a_single_relative_file(self):
+        files, commands = bridge.validate_unitary_operation(
+            {
+                "files": ["BUILD.md"],
+            }
+        )
+
+        self.assertEqual(files, ["BUILD.md"])
+        self.assertEqual(commands, [])
+
+    def test_accepts_a_single_command_without_file(self):
+        files, commands = bridge.validate_unitary_operation(
+            {
+                "files": [],
+                "commands": ["true"],
+            }
+        )
+
+        self.assertEqual(files, [])
+        self.assertEqual(commands, ["true"])
+
+    def test_rejects_empty_or_ambiguous_operations(self):
+        invalid_operations = (
+            {"files": [], "commands": []},
+            {"files": ["BUILD.md"], "commands": ["true"]},
+            {"files": ["BUILD.md", "README.md"], "commands": []},
+            {"files": [], "commands": ["true", "false"]},
+        )
+
+        for operation in invalid_operations:
+            with self.assertRaises(bridge.ValidationError):
+                bridge.validate_unitary_operation(operation)
+
+
 if __name__ == "__main__":
     unittest.main()
