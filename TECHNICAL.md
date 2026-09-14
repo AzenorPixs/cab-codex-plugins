@@ -30,7 +30,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.71.0`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.72.0`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -234,7 +234,7 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 - `OC_Codex_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
 - `OC_Codex_STATUS_PORT`
 - `OC_Codex_RECONNECT_MS`
-- `OC_Codex_DECISION_MODE` : `automatic` par défaut ou `manual` pour
+- `OC_Codex_DECISION_MODE` : `manual` par défaut ou `automatic` pour
   conserver les demandes PENDING jusqu'à une décision corrélée sur l'interface
   HTTP locale
 - `OC_Codex_CONTROLLER_URL`
