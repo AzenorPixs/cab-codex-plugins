@@ -29,6 +29,7 @@ const statusHost = envValue("OC_Codex_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_STATUS_PORT") || "8788");
 const reconnectMs = Number(envValue("OC_Codex_RECONNECT_MS") || "1000");
 const decisionMode = envValue("OC_Codex_DECISION_MODE") || "manual";
+const opencodeExitStatusSuffix = ' 2>/dev/null; echo "exit=$?"';
 
 if (!workspace) {
   throw new Error(
@@ -174,11 +175,19 @@ function matchesApprovedOperation(permission, operation) {
     );
   }
 
+  if (
+    operation.kind !== "bash" ||
+    permission.permission !== "bash" ||
+    typeof permission.metadata?.command !== "string"
+  ) {
+    return false;
+  }
+
+  const command = permission.metadata.command;
+
   return (
-    operation.kind === "bash" &&
-    permission.permission === "bash" &&
-    typeof permission.metadata?.command === "string" &&
-    permission.metadata.command === operation.target
+    command === operation.target ||
+    command === `${operation.target}${opencodeExitStatusSuffix}`
   );
 }
 
@@ -617,7 +626,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.72.0",
+      version: "0.72.1",
     },
   });
 
