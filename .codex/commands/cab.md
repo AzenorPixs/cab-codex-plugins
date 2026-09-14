@@ -68,7 +68,7 @@ Le broker :
 2. Vérifie que la configuration OpenCode déclare `cgpt-validation` comme serveur MCP local `stdio`.
 3. Consulte l’état MCP du serveur OpenCode par `GET /mcp`. Cette API est la seule source de vérité pour les sessions persistantes ; une sortie de CLI ou un état mémorisé ne suffit pas.
 4. Si `cgpt-validation` n’est pas `connected`, demande une réinitialisation contrôlée de l’instance OpenCode par `POST /instance/dispose`, sans tuer ni démarrer directement le processus broker. Attends ensuite une nouvelle réponse saine de `/global/health` et `cgpt-validation: connected` dans `/mcp`. En cas d’échec, publie `CAB_INACTIF` avec l’erreur observée et n’ouvre aucune session de codage.
-5. Démarre ou réutilise le contrôleur Codex persistant hors sandbox sous `oc-cgpt-validation-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté.
+5. Démarre ou réutilise le contrôleur Codex persistant hors sandbox sous `cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie que le service utilise le redémarrage automatique.
 6. Vérifie le contrôleur Codex sur son interface locale.
 7. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
 8. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
@@ -164,7 +164,7 @@ Ne ferme jamais :
 
 1. Supprime tous les heartbeats et cron healthchecks créés par `/cab`, dont « Surveillance CAB ».
 2. Ferme les flux SSE ouverts par `/cab`.
-3. Arrête proprement uniquement les processus de contrôleur démarrés par `/cab`, notamment `oc-cgpt-validation-controller.service`.
+3. Arrête proprement uniquement les processus de contrôleur démarrés par `/cab`, notamment `cgpt-approval-bridge-controller.service`.
 4. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
 5. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
 6. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.

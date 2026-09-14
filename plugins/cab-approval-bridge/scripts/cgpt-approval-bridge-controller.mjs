@@ -28,7 +28,7 @@ const codexCommand = process.env.CODEX_COMMAND || "codex";
 const statusHost = envValue("OC_Codex_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_STATUS_PORT") || "8788");
 const reconnectMs = Number(envValue("OC_Codex_RECONNECT_MS") || "1000");
-const decisionMode = envValue("OC_Codex_DECISION_MODE") || "automatic";
+const decisionMode = envValue("OC_Codex_DECISION_MODE") || "manual";
 
 if (!workspace) {
   throw new Error(
@@ -617,7 +617,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.71.0",
+      version: "0.72.0",
     },
   });
 
