@@ -119,7 +119,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.69.1` pour le broker et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
+CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.71.0` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
 
 Les releases Git devraient être identifiées par des tags de forme :
 

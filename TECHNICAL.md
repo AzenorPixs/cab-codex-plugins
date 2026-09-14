@@ -30,7 +30,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.69.1`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.71.0`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -113,6 +113,12 @@ seulement après contrôle de son éligibilité, des validations et de la
 cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
+
+Le contrôleur est démarré et maintenu par le service utilisateur
+`cgpt-approval-bridge-controller.service`, configuré pour le redémarrage
+automatique. Un RUN CAB ne doit pas le remplacer par un processus éphémère :
+le service conserve la disponibilité du contrôleur pendant les notifications
+et décisions corrélées.
 
 L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
 admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas

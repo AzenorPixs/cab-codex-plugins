@@ -4,6 +4,13 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.71.0 - 2026-09-14
+
+- Documentation du contrôleur CAB supervisé par le service utilisateur
+  `cgpt-approval-bridge-controller.service`, avec redémarrage automatique et
+  sans processus éphémère pendant un RUN.
+- Alignement du broker, du contrôleur et du plugin sur la version `0.71.0`.
+
 ## 0.69.1 - 2026-09-14
 
 - Le contrôleur accepte désormais toute racine de projet absolue fournie au
