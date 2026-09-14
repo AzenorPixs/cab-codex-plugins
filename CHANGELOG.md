@@ -4,6 +4,16 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.69.0 - 2026-09-14
+
+- Ajout d'un mode de décision manuelle du contrôleur, désactivé par défaut,
+  pour conserver les mandats PENDING jusqu'à une décision HTTP corrélée de
+  l'orchestrateur.
+- Conservation du mode de décision automatique existant, de la corrélation
+  `requestId` / `approval_id` / `change_id` et de la consommation unique des
+  permissions OpenCode.
+- Alignement des versions du broker, du contrôleur et du plugin sur `0.69.0`.
+
 - Correction de la validation des mandats unitaires : une commande unique peut
   désormais être validée avec une liste `files` vide.
 - Passage à des mandats unitaires : Codex pilote et valide chaque opération

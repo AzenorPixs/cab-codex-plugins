@@ -207,7 +207,7 @@ Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-La version de base actuelle du broker et du plugin est `0.63.0`. Le plugin ajoute un cachebuster Codex pour les installations locales.
+La version de base actuelle du broker et du plugin est `0.69.0`. Le plugin ajoute un cachebuster Codex pour les installations locales.
 
 ## Documentation
 
