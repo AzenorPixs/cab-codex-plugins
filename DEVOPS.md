@@ -132,10 +132,9 @@ Version : 0.1
   * venv: disponible
   * pip 26.1.2
 
-
 ## Environnement non conteneurisé
 
   * v3.14.7
-  * /home/devops/python/current
+  * /home/devops/python/current/bin/python3
   * venv: disponible
   * pip 26.2.1

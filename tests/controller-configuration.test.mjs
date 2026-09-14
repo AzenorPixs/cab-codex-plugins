@@ -363,6 +363,132 @@ test("réconcilie une permission native corrélée apparue après la décision",
   ]);
 });
 
+test("corrèle uniquement l'instrumentation de sortie OpenCode admise", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "cab-controller-command-test-"));
+  const fakeCodex = join(directory, "fake-codex.cjs");
+  const controllerPort = await availablePort();
+  const opencodePort = await availablePort();
+  const controllerUrl = `http://127.0.0.1:${controllerPort}`;
+  const replies = [];
+  let permissions = [];
+
+  const opencode = createServer(async (request, response) => {
+    const body = [];
+
+    for await (const chunk of request) {
+      body.push(chunk);
+    }
+
+    if (request.url.startsWith("/global/health")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ healthy: true }));
+      return;
+    }
+
+    if (request.url.startsWith("/permission")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(permissions));
+      return;
+    }
+
+    if (request.url.startsWith("/session/ses_command_test/permissions/")) {
+      replies.push({
+        id: request.url.split("/").at(-1).split("?")[0],
+        body: JSON.parse(Buffer.concat(body).toString("utf8")),
+      });
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end("true");
+      return;
+    }
+
+    response.writeHead(404).end();
+  });
+
+  await new Promise((resolve) => {
+    opencode.listen(opencodePort, "127.0.0.1", resolve);
+  });
+
+  writeFileSync(fakeCodex, "#!/usr/bin/env node\nprocess.stdin.resume();\n", {
+    mode: 0o755,
+  });
+
+  const controller = spawn(process.execPath, [controllerPath], {
+    env: {
+      ...process.env,
+      CODEX_COMMAND: fakeCodex,
+      OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
+      OC_CGPT_OUTSIDE_SANDBOX: "1",
+      OC_CGPT_RECONNECT_MS: "25",
+      OC_CGPT_STATUS_HOST: "127.0.0.1",
+      OC_CGPT_STATUS_PORT: String(controllerPort),
+      OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
+    },
+    stdio: "ignore",
+  });
+
+  context.after(async () => {
+    controller.kill("SIGTERM");
+    await new Promise((resolve) => opencode.close(resolve));
+    rmSync(directory, { force: true, recursive: true });
+  });
+
+  await waitForStatus(controllerUrl);
+
+  const validation = await fetch(`${controllerUrl}/validation/request`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      approval: {
+        approval_id: "approval-command-123",
+        change_id: "change-command-789",
+        requestId: "request-command-456",
+        summary: "Test de corrélation de commande.",
+        session_id: "ses_command_test",
+        directory: "/workspace",
+        files: [],
+        commands: ["printf approved"],
+      },
+    }),
+  });
+
+  assert.equal(validation.status, 202);
+
+  const decision = await fetch(`${controllerUrl}/decision/request-command-456`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      decision: "approved",
+      instructions: "Dans le périmètre.",
+      rationale: "Test.",
+    }),
+  });
+
+  assert.equal(decision.status, 201);
+
+  permissions = [
+    {
+      id: "permission-command-123",
+      sessionID: "ses_command_test",
+      permission: "bash",
+      metadata: { command: 'printf approved 2>/dev/null; echo "exit=$?"' },
+    },
+    {
+      id: "permission-command-124",
+      sessionID: "ses_command_test",
+      permission: "bash",
+      metadata: { command: "printf approved; touch unexpected" },
+    },
+  ];
+
+  for (let attempt = 0; attempt < 40 && replies.length === 0; attempt += 1) {
+    await delay(25);
+  }
+
+  assert.deepEqual(replies, [
+    { id: "permission-command-123", body: { response: "once" } },
+  ]);
+});
+
 test("conserve une décision manuelle rejected face à une décision automatique tardive", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-race-test-"));
   const fakeCodex = join(directory, "fake-codex.cjs");

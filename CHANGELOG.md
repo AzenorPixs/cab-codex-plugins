@@ -4,6 +4,14 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.72.1 - 2026-09-14
+
+- Le contrôleur corrèle désormais une commande Bash lorsque OpenCode ajoute
+  uniquement son instrumentation de sortie déterministe reconnue.
+- Toute autre transformation de commande reste non corrélée et ne reçoit pas
+  de permission native.
+- Alignement du broker, du contrôleur et du plugin sur la version `0.72.1`.
+
 ## 0.72.0 - 2026-09-14
 
 - Le contrôleur démarre désormais en mode de décision `manual` par défaut afin
