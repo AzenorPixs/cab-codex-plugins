@@ -67,7 +67,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "0.61.0"
+SERVER_VERSION = "0.69.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -2306,19 +2306,19 @@ def decision_fingerprint(decision):
 
 
 def controller_decision(item):
-    approval_id = item.get(
-        "approval_id",
+    request_id = item.get(
+        "requestId",
         "",
     )
 
-    if not approval_id:
+    if not request_id:
         return None
 
     url = (
         controller_url()
         + "/decision/"
         + parse.quote(
-            approval_id,
+            request_id,
             safe="",
         )
     )
@@ -2705,6 +2705,10 @@ def validate_controller_decision(
         "approval_id"
     )
 
+    request_id = item.get(
+        "requestId"
+    )
+
     change_id = item.get(
         "change_id"
     )
@@ -2722,24 +2726,30 @@ def validate_controller_decision(
     )
 
     if (
-        decision_approval_id is not None
-        and decision_approval_id
-        != approval_id
-    ):
-        return False
-
-    if (
-        decision_request_id is not None
-        and not request_id_matches_item(
-            item,
-            decision_request_id,
+        not isinstance(
+            approval_id,
+            str,
         )
+        or not approval_id
+        or not isinstance(
+            request_id,
+            str,
+        )
+        or not request_id
+        or not isinstance(
+            change_id,
+            str,
+        )
+        or not change_id
     ):
         return False
 
     if (
-        decision_change_id is not None
-        and decision_change_id
+        decision_approval_id
+        != approval_id
+        or decision_request_id
+        != request_id
+        or decision_change_id
         != change_id
     ):
         return False
@@ -3113,6 +3123,7 @@ def require_list_str(
     args,
     name,
     max_items=50,
+    allow_empty=False,
 ):
     value = args.get(
         name
@@ -3123,7 +3134,10 @@ def require_list_str(
             value,
             list,
         )
-        or not value
+        or (
+            not allow_empty
+            and not value
+        )
     ):
         raise ValidationError(
             "parametre '%s' : liste non vide obligatoire"
@@ -3158,6 +3172,45 @@ def require_list_str(
         )
 
     return result
+
+
+def validate_unitary_operation(
+    args,
+):
+    operation_args = dict(
+        args
+    )
+    operation_args.setdefault(
+        "commands",
+        [],
+    )
+
+    files = require_list_str(
+        operation_args,
+        "files",
+        max_items=1,
+        allow_empty=True,
+    )
+
+    commands = require_list_str(
+        operation_args,
+        "commands",
+        max_items=1,
+        allow_empty=True,
+    )
+
+    if (
+        len(files) != 1
+        and len(commands) != 1
+    ) or (
+        files
+        and commands
+    ):
+        raise ValidationError(
+            "un mandat doit contenir un fichier ou une commande unique"
+        )
+
+    return files, commands
 
 
 def validate_wait_parameters(
@@ -3307,6 +3360,9 @@ def validate_existing_approval(
     title,
     files,
     request_id,
+    session_id,
+    directory,
+    commands,
 ):
     if item.get(
         "change_id"
@@ -3321,6 +3377,15 @@ def validate_existing_approval(
     if item.get(
         "files"
     ) != files:
+        return False
+
+    if item.get("session_id", "") != session_id:
+        return False
+
+    if item.get("directory", "") != directory:
+        return False
+
+    if item.get("commands", []) != commands:
         return False
 
     if (
@@ -3348,9 +3413,8 @@ def do_propose(args):
         300,
     )
 
-    files = require_list_str(
+    files, commands = validate_unitary_operation(
         args,
-        "files",
     )
 
     summary = optional_str(
@@ -3370,6 +3434,40 @@ def do_propose(args):
         "requestId",
         100,
     )
+
+    session_id = optional_str(
+        args,
+        "session_id",
+        200,
+    )
+
+    directory = optional_str(
+        args,
+        "directory",
+        500,
+    )
+
+    if bool(session_id) != bool(directory):
+        raise ValidationError(
+            "session_id et directory doivent etre fournis ensemble"
+        )
+
+    if session_id:
+        if not session_id.startswith("ses_"):
+            raise ValidationError("parametre 'session_id' invalide")
+
+        if not directory.startswith("/"):
+            raise ValidationError("parametre 'directory' invalide")
+
+        if any(
+            path.startswith("/")
+            or path == ".."
+            or path.startswith("../")
+            for path in files
+        ):
+            raise ValidationError(
+                "files doit contenir des chemins relatifs sans remontee"
+            )
 
     ttl = args.get(
         "ttl_seconds",
@@ -3481,6 +3579,9 @@ def do_propose(args):
                 title,
                 files,
                 request_id,
+                session_id,
+                directory,
+                commands,
             ):
                 raise ValidationError(
                     "retry incompatible avec "
@@ -3546,6 +3647,9 @@ def do_propose(args):
                 "change_id": change_id,
                 "title": title,
                 "files": files,
+                "session_id": session_id,
+                "directory": directory,
+                "commands": commands,
                 "summary": summary,
                 "status": "PENDING",
                 "requester": "OC",
@@ -8066,6 +8170,18 @@ APPROVAL_REQUEST_PROPERTIES = {
     },
     "requestId": {
         "type": "string",
+    },
+    "session_id": {
+        "type": "string",
+    },
+    "directory": {
+        "type": "string",
+    },
+    "commands": {
+        "type": "array",
+        "items": {
+            "type": "string",
+        },
     },
     "ttl_seconds": {
         "type": "integer",

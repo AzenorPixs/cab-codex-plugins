@@ -91,7 +91,7 @@ When the user is ready to implement, they must start the apply workflow explicit
       - The instructions JSON includes:
         - `context`: Project background (constraints for you - do NOT include in output)
         - `rules`: Artifact-specific rules (constraints for you - do NOT include in output)
-        - `template`: The structure to use for your output file
+        - `cab`: The structure to use for your output file
         - `instruction`: Schema-specific guidance for this artifact type
         - `skipped`/`warning`: present when the change declares skip_specs and this artifact must NOT be created - stop and pick another artifact
         - `resolvedOutputPath`: Resolved path or pattern to write the artifact
@@ -102,7 +102,7 @@ When the user is ready to implement, they must start the apply workflow explicit
         - Ground scope, approach, and tasks in what you find. Distinguish observed behavior from assumptions and proposed additions; surface conflicts with existing specs instead of silently deciding which is correct.
         - Do this discovery now, rather than leaving generic "explore the codebase" or "make a plan" tasks for implementation. Keep any necessary follow-up investigation specific to an unresolved question.
       - If the `instruction` field delegates creation to a specific skill or command, invoke it to produce the artifact instead of writing the file yourself, then verify the artifact file exists at `resolvedOutputPath`
-      - Otherwise create the artifact file using `template` as the structure and write it to `resolvedOutputPath`. If `resolvedOutputPath` is a glob, follow `instruction` to choose the concrete file path
+      - Otherwise create the artifact file using `cab` as the structure and write it to `resolvedOutputPath`. If `resolvedOutputPath` is a glob, follow `instruction` to choose the concrete file path
       - Apply `context` and `rules` as constraints - but do NOT copy them into the file
       - Show brief progress: "Created <artifact-id>"
 
@@ -139,7 +139,7 @@ After completing all artifacts, summarize:
 - If the `instruction` field directs you to use a specific skill or command to create the artifact, invoke it instead of writing the artifact directly
 - The schema defines what each artifact should contain - follow it
 - Read dependency artifacts for context before creating new ones
-- Use `template` as the structure for your output file - fill in its sections
+- Use `cab` as the structure for your output file - fill in its sections
 - **IMPORTANT**: `context` and `rules` are constraints for YOU, not content for the file
   - Do NOT copy `<context>`, `<rules>`, `<project_context>` blocks into the artifact
   - These guide what you write, but should never appear in the output

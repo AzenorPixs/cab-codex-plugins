@@ -1,4 +1,4 @@
-# BUILD.md — CGPT Approval Bridge (CAB)
+# BUILD.md — Codex Approval Bridge (CAB)
 
 ## 1. Objet
 
@@ -6,7 +6,9 @@ Ce document définit le cadrage de construction, d'installation, de packaging et
 
 ## 2. État actuel de la distribution
 
-CAB est actuellement un dépôt source autonome comprenant le broker Python, le plugin Codex, la skill, la commande `/cab` et les scripts Node.js de contrôle et de supervision.
+CAB est actuellement un dépôt source autonome comprenant le broker Python, le
+plugin Codex, la skill, la commande Codex versionnée `/cab` et les scripts
+Node.js de contrôle et de supervision.
 
 Aucun Dockerfile ni format de paquet système n'est actuellement défini dans les sources CAB. Une image Docker ou un paquet Debian ne constitue donc pas encore un mode de distribution du projet.
 
@@ -14,17 +16,16 @@ Aucun Dockerfile ni format de paquet système n'est actuellement défini dans le
 
 ```text
 CAB/
+├── .agents/plugins/marketplace.json # marketplace Codex distribuable
+├── plugins/cab-approval-bridge/      # plugin Codex distribuable
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/approval-bridge/SKILL.md
+│   └── scripts/
+│       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-healthcheck.mjs
+│       └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── src/                 # bridge Python
-├── cab-codex-plugins/    # marketplace et plugin distribuable Codex
-│   ├── .agents/plugins/marketplace.json
-│   └── plugins/cab-approval-bridge/
-│       ├── .codex-plugin/plugin.json
-│       ├── skills/approval-bridge/SKILL.md
-│       └── scripts/
-│           ├── cgpt-approval-bridge-controller.mjs
-│           ├── cgpt-approval-bridge-healthcheck.mjs
-│           └── cgpt-approval-bridge-opencode-sse-client.mjs
-├── codex/
+├── .codex/
 │   └── commands/        # commande /cab
 ├── PROJECT.md
 ├── TECHNICAL.md
@@ -79,16 +80,17 @@ Le broker doit disposer d'un espace persistant en écriture pour son magasin, so
 
 ## 6. Installation du plugin Codex
 
-La source de la marketplace et du plugin se trouve sous :
+La source de la marketplace et du plugin se trouve à la racine du dépôt :
 
 ```text
-cab-codex-plugins/
+.agents/plugins/marketplace.json
+plugins/cab-approval-bridge/
 ```
 
 Le plugin publié se trouve sous :
 
 ```text
-cab-codex-plugins/plugins/cab-approval-bridge/
+plugins/cab-approval-bridge/
 .codex-plugin/plugin.json
 skills/approval-bridge/SKILL.md
 scripts/cgpt-approval-bridge-controller.mjs
@@ -96,19 +98,28 @@ scripts/cgpt-approval-bridge-healthcheck.mjs
 scripts/cgpt-approval-bridge-opencode-sse-client.mjs
 ```
 
-Le catalogue `cab-codex-plugins/.agents/plugins/marketplace.json` référence ce plugin.
+Le catalogue `.agents/plugins/marketplace.json` référence ce plugin.
 
-La commande `/cab` est maintenue séparément dans :
+La commande Codex `/cab` est maintenue séparément dans :
 
 ```text
-codex/commands/cab.md
+.codex/commands/cab.md
 ```
+
+Cet artefact orchestre `start`, `test` et `stop` pour les ressources CAB. Il
+doit être distribué et installé avec son plugin et sa skill, sans prendre en
+charge la décision métier ni le cycle de vie direct du broker MCP OpenCode.
+
+La vérification d'intégration de la release doit confirmer que `/cab start`
+observe l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que
+`/cab test` utilise la session de codage persistante créée ou reprise au
+démarrage.
 
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.61.0` pour le broker et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
+CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.68.0` pour le broker et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
 
 Les releases Git devraient être identifiées par des tags de forme :
 
@@ -122,7 +133,11 @@ Les numéros de version du broker et du plugin doivent être synchronisés ou le
 
 ## 8. Publication du plugin
 
-Aucun catalogue marketplace n'est actuellement distribué avec CAB. Le canal de publication et son format devront être retenus et validés contre la documentation Codex avant une release publique ; ils ne doivent pas être simulés par un manifeste vide.
+CAB distribue une marketplace Codex dans `.agents/plugins/marketplace.json`.
+Pour une marketplace GitHub privée, ce fichier et `plugins/` doivent être
+publiés à la racine d'un dépôt GitHub privé. L'administrateur de l'espace de
+travail importe ensuite ce dépôt et le synchronise ; le compte GitHub connecté
+doit disposer d'un accès en lecture au dépôt.
 
 ## 9. Forge et distribution Git
 
@@ -151,11 +166,15 @@ Avant publication :
 2. vérifier la syntaxe JavaScript ;
 3. valider `.codex-plugin/plugin.json` ;
 4. exécuter les tests CAB applicables ;
-5. vérifier `/cab test` dans un environnement d'intégration ;
-6. vérifier l'absence de secret ;
-7. vérifier que les caches et états runtime sont absents ;
-8. vérifier la cohérence des versions ;
-9. mettre à jour `CHANGELOG.md` et `README.md`.
+5. vérifier `/cab start` et `/cab test` dans un environnement d'intégration,
+   avec une session persistante et un MCP `cgpt-validation` connecté ;
+6. vérifier qu’une décision `approved` ne transmet qu’un mandat unitaire à une
+   seule permission native corrélée, et qu’un second mandat reste en attente
+   d’une nouvelle décision Codex ;
+7. vérifier l'absence de secret ;
+8. vérifier que les caches et états runtime sont absents ;
+9. vérifier la cohérence des versions ;
+10. mettre à jour `CHANGELOG.md` et `README.md`.
 
 ## 12. Packaging système futur
 

@@ -1,10 +1,33 @@
-# CGPT Approval Bridge — CAB
+# Codex Approval Bridge — CAB - 100% IA
 
-**CAB** relie OpenCode et CGPT pour fournir un cycle de validation explicite, persistant, observable et résilient.
+**CAB - Codex-Approval-Bridge** relie OpenCode et Codex pour fournir un cycle de validation explicite, persistant, observable et résilient.
 
-Le bridge transporte les demandes de validation d'OpenCode vers CGPT, conserve leur état, récupère la décision correspondante et restitue une réponse MCP corrélée à OpenCode.
+Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve leur état, récupère la décision correspondante et restitue une réponse MCP corrélée à OpenCode.
 
-Il ne décide jamais à la place de CGPT et ne modifie pas le projet piloté.
+Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
+
+Codex est l’orchestrateur et le validateur de la session : il pilote les
+mandats du démarrage à la clôture et rend une décision explicite pour chaque
+opération nécessitant une permission OpenCode. CAB transmet cette décision,
+mais ne l’invente jamais. L’archivage OpenSpec est un mandat séparé, décidé
+après contrôle de la cohérence et des validations.
+
+```text
+                    Développeur
+                        │
+            interaction / validation
+                        │
+             ┌──────────┴──────────┐
+             ▼                     ▼
+         OpenCode               Codex
+      Agent de codage        Orchestrateur
+             ▲                     │
+             └──── Bridge MCP ─────┘
+                                   │
+                                   ▼
+                                  GPT
+                     Analyse / Revue / Validation
+```
 
 ## Architecture
 
@@ -15,7 +38,7 @@ OpenCode
 CAB Broker
    │ HTTP local
    ▼
-Contrôleur CGPT ──► Codex App Server
+Contrôleur Codex ──► Codex App Server
 
 OpenCode ── SSE HTTP direct ──► supervision CAB
 ```
@@ -33,37 +56,54 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 - diagnostic avec cause racine ;
 - remédiations techniques contrôlées ;
 - circuit breaker d'auto-remédiation ;
-- contrôleur CGPT local ;
+- contrôleur Codex local ;
 - supervision SSE OpenCode ;
 - plugin et skill Codex ;
 - commande `/cab`.
 
 ## Commande `/cab`
 
+`/cab` est une commande de l'agent Codex versionnée avec CAB. Elle orchestre
+la communication entre le broker MCP et l'agent Codex ; elle ne prend jamais
+de décision d'approbation.
+
 ```text
 /cab start
 /cab test
+/cab run
 /cab stop
 ```
 
-`/cab start` initialise et vérifie le dispositif.
+`/cab start` vérifie le MCP actif par `/mcp`, initialise ou reprend le
+contrôleur et la supervision CAB, puis crée ou réutilise une session de codage
+persistante visible dans OpenCode.
 
-`/cab test` réalise un test non destructif du chemin complet OpenCode → MCP → CAB → CGPT → CAB → OpenCode.
+`/cab test` réalise, dans cette même session, un test non destructif du chemin
+complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
 
-`/cab stop` arrête les ressources de supervision CAB sans fermer arbitrairement OpenCode.
+`/cab run` maintient le job dans cette session. Chaque édition, commande Bash,
+commande système, commande OpenSpec ou opération d’archivage est soumise par
+OpenCode comme mandat unitaire, puis exécutée seulement après une décision
+Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
+
+`/cab stop` arrête uniquement les ressources CAB qu'elle a créées, sans fermer
+OpenCode ni arrêter le broker MCP géré par OpenCode.
 
 ## Organisation du dépôt
 
 ```text
 CAB/
-├── src/                       # bridge Python
-├── codex/
-│   ├── commands/cab.md        # commande /cab
-│   └── plugin/                # plugin + skill + scripts
+├── src/                       # bridge Python initié par OpenCode
+├── .codex/commands/cab.md     # commande /cab pour Codex
+├── .agents/plugins/marketplace.json # marketplace Codex
+├── plugins/cab-approval-bridge/     # plugin Codex
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/approval-bridge/SKILL.md
+│   └── scripts/
 ├── PROJECT.md                 # architecture générale
 ├── TECHNICAL.md               # fonctionnement technique
 ├── BUILD.md                   # construction et distribution
-└── CHANGELOG.md
+└── CHANGELOG.md               # Suivi de versions
 ```
 
 ## Prérequis
@@ -123,15 +163,18 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 
 | Variable | Rôle |
 |---|---|
-| `OC_CGPT_WORKSPACE` | workspace autorisé |
-| `OC_CGPT_OUTSIDE_SANDBOX` | impose l'exécution hors sandbox |
-| `OC_CGPT_OPENCODE_URL` | URL locale OpenCode |
-| `OC_CGPT_STATUS_HOST` | adresse d'écoute du contrôleur |
-| `OC_CGPT_STATUS_PORT` | port local du contrôleur |
-| `OC_CGPT_RECONNECT_MS` | délai de reconnexion SSE |
-| `OC_CGPT_CONTROLLER_URL` | endpoint de statut utilisé par le healthcheck |
-| `OC_CGPT_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readiness |
+| `OC_Codex_WORKSPACE` | workspace CAB autorisé : `/workspace` ou `/home/devops/datas/cab` |
+| `OC_Codex_OUTSIDE_SANDBOX` | impose l'exécution hors sandbox |
+| `OC_Codex_OPENCODE_URL` | URL locale OpenCode |
+| `OC_Codex_STATUS_HOST` | adresse loopback du contrôleur : `127.0.0.1` ou `::1` |
+| `OC_Codex_STATUS_PORT` | port local du contrôleur |
+| `OC_Codex_RECONNECT_MS` | délai de reconnexion SSE |
+| `OC_Codex_CONTROLLER_URL` | endpoint de statut utilisé par le healthcheck |
+| `OC_Codex_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readiness |
 | `CODEX_COMMAND` | commande utilisée pour Codex App Server |
+
+Les noms historiques équivalents préfixés `OC_CGPT_` restent acceptés pour la
+compatibilité avec les installations existantes.
 
 Les secrets doivent rester hors du dépôt Git et des journaux.
 
@@ -156,13 +199,15 @@ CAB expose quatre états :
 
 ## Distribution
 
-Le dépôt contient directement les sources du bridge et du plugin Codex.
+Le dépôt contient directement les sources du bridge et du plugin Codex. La
+marketplace est définie dans `.agents/plugins/marketplace.json` et référence
+le plugin situé dans `plugins/cab-approval-bridge/`.
 
-Aucun paquet Debian ni image Docker CAB n'est actuellement défini. Ces modes pourront être ajoutés ultérieurement après spécification.
+Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
+racine, puis importez et synchronisez-le depuis l'administration de votre
+espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-Aucun catalogue marketplace n'est actuellement distribué. Le canal de publication du plugin devra être choisi et validé contre le mécanisme Codex retenu avant une release publique.
-
-La version de base actuelle du broker et du plugin est `0.61.0`. Le plugin ajoute un cachebuster Codex pour les installations locales.
+La version de base actuelle du broker et du plugin est `0.69.0`. Le plugin ajoute un cachebuster Codex pour les installations locales.
 
 ## Documentation
 

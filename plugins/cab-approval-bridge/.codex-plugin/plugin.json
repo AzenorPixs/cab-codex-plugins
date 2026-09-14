@@ -1,18 +1,18 @@
 {
   "name": "cab-approval-bridge",
-  "version": "0.61.0+codex.20260911094634",
-  "description": "Pilote et v\u00e9rifie le pont de validation OpenCode\u2013CGPT.",
+  "version": "0.69.0+codex.20260914033637",
+  "description": "Pilote et v\u00e9rifie le pont de validation OpenCode\u2013Codex.",
   "author": {
     "name": "CAB"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Pilotage OC\u2013CGPT",
-    "shortDescription": "Configure et v\u00e9rifie le pont OpenCode\u2013CGPT.",
+    "displayName": "Pilotage OC\u2013Codex",
+    "shortDescription": "Configure et v\u00e9rifie le pont OpenCode\u2013Codex.",
     "longDescription": "Ajoute un skill et des scripts locaux pour tester et superviser le broker MCP stdio, le contr\u00f4leur local et le SSE OpenCode.",
     "developerName": "CAB",
     "category": "Productivity",
     "capabilities": [],
-    "defaultPrompt": "Configure et v\u00e9rifie le pont de validation OpenCode\u2013CGPT."
+    "defaultPrompt": "Configure et v\u00e9rifie le pont de validation OpenCode\u2013Codex."
   }
 }

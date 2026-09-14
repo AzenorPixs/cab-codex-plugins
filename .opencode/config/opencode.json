@@ -4,13 +4,16 @@
 	"snapshot": false,
 	"autoupdate": false,
 	"mcp": {
+	  "servers": {
 		"cgpt-validation": {
-			"type": "remote",
-			"url": "http://127.0.0.1:8787/mcp",
-			"enabled": true,
-			"oauth": false,
-			"timeout": 30000
-		}
+		  "type": "local",
+		  "command": [
+			"python3",
+			"/opt/tools/cab/cgpt_approval_bridge_server.py"
+		  ],
+		  "cwd": "/workspace"
+      }
+	  }
 	},
 	"agent": {
 		"plan": {
@@ -24,7 +27,7 @@
 	},
 	"permission": {
 		"*": "ask",
-		"cgpt-validation_request_validation": "allow",
+		"cgpt-validation_*": "allow",
 		"skill": {
 			"*": "ask",
 			"openspec-*": "allow"
@@ -134,6 +137,8 @@
 			"sed *": "ask",
 			"shellcheck": "allow",
 			"shellcheck *": "allow",
+			"sleep": "allow",
+			"sleep *": "allow",
 			"tail": "allow",
 			"tail *": "allow",
 			"touch": "ask",
@@ -192,9 +197,11 @@
 			"openspec/AGENTS.md": "ask",
 			"openspec/config.yaml": "ask",
 			"openspec/changes/**": "ask",
+			"dockerfile": "allow",
+			"entrypoint.sh": "allow",
 			"openspec/specs/**": "ask",
 			"output/**": "ask",
-			"PROJECT.md": "ask"
+			"PROJECT.md": "ask",
 			"README.md": "ask",
 			"TECHNICAL.md": "ask",
 			"reports/**": "ask",
@@ -237,7 +244,7 @@
 			".npm/**": "deny",
 			".opencode/**": "deny",
 			".opencode/commands/**": "allow",
-			".opencode/config/opencode.json": "allow",
+			".opencode/config/opencode.json": "ask",
 			".opencode/skills/**": "allow",
 			".pytest_cache/**": "deny",
 			".python-version": "deny",

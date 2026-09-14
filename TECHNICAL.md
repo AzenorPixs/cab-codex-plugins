@@ -1,4 +1,4 @@
-# TECHNICAL.md — CGPT Approval Bridge (CAB)
+# TECHNICAL.md — Codex Approval Bridge (CAB)
 
 ## 1. Objet
 
@@ -8,27 +8,29 @@ Ce document décrit le fonctionnement technique de CAB. Il complète `PROJECT.md
 
 ```text
 CAB/
+├── .agents/plugins/marketplace.json
+├── plugins/cab-approval-bridge/
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/approval-bridge/SKILL.md
+│   └── scripts/
+│       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-healthcheck.mjs
+│       └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── src/
 │   ├── cgpt_approval_bridge_server.py
 │   ├── cgpt_approval_bridge_router.py
 │   └── cgpt_approval_bridge_journal.py
-├── cab-codex-plugins/
-│   ├── .agents/plugins/marketplace.json
-│   └── plugins/cab-approval-bridge/
-│       ├── .codex-plugin/plugin.json
-│       ├── skills/approval-bridge/SKILL.md
-│       └── scripts/
-│           ├── cgpt-approval-bridge-controller.mjs
-│           ├── cgpt-approval-bridge-healthcheck.mjs
-│           └── cgpt-approval-bridge-opencode-sse-client.mjs
-└── codex/commands/cab.md
+└── .codex/commands/cab.md
 ```
+
+`.codex/commands/cab.md` est la définition versionnée de la commande Codex
+`/cab`. Elle n'est ni un serveur MCP ni un mécanisme de décision métier.
 
 ## 3. Broker MCP
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.61.0`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.69.0`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -75,32 +77,70 @@ EXPIRED
 
 ```text
 OpenCode
-  → request_validation
+  → request_validation pour un mandat unitaire
   → broker : validation + requestId + persistance PENDING
   → POST local vers le contrôleur
-  → décision CGPT
+  → décision explicite Codex
   → GET /decision/<requestId> par le broker
   → corrélation + persistance + journal
   → réponse MCP corrélée vers OpenCode
+  → une permission native OpenCode correspondante, consommée une fois
 ```
 
 Une absence de décision ne vaut jamais approbation.
 
-## 7. Contrôleur CGPT
+Un mandat qui attend une permission native contient l’identifiant de session,
+le répertoire cible et exactement un fichier relatif pour une édition, ou une
+commande complète pour Bash, système ou OpenSpec. Après une décision
+`approved`, le contrôleur ne répond `once` qu’à cette permission corrélée et
+consomme le mandat. Un second fichier, une seconde commande ou une seconde
+permission exige un nouveau `request_validation` et une nouvelle décision
+Codex.
 
-Le contrôleur est un programme Node.js exécuté hors sandbox. Il exige `OC_CGPT_OUTSIDE_SANDBOX=1` et un workspace autorisé, lance `codex app-server`, crée un thread Codex en lecture seule, reçoit les demandes du broker, obtient une décision structurée, conserve les décisions pour le sondage du broker, expose une interface HTTP locale et supervise le SSE direct OpenCode.
+## 7. Contrôleur Codex
 
-L'interface locale écoute par défaut sur `127.0.0.1:8788`. Ce port n'est pas un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST /validation/request` et `GET` ou `POST /decision/<requestId>` ; les décisions admises sont `approved`, `rejected` et `needs_clarification`.
+Le contrôleur est un programme Node.js exécuté hors sandbox. Il exige
+`OC_Codex_OUTSIDE_SANDBOX=1` et un workspace CAB absolu autorisé (`/workspace`
+ou `/home/devops/datas/cab`), lance `codex app-server`, crée un thread Codex en
+lecture seule, reçoit les demandes du broker, obtient une décision structurée,
+conserve les décisions pour le sondage du broker, expose une interface HTTP
+locale et supervise le SSE direct OpenCode.
+
+Codex y assume le rôle d’orchestrateur et de validateur de bout en bout : il
+évalue chaque mandat, sans déléguer sa décision au broker ni à une portée de
+job. L’archivage OpenSpec est traité comme un mandat distinct, approuvé
+seulement après contrôle de son éligibilité, des validations et de la
+cohérence finale.
+
+`OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
+
+L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
+admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas
+un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST
+/validation/request` et `GET` ou `POST /decision/<requestId>` ; les décisions
+admises sont `approved`, `rejected` et `needs_clarification`.
 
 ## 8. Supervision OpenCode
 
 ```text
 OpenCode : http://127.0.0.1:4096
 Health   : /global/health
+MCP      : /mcp
 SSE      : /global/event
 ```
 
 Après reconnexion ou divergence, le contrôleur réconcilie l'état via HTTP et consulte les permissions OpenCode.
+
+L'état `GET /mcp` du serveur OpenCode est l'autorité de connexion du broker
+pour les sessions persistantes. Si `cgpt-validation` n'est pas `connected`, CAB
+réinitialise l'instance OpenCode par `POST /instance/dispose`, attend une
+nouvelle healthcheck et ne crée aucune session avant le rétablissement. CAB ne
+termine ni ne démarre directement le broker, qui est détenu par OpenCode.
+
+Après ce contrôle, CAB crée ou réutilise une session de codage persistante par
+`POST /session` et transmet les mandats uniquement par
+`POST /session/<id>/message`. Le test de bout en bout et le travail ultérieur
+restent dans cette session visible du développeur.
 
 ## 9. Readiness et healthcheck
 
@@ -181,21 +221,36 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 
 ## 15. Variables du contrôleur et du healthcheck
 
-- `OC_CGPT_WORKSPACE`
-- `OC_CGPT_OUTSIDE_SANDBOX`
-- `OC_CGPT_OPENCODE_URL`
-- `OC_CGPT_STATUS_HOST`
-- `OC_CGPT_STATUS_PORT`
-- `OC_CGPT_RECONNECT_MS`
-- `OC_CGPT_CONTROLLER_URL`
-- `OC_CGPT_READINESS_MAX_AGE_MS`
+- `OC_Codex_WORKSPACE` : `/workspace` ou `/home/devops/datas/cab` uniquement
+- `OC_Codex_OUTSIDE_SANDBOX`
+- `OC_Codex_OPENCODE_URL`
+- `OC_Codex_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
+- `OC_Codex_STATUS_PORT`
+- `OC_Codex_RECONNECT_MS`
+- `OC_Codex_DECISION_MODE` : `automatic` par défaut ou `manual` pour
+  conserver les demandes PENDING jusqu'à une décision corrélée sur l'interface
+  HTTP locale
+- `OC_Codex_CONTROLLER_URL`
+- `OC_Codex_READINESS_MAX_AGE_MS`
 - `CODEX_COMMAND`
+
+Les variables historiques équivalentes préfixées `OC_CGPT_` restent admises
+par le contrôleur et le healthcheck pour préserver les installations existantes.
 
 ## 16. Commande `/cab`
 
-- `/cab start` initialise et vérifie le dispositif ;
-- `/cab test` réalise un test non destructif ;
-- `/cab stop` retire les ressources CAB sans arrêter directement le broker géré par OpenCode ni fermer arbitrairement OpenCode.
+La commande Codex `/cab`, définie dans `.codex/commands/cab.md`, orchestre le
+cycle de vie des ressources de communication CAB. Elle ne remplace pas le
+broker, ne rend pas de décision d'approbation et ne modifie pas le projet
+piloté.
+
+- `/cab start` vérifie `/mcp`, initialise ou reprend le contrôleur et la
+  supervision, puis crée ou réutilise une session de codage persistante ;
+- `/cab test` réalise un test non destructif du chemin de validation complet
+  dans cette même session ;
+- `/cab stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
+  doit ni arrêter directement le broker géré par OpenCode ni fermer
+  arbitrairement OpenCode.
 
 ## 17. Secrets
 

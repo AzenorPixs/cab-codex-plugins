@@ -1,16 +1,20 @@
 import { execFileSync } from "node:child_process";
 
+function envValue(name) {
+  return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
+}
+
 const controllerUrl =
-  process.env.OC_CGPT_CONTROLLER_URL ||
+  envValue("OC_Codex_CONTROLLER_URL") ||
   "http://127.0.0.1:8788/status";
 
 const opencodeUrl = (
-  process.env.OC_CGPT_OPENCODE_URL ||
+  envValue("OC_Codex_OPENCODE_URL") ||
   "http://127.0.0.1:4096"
 ).replace(/\/$/, "");
 
 const maxReadinessAgeMs = Number(
-  process.env.OC_CGPT_READINESS_MAX_AGE_MS ||
+  envValue("OC_Codex_READINESS_MAX_AGE_MS") ||
     "90000"
 );
 
