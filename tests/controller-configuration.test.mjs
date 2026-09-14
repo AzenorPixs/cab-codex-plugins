@@ -98,8 +98,9 @@ test("refuse un mode de décision inconnu", () => {
 for (const workspace of [
   "/workspace",
   "/home/devops/datas/cab",
+  "/tmp/cab-controller-workspace",
 ]) {
-  test(`accepte le workspace CAB ${workspace}`, () => {
+  test(`accepte le workspace absolu ${workspace}`, () => {
     const result = startWith({
       OC_CGPT_WORKSPACE: workspace,
       OC_CGPT_STATUS_HOST: "0.0.0.0",
@@ -121,21 +122,10 @@ test("refuse un workspace relatif", () => {
   assert.notEqual(result.status, 0);
   assert.match(
     result.stderr,
-    /OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée/
+    /OC_Codex_WORKSPACE doit désigner une racine de projet absolue/
   );
 });
 
-test("refuse un workspace absolu hors CAB", () => {
-  const result = startWith({
-    OC_CGPT_WORKSPACE: "/tmp",
-  });
-
-  assert.notEqual(result.status, 0);
-  assert.match(
-    result.stderr,
-    /OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée/
-  );
-});
 
 test("propage les trois identifiants à une décision manuelle", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-test-"));

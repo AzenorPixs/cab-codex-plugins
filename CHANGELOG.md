@@ -4,6 +4,14 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.69.1 - 2026-09-14
+
+- Le contrôleur accepte désormais toute racine de projet absolue fournie au
+  démarrage, sans liste codée en dur de projets pilotés.
+- Conservation des protections existantes : exécution hors sandbox déclarée et
+  interface HTTP limitée au loopback.
+- Alignement du broker, du contrôleur et du plugin sur la version `0.69.1`.
+
 ## 0.69.0 - 2026-09-14
 
 - Ajout d'un mode de décision manuelle du contrôleur, désactivé par défaut,

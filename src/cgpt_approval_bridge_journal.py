@@ -30,7 +30,7 @@ Exemple :
     "timestamp": "2026-09-10T21:00:00Z",
     "approval_id": "apr-...",
     "requestId": "req-...",
-    "change_id": "implement-pldap-tls-support",
+    "change_id": "example-change",
     "actor": "CGPT",
     "data": {...}
   }

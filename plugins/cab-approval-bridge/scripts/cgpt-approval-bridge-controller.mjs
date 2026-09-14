@@ -13,10 +13,6 @@ const allowedStatusHosts = new Set([
   "127.0.0.1",
   "::1",
 ]);
-const allowedWorkspaces = new Set([
-  "/workspace",
-  "/home/devops/datas/cab",
-]);
 
 if (envValue("OC_Codex_OUTSIDE_SANDBOX") !== "1") {
   throw new Error(
@@ -40,9 +36,9 @@ if (!workspace) {
   );
 }
 
-if (!isAbsolute(workspace) || !allowedWorkspaces.has(workspace)) {
+if (!isAbsolute(workspace)) {
   throw new Error(
-    "OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée."
+    "OC_Codex_WORKSPACE doit désigner une racine de projet absolue."
   );
 }
 
@@ -621,7 +617,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.69.0",
+      version: "0.69.1",
     },
   });
 
