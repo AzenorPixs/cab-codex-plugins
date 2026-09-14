@@ -51,6 +51,8 @@ Le contrôleur Codex est local et s’exécute hors sandbox.
 Le broker :
 - corrèle les demandes par `requestId` ;
 - persiste leur état ;
+- ne remplace jamais une décision corrélée déjà enregistrée, y compris par
+  une décision automatique postérieure ;
 - notifie le contrôleur ;
 - récupère les décisions ;
 - restitue à OpenCode une réponse MCP corrélée ;

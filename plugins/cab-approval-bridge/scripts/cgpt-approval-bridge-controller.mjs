@@ -32,6 +32,7 @@ const codexCommand = process.env.CODEX_COMMAND || "codex";
 const statusHost = envValue("OC_Codex_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_STATUS_PORT") || "8788");
 const reconnectMs = Number(envValue("OC_Codex_RECONNECT_MS") || "1000");
+const decisionMode = envValue("OC_Codex_DECISION_MODE") || "automatic";
 
 if (!workspace) {
   throw new Error(
@@ -42,6 +43,12 @@ if (!workspace) {
 if (!isAbsolute(workspace) || !allowedWorkspaces.has(workspace)) {
   throw new Error(
     "OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée."
+  );
+}
+
+if (!new Set(["automatic", "manual"]).has(decisionMode)) {
+  throw new Error(
+    "OC_Codex_DECISION_MODE doit être automatic ou manual."
   );
 }
 
@@ -614,7 +621,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.67.0",
+      version: "0.69.0",
     },
   });
 
@@ -748,6 +755,21 @@ async function handleValidation(request) {
       requestId: request.requestId,
     }
   );
+
+  if (decisionMode === "manual") {
+    updateStatus(
+      "validation-awaiting-manual-decision",
+      {
+        requestId: request.requestId,
+      }
+    );
+
+    active.delete(request.requestId);
+    status.activeValidations = status.activeValidations.filter(
+      (value) => value !== entry
+    );
+    return;
+  }
 
   try {
     const decision = await decide({

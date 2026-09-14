@@ -82,6 +82,19 @@ test("refuse une interface contrôleur non loopback", () => {
   );
 });
 
+test("refuse un mode de décision inconnu", () => {
+  const result = startWith({
+    OC_CGPT_DECISION_MODE: "invalid",
+    OC_CGPT_STATUS_HOST: "0.0.0.0",
+  });
+
+  assert.notEqual(result.status, 0);
+  assert.match(
+    result.stderr,
+    /OC_Codex_DECISION_MODE doit être automatic ou manual/
+  );
+});
+
 for (const workspace of [
   "/workspace",
   "/home/devops/datas/cab",
@@ -155,6 +168,7 @@ test("propage les trois identifiants à une décision manuelle", async (context)
         OC_CGPT_OPENCODE_URL: "http://127.0.0.1:9",
         OC_CGPT_OUTSIDE_SANDBOX: "1",
         OC_CGPT_RECONNECT_MS: "60000",
+        OC_CGPT_DECISION_MODE: "manual",
         OC_CGPT_STATUS_HOST: "127.0.0.1",
         OC_CGPT_STATUS_PORT: String(port),
         OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
@@ -189,6 +203,12 @@ test("propage les trois identifiants à une décision manuelle", async (context)
   );
 
   assert.equal(requestResponse.status, 202);
+
+  const pendingResponse = await fetch(
+    `${baseUrl}/decision/request-test-456`
+  );
+
+  assert.equal(pendingResponse.status, 404);
 
   const decisionResponse = await fetch(
     `${baseUrl}/decision/request-test-456`,
