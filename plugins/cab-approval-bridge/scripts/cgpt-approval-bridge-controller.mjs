@@ -13,10 +13,6 @@ const allowedStatusHosts = new Set([
   "127.0.0.1",
   "::1",
 ]);
-const allowedWorkspaces = new Set([
-  "/workspace",
-  "/home/devops/datas/cab",
-]);
 
 if (envValue("OC_Codex_OUTSIDE_SANDBOX") !== "1") {
   throw new Error(
@@ -32,7 +28,8 @@ const codexCommand = process.env.CODEX_COMMAND || "codex";
 const statusHost = envValue("OC_Codex_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_STATUS_PORT") || "8788");
 const reconnectMs = Number(envValue("OC_Codex_RECONNECT_MS") || "1000");
-const decisionMode = envValue("OC_Codex_DECISION_MODE") || "automatic";
+const decisionMode = envValue("OC_Codex_DECISION_MODE") || "manual";
+const opencodeExitStatusSuffix = ' 2>/dev/null; echo "exit=$?"';
 
 if (!workspace) {
   throw new Error(
@@ -40,9 +37,9 @@ if (!workspace) {
   );
 }
 
-if (!isAbsolute(workspace) || !allowedWorkspaces.has(workspace)) {
+if (!isAbsolute(workspace)) {
   throw new Error(
-    "OC_Codex_WORKSPACE doit être une racine CAB absolue autorisée."
+    "OC_Codex_WORKSPACE doit désigner une racine de projet absolue."
   );
 }
 
@@ -178,11 +175,19 @@ function matchesApprovedOperation(permission, operation) {
     );
   }
 
+  if (
+    operation.kind !== "bash" ||
+    permission.permission !== "bash" ||
+    typeof permission.metadata?.command !== "string"
+  ) {
+    return false;
+  }
+
+  const command = permission.metadata.command;
+
   return (
-    operation.kind === "bash" &&
-    permission.permission === "bash" &&
-    typeof permission.metadata?.command === "string" &&
-    permission.metadata.command === operation.target
+    command === operation.target ||
+    command === `${operation.target}${opencodeExitStatusSuffix}`
   );
 }
 
@@ -621,7 +626,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.69.0",
+      version: "0.72.1",
     },
   });
 

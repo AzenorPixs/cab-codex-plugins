@@ -30,7 +30,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.69.0`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.72.1`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -100,8 +100,8 @@ Codex.
 ## 7. Contrôleur Codex
 
 Le contrôleur est un programme Node.js exécuté hors sandbox. Il exige
-`OC_Codex_OUTSIDE_SANDBOX=1` et un workspace CAB absolu autorisé (`/workspace`
-ou `/home/devops/datas/cab`), lance `codex app-server`, crée un thread Codex en
+`OC_Codex_OUTSIDE_SANDBOX=1` et un workspace de projet absolu fourni au
+démarrage, lance `codex app-server`, crée un thread Codex en
 lecture seule, reçoit les demandes du broker, obtient une décision structurée,
 conserve les décisions pour le sondage du broker, expose une interface HTTP
 locale et supervise le SSE direct OpenCode.
@@ -113,6 +113,12 @@ seulement après contrôle de son éligibilité, des validations et de la
 cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
+
+Le contrôleur est démarré et maintenu par le service utilisateur
+`cgpt-approval-bridge-controller.service`, configuré pour le redémarrage
+automatique. Un RUN CAB ne doit pas le remplacer par un processus éphémère :
+le service conserve la disponibilité du contrôleur pendant les notifications
+et décisions corrélées.
 
 L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
 admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas
@@ -221,13 +227,14 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 
 ## 15. Variables du contrôleur et du healthcheck
 
-- `OC_Codex_WORKSPACE` : `/workspace` ou `/home/devops/datas/cab` uniquement
+- `OC_Codex_WORKSPACE` : racine absolue du projet à piloter ; aucune liste de
+  projets n'est codée dans CAB
 - `OC_Codex_OUTSIDE_SANDBOX`
 - `OC_Codex_OPENCODE_URL`
 - `OC_Codex_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
 - `OC_Codex_STATUS_PORT`
 - `OC_Codex_RECONNECT_MS`
-- `OC_Codex_DECISION_MODE` : `automatic` par défaut ou `manual` pour
+- `OC_Codex_DECISION_MODE` : `manual` par défaut ou `automatic` pour
   conserver les demandes PENDING jusqu'à une décision corrélée sur l'interface
   HTTP locale
 - `OC_Codex_CONTROLLER_URL`

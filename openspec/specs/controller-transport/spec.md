@@ -8,8 +8,9 @@ Cette capacité définit le contrôleur CGPT local qui relaie une demande du bro
 ### Requirement: Interface locale limitée
 Le contrôleur SHALL écouter uniquement sur `127.0.0.1` ou `::1`, par défaut
 `127.0.0.1`, et SHALL conserver MCP hors de son interface HTTP. Il SHALL
-exiger une exécution explicitement déclarée hors sandbox et un workspace CAB
-absolu autorisé : `/workspace` ou `/home/devops/datas/cab`.
+exiger une exécution explicitement déclarée hors sandbox et un workspace de
+projet absolu fourni au démarrage. Il ne SHALL contenir aucune liste codée en
+dur de projets pilotés.
 
 #### Scenario: Démarrage sans autorisation hors sandbox
 - **WHEN** le contrôleur démarre sans `OC_CGPT_OUTSIDE_SANDBOX=1`
@@ -20,8 +21,12 @@ absolu autorisé : `/workspace` ou `/home/devops/datas/cab`.
 - **THEN** le contrôleur échoue avant d'ouvrir son interface locale
 
 #### Scenario: Workspace non autorisé refusé
-- **WHEN** `OC_CGPT_WORKSPACE` est relatif ou ne correspond pas à une racine CAB autorisée
+- **WHEN** `OC_CGPT_WORKSPACE` est relatif ou absent
 - **THEN** le contrôleur échoue avant de lancer Codex App Server
+
+#### Scenario: Workspace absolu générique
+- **WHEN** `OC_CGPT_WORKSPACE` désigne une racine de projet absolue
+- **THEN** le contrôleur l'accepte sans comporter de référence à un projet piloté particulier
 
 ### Requirement: Contrat HTTP de validation
 Le contrôleur SHALL accepter une demande sur `POST /validation/request`,

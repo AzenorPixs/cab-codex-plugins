@@ -163,7 +163,7 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 
 | Variable | Rôle |
 |---|---|
-| `OC_Codex_WORKSPACE` | workspace CAB autorisé : `/workspace` ou `/home/devops/datas/cab` |
+| `OC_Codex_WORKSPACE` | racine absolue du projet à piloter, sans liste de projets codée dans CAB |
 | `OC_Codex_OUTSIDE_SANDBOX` | impose l'exécution hors sandbox |
 | `OC_Codex_OPENCODE_URL` | URL locale OpenCode |
 | `OC_Codex_STATUS_HOST` | adresse loopback du contrôleur : `127.0.0.1` ou `::1` |
@@ -207,7 +207,7 @@ Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-La version de base actuelle du broker et du plugin est `0.69.0`. Le plugin ajoute un cachebuster Codex pour les installations locales.
+La version de base actuelle du broker, du contrôleur et du plugin est `0.72.1`. Le plugin ajoute un cachebuster Codex pour les installations locales.
 
 ## Documentation
 

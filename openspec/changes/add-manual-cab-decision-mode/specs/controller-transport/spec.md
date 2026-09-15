@@ -7,7 +7,7 @@ et la restituer par `GET /decision/<requestId>`. Toute décision restituée SHAL
 inclure le même `requestId`, l'`approval_id` et le `change_id` de la demande
 notifiée. Le contrôleur SHALL accepter les décisions `approved`, `rejected` et
 `needs_clarification` et SHALL refuser une seconde décision pour le même
-`requestId`. Le mode de décision SHALL être `automatic` par défaut. Lorsque
+`requestId`. Le mode de décision SHALL être `manual` par défaut. Lorsque
 `OC_Codex_DECISION_MODE=manual`, le contrôleur SHALL conserver la demande en
 attente et SHALL attendre une décision valide envoyée sur
 `POST /decision/<requestId>` sans lancer de décision automatique.
