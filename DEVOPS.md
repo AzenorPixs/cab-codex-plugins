@@ -117,10 +117,12 @@ Version : 0.1
 ## Environnement conteneurisé
 
   * v16
+  * 127.0.0.1:5432
 
 ## Environnement non conteneurisé
 
-  * v16 
+  * v16
+  * 127.0.0.1:5432
 
 
 # Python
