@@ -9,24 +9,25 @@ Cette capacité définit le contrôleur CGPT local qui relaie une demande du bro
 Le contrôleur SHALL écouter uniquement sur `127.0.0.1` ou `::1`, par défaut
 `127.0.0.1`, et SHALL conserver MCP hors de son interface HTTP. Il SHALL
 exiger une exécution explicitement déclarée hors sandbox et un workspace de
-projet absolu fourni au démarrage. Il ne SHALL contenir aucune liste codée en
-dur de projets pilotés.
+projet absolu fourni au démarrage. Il SHALL NOT contenir de liste codée en dur
+de projets pilotés.
 
 #### Scenario: Démarrage sans autorisation hors sandbox
-- **WHEN** le contrôleur démarre sans `OC_CGPT_OUTSIDE_SANDBOX=1`
+- **WHEN** le contrôleur démarre sans `OC_Codex_OUTSIDE_SANDBOX=1`
 - **THEN** il échoue avant d'ouvrir son interface locale
 
 #### Scenario: Hôte non local refusé
-- **WHEN** `OC_CGPT_STATUS_HOST` contient une adresse autre que `127.0.0.1` ou `::1`
+- **WHEN** `OC_Codex_STATUS_HOST` contient une adresse autre que `127.0.0.1` ou `::1`
 - **THEN** le contrôleur échoue avant d'ouvrir son interface locale
 
 #### Scenario: Workspace non autorisé refusé
-- **WHEN** `OC_CGPT_WORKSPACE` est relatif ou absent
+- **WHEN** `OC_Codex_WORKSPACE` est absent ou relatif
 - **THEN** le contrôleur échoue avant de lancer Codex App Server
 
 #### Scenario: Workspace absolu générique
-- **WHEN** `OC_CGPT_WORKSPACE` désigne une racine de projet absolue
-- **THEN** le contrôleur l'accepte sans comporter de référence à un projet piloté particulier
+- **WHEN** `OC_Codex_WORKSPACE` désigne une racine de projet absolue
+- **THEN** le contrôleur l'accepte sans comporter de référence à un projet
+  piloté particulier
 
 ### Requirement: Contrat HTTP de validation
 Le contrôleur SHALL accepter une demande sur `POST /validation/request`,
@@ -35,11 +36,18 @@ et la restituer par `GET /decision/<requestId>`. Toute décision restituée SHAL
 inclure le même `requestId`, l'`approval_id` et le `change_id` de la demande
 notifiée. Le contrôleur SHALL accepter les décisions `approved`, `rejected` et
 `needs_clarification` et SHALL refuser une seconde décision pour le même
-`requestId`.
+`requestId`. Le mode de décision SHALL être `manual` par défaut. Lorsque
+`OC_Codex_DECISION_MODE=manual`, le contrôleur SHALL conserver la demande en
+attente et SHALL attendre une décision valide envoyée sur
+`POST /decision/<requestId>` sans lancer de décision automatique.
 
 #### Scenario: Décision manuelle valide
-- **WHEN** une décision `needs_clarification` valide est envoyée sur `POST /decision/<requestId>` pour une demande notifiée
+- **WHEN** une décision `needs_clarification` valide est envoyée sur `POST /decision/<requestId>` pour une demande notifiée en mode manuel
 - **THEN** le contrôleur la mémorise une fois avec les identifiants de la demande et répond avec un statut HTTP de création
+
+#### Scenario: Demande manuelle en attente
+- **WHEN** une demande valide est envoyée sur `POST /validation/request` avec `OC_Codex_DECISION_MODE=manual`
+- **THEN** le contrôleur répond PENDING sans démarrer de tour de décision Codex et `GET /decision/<requestId>` reste indisponible jusqu'à une décision corrélée
 
 #### Scenario: Lecture corrélée d'une décision
 - **WHEN** le broker appelle `GET /decision/<requestId>` après qu'une décision a été mémorisée
@@ -55,3 +63,29 @@ Le contrôleur SHALL exposer son état public sur `GET /status`, dont l'état du
 #### Scenario: Lecture du statut
 - **WHEN** un healthcheck appelle `GET /status`
 - **THEN** il reçoit un objet JSON sans secret ni décision détaillée
+
+### Requirement: Corrélation sûre des commandes Bash instrumentées
+Le contrôleur SHALL corréler une permission Bash à la commande approuvée
+lorsque OpenCode y ajoute exclusivement une instrumentation de sortie
+déterministe connue. Il SHALL vérifier que la commande métier approuvée reste
+inchangée et SHALL refuser toute transformation qui ajoute, retire ou modifie
+une opération métier. Une permission corrélée SHALL rester consommable une
+seule fois.
+
+#### Scenario: Commande exacte
+- **WHEN** OpenCode demande une permission Bash dont la commande est identique
+  à celle du mandat approuvé
+- **THEN** le contrôleur la corrèle à ce mandat et peut transmettre une unique
+  réponse `once` après une décision `approved`
+
+#### Scenario: Instrumentation de sortie admise
+- **WHEN** OpenCode ajoute uniquement l'instrumentation de sortie déterministe
+  reconnue à la fin de la commande approuvée
+- **THEN** le contrôleur corrèle la permission à la commande métier approuvée
+  sans élargir la portée du mandat
+
+#### Scenario: Transformation métier refusée
+- **WHEN** la commande de permission diffère de la commande approuvée autrement
+  que par l'instrumentation de sortie reconnue
+- **THEN** le contrôleur ne la corrèle pas et ne transmet aucune réponse de
+  permission
