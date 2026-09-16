@@ -11,7 +11,7 @@ transmette sa décision explicite.
 
 - Permettre au contrôleur de conserver un mandat PENDING pour décision manuelle.
 - Préserver la corrélation et la consommation unique d'une permission native.
-- Conserver le comportement automatique existant par défaut.
+- Conserver le mode automatique existant comme option explicite.
 
 **Non-Goals:**
 
@@ -21,8 +21,8 @@ transmette sa décision explicite.
 ## Decisions
 
 - Ajouter `OC_Codex_DECISION_MODE` avec les seules valeurs `automatic` et
-  `manual`; une valeur absente utilise `automatic` pour préserver la
-  compatibilité.
+  `manual`; une valeur absente utilise `manual` afin que l'orchestrateur
+  conserve la décision corrélée de chaque mandat.
 - En mode manuel, enregistrer la validation puis ne pas appeler `decide()`;
   l'endpoint de décision existant reste l'unique voie pour conclure le mandat.
 - Refuser le démarrage avec une valeur de mode inconnue plutôt que de choisir
@@ -33,11 +33,12 @@ transmette sa décision explicite.
 - [Mandat manuel non décidé] → il reste PENDING, conformément au refus par
   défaut, et les watchdogs existants le signalent.
 - [Erreur de configuration] → validation au démarrage et maintien du mode
-  automatique comme défaut compatible.
+  manuel comme défaut sûr.
 
 ## Migration Plan
 
-1. Déployer le contrôleur mis à jour sans variable : comportement inchangé.
-2. Définir `OC_Codex_DECISION_MODE=manual` uniquement pour une session pilotée
-   où l'orchestrateur publie les décisions corrélées.
-3. Retirer la variable pour revenir au mode automatique.
+1. Déployer le contrôleur mis à jour sans variable : le mode manuel devient le
+   comportement par défaut.
+2. Définir `OC_Codex_DECISION_MODE=automatic` uniquement lorsqu'une décision
+   automatique est explicitement souhaitée.
+3. Retirer la variable pour revenir au mode manuel.
