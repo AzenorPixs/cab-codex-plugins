@@ -7,10 +7,11 @@ par l'orchestrateur.
 
 ## What Changes
 
-- Ajouter un mode de décision manuelle du contrôleur, désactivé par défaut.
+- Faire du mode de décision manuelle le comportement par défaut du contrôleur,
+  tout en conservant le mode automatique explicite.
 - Dans ce mode, conserver une demande corrélée en attente jusqu'à la décision
   explicite envoyée sur l'interface HTTP locale existante.
-- Préserver le mode automatique existant et les protections de corrélation et
+- Préserver le mode automatique explicite et les protections de corrélation et
   de décision unique.
 - Passer le broker, le contrôleur et le plugin CAB à la version `0.69.0`.
 
