@@ -72,14 +72,16 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
 
+STATE_BASE_DIR = os.path.expandvars("$HOME/.opencode/state")
+
 DEFAULT_STORE = (
-    "/workspace/.opencode/state/"
-    "cgpt-approval-bridge/approvals.json"
+    STATE_BASE_DIR
+    + "/cgpt-approval-bridge/approvals.json"
 )
 
 DEFAULT_INSTANCE_LOCK = (
-    "/workspace/.opencode/state/"
-    "cgpt-approval-bridge/broker.instance.lock"
+    STATE_BASE_DIR
+    + "/cgpt-approval-bridge/broker.instance.lock"
 )
 
 DEFAULT_TTL_SECONDS = 86400
@@ -233,8 +235,8 @@ def validate_auto_remediation_state_path(path):
             "CGPT_AUTO_REMEDIATION_CB_STATE_PATH ne peut pas etre vide"
         )
         return (
-            "/workspace/.opencode/state/cgpt-approval-bridge/"
-            "auto-remediation-circuit.json"
+            STATE_BASE_DIR
+            + "/cgpt-approval-bridge/auto-remediation-circuit.json"
         )
 
     normalized = os.path.abspath(path)
@@ -293,8 +295,7 @@ AUTO_REMEDIATION_CIRCUIT_STATE_SCHEMA_VERSION = 1
 AUTO_REMEDIATION_CIRCUIT_STATE_PATH = validate_auto_remediation_state_path(
     os.environ.get(
         "CGPT_AUTO_REMEDIATION_CB_STATE_PATH",
-        "/workspace/.opencode/state/cgpt-approval-bridge/"
-        "auto-remediation-circuit.json",
+        STATE_BASE_DIR + "/cgpt-approval-bridge/auto-remediation-circuit.json",
     )
 )
 

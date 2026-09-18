@@ -18,7 +18,7 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - `broker_readiness` est l’interface synthétique de supervision.
 - `broker_health` reste réservé au diagnostic détaillé.
 - Le contrôleur `../../scripts/cgpt-approval-bridge-controller.mjs` (chemin relatif à ce `SKILL.md`) s’exécute exclusivement hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1`. L’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté.
-- Le contrôleur est géré par le service utilisateur `cgpt-approval-bridge-controller.service`, avec redémarrage automatique. Le démarrer ou le réutiliser par ce service ; ne pas utiliser un processus éphémère ou un `nohup` pour un RUN CAB.
+- Le contrôleur est géré par le service utilisateur `cgpt-approval-bridge-controller.service`, avec `Restart=on-failure` pendant son exécution. `/cab start` installe ses ressources sans l'activer, puis le démarre explicitement ; `/cab stop` l'arrête. Ne pas utiliser un processus éphémère ou un `nohup` pour un RUN CAB.
 - Le contrôleur n’écoute que `127.0.0.1`.
 - OpenCode est observé indépendamment via son SSE HTTP direct.
 - Après reconnexion SSE ou divergence, réconcilier l’état réel par HTTP auprès d’OpenCode.
@@ -67,7 +67,7 @@ ne vaut jamais autorisation d’archiver un autre changement.
 2. Vérifier que `cgpt-validation` est déclaré comme MCP local `stdio`.
 3. Vérifier `GET /mcp` et exiger `cgpt-validation: connected`.
 4. Si ce statut est absent ou en échec, exécuter seulement la récupération contrôlée `POST /instance/dispose`, puis attendre `/global/health` et `/mcp` sains. Ne jamais tuer ou lancer directement le broker, qui appartient à OpenCode.
-5. Démarrer ou réutiliser le service utilisateur `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`), puis vérifier que son redémarrage automatique est actif.
+5. Installer ou actualiser les ressources utilisateur du contrôleur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
 6. Vérifier le statut local du contrôleur.
 7. Démarrer ou maintenir le SSE direct OpenCode.
 8. Créer ou réutiliser une session OpenCode persistante via `POST /session`, conserver son identifiant et adresser tous les mandats par `POST /session/<id>/message`.
