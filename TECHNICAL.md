@@ -123,7 +123,7 @@ et décisions corrélées.
 L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
 admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas
 un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST
-/validation/request` et `GET` ou `POST /decision/<requestId>` ; les décisions
+/validation/request`, `POST /validation/reminder` et `GET` ou `POST /decision/<requestId>` ; les décisions
 admises sont `approved`, `rejected` et `needs_clarification`.
 
 ## 8. Supervision OpenCode
@@ -153,6 +153,13 @@ restent dans cette session visible du développeur.
 `broker_readiness` expose `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`, avec cause racine, action recommandée, disponibilité du contrôleur, compteurs d'approbations et disponibilité éventuelle d'une auto-récupération.
 
 Le broker publie périodiquement cette readiness au contrôleur local.
+
+Lorsqu'un mandat notifié reste PENDING sans décision, le broker adresse aussi
+au contrôleur une relance corrélée toutes les trente secondes. Le contrôleur
+transmet l'événement à sa tâche orchestratrice, planifie un heartbeat de
+reprise si nécessaire et conserve une notification locale persistante lorsque
+le réveil reste indisponible. Cette relance ne constitue jamais une décision
+ni une permission OpenCode.
 
 Le healthcheck vérifie la santé OpenCode, le contrôleur, Codex App Server, le SSE OpenCode et la fraîcheur de `broker_readiness`. Un état fonctionnel `BLOCKED` ou `HUMAN_REQUIRED` n'entraîne pas un redémarrage aveugle du contrôleur.
 

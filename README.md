@@ -51,7 +51,8 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 - corrélation par `requestId` ;
 - journal append-only et contrôle d'intégrité ;
 - reprise après interruption ;
-- watchdogs de validation et de session ;
+- watchdogs de validation et de session, avec relance corrélée du contrôleur
+  toutes les trente secondes pour une décision PENDING ;
 - readiness `READY / DEGRADED / BLOCKED / HUMAN_REQUIRED` ;
 - diagnostic avec cause racine ;
 - remédiations techniques contrôlées ;

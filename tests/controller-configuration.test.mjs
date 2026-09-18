@@ -233,6 +233,78 @@ test("propage les trois identifiants à une décision manuelle", async (context)
   });
 });
 
+test("relance corrélée sans créer de décision", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "cab-controller-reminder-"));
+  const fakeCodex = join(directory, "fake-codex.cjs");
+  const port = await availablePort();
+  const baseUrl = `http://127.0.0.1:${port}`;
+
+  writeFileSync(
+    fakeCodex,
+    [
+      "#!/usr/bin/env node",
+      "const readline = require('node:readline');",
+      "readline.createInterface({ input: process.stdin }).on('line', (line) => {",
+      "  const message = JSON.parse(line);",
+      "  if (!message.id) return;",
+      "  const result = message.method === 'thread/start' ? { thread: { id: 'test-thread' } } : message.method === 'turn/start' ? { turn: { id: 'test-turn' } } : {};",
+      "  setTimeout(() => { process.stdout.write(JSON.stringify({ id: message.id, result }) + '\\n'); if (message.method === 'turn/start') process.stdout.write(JSON.stringify({ method: 'turn/completed', params: { turn: { id: 'test-turn', status: 'completed' } } }) + '\\n'); }, 0);",
+      "});",
+    ].join("\n"),
+    { mode: 0o755 }
+  );
+
+  const controller = spawn(process.execPath, [controllerPath], {
+    env: {
+      ...process.env,
+      CODEX_COMMAND: fakeCodex,
+      OC_CGPT_OPENCODE_URL: "http://127.0.0.1:9",
+      OC_CGPT_OUTSIDE_SANDBOX: "1",
+      OC_CGPT_RECONNECT_MS: "60000",
+      OC_CGPT_DECISION_MODE: "manual",
+      OC_CGPT_STATUS_HOST: "127.0.0.1",
+      OC_CGPT_STATUS_PORT: String(port),
+      OC_CGPT_WORKSPACE: directory,
+    },
+    stdio: "ignore",
+  });
+
+  context.after(() => {
+    controller.kill("SIGTERM");
+    rmSync(directory, { force: true, recursive: true });
+  });
+
+  await waitForStatus(baseUrl);
+  const approval = {
+    approval_id: "approval-reminder-123",
+    change_id: "change-reminder-789",
+    requestId: "request-reminder-456",
+    summary: "Relance corrélée",
+    session_id: "ses_reminder",
+    directory: "/workspace",
+    files: ["src/example.py"],
+    commands: [],
+  };
+
+  const validation = await fetch(`${baseUrl}/validation/request`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ approval }),
+  });
+  assert.equal(validation.status, 202);
+
+  const reminder = await fetch(`${baseUrl}/validation/reminder`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ approval, age_seconds: 30, last_state: "WAITING_DECISION" }),
+  });
+  assert.equal(reminder.status, 202);
+  await delay(50);
+
+  const decision = await fetch(`${baseUrl}/decision/request-reminder-456`);
+  assert.equal(decision.status, 404);
+});
+
 test("réconcilie une permission native corrélée apparue après la décision", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-scope-test-"));
   const fakeCodex = join(directory, "fake-codex.cjs");

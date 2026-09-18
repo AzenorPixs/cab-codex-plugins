@@ -95,6 +95,7 @@ CONTROLLER_TCP_TIMEOUT_SECONDS = 1
 NOTIFICATION_RETRY_INITIAL_SECONDS = 5
 NOTIFICATION_RETRY_MAX_SECONDS = 300
 NOTIFICATION_LEASE_SECONDS = 15
+REMINDER_INTERVAL_SECONDS = 30
 
 PENDING_WATCHDOG_INTERVAL_SECONDS = int(
     os.environ.get("CGPT_PENDING_WATCHDOG_INTERVAL", "30")
@@ -2287,6 +2288,75 @@ def notify_controller(
     }
 
 
+def remind_controller(item, age_seconds, last_state):
+    """Relance le controleur sans modifier l'etat metier du mandat."""
+    approval_id = item.get("approval_id", "")
+    endpoint = controller_url() + "/validation/reminder"
+    payload = json.dumps(
+        {
+            "event": "validation.reminder",
+            "approval": item,
+            "age_seconds": age_seconds,
+            "last_state": last_state,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    bucket = int(time.time() // REMINDER_INTERVAL_SECONDS)
+    journal.append_unique_event(
+        event_type="CONTROLLER_REMINDER_ATTEMPTED",
+        event_key="controller-reminder:%s:attempt:%s" % (approval_id, bucket),
+        approval_id=approval_id,
+        request_id=item.get("requestId", ""),
+        change_id=item.get("change_id", ""),
+        actor="BROKER",
+        data={"endpoint": endpoint, "age_seconds": age_seconds, "last_state": last_state},
+    )
+    http_request = request.Request(
+        endpoint,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with request.urlopen(http_request, timeout=CONTROLLER_HTTP_TIMEOUT_SECONDS) as response:
+            delivered = 200 <= response.status < 300
+            status = response.status
+    except (error.HTTPError, error.URLError, OSError):
+        delivered = False
+        status = None
+    journal.append_unique_event(
+        event_type="CONTROLLER_REMINDER_DELIVERED" if delivered else "CONTROLLER_REMINDER_FAILED",
+        event_key="controller-reminder:%s:%s:%s" % (approval_id, "delivered" if delivered else "failed", bucket),
+        approval_id=approval_id,
+        request_id=item.get("requestId", ""),
+        change_id=item.get("change_id", ""),
+        actor="BROKER",
+        data={"http_status": status},
+    )
+    return delivered
+
+
+def maybe_remind_controller(item, age_seconds, last_state):
+    """Reserve atomiquement une relance de trente secondes pour un PENDING."""
+    approval_id = item.get("approval_id", "")
+    if not approval_id or item.get("notification_status") != "DELIVERED":
+        return False
+    now_ts = time.time()
+    path = store_path()
+    with locked_store(path):
+        data = load_store(path)
+        current = data["approvals"].get(approval_id)
+        if current is None or current.get("status") != "PENDING":
+            return False
+        last_reminder = parse_utc(current.get("reminder_last_at", ""))
+        if last_reminder is not None and now_ts - last_reminder < REMINDER_INTERVAL_SECONDS:
+            return False
+        current["reminder_last_at"] = utc_now()
+        save_store(path, data)
+        snapshot = dict(current)
+    return remind_controller(snapshot, age_seconds, last_state)
+
+
 def decision_fingerprint(decision):
     canonical = json.dumps(
         decision,
@@ -3669,6 +3739,7 @@ def do_propose(args):
                 "notification_next_retry_at": "",
                 "notification_lease_id": "",
                 "notification_lease_until": "",
+                "reminder_last_at": "",
                 "decision_id": "",
                 "decision_applied_at": "",
                 "cancelled_at": "",
@@ -5034,9 +5105,11 @@ def run_pending_watchdog_once():
                 "reason": reason,
                 "age_seconds": age,
                 "notification_status": item.get("notification_status", ""),
+                "reminder_last_at": item.get("reminder_last_at", ""),
                 "observed_at": utc_now(),
             }
             new_state[approval_id] = value
+            maybe_remind_controller(item, age, value["state"])
             old_state = previous.get(approval_id, {}).get("state")
             if old_state != state:
                 transitions.append((item, old_state or "NONE", value))
