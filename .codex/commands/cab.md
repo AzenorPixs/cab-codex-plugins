@@ -68,26 +68,27 @@ Le broker :
 2. Vérifie que la configuration OpenCode déclare `cgpt-validation` comme serveur MCP local `stdio`.
 3. Consulte l’état MCP du serveur OpenCode par `GET /mcp`. Cette API est la seule source de vérité pour les sessions persistantes ; une sortie de CLI ou un état mémorisé ne suffit pas.
 4. Si `cgpt-validation` n’est pas `connected`, demande une réinitialisation contrôlée de l’instance OpenCode par `POST /instance/dispose`, sans tuer ni démarrer directement le processus broker. Attends ensuite une nouvelle réponse saine de `/global/health` et `cgpt-validation: connected` dans `/mcp`. En cas d’échec, publie `CAB_INACTIF` avec l’erreur observée et n’ouvre aucune session de codage.
-5. Démarre ou réutilise le contrôleur Codex persistant hors sandbox sous `cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie que le service utilise le redémarrage automatique.
-6. Vérifie le contrôleur Codex sur son interface locale.
-7. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
-8. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
-9. Adresse les mandats exclusivement à cette session via `POST /session/<id>/message`. Aucun appel CLI éphémère ne peut transmettre ou exécuter un mandat de codage. La session doit rester visible au développeur dans OpenCode.
-10. Dans cette session, appelle `broker_readiness` sans lecture, commande ni écriture du projet.
-11. Accepte comme états possibles : `READY`, `DEGRADED`, `BLOCKED`, `HUMAN_REQUIRED`.
-12. Après reconnexion SSE ou divergence détectée, réconcilie l’état réel via HTTP auprès d’OpenCode, puis recontrôle `/mcp` avant tout nouveau mandat.
-13. Crée ou réactive le heartbeat global « Surveillance CAB » toutes les 30 secondes.
-14. Le heartbeat surveille OpenCode, `/mcp`, `broker_readiness`, le contrôleur et le SSE OpenCode.
-15. Le heartbeat reste silencieux lorsque tout est sain et ne prend aucune décision de validation.
-16. Publie `CAB_ACTIF` uniquement si les preuves suivantes sont présentes :
+5. Résous les ressources du plugin CAB installé, puis copie son contrôleur et son modèle d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Crée ou actualise `~/.config/cab-approval-bridge/controller.env` avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
+6. Démarre ou réutilise le contrôleur Codex persistant hors sandbox par `systemctl --user start cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie qu’il est `active` et que son unité utilise `Restart=on-failure`.
+7. Vérifie le contrôleur Codex sur son interface locale.
+8. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
+9. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
+10. Adresse les mandats exclusivement à cette session via `POST /session/<id>/message`. Aucun appel CLI éphémère ne peut transmettre ou exécuter un mandat de codage. La session doit rester visible au développeur dans OpenCode.
+11. Dans cette session, appelle `broker_readiness` sans lecture, commande ni écriture du projet.
+12. Accepte comme états possibles : `READY`, `DEGRADED`, `BLOCKED`, `HUMAN_REQUIRED`.
+13. Après reconnexion SSE ou divergence détectée, réconcilie l’état réel via HTTP auprès d’OpenCode, puis recontrôle `/mcp` avant tout nouveau mandat.
+14. Crée ou réactive le heartbeat global « Surveillance CAB » toutes les 30 secondes.
+15. Le heartbeat surveille OpenCode, `/mcp`, `broker_readiness`, le contrôleur et le SSE OpenCode.
+16. Le heartbeat reste silencieux lorsque tout est sain et ne prend aucune décision de validation.
+17. Publie `CAB_ACTIF` uniquement si les preuves suivantes sont présentes :
     - OpenCode sain ;
     - MCP `cgpt-validation` connecté ;
     - `broker_readiness` exploitable ;
     - contrôleur Codex joignable ;
     - SSE OpenCode `connected` ;
     - heartbeat actif.
-17. Toute preuve absente impose `CAB_INACTIF`.
-18. Avant le premier pilotage réel après démarrage, exécute obligatoirement `/cab test`.
+18. Toute preuve absente impose `CAB_INACTIF`.
+19. Avant le premier pilotage réel après démarrage, exécute obligatoirement `/cab test`.
 
 Une simple réponse HTTP, un ancien état MCP ou une ancienne session de test ne suffit jamais à déclarer `CAB_ACTIF`.
 
@@ -164,7 +165,7 @@ Ne ferme jamais :
 
 1. Supprime tous les heartbeats et cron healthchecks créés par `/cab`, dont « Surveillance CAB ».
 2. Ferme les flux SSE ouverts par `/cab`.
-3. Arrête proprement uniquement les processus de contrôleur démarrés par `/cab`, notamment `cgpt-approval-bridge-controller.service`.
+3. Arrête explicitement et proprement uniquement le contrôleur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime son unité : elle reste installée mais inactive jusqu’au prochain `/cab start`.
 4. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
 5. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
 6. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.

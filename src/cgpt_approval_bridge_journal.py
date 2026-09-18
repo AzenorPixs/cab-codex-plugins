@@ -87,14 +87,16 @@ from datetime import datetime, timezone
 JOURNAL_VERSION = 3
 CHECKPOINT_VERSION = 2
 
+_JOURNAL_STATE_BASE = os.path.expandvars("$HOME/.opencode/state")
+
 DEFAULT_JOURNAL_PATH = (
-    "/workspace/.opencode/state/"
-    "cgpt-approval-bridge/events.ndjson"
+    _JOURNAL_STATE_BASE
+    + "/cgpt-approval-bridge/events.ndjson"
 )
 
 DEFAULT_CHECKPOINT_PATH = (
-    "/workspace/.opencode/state/"
-    "cgpt-approval-bridge/journal.checkpoint.json"
+    _JOURNAL_STATE_BASE
+    + "/cgpt-approval-bridge/journal.checkpoint.json"
 )
 
 CHECKPOINT_KEY_ENV = "CGPT_JOURNAL_HMAC_KEY"

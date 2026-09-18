@@ -114,11 +114,18 @@ cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
 
-Le contrôleur est démarré et maintenu par le service utilisateur
-`cgpt-approval-bridge-controller.service`, configuré pour le redémarrage
-automatique. Un RUN CAB ne doit pas le remplacer par un processus éphémère :
-le service conserve la disponibilité du contrôleur pendant les notifications
-et décisions corrélées.
+Le plugin distribue le modèle de service utilisateur
+`cgpt-approval-bridge-controller.service`. `/cab start` installe ou actualise
+de façon différée le contrôleur, le fichier d'environnement non secret et
+l'unité dans le profil utilisateur, exécute `systemctl --user daemon-reload`,
+puis démarre explicitement le service. Il ne l'active jamais : l'installation
+du plugin et l'ouverture de session ne démarrent donc aucun contrôleur.
+
+L'unité applique `Restart=on-failure` tant qu'elle est en cours d'exécution.
+`/cab stop` arrête explicitement ce service sans supprimer l'unité, sans
+arrêter OpenCode et sans arrêter le broker MCP. Un RUN CAB ne doit pas le
+remplacer par un processus éphémère : le service conserve la disponibilité du
+contrôleur pendant les notifications et décisions corrélées.
 
 L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
 admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas

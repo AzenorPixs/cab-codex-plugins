@@ -75,9 +75,10 @@ de décision d'approbation.
 /cab stop
 ```
 
-`/cab start` vérifie le MCP actif par `/mcp`, initialise ou reprend le
-contrôleur et la supervision CAB, puis crée ou réutilise une session de codage
-persistante visible dans OpenCode.
+`/cab start` vérifie le MCP actif par `/mcp`, installe de façon différée le
+service utilisateur du contrôleur sans l'activer au login, le démarre
+explicitement, initialise la supervision CAB, puis crée ou réutilise une
+session de codage persistante visible dans OpenCode.
 
 `/cab test` réalise, dans cette même session, un test non destructif du chemin
 complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
@@ -87,8 +88,10 @@ commande système, commande OpenSpec ou opération d’archivage est soumise par
 OpenCode comme mandat unitaire, puis exécutée seulement après une décision
 Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
 
-`/cab stop` arrête uniquement les ressources CAB qu'elle a créées, sans fermer
-OpenCode ni arrêter le broker MCP géré par OpenCode.
+`/cab stop` arrête explicitement le contrôleur et les ressources CAB qu'elle a
+créées, sans fermer OpenCode ni arrêter le broker MCP géré par OpenCode.
+L'unité utilisateur reste installée mais inactive jusqu'au prochain
+`/cab start`.
 
 ## Organisation du dépôt
 

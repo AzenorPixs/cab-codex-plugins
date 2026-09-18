@@ -20,6 +20,7 @@ CAB/
 ├── plugins/cab-approval-bridge/      # plugin Codex distribuable
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
+│   ├── systemd/cgpt-approval-bridge-controller.service
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-healthcheck.mjs
@@ -99,6 +100,13 @@ scripts/cgpt-approval-bridge-opencode-sse-client.mjs
 ```
 
 Le catalogue `.agents/plugins/marketplace.json` référence ce plugin.
+
+Le plugin distribue aussi un modèle d'unité systemd utilisateur. Son
+installation effective est différée au premier `/cab start` : la commande
+copie les ressources dans le profil Codex, écrit la configuration non secrète
+du workspace, recharge systemd puis démarre explicitement le service. Elle ne
+doit jamais appeler `systemctl --user enable`. `/cab stop` arrête le service
+mais conserve son unité inactive pour un démarrage ultérieur.
 
 La commande Codex `/cab` est maintenue séparément dans :
 
