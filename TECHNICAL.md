@@ -30,7 +30,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.72.1`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.74.0`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -269,6 +269,10 @@ piloté.
   supervision, puis crée ou réutilise une session de codage persistante ;
 - `/cab test` réalise un test non destructif du chemin de validation complet
   dans cette même session ;
+- `/cab update` compare la version installée de `cab-approval-bridge` à la
+  version publiée par la marketplace `cab_codex_plugins`, puis compare la
+  commande du profil Codex à `AzenorPixs/tools-codex` sur `main`. Elle met à
+  niveau chaque élément seulement lorsqu'une version plus récente est disponible ;
 - `/cab stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.

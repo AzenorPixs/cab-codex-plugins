@@ -72,6 +72,7 @@ de décision d'approbation.
 /cab start
 /cab test
 /cab run
+/cab update
 /cab stop
 ```
 
@@ -92,6 +93,14 @@ Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
 créées, sans fermer OpenCode ni arrêter le broker MCP géré par OpenCode.
 L'unité utilisateur reste installée mais inactive jusqu'au prochain
 `/cab start`.
+
+`/cab update` compare la version SemVer de base de `cab-approval-bridge`
+installée à celle publiée par la marketplace `cab_codex_plugins`. Elle compare
+aussi la commande CAB du profil Codex à celle de
+`AzenorPixs/tools-codex`, branche `main`, puis met à niveau chaque élément
+seulement lorsqu'une version plus récente est disponible. Le remplacement de la
+commande de profil est atomique ; la configuration, le catalogue et les
+ressources CAB en cours restent inchangés.
 
 ## Organisation du dépôt
 
@@ -211,7 +220,7 @@ Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-La version de base actuelle du broker, du contrôleur et du plugin est `0.72.1`. Le plugin ajoute un cachebuster Codex pour les installations locales.
+La version de base actuelle du broker, du contrôleur et du plugin est `0.74.0`. Le plugin ajoute un cachebuster Codex pour les installations locales.
 
 ## Documentation
 
