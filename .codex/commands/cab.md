@@ -1,5 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
+version: 0.74.0
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -29,6 +30,7 @@ Les seules sous-commandes admises sont :
 - `/cab run`
 - `/cab stop`
 - `/cab test`
+- `/cab update`
 
 Sans argument ou avec un argument inconnu, affiche cette syntaxe et n’effectue aucune action.
 
@@ -160,6 +162,56 @@ Ne ferme jamais :
 - OpenCode ;
 - le contrôleur persistant ;
 - le heartbeat global.
+
+## `/cab update`
+
+Met à jour séparément le plugin CAB et la copie de la commande `/cab` installée
+dans le profil Codex. Cette sous-commande ne démarre ni n'arrête OpenCode, le
+broker MCP, le contrôleur, le SSE ou une session de codage.
+
+1. Vérifie avec `codex plugin marketplace list` que la marketplace
+   `cab_codex_plugins` est configurée.
+2. Obtient les métadonnées du plugin installé avec
+   `codex plugin list --marketplace cab_codex_plugins --available --json` et
+   exige l'entrée `cab-approval-bridge@cab_codex_plugins`.
+3. Résout le manifeste `.codex-plugin/plugin.json` depuis la source déclarée
+   par cette marketplace, puis lit sa version sans accéder à un secret.
+4. Compare les versions de base selon SemVer, en ignorant le suffixe de
+   cachebuster Codex commençant par `+`. Une version absente ou invalide, une
+   marketplace non configurée ou un plugin non installé produit une erreur sans
+   mise à jour.
+5. Si la version marketplace est égale ou antérieure à la version installée,
+   affiche `CAB_DÉJÀ_À_JOUR` avec les deux versions et n'exécute aucune
+   commande de mise à jour.
+6. Si la version marketplace est strictement plus récente, exécute une seule
+   fois `codex plugin marketplace upgrade cab_codex_plugins`.
+7. Relit les métadonnées installées et affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si
+   la version installée est celle du manifeste marketplace. Sinon, affiche
+   `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+8. Utilise exclusivement la référence GitHub suivante pour la commande CAB :
+   `https://github.com/AzenorPixs/tools-codex`, branche `main`, chemin
+   `.codex/commands/cab.md`. Construit l'URL brute HTTPS correspondante sans
+   accepter de redirection vers un autre hôte.
+9. Télécharge cette commande dans un fichier temporaire du profil Codex avec
+   `curl --fail --silent --show-error`, sans écrire la cible locale. Vérifie
+   que le frontmatter YAML contient une version SemVer valide.
+10. Lit la version de la commande locale
+    `${CODEX_HOME:-$HOME/.codex}/commands/cab.md`. Une copie locale sans
+    version est traitée comme une installation héritée, donc antérieure à une
+    commande distante valide.
+11. Si la version GitHub est égale ou antérieure à la version locale, affiche
+    `CAB_COMMANDE_DÉJÀ_À_JOUR` et conserve le fichier local.
+12. Si la version GitHub est strictement plus récente, remplace atomiquement
+    la copie du profil par le fichier temporaire validé, puis relit sa version
+    et affiche `CAB_COMMANDE_MISE_À_JOUR` seulement en cas de concordance.
+    Tout échec laisse la copie locale inchangée et affiche
+    `CAB_COMMANDE_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+
+N'édite jamais la marketplace, le manifeste du plugin, la configuration Codex
+ou les fichiers du projet piloté. La seule écriture locale admise est le
+remplacement atomique de la copie `/cab` dans le profil Codex. Une marketplace
+Git est actualisée par Codex ; une marketplace locale recharge seulement sa
+source locale.
 
 ## `/cab stop`
 

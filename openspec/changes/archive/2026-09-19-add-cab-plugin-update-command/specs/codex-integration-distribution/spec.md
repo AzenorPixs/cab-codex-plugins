@@ -1,24 +1,4 @@
-# codex-integration-distribution Specification
-
-## Purpose
-Cette capacité définit l'intégration locale de CAB dans Codex et les conditions minimales de distribution reproductible.
-
-## Requirements
-
-### Requirement: Plugin Codex structuré
-Le plugin CAB SHALL être distribué depuis la racine du dépôt, avec une
-marketplace dans `.agents/plugins/marketplace.json` et un plugin dans
-`plugins/cab-approval-bridge/`. Ce plugin SHALL fournir un manifeste
-`.codex-plugin/plugin.json`, la skill CAB et les scripts de contrôleur,
-healthcheck et SSE dans une arborescence distribuable cohérente.
-
-#### Scenario: Validation du plugin
-- **WHEN** le manifeste du plugin est soumis au validateur Codex
-- **THEN** il est accepté et les chemins déclarés existent dans l'artefact
-
-#### Scenario: Localisation du plugin
-- **WHEN** une distribution CAB est préparée
-- **THEN** la marketplace et le plugin sont pris depuis la racine du dépôt, sans déplacement sous `.codex/`
+## MODIFIED Requirements
 
 ### Requirement: Commande de pilotage sûre
 La commande Codex `/cab` SHALL être versionnée dans
@@ -74,10 +54,3 @@ ressource CAB, configuration Codex ou source du marketplace.
 - **WHEN** la marketplace, le plugin ou l'une des versions nécessaires est
   absent ou invalide
 - **THEN** `/cab update` échoue sans actualiser ni modifier de configuration
-
-### Requirement: Version et publication cohérentes
-Les artefacts distribués CAB SHALL partager une version de projet explicite ou documenter leur relation. Un catalogue marketplace SHALL référencer le plugin publié, ou être absent tant qu'aucune publication n'est définie.
-
-#### Scenario: Préparation de release
-- **WHEN** une release est préparée
-- **THEN** la version du broker, du plugin et du catalogue est vérifiée avant publication

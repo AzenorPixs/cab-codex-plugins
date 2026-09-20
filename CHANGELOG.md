@@ -4,6 +4,18 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.74.0 - 2026-09-19
+
+- `/cab update` vérifie désormais aussi la commande CAB du profil Codex face à
+  `AzenorPixs/tools-codex` et la remplace atomiquement si GitHub est plus récent.
+- Alignement du broker, du contrôleur et du plugin sur la version `0.74.0`.
+
+## 0.73.0 - 2026-09-19
+
+- Ajout de `/cab update`, qui compare la version du plugin CAB et celle de sa
+  marketplace avant de déléguer une mise à niveau nécessaire à Codex.
+- Alignement du broker, du contrôleur et du plugin sur la version `0.73.0`.
+
 ## 0.72.1 - 2026-09-14
 
 - Le contrôleur corrèle désormais une commande Bash lorsque OpenCode ajoute

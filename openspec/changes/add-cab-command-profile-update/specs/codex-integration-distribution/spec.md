@@ -1,24 +1,4 @@
-# codex-integration-distribution Specification
-
-## Purpose
-Cette capacité définit l'intégration locale de CAB dans Codex et les conditions minimales de distribution reproductible.
-
-## Requirements
-
-### Requirement: Plugin Codex structuré
-Le plugin CAB SHALL être distribué depuis la racine du dépôt, avec une
-marketplace dans `.agents/plugins/marketplace.json` et un plugin dans
-`plugins/cab-approval-bridge/`. Ce plugin SHALL fournir un manifeste
-`.codex-plugin/plugin.json`, la skill CAB et les scripts de contrôleur,
-healthcheck et SSE dans une arborescence distribuable cohérente.
-
-#### Scenario: Validation du plugin
-- **WHEN** le manifeste du plugin est soumis au validateur Codex
-- **THEN** il est accepté et les chemins déclarés existent dans l'artefact
-
-#### Scenario: Localisation du plugin
-- **WHEN** une distribution CAB est préparée
-- **THEN** la marketplace et le plugin sont pris depuis la racine du dépôt, sans déplacement sous `.codex/`
+## MODIFIED Requirements
 
 ### Requirement: Commande de pilotage sûre
 La commande Codex `/cab` SHALL être versionnée dans
@@ -41,8 +21,18 @@ plugin `cab-approval-bridge` sont configurés, comparer leurs versions SemVer de
 base et appeler `codex plugin marketplace upgrade cab_codex_plugins` seulement
 si la version de la marketplace est strictement plus récente. Elle SHALL
 refuser une version absente ou invalide et SHALL vérifier la version installée
-après l'actualisation. Elle SHALL ne démarrer, arrêter ni modifier aucune
-ressource CAB, configuration Codex ou source du marketplace.
+après l'actualisation.
+
+`/cab update` SHALL aussi télécharger exclusivement
+`.codex/commands/cab.md` depuis `https://github.com/AzenorPixs/tools-codex`,
+branche `main`, vérifier son frontmatter versionné et comparer cette version
+SemVer à la copie de profil Codex. Elle SHALL remplacer atomiquement cette
+copie seulement si GitHub fournit une version strictement plus récente. Une
+copie locale sans version MAY être remplacée par une copie GitHub valide. Un
+échec réseau, une redirection d'hôte, une version invalide ou une version
+distante égale ou antérieure SHALL préserver la copie locale. Elle SHALL ne
+démarrer, arrêter ni modifier aucune ressource CAB, configuration Codex ou
+source du marketplace.
 
 #### Scenario: Démarrage CAB
 - **WHEN** `/cab start` est exécutée
@@ -75,9 +65,10 @@ ressource CAB, configuration Codex ou source du marketplace.
   absent ou invalide
 - **THEN** `/cab update` échoue sans actualiser ni modifier de configuration
 
-### Requirement: Version et publication cohérentes
-Les artefacts distribués CAB SHALL partager une version de projet explicite ou documenter leur relation. Un catalogue marketplace SHALL référencer le plugin publié, ou être absent tant qu'aucune publication n'est définie.
+#### Scenario: Commande de profil plus récente sur GitHub
+- **WHEN** `/cab update` télécharge une commande GitHub valide dont la version est strictement plus récente que la copie de profil
+- **THEN** elle remplace atomiquement la copie de profil et vérifie sa version avant d'annoncer le succès
 
-#### Scenario: Préparation de release
-- **WHEN** une release est préparée
-- **THEN** la version du broker, du plugin et du catalogue est vérifiée avant publication
+#### Scenario: Commande de profil non actualisable
+- **WHEN** la source GitHub est inaccessible, redirigée vers un autre hôte, invalide ou pas plus récente
+- **THEN** `/cab update` préserve la copie locale et rapporte la cause observée

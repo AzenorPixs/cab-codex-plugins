@@ -114,9 +114,18 @@ La commande Codex `/cab` est maintenue séparément dans :
 .codex/commands/cab.md
 ```
 
-Cet artefact orchestre `start`, `test` et `stop` pour les ressources CAB. Il
+Cet artefact orchestre `start`, `run`, `test`, `update` et `stop` pour les ressources CAB. Il
 doit être distribué et installé avec son plugin et sa skill, sans prendre en
 charge la décision métier ni le cycle de vie direct du broker MCP OpenCode.
+
+`/cab update` compare la version SemVer de base du plugin installé et celle du
+manifeste fourni par la marketplace `cab_codex_plugins`. Si cette dernière est
+strictement plus récente, elle délègue l'actualisation à
+`codex plugin marketplace upgrade cab_codex_plugins`. Elle compare aussi le
+frontmatter de la commande installée dans le profil Codex à celui téléchargé
+depuis `AzenorPixs/tools-codex`, branche `main`, et la remplace atomiquement
+uniquement si GitHub fournit une version plus récente. Cette commande ne
+modifie ni le catalogue, ni le manifeste, ni la configuration Codex.
 
 La vérification d'intégration de la release doit confirmer que `/cab start`
 observe l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que
@@ -127,7 +136,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.72.1` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
+CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.74.0` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
 
 Les releases Git devraient être identifiées par des tags de forme :
 

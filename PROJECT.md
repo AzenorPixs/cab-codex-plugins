@@ -110,6 +110,9 @@ décision d'approbation.
 - `/cab test` : vérifie le chemin complet de validation dans cette session ;
 - `/cab run` : maintient le job piloté et ses mandats unitaires dans cette
   même session ;
+- `/cab update` : actualise séparément le plugin CAB depuis sa marketplace et
+  la commande de profil depuis `AzenorPixs/tools-codex`, seulement lorsqu'une
+  version strictement plus récente est disponible ;
 - `/cab stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
   arrêter OpenCode ni le broker MCP géré par OpenCode.
 
