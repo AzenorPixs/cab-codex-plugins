@@ -3,7 +3,7 @@
 La commande `/cab` installée dans le profil Codex n'appartient pas à la cache
 du plugin marketplace. Elle doit donc être actualisée séparément depuis sa
 source GitHub définie par le développeur :
-`https://github.com/AzenorPixs/tools-codex`, branche `main`, chemin
+`https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, chemin
 `.codex/commands/cab.md`.
 
 ## Decisions

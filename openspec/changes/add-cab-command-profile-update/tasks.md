@@ -6,7 +6,7 @@
 
 - [x] 2.1 Ajouter la comparaison GitHub et le remplacement atomique à `/cab update`.
 - [x] 2.2 Mettre à jour la copie de profil Codex avec la commande versionnée.
-- [x] 2.3 Aligner les versions CAB sur `0.74.0` et mettre à jour la documentation.
+- [x] 2.3 Aligner les versions CAB sur `0.84.0` et mettre à jour la documentation.
 
 ## 3. Validation
 

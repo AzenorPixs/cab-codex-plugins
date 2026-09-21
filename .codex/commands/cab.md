@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.74.0
+version: 0.84.0
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -189,7 +189,7 @@ broker MCP, le contrôleur, le SSE ou une session de codage.
    la version installée est celle du manifeste marketplace. Sinon, affiche
    `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
 8. Utilise exclusivement la référence GitHub suivante pour la commande CAB :
-   `https://github.com/AzenorPixs/tools-codex`, branche `main`, chemin
+   `https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, chemin
    `.codex/commands/cab.md`. Construit l'URL brute HTTPS correspondante sans
    accepter de redirection vers un autre hôte.
 9. Télécharge cette commande dans un fichier temporaire du profil Codex avec
