@@ -4,6 +4,18 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.84.2 - 2026-09-21
+
+- `/cab update` affiche les versions GitHub et locales du plugin CAB, du
+  contrôleur, du broker actif et de la commande CAB.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.2`.
+
+## 0.84.1 - 2026-09-21
+
+- `/cab update` migre de façon réversible la marketplace CAB locale vers sa
+  source GitHub, actualise son instantané puis réinstalle le plugin si nécessaire.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.1`.
+
 ## 0.84.0 - 2026-09-21
 
 - `/cab update` synchronise la commande de profil avec

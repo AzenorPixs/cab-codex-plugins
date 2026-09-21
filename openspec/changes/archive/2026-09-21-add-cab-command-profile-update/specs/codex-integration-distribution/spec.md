@@ -16,12 +16,16 @@ broker directement. Après ce contrôle, elle SHALL créer ou réutiliser une
 session OpenCode persistante et SHALL transmettre les mandats par la
 messagerie native de cette session.
 
-`/cab update` SHALL vérifier que la marketplace `cab_codex_plugins` et le
-plugin `cab-approval-bridge` sont configurés, comparer leurs versions SemVer de
-base et appeler `codex plugin marketplace upgrade cab_codex_plugins` seulement
-si la version de la marketplace est strictement plus récente. Elle SHALL
-refuser une version absente ou invalide et SHALL vérifier la version installée
-après l'actualisation.
+`/cab update` SHALL vérifier que la marketplace `cab_codex_plugins` utilise la
+source Git `AzenorPixs/cab-codex-plugins`, branche `main`, avec une extraction
+sparse `.agents/plugins` et `plugins`. Si une source locale homonyme est détectée, elle
+SHALL mémoriser sa racine, la remplacer par la source Git et la restaurer si
+l'ajout Git échoue. Elle SHALL actualiser l'instantané Git par
+`codex plugin marketplace upgrade cab_codex_plugins`, comparer le manifeste
+distant de `cab-approval-bridge` à la version installée et appeler
+`codex plugin add cab-approval-bridge@cab_codex_plugins` seulement si le
+manifeste distant est strictement plus récent. Elle SHALL refuser une version
+absente ou invalide et SHALL vérifier la version installée après la réinstallation.
 
 `/cab update` SHALL aussi télécharger exclusivement
 `.codex/commands/cab.md` depuis `https://github.com/AzenorPixs/cab-codex-plugins`,
@@ -31,8 +35,9 @@ copie seulement si GitHub fournit une version strictement plus récente. Une
 copie locale sans version MAY être remplacée par une copie GitHub valide. Un
 échec réseau, une redirection d'hôte, une version invalide ou une version
 distante égale ou antérieure SHALL préserver la copie locale. Elle SHALL ne
-démarrer, arrêter ni modifier aucune ressource CAB, configuration Codex ou
-source du marketplace.
+démarrer, arrêter ni modifier aucune ressource CAB ou configuration Codex, à
+l'exception de la migration réversible de sa marketplace locale vers la source
+Git spécifiée.
 
 #### Scenario: Démarrage CAB
 - **WHEN** `/cab start` est exécutée
@@ -59,6 +64,10 @@ source du marketplace.
 #### Scenario: Plugin déjà à jour
 - **WHEN** `/cab update` constate une version installée égale ou plus récente
 - **THEN** elle n'exécute aucune actualisation et signale que le plugin est à jour
+
+#### Scenario: Migration depuis un marketplace local
+- **WHEN** `cab_codex_plugins` désigne une source locale
+- **THEN** `/cab update` la remplace par la source Git CAB et restaure la source locale si l'ajout Git échoue
 
 #### Scenario: Métadonnées non exploitables
 - **WHEN** la marketplace, le plugin ou l'une des versions nécessaires est
