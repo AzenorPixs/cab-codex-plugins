@@ -20,6 +20,7 @@ CAB/
 ├── plugins/cab-approval-bridge/      # plugin Codex distribuable
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
+│   ├── systemd/cgpt-approval-bridge-controller.service
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-healthcheck.mjs
@@ -100,15 +101,33 @@ scripts/cgpt-approval-bridge-opencode-sse-client.mjs
 
 Le catalogue `.agents/plugins/marketplace.json` référence ce plugin.
 
+Le plugin distribue aussi un modèle d'unité systemd utilisateur. Son
+installation effective est différée au premier `/cab start` : la commande
+copie les ressources dans le profil Codex, écrit la configuration non secrète
+du workspace, recharge systemd puis démarre explicitement le service. Elle ne
+doit jamais appeler `systemctl --user enable`. `/cab stop` arrête le service
+mais conserve son unité inactive pour un démarrage ultérieur.
+
 La commande Codex `/cab` est maintenue séparément dans :
 
 ```text
 .codex/commands/cab.md
 ```
 
-Cet artefact orchestre `start`, `test` et `stop` pour les ressources CAB. Il
+Cet artefact orchestre `start`, `run`, `test`, `update` et `stop` pour les ressources CAB. Il
 doit être distribué et installé avec son plugin et sa skill, sans prendre en
 charge la décision métier ni le cycle de vie direct du broker MCP OpenCode.
+
+`/cab update` s'assure que `cab_codex_plugins` est le marketplace Git
+`AzenorPixs/cab-codex-plugins`, branche `main`, avec une extraction sparse de
+`.agents/plugins` et `plugins`. Elle migre de manière réversible une source locale homonyme,
+actualise l'instantané Git, puis réinstalle le plugin uniquement lorsque son
+manifeste distant est plus récent. Elle compare aussi le
+frontmatter de la commande installée dans le profil Codex à celui téléchargé
+depuis `AzenorPixs/cab-codex-plugins`, branche `main`, et la remplace atomiquement
+uniquement si GitHub fournit une version plus récente. Cette commande ne
+modifie ni le manifeste ni la configuration Codex ; seule la migration
+réversible de la marketplace CAB est admise.
 
 La vérification d'intégration de la release doit confirmer que `/cab start`
 observe l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que
@@ -119,7 +138,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.72.1` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
+CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.84.3` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
 
 Les releases Git devraient être identifiées par des tags de forme :
 

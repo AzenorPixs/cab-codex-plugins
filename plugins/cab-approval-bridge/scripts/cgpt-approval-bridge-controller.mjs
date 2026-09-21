@@ -1,6 +1,8 @@
 import { spawn } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { mkdir, rename, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
-import { isAbsolute } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import readline from "node:readline";
 
 function envValue(name) {
@@ -29,6 +31,13 @@ const statusHost = envValue("OC_Codex_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_STATUS_PORT") || "8788");
 const reconnectMs = Number(envValue("OC_Codex_RECONNECT_MS") || "1000");
 const decisionMode = envValue("OC_Codex_DECISION_MODE") || "manual";
+const reminderStatePath = join(
+  workspace || ".",
+  ".opencode",
+  "state",
+  "cgpt-approval-bridge",
+  "controller-reminders.json"
+);
 const opencodeExitStatusSuffix = ' 2>/dev/null; echo "exit=$?"';
 
 if (!workspace) {
@@ -68,6 +77,16 @@ const httpDecisions = new Map();
 const validations = new Map();
 const reconcilingPermissions = new Set();
 const unmatchedNativePermissions = new Map();
+const reminderNotifications = new Map();
+
+try {
+  const persisted = JSON.parse(readFileSync(reminderStatePath, "utf8"));
+  for (const [requestId, notification] of Object.entries(persisted)) {
+    reminderNotifications.set(requestId, notification);
+  }
+} catch {
+  // L'absence de notification persistante est l'état initial normal.
+}
 
 const status = {
   startedAt: new Date().toISOString(),
@@ -98,6 +117,7 @@ function publicStatus() {
     brokerReadiness: status.brokerReadiness,
     brokerReadinessReceivedAt: status.brokerReadinessReceivedAt,
     activeValidationCount: status.activeValidations.length,
+    pendingReminderCount: reminderNotifications.size,
     activeValidations: status.activeValidations.map(
       ({ requestId, receivedAt }) => ({
         requestId,
@@ -568,6 +588,11 @@ function onCodexLine(line) {
       return;
     }
 
+    if (turn.kind === "reminder") {
+      turn.resolve(turn.finalText || turn.text);
+      return;
+    }
+
     try {
       turn.resolve(
         parseDecision(
@@ -626,7 +651,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.72.1",
+      version: "0.84.3",
     },
   });
 
@@ -713,6 +738,57 @@ async function decide(request) {
       });
     }
   );
+}
+
+async function persistReminderNotification(reminder, reason) {
+  const notification = {
+    requestId: reminder.requestId,
+    approval_id: reminder.approvalId,
+    change_id: reminder.changeId,
+    age_seconds: reminder.ageSeconds,
+    reason,
+    recordedAt: new Date().toISOString(),
+  };
+  reminderNotifications.set(reminder.requestId, notification);
+  await mkdir(dirname(reminderStatePath), { recursive: true });
+  const temporaryPath = `${reminderStatePath}.tmp`;
+  await writeFile(
+    temporaryPath,
+    JSON.stringify(Object.fromEntries(reminderNotifications), null, 2),
+    "utf8"
+  );
+  await rename(temporaryPath, reminderStatePath);
+}
+
+async function notifyOrchestrator(reminder) {
+  const threadId = await ensureThread();
+  const prompt = [
+    "RAPPEL_CAB",
+    "Une décision CAB reste en attente. Examine le mandat corrélé, décide explicitement, demande une clarification ou maintiens l'attente.",
+    "N'approuve jamais implicitement et n'exécute aucune opération.",
+    JSON.stringify(reminder),
+  ].join("\n\n");
+  return new Promise((resolve, reject) => {
+    const startId = sendCodex("turn/start", {
+      threadId,
+      input: [{ type: "text", text: prompt }],
+    });
+    turnStarts.set(startId, {
+      kind: "reminder",
+      text: "",
+      finalText: "",
+      resolve,
+      reject,
+    });
+  });
+}
+
+function scheduleReminderHeartbeat(reminder) {
+  setTimeout(() => {
+    void notifyOrchestrator(reminder).catch(async () => {
+      await persistReminderNotification(reminder, "heartbeat-unavailable");
+    });
+  }, 30_000);
 }
 
 async function handleValidation(request) {
@@ -1225,6 +1301,68 @@ createServer(
         response
           .writeHead(400)
           .end();
+      }
+
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
+      url.pathname === "/validation/reminder"
+    ) {
+      try {
+        const payload = await readJson(request);
+        const approval = payload?.approval;
+        const requestId = approval?.requestId;
+        const approvalId = approval?.approval_id;
+        const changeId = approval?.change_id;
+        let validation = validations.get(requestId);
+
+        if (!validation && typeof requestId === "string" && typeof approvalId === "string" && typeof changeId === "string") {
+          validation = {
+            requestId,
+            approvalId,
+            changeId,
+            summary: typeof approval.summary === "string" ? approval.summary : "Validation OpenCode",
+            operation: approvedOperation(approval),
+          };
+          validations.set(requestId, validation);
+        }
+
+        if (
+          !validation ||
+          validation.approvalId !== approvalId ||
+          validation.changeId !== changeId ||
+          httpDecisions.has(requestId) ||
+          answered.has(requestId)
+        ) {
+          throw new Error("Relance de validation invalide ou terminale.");
+        }
+
+        const reminder = {
+          requestId,
+          approvalId,
+          changeId,
+          sessionId: approval.session_id,
+          ageSeconds: payload.age_seconds,
+          operation: validation.operation,
+          lastState: payload.last_state,
+        };
+
+        try {
+          await notifyOrchestrator(reminder);
+          reminderNotifications.delete(requestId);
+          updateStatus("validation-reminder-delivered", { requestId });
+        } catch {
+          scheduleReminderHeartbeat(reminder);
+          await persistReminderNotification(reminder, "orchestrator-unavailable");
+          updateStatus("validation-reminder-pending", { requestId });
+        }
+
+        response.writeHead(202, { "content-type": "application/json" });
+        response.end(JSON.stringify({ requestId, status: "PENDING" }));
+      } catch {
+        response.writeHead(400).end();
       }
 
       return;

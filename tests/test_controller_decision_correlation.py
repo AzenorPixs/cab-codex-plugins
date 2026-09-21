@@ -116,6 +116,44 @@ class ControllerDecisionCorrelationTest(
             )
         )
 
+    def test_reminder_keeps_pending_state_and_uses_correlated_endpoint(self):
+        item = {
+            **self.item,
+            "status": "PENDING",
+            "notification_status": "DELIVERED",
+        }
+        observed = []
+
+        def fake_urlopen(http_request, timeout):
+            observed.append((http_request.full_url, timeout))
+            return FakeResponse({})
+
+        with (
+            patch.object(
+                bridge,
+                "controller_url",
+                return_value="http://controller",
+            ),
+            patch.object(
+                bridge.request,
+                "urlopen",
+                side_effect=fake_urlopen,
+            ),
+            patch.object(bridge.journal, "append_unique_event"),
+        ):
+            delivered = bridge.remind_controller(
+                item,
+                age_seconds=30,
+                last_state="WAITING_DECISION",
+            )
+
+        self.assertTrue(delivered)
+        self.assertEqual(
+            observed[0][0],
+            "http://controller/validation/reminder",
+        )
+        self.assertEqual(item["status"], "PENDING")
+
 
 class UnitaryOperationValidationTest(
     unittest.TestCase,

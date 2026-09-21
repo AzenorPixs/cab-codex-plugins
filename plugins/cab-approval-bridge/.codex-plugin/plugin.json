@@ -1,6 +1,6 @@
 {
   "name": "cab-approval-bridge",
-  "version": "0.72.1+codex.20260914140827",
+  "version": "0.84.3+codex.20260921090000",
   "description": "Pilote et v\u00e9rifie le pont de validation OpenCode\u2013Codex.",
   "author": {
     "name": "CAB"
