@@ -4,6 +4,15 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.84.3 - 2026-09-21
+
+- `/cab start` vérifie avant toute session persistante que le fournisseur, le
+  modèle et le niveau de raisonnement configurés dans OpenCode répondent
+  effectivement dans un prévol sans outil ni accès au projet.
+- En cas de preuve absente ou divergente, CAB publie `CAB_INACTIF` sans lancer
+  de session pilotée.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.3`.
+
 ## 0.84.2 - 2026-09-21
 
 - `/cab update` affiche les versions GitHub et locales du plugin CAB, du

@@ -30,7 +30,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.84.2`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.84.3`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
