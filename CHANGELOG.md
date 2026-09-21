@@ -4,6 +4,12 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.84.0 - 2026-09-21
+
+- `/cab update` synchronise la commande de profil avec
+  `AzenorPixs/cab-codex-plugins` au lieu d'une source incorrecte.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.0`.
+
 ## 0.74.0 - 2026-09-19
 
 - `/cab update` vérifie désormais aussi la commande CAB du profil Codex face à

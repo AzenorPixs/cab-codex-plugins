@@ -8,10 +8,10 @@ que sa référence distribuée par GitHub.
 
 - Versionner explicitement la commande `/cab` dans son frontmatter.
 - Comparer la copie de profil à `.codex/commands/cab.md` de
-  `AzenorPixs/tools-codex`, branche `main`.
+  `AzenorPixs/cab-codex-plugins`, branche `main`.
 - Remplacer atomiquement cette copie seulement lorsqu'une version GitHub SemVer
   strictement plus récente est disponible.
-- Aligner CAB sur la version `0.74.0`.
+- Aligner CAB sur la version `0.84.0`.
 
 ## Capabilities
 

@@ -24,7 +24,7 @@ refuser une version absente ou invalide et SHALL vérifier la version installée
 après l'actualisation.
 
 `/cab update` SHALL aussi télécharger exclusivement
-`.codex/commands/cab.md` depuis `https://github.com/AzenorPixs/tools-codex`,
+`.codex/commands/cab.md` depuis `https://github.com/AzenorPixs/cab-codex-plugins`,
 branche `main`, vérifier son frontmatter versionné et comparer cette version
 SemVer à la copie de profil Codex. Elle SHALL remplacer atomiquement cette
 copie seulement si GitHub fournit une version strictement plus récente. Une

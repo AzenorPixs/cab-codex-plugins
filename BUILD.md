@@ -123,7 +123,7 @@ manifeste fourni par la marketplace `cab_codex_plugins`. Si cette dernière est
 strictement plus récente, elle délègue l'actualisation à
 `codex plugin marketplace upgrade cab_codex_plugins`. Elle compare aussi le
 frontmatter de la commande installée dans le profil Codex à celui téléchargé
-depuis `AzenorPixs/tools-codex`, branche `main`, et la remplace atomiquement
+depuis `AzenorPixs/cab-codex-plugins`, branche `main`, et la remplace atomiquement
 uniquement si GitHub fournit une version plus récente. Cette commande ne
 modifie ni le catalogue, ni le manifeste, ni la configuration Codex.
 
@@ -136,7 +136,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.74.0` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
+CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.84.0` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
 
 Les releases Git devraient être identifiées par des tags de forme :
 
