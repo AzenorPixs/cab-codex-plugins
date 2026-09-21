@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.84.0
+version: 0.84.2
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -170,23 +170,31 @@ dans le profil Codex. Cette sous-commande ne démarre ni n'arrête OpenCode, le
 broker MCP, le contrôleur, le SSE ou une session de codage.
 
 1. Vérifie avec `codex plugin marketplace list` que la marketplace
-   `cab_codex_plugins` est configurée.
-2. Obtient les métadonnées du plugin installé avec
-   `codex plugin list --marketplace cab_codex_plugins --available --json` et
-   exige l'entrée `cab-approval-bridge@cab_codex_plugins`.
-3. Résout le manifeste `.codex-plugin/plugin.json` depuis la source déclarée
-   par cette marketplace, puis lit sa version sans accéder à un secret.
-4. Compare les versions de base selon SemVer, en ignorant le suffixe de
-   cachebuster Codex commençant par `+`. Une version absente ou invalide, une
-   marketplace non configurée ou un plugin non installé produit une erreur sans
-   mise à jour.
-5. Si la version marketplace est égale ou antérieure à la version installée,
-   affiche `CAB_DÉJÀ_À_JOUR` avec les deux versions et n'exécute aucune
-   commande de mise à jour.
-6. Si la version marketplace est strictement plus récente, exécute une seule
-   fois `codex plugin marketplace upgrade cab_codex_plugins`.
-7. Relit les métadonnées installées et affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si
-   la version installée est celle du manifeste marketplace. Sinon, affiche
+   `cab_codex_plugins` est configurée depuis
+   `AzenorPixs/cab-codex-plugins`, branche `main`, avec le chemin sparse
+   `.agents/plugins` et `plugins`.
+2. Si une marketplace locale porte déjà ce nom, mémorise sa racine, la retire,
+   puis ajoute la source Git par
+   `codex plugin marketplace add AzenorPixs/cab-codex-plugins --ref main --sparse .agents/plugins --sparse plugins`.
+   Si cet ajout échoue, restaure immédiatement la source locale mémorisée et
+   affiche `CAB_MARKETPLACE_MIGRATION_ÉCHOUÉE`. N'essaie aucune actualisation
+   de plugin après cet échec.
+3. Si la marketplace Git n'est pas encore configurée, l'ajoute avec la même
+   commande. Un échec affiche `CAB_MARKETPLACE_INDISPONIBLE` et préserve les
+   autres ressources CAB.
+4. Actualise l'instantané Git par
+   `codex plugin marketplace upgrade cab_codex_plugins`, puis vérifie que
+   `cab-approval-bridge@cab_codex_plugins` est disponible.
+5. Télécharge et valide le manifeste distant
+   `plugins/cab-approval-bridge/.codex-plugin/plugin.json` depuis la même
+   branche GitHub. Compare sa version SemVer de base, sans son cachebuster
+   `+codex`, à celle renvoyée par `codex plugin list --marketplace cab_codex_plugins --available --json`.
+6. Si la version distante est égale ou antérieure à celle installée, affiche
+   `CAB_PLUGIN_DÉJÀ_À_JOUR` et ne réinstalle pas le plugin.
+7. Si la version distante est strictement plus récente, exécute une seule fois
+   `codex plugin add cab-approval-bridge@cab_codex_plugins`, puis relit les
+   métadonnées installées. Affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si la
+   version installée est celle du manifeste distant ; sinon, affiche
    `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
 8. Utilise exclusivement la référence GitHub suivante pour la commande CAB :
    `https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, chemin
@@ -206,12 +214,23 @@ broker MCP, le contrôleur, le SSE ou une session de codage.
     et affiche `CAB_COMMANDE_MISE_À_JOUR` seulement en cas de concordance.
     Tout échec laisse la copie locale inchangée et affiche
     `CAB_COMMANDE_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+13. Affiche toujours `CAB_RÉSUMÉ_VERSIONS`, y compris après un échec, avec :
+    - GitHub : version du manifeste du plugin, version du contrôleur extraite
+      de `plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs`,
+      version du broker extraite de `src/cgpt_approval_bridge_server.py` et
+      version du frontmatter de `.codex/commands/cab.md` ;
+    - profil local : version du manifeste et du contrôleur depuis le cache du
+      plugin installé, version du broker réellement actif fournie par
+      `broker_readiness.server_version`, et version du frontmatter de
+      `${CODEX_HOME:-$HOME/.codex}/commands/cab.md`.
+    Toute source inaccessible ou version absente doit être affichée comme
+    `INDISPONIBLE`, sans remplacer cette valeur par une déduction.
 
-N'édite jamais la marketplace, le manifeste du plugin, la configuration Codex
-ou les fichiers du projet piloté. La seule écriture locale admise est le
-remplacement atomique de la copie `/cab` dans le profil Codex. Une marketplace
-Git est actualisée par Codex ; une marketplace locale recharge seulement sa
-source locale.
+N'édite jamais le manifeste du plugin, la configuration Codex ou les fichiers
+du projet piloté. La seule écriture locale admise est le remplacement atomique
+de la copie `/cab` dans le profil Codex. La migration contrôlée de la source
+locale CAB vers son marketplace Git est l'unique modification de marketplace
+autorisée ; elle doit toujours être réversible en cas d'échec.
 
 ## `/cab stop`
 

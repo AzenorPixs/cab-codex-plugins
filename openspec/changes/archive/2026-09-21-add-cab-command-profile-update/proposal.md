@@ -11,7 +11,9 @@ que sa référence distribuée par GitHub.
   `AzenorPixs/cab-codex-plugins`, branche `main`.
 - Remplacer atomiquement cette copie seulement lorsqu'une version GitHub SemVer
   strictement plus récente est disponible.
-- Aligner CAB sur la version `0.84.0`.
+- Migrer de façon contrôlée la marketplace CAB locale vers sa source GitHub,
+  puis réinstaller le plugin lorsque son manifeste distant est plus récent.
+- Aligner CAB sur la version `0.84.1`.
 
 ## Capabilities
 
