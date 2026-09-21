@@ -70,7 +70,7 @@ Version : 0.2
 ## Environnement non conteneurisé
 
   * 24.21.0
-  * /home/devops/node/current
+  * /home/devops/node/current/bin/node
 
 
 # NPM
@@ -163,23 +163,23 @@ Version : 0.2
 
 ## Environnement conteneurisé
 
+  * v3.3.5 --> /usr/bin/python3 -c "import psycopg; print(psycopg.__version__)"
   * psycopg  installé lors du démarrage du conteneur
-  * 3.3.5 --> /usr/bin/python3 -c "import psycopg; print(psycopg.__version__)"
 
 ## Environnement non conteneurisé
 
+  * v3.3.5 --> /home/devops/python/current/bin/python3 -c "import psycopg; print(psycopg.__version__)"
   * psycopg
-  * 3.3.5 --> /home/devops/python/current/bin/python3 -c "import psycopg; print(psycopg.__version__)"
 
 
 # Python - Gestionnaire de paquets
 
 ## Environnement conteneurisé
 
+  * v26.1.2
   * /usr/bin/pip3
-  * pip 26.1.2
 
 ## Environnement non conteneurisé
 
+  * v26.2.1
   * /home/devops/python/current/bin/pip3
-  * pip 26.2.1

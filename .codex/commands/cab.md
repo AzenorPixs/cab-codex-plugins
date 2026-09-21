@@ -1,5 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
+version: 0.84.3
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -29,6 +30,7 @@ Les seules sous-commandes admises sont :
 - `/cab run`
 - `/cab stop`
 - `/cab test`
+- `/cab update`
 
 Sans argument ou avec un argument inconnu, affiche cette syntaxe et n’effectue aucune action.
 
@@ -68,26 +70,30 @@ Le broker :
 2. Vérifie que la configuration OpenCode déclare `cgpt-validation` comme serveur MCP local `stdio`.
 3. Consulte l’état MCP du serveur OpenCode par `GET /mcp`. Cette API est la seule source de vérité pour les sessions persistantes ; une sortie de CLI ou un état mémorisé ne suffit pas.
 4. Si `cgpt-validation` n’est pas `connected`, demande une réinitialisation contrôlée de l’instance OpenCode par `POST /instance/dispose`, sans tuer ni démarrer directement le processus broker. Attends ensuite une nouvelle réponse saine de `/global/health` et `cgpt-validation: connected` dans `/mcp`. En cas d’échec, publie `CAB_INACTIF` avec l’erreur observée et n’ouvre aucune session de codage.
-5. Démarre ou réutilise le contrôleur Codex persistant hors sandbox sous `cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie que le service utilise le redémarrage automatique.
-6. Vérifie le contrôleur Codex sur son interface locale.
-7. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
-8. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
-9. Adresse les mandats exclusivement à cette session via `POST /session/<id>/message`. Aucun appel CLI éphémère ne peut transmettre ou exécuter un mandat de codage. La session doit rester visible au développeur dans OpenCode.
-10. Dans cette session, appelle `broker_readiness` sans lecture, commande ni écriture du projet.
-11. Accepte comme états possibles : `READY`, `DEGRADED`, `BLOCKED`, `HUMAN_REQUIRED`.
-12. Après reconnexion SSE ou divergence détectée, réconcilie l’état réel via HTTP auprès d’OpenCode, puis recontrôle `/mcp` avant tout nouveau mandat.
-13. Crée ou réactive le heartbeat global « Surveillance CAB » toutes les 30 secondes.
-14. Le heartbeat surveille OpenCode, `/mcp`, `broker_readiness`, le contrôleur et le SSE OpenCode.
-15. Le heartbeat reste silencieux lorsque tout est sain et ne prend aucune décision de validation.
-16. Publie `CAB_ACTIF` uniquement si les preuves suivantes sont présentes :
+5. Identifie dans la configuration API OpenCode l’agent de codage qui recevra le premier prompt et relève son fournisseur, son modèle et son niveau de raisonnement effectivement configurés. Ne modifie jamais cette configuration et ne lis aucune donnée secrète.
+6. Vérifie via l’API OpenCode que le fournisseur et le modèle relevés sont publiés et disponibles. Crée alors une session de prévol temporaire, sans outil ni accès au projet, et lui adresse une requête inoffensive en imposant exactement ce fournisseur, ce modèle et ce niveau de raisonnement.
+7. Contrôle la réponse et ses métadonnées réellement observées. Elles doivent confirmer le même fournisseur, le même modèle et le même niveau de raisonnement. Ferme la session de prévol après cette preuve. Si une valeur est absente, indisponible, divergente ou si la requête échoue, publie `CAB_INACTIF` avec les valeurs attendues et observées, puis n’installe pas le contrôleur et ne crée ni ne réutilise de session persistante.
+8. Résous les ressources du plugin CAB installé, puis copie son contrôleur et son modèle d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Crée ou actualise `~/.config/cab-approval-bridge/controller.env` avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
+9. Démarre ou réutilise le contrôleur Codex persistant hors sandbox par `systemctl --user start cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie qu’il est `active` et que son unité utilise `Restart=on-failure`.
+10. Vérifie le contrôleur Codex sur son interface locale.
+11. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
+12. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
+13. Adresse les mandats exclusivement à cette session via `POST /session/<id>/message`. Aucun appel CLI éphémère ne peut transmettre ou exécuter un mandat de codage. La session doit rester visible au développeur dans OpenCode.
+14. Dans cette session, appelle `broker_readiness` sans lecture, commande ni écriture du projet.
+15. Accepte comme états possibles : `READY`, `DEGRADED`, `BLOCKED`, `HUMAN_REQUIRED`.
+16. Après reconnexion SSE ou divergence détectée, réconcilie l’état réel via HTTP auprès d’OpenCode, puis recontrôle `/mcp` avant tout nouveau mandat.
+17. Crée ou réactive le heartbeat global « Surveillance CAB » toutes les 30 secondes.
+18. Le heartbeat surveille OpenCode, `/mcp`, `broker_readiness`, le contrôleur et le SSE OpenCode.
+19. Le heartbeat reste silencieux lorsque tout est sain et ne prend aucune décision de validation.
+20. Publie `CAB_ACTIF` uniquement si les preuves suivantes sont présentes :
     - OpenCode sain ;
     - MCP `cgpt-validation` connecté ;
     - `broker_readiness` exploitable ;
     - contrôleur Codex joignable ;
     - SSE OpenCode `connected` ;
     - heartbeat actif.
-17. Toute preuve absente impose `CAB_INACTIF`.
-18. Avant le premier pilotage réel après démarrage, exécute obligatoirement `/cab test`.
+21. Toute preuve absente impose `CAB_INACTIF`.
+22. Avant le premier pilotage réel après démarrage, exécute obligatoirement `/cab test`.
 
 Une simple réponse HTTP, un ancien état MCP ou une ancienne session de test ne suffit jamais à déclarer `CAB_ACTIF`.
 
@@ -160,11 +166,80 @@ Ne ferme jamais :
 - le contrôleur persistant ;
 - le heartbeat global.
 
+## `/cab update`
+
+Met à jour séparément le plugin CAB et la copie de la commande `/cab` installée
+dans le profil Codex. Cette sous-commande ne démarre ni n'arrête OpenCode, le
+broker MCP, le contrôleur, le SSE ou une session de codage.
+
+1. Vérifie avec `codex plugin marketplace list` que la marketplace
+   `cab_codex_plugins` est configurée depuis
+   `AzenorPixs/cab-codex-plugins`, branche `main`, avec le chemin sparse
+   `.agents/plugins` et `plugins`.
+2. Si une marketplace locale porte déjà ce nom, mémorise sa racine, la retire,
+   puis ajoute la source Git par
+   `codex plugin marketplace add AzenorPixs/cab-codex-plugins --ref main --sparse .agents/plugins --sparse plugins`.
+   Si cet ajout échoue, restaure immédiatement la source locale mémorisée et
+   affiche `CAB_MARKETPLACE_MIGRATION_ÉCHOUÉE`. N'essaie aucune actualisation
+   de plugin après cet échec.
+3. Si la marketplace Git n'est pas encore configurée, l'ajoute avec la même
+   commande. Un échec affiche `CAB_MARKETPLACE_INDISPONIBLE` et préserve les
+   autres ressources CAB.
+4. Actualise l'instantané Git par
+   `codex plugin marketplace upgrade cab_codex_plugins`, puis vérifie que
+   `cab-approval-bridge@cab_codex_plugins` est disponible.
+5. Télécharge et valide le manifeste distant
+   `plugins/cab-approval-bridge/.codex-plugin/plugin.json` depuis la même
+   branche GitHub. Compare sa version SemVer de base, sans son cachebuster
+   `+codex`, à celle renvoyée par `codex plugin list --marketplace cab_codex_plugins --available --json`.
+6. Si la version distante est égale ou antérieure à celle installée, affiche
+   `CAB_PLUGIN_DÉJÀ_À_JOUR` et ne réinstalle pas le plugin.
+7. Si la version distante est strictement plus récente, exécute une seule fois
+   `codex plugin add cab-approval-bridge@cab_codex_plugins`, puis relit les
+   métadonnées installées. Affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si la
+   version installée est celle du manifeste distant ; sinon, affiche
+   `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+8. Utilise exclusivement la référence GitHub suivante pour la commande CAB :
+   `https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, chemin
+   `.codex/commands/cab.md`. Construit l'URL brute HTTPS correspondante sans
+   accepter de redirection vers un autre hôte.
+9. Télécharge cette commande dans un fichier temporaire du profil Codex avec
+   `curl --fail --silent --show-error`, sans écrire la cible locale. Vérifie
+   que le frontmatter YAML contient une version SemVer valide.
+10. Lit la version de la commande locale
+    `${CODEX_HOME:-$HOME/.codex}/commands/cab.md`. Une copie locale sans
+    version est traitée comme une installation héritée, donc antérieure à une
+    commande distante valide.
+11. Si la version GitHub est égale ou antérieure à la version locale, affiche
+    `CAB_COMMANDE_DÉJÀ_À_JOUR` et conserve le fichier local.
+12. Si la version GitHub est strictement plus récente, remplace atomiquement
+    la copie du profil par le fichier temporaire validé, puis relit sa version
+    et affiche `CAB_COMMANDE_MISE_À_JOUR` seulement en cas de concordance.
+    Tout échec laisse la copie locale inchangée et affiche
+    `CAB_COMMANDE_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+13. Affiche toujours `CAB_RÉSUMÉ_VERSIONS`, y compris après un échec, avec :
+    - GitHub : version du manifeste du plugin, version du contrôleur extraite
+      de `plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs`,
+      version du broker extraite de `src/cgpt_approval_bridge_server.py` et
+      version du frontmatter de `.codex/commands/cab.md` ;
+    - profil local : version du manifeste et du contrôleur depuis le cache du
+      plugin installé, version du broker réellement actif fournie par
+      `broker_readiness.server_version`, et version du frontmatter de
+      `${CODEX_HOME:-$HOME/.codex}/commands/cab.md`.
+    Toute source inaccessible ou version absente doit être affichée comme
+    `INDISPONIBLE`, sans remplacer cette valeur par une déduction.
+
+N'édite jamais le manifeste du plugin, la configuration Codex ou les fichiers
+du projet piloté. La seule écriture locale admise est le remplacement atomique
+de la copie `/cab` dans le profil Codex. La migration contrôlée de la source
+locale CAB vers son marketplace Git est l'unique modification de marketplace
+autorisée ; elle doit toujours être réversible en cas d'échec.
+
 ## `/cab stop`
 
 1. Supprime tous les heartbeats et cron healthchecks créés par `/cab`, dont « Surveillance CAB ».
 2. Ferme les flux SSE ouverts par `/cab`.
-3. Arrête proprement uniquement les processus de contrôleur démarrés par `/cab`, notamment `cgpt-approval-bridge-controller.service`.
+3. Arrête explicitement et proprement uniquement le contrôleur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime son unité : elle reste installée mais inactive jusqu’au prochain `/cab start`.
 4. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
 5. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
 6. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.

@@ -18,25 +18,13 @@
   "share": "disabled",
 	"snapshot": false,
 	"autoupdate": false,
-	"mcp": {
-	  "servers": {
-		"cgpt-validation": {
-		  "type": "local",
-		  "command": [
-			"python3",
-			"/opt/tools/cab/cgpt_approval_bridge_server.py"
-		  ],
-		  "cwd": "/workspace"
-      }
-	  }
-	},
 	"agent": {
 		"plan": {
-			"model": "opencode-go/qwen3.8-flash",
+			"model": "Qwen/Qwen3.6-35B-A3B-FP8",
 			"reasoningEffort": "low"
 		},
 		"build": {
-			"model": "opencode-go/qwen3.8-flash",
+			"model": "Qwen/Qwen3.6-35B-A3B-FP8",
 			"reasoningEffort": "low"
 		}
 	},

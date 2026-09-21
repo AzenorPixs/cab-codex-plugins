@@ -51,7 +51,8 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 - corrélation par `requestId` ;
 - journal append-only et contrôle d'intégrité ;
 - reprise après interruption ;
-- watchdogs de validation et de session ;
+- watchdogs de validation et de session, avec relance corrélée du contrôleur
+  toutes les trente secondes pour une décision PENDING ;
 - readiness `READY / DEGRADED / BLOCKED / HUMAN_REQUIRED` ;
 - diagnostic avec cause racine ;
 - remédiations techniques contrôlées ;
@@ -71,12 +72,14 @@ de décision d'approbation.
 /cab start
 /cab test
 /cab run
+/cab update
 /cab stop
 ```
 
-`/cab start` vérifie le MCP actif par `/mcp`, initialise ou reprend le
-contrôleur et la supervision CAB, puis crée ou réutilise une session de codage
-persistante visible dans OpenCode.
+`/cab start` vérifie le MCP actif par `/mcp`, installe de façon différée le
+service utilisateur du contrôleur sans l'activer au login, le démarre
+explicitement, initialise la supervision CAB, puis crée ou réutilise une
+session de codage persistante visible dans OpenCode.
 
 `/cab test` réalise, dans cette même session, un test non destructif du chemin
 complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
@@ -86,8 +89,23 @@ commande système, commande OpenSpec ou opération d’archivage est soumise par
 OpenCode comme mandat unitaire, puis exécutée seulement après une décision
 Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
 
-`/cab stop` arrête uniquement les ressources CAB qu'elle a créées, sans fermer
-OpenCode ni arrêter le broker MCP géré par OpenCode.
+`/cab stop` arrête explicitement le contrôleur et les ressources CAB qu'elle a
+créées, sans fermer OpenCode ni arrêter le broker MCP géré par OpenCode.
+L'unité utilisateur reste installée mais inactive jusqu'au prochain
+`/cab start`.
+
+`/cab update` compare la version SemVer de base de `cab-approval-bridge`
+aussi la commande CAB du profil Codex à celle de
+installée à celle publiée par le marketplace Git `cab_codex_plugins`. Elle
+peut migrer de façon réversible une source locale CAB vers
+`AzenorPixs/cab-codex-plugins`, puis compare aussi la commande CAB du profil à celle de
+aussi la commande CAB du profil Codex à celle de
+`AzenorPixs/cab-codex-plugins`, branche `main`, puis met à niveau chaque élément
+seulement lorsqu'une version plus récente est disponible. Le remplacement de la
+commande de profil est atomique ; la configuration, le catalogue et les
+ressources CAB en cours restent inchangés.
+À la fin, elle récapitule les versions GitHub et locales du plugin, du
+contrôleur, du broker actif et de la commande CAB.
 
 ## Organisation du dépôt
 
@@ -207,7 +225,7 @@ Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-La version de base actuelle du broker, du contrôleur et du plugin est `0.72.1`. Le plugin ajoute un cachebuster Codex pour les installations locales.
+La version de base actuelle du broker, du contrôleur et du plugin est `0.84.3`. Le plugin ajoute un cachebuster Codex pour les installations locales.
 
 ## Documentation
 

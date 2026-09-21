@@ -4,6 +4,45 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.84.3 - 2026-09-21
+
+- `/cab start` vérifie avant toute session persistante que le fournisseur, le
+  modèle et le niveau de raisonnement configurés dans OpenCode répondent
+  effectivement dans un prévol sans outil ni accès au projet.
+- En cas de preuve absente ou divergente, CAB publie `CAB_INACTIF` sans lancer
+  de session pilotée.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.3`.
+
+## 0.84.2 - 2026-09-21
+
+- `/cab update` affiche les versions GitHub et locales du plugin CAB, du
+  contrôleur, du broker actif et de la commande CAB.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.2`.
+
+## 0.84.1 - 2026-09-21
+
+- `/cab update` migre de façon réversible la marketplace CAB locale vers sa
+  source GitHub, actualise son instantané puis réinstalle le plugin si nécessaire.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.1`.
+
+## 0.84.0 - 2026-09-21
+
+- `/cab update` synchronise la commande de profil avec
+  `AzenorPixs/cab-codex-plugins` au lieu d'une source incorrecte.
+- Alignement du broker, du contrôleur et des commandes sur la version `0.84.0`.
+
+## 0.74.0 - 2026-09-19
+
+- `/cab update` vérifie désormais aussi la commande CAB du profil Codex face à
+  `AzenorPixs/tools-codex` et la remplace atomiquement si GitHub est plus récent.
+- Alignement du broker, du contrôleur et du plugin sur la version `0.74.0`.
+
+## 0.73.0 - 2026-09-19
+
+- Ajout de `/cab update`, qui compare la version du plugin CAB et celle de sa
+  marketplace avant de déléguer une mise à niveau nécessaire à Codex.
+- Alignement du broker, du contrôleur et du plugin sur la version `0.73.0`.
+
 ## 0.72.1 - 2026-09-14
 
 - Le contrôleur corrèle désormais une commande Bash lorsque OpenCode ajoute

@@ -1,0 +1,9 @@
+[Unit]
+Description=Contrôleur local Codex Approval Bridge
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cab-approval-bridge/controller.env
+ExecStart=/usr/bin/env node %h/.local/share/cab-approval-bridge/cgpt-approval-bridge-controller.mjs
+Restart=on-failure
+RestartSec=5

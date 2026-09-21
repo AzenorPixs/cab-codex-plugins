@@ -30,7 +30,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.72.1`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.84.3`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -114,16 +114,23 @@ cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
 
-Le contrôleur est démarré et maintenu par le service utilisateur
-`cgpt-approval-bridge-controller.service`, configuré pour le redémarrage
-automatique. Un RUN CAB ne doit pas le remplacer par un processus éphémère :
-le service conserve la disponibilité du contrôleur pendant les notifications
-et décisions corrélées.
+Le plugin distribue le modèle de service utilisateur
+`cgpt-approval-bridge-controller.service`. `/cab start` installe ou actualise
+de façon différée le contrôleur, le fichier d'environnement non secret et
+l'unité dans le profil utilisateur, exécute `systemctl --user daemon-reload`,
+puis démarre explicitement le service. Il ne l'active jamais : l'installation
+du plugin et l'ouverture de session ne démarrent donc aucun contrôleur.
+
+L'unité applique `Restart=on-failure` tant qu'elle est en cours d'exécution.
+`/cab stop` arrête explicitement ce service sans supprimer l'unité, sans
+arrêter OpenCode et sans arrêter le broker MCP. Un RUN CAB ne doit pas le
+remplacer par un processus éphémère : le service conserve la disponibilité du
+contrôleur pendant les notifications et décisions corrélées.
 
 L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
 admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas
 un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST
-/validation/request` et `GET` ou `POST /decision/<requestId>` ; les décisions
+/validation/request`, `POST /validation/reminder` et `GET` ou `POST /decision/<requestId>` ; les décisions
 admises sont `approved`, `rejected` et `needs_clarification`.
 
 ## 8. Supervision OpenCode
@@ -153,6 +160,13 @@ restent dans cette session visible du développeur.
 `broker_readiness` expose `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`, avec cause racine, action recommandée, disponibilité du contrôleur, compteurs d'approbations et disponibilité éventuelle d'une auto-récupération.
 
 Le broker publie périodiquement cette readiness au contrôleur local.
+
+Lorsqu'un mandat notifié reste PENDING sans décision, le broker adresse aussi
+au contrôleur une relance corrélée toutes les trente secondes. Le contrôleur
+transmet l'événement à sa tâche orchestratrice, planifie un heartbeat de
+reprise si nécessaire et conserve une notification locale persistante lorsque
+le réveil reste indisponible. Cette relance ne constitue jamais une décision
+ni une permission OpenCode.
 
 Le healthcheck vérifie la santé OpenCode, le contrôleur, Codex App Server, le SSE OpenCode et la fraîcheur de `broker_readiness`. Un état fonctionnel `BLOCKED` ou `HUMAN_REQUIRED` n'entraîne pas un redémarrage aveugle du contrôleur.
 
@@ -255,6 +269,13 @@ piloté.
   supervision, puis crée ou réutilise une session de codage persistante ;
 - `/cab test` réalise un test non destructif du chemin de validation complet
   dans cette même session ;
+- `/cab update` compare la version installée de `cab-approval-bridge` à la
+  version publiée par le marketplace Git `cab_codex_plugins`, le migre de façon
+  réversible depuis une source locale si nécessaire, puis compare la
+  commande du profil Codex à `AzenorPixs/cab-codex-plugins` sur `main`. Elle met à
+  niveau chaque élément seulement lorsqu'une version plus récente est disponible
+  et restitue les versions GitHub et locales du plugin, du contrôleur, du broker
+  actif et de la commande ;
 - `/cab stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.
