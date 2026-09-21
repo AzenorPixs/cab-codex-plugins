@@ -36,6 +36,16 @@ broker directement. Après ce contrôle, elle SHALL créer ou réutiliser une
 session OpenCode persistante et SHALL transmettre les mandats par la
 messagerie native de cette session.
 
+Après la preuve MCP et avant de créer ou réutiliser cette session persistante,
+`/cab start` SHALL vérifier le fournisseur, le modèle et le niveau de
+raisonnement effectivement configurés pour l'agent de codage ciblé. Elle SHALL
+vérifier leur disponibilité via l'API OpenCode, soumettre une requête
+temporaire sans outil ni accès au projet et contrôler les métadonnées
+réellement observées. Si une valeur est absente, indisponible ou divergente,
+elle SHALL publier `CAB_INACTIF` avec la cause et ne créer aucune session
+persistante. Elle SHALL ne jamais modifier la configuration choisie par le
+développeur.
+
 `/cab update` SHALL vérifier que la marketplace `cab_codex_plugins` utilise la
 source Git `AzenorPixs/cab-codex-plugins`, branche `main`, avec une extraction
 sparse `.agents/plugins` et `plugins`. Si une source locale homonyme est
@@ -72,6 +82,18 @@ signalée comme telle sans être déduite d'une autre source.
 #### Scenario: MCP non connecté
 - **WHEN** `GET /mcp` ne présente pas `cgpt-validation` comme `connected`
 - **THEN** `/cab start` réinitialise seulement l'instance OpenCode, attend une preuve de connexion et échoue sans créer de session si cette preuve reste absente
+
+#### Scenario: Prévol conforme du modèle OpenCode
+- **WHEN** le MCP est connecté et que le prévol constate une réponse avec le
+  fournisseur, le modèle et le raisonnement configurés
+- **THEN** `/cab start` clôt la session temporaire et peut créer ou réutiliser
+  la session persistante
+
+#### Scenario: Prévol divergent ou indisponible
+- **WHEN** le prévol ne peut pas confirmer le fournisseur, le modèle ou le
+  raisonnement configurés
+- **THEN** `/cab start` publie `CAB_INACTIF` et ne crée aucune session
+  persistante
 
 #### Scenario: Test CAB
 - **WHEN** `/cab test` est exécutée
