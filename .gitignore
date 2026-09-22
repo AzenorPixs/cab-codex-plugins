@@ -130,6 +130,7 @@ node_modules/
 .opencode/**
 .worktrees
 .worktrees/**
+config.json
 
 # ----------------------------------------------------------
 # OpenSpec
