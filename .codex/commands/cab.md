@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.84.3
+version: 0.84.4
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -237,9 +237,10 @@ autorisée ; elle doit toujours être réversible en cas d'échec.
 
 ## `/cab stop`
 
-1. Supprime tous les heartbeats et cron healthchecks créés par `/cab`, dont « Surveillance CAB ».
-2. Ferme les flux SSE ouverts par `/cab`.
-3. Arrête explicitement et proprement uniquement le contrôleur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime son unité : elle reste installée mais inactive jusqu’au prochain `/cab start`.
-4. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
-5. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
-6. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.
+1. Avant tout arrêt normal, appelle `POST /job/terminal-gate` du contrôleur avec l'état terminal explicite `TERMINÉ` ou `BLOQUÉ`. Si le contrôleur refuse le gate, ne clôture pas le job et reprends le pilotage ou restitue le blocage observé. Cette vérification est distincte d'un arrêt forcé explicitement demandé par le développeur.
+2. Supprime tous les heartbeats et cron healthchecks créés par `/cab`, dont « Surveillance CAB ».
+3. Ferme les flux SSE ouverts par `/cab`.
+4. Arrête explicitement et proprement uniquement le contrôleur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime son unité : elle reste installée mais inactive jusqu’au prochain `/cab start`.
+5. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
+6. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
+7. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.

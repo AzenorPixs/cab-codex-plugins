@@ -174,6 +174,27 @@ test("propage les trois identifiants à une décision manuelle", async (context)
 
   await waitForStatus(baseUrl);
 
+  const prematureGate = await fetch(`${baseUrl}/job/terminal-gate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state: "TERMINÉ" }),
+  });
+  assert.equal(prematureGate.status, 409);
+
+  const readiness = await fetch(`${baseUrl}/broker/readiness`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ status: "READY", pending_count: 0 }),
+  });
+  assert.equal(readiness.status, 202);
+
+  const validGate = await fetch(`${baseUrl}/job/terminal-gate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state: "TERMINÉ" }),
+  });
+  assert.equal(validGate.status, 201);
+
   const validation = {
     approval: {
       approval_id: "approval-test-123",
