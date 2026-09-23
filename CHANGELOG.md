@@ -4,6 +4,14 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.84.4 - 2026-09-23
+
+- Le contrôleur exige désormais un gate terminal local avant une clôture CAB
+  normale et expose son état via `/status`.
+- Le gate refuse une clôture sans état terminal explicite, sans readiness
+  broker ou avec validation active ou en attente.
+- Alignement du broker, du contrôleur, du plugin et de `/cab` sur `0.84.4`.
+
 ## 0.84.3 - 2026-09-21
 
 - `/cab start` vérifie avant toute session persistante que le fournisseur, le

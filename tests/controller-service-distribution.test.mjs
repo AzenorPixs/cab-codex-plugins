@@ -67,8 +67,8 @@ test("les artefacts distribués annoncent la même version de base", () => {
     "utf8"
   );
 
-  assert.match(command, /^version: 0\.84\.3$/m);
-  assert.match(manifest, /"version": "0\.84\.3\+codex\./);
-  assert.match(controller, /version: "0\.84\.3"/);
-  assert.match(broker, /SERVER_VERSION = "0\.84\.3"/);
+  assert.match(command, /^version: 0\.84\.4$/m);
+  assert.match(manifest, /"version": "0\.84\.4\+codex\./);
+  assert.match(controller, /version: "0\.84\.4"/);
+  assert.match(broker, /SERVER_VERSION = "0\.84\.4"/);
 });

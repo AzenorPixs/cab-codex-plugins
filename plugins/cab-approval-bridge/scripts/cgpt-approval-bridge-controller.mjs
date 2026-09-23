@@ -100,6 +100,27 @@ const status = {
     type: "starting",
   },
 };
+const terminalGate = {
+  status: "OPEN",
+  reason: "job-not-terminal",
+  declaredState: null,
+  validatedAt: null,
+};
+
+function resetTerminalGate(reason) {
+  terminalGate.status = "OPEN";
+  terminalGate.reason = reason;
+  terminalGate.declaredState = null;
+  terminalGate.validatedAt = null;
+}
+
+function terminalGateFailure(declaredState) {
+  if (!new Set(["TERMINÉ", "BLOQUÉ"]).has(declaredState)) return "terminal-state-required";
+  if (status.activeValidations.length > 0) return "active-validations";
+  if (!status.brokerReadiness) return "broker-readiness-missing";
+  if (Number(status.brokerReadiness.pending_count || 0) > 0) return "pending-validations";
+  return null;
+}
 
 function updateStatus(type, details = {}) {
   status.lastEvent = {
@@ -128,6 +149,7 @@ function publicStatus() {
     unmatchedNativePermissions: Array.from(
       unmatchedNativePermissions.values()
     ),
+    terminalGate: { ...terminalGate },
     lastEvent: status.lastEvent,
   };
 }
@@ -651,7 +673,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.84.3",
+      version: "0.84.4",
     },
   });
 
@@ -820,6 +842,8 @@ async function handleValidation(request) {
     receivedAt:
       new Date().toISOString(),
   };
+
+  resetTerminalGate("validation-received");
 
   active.set(
     request.requestId,
@@ -1134,6 +1158,42 @@ createServer(
 
     if (
       request.method === "POST" &&
+      url.pathname === "/job/terminal-gate"
+    ) {
+      try {
+        const payload = await readJson(request);
+        const declaredState = payload?.state;
+        const reason = terminalGateFailure(declaredState);
+
+        if (reason) {
+          resetTerminalGate(reason);
+          updateStatus("terminal-gate-refused", { reason });
+          response.writeHead(409, { "content-type": "application/json" });
+          response.end(JSON.stringify({ status: "OPEN", reason }));
+          return;
+        }
+
+        terminalGate.status = "VALIDATED";
+        terminalGate.reason = "terminal-gate-validated";
+        terminalGate.declaredState = declaredState;
+        terminalGate.validatedAt = new Date().toISOString();
+        updateStatus("terminal-gate-validated", { declaredState });
+        response.writeHead(201, { "content-type": "application/json" });
+        response.end(JSON.stringify({
+          status: terminalGate.status,
+          declaredState,
+          validatedAt: terminalGate.validatedAt,
+        }));
+      } catch (cause) {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: cause.message }));
+      }
+
+      return;
+    }
+
+    if (
+      request.method === "POST" &&
       url.pathname ===
         "/broker/readiness"
     ) {
@@ -1157,6 +1217,10 @@ createServer(
 
         status.brokerReadiness =
           payload;
+
+        if (Number(payload.pending_count || 0) > 0) {
+          resetTerminalGate("pending-validations");
+        }
 
         status.brokerReadinessReceivedAt =
           new Date().toISOString();
