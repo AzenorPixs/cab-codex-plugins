@@ -1,0 +1,10 @@
+[Unit]
+Description=Superviseur persistant CAB
+After=cgpt-approval-bridge-controller.service
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cab-approval-bridge/controller.env
+ExecStart=/usr/bin/env node %h/.local/share/cab-approval-bridge/cgpt-approval-bridge-supervisor.mjs
+Restart=on-failure
+RestartSec=5

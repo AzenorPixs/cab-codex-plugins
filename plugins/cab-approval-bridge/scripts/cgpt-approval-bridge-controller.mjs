@@ -38,6 +38,13 @@ const reminderStatePath = join(
   "cgpt-approval-bridge",
   "controller-reminders.json"
 );
+const jobStatePath = join(
+  workspace || ".",
+  ".opencode",
+  "state",
+  "cgpt-approval-bridge",
+  "controller-job.json"
+);
 const opencodeExitStatusSuffix = ' 2>/dev/null; echo "exit=$?"';
 
 if (!workspace) {
@@ -78,6 +85,8 @@ const validations = new Map();
 const reconcilingPermissions = new Set();
 const unmatchedNativePermissions = new Map();
 const reminderNotifications = new Map();
+let job = null;
+let jobPersistence = Promise.resolve();
 
 try {
   const persisted = JSON.parse(readFileSync(reminderStatePath, "utf8"));
@@ -86,6 +95,15 @@ try {
   }
 } catch {
   // L'absence de notification persistante est l'état initial normal.
+}
+
+try {
+  const persisted = JSON.parse(readFileSync(jobStatePath, "utf8"));
+  if (persisted && typeof persisted === "object") {
+    job = persisted;
+  }
+} catch {
+  // L'absence de contrat persistant est l'état initial normal.
 }
 
 const status = {
@@ -101,17 +119,62 @@ const status = {
   },
 };
 const terminalGate = {
-  status: "OPEN",
-  reason: "job-not-terminal",
-  declaredState: null,
-  validatedAt: null,
+  status: job?.terminalGate?.status || "OPEN",
+  reason: job?.terminalGate?.reason || "job-not-terminal",
+  declaredState: job?.terminalGate?.declaredState || null,
+  validatedAt: job?.terminalGate?.validatedAt || null,
 };
 
-function resetTerminalGate(reason) {
+function publicJob() {
+  if (!job) return null;
+
+  return {
+    jobId: job.jobId,
+    sessionId: job.sessionId,
+    directory: job.directory,
+    changeId: job.changeId,
+    criteria: job.criteria,
+    lastProvenMilestone: job.lastProvenMilestone,
+    currentCabMandate: job.currentCabMandate,
+    armed: job.armed,
+    armedAt: job.armedAt,
+    updatedAt: job.updatedAt,
+    disarmedAt: job.disarmedAt || null,
+    terminalGate: { ...terminalGate },
+  };
+}
+
+function persistJob() {
+  if (!job) return Promise.resolve();
+
+  job.terminalGate = { ...terminalGate };
+  job.updatedAt = new Date().toISOString();
+  const snapshot = JSON.stringify(job, null, 2);
+
+  jobPersistence = jobPersistence.catch(() => {}).then(async () => {
+    await mkdir(dirname(jobStatePath), { recursive: true });
+    const temporaryPath = `${jobStatePath}.tmp`;
+    await writeFile(temporaryPath, snapshot, "utf8");
+    await rename(temporaryPath, jobStatePath);
+  });
+
+  return jobPersistence;
+}
+
+function rememberJob() {
+  void persistJob().catch(() => {
+    updateStatus("job-persistence-failed");
+  });
+}
+
+function resetTerminalGate(reason, persist = true) {
   terminalGate.status = "OPEN";
   terminalGate.reason = reason;
   terminalGate.declaredState = null;
   terminalGate.validatedAt = null;
+  if (persist) {
+    rememberJob();
+  }
 }
 
 function terminalGateFailure(declaredState) {
@@ -150,7 +213,44 @@ function publicStatus() {
       unmatchedNativePermissions.values()
     ),
     terminalGate: { ...terminalGate },
+    job: publicJob(),
     lastEvent: status.lastEvent,
+  };
+}
+
+function validJobContract(payload) {
+  if (
+    !payload ||
+    typeof payload.jobId !== "string" ||
+    !payload.jobId ||
+    typeof payload.sessionId !== "string" ||
+    !payload.sessionId ||
+    typeof payload.directory !== "string" ||
+    !isAbsolute(payload.directory) ||
+    !Array.isArray(payload.criteria) ||
+    !payload.criteria.every((criterion) => typeof criterion === "string")
+  ) {
+    return null;
+  }
+
+  if (
+    payload.changeId !== undefined &&
+    (typeof payload.changeId !== "string" || !payload.changeId)
+  ) {
+    return null;
+  }
+
+  return {
+    jobId: payload.jobId,
+    sessionId: payload.sessionId,
+    directory: payload.directory,
+    changeId: payload.changeId || null,
+    criteria: payload.criteria,
+    lastProvenMilestone: null,
+    currentCabMandate: null,
+    armed: true,
+    armedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 }
 
@@ -673,7 +773,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.84.4",
+      version: "0.85.0",
     },
   });
 
@@ -1156,6 +1256,118 @@ createServer(
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/job") {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify(publicJob()));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/job/arm") {
+      try {
+        const candidate = validJobContract(await readJson(request));
+
+        if (!candidate) {
+          throw new Error("Contrat de job invalide.");
+        }
+
+        if (
+          job &&
+          job.armed &&
+          (job.jobId !== candidate.jobId || job.sessionId !== candidate.sessionId)
+        ) {
+          response.writeHead(409, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "job-already-armed" }));
+          return;
+        }
+
+        if (
+          job &&
+          job.jobId === candidate.jobId &&
+          job.sessionId !== candidate.sessionId
+        ) {
+          response.writeHead(409, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "job-session-immutable" }));
+          return;
+        }
+
+        job = candidate;
+        resetTerminalGate("job-armed", false);
+        await persistJob();
+        updateStatus("job-armed", { jobId: job.jobId });
+        response.writeHead(201, { "content-type": "application/json" });
+        response.end(JSON.stringify(publicJob()));
+      } catch (cause) {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: cause.message }));
+      }
+
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/job/progress") {
+      try {
+        const payload = await readJson(request);
+
+        if (
+          !job ||
+          !job.armed ||
+          payload?.jobId !== job.jobId ||
+          (payload.lastProvenMilestone !== undefined &&
+            typeof payload.lastProvenMilestone !== "string") ||
+          (payload.currentCabMandate !== undefined &&
+            typeof payload.currentCabMandate !== "string")
+        ) {
+          throw new Error("Progression de job invalide.");
+        }
+
+        if (payload.lastProvenMilestone !== undefined) {
+          job.lastProvenMilestone = payload.lastProvenMilestone;
+        }
+
+        if (payload.currentCabMandate !== undefined) {
+          job.currentCabMandate = payload.currentCabMandate;
+        }
+
+        await persistJob();
+        updateStatus("job-progress", { jobId: job.jobId });
+        response.writeHead(202, { "content-type": "application/json" });
+        response.end(JSON.stringify(publicJob()));
+      } catch (cause) {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: cause.message }));
+      }
+
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/job/disarm") {
+      try {
+        const payload = await readJson(request);
+
+        if (!job || payload?.jobId !== job.jobId) {
+          throw new Error("Job inconnu.");
+        }
+
+        if (terminalGate.status !== "VALIDATED") {
+          response.writeHead(409, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "terminal-gate-open" }));
+          return;
+        }
+
+        job.armed = false;
+        job.disarmedAt = new Date().toISOString();
+        await persistJob();
+        updateStatus("job-disarmed", { jobId: job.jobId });
+        response.writeHead(202, { "content-type": "application/json" });
+        response.end(JSON.stringify(publicJob()));
+      } catch (cause) {
+        response.writeHead(400, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: cause.message }));
+      }
+
+      return;
+    }
+
     if (
       request.method === "POST" &&
       url.pathname === "/job/terminal-gate"
@@ -1177,6 +1389,7 @@ createServer(
         terminalGate.reason = "terminal-gate-validated";
         terminalGate.declaredState = declaredState;
         terminalGate.validatedAt = new Date().toISOString();
+        await persistJob();
         updateStatus("terminal-gate-validated", { declaredState });
         response.writeHead(201, { "content-type": "application/json" });
         response.end(JSON.stringify({

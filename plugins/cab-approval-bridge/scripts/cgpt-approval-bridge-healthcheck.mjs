@@ -8,6 +8,10 @@ const controllerUrl =
   envValue("OC_Codex_CONTROLLER_URL") ||
   "http://127.0.0.1:8788/status";
 
+const supervisorUrl =
+  envValue("OC_Codex_SUPERVISOR_URL") ||
+  "http://127.0.0.1:8789/status";
+
 const opencodeUrl = (
   envValue("OC_Codex_OPENCODE_URL") ||
   "http://127.0.0.1:4096"
@@ -23,12 +27,15 @@ class HealthError extends Error {
     message,
     {
       restartController = false,
+      restartSupervisor = false,
     } = {}
   ) {
     super(message);
 
     this.restartController =
       restartController;
+    this.restartSupervisor =
+      restartSupervisor;
   }
 }
 
@@ -174,6 +181,17 @@ async function check() {
       status
     );
 
+    try {
+      await fetchJson(supervisorUrl);
+    } catch (error) {
+      throw new HealthError(
+        `Superviseur indisponible: ${error.message}`,
+        {
+          restartSupervisor: true,
+        }
+      );
+    }
+
     return status;
   } catch (error) {
     if (
@@ -185,6 +203,22 @@ async function check() {
           "--user",
           "restart",
           "cgpt-approval-bridge-controller.service",
+        ],
+        {
+          stdio: "inherit",
+        }
+      );
+    }
+
+    if (
+      error.restartSupervisor
+    ) {
+      execFileSync(
+        "systemctl",
+        [
+          "--user",
+          "restart",
+          "cgpt-approval-bridge-supervisor.service",
         ],
         {
           stdio: "inherit",

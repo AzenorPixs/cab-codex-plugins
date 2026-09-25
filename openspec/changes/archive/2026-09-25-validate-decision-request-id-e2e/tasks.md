@@ -7,6 +7,6 @@
 
 ## 2. Validation E2E corrélée
 
-- [ ] 2.1 Vérifier que `cgpt-validation` est connecté et que `broker_readiness` est READY, sans approbation parasite.
-- [ ] 2.2 Exécuter `/cab test` avec des identifiants `requestId` et `approval_id` distincts et vérifier l'absence de demande parasite finale.
-- [ ] 2.3 Archiver le change après preuve E2E, validation stricte OpenSpec et cohérence documentaire.
+- [x] 2.1 Vérifier que `cgpt-validation` est connecté et que `broker_readiness` est READY, sans approbation parasite.
+- [x] 2.2 Exécuter `/cab test` avec des identifiants `requestId` et `approval_id` distincts et vérifier l'absence de demande parasite finale.
+- [x] 2.3 Archiver le change après preuve E2E, validation stricte OpenSpec et cohérence documentaire.

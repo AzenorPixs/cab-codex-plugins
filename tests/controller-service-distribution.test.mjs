@@ -7,6 +7,10 @@ const servicePath = new URL(
   "../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service",
   import.meta.url
 );
+const supervisorServicePath = new URL(
+  "../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service",
+  import.meta.url
+);
 
 test("distribue une unité utilisateur inactive par défaut", () => {
   const service = readFileSync(servicePath, "utf8");
@@ -32,6 +36,24 @@ test("la commande CAB installe sans activer, démarre et arrête explicitement",
     command,
     /systemctl --user stop cgpt-approval-bridge-controller\.service/
   );
+  assert.match(
+    command,
+    /systemctl --user start cgpt-approval-bridge-supervisor\.service/
+  );
+  assert.match(
+    command,
+    /systemctl --user stop cgpt-approval-bridge-supervisor\.service/
+  );
+  assert.match(command, /POST \/job\/arm/);
+  assert.match(command, /POST \/job\/disarm/);
+});
+
+test("distribue un superviseur utilisateur inactif par défaut", () => {
+  const service = readFileSync(supervisorServicePath, "utf8");
+
+  assert.match(service, /^After=cgpt-approval-bridge-controller\.service$/m);
+  assert.match(service, /^Restart=on-failure$/m);
+  assert.doesNotMatch(service, /^\[Install\]$/m);
 });
 
 test("la commande CAB prévole le modèle OpenCode avant la session persistante", () => {
@@ -66,9 +88,17 @@ test("les artefacts distribués annoncent la même version de base", () => {
     new URL("../src/cgpt_approval_bridge_server.py", import.meta.url),
     "utf8"
   );
+  const supervisor = readFileSync(
+    new URL(
+      "../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+      import.meta.url
+    ),
+    "utf8"
+  );
 
-  assert.match(command, /^version: 0\.84\.4$/m);
-  assert.match(manifest, /"version": "0\.84\.4\+codex\./);
-  assert.match(controller, /version: "0\.84\.4"/);
-  assert.match(broker, /SERVER_VERSION = "0\.84\.4"/);
+  assert.match(command, /^version: 0\.85\.0$/m);
+  assert.match(manifest, /"version": "0\.85\.0\+codex\./);
+  assert.match(controller, /version: "0\.85\.0"/);
+  assert.match(supervisor, /const version = "0\.85\.0"/);
+  assert.match(broker, /SERVER_VERSION = "0\.85\.0"/);
 });
