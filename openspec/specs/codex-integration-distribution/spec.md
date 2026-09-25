@@ -84,16 +84,12 @@ signalée comme telle sans être déduite d'une autre source.
 - **THEN** `/cab start` réinitialise seulement l'instance OpenCode, attend une preuve de connexion et échoue sans créer de session si cette preuve reste absente
 
 #### Scenario: Prévol conforme du modèle OpenCode
-- **WHEN** le MCP est connecté et que le prévol constate une réponse avec le
-  fournisseur, le modèle et le raisonnement configurés
-- **THEN** `/cab start` clôt la session temporaire et peut créer ou réutiliser
-  la session persistante
+- **WHEN** le MCP est connecté et que le prévol constate une réponse avec le fournisseur, le modèle et le raisonnement configurés
+- **THEN** `/cab start` clôt la session temporaire et peut créer ou réutiliser la session persistante
 
 #### Scenario: Prévol divergent ou indisponible
-- **WHEN** le prévol ne peut pas confirmer le fournisseur, le modèle ou le
-  raisonnement configurés
-- **THEN** `/cab start` publie `CAB_INACTIF` et ne crée aucune session
-  persistante
+- **WHEN** le prévol ne peut pas confirmer le fournisseur, le modèle ou le raisonnement configurés
+- **THEN** `/cab start` publie `CAB_INACTIF` et ne crée aucune session persistante
 
 #### Scenario: Test CAB
 - **WHEN** `/cab test` est exécutée
@@ -137,3 +133,20 @@ Les artefacts distribués CAB SHALL partager une version de projet explicite ou 
 #### Scenario: Préparation de release
 - **WHEN** une release est préparée
 - **THEN** la version du broker, du plugin et du catalogue est vérifiée avant publication
+
+### Requirement: Distribution du superviseur local
+
+Le plugin CAB SHALL distribuer le superviseur persistant et son unité systemd
+utilisateur avec le contrôleur. `/cab start` SHALL installer et démarrer
+explicitement le superviseur après le contrôleur, sans l'activer au login.
+`/cab stop` SHALL refuser l'arrêt normal tant qu'un job armé ne possède pas un
+gate terminal validé, puis arrêter explicitement le superviseur avant le
+contrôleur. Les artefacts distribués du broker, du contrôleur et du
+superviseur SHALL annoncer la même version de base.
+
+#### Scenario: Démarrage d'un superviseur distribué
+
+- **WHEN** `/cab start` a confirmé les préconditions CAB et installé les
+  ressources locales
+- **THEN** il démarre le superviseur utilisateur, vérifie son état local et ne
+  l'active pas pour le login

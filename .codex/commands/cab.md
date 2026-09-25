@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.84.4
+version: 0.85.0
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -73,27 +73,29 @@ Le broker :
 5. Identifie dans la configuration API OpenCode l’agent de codage qui recevra le premier prompt et relève son fournisseur, son modèle et son niveau de raisonnement effectivement configurés. Ne modifie jamais cette configuration et ne lis aucune donnée secrète.
 6. Vérifie via l’API OpenCode que le fournisseur et le modèle relevés sont publiés et disponibles. Crée alors une session de prévol temporaire, sans outil ni accès au projet, et lui adresse une requête inoffensive en imposant exactement ce fournisseur, ce modèle et ce niveau de raisonnement.
 7. Contrôle la réponse et ses métadonnées réellement observées. Elles doivent confirmer le même fournisseur, le même modèle et le même niveau de raisonnement. Ferme la session de prévol après cette preuve. Si une valeur est absente, indisponible, divergente ou si la requête échoue, publie `CAB_INACTIF` avec les valeurs attendues et observées, puis n’installe pas le contrôleur et ne crée ni ne réutilise de session persistante.
-8. Résous les ressources du plugin CAB installé, puis copie son contrôleur et son modèle d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Crée ou actualise `~/.config/cab-approval-bridge/controller.env` avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
+8. Résous les ressources du plugin CAB installé, puis copie son contrôleur, son superviseur et leurs modèles d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Crée ou actualise `~/.config/cab-approval-bridge/controller.env` avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
 9. Démarre ou réutilise le contrôleur Codex persistant hors sandbox par `systemctl --user start cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie qu’il est `active` et que son unité utilise `Restart=on-failure`.
 10. Vérifie le contrôleur Codex sur son interface locale.
-11. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
-12. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
-13. Adresse les mandats exclusivement à cette session via `POST /session/<id>/message`. Aucun appel CLI éphémère ne peut transmettre ou exécuter un mandat de codage. La session doit rester visible au développeur dans OpenCode.
-14. Dans cette session, appelle `broker_readiness` sans lecture, commande ni écriture du projet.
-15. Accepte comme états possibles : `READY`, `DEGRADED`, `BLOCKED`, `HUMAN_REQUIRED`.
-16. Après reconnexion SSE ou divergence détectée, réconcilie l’état réel via HTTP auprès d’OpenCode, puis recontrôle `/mcp` avant tout nouveau mandat.
-17. Crée ou réactive le heartbeat global « Surveillance CAB » toutes les 30 secondes.
-18. Le heartbeat surveille OpenCode, `/mcp`, `broker_readiness`, le contrôleur et le SSE OpenCode.
-19. Le heartbeat reste silencieux lorsque tout est sain et ne prend aucune décision de validation.
-20. Publie `CAB_ACTIF` uniquement si les preuves suivantes sont présentes :
+11. Démarre explicitement le superviseur utilisateur par `systemctl --user start cgpt-approval-bridge-supervisor.service`, puis vérifie son statut local. Il utilise `Restart=on-failure`, sans activation au login, et ne prend aucune décision CAB.
+12. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
+13. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
+14. Adresse les mandats exclusivement à cette session via `POST /session/<id>/message`. Aucun appel CLI éphémère ne peut transmettre ou exécuter un mandat de codage. La session doit rester visible au développeur dans OpenCode.
+15. Dans cette session, appelle `broker_readiness` sans lecture, commande ni écriture du projet.
+16. Accepte comme états possibles : `READY`, `DEGRADED`, `BLOCKED`, `HUMAN_REQUIRED`.
+17. Après reconnexion SSE ou divergence détectée, réconcilie l’état réel via HTTP auprès d’OpenCode, puis recontrôle `/mcp` avant tout nouveau mandat.
+18. Crée ou réactive le heartbeat global « Surveillance CAB » toutes les 30 secondes.
+19. Le heartbeat surveille OpenCode, `/mcp`, `broker_readiness`, le contrôleur, le superviseur et le SSE OpenCode.
+20. Le heartbeat reste silencieux lorsque tout est sain et ne prend aucune décision de validation.
+21. Publie `CAB_ACTIF` uniquement si les preuves suivantes sont présentes :
     - OpenCode sain ;
     - MCP `cgpt-validation` connecté ;
     - `broker_readiness` exploitable ;
     - contrôleur Codex joignable ;
+    - superviseur CAB joignable ;
     - SSE OpenCode `connected` ;
     - heartbeat actif.
-21. Toute preuve absente impose `CAB_INACTIF`.
-22. Avant le premier pilotage réel après démarrage, exécute obligatoirement `/cab test`.
+22. Toute preuve absente impose `CAB_INACTIF`.
+23. Avant le premier pilotage réel après démarrage, exécute obligatoirement `/cab test`.
 
 Une simple réponse HTTP, un ancien état MCP ou une ancienne session de test ne suffit jamais à déclarer `CAB_ACTIF`.
 
@@ -102,9 +104,11 @@ Une simple réponse HTTP, un ancien état MCP ou une ancienne session de test ne
 Exécute un job piloté dans la session persistante après un `/cab start` et un
 `/cab test` réussis.
 
-1. Constitue un contrat de job : objectif, session OpenCode, répertoire cible,
-   limites fonctionnelles et critères de fin. Ce contrat ne vaut jamais une
-   décision d’approbation d’action.
+1. Constitue un contrat de job : identifiant de job, session OpenCode,
+   répertoire cible, change OpenSpec éventuel et critères de fin. Arme-le par
+   `POST /job/arm` du contrôleur avant tout mandat. Ce contrat ne vaut jamais
+   une décision d’approbation d’action et ne contient ni secret ni contenu du
+   projet. Publie chaque jalon prouvé et mandat courant par `POST /job/progress`.
 2. Avant chaque édition, commande Bash, commande système ou commande OpenSpec
    qui exige une permission native, l’agent de codage crée un mandat CAB
    unitaire : `requestId`, `approval_id`, `change_id`, session, répertoire,
@@ -118,7 +122,9 @@ Exécute un job piloté dans la session persistante après un `/cab start` et un
    l’écart est remonté à l’orchestrateur.
 5. Après chaque tour de l’agent de codage, contrôle la session persistante. Si
    le contrat n’est pas terminal, envoie le mandat suivant sans créer de session
-   éphémère et sans conclure la réponse Codex.
+   éphémère et sans conclure la réponse Codex. Si une interruption empêche ce
+   mandat, le superviseur CAB réexamine la même session après 60 secondes ; il
+   ne crée ni décision ni session de remplacement.
 6. Le job devient terminal uniquement si tous ses critères sont satisfaits, si
    CAB retourne `BLOCKED` ou `HUMAN_REQUIRED`, ou si le développeur l’arrête
    explicitement. À ce moment seulement, publie le bilan final puis clôture le
@@ -237,10 +243,10 @@ autorisée ; elle doit toujours être réversible en cas d'échec.
 
 ## `/cab stop`
 
-1. Avant tout arrêt normal, appelle `POST /job/terminal-gate` du contrôleur avec l'état terminal explicite `TERMINÉ` ou `BLOQUÉ`. Si le contrôleur refuse le gate, ne clôture pas le job et reprends le pilotage ou restitue le blocage observé. Cette vérification est distincte d'un arrêt forcé explicitement demandé par le développeur.
+1. Avant tout arrêt normal, appelle `POST /job/terminal-gate` du contrôleur avec l'état terminal explicite `TERMINÉ` ou `BLOQUÉ`. Si le contrôleur refuse le gate, ne clôture pas le job et reprends le pilotage ou restitue le blocage observé. Après un gate validé, désarme le contrat correspondant par `POST /job/disarm`. Cette vérification est distincte d'un arrêt forcé explicitement demandé par le développeur.
 2. Supprime tous les heartbeats et cron healthchecks créés par `/cab`, dont « Surveillance CAB ».
 3. Ferme les flux SSE ouverts par `/cab`.
-4. Arrête explicitement et proprement uniquement le contrôleur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime son unité : elle reste installée mais inactive jusqu’au prochain `/cab start`.
+4. Arrête explicitement le superviseur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-supervisor.service`, puis arrête explicitement et proprement le contrôleur avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime leurs unités : elles restent installées mais inactives jusqu’au prochain `/cab start`.
 5. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
 6. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
 7. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.

@@ -161,7 +161,7 @@ test("propage les trois identifiants à une décision manuelle", async (context)
         OC_CGPT_DECISION_MODE: "manual",
         OC_CGPT_STATUS_HOST: "127.0.0.1",
         OC_CGPT_STATUS_PORT: String(port),
-        OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
+        OC_CGPT_WORKSPACE: directory,
       },
       stdio: "ignore",
     }
@@ -194,6 +194,42 @@ test("propage les trois identifiants à une décision manuelle", async (context)
     body: JSON.stringify({ state: "TERMINÉ" }),
   });
   assert.equal(validGate.status, 201);
+
+  const armedJob = await fetch(`${baseUrl}/job/arm`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      jobId: "job-test-123",
+      sessionId: "ses_test_456",
+      directory,
+      changeId: "change-test-789",
+      criteria: ["preuve de test"],
+    }),
+  });
+  assert.equal(armedJob.status, 201);
+  assert.equal((await armedJob.json()).terminalGate.status, "OPEN");
+
+  const prematureDisarm = await fetch(`${baseUrl}/job/disarm`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jobId: "job-test-123" }),
+  });
+  assert.equal(prematureDisarm.status, 409);
+
+  const jobGate = await fetch(`${baseUrl}/job/terminal-gate`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ state: "TERMINÉ" }),
+  });
+  assert.equal(jobGate.status, 201);
+
+  const disarmedJob = await fetch(`${baseUrl}/job/disarm`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ jobId: "job-test-123" }),
+  });
+  assert.equal(disarmedJob.status, 202);
+  assert.equal((await disarmedJob.json()).armed, false);
 
   const validation = {
     approval: {

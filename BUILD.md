@@ -48,7 +48,7 @@ Les caches d'installation Codex ne font pas partie des sources du projet.
 
 Le broker n'utilise actuellement aucune dépendance Python tierce.
 
-### 4.2 Plugin et contrôleur
+### 4.2 Plugin, contrôleur et superviseur
 
 - Node.js avec les API Web utilisées par les scripts ;
 - commande `codex` permettant `codex app-server` ;
@@ -57,7 +57,9 @@ Le broker n'utilise actuellement aucune dépendance Python tierce.
 
 ### 4.3 Supervision système
 
-Le healthcheck actuel peut redémarrer le contrôleur avec `systemctl --user`. Une distribution sans systemd utilisateur devra fournir un mécanisme équivalent ou adapter ce composant.
+Le healthcheck actuel peut redémarrer le contrôleur ou le superviseur avec
+`systemctl --user`. Une distribution sans systemd utilisateur devra fournir un
+mécanisme équivalent ou adapter ces composants.
 
 ## 5. Installation du broker dans OpenCode
 
@@ -138,7 +140,10 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 
 ## 7. Versionnement
 
-CAB doit utiliser une version de projet explicite et cohérente entre les artefacts distribués. La version de base actuelle est `0.84.4` pour le broker, le contrôleur et le plugin ; le plugin ajoute uniquement un cachebuster Codex à cette version.
+CAB doit utiliser une version de projet explicite et cohérente entre les
+artefacts distribués. La version de base actuelle est `0.85.0` pour le broker,
+le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
+cachebuster Codex à cette version.
 
 Les releases Git devraient être identifiées par des tags de forme :
 

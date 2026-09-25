@@ -30,7 +30,10 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.84.4`. Le plugin utilise cette même version de base, complétée d'un cachebuster Codex pour les installations locales. L'implémentation Python utilise uniquement la bibliothèque standard.
+La version de projet actuelle est `0.85.0` pour le broker, le contrôleur et le
+superviseur. Le plugin utilise cette même version de base, complétée d'un
+cachebuster Codex pour les installations locales. L'implémentation Python
+utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -114,24 +117,33 @@ cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
 
-Le plugin distribue le modèle de service utilisateur
-`cgpt-approval-bridge-controller.service`. `/cab start` installe ou actualise
-de façon différée le contrôleur, le fichier d'environnement non secret et
-l'unité dans le profil utilisateur, exécute `systemctl --user daemon-reload`,
-puis démarre explicitement le service. Il ne l'active jamais : l'installation
-du plugin et l'ouverture de session ne démarrent donc aucun contrôleur.
+Le plugin distribue les modèles de services utilisateur
+`cgpt-approval-bridge-controller.service` et
+`cgpt-approval-bridge-supervisor.service`. `/cab start` installe ou actualise
+de façon différée le contrôleur, le superviseur, le fichier d'environnement
+non secret et les unités dans le profil utilisateur, exécute
+`systemctl --user daemon-reload`, puis démarre explicitement les services. Il
+ne les active jamais : l'installation du plugin et l'ouverture de session ne
+démarrent donc aucun service CAB.
 
-L'unité applique `Restart=on-failure` tant qu'elle est en cours d'exécution.
-`/cab stop` arrête explicitement ce service sans supprimer l'unité, sans
-arrêter OpenCode et sans arrêter le broker MCP. Un RUN CAB ne doit pas le
-remplacer par un processus éphémère : le service conserve la disponibilité du
-contrôleur pendant les notifications et décisions corrélées.
+Les unités appliquent `Restart=on-failure` tant qu'elles sont en cours
+d'exécution. `/cab stop` arrête explicitement le superviseur, puis le
+contrôleur, sans supprimer les unités, arrêter OpenCode ou arrêter le broker
+MCP. Un RUN CAB ne doit pas les remplacer par des processus éphémères.
 
-L'interface locale écoute par défaut sur `127.0.0.1:8788`. La configuration
-admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce port n'est pas
-un transport MCP. Elle expose `GET /status`, `POST /broker/readiness`, `POST
-/validation/request`, `POST /validation/reminder` et `GET` ou `POST /decision/<requestId>` ; les décisions
-admises sont `approved`, `rejected` et `needs_clarification`.
+L'interface du contrôleur écoute par défaut sur `127.0.0.1:8788`. La
+configuration admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce
+port n'est pas un transport MCP. Elle expose `GET /status`, `GET /job`, `POST
+/job/arm`, `POST /job/progress`, `POST /job/disarm`, `POST
+/job/terminal-gate`, `POST /broker/readiness`, `POST /validation/request`,
+`POST /validation/reminder` et `GET` ou `POST /decision/<requestId>` ; les
+décisions admises sont `approved`, `rejected` et `needs_clarification`.
+
+Le superviseur écoute par défaut sur `127.0.0.1:8789`. Il conserve son état
+dans `.opencode/state/cgpt-approval-bridge/`, observe le contrat de job et la
+session OpenCode, puis adresse une reprise à la même session après 60 secondes
+par défaut si le gate terminal est ouvert. Il ne crée ni session de
+remplacement, ni mandat, ni décision CAB.
 
 ## 8. Supervision OpenCode
 
@@ -168,7 +180,10 @@ reprise si nécessaire et conserve une notification locale persistante lorsque
 le réveil reste indisponible. Cette relance ne constitue jamais une décision
 ni une permission OpenCode.
 
-Le healthcheck vérifie la santé OpenCode, le contrôleur, Codex App Server, le SSE OpenCode et la fraîcheur de `broker_readiness`. Un état fonctionnel `BLOCKED` ou `HUMAN_REQUIRED` n'entraîne pas un redémarrage aveugle du contrôleur.
+Le healthcheck vérifie la santé OpenCode, le contrôleur, le superviseur, Codex
+App Server, le SSE OpenCode et la fraîcheur de `broker_readiness`. Un état
+fonctionnel `BLOCKED` ou `HUMAN_REQUIRED` n'entraîne pas un redémarrage
+aveugle des services CAB.
 
 ## 10. Watchdogs et diagnostic
 
@@ -252,6 +267,12 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
   conserver les demandes PENDING jusqu'à une décision corrélée sur l'interface
   HTTP locale
 - `OC_Codex_CONTROLLER_URL`
+- `OC_Codex_SUPERVISOR_URL`
+- `OC_Codex_SUPERVISOR_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
+- `OC_Codex_SUPERVISOR_STATUS_PORT`
+- `OC_Codex_SUPERVISOR_RESUME_DELAY_MS` : 60 secondes par défaut
+- `OC_Codex_SUPERVISOR_POLL_INTERVAL_MS`
+- `OC_Codex_SUPERVISOR_STATE_PATH`
 - `OC_Codex_READINESS_MAX_AGE_MS`
 - `CODEX_COMMAND`
 
@@ -267,6 +288,9 @@ piloté.
 
 - `/cab start` vérifie `/mcp`, initialise ou reprend le contrôleur et la
   supervision, puis crée ou réutilise une session de codage persistante ;
+- `/cab run` arme un contrat de job durable et actualise ses jalons avant de
+  transmettre les mandats ; le superviseur reprend cette même session tant que
+  le gate terminal reste ouvert ;
 - `/cab test` réalise un test non destructif du chemin de validation complet
   dans cette même session ;
 - `/cab update` compare la version installée de `cab-approval-bridge` à la
