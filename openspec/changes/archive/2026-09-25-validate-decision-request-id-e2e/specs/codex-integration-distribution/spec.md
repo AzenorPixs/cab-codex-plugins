@@ -1,24 +1,4 @@
-# codex-integration-distribution Specification
-
-## Purpose
-Cette capacité définit l'intégration locale de CAB dans Codex et les conditions minimales de distribution reproductible.
-
-## Requirements
-
-### Requirement: Plugin Codex structuré
-Le plugin CAB SHALL être distribué depuis la racine du dépôt, avec une
-marketplace dans `.agents/plugins/marketplace.json` et un plugin dans
-`plugins/cab-approval-bridge/`. Ce plugin SHALL fournir un manifeste
-`.codex-plugin/plugin.json`, la skill CAB et les scripts de contrôleur,
-healthcheck et SSE dans une arborescence distribuable cohérente.
-
-#### Scenario: Validation du plugin
-- **WHEN** le manifeste du plugin est soumis au validateur Codex
-- **THEN** il est accepté et les chemins déclarés existent dans l'artefact
-
-#### Scenario: Localisation du plugin
-- **WHEN** une distribution CAB est préparée
-- **THEN** la marketplace et le plugin sont pris depuis la racine du dépôt, sans déplacement sous `.codex/`
+## MODIFIED Requirements
 
 ### Requirement: Commande de pilotage sûre
 La commande Codex `/cab` SHALL être versionnée dans
@@ -66,16 +46,12 @@ copie locale sans version MAY être remplacée par une copie GitHub valide. Un
 échec réseau, une redirection d'hôte, une version invalide ou une version
 distante égale ou antérieure SHALL préserver la copie locale. Elle SHALL ne
 démarrer, arrêter ni modifier aucune ressource CAB ou configuration Codex, à
-l'exception du déploiement atomique du superviseur et de son unité systemd
-utilisateur ainsi que de la migration réversible de sa marketplace locale vers
-la source Git spécifiée. Elle SHALL installer ou actualiser le superviseur
-depuis le plugin installé lorsqu'il est absent ou divergent, puis recharger
-systemd sans l'activer ni le démarrer.
+l'exception de la migration réversible de sa marketplace locale vers la source
+Git spécifiée.
 
 À la fin, `/cab update` SHALL afficher un résumé séparant les versions GitHub
-et locales du manifeste du plugin, du contrôleur, du superviseur, du broker et
-de la commande `/cab`. La version locale du superviseur SHALL provenir du
-script déployé dans le profil Codex. La version locale du broker SHALL provenir de
+et locales du manifeste du plugin, du contrôleur, du broker et de la commande
+`/cab`. La version locale du broker SHALL provenir de
 `broker_readiness.server_version`. Toute version indisponible SHALL être
 signalée comme telle sans être déduite d'une autre source.
 
@@ -130,33 +106,3 @@ signalée comme telle sans être déduite d'une autre source.
 #### Scenario: Résumé des versions
 - **WHEN** `/cab update` termine, avec succès ou échec
 - **THEN** elle affiche les versions GitHub et locales exigées, et signale séparément toute valeur indisponible
-
-#### Scenario: Superviseur absent ou divergent
-- **WHEN** `/cab update` a validé le plugin installé et constate que le script
-  ou l'unité du superviseur est absent ou divergent dans le profil Codex
-- **THEN** elle les déploie atomiquement, recharge systemd et ne démarre ni
-  n'active le service
-
-### Requirement: Version et publication cohérentes
-Les artefacts distribués CAB SHALL partager une version de projet explicite ou documenter leur relation. Un catalogue marketplace SHALL référencer le plugin publié, ou être absent tant qu'aucune publication n'est définie.
-
-#### Scenario: Préparation de release
-- **WHEN** une release est préparée
-- **THEN** la version du broker, du plugin et du catalogue est vérifiée avant publication
-
-### Requirement: Distribution du superviseur local
-
-Le plugin CAB SHALL distribuer le superviseur persistant et son unité systemd
-utilisateur avec le contrôleur. `/cab start` SHALL installer et démarrer
-explicitement le superviseur après le contrôleur, sans l'activer au login.
-`/cab stop` SHALL refuser l'arrêt normal tant qu'un job armé ne possède pas un
-gate terminal validé, puis arrêter explicitement le superviseur avant le
-contrôleur. Les artefacts distribués du broker, du contrôleur et du
-superviseur SHALL annoncer la même version de base.
-
-#### Scenario: Démarrage d'un superviseur distribué
-
-- **WHEN** `/cab start` a confirmé les préconditions CAB et installé les
-  ressources locales
-- **THEN** il démarre le superviseur utilisateur, vérifie son état local et ne
-  l'active pas pour le login
