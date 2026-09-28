@@ -1,4 +1,4 @@
-# DEVOPS.md — Pixs
+# DEVOPS.md — Codex Approval Bridge
 
 Version : 0.2
 
