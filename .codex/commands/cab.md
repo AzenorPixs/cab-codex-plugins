@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.85.0
+version: 0.85.1
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -174,9 +174,10 @@ Ne ferme jamais :
 
 ## `/cab update`
 
-Met à jour séparément le plugin CAB et la copie de la commande `/cab` installée
-dans le profil Codex. Cette sous-commande ne démarre ni n'arrête OpenCode, le
-broker MCP, le contrôleur, le SSE ou une session de codage.
+Met à jour séparément le plugin CAB, le superviseur local et la copie de la
+commande `/cab` installée dans le profil Codex. Cette sous-commande ne démarre
+ni n'arrête OpenCode, le broker MCP, le contrôleur, le superviseur, le SSE ou
+une session de codage.
 
 1. Vérifie avec `codex plugin marketplace list` que la marketplace
    `cab_codex_plugins` est configurée depuis
@@ -205,41 +206,60 @@ broker MCP, le contrôleur, le SSE ou une session de codage.
    métadonnées installées. Affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si la
    version installée est celle du manifeste distant ; sinon, affiche
    `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
-8. Utilise exclusivement la référence GitHub suivante pour la commande CAB :
+8. Résout dans le plugin installé le script
+   `cgpt-approval-bridge-supervisor.mjs` et son unité
+   `cgpt-approval-bridge-supervisor.service`. Vérifie que la version du script
+   est présente et cohérente avec le manifeste installé, puis compare le
+   contenu de l'unité. Copie atomiquement le script dans
+   `~/.local/share/cab-approval-bridge/` et l'unité dans
+   `~/.config/systemd/user/` lorsqu'un artefact est absent, que la version du
+   script diffère ou que l'unité diffère. Exécute `systemctl --user
+   daemon-reload` seulement après ces copies. Affiche
+   `CAB_SUPERVISEUR_INSTALLÉ`, `CAB_SUPERVISEUR_MIS_À_JOUR` ou
+   `CAB_SUPERVISEUR_DÉJÀ_À_JOUR` selon le résultat. Cette étape n'écrit pas
+   `controller.env`, n'active aucun service au login et ne démarre ni n'arrête
+   le superviseur. En cas d'échec, elle préserve les ressources déployées et
+   affiche `CAB_SUPERVISEUR_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+9. Utilise exclusivement la référence GitHub suivante pour la commande CAB :
    `https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, chemin
    `.codex/commands/cab.md`. Construit l'URL brute HTTPS correspondante sans
    accepter de redirection vers un autre hôte.
-9. Télécharge cette commande dans un fichier temporaire du profil Codex avec
+10. Télécharge cette commande dans un fichier temporaire du profil Codex avec
    `curl --fail --silent --show-error`, sans écrire la cible locale. Vérifie
    que le frontmatter YAML contient une version SemVer valide.
-10. Lit la version de la commande locale
+11. Lit la version de la commande locale
     `${CODEX_HOME:-$HOME/.codex}/commands/cab.md`. Une copie locale sans
     version est traitée comme une installation héritée, donc antérieure à une
     commande distante valide.
-11. Si la version GitHub est égale ou antérieure à la version locale, affiche
+12. Si la version GitHub est égale ou antérieure à la version locale, affiche
     `CAB_COMMANDE_DÉJÀ_À_JOUR` et conserve le fichier local.
-12. Si la version GitHub est strictement plus récente, remplace atomiquement
+13. Si la version GitHub est strictement plus récente, remplace atomiquement
     la copie du profil par le fichier temporaire validé, puis relit sa version
     et affiche `CAB_COMMANDE_MISE_À_JOUR` seulement en cas de concordance.
     Tout échec laisse la copie locale inchangée et affiche
     `CAB_COMMANDE_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
-13. Affiche toujours `CAB_RÉSUMÉ_VERSIONS`, y compris après un échec, avec :
+14. Affiche toujours `CAB_RÉSUMÉ_VERSIONS`, y compris après un échec, avec :
     - GitHub : version du manifeste du plugin, version du contrôleur extraite
       de `plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs`,
+      version du superviseur extraite de
+      `plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs`,
       version du broker extraite de `src/cgpt_approval_bridge_server.py` et
       version du frontmatter de `.codex/commands/cab.md` ;
     - profil local : version du manifeste et du contrôleur depuis le cache du
-      plugin installé, version du broker réellement actif fournie par
+      plugin installé, version du superviseur déployé dans
+      `~/.local/share/cab-approval-bridge/cgpt-approval-bridge-supervisor.mjs`,
+      version du broker réellement actif fournie par
       `broker_readiness.server_version`, et version du frontmatter de
       `${CODEX_HOME:-$HOME/.codex}/commands/cab.md`.
     Toute source inaccessible ou version absente doit être affichée comme
     `INDISPONIBLE`, sans remplacer cette valeur par une déduction.
 
 N'édite jamais le manifeste du plugin, la configuration Codex ou les fichiers
-du projet piloté. La seule écriture locale admise est le remplacement atomique
-de la copie `/cab` dans le profil Codex. La migration contrôlée de la source
-locale CAB vers son marketplace Git est l'unique modification de marketplace
-autorisée ; elle doit toujours être réversible en cas d'échec.
+du projet piloté. Les seules écritures locales admises sont le déploiement
+atomique du superviseur et de son unité, ainsi que le remplacement atomique de
+la copie `/cab` dans le profil Codex. La migration contrôlée de la source locale
+CAB vers son marketplace Git est l'unique modification de marketplace autorisée
+; elle doit toujours être réversible en cas d'échec.
 
 ## `/cab stop`
 

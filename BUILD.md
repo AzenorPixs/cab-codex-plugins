@@ -127,9 +127,12 @@ actualise l'instantané Git, puis réinstalle le plugin uniquement lorsque son
 manifeste distant est plus récent. Elle compare aussi le
 frontmatter de la commande installée dans le profil Codex à celui téléchargé
 depuis `AzenorPixs/cab-codex-plugins`, branche `main`, et la remplace atomiquement
-uniquement si GitHub fournit une version plus récente. Cette commande ne
-modifie ni le manifeste ni la configuration Codex ; seule la migration
-réversible de la marketplace CAB est admise.
+uniquement si GitHub fournit une version plus récente. Elle installe ou
+actualise aussi atomiquement le script et l'unité systemd utilisateur du
+superviseur depuis le plugin installé, puis recharge systemd sans activer ni
+démarrer le service. Cette commande ne modifie ni le manifeste ni la
+configuration Codex ; seule la migration réversible de la marketplace CAB est
+admise.
 
 La vérification d'intégration de la release doit confirmer que `/cab start`
 observe l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que
@@ -141,7 +144,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `0.85.0` pour le broker,
+artefacts distribués. La version de base actuelle est `0.85.1` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 

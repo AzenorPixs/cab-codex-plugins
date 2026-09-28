@@ -96,9 +96,25 @@ test("les artefacts distribués annoncent la même version de base", () => {
     "utf8"
   );
 
-  assert.match(command, /^version: 0\.85\.0$/m);
-  assert.match(manifest, /"version": "0\.85\.0\+codex\./);
-  assert.match(controller, /version: "0\.85\.0"/);
-  assert.match(supervisor, /const version = "0\.85\.0"/);
-  assert.match(broker, /SERVER_VERSION = "0\.85\.0"/);
+  assert.match(command, /^version: 0\.85\.1$/m);
+  assert.match(manifest, /"version": "0\.85\.1\+codex\./);
+  assert.match(controller, /version: "0\.85\.1"/);
+  assert.match(supervisor, /const version = "0\.85\.1"/);
+  assert.match(broker, /SERVER_VERSION = "0\.85\.1"/);
+});
+
+test("la mise à jour déploie le superviseur sans le démarrer", () => {
+  const command = readFileSync(commandPath, "utf8");
+  const updateStart = command.indexOf("## `/cab update`");
+  const updateEnd = command.indexOf("## `/cab stop`");
+  const update = command.slice(updateStart, updateEnd);
+
+  assert.match(update, /cgpt-approval-bridge-supervisor\.mjs/);
+  assert.match(update, /cgpt-approval-bridge-supervisor\.service/);
+  assert.match(update, /systemctl --user\s+daemon-reload/);
+  assert.match(update, /ne démarre ni n'arrête\s+le superviseur/);
+  assert.match(update, /CAB_SUPERVISEUR_INSTALLÉ/);
+  assert.match(update, /CAB_SUPERVISEUR_MIS_À_JOUR/);
+  assert.match(update, /version du superviseur extraite/);
+  assert.match(update, /version du superviseur déployé/);
 });

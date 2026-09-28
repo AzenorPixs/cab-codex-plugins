@@ -30,7 +30,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.85.0` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.85.1` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -299,7 +299,9 @@ piloté.
   commande du profil Codex à `AzenorPixs/cab-codex-plugins` sur `main`. Elle met à
   niveau chaque élément seulement lorsqu'une version plus récente est disponible
   et restitue les versions GitHub et locales du plugin, du contrôleur, du broker
-  actif et de la commande ;
+  actif, du superviseur déployé et de la commande. Elle installe ou actualise
+  atomiquement le script et l'unité du superviseur sans l'activer ni le
+  démarrer ;
 - `/cab stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.

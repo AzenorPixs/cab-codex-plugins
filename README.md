@@ -100,18 +100,16 @@ ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
 installées mais inactives jusqu'au prochain
 `/cab start`.
 
-`/cab update` compare la version SemVer de base de `cab-approval-bridge`
-aussi la commande CAB du profil Codex à celle de
-installée à celle publiée par le marketplace Git `cab_codex_plugins`. Elle
-peut migrer de façon réversible une source locale CAB vers
-`AzenorPixs/cab-codex-plugins`, puis compare aussi la commande CAB du profil à celle de
-aussi la commande CAB du profil Codex à celle de
-`AzenorPixs/cab-codex-plugins`, branche `main`, puis met à niveau chaque élément
-seulement lorsqu'une version plus récente est disponible. Le remplacement de la
-commande de profil est atomique ; la configuration, le catalogue et les
-ressources CAB en cours restent inchangés.
+`/cab update` compare la version SemVer de base de `cab-approval-bridge` à
+celle publiée par le marketplace Git `cab_codex_plugins`. Elle peut migrer de
+façon réversible une source locale CAB vers `AzenorPixs/cab-codex-plugins`,
+puis compare la commande CAB du profil Codex à celle de la branche `main`.
+Elle installe ou actualise atomiquement le script et l'unité du superviseur
+depuis le plugin installé, sans activer ni démarrer le service. Le remplacement
+de la commande de profil est également atomique ; la configuration et les
+ressources CAB en cours restent inchangées.
 À la fin, elle récapitule les versions GitHub et locales du plugin, du
-contrôleur, du broker actif et de la commande CAB.
+contrôleur, du superviseur déployé, du broker actif et de la commande CAB.
 
 ## Organisation du dépôt
 
@@ -238,7 +236,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.85.0`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.85.1`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
