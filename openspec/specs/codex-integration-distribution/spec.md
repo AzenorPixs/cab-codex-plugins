@@ -66,12 +66,16 @@ copie locale sans version MAY être remplacée par une copie GitHub valide. Un
 échec réseau, une redirection d'hôte, une version invalide ou une version
 distante égale ou antérieure SHALL préserver la copie locale. Elle SHALL ne
 démarrer, arrêter ni modifier aucune ressource CAB ou configuration Codex, à
-l'exception de la migration réversible de sa marketplace locale vers la source
-Git spécifiée.
+l'exception du déploiement atomique du superviseur et de son unité systemd
+utilisateur ainsi que de la migration réversible de sa marketplace locale vers
+la source Git spécifiée. Elle SHALL installer ou actualiser le superviseur
+depuis le plugin installé lorsqu'il est absent ou divergent, puis recharger
+systemd sans l'activer ni le démarrer.
 
 À la fin, `/cab update` SHALL afficher un résumé séparant les versions GitHub
-et locales du manifeste du plugin, du contrôleur, du broker et de la commande
-`/cab`. La version locale du broker SHALL provenir de
+et locales du manifeste du plugin, du contrôleur, du superviseur, du broker et
+de la commande `/cab`. La version locale du superviseur SHALL provenir du
+script déployé dans le profil Codex. La version locale du broker SHALL provenir de
 `broker_readiness.server_version`. Toute version indisponible SHALL être
 signalée comme telle sans être déduite d'une autre source.
 
@@ -126,6 +130,12 @@ signalée comme telle sans être déduite d'une autre source.
 #### Scenario: Résumé des versions
 - **WHEN** `/cab update` termine, avec succès ou échec
 - **THEN** elle affiche les versions GitHub et locales exigées, et signale séparément toute valeur indisponible
+
+#### Scenario: Superviseur absent ou divergent
+- **WHEN** `/cab update` a validé le plugin installé et constate que le script
+  ou l'unité du superviseur est absent ou divergent dans le profil Codex
+- **THEN** elle les déploie atomiquement, recharge systemd et ne démarre ni
+  n'active le service
 
 ### Requirement: Version et publication cohérentes
 Les artefacts distribués CAB SHALL partager une version de projet explicite ou documenter leur relation. Un catalogue marketplace SHALL référencer le plugin publié, ou être absent tant qu'aucune publication n'est définie.

@@ -4,6 +4,15 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.85.1 - 2026-09-25
+
+- `/cab update` installe ou actualise atomiquement le superviseur et son unité
+  systemd utilisateur, sans activer ni démarrer le service.
+- Son résumé compare désormais aussi les versions distante et locale du
+  superviseur.
+- Alignement du broker, du contrôleur, du superviseur, du plugin et de `/cab`
+  sur `0.85.1`.
+
 ## 0.84.4 - 2026-09-23
 
 - Le contrôleur exige désormais un gate terminal local avant une clôture CAB
