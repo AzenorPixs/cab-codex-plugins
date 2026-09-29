@@ -29,6 +29,16 @@ après contrôle de la cohérence et des validations.
                      Analyse / Revue / Validation
 ```
 
+## Statistiques après archivage
+
+Le plugin CAB embarque `coding-session-statistics`. Son protocole impose un
+rapport `STATISTIQUES.md` dans chaque dossier d'archive OpenSpec après un
+archivage autorisé et réussi, avant la clôture normale du travail. La collecte
+est préparée dès le début du change ; les données absentes sont signalées
+`N/A` sans estimation. Le suivi des quotas utilise l'outil natif Codex, sans
+installation de `cgpt` ou de Tools Codex. Une erreur de publication doit être
+résolue ou déclarée comme blocage, sans réarchiver le change.
+
 ## Architecture
 
 ```text
@@ -236,7 +246,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.85.1`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.85.2`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

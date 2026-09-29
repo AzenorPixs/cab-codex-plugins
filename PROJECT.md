@@ -96,7 +96,13 @@ CAB observe OpenCode par une voie SSE directe indépendante du cycle MCP. Cette 
 
 ### 5.4 Plugin Codex
 
-Le plugin regroupe la skill `cgpt-approval-bridge`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex. Sa marketplace est versionnée à la racine du dépôt dans `.agents/plugins/marketplace.json` et le plugin dans `plugins/cab-approval-bridge/`.
+Le plugin regroupe les skills `approval-bridge` et `coding-session-statistics`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex. Sa marketplace est versionnée à la racine du dépôt dans `.agents/plugins/marketplace.json` et le plugin dans `plugins/cab-approval-bridge/`.
+
+L'orchestrateur prépare la collecte dès le début de chaque change. Après
+chaque archivage OpenSpec autorisé et réussi, il fait produire et vérifier
+`STATISTIQUES.md` dans le dossier d'archive avant la clôture normale. Un lot
+exige un rapport par archive. Les mesures absentes restent `N/A` motivées ;
+une publication échouée laisse le cycle incomplet, sans réarchivage.
 
 ### 5.5 Commande `/cab`
 
@@ -158,6 +164,8 @@ OpenSpec est la source de vérité normative des capacités CAB. La décompositi
 - `supervision-remediation` : readiness, SSE et remédiations contrôlées ;
 - `codex-integration-distribution` : plugin Codex, commande d'orchestration
   `/cab` et distribution.
+- `archive-session-statistics` : collecte auditable et rapport obligatoire
+  après chaque archivage OpenSpec réussi.
 
 Les spécifications détaillent les comportements attendus ; ce document conserve le cadrage architectural général.
 
