@@ -4,6 +4,16 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.85.2 - 2026-09-29
+
+- Intégration de `coding-session-statistics` au plugin CAB, avec lecture native
+  des quotas Codex et sans dépendance à Tools Codex ou au skill `cgpt`.
+- Le protocole impose un `STATISTIQUES.md` par archive OpenSpec réussie, avec
+  relevés finaux après archivage et preuve du rapport avant clôture normale.
+- Données absentes explicites et reprise d'un rapport échoué sans réarchivage.
+- Alignement du broker, du contrôleur, du superviseur, du plugin et de `/cab`
+  sur `0.85.2` ; aucun changement des versions de schéma ou de protocole MCP.
+
 ## 0.85.1 - 2026-09-25
 
 - `/cab update` installe ou actualise atomiquement le superviseur et son unité

@@ -7,7 +7,7 @@ Ce document définit le cadrage de construction, d'installation, de packaging et
 ## 2. État actuel de la distribution
 
 CAB est actuellement un dépôt source autonome comprenant le broker Python, le
-plugin Codex, la skill, la commande Codex versionnée `/cab` et les scripts
+plugin Codex, ses skills, la commande Codex versionnée `/cab` et les scripts
 Node.js de contrôle et de supervision.
 
 Aucun Dockerfile ni format de paquet système n'est actuellement défini dans les sources CAB. Une image Docker ou un paquet Debian ne constitue donc pas encore un mode de distribution du projet.
@@ -20,6 +20,7 @@ CAB/
 ├── plugins/cab-approval-bridge/      # plugin Codex distribuable
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
+│   ├── skills/coding-session-statistics/SKILL.md
 │   ├── systemd/cgpt-approval-bridge-controller.service
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
@@ -55,7 +56,17 @@ Le broker n'utilise actuellement aucune dépendance Python tierce.
 - accès local à OpenCode ;
 - possibilité d'exécuter le contrôleur hors sandbox.
 
-### 4.3 Supervision système
+### 4.3 Statistiques de session
+
+Le skill `coding-session-statistics` est embarqué dans le plugin CAB avec
+ses métadonnées. Il utilise l'historique persistant et l'outil natif Codex
+`mcp__codex_app__get_usage_limits` pour le quota hebdomadaire. Il ne nécessite
+ni plugin Tools Codex ni skill `cgpt`. Une source indisponible produit `N/A`
+motivé ; aucune donnée de session ou de quota n'est embarquée dans le paquet.
+Les rapports sont produits dans les archives du projet piloté, jamais dans
+le cache du plugin.
+
+### 4.4 Supervision système
 
 Le healthcheck actuel peut redémarrer le contrôleur ou le superviseur avec
 `systemctl --user`. Une distribution sans systemd utilisateur devra fournir un
@@ -96,6 +107,8 @@ Le plugin publié se trouve sous :
 plugins/cab-approval-bridge/
 .codex-plugin/plugin.json
 skills/approval-bridge/SKILL.md
+skills/coding-session-statistics/SKILL.md
+skills/coding-session-statistics/agents/openai.yaml
 scripts/cgpt-approval-bridge-controller.mjs
 scripts/cgpt-approval-bridge-healthcheck.mjs
 scripts/cgpt-approval-bridge-opencode-sse-client.mjs
@@ -144,7 +157,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `0.85.1` pour le broker,
+artefacts distribués. La version de base actuelle est `0.85.2` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 

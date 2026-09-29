@@ -773,7 +773,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.85.1",
+      version: "0.85.2",
     },
   });
 

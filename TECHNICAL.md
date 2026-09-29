@@ -12,6 +12,7 @@ CAB/
 ├── plugins/cab-approval-bridge/
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
+│   ├── skills/coding-session-statistics/SKILL.md
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-healthcheck.mjs
@@ -30,7 +31,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.85.1` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.85.2` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -306,6 +307,21 @@ piloté.
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.
 
-## 17. Secrets
+## 17. Statistiques à l'archivage
+
+Le protocole charge le skill embarqué `coding-session-statistics` dès le début
+de chaque change. Après chaque archivage autorisé et réussi, l'orchestrateur
+fait générer `openspec/changes/archive/<archive>/STATISTIQUES.md` sous un mandat
+d'édition distinct. Le relevé de quota final et la fin de l'intervalle suivent
+l'archivage et précèdent la synthèse. Un lot exige un rapport par archive.
+
+La preuve du rapport (existence, six sections, UTF-8/LF et totaux cohérents)
+est un critère de fin du job avant toute clôture normale `TERMINÉ`. Le
+contrôle est assuré par l'orchestrateur ; le gate HTTP existant ne lit pas
+le projet. Si la publication échoue, le cycle reste incomplet et seul le
+rapport est repris, sans réarchivage. Les mesures absentes restent `N/A`
+motivées. Le broker et le contrôleur ne rédigent ni n'approuvent le rapport.
+
+## 18. Secrets
 
 Les clés HMAC et autres secrets doivent être injectés par l'environnement et rester hors Git, des journaux, des diagnostics et des sorties utilisateur.

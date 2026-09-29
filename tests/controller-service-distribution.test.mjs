@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
 const commandPath = new URL("../.codex/commands/cab.md", import.meta.url);
@@ -96,11 +96,11 @@ test("les artefacts distribués annoncent la même version de base", () => {
     "utf8"
   );
 
-  assert.match(command, /^version: 0\.85\.1$/m);
-  assert.match(manifest, /"version": "0\.85\.1\+codex\./);
-  assert.match(controller, /version: "0\.85\.1"/);
-  assert.match(supervisor, /const version = "0\.85\.1"/);
-  assert.match(broker, /SERVER_VERSION = "0\.85\.1"/);
+  assert.match(command, /^version: 0\.85\.2$/m);
+  assert.match(manifest, /"version": "0\.85\.2\+codex\./);
+  assert.match(controller, /version: "0\.85\.2"/);
+  assert.match(supervisor, /const version = "0\.85\.2"/);
+  assert.match(broker, /SERVER_VERSION = "0\.85\.2"/);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -117,4 +117,54 @@ test("la mise à jour déploie le superviseur sans le démarrer", () => {
   assert.match(update, /CAB_SUPERVISEUR_MIS_À_JOUR/);
   assert.match(update, /version du superviseur extraite/);
   assert.match(update, /version du superviseur déployé/);
+});
+
+test("la marketplace CAB distribue les statistiques avec le plugin existant", () => {
+  const root = new URL("../", import.meta.url);
+  const marketplace = JSON.parse(readFileSync(new URL(".agents/plugins/marketplace.json", root)));
+  const entry = marketplace.plugins.find((plugin) => plugin.name === "cab-approval-bridge");
+  assert.ok(entry);
+  assert.ok(!marketplace.plugins.some((plugin) => plugin.name === "coding-session-statistics"));
+  const pluginRoot = new URL(`${entry.source.path}/`, root);
+  const manifest = JSON.parse(readFileSync(new URL(".codex-plugin/plugin.json", pluginRoot)));
+  const skillsRoot = new URL(manifest.skills, pluginRoot);
+  const available = readdirSync(skillsRoot);
+  assert.ok(available.includes("approval-bridge"));
+  assert.ok(available.includes("coding-session-statistics"));
+  const stats = new URL("coding-session-statistics/", skillsRoot);
+  const skill = readFileSync(new URL("SKILL.md", stats), "utf8");
+  const metadata = readFileSync(new URL("agents/openai.yaml", stats), "utf8");
+  assert.match(skill, /^name: coding-session-statistics$/m);
+  assert.match(metadata, /\$coding-session-statistics/);
+  assert.match(skill, /mcp__codex_app__get_usage_limits/);
+  assert.doesNotMatch(skill, /\/cgpt 7u|\.codexold/);
+  assert.match(skill, /usedPercent/);
+  assert.match(skill, /10080/);
+  assert.match(skill, /relevé initial absent/);
+  assert.match(skill, /sondes périodiques non activées/);
+});
+
+test("le protocole exige un rapport par archive et empêche une clôture sans preuve", () => {
+  const protocolPaths = [
+    "../AGENTS.md",
+    "../.codex/commands/cab.md",
+    "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+    "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
+  ];
+  for (const path of protocolPaths) {
+    const protocol = readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
+    assert.match(protocol, /openspec\/changes\/archive\/<archive>\/STATISTIQUES\.md/, path);
+    assert.match(protocol, /mandat d'édition distinct/, path);
+    assert.match(protocol, /six sections/, path);
+    assert.match(protocol, /rapport par archive/, path);
+    assert.match(protocol, /N\/A/, path);
+    assert.match(protocol, /sans réarchiver|Ne pas réarchiver/, path);
+    assert.match(protocol, /TERMINÉ/, path);
+  }
+  const command = readFileSync(commandPath, "utf8");
+  const run = command.slice(command.indexOf("## `/cab run`"), command.indexOf("## `/cab test`"));
+  assert.match(run, /critères de fin la preuve du rapport/);
+  assert.match(run, /Ne demande pas la clôture normale `TERMINÉ` sans preuve du rapport/);
+  assert.match(run, /Si l'archivage échoue/);
+  assert.match(run, /`BLOQUÉ` ou un arrêt explicite/);
 });

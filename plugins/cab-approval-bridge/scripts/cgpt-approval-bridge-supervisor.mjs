@@ -7,7 +7,7 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "0.85.1";
+const version = "0.85.2";
 const workspace = envValue("OC_Codex_WORKSPACE");
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");

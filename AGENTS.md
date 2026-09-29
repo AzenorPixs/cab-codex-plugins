@@ -321,6 +321,23 @@ archivage OpenSpec reste un mandat distinct et exige une validation explicite
 de CGPT après contrôle des critères, des tests et de la cohérence entre code,
 spécifications et documentation.
 
+#### Statistiques obligatoires à l'archivage
+
+L'orchestrateur charge le skill `coding-session-statistics` embarqué dans le
+plugin CAB dès le début de chaque change pour préparer ses relevés et sondes.
+Après chaque archivage OpenSpec autorisé et réussi, il DOIT faire produire
+`openspec/changes/archive/<archive>/STATISTIQUES.md`, un rapport par archive,
+avec un mandat d'édition distinct. Le relevé final des quotas et la fin de
+l'intervalle sont enregistrés après archivage, avant la synthèse.
+
+La preuve d'existence du rapport, de ses six sections et de la cohérence des
+totaux fait partie des critères de fin du job. Aucun état normal `TERMINÉ`
+ne peut être déclaré avant cette vérification. Les données indisponibles sont
+signalées `N/A` avec leur cause, sans reconstitution rétroactive. Si le
+rapport échoue, signaler le cycle incomplet et reprendre uniquement sa
+production avec un nouveau mandat, sans réarchiver. Cette obligation ne vaut
+jamais autorisation d'archiver ; le broker reste neutre.
+
 ## 8. Arborescence et fichiers
 
 L'agent DOIT préserver l'arborescence et les conventions existantes.
