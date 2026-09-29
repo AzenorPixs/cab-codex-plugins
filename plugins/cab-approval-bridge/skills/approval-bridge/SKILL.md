@@ -55,6 +55,29 @@ la cohérence entre implémentation, spécifications et cadrages, ainsi que
 l’absence de blocage connu. Cette décision clôt le cycle OpenSpec ciblé ; elle
 ne vaut jamais autorisation d’archiver un autre changement.
 
+## Statistiques obligatoires à chaque archivage
+
+Charger le skill voisin `../coding-session-statistics/SKILL.md` dès le début
+de chaque change piloté. Préparer ses relevés de quota et ses sondes avant le
+premier travail ; conserver l'identité de la session, le change et les bornes.
+La lecture des quotas utilise directement l'outil natif Codex, sans skill
+`cgpt` externe. Toute donnée inaccessible reste `N/A` avec sa cause.
+
+Inscrire dans les critères de fin du job la preuve de publication de
+`openspec/changes/archive/<archive>/STATISTIQUES.md` après chaque archivage.
+Après la preuve d'un archivage autorisé et réussi, obtenir le relevé final
+et la fin de l'intervalle, puis faire produire le rapport par un mandat
+d'édition distinct. Vérifier ses six sections, ses totaux, son encodage
+UTF-8/LF et son existence avant de demander la clôture normale `TERMINÉ`.
+Pour un lot, exiger un rapport par archive avec ses bornes et son périmètre.
+
+Si l'archivage échoue, le rapport final après archivage reste en attente. Si
+le rapport échoue après archivage, signaler le cycle incomplet et reprendre
+le rapport avec un nouveau mandat sans réarchiver. Une donnée absente ne
+dispense pas du rapport ; ne jamais inventer de mesure. Le broker et le
+contrôleur restent neutres et ne produisent pas ce document à la place des
+agents. Cette obligation ne remplace pas l'autorisation d'archivage.
+
 ## Environnement Pixs / Devops
 
 - Sur l’hôte Devops, OpenSpec est installé sous `/home/devops/.local/npm/bin/openspec`.

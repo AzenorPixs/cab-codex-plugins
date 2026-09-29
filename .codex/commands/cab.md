@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.85.1
+version: 0.85.2
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -109,6 +109,9 @@ Exécute un job piloté dans la session persistante après un `/cab start` et un
    `POST /job/arm` du contrôleur avant tout mandat. Ce contrat ne vaut jamais
    une décision d’approbation d’action et ne contient ni secret ni contenu du
    projet. Publie chaque jalon prouvé et mandat courant par `POST /job/progress`.
+   Pour chaque change, charge le skill `coding-session-statistics` du plugin
+   CAB avant le premier travail et prépare les relevés et sondes prévus. Ajoute
+   aux critères de fin la preuve du rapport après archivage définie ci-dessous.
 2. Avant chaque édition, commande Bash, commande système ou commande OpenSpec
    qui exige une permission native, l’agent de codage crée un mandat CAB
    unitaire : `requestId`, `approval_id`, `change_id`, session, répertoire,
@@ -129,6 +132,28 @@ Exécute un job piloté dans la session persistante après un `/cab start` et un
    CAB retourne `BLOCKED` ou `HUMAN_REQUIRED`, ou si le développeur l’arrête
    explicitement. À ce moment seulement, publie le bilan final puis clôture le
    contrat côté CAB.
+
+### Statistiques obligatoires après archivage
+
+Pour chaque spécification archivée avec succès, l'orchestrateur fait produire
+`openspec/changes/archive/<archive>/STATISTIQUES.md` selon le skill embarqué
+`coding-session-statistics`. L'archivage doit rester explicitement autorisé.
+Après sa preuve, relève le quota final et la fin de l'intervalle avant la
+synthèse, puis transmets un mandat d'édition distinct pour ce seul rapport.
+La commande `/cab` ne rédige pas elle-même de fichier dans le projet piloté.
+
+Vérifie l'existence, les six sections, UTF-8/LF et la cohérence des totaux,
+puis publie ce jalon prouvé par `POST /job/progress` avant de demander le gate
+terminal normal `TERMINÉ`. Un lot exige un rapport par archive, avec le
+périmètre et les bornes propres à chaque change. Le skill lit les quotas
+avec l'outil natif Codex et n'exige pas le skill `cgpt`.
+
+Toute donnée manquante est signalée `N/A` avec sa cause, sans mesure inventée.
+Si l'archivage échoue, ne présente pas un rapport final après archivage. Si
+le rapport échoue alors que l'archive existe, signale le cycle incomplet et
+reprends seulement le rapport avec un nouveau mandat, sans réarchiver.
+Ne demande pas la clôture normale `TERMINÉ` sans preuve du rapport ; une
+clôture `BLOQUÉ` ou un arrêt explicite conserve la cause et le travail restant.
 
 ## `/cab test`
 
