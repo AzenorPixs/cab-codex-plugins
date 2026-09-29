@@ -4,6 +4,19 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.85.3 - 2026-09-29
+
+- Option booléenne `strictCommands` dans le contrat de job, persistée et
+  exposée dans son état public. Pour la session et le répertoire concernés,
+  seule la commande exacte approuvée est corrélée ; tout suffixe, y compris
+  l'instrumentation de sortie OpenCode, reste sans approbation native.
+- Le comportement instrumenté existant est conservé lorsque l'option est
+  absente ou vaut `false` ; les valeurs non booléennes sont refusées.
+- Tests HTTP du refus des suffixes, de l'approbation de la commande exacte,
+  de la consommation unique et de la compatibilité du mode existant.
+- Alignement du broker, du contrôleur, du superviseur, du plugin et de `/cab`
+  sur `0.85.3` ; versions de schéma et protocole MCP inchangées.
+
 ## 0.85.2 - 2026-09-29
 
 - Intégration de `coding-session-statistics` au plugin CAB, avec lecture native
