@@ -70,7 +70,11 @@ lorsque OpenCode y ajoute exclusivement une instrumentation de sortie
 déterministe connue. Il SHALL vérifier que la commande métier approuvée reste
 inchangée et SHALL refuser toute transformation qui ajoute, retire ou modifie
 une opération métier. Une permission corrélée SHALL rester consommable une
-seule fois.
+seule fois. Pour un job déclarant `strictCommands: true`, le contrôleur
+SHALL exiger une commande de permission strictement identique à celle du
+mandat et SHALL refuser également l'instrumentation de sortie reconnue.
+Cette restriction SHALL s'appliquer à la session et au répertoire du contrat
+de job ; son absence SHALL préserver la corrélation instrumentée existante.
 
 #### Scenario: Commande exacte
 - **WHEN** OpenCode demande une permission Bash dont la commande est identique
@@ -89,6 +93,19 @@ seule fois.
   que par l'instrumentation de sortie reconnue
 - **THEN** le contrôleur ne la corrèle pas et ne transmet aucune réponse de
   permission
+
+#### Scenario: Suffixe refusé pour un job strict
+- **WHEN** un job déclare `strictCommands: true` et OpenCode ajoute un suffixe,
+  y compris l'instrumentation de sortie reconnue, à une commande approuvée de
+  la même session et du même répertoire
+- **THEN** le contrôleur ne corrèle pas cette permission et ne transmet aucune
+  réponse `once`
+
+#### Scenario: Commande exacte consommée une fois pour un job strict
+- **WHEN** un job déclare `strictCommands: true` et OpenCode demande une
+  permission dont la commande est strictement identique au mandat approuvé
+- **THEN** le contrôleur peut transmettre une seule réponse `once` à cette
+  permission et ne réutilise pas la décision pour une seconde permission
 
 ### Requirement: Réveil corrélé de l'orchestrateur
 Le contrôleur SHALL accepter une relance corrélée sur une interface HTTP locale
@@ -116,9 +133,17 @@ un contrat de supervision de job non secret, corrélé à une session OpenCode e
 substitue la session d'un job existant, ou une désactivation sans gate terminal
 validé. Son statut public SHALL résumer le job armé et son gate sans exposer le
 contenu du projet ni une décision CAB.
+Le champ facultatif `strictCommands` SHALL être booléen, valoir `false` par
+défaut et être conservé dans le contrat persistant et son état public. Le
+contrôleur SHALL refuser toute autre valeur avant d'armer le job.
 
 #### Scenario: Tentative de désarmement prématuré
 
 - **WHEN** un client demande le désarmement d'un job dont le gate terminal est
   ouvert
 - **THEN** le contrôleur refuse la demande et conserve le contrat observable
+
+#### Scenario: Type invalide pour la corrélation stricte
+- **WHEN** un client arme un job avec une valeur non booléenne de
+  `strictCommands`
+- **THEN** le contrôleur refuse le contrat et ne l'arme pas

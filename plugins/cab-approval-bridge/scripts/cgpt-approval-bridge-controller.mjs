@@ -134,6 +134,7 @@ function publicJob() {
     directory: job.directory,
     changeId: job.changeId,
     criteria: job.criteria,
+    strictCommands: job.strictCommands === true,
     lastProvenMilestone: job.lastProvenMilestone,
     currentCabMandate: job.currentCabMandate,
     armed: job.armed,
@@ -228,7 +229,9 @@ function validJobContract(payload) {
     typeof payload.directory !== "string" ||
     !isAbsolute(payload.directory) ||
     !Array.isArray(payload.criteria) ||
-    !payload.criteria.every((criterion) => typeof criterion === "string")
+    !payload.criteria.every((criterion) => typeof criterion === "string") ||
+    (payload.strictCommands !== undefined &&
+      typeof payload.strictCommands !== "boolean")
   ) {
     return null;
   }
@@ -246,6 +249,7 @@ function validJobContract(payload) {
     directory: payload.directory,
     changeId: payload.changeId || null,
     criteria: payload.criteria,
+    strictCommands: payload.strictCommands === true,
     lastProvenMilestone: null,
     currentCabMandate: null,
     armed: true,
@@ -326,10 +330,15 @@ function matchesApprovedOperation(permission, operation) {
   }
 
   const command = permission.metadata.command;
+  const strictCommands =
+    job?.strictCommands === true &&
+    job.sessionId === operation.sessionId &&
+    job.directory === operation.directory;
 
   return (
     command === operation.target ||
-    command === `${operation.target}${opencodeExitStatusSuffix}`
+    (!strictCommands &&
+      command === `${operation.target}${opencodeExitStatusSuffix}`)
   );
 }
 
@@ -773,7 +782,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.85.2",
+      version: "0.85.3",
     },
   });
 

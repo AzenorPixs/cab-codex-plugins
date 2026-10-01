@@ -492,7 +492,7 @@ test("réconcilie une permission native corrélée apparue après la décision",
   ]);
 });
 
-test("corrèle uniquement l'instrumentation de sortie OpenCode admise", async (context) => {
+async function testCommandCorrelation(context, strictCommands) {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-command-test-"));
   const fakeCodex = join(directory, "fake-codex.cjs");
   const controllerPort = await availablePort();
@@ -550,7 +550,7 @@ test("corrèle uniquement l'instrumentation de sortie OpenCode admise", async (c
       OC_CGPT_RECONNECT_MS: "25",
       OC_CGPT_STATUS_HOST: "127.0.0.1",
       OC_CGPT_STATUS_PORT: String(controllerPort),
-      OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
+      OC_CGPT_WORKSPACE: strictCommands ? directory : "/home/devops/datas/cab",
     },
     stdio: "ignore",
   });
@@ -562,6 +562,29 @@ test("corrèle uniquement l'instrumentation de sortie OpenCode admise", async (c
   });
 
   await waitForStatus(controllerUrl);
+
+  if (strictCommands) {
+    const contract = {
+      jobId: "job-command-test",
+      sessionId: "ses_command_test",
+      directory: "/workspace",
+      criteria: ["Commande exacte, refus des suffixes et consommation unique."],
+      strictCommands: true,
+    };
+    const invalid = await fetch(`${controllerUrl}/job/arm`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...contract, strictCommands: "true" }),
+    });
+    assert.equal(invalid.status, 400);
+    const armed = await fetch(`${controllerUrl}/job/arm`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(contract),
+    });
+    assert.equal(armed.status, 201);
+    assert.equal((await armed.json()).strictCommands, true);
+  }
 
   const validation = await fetch(`${controllerUrl}/validation/request`, {
     method: "POST",
@@ -609,14 +632,45 @@ test("corrèle uniquement l'instrumentation de sortie OpenCode admise", async (c
     },
   ];
 
+  if (strictCommands) {
+    await delay(150);
+    assert.deepEqual(replies, []);
+    permissions.push({
+      id: "permission-command-exact",
+      sessionID: "ses_command_test",
+      permission: "bash",
+      metadata: { command: "printf approved" },
+    });
+  }
+
   for (let attempt = 0; attempt < 40 && replies.length === 0; attempt += 1) {
     await delay(25);
   }
 
   assert.deepEqual(replies, [
-    { id: "permission-command-123", body: { response: "once" } },
+    {
+      id: strictCommands ? "permission-command-exact" : "permission-command-123",
+      body: { response: "once" },
+    },
   ]);
-});
+
+  if (strictCommands) {
+    permissions.push({
+      id: "permission-command-repeat",
+      sessionID: "ses_command_test",
+      permission: "bash",
+      metadata: { command: "printf approved" },
+    });
+    await delay(150);
+    assert.equal(replies.length, 1);
+  }
+}
+
+for (const strictCommands of [false, true]) {
+  test(`corrèle les commandes avec strictCommands=${strictCommands}`, (context) =>
+    testCommandCorrelation(context, strictCommands)
+  );
+}
 
 test("conserve une décision manuelle rejected face à une décision automatique tardive", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-race-test-"));
