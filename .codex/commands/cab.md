@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.85.2
+version: 0.85.3
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -107,8 +107,10 @@ Exécute un job piloté dans la session persistante après un `/cab start` et un
 1. Constitue un contrat de job : identifiant de job, session OpenCode,
    répertoire cible, change OpenSpec éventuel et critères de fin. Arme-le par
    `POST /job/arm` du contrôleur avant tout mandat. Ce contrat ne vaut jamais
-   une décision d’approbation d’action et ne contient ni secret ni contenu du
-   projet. Publie chaque jalon prouvé et mandat courant par `POST /job/progress`.
+   une décision d'approbation d'action et ne contient ni secret ni contenu du
+   projet. Si le prompt parent exige l'identité stricte des commandes, notamment
+   CISMP, arme ce contrat avec `strictCommands: true` pour refuser tout suffixe.
+   Publie chaque jalon prouvé et mandat courant par `POST /job/progress`.
    Pour chaque change, charge le skill `coding-session-statistics` du plugin
    CAB avant le premier travail et prépare les relevés et sondes prévus. Ajoute
    aux critères de fin la preuve du rapport après archivage définie ci-dessous.

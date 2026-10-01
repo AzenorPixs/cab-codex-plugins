@@ -31,7 +31,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.85.2` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.85.3` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -139,6 +139,12 @@ port n'est pas un transport MCP. Elle expose `GET /status`, `GET /job`, `POST
 /job/terminal-gate`, `POST /broker/readiness`, `POST /validation/request`,
 `POST /validation/reminder` et `GET` ou `POST /decision/<requestId>` ; les
 décisions admises sont `approved`, `rejected` et `needs_clarification`.
+
+Le contrat de job accepte `strictCommands`, booléen facultatif valant `false`
+par défaut. À `true`, les permissions Bash de sa session et de son répertoire
+doivent contenir exactement la commande approuvée, sans suffixe ni
+instrumentation de sortie. Cette option est persistée et exposée par
+`GET /job` ; le comportement existant est conservé pour les autres jobs.
 
 Le superviseur écoute par défaut sur `127.0.0.1:8789`. Il conserve son état
 dans `.opencode/state/cgpt-approval-bridge/`, observe le contrat de job et la
