@@ -31,12 +31,18 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.85.3` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.86.3` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
+
+Après un arrêt non propre, la récupération reste synchrone avant la lecture
+MCP. Sa première boucle de réparation utilise un index temporaire des couples
+`(approval_id, event_type)`, construit depuis une lecture du journal et mis à
+jour après chaque écriture durable réussie. Les contrôles de cohérence et
+d'intégrité ainsi que les autres réparations conservent leur fonctionnement.
 
 ## 4. Persistance
 

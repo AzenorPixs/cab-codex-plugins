@@ -67,7 +67,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "0.85.3"
+SERVER_VERSION = "0.86.3"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -1041,8 +1041,12 @@ def recover_after_unclean_shutdown():
         if changed:
             save_store(path, data)
 
+        event_index = {
+            (event.get("approval_id", ""), event.get("event_type", ""))
+            for event in journal.read_events()
+        }
         for item in approvals.values():
-            repair_journal_for_item(item)
+            repair_journal_for_item(item, event_index=event_index)
 
     consistency_before = store_journal_consistency_snapshot()
     repair_result = None
@@ -1786,7 +1790,18 @@ def check_request_id_uniqueness(
 def journal_event_exists(
     approval_id,
     event_type,
+    event_index=None,
 ):
+    if event_index is not None:
+        approval_id = journal.optional_string(
+            approval_id, "approval_id", journal.MAX_IDENTIFIER_LENGTH,
+        )
+        event_type = journal.optional_string(
+            event_type, "event_type", journal.MAX_EVENT_TYPE_LENGTH,
+        )
+        if approval_id and event_type:
+            return (approval_id, event_type) in event_index
+
     events = journal.read_events(
         approval_id=approval_id,
         event_type=event_type,
@@ -1803,6 +1818,7 @@ def ensure_journal_event(
     event_type,
     actor,
     data=None,
+    event_index=None,
 ):
     approval_id = item.get(
         "approval_id",
@@ -1817,6 +1833,7 @@ def ensure_journal_event(
     if journal_event_exists(
         approval_id,
         event_type,
+        event_index=event_index,
     ):
         return None
 
@@ -1832,7 +1849,7 @@ def ensure_journal_event(
             data
         )
 
-    return journal.append_event(
+    event = journal.append_event(
         event_type=event_type,
         approval_id=approval_id,
         request_id=item.get(
@@ -1847,8 +1864,13 @@ def ensure_journal_event(
         data=payload,
     )
 
+    if event_index is not None:
+        event_index.add((event["approval_id"], event["event_type"]))
 
-def ensure_created_event(item):
+    return event
+
+
+def ensure_created_event(item, event_index=None):
     return ensure_journal_event(
         item,
         "APPROVAL_CREATED",
@@ -1871,6 +1893,7 @@ def ensure_created_event(item):
                 "",
             ),
         },
+        event_index=event_index,
     )
 
 
@@ -1972,7 +1995,7 @@ def terminal_event_data(item):
     return payload
 
 
-def ensure_terminal_event(item):
+def ensure_terminal_event(item, event_index=None):
     status = item.get(
         "status"
     )
@@ -1993,17 +2016,20 @@ def ensure_terminal_event(item):
         terminal_event_data(
             item
         ),
+        event_index=event_index,
     )
 
 
-def repair_journal_for_item(item):
+def repair_journal_for_item(item, event_index=None):
     """Repare les evenements fondamentaux manquants."""
     ensure_created_event(
-        item
+        item,
+        event_index=event_index,
     )
 
     ensure_terminal_event(
-        item
+        item,
+        event_index=event_index,
     )
 
 

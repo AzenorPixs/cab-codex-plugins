@@ -246,7 +246,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.85.3`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.86.3`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
