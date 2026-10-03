@@ -5,23 +5,15 @@ Version : 0.3
 ## 1. Contexte
 
 * Projet : `Codex Approval Bridge` ;
-* Racine pour les agents conteneurisé : `/workspace` ;
-* Racine pour les agents non conteneurisé : `/home/devops/datas/cab` ;
+* Racine du projet : `/home/devops/datas/cab` ;
 * Règles de sécurité et de travails des LLM : `AGENTS.md` ;
 * Objectifs et architecture du projet : `PROJECT.md` ;
 * Cadrage technique : `TECHNICAL.md` ;
 * Cadrage de déploiement : `BUILD.md` ;
 * Envrionnement de développement : `DEVOPS.md` ;
 
-Les deux racines désignent le même projet lorsqu'un montage conteneurisé est
-configuré. Toute opération DOIT utiliser la racine correspondant à son
-environnement d'exécution : `/workspace` pour un agent conteneurisé ou
-`/home/devops/datas/cab` pour un agent non conteneurisé.
-
 L'agent NE DOIT PAS créer, modifier ou supprimer de fichier hors de la racine
 applicable à son environnement sans validation explicite du développeur.
-
-TECHNICAL.md et BUILD.md ne sont pas nécessairement présents, et restent complémentaires et optionnelles.
 
 ## 2. Priorité des règles
 
@@ -321,22 +313,14 @@ archivage OpenSpec reste un mandat distinct et exige une validation explicite
 de CGPT après contrôle des critères, des tests et de la cohérence entre code,
 spécifications et documentation.
 
-#### Statistiques obligatoires à l'archivage
+#### Statistiques d'archivage
 
-L'orchestrateur charge le skill `coding-session-statistics` embarqué dans le
-plugin CAB dès le début de chaque change pour préparer ses relevés et sondes.
-Après chaque archivage OpenSpec autorisé et réussi, il DOIT faire produire
-`openspec/changes/archive/<archive>/STATISTIQUES.md`, un rapport par archive,
-avec un mandat d'édition distinct. Le relevé final des quotas et la fin de
-l'intervalle sont enregistrés après archivage, avant la synthèse.
-
-La preuve d'existence du rapport, de ses six sections et de la cohérence des
-totaux fait partie des critères de fin du job. Aucun état normal `TERMINÉ`
-ne peut être déclaré avant cette vérification. Les données indisponibles sont
-signalées `N/A` avec leur cause, sans reconstitution rétroactive. Si le
-rapport échoue, signaler le cycle incomplet et reprendre uniquement sa
-production avec un nouveau mandat, sans réarchiver. Cette obligation ne vaut
-jamais autorisation d'archiver ; le broker reste neutre.
+Après chaque archivage OpenSpec autorisé et réussi, produire un rapport par
+archive dans `openspec/changes/archive/<archive>/STATISTIQUES.md`, avec un
+mandat d'édition distinct pour ce seul fichier lorsque le protocole CAB
+s'applique. Vérifier les six sections, UTF-8/LF et les totaux ; afficher `N/A`
+motivé pour les mesures absentes. Ne pas déclarer `TERMINÉ` sans preuve du
+rapport. Si le rapport échoue, reprendre uniquement ce rapport, sans réarchiver.
 
 ## 8. Arborescence et fichiers
 
@@ -436,6 +420,7 @@ openspec/.tmp/
 openspec/build/
 openspec/dist/
 openspec/logs/
+PROMPTS/
 secrets.json
 secrets.yaml
 tmp/
@@ -566,28 +551,171 @@ Avant toute proposition de commit, l'agent DOIT :
 5. exécuter les vérifications disponibles ;
 6. décrire clairement le contenu du commit.
 
-## 13. Bash et Shell
+## 13. Langages de programmation
+
+### 13.1. Règles communes
+
+Le code DOIT rester compatible avec les versions des langages, runtimes et dépendances supportées par le projet.
+
+Les versions de référence DOIVENT être déterminées à partir des spécifications et des fichiers de configuration du projet, notamment `pyproject.toml`, `package.json` et `DEVOPS.md`.
+
+La présence d'une version plus récente dans l'environnement de développement NE DOIT PAS conduire à relever implicitement la version minimale supportée.
+
+Toute fonctionnalité nécessitant une version plus récente DOIT être justifiée et respecter les règles de validation applicables.
+
+Quel que soit le langage, le code DOIT :
+
+* respecter les conventions et l'architecture existantes ;
+* valider les entrées aux frontières du système ;
+* gérer explicitement les échecs attendus ;
+* détecter, traiter ou propager les erreurs de manière explicite ;
+* NE JAMAIS masquer silencieusement une erreur ;
+* produire des diagnostics compréhensibles sans exposer de secret ;
+* libérer les ressources utilisées, y compris en cas d'échec ;
+* préserver les comportements existants non concernés.
+
+Les vérifications DOIVENT utiliser les outils et configurations retenus par le projet.
+
+L'ajout d'un outil, d'une dépendance ou d'un langage reste soumis aux règles applicables aux dépendances et aux choix techniques.
+
+Une vérification syntaxique réussie NE suffit PAS à démontrer la validité fonctionnelle du code. Les tests applicables restent obligatoires.
+
+Toute vérification indisponible, non exécutée ou échouée DOIT être signalée explicitement.
+
+### 13.2. Bash et Shell
 
 Les scripts DOIVENT rester compatibles avec la version de Bash fournie par les versions Debian supportées.
 
 Les constructions POSIX DEVRAIENT être privilégiées lorsqu'elles permettent simplement le même résultat.
 
-Une fonctionnalité spécifique à une version récente de Bash nécessite une justification claire.
+L'interpréteur déclaré par le shebang DOIT correspondre aux constructions utilisées. Un script déclaré pour `sh` NE DOIT PAS utiliser de constructions spécifiques à Bash.
 
 Pour Bash, les vérifications minimales sont :
 
-```bash id="8vhj9b"
-bash -n <fichier>
-shellcheck <fichier>
+```bash
+bash -n "<fichier>"
+shellcheck "<fichier>"
+```
+
+Pour un script POSIX exécuté avec `sh`, la vérification syntaxique DOIT utiliser l'interpréteur cible :
+
+```sh
+sh -n "<fichier>"
+shellcheck "<fichier>"
 ```
 
 Les scripts DOIVENT :
 
-* protéger les variables par des guillemets lorsque nécessaire ;
-* gérer explicitement les échecs attendus ;
-* détecter, traiter et signaler clairement les erreurs ;
-* NE JAMAIS ignorer silencieusement une erreur ;
-* préserver les comportements existants non concernés.
+* protéger les expansions de variables par des guillemets lorsque nécessaire ;
+* préserver les arguments et les chemins contenant des espaces ou caractères spéciaux ;
+* contrôler les codes de retour lorsque l'échec influence la suite du traitement ;
+* traiter explicitement les échecs attendus ;
+* retourner un code de sortie cohérent avec le résultat.
+
+L'utilisation de `set -e` NE remplace PAS une gestion explicite des erreurs.
+
+### 13.3. Python
+
+Le code DOIT respecter la plage de versions Python déclarée dans `pyproject.toml` et les versions effectivement supportées par le projet.
+
+Les commandes DOIVENT utiliser l'interpréteur et l'environnement Python retenus pour le projet.
+
+La bibliothèque standard DEVRAIT être privilégiée lorsqu'elle répond simplement au besoin.
+
+Le code Python DOIT :
+
+* capturer des exceptions précises lorsque leur traitement est nécessaire ;
+* préserver la cause d'origine lorsqu'une exception est transformée ;
+* éviter les captures générales qui masquent les erreurs inattendues ;
+* utiliser des gestionnaires de contexte lorsque adaptés à la libération des ressources ;
+* éviter les arguments par défaut mutables ;
+* éviter les effets de bord non nécessaires lors de l'import d'un module.
+
+Les annotations de types DEVRAIENT être utilisées pour les nouveaux contrats publics et les interfaces dont elles améliorent la compréhension.
+
+Pour chaque fichier Python modifié, la vérification syntaxique minimale est :
+
+```bash
+python3 -m py_compile "<fichier.py>"
+```
+
+Les tests applicables DOIVENT être exécutés avec le mécanisme retenu par le projet.
+
+Les contrôles de style, d'analyse statique et de types DOIVENT être exécutés lorsqu'ils sont configurés pour le périmètre concerné.
+
+Pour Django, les modifications DOIVENT également respecter les conventions du projet relatives aux modèles, migrations, transactions, contrôles et tests.
+
+### 13.4. JavaScript et TypeScript
+
+Le code DOIT rester compatible avec les versions de Node.js, les navigateurs cibles et les outils de construction supportés par le projet.
+
+Le système de modules et les conventions JavaScript ou TypeScript existants DOIVENT être respectés.
+
+Une conversion de JavaScript vers TypeScript, ou inversement, NE DOIT PAS être réalisée sans demande ou validation concernant cette conversion.
+
+Le code DOIT :
+
+* gérer les rejets des opérations asynchrones ;
+* éviter les promesses abandonnées sans traitement explicite ;
+* libérer les abonnements, écouteurs et temporisateurs lorsque nécessaire ;
+* valider les données externes à l'exécution ;
+* respecter les contrats API et les conventions des composants existants.
+
+Les types TypeScript NE remplacent PAS la validation des données reçues à l'exécution.
+
+En TypeScript, l'utilisation de `any` ou d'une suppression de diagnostic DOIT être limitée et justifiée.
+
+Les vérifications minimales comprennent les tests et la construction applicables définis dans `package.json`.
+
+Lorsqu'une application web nécessite des tests unitaires pour sa partie frontend, ces tests DOIVENT être exécutés dans les navigateurs web déclarés dans `DEVOPS.md`, en mode headless.
+
+Pour le frontend Pixs actuel :
+
+```bash
+npm --prefix frontend test
+npm --prefix frontend run build
+```
+
+Les contrôles de lint et de types DOIVENT également être exécutés lorsqu'ils sont configurés.
+
+Les modifications d'interface DOIVENT faire l'objet des vérifications navigateur applicables ; une construction réussie NE suffit PAS à valider le comportement visuel ou interactif.
+
+### 13.5. SQL et PostgreSQL
+
+Les requêtes et migrations DOIVENT rester compatibles avec les versions du serveur PostgreSQL supportées par le projet.
+
+Les valeurs externes DOIVENT être transmises par des paramètres de requête. Elles NE DOIVENT PAS être concaténées dans du SQL.
+
+Les identifiants SQL dynamiques DOIVENT utiliser les mécanismes adaptés du pilote ou de l'ORM.
+
+Les modifications DOIVENT :
+
+* respecter les contrats de données et les règles d'isolation du projet ;
+* utiliser les transactions lorsque l'atomicité est nécessaire ;
+* traiter explicitement les erreurs et les conflits attendus ;
+* préserver les contraintes et l'intégrité des données ;
+* documenter les impacts des migrations et leur stratégie de retour lorsque applicable.
+
+L'ORM et les mécanismes de migration existants DEVRAIENT être privilégiés lorsqu'ils répondent au besoin.
+
+Les vérifications DOIVENT utiliser les outils de migration et les tests applicables sur un environnement de test autorisé.
+
+L'exécution d'un fichier SQL NE DOIT PAS être présentée comme une simple vérification syntaxique sans effets de bord.
+
+### 13.6. HTML, CSS et autres langages
+
+Les modifications HTML et CSS DOIVENT respecter les navigateurs cibles, les conventions de composants, les thèmes, l'accessibilité et le comportement responsive du projet.
+
+Elles DOIVENT être vérifiées avec la construction et les contrôles navigateur applicables.
+
+Pour tout autre langage présent dans le périmètre, l'agent DOIT identifier :
+
+* les versions supportées ;
+* les conventions existantes ;
+* les outils de vérification configurés ;
+* les tests applicables.
+
+Il DOIT appliquer les règles communes de cette section et signaler toute absence de mécanisme de validation.
 
 ## 14. Variables
 
@@ -725,13 +853,6 @@ Le code DEVRAIT privilégier :
 ## 21. Tests et validation finale
 
 Lorsqu'un mécanisme de test existe, l'agent DOIT exécuter les tests applicables avant de déclarer le travail valide.
-
-Pour Bash, les vérifications minimales sont :
-
-```bash id="h2j28x"
-bash -n
-shellcheck
-```
 
 Avant de déclarer une modification valide, l'agent DOIT vérifier :
 

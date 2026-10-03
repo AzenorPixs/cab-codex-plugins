@@ -157,7 +157,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `0.85.3` pour le broker,
+artefacts distribués. La version de base actuelle est `0.86.3` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
