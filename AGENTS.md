@@ -194,6 +194,18 @@ afficher ou transmettre de secret.
 
 #### Initialisation de session
 
+Avant chaque nouvelle session CAB, l'orchestrateur DOIT appliquer la purge
+complète définie par le skill `approval-bridge` et la commande `/cab start`.
+Il DOIT prouver l'inactivité du contexte, arrêter les ressources CAB et
+déconnecter le broker par l'API native OpenCode avant de purger les seuls
+espaces runtime CAB, y compris leurs conflits Syncthing, sans lire ni
+restaurer leur ancien contenu. Une purge échouée interdit le démarrage.
+L'orchestrateur NE DOIT PAS fermer OpenCode, effacer un RUN actif ou toucher
+les sources, secrets, configurations, rapports et historiques natifs.
+La reprise du même RUN conserve son état ; elle ne constitue pas un nouveau
+démarrage. La nouvelle session utilise de nouveaux identifiants et exige une
+readiness réelle et un test CAB complet avant tout mandat de travail.
+
 Avant tout accès au projet, l'agent DOIT :
 
 1. confirmer le répertoire, le change OpenSpec et le périmètre reçus ;
@@ -312,6 +324,29 @@ L'agent ne coche une tâche OpenSpec qu'après preuve de son achèvement. Un
 archivage OpenSpec reste un mandat distinct et exige une validation explicite
 de CGPT après contrôle des critères, des tests et de la cohérence entre code,
 spécifications et documentation.
+
+#### Compactage coordonné des deux agents
+
+L'orchestrateur DOIT piloter un cycle commun de compactage des sessions de
+l'orchestrateur et de l'agent de codage toutes les 1 h 30 (5 400 secondes).
+À l'échéance, il DOIT suspendre l'attribution de nouveaux mandats, laisser
+l'opération autorisée en cours se terminer et traiter son rapport. Il DOIT
+ensuite lancer les deux compactages en parallèle, sans attendre la fin de
+l'un pour déclencher l'autre, dans un même cycle identifié et horodaté.
+
+Le checkpoint non secret DOIT conserver les deux identifiants de session, le
+périmètre, les mandats consommés, les preuves et la prochaine action. Les deux
+résultats natifs DOIVENT être observés et corrélés aux sessions réellement
+pilotées ; une session auxiliaire, un accusé de lancement ou un résumé rédigé
+manuellement NE DOIT PAS être présenté comme un compactage achevé.
+
+Avant reprise, l'orchestrateur DOIT réconcilier les deux contextes, la santé
+OpenCode, MCP, la readiness CAB et l'absence de permission parasite. Un
+compactage NE DOIT PAS rejouer un mandat, autoriser une opération, modifier le
+modèle ou fermer/redémarrer un processus. Si une API native est indisponible
+ou si l'un des compactages échoue, conserver le cycle incomplet, sa cause et
+ses preuves ; ne pas annoncer une synchronisation réussie. Tout retard dû à
+un mandat en cours DOIT rester observable, sans réussite rétroactive.
 
 #### Statistiques d'archivage
 
