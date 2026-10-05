@@ -50,6 +50,11 @@ Chaque demande est corrélée par un `requestId` stable. Une décision doit corr
 
 CAB conserve l'état courant des approbations, leur historique, les éléments nécessaires à la reprise après interruption et les informations de diagnostic.
 
+Cette persistance couvre le RUN courant et sa reprise. Chaque nouvelle session
+CAB purge d'abord l'intégralité de son ancien état technique, y compris les
+conflits Syncthing, puis réinitialise le broker et la supervision. Les rapports
+et historiques natifs des agents sont conservés hors de cet espace runtime.
+
 ### 3.6 Supervision indépendante
 
 CAB distingue disponibilité des processus, activité des transports et progression métier réelle. Un processus vivant ou un échange réseau actif ne suffit pas à déclarer le système sain.
@@ -111,8 +116,9 @@ une publication échouée laisse le cycle incomplet, sans réarchivage.
 communication entre le broker MCP et l'agent Codex ; elle ne rend aucune
 décision d'approbation.
 
-- `/cab start` : vérifie le MCP actif, initialise ou reprend le contrôleur et
-  la supervision, puis crée ou réutilise la session de codage persistante ;
+- `/cab start` : purge l'ancien état technique après contrôle d'inactivité,
+  vérifie le MCP actif, initialise la supervision et crée une nouvelle session
+  maîtresse ; la reprise du même RUN conserve son état et sa session ;
 - `/cab test` : vérifie le chemin complet de validation dans cette session ;
 - `/cab run` : maintient le job piloté et ses mandats unitaires dans cette
   même session ;

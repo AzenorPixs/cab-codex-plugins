@@ -67,7 +67,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "0.86.3"
+SERVER_VERSION = "0.86.5"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -4146,11 +4146,17 @@ def do_list(args):
 
         items = []
 
+        event_index = {
+            (event.get("approval_id", ""), event.get("event_type", ""))
+            for event in journal.read_events()
+        } if data["approvals"] else set()
+
         for item in data[
             "approvals"
         ].values():
             repair_journal_for_item(
-                item
+                item,
+                event_index=event_index,
             )
 
             if (

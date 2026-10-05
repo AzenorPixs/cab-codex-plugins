@@ -4,6 +4,30 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Nouvelle session CAB : purge complète de l'ancien runtime, incluant
+  approbations, journal, checkpoints, jobs, rappels et conflits Syncthing.
+  La persistance reste assurée pendant un RUN et sa reprise.
+- Outil de purge distribué avec le plugin, contrôles d'inactivité et de
+  verrou avant suppression, refus des cibles invalides et protection des
+  fichiers extérieurs. Nouvelle session maîtresse et test CAB obligatoire.
+- Alignement du protocole AGENTS, de la skill, de `/cab start` et des cadrages.
+- Incrément des briques CAB de `0.86.4` à `0.86.5` ; schémas et protocole MCP
+  inchangés. Suppression historique sans sauvegarde acceptée ; aucune
+  publication ou modification Syncthing incluse.
+
+## 0.86.4 - 2026-10-05
+
+- Recherches de présence indexées dans les appels de liste d'approbations :
+  une seule lecture initiale d'un journal cohérent remplace les relectures
+  par approbation sous le verrou du magasin, même si la réponse est filtrée.
+- Index local à chaque appel et actualisé après écriture durable réussie ;
+  expirations, réparations, erreurs, intégrité des append et résultats préservés.
+  Aucun accès au journal pour un magasin vide.
+- Tests isolés de liste, d'idempotence, de persistance et d'erreurs, avec une
+  fixture représentative et un contrôle déterministe du nombre de lectures.
+- Alignement du broker, du contrôleur, du superviseur, du plugin, de `/cab`
+  et de `pyproject.toml` sur `0.86.4` ; schémas et protocole MCP inchangés.
+
 ## 0.86.3 - 2026-10-03
 
 - Recherches d'événements indexées dans la première boucle de réparation
