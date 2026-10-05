@@ -6,6 +6,43 @@ interruption conversationnelle ne soit jamais confondue avec une fin de job.
 
 ## Requirements
 
+### Requirement: Compactage coordonné des deux sessions
+
+L'orchestrateur SHALL déclencher un cycle commun de compactage de sa session
+et de la session de codage toutes les 1 h 30 (5 400 secondes). À l'échéance,
+il SHALL suspendre les nouveaux mandats, attendre l'achèvement du mandat
+autorisé en cours et traiter son rapport, puis lancer les deux compactages
+en parallèle sans attendre la fin de l'un avant de déclencher l'autre. Le
+cycle SHALL conserver un identifiant commun, les deux identifiants de session,
+les horodatages, résultats natifs et éventuels retards dans le checkpoint non
+secret. La prochaine échéance SHALL être calculée depuis le déclenchement du
+cycle commun, sans remplacer un échec par une réussite rétroactive.
+
+Un accusé de lancement, un résumé manuel ou le compactage d'une session
+auxiliaire SHALL NOT constituer la preuve de compactage de l'orchestrateur
+réel. Avant reprise des mandats, l'orchestrateur SHALL observer les deux fins
+natives corrélées, réconcilier les deux contextes, la santé OpenCode, MCP et
+la readiness CAB, et vérifier l'absence d'approbation parasite. Si une API
+requise est indisponible ou si un compactage échoue, il SHALL conserver le
+cycle incomplet et signaler sa cause sans annoncer une synchronisation
+réussie. Ce cycle SHALL NOT créer une approbation, rejouer une opération,
+changer le modèle ni fermer ou redémarrer les processus des agents.
+
+#### Scenario: Échéance entre deux mandats
+
+- **WHEN** l'échéance de 5 400 secondes est atteinte et aucun mandat n'est en cours
+- **THEN** l'orchestrateur déclenche les deux compactages en parallèle dans un même cycle et ne reprend qu'après leurs preuves natives et la réconciliation
+
+#### Scenario: Échéance pendant une exécution
+
+- **WHEN** l'échéance est atteinte pendant l'unique opération déjà autorisée
+- **THEN** l'orchestrateur laisse cette opération s'achever, traite son rapport, rend le retard observable et compacte les deux sessions avant tout nouveau mandat
+
+#### Scenario: Compactage de l'orchestrateur non prouvé
+
+- **WHEN** seule la session de codage ou une session auxiliaire est compactée, ou que l'API de l'orchestrateur réel est indisponible
+- **THEN** le cycle reste incomplet avec sa cause et aucune réussite conjointe n'est déclarée
+
 ### Requirement: Contrat de job durable et non secret
 
 CAB SHALL enregistrer atomiquement un contrat de job local avant sa

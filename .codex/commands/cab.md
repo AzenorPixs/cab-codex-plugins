@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.85.3
+version: 0.86.4
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -21,6 +21,22 @@ Un tour OpenCode achevé n’est jamais une fin de job. Tant que le job n’est 
 terminé, ni bloqué, ni explicitement arrêté, lire son dernier résultat dans la
 session persistante et transmettre le mandat suivant dans cette même session.
 Ne jamais envoyer de réponse finale au développeur pendant cet état RUN.
+
+## Compactage coordonné toutes les 1 h 30
+
+L'orchestrateur pilote un cycle commun toutes les 5 400 secondes pour sa
+session réelle et la session de codage. À l'échéance, n'attribue plus de mandat,
+laisse le mandat courant s'achever et traite son rapport. Sauvegarde le
+checkpoint non secret, puis déclenche les deux compactages en parallèle sous
+un même identifiant de cycle. Ne compacte pas une conversation auxiliaire à
+la place de l'orchestrateur réellement actif.
+
+Exige deux preuves natives de fin, corrélées aux bonnes sessions, avant de
+réconcilier les contextes, santé, MCP et readiness CAB et de poursuivre.
+Un accusé de lancement n'est pas une fin de compactage. Si une API manque ou
+si une seule moitié réussit, conserve l'état incomplet et la cause ; ne
+fabrique ni compactage, ni réussite, ni approbation. Ce cycle ne ferme ou ne
+redémarre aucun processus et ne rejoue aucun mandat consommé.
 
 ## Syntaxe
 
@@ -198,6 +214,15 @@ Ne ferme jamais :
 - OpenCode ;
 - le contrôleur persistant ;
 - le heartbeat global.
+
+Ces interdictions concernent la fermeture des processus. Elles n’interdisent
+pas une bascule d’authentification fournisseur explicitement autorisée ni le
+stockage privé standard de la clé par OpenCode, hors dépôt et lecture des
+agents. `POST /instance/dispose` recharge le contexte interne sans fermer
+l’interface ni redémarrer le processus OpenCode ; l’utiliser à une frontière
+entre mandats, puis réconcilier santé, MCP, readiness réelle et test CAB.
+Cette distinction n’autorise pas CAB à manipuler des secrets ou à modifier
+le projet piloté ; l’authentification relève de sa procédure dédiée.
 
 ## `/cab update`
 

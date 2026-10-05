@@ -31,12 +31,27 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.85.3` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.86.4` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
+
+Après un arrêt non propre, la récupération reste synchrone avant la lecture
+MCP. Sa première boucle de réparation utilise un index temporaire des couples
+`(approval_id, event_type)`, construit depuis une lecture du journal et mis à
+jour après chaque écriture durable réussie. Les contrôles de cohérence et
+d'intégrité ainsi que les autres réparations conservent leur fonctionnement.
+
+Les appels de liste d'approbations utilisent aussi un index temporaire local
+à l'appel, construit depuis une seule lecture initiale du journal lorsque le
+magasin n'est pas vide. Toutes les approbations sont réparées avant filtrage,
+sans relecture du journal pour chaque recherche de présence. Les append
+nécessaires conservent leurs contrôles et actualisent l'index après succès.
+Le verrou du magasin, la sauvegarde des expirations avant journalisation,
+le tri, le compte total, le filtre et la limite restent inchangés. Un magasin
+vide n'entraîne aucune lecture du journal ; aucun cache global n'est ajouté.
 
 ## 4. Persistance
 
@@ -175,6 +190,26 @@ Après ce contrôle, CAB crée ou réutilise une session de codage persistante p
 restent dans cette session visible du développeur.
 
 ## 9. Readiness et healthcheck
+
+### Compactage coordonné des contextes
+
+Le protocole impose un cycle commun toutes les 1 h 30 (5 400 secondes), piloté
+par l'orchestrateur à une frontière entre mandats. Il déclenche en parallèle
+les compactages des deux sessions réellement actives, puis attend leurs deux
+preuves et réconcilie les contextes et CAB avant de reprendre. L'horloge et
+les éventuels retards de fin de mandat sont conservés dans le checkpoint.
+
+OpenCode expose `POST /session/<id>/summarize`. Codex App Server expose
+`thread/compact/start` sur la connexion qui possède la session active : sa
+réponse immédiate est seulement un accusé de lancement ; la fin doit être
+observée via l'item natif `contextCompaction` achevé, corrélé au bon thread.
+Le thread auxiliaire de décision créé par le contrôleur ne remplace pas celui
+de l'orchestrateur principal. Une API non exposée doit rester une limite
+signalée, pas une preuve fabriquée. `POST /instance/dispose` recharge un
+contexte interne et ne constitue pas un compactage de conversation.
+
+Cette règle décrit le pilotage attendu ; elle ne prétend pas qu'un automate
+de compactage conjoint est déjà implémenté dans le contrôleur.
 
 `broker_readiness` expose `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`, avec cause racine, action recommandée, disponibilité du contrôleur, compteurs d'approbations et disponibilité éventuelle d'une auto-récupération.
 
