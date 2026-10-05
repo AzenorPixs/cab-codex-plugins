@@ -4,6 +4,32 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+## 0.86.4 - 2026-10-05
+
+- Recherches de présence indexées dans les appels de liste d'approbations :
+  une seule lecture initiale d'un journal cohérent remplace les relectures
+  par approbation sous le verrou du magasin, même si la réponse est filtrée.
+- Index local à chaque appel et actualisé après écriture durable réussie ;
+  expirations, réparations, erreurs, intégrité des append et résultats préservés.
+  Aucun accès au journal pour un magasin vide.
+- Tests isolés de liste, d'idempotence, de persistance et d'erreurs, avec une
+  fixture représentative et un contrôle déterministe du nombre de lectures.
+- Alignement du broker, du contrôleur, du superviseur, du plugin, de `/cab`
+  et de `pyproject.toml` sur `0.86.4` ; schémas et protocole MCP inchangés.
+
+## 0.86.3 - 2026-10-03
+
+- Recherches d'événements indexées dans la première boucle de réparation
+  post-crash : un journal déjà cohérent n'est plus relu pour chaque
+  approbation avant l'initialisation MCP.
+- Index temporaire actualisé seulement après une écriture durable réussie ;
+  récupération synchrone, contrôles de cohérence et d'intégrité, verrous et
+  autres réparations conservés.
+- Tests isolés de récupération, d'idempotence, d'erreurs et d'initialisation
+  MCP, avec contrôle du nombre de lectures du journal.
+- Alignement du broker, du contrôleur, du superviseur, du plugin, de `/cab`
+  et de `pyproject.toml` sur `0.86.3` ; schémas et protocole MCP inchangés.
+
 ## 0.85.3 - 2026-09-29
 
 - Option booléenne `strictCommands` dans le contrat de job, persistée et

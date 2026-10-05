@@ -28,6 +28,13 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - Chaque opération OpenCode nécessitant une permission native constitue un mandat unitaire. Avant cette opération, l’agent soumet `request_validation` avec l’identifiant de session, le répertoire cible et exactement un fichier relatif ou une commande complète. Le contrôleur ne transmet `once` qu’après une décision CAB `approved` explicite et corrélée à ce mandat unique ; cette décision est consommée après une seule permission native correspondante.
 - La fin d’un tour OpenCode ne constitue pas la fin du job : conserver la boucle de pilotage et transmettre le mandat suivant dans la même session jusqu’à un état terminal explicite.
 - Ne jamais lire, journaliser ou afficher de secret.
+- Une interdiction de fermer ou redémarrer OpenCode vise son processus et
+  l’interface visible. Elle ne prohibe pas une authentification fournisseur
+  explicitement autorisée, son stockage privé standard par OpenCode, ni un
+  rechargement interne via `POST /instance/dispose`. Le secret reste hors du
+  broker, du modèle, des sorties et des sources. Attendre la fin du mandat
+  courant, préserver le processus et la session, puis réconcilier santé, MCP,
+  `broker_readiness` réel et test CAB avant de reprendre le pilotage.
 
 ## Rôle non déléguable de l’orchestrateur
 
@@ -54,6 +61,21 @@ qu’après avoir vérifié les critères d’acceptation, les validations appli
 la cohérence entre implémentation, spécifications et cadrages, ainsi que
 l’absence de blocage connu. Cette décision clôt le cycle OpenSpec ciblé ; elle
 ne vaut jamais autorisation d’archiver un autre changement.
+
+## Compactage coordonné toutes les 1 h 30
+
+L'orchestrateur pilote les deux sessions réellement actives, avec un cycle
+commun toutes les 5 400 secondes. À l'échéance, il gèle l'attribution de
+nouveaux mandats, attend la fin du mandat autorisé en cours et traite son
+rapport. Après checkpoint non secret, il déclenche en parallèle le compactage
+de l'orchestrateur et celui de l'agent de codage, sous un identifiant commun.
+
+Observer les deux résultats natifs et leurs identifiants avant toute reprise.
+Un accusé de lancement, un texte de résumé ou une session Codex auxiliaire ne
+prouve pas le compactage de l'orchestrateur. Une API absente ou un échec laisse
+le cycle incomplet et sa cause observable ; aucune réussite conjointe fictive.
+Réconcilier les deux contextes, OpenCode, MCP et la readiness CAB, sans
+permission parasite, changement de modèle, rejeu ou fermeture/redémarrage.
 
 ## Statistiques obligatoires à chaque archivage
 
