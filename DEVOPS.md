@@ -52,7 +52,7 @@ Version : 0.2
 
 # OpenSpec
 
-  * 1.14.0
+  * 1.14.1
   * /home/devops/.local/npm/bin/openspec
 
 

@@ -88,10 +88,17 @@ de décision d'approbation.
 /cab stop
 ```
 
-`/cab start` vérifie le MCP actif par `/mcp`, installe de façon différée les
+Chaque nouvelle session `/cab start` purge entièrement l'ancien état technique
+CAB, y compris ses conflits Syncthing, sans le restaurer. Elle vérifie d'abord
+l'inactivité du contexte, arrête les ressources CAB et déconnecte le broker
+par OpenCode ; sources, secrets, rapports et historiques natifs restent hors
+purge. Le plugin fournit l'outil de purge et son protocole. Une reprise du même
+RUN conserve son état.
+
+`/cab start` reconnecte et vérifie le MCP actif par `/mcp`, installe de façon différée les
 services utilisateur du contrôleur et du superviseur sans les activer au
-login, les démarre explicitement, initialise la supervision CAB, puis crée ou
-réutilise une session de codage persistante visible dans OpenCode.
+login, les démarre explicitement, initialise la supervision CAB, puis crée
+une nouvelle session maîtresse persistante visible dans OpenCode.
 
 `/cab test` réalise, dans cette même session, un test non destructif du chemin
 complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
@@ -214,6 +221,11 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 Les noms historiques équivalents préfixés `OC_CGPT_` restent acceptés pour la
 compatibilité avec les installations existantes.
 
+Le mode `OC_Codex_DECISION_MODE=manual`, utilisé par défaut, conserve les
+demandes en attente d'une décision HTTP explicite de l'orchestrateur
+principal. Les rappels corrélés restent observables sans créer de thread ni
+de tour Codex auxiliaire. Le mode `automatic` conserve son fonctionnement.
+
 Les secrets doivent rester hors du dépôt Git et des journaux.
 
 ## Persistance
@@ -246,7 +258,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.86.4`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.86.6`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

@@ -1,24 +1,65 @@
-# codex-integration-distribution Specification
+## ADDED Requirements
 
-## Purpose
-Cette capacité définit l'intégration locale de CAB dans Codex et les conditions minimales de distribution reproductible.
+### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
+La commande `/cab start` et la skill du plugin SHALL imposer la purge complète
+des espaces runtime CAB avant chaque nouvelle session, quelle que soit la
+quantité ou la cohérence de leurs traces précédentes. Une reprise du même RUN,
+un compactage, une reconnexion ou les sous-commandes `run`, `test`, `update` et
+`stop` SHALL conserver l'état courant sans déclencher cette purge.
 
-## Requirements
+#### Scenario: Ancien état disponible
+- **WHEN** `/cab start` ouvre une nouvelle session et aucun travail précédent n'est actif
+- **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur
+- **AND** aucune ancienne session maîtresse ou décision n'est réadoptée
 
-### Requirement: Plugin Codex structuré
-Le plugin CAB SHALL être distribué depuis la racine du dépôt, avec une
-marketplace dans `.agents/plugins/marketplace.json` et un plugin dans
-`plugins/cab-approval-bridge/`. Ce plugin SHALL fournir un manifeste
-`.codex-plugin/plugin.json`, la skill CAB et les scripts de contrôleur,
-healthcheck et SSE dans une arborescence distribuable cohérente.
+#### Scenario: Reprise du même RUN
+- **WHEN** CAB réconcilie le même RUN après interruption, compactage ou reconnexion
+- **THEN** il conserve les preuves et demandes de ce RUN sans purge
 
-#### Scenario: Validation du plugin
-- **WHEN** le manifeste du plugin est soumis au validateur Codex
-- **THEN** il est accepté et les chemins déclarés existent dans l'artefact
+#### Scenario: Sous-commande sans nouveau démarrage
+- **WHEN** `/cab run`, `/cab test`, `/cab update` ou `/cab stop` est exécutée
+- **THEN** elle ne déclenche pas une purge de début de session
 
-#### Scenario: Localisation du plugin
-- **WHEN** une distribution CAB est préparée
-- **THEN** la marketplace et le plugin sont pris depuis la racine du dépôt, sans déplacement sous `.codex/`
+### Requirement: Arrêt contrôlé avant purge
+L'orchestrateur SHALL prouver la propriété et l'inactivité du contexte, sans
+RUN actif, session occupée, mandat en cours ou permission native non résolue.
+Il SHALL arrêter les ressources CAB, déconnecter le broker par l'API native
+OpenCode et vérifier son verrou avant toute purge. Il SHALL NOT tuer ou lancer
+directement le broker ni fermer ou redémarrer le processus OpenCode.
+
+#### Scenario: Travail actif ou inactivité non prouvée
+- **WHEN** un travail ou une permission reste actif, ou que la propriété et l'inactivité du contexte ne sont pas prouvées
+- **THEN** CAB refuse la purge et signale la cause sans effacer l'état
+
+### Requirement: Outil de purge distribué et borné
+Le plugin SHALL distribuer `scripts/cgpt-approval-bridge-reset.py`. L'outil
+SHALL exiger une confirmation de nouvelle session et contrôler toutes les
+cibles avant suppression. Il SHALL refuser les chemins relatifs, traversants,
+non dédiés, symboliques ou imbriqués et les verrous occupés, non ordinaires ou
+à liens matériels. Une erreur ou un état recréé SHALL interdire le démarrage.
+
+#### Scenario: Verrou détenu ou cible invalide
+- **WHEN** un broker conserve le verrou ou une cible de purge est invalide
+- **THEN** l'outil échoue avant toute suppression
+- **AND** une cible déjà contrôlée conserve ses données
+
+#### Scenario: Purge échouée
+- **WHEN** une suppression échoue ou qu'un autre processus recrée l'état
+- **THEN** l'outil signale l'échec et CAB ne démarre pas une session sur cet état partiel
+
+### Requirement: Prévol neuf après purge
+Après la purge, CAB SHALL reconnecter le broker par OpenCode, vérifier le
+contexte et le modèle et créer une nouvelle session maîtresse. Avant tout
+travail, il SHALL exiger un appel réel à broker_readiness donnant READY sans
+demande ou permission parasite, puis un test CAB complet avec un requestId
+inédit, une décision explicite, une réponse MCP corrélée et l'exécution unique
+de true. Aucune ancienne preuve SHALL valider ce prévol.
+
+#### Scenario: Nouvelle session vérifiée
+- **WHEN** la purge réussit et CAB ouvre une nouvelle session maîtresse
+- **THEN** seuls les résultats de sa readiness et de son test CAB complet autorisent le premier mandat
+
+## MODIFIED Requirements
 
 ### Requirement: Commande de pilotage sûre
 La commande Codex `/cab` SHALL être versionnée dans
@@ -138,104 +179,3 @@ signalée comme telle sans être déduite d'une autre source.
 - **THEN** elle les déploie atomiquement, recharge systemd et ne démarre ni
   n'active le service
 
-### Requirement: Version et publication cohérentes
-Les artefacts distribués CAB SHALL partager une version de projet explicite ou documenter leur relation. Un catalogue marketplace SHALL référencer le plugin publié, ou être absent tant qu'aucune publication n'est définie.
-
-#### Scenario: Préparation de release
-- **WHEN** une release est préparée
-- **THEN** la version du broker, du plugin et du catalogue est vérifiée avant publication
-
-### Requirement: Distribution du superviseur local
-
-Le plugin CAB SHALL distribuer le superviseur persistant et son unité systemd
-utilisateur avec le contrôleur. `/cab start` SHALL installer et démarrer
-explicitement le superviseur après le contrôleur, sans l'activer au login.
-`/cab stop` SHALL refuser l'arrêt normal tant qu'un job armé ne possède pas un
-gate terminal validé, puis arrêter explicitement le superviseur avant le
-contrôleur. Les artefacts distribués du broker, du contrôleur et du
-superviseur SHALL annoncer la même version de base.
-
-#### Scenario: Démarrage d'un superviseur distribué
-
-- **WHEN** `/cab start` a confirmé les préconditions CAB et installé les
-  ressources locales
-- **THEN** il démarre le superviseur utilisateur, vérifie son état local et ne
-  l'active pas pour le login
-
-### Requirement: Skill de statistiques embarqué dans CAB
-Le plugin `cab-approval-bridge` SHALL distribuer le skill
-`coding-session-statistics` et ses métadonnées sous son répertoire `skills/`.
-Son installation SHALL rendre ce skill disponible sans plugin Tools Codex
-et sans skill `cgpt` externe. Le protocole et la commande CAB SHALL imposer
-sa production de statistiques après chaque archivage réussi selon
-`archive-session-statistics`. Les composants versionnés SHALL partager la
-version de base `0.86.6`, le plugin pouvant ajouter un cachebuster Codex.
-
-#### Scenario: Installation depuis la marketplace CAB
-- **WHEN** le plugin CAB est installé depuis sa marketplace
-- **THEN** les skills `approval-bridge` et `coding-session-statistics` sont
-  présents dans le paquet et résolus depuis son manifeste
-
-#### Scenario: Release cohérente
-- **WHEN** la release est validée
-- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande
-  annoncent tous la version de base `0.86.6`
-
-### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
-La commande `/cab start` et la skill du plugin SHALL imposer la purge complète
-des espaces runtime CAB avant chaque nouvelle session, quelle que soit la
-quantité ou la cohérence de leurs traces précédentes. Une reprise du même RUN,
-un compactage, une reconnexion ou les sous-commandes `run`, `test`, `update` et
-`stop` SHALL conserver l'état courant sans déclencher cette purge.
-
-#### Scenario: Ancien état disponible
-- **WHEN** `/cab start` ouvre une nouvelle session et aucun travail précédent n'est actif
-- **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur
-- **AND** aucune ancienne session maîtresse ou décision n'est réadoptée
-
-#### Scenario: Reprise du même RUN
-- **WHEN** CAB réconcilie le même RUN après interruption, compactage ou reconnexion
-- **THEN** il conserve les preuves et demandes de ce RUN sans purge
-
-#### Scenario: Sous-commande sans nouveau démarrage
-- **WHEN** `/cab run`, `/cab test`, `/cab update` ou `/cab stop` est exécutée
-- **THEN** elle ne déclenche pas une purge de début de session
-
-### Requirement: Arrêt contrôlé avant purge
-L'orchestrateur SHALL prouver la propriété et l'inactivité du contexte, sans
-RUN actif, session occupée, mandat en cours ou permission native non résolue.
-Il SHALL arrêter les ressources CAB, déconnecter le broker par l'API native
-OpenCode et vérifier son verrou avant toute purge. Il SHALL NOT tuer ou lancer
-directement le broker ni fermer ou redémarrer le processus OpenCode.
-
-#### Scenario: Travail actif ou inactivité non prouvée
-- **WHEN** un travail ou une permission reste actif, ou que la propriété et l'inactivité du contexte ne sont pas prouvées
-- **THEN** CAB refuse la purge et signale la cause sans effacer l'état
-
-### Requirement: Outil de purge distribué et borné
-Le plugin SHALL distribuer `scripts/cgpt-approval-bridge-reset.py`. L'outil
-SHALL exiger une confirmation de nouvelle session et contrôler toutes les
-cibles avant suppression. Il SHALL refuser les chemins relatifs, traversants,
-non dédiés, symboliques ou imbriqués et les verrous occupés, non ordinaires ou
-à liens matériels. Une erreur ou un état recréé SHALL interdire le démarrage.
-
-#### Scenario: Verrou détenu ou cible invalide
-- **WHEN** un broker conserve le verrou ou une cible de purge est invalide
-- **THEN** l'outil échoue avant toute suppression
-- **AND** une cible déjà contrôlée conserve ses données
-
-#### Scenario: Purge échouée
-- **WHEN** une suppression échoue ou qu'un autre processus recrée l'état
-- **THEN** l'outil signale l'échec et CAB ne démarre pas une session sur cet état partiel
-
-### Requirement: Prévol neuf après purge
-Après la purge, CAB SHALL reconnecter le broker par OpenCode, vérifier le
-contexte et le modèle et créer une nouvelle session maîtresse. Avant tout
-travail, il SHALL exiger un appel réel à broker_readiness donnant READY sans
-demande ou permission parasite, puis un test CAB complet avec un requestId
-inédit, une décision explicite, une réponse MCP corrélée et l'exécution unique
-de true. Aucune ancienne preuve SHALL valider ce prévol.
-
-#### Scenario: Nouvelle session vérifiée
-- **WHEN** la purge réussit et CAB ouvre une nouvelle session maîtresse
-- **THEN** seuls les résultats de sa readiness et de son test CAB complet autorisent le premier mandat

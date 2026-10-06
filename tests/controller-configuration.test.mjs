@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -290,19 +290,24 @@ test("propage les trois identifiants à une décision manuelle", async (context)
   });
 });
 
-test("relance corrélée sans créer de décision", async (context) => {
+test("relances manuelles sans tour Codex, puis décision explicite unique", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-reminder-"));
   const fakeCodex = join(directory, "fake-codex.cjs");
+  const rpcLog = join(directory, "codex-rpc-methods.txt");
   const port = await availablePort();
   const baseUrl = `http://127.0.0.1:${port}`;
+
+  writeFileSync(rpcLog, "");
 
   writeFileSync(
     fakeCodex,
     [
       "#!/usr/bin/env node",
       "const readline = require('node:readline');",
+      "const { appendFileSync } = require('node:fs');",
       "readline.createInterface({ input: process.stdin }).on('line', (line) => {",
       "  const message = JSON.parse(line);",
+      "  appendFileSync(process.env.CAB_TEST_RPC_LOG, message.method + '\\n');",
       "  if (!message.id) return;",
       "  const result = message.method === 'thread/start' ? { thread: { id: 'test-thread' } } : message.method === 'turn/start' ? { turn: { id: 'test-turn' } } : {};",
       "  setTimeout(() => { process.stdout.write(JSON.stringify({ id: message.id, result }) + '\\n'); if (message.method === 'turn/start') process.stdout.write(JSON.stringify({ method: 'turn/completed', params: { turn: { id: 'test-turn', status: 'completed' } } }) + '\\n'); }, 0);",
@@ -315,6 +320,7 @@ test("relance corrélée sans créer de décision", async (context) => {
     env: {
       ...process.env,
       CODEX_COMMAND: fakeCodex,
+      CAB_TEST_RPC_LOG: rpcLog,
       OC_CGPT_OPENCODE_URL: "http://127.0.0.1:9",
       OC_CGPT_OUTSIDE_SANDBOX: "1",
       OC_CGPT_RECONNECT_MS: "60000",
@@ -350,16 +356,53 @@ test("relance corrélée sans créer de décision", async (context) => {
   });
   assert.equal(validation.status, 202);
 
-  const reminder = await fetch(`${baseUrl}/validation/reminder`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ approval, age_seconds: 30, last_state: "WAITING_DECISION" }),
-  });
-  assert.equal(reminder.status, 202);
-  await delay(50);
+  for (const ageSeconds of [30, 60]) {
+    const reminder = await fetch(`${baseUrl}/validation/reminder`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ approval, age_seconds: ageSeconds, last_state: "WAITING_DECISION" }),
+    });
+    assert.equal(reminder.status, 202);
+    const status = await fetch(`${baseUrl}/status`).then((response) => response.json());
+    assert.equal(status.lastEvent.type, "validation-reminder-delivered");
+    assert.equal(status.lastEvent.requestId, approval.requestId);
+  }
+
+  const rpcMethods = readFileSync(rpcLog, "utf8").trim().split("\n");
+  assert.ok(!rpcMethods.includes("thread/start"), "un rappel manuel ne crée pas de thread Codex");
+  assert.ok(!rpcMethods.includes("turn/start"), "un rappel manuel ne crée pas de tour Codex");
 
   const decision = await fetch(`${baseUrl}/decision/request-reminder-456`);
   assert.equal(decision.status, 404);
+
+  const explicitDecision = { decision: "needs_clarification", reason: "Décision de l'orchestrateur principal" };
+  const decided = await fetch(`${baseUrl}/decision/${approval.requestId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(explicitDecision),
+  });
+  assert.equal(decided.status, 201);
+  const received = await fetch(`${baseUrl}/decision/${approval.requestId}`)
+    .then((response) => response.json());
+  assert.deepEqual(received, {
+    ...explicitDecision,
+    requestId: approval.requestId,
+    approval_id: approval.approval_id,
+    change_id: approval.change_id,
+  });
+
+  const repeated = await fetch(`${baseUrl}/decision/${approval.requestId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(explicitDecision),
+  });
+  assert.equal(repeated.status, 400);
+  const terminalReminder = await fetch(`${baseUrl}/validation/reminder`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ approval, age_seconds: 90, last_state: "WAITING_DECISION" }),
+  });
+  assert.equal(terminalReminder.status, 400);
 });
 
 test("réconcilie une permission native corrélée apparue après la décision", async (context) => {
