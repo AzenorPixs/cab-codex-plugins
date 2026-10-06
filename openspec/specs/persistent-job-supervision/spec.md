@@ -10,38 +10,69 @@ interruption conversationnelle ne soit jamais confondue avec une fin de job.
 
 L'orchestrateur SHALL déclencher un cycle commun de compactage de sa session
 et de la session de codage toutes les 1 h 30 (5 400 secondes). À l'échéance,
-il SHALL suspendre les nouveaux mandats, attendre l'achèvement du mandat
-autorisé en cours et traiter son rapport, puis lancer les deux compactages
-en parallèle sans attendre la fin de l'un avant de déclencher l'autre. Le
-cycle SHALL conserver un identifiant commun, les deux identifiants de session,
+il SHALL suspendre les nouveaux mandats le temps d'achever le mandat
+autorisé en cours, traiter son rapport et sauvegarder le checkpoint, puis
+vérifier les API natives exposées pour les sessions réellement pilotées.
+Lorsque les deux API sont disponibles, il SHALL lancer les deux compactages
+en parallèle ; sinon, il SHALL compacter les seules sessions accessibles et
+tracer les opérations non exécutées. Le cycle SHALL conserver un identifiant
+commun, les identifiants de session disponibles et ceux explicitement non exposés,
 les horodatages, résultats natifs et éventuels retards dans le checkpoint non
 secret. La prochaine échéance SHALL être calculée depuis le déclenchement du
 cycle commun, sans remplacer un échec par une réussite rétroactive.
 
 Un accusé de lancement, un résumé manuel ou le compactage d'une session
 auxiliaire SHALL NOT constituer la preuve de compactage de l'orchestrateur
-réel. Avant reprise des mandats, l'orchestrateur SHALL observer les deux fins
-natives corrélées, réconcilier les deux contextes, la santé OpenCode, MCP et
-la readiness CAB, et vérifier l'absence d'approbation parasite. Si une API
-requise est indisponible ou si un compactage échoue, il SHALL conserver le
+réel. Les deux fins natives corrélées SHALL être requises pour déclarer une
+réussite conjointe, pas pour reprendre un RUN dont l'état reste exploitable.
+Une API de compactage absente SHALL NOT être assimilée à une perte de contexte
+lorsque la conversation active, le checkpoint et les preuves disponibles
+permettent de vérifier la continuité ; les identifiants non exposés SHALL être
+signalés sans être inventés.
+Avant reprise des mandats, l'orchestrateur SHALL réconcilier les deux contextes,
+la santé OpenCode, MCP et la readiness CAB, et vérifier l'absence d'approbation
+parasite. Si une API requise est indisponible ou si un compactage échoue,
+il SHALL conserver le
 cycle incomplet et signaler sa cause sans annoncer une synchronisation
-réussie. Ce cycle SHALL NOT créer une approbation, rejouer une opération,
+réussie. Ce seul écart SHALL NOT classer le RUN `BLOQUÉ`, arrêter CAB, demander
+une dérogation humaine ni différer les statistiques ; après réconciliation
+sûre, l'orchestrateur SHALL poursuivre les mandats déjà autorisés. Un compactage
+encore en cours ou une réconciliation impossible SHALL suspendre les opérations
+concernées selon le protocole CAB. L'orchestrateur SHALL NOT répéter aveuglément
+une opération d'effet inconnu ni attendre une API absente ; il SHALL réexaminer
+sa disponibilité à la prochaine échéance du cycle. Ce cycle SHALL NOT créer
+une approbation, rejouer une opération,
 changer le modèle ni fermer ou redémarrer les processus des agents.
 
 #### Scenario: Échéance entre deux mandats
 
-- **WHEN** l'échéance de 5 400 secondes est atteinte et aucun mandat n'est en cours
+- **WHEN** l'échéance de 5 400 secondes est atteinte, aucun mandat n'est en cours et les deux API natives sont disponibles
 - **THEN** l'orchestrateur déclenche les deux compactages en parallèle dans un même cycle et ne reprend qu'après leurs preuves natives et la réconciliation
 
 #### Scenario: Échéance pendant une exécution
 
 - **WHEN** l'échéance est atteinte pendant l'unique opération déjà autorisée
-- **THEN** l'orchestrateur laisse cette opération s'achever, traite son rapport, rend le retard observable et compacte les deux sessions avant tout nouveau mandat
+- **THEN** l'orchestrateur laisse cette opération s'achever, traite son rapport, rend le retard observable, compacte les sessions accessibles puis reprend après réconciliation sûre
 
 #### Scenario: Compactage de l'orchestrateur non prouvé
 
 - **WHEN** seule la session de codage ou une session auxiliaire est compactée, ou que l'API de l'orchestrateur réel est indisponible
-- **THEN** le cycle reste incomplet avec sa cause et aucune réussite conjointe n'est déclarée
+- **THEN** le cycle reste incomplet avec sa cause, aucune réussite conjointe n'est déclarée et le RUN poursuit ses mandats autorisés après réconciliation sûre sans dérogation ni report des statistiques
+
+#### Scenario: Aucun compactage disponible
+
+- **WHEN** aucune des deux API natives n'est exposée et les contextes, CAB et les permissions restent exploitables
+- **THEN** l'orchestrateur consigne les opérations non exécutées, poursuit le RUN sans attendre une API absente et réexamine la disponibilité à l'échéance suivante
+
+#### Scenario: Échec de compactage avec contexte préservé
+
+- **WHEN** un compactage échoue mais la réconciliation confirme la continuité du périmètre, des preuves et des permissions sans opération encore en cours
+- **THEN** l'échec reste observable et le RUN poursuit les mandats autorisés sans classement `BLOQUÉ` fondé sur ce seul échec
+
+#### Scenario: Réconciliation non sûre
+
+- **WHEN** un compactage reste en cours, le contexte est perdu, un mandat est ambigu ou une permission parasite subsiste
+- **THEN** l'orchestrateur suspend les opérations concernées et applique la récupération CAB sans inventer de preuve ni rejouer un mandat
 
 ### Requirement: Contrat de job durable et non secret
 

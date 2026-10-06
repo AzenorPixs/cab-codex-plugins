@@ -64,18 +64,32 @@ ne vaut jamais autorisation d’archiver un autre changement.
 
 ## Compactage coordonné toutes les 1 h 30
 
-L'orchestrateur pilote les deux sessions réellement actives, avec un cycle
-commun toutes les 5 400 secondes. À l'échéance, il gèle l'attribution de
-nouveaux mandats, attend la fin du mandat autorisé en cours et traite son
-rapport. Après checkpoint non secret, il déclenche en parallèle le compactage
-de l'orchestrateur et celui de l'agent de codage, sous un identifiant commun.
+Toutes les 5 400 secondes, terminer le mandat autorisé en cours, traiter son
+rapport et sauvegarder un checkpoint non secret. Vérifier les API natives
+réellement exposées pour les deux sessions actives. Si les deux sont
+disponibles, déclencher leurs compactages en parallèle sous un identifiant
+commun et observer leurs fins natives corrélées. Sinon, compacter seulement
+les sessions dont l'API est disponible et tracer les opérations non exécutées.
 
-Observer les deux résultats natifs et leurs identifiants avant toute reprise.
-Un accusé de lancement, un texte de résumé ou une session Codex auxiliaire ne
-prouve pas le compactage de l'orchestrateur. Une API absente ou un échec laisse
-le cycle incomplet et sa cause observable ; aucune réussite conjointe fictive.
-Réconcilier les deux contextes, OpenCode, MCP et la readiness CAB, sans
-permission parasite, changement de modèle, rejeu ou fermeture/redémarrage.
+Une API absente ou un échec conserve le cycle incomplet avec sa cause ; ne
+déclarer une réussite conjointe qu'avec les deux preuves natives. Un accusé de
+lancement, un résumé manuel ou une session auxiliaire ne remplace pas ces
+preuves. Après réconciliation des contextes, de la santé OpenCode, de MCP,
+de la readiness CAB et des permissions, poursuivre les mandats autorisés si
+l'état réel permet une reprise sûre, même si le compactage reste incomplet.
+Une API de compactage absente ne signifie pas une perte de contexte : utiliser
+la conversation active, le checkpoint et les preuves disponibles pour vérifier
+la continuité. Signaler les identifiants non exposés sans en inventer.
+
+L'indisponibilité ou l'échec du compactage ne suffit jamais, à lui seul, à
+classer le RUN `BLOQUÉ`, arrêter CAB, demander une dérogation au développeur ou
+différer les statistiques. Un compactage encore en cours ou un contexte perdu,
+un mandat ambigu ou une permission non corrélée suspend les opérations
+concernées selon les règles CAB habituelles. Ne pas relancer aveuglément un
+compactage dont l'effet est inconnu ni attendre une API absente : réexaminer
+sa disponibilité à l'échéance suivante, calculée depuis le cycle courant.
+Ce mécanisme ne change pas le modèle, ne rejoue pas de mandat et ne ferme ni
+ne redémarre les processus des agents.
 
 ## Statistiques obligatoires à chaque archivage
 
