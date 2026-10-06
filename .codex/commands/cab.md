@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.86.4
+version: 0.86.6
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -82,6 +82,17 @@ Le broker :
 
 ## `/cab start`
 
+Avant les étapes ci-dessous, appliquer intégralement
+`references/session-reset.md` depuis le skill `approval-bridge` du plugin
+CAB installé. Toute nouvelle session impose la purge complète du runtime CAB,
+y compris journal, approbations, anciens jobs, checkpoints et conflits
+Syncthing, sans lire ou restaurer l'ancien contenu. La commande autorise cette
+purge des seuls espaces CAB, après preuve d'inactivité, arrêt des ressources
+et déconnexion native du broker ; elle ne ferme pas OpenCode. Le plugin
+distribue `scripts/cgpt-approval-bridge-reset.py` pour l'exécution contrôlée.
+Une purge échouée ou incomplète impose `CAB_INACTIF`, sans premier mandat.
+La reprise du même RUN conserve ses preuves et ne relance pas cette purge.
+
 1. Vérifie qu’OpenCode répond sur `127.0.0.1:4096`.
 2. Vérifie que la configuration OpenCode déclare `cgpt-validation` comme serveur MCP local `stdio`.
 3. Consulte l’état MCP du serveur OpenCode par `GET /mcp`. Cette API est la seule source de vérité pour les sessions persistantes ; une sortie de CLI ou un état mémorisé ne suffit pas.
@@ -94,7 +105,7 @@ Le broker :
 10. Vérifie le contrôleur Codex sur son interface locale.
 11. Démarre explicitement le superviseur utilisateur par `systemctl --user start cgpt-approval-bridge-supervisor.service`, puis vérifie son statut local. Il utilise `Restart=on-failure`, sans activation au login, et ne prend aucune décision CAB.
 12. Établit et maintient le SSE HTTP direct OpenCode `/global/event`.
-13. Crée ou réutilise une unique session de codage OpenCode persistante avec l’API native `POST /session`. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
+13. Crée une nouvelle et unique session de codage OpenCode persistante pour ce nouveau RUN avec l’API native `POST /session`. Réutilise la session uniquement pour une reprise du même RUN. Conserve et affiche son identifiant ; elle est l’unique canal des mandats de codage jusqu’à la clôture du job.
 14. Adresse les mandats exclusivement à cette session via `POST /session/<id>/message`. Aucun appel CLI éphémère ne peut transmettre ou exécuter un mandat de codage. La session doit rester visible au développeur dans OpenCode.
 15. Dans cette session, appelle `broker_readiness` sans lecture, commande ni écriture du projet.
 16. Accepte comme états possibles : `READY`, `DEGRADED`, `BLOCKED`, `HUMAN_REQUIRED`.

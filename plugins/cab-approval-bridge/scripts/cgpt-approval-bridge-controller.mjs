@@ -782,7 +782,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.86.4",
+      version: "0.86.6",
     },
   });
 
@@ -892,6 +892,13 @@ async function persistReminderNotification(reminder, reason) {
 }
 
 async function notifyOrchestrator(reminder) {
+  if (decisionMode === "manual") {
+    updateStatus("validation-awaiting-manual-decision", {
+      requestId: reminder.requestId,
+    });
+    return;
+  }
+
   const threadId = await ensureThread();
   const prompt = [
     "RAPPEL_CAB",

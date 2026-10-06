@@ -24,6 +24,7 @@ CAB/
 │   ├── systemd/cgpt-approval-bridge-controller.service
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-reset.py
 │       ├── cgpt-approval-bridge-healthcheck.mjs
 │       └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── src/                 # bridge Python
@@ -110,11 +111,19 @@ skills/approval-bridge/SKILL.md
 skills/coding-session-statistics/SKILL.md
 skills/coding-session-statistics/agents/openai.yaml
 scripts/cgpt-approval-bridge-controller.mjs
+scripts/cgpt-approval-bridge-reset.py
 scripts/cgpt-approval-bridge-healthcheck.mjs
 scripts/cgpt-approval-bridge-opencode-sse-client.mjs
 ```
 
 Le catalogue `.agents/plugins/marketplace.json` référence ce plugin.
+
+Le plugin embarque aussi la référence `skills/approval-bridge/references/session-reset.md`
+et l'outil Python de purge, sans dépendance tierce. `/cab start` les résout
+depuis le plugin installé avant toute nouvelle session. Ils ne doivent pas
+être copiés depuis un ancien cache divergent. L'outil reste dans le paquet ;
+ses cibles sont seulement les espaces runtime CAB résolus, jamais le paquet
+ou les sources du projet piloté.
 
 Le plugin distribue aussi un modèle d'unité systemd utilisateur. Son
 installation effective est différée au premier `/cab start` : la commande
@@ -148,16 +157,17 @@ configuration Codex ; seule la migration réversible de la marketplace CAB est
 admise.
 
 La vérification d'intégration de la release doit confirmer que `/cab start`
-observe l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que
-`/cab test` utilise la session de codage persistante créée ou reprise au
-démarrage.
+purge complètement l'ancien runtime avant une nouvelle session, observe
+l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que `/cab test`
+utilise la nouvelle session maîtresse. Une reprise du même RUN doit préserver
+ses preuves et sa session sans purge.
 
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.
 
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `0.86.4` pour le broker,
+artefacts distribués. La version de base actuelle est `0.86.6` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 

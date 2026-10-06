@@ -15,6 +15,7 @@ CAB/
 │   ├── skills/coding-session-statistics/SKILL.md
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-reset.py
 │       ├── cgpt-approval-bridge-healthcheck.mjs
 │       └── cgpt-approval-bridge-opencode-sse-client.mjs
 ├── src/
@@ -31,7 +32,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.86.4` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.86.6` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -78,6 +79,30 @@ Un checkpoint HMAC-SHA256 optionnel peut authentifier la tête du journal :
 ```
 
 Les clés ne sont jamais exposées dans les interfaces de statut.
+
+### 4.4 Durée de vie et purge d'une nouvelle session
+
+La persistance et le journal append-only s'appliquent pendant le RUN et sa
+reprise. Avant chaque nouvelle session CAB, `/cab start` applique la procédure
+`references/session-reset.md` du skill distribué : inactivité prouvée, arrêt
+des ressources CAB, déconnexion native du broker, purge complète puis
+reconnexion et nouveau prévol. La cohérence de l'ancien état n'est pas une
+précondition de sa purge ; aucune ancienne décision n'est restaurée.
+
+Le script distribué `cgpt-approval-bridge-reset.py` reçoit
+`--confirm-new-session` et un `--state-dir` absolu par espace CAB réellement
+résolu. Le broker utilise par défaut le home OpenCode et les autres composants
+le workspace ; les chemins ci-dessus sont des exemples, pas une résolution
+de ces emplacements. Tous les chemins personnalisés doivent être couverts.
+L'outil refuse les cibles non dédiées, symboliques, imbriquées ou les verrous
+occupés/non ordinaires/à liens matériels avant toute suppression. Il ne lit
+aucun ancien contenu et ne suit pas les liens internes.
+
+La purge efface également les checkpoints, anciens jobs, rappels, états de
+remédiation et conflits Syncthing. Seul l'inode de `broker.instance.lock` reste
+vide, verrouillé jusqu'à la fin de la purge. Un état recréé ou une erreur
+interdit le démarrage. Sources, secrets, configurations, rapports et historiques
+natifs des agents restent hors purge. Une reprise du même RUN ne purge rien.
 
 ## 5. États d'approbation
 
@@ -184,8 +209,9 @@ réinitialise l'instance OpenCode par `POST /instance/dispose`, attend une
 nouvelle healthcheck et ne crée aucune session avant le rétablissement. CAB ne
 termine ni ne démarre directement le broker, qui est détenu par OpenCode.
 
-Après ce contrôle, CAB crée ou réutilise une session de codage persistante par
-`POST /session` et transmet les mandats uniquement par
+Après la purge d'un nouveau RUN et ce contrôle, CAB crée une nouvelle session
+maîtresse persistante par `POST /session` ; seule une reprise du même RUN
+réutilise sa session. CAB transmet les mandats uniquement par
 `POST /session/<id>/message`. Le test de bout en bout et le travail ultérieur
 restent dans cette session visible du développeur.
 
@@ -216,11 +242,13 @@ de compactage conjoint est déjà implémenté dans le contrôleur.
 Le broker publie périodiquement cette readiness au contrôleur local.
 
 Lorsqu'un mandat notifié reste PENDING sans décision, le broker adresse aussi
-au contrôleur une relance corrélée toutes les trente secondes. Le contrôleur
-transmet l'événement à sa tâche orchestratrice, planifie un heartbeat de
-reprise si nécessaire et conserve une notification locale persistante lorsque
-le réveil reste indisponible. Cette relance ne constitue jamais une décision
-ni une permission OpenCode.
+au contrôleur une relance corrélée toutes les trente secondes. En mode
+manuel, le contrôleur signale le rappel dans son statut sans créer de thread
+ni de tour Codex ; seul l'orchestrateur principal publie la décision HTTP.
+La même garde protège les heartbeats de relance. En mode automatique, le
+contrôleur conserve la transmission à sa tâche orchestratrice, le heartbeat
+de reprise et la notification locale persistante en cas d'indisponibilité.
+Cette relance ne constitue jamais une décision ni une permission OpenCode.
 
 Le healthcheck vérifie la santé OpenCode, le contrôleur, le superviseur, Codex
 App Server, le SSE OpenCode et la fraîcheur de `broker_readiness`. Un état
@@ -306,8 +334,9 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 - `OC_Codex_STATUS_PORT`
 - `OC_Codex_RECONNECT_MS`
 - `OC_Codex_DECISION_MODE` : `manual` par défaut ou `automatic` pour
-  conserver les demandes PENDING jusqu'à une décision corrélée sur l'interface
-  HTTP locale
+  utiliser le chemin de décision existant via Codex App Server ; en mode
+  manuel, les demandes restent PENDING jusqu'à une décision HTTP explicite,
+  et les rappels ne lancent aucun thread ni tour Codex auxiliaire
 - `OC_Codex_CONTROLLER_URL`
 - `OC_Codex_SUPERVISOR_URL`
 - `OC_Codex_SUPERVISOR_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
@@ -328,8 +357,9 @@ cycle de vie des ressources de communication CAB. Elle ne remplace pas le
 broker, ne rend pas de décision d'approbation et ne modifie pas le projet
 piloté.
 
-- `/cab start` vérifie `/mcp`, initialise ou reprend le contrôleur et la
-  supervision, puis crée ou réutilise une session de codage persistante ;
+- `/cab start` purge les seuls anciens états CAB après contrôle d'inactivité,
+  vérifie `/mcp`, initialise la supervision et crée une nouvelle session
+  maîtresse ; la reprise du même RUN conserve son état ;
 - `/cab run` arme un contrat de job durable et actualise ses jalons avant de
   transmettre les mandats ; le superviseur reprend cette même session tant que
   le gate terminal reste ouvert ;

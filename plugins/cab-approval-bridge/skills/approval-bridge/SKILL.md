@@ -24,7 +24,7 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - Après reconnexion SSE ou divergence, réconcilier l’état réel par HTTP auprès d’OpenCode.
 - Les validations normales passent par MCP stdio.
 - L’état `GET /mcp` du serveur OpenCode est la source de vérité de connexion MCP pour les sessions persistantes ; une sortie CLI ne peut pas s’y substituer.
-- Une session de codage persistante est créée ou réutilisée avec l’API native OpenCode après confirmation de `cgpt-validation: connected`. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
+- Une nouvelle session CAB purge entièrement son ancien état technique et crée une nouvelle session maîtresse après confirmation de `cgpt-validation: connected`. La réutilisation d'une session concerne seulement la reprise du même RUN. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
 - Chaque opération OpenCode nécessitant une permission native constitue un mandat unitaire. Avant cette opération, l’agent soumet `request_validation` avec l’identifiant de session, le répertoire cible et exactement un fichier relatif ou une commande complète. Le contrôleur ne transmet `once` qu’après une décision CAB `approved` explicite et corrélée à ce mandat unique ; cette décision est consommée après une seule permission native correspondante.
 - La fin d’un tour OpenCode ne constitue pas la fin du job : conserver la boucle de pilotage et transmettre le mandat suivant dans la même session jusqu’à un état terminal explicite.
 - Ne jamais lire, journaliser ou afficher de secret.
@@ -108,6 +108,12 @@ agents. Cette obligation ne remplace pas l'autorisation d'archivage.
 
 ## Ordre de mise en place
 
+Avant toute nouvelle session, appliquer intégralement la
+[procédure de purge](references/session-reset.md). Elle est obligatoire quel
+que soit l'ancien état, y compris en présence de conflits Syncthing. Le script
+`../../scripts/cgpt-approval-bridge-reset.py` est fourni par ce plugin.
+Une reprise du même RUN conserve son état et commence par la réconciliation.
+
 1. Vérifier `GET /global/health` d’OpenCode.
 2. Vérifier que `cgpt-validation` est déclaré comme MCP local `stdio`.
 3. Vérifier `GET /mcp` et exiger `cgpt-validation: connected`.
@@ -118,7 +124,7 @@ agents. Cette obligation ne remplace pas l'autorisation d'archivage.
 8. Installer ou actualiser les ressources utilisateur du contrôleur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
 9. Vérifier le statut local du contrôleur.
 10. Démarrer ou maintenir le SSE direct OpenCode.
-11. Créer ou réutiliser une session OpenCode persistante via `POST /session`, conserver son identifiant et adresser tous les mandats par `POST /session/<id>/message`.
+11. Créer une nouvelle session maîtresse pour un nouveau RUN via `POST /session` ; réutiliser la session seulement pour une reprise du même RUN. Conserver son identifiant et adresser tous les mandats par `POST /session/<id>/message`.
 12. Appeler `broker_readiness` dans cette session, sans accès au projet.
 13. Interpréter `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`.
 14. Réconcilier l’état OpenCode via HTTP après chaque reconnexion ou divergence, puis revalider `/mcp` avant tout mandat.

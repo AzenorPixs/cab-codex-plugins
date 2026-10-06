@@ -194,6 +194,18 @@ afficher ou transmettre de secret.
 
 #### Initialisation de session
 
+Avant chaque nouvelle session CAB, l'orchestrateur DOIT appliquer la purge
+complète définie par le skill `approval-bridge` et la commande `/cab start`.
+Il DOIT prouver l'inactivité du contexte, arrêter les ressources CAB et
+déconnecter le broker par l'API native OpenCode avant de purger les seuls
+espaces runtime CAB, y compris leurs conflits Syncthing, sans lire ni
+restaurer leur ancien contenu. Une purge échouée interdit le démarrage.
+L'orchestrateur NE DOIT PAS fermer OpenCode, effacer un RUN actif ou toucher
+les sources, secrets, configurations, rapports et historiques natifs.
+La reprise du même RUN conserve son état ; elle ne constitue pas un nouveau
+démarrage. La nouvelle session utilise de nouveaux identifiants et exige une
+readiness réelle et un test CAB complet avant tout mandat de travail.
+
 Avant tout accès au projet, l'agent DOIT :
 
 1. confirmer le répertoire, le change OpenSpec et le périmètre reçus ;

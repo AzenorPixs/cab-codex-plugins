@@ -4,6 +4,23 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Rappels en mode manuel : aucun thread ni tour Codex auxiliaire ; la
+  décision reste réservée à l'orchestrateur principal sur l'interface HTTP.
+  Mode automatique, corrélation et consommation unique préservés.
+- Régression HTTP des rappels répétés, de l'absence de RPC Codex et de la
+  décision explicite unique. Incrément de toutes les briques versionnées
+  de `0.86.5` à `0.86.6`, sans changement des schémas ni du protocole MCP.
+- Nouvelle session CAB : purge complète de l'ancien runtime, incluant
+  approbations, journal, checkpoints, jobs, rappels et conflits Syncthing.
+  La persistance reste assurée pendant un RUN et sa reprise.
+- Outil de purge distribué avec le plugin, contrôles d'inactivité et de
+  verrou avant suppression, refus des cibles invalides et protection des
+  fichiers extérieurs. Nouvelle session maîtresse et test CAB obligatoire.
+- Alignement du protocole AGENTS, de la skill, de `/cab start` et des cadrages.
+- Incrément des briques CAB de `0.86.4` à `0.86.5` ; schémas et protocole MCP
+  inchangés. Suppression historique sans sauvegarde acceptée ; aucune
+  publication ou modification Syncthing incluse.
+
 ## 0.86.4 - 2026-10-05
 
 - Recherches de présence indexées dans les appels de liste d'approbations :

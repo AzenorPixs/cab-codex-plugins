@@ -98,12 +98,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.86\.4$/m);
-  assert.match(manifest, /"version": "0\.86\.4\+codex\./);
-  assert.match(controller, /version: "0\.86\.4"/);
-  assert.match(supervisor, /const version = "0\.86\.4"/);
-  assert.match(broker, /SERVER_VERSION = "0\.86\.4"/);
-  assert.match(project, /^version = "0\.86\.4"$/m);
+  assert.match(command, /^version: 0\.86\.6$/m);
+  assert.match(manifest, /"version": "0\.86\.6\+codex\./);
+  assert.match(controller, /version: "0\.86\.6"/);
+  assert.match(supervisor, /const version = "0\.86\.6"/);
+  assert.match(broker, /SERVER_VERSION = "0\.86\.6"/);
+  assert.match(project, /^version = "0\.86\.6"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {

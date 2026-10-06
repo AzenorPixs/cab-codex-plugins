@@ -32,11 +32,12 @@ Avant de créer une session de codage, `/cab start` SHALL consulter `GET /mcp`
 du serveur OpenCode et exiger que `cgpt-validation` soit `connected`. En cas
 d'échec, elle MAY réinitialiser l'instance par `POST /instance/dispose`, puis
 SHALL attendre un état sain ; elle SHALL ne jamais démarrer ni arrêter le
-broker directement. Après ce contrôle, elle SHALL créer ou réutiliser une
-session OpenCode persistante et SHALL transmettre les mandats par la
-messagerie native de cette session.
+broker directement. Après la purge d'un nouveau RUN et ce contrôle, elle SHALL créer une nouvelle
+session maîtresse OpenCode persistante. Elle MAY réutiliser la session seulement
+pour la reprise du même RUN, sans purge. Elle SHALL transmettre les mandats par
+la messagerie native de cette session.
 
-Après la preuve MCP et avant de créer ou réutiliser cette session persistante,
+Après la preuve MCP et avant de créer cette session persistante,
 `/cab start` SHALL vérifier le fournisseur, le modèle et le niveau de
 raisonnement effectivement configurés pour l'agent de codage ciblé. Elle SHALL
 vérifier leur disponibilité via l'API OpenCode, soumettre une requête
@@ -81,7 +82,7 @@ signalée comme telle sans être déduite d'une autre source.
 
 #### Scenario: Démarrage CAB
 - **WHEN** `/cab start` est exécutée
-- **THEN** elle vérifie `/mcp`, initialise ou reprend le contrôleur et la supervision CAB, puis crée ou réutilise une session persistante sans prendre de décision métier
+- **THEN** elle purge le runtime selon le contrat de nouvelle session, vérifie `/mcp`, initialise le contrôleur et la supervision CAB, puis crée une nouvelle session maîtresse sans prendre de décision métier
 
 #### Scenario: MCP non connecté
 - **WHEN** `GET /mcp` ne présente pas `cgpt-validation` comme `connected`
@@ -89,7 +90,7 @@ signalée comme telle sans être déduite d'une autre source.
 
 #### Scenario: Prévol conforme du modèle OpenCode
 - **WHEN** le MCP est connecté et que le prévol constate une réponse avec le fournisseur, le modèle et le raisonnement configurés
-- **THEN** `/cab start` clôt la session temporaire et peut créer ou réutiliser la session persistante
+- **THEN** `/cab start` clôt la session temporaire et peut créer la nouvelle session maîtresse
 
 #### Scenario: Prévol divergent ou indisponible
 - **WHEN** le prévol ne peut pas confirmer le fournisseur, le modèle ou le raisonnement configurés
@@ -162,21 +163,79 @@ superviseur SHALL annoncer la même version de base.
   l'active pas pour le login
 
 ### Requirement: Skill de statistiques embarqué dans CAB
-
 Le plugin `cab-approval-bridge` SHALL distribuer le skill
 `coding-session-statistics` et ses métadonnées sous son répertoire `skills/`.
 Son installation SHALL rendre ce skill disponible sans plugin Tools Codex
 et sans skill `cgpt` externe. Le protocole et la commande CAB SHALL imposer
 sa production de statistiques après chaque archivage réussi selon
 `archive-session-statistics`. Les composants versionnés SHALL partager la
-version de base `0.85.2`, le plugin pouvant ajouter un cachebuster Codex.
+version de base `0.86.6`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
-
 - **WHEN** le plugin CAB est installé depuis sa marketplace
-- **THEN** les skills `approval-bridge` et `coding-session-statistics` sont présents dans le paquet et résolus depuis son manifeste
+- **THEN** les skills `approval-bridge` et `coding-session-statistics` sont
+  présents dans le paquet et résolus depuis son manifeste
 
 #### Scenario: Release cohérente
-
 - **WHEN** la release est validée
-- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.85.2`
+- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande
+  annoncent tous la version de base `0.86.6`
+
+### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
+La commande `/cab start` et la skill du plugin SHALL imposer la purge complète
+des espaces runtime CAB avant chaque nouvelle session, quelle que soit la
+quantité ou la cohérence de leurs traces précédentes. Une reprise du même RUN,
+un compactage, une reconnexion ou les sous-commandes `run`, `test`, `update` et
+`stop` SHALL conserver l'état courant sans déclencher cette purge.
+
+#### Scenario: Ancien état disponible
+- **WHEN** `/cab start` ouvre une nouvelle session et aucun travail précédent n'est actif
+- **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur
+- **AND** aucune ancienne session maîtresse ou décision n'est réadoptée
+
+#### Scenario: Reprise du même RUN
+- **WHEN** CAB réconcilie le même RUN après interruption, compactage ou reconnexion
+- **THEN** il conserve les preuves et demandes de ce RUN sans purge
+
+#### Scenario: Sous-commande sans nouveau démarrage
+- **WHEN** `/cab run`, `/cab test`, `/cab update` ou `/cab stop` est exécutée
+- **THEN** elle ne déclenche pas une purge de début de session
+
+### Requirement: Arrêt contrôlé avant purge
+L'orchestrateur SHALL prouver la propriété et l'inactivité du contexte, sans
+RUN actif, session occupée, mandat en cours ou permission native non résolue.
+Il SHALL arrêter les ressources CAB, déconnecter le broker par l'API native
+OpenCode et vérifier son verrou avant toute purge. Il SHALL NOT tuer ou lancer
+directement le broker ni fermer ou redémarrer le processus OpenCode.
+
+#### Scenario: Travail actif ou inactivité non prouvée
+- **WHEN** un travail ou une permission reste actif, ou que la propriété et l'inactivité du contexte ne sont pas prouvées
+- **THEN** CAB refuse la purge et signale la cause sans effacer l'état
+
+### Requirement: Outil de purge distribué et borné
+Le plugin SHALL distribuer `scripts/cgpt-approval-bridge-reset.py`. L'outil
+SHALL exiger une confirmation de nouvelle session et contrôler toutes les
+cibles avant suppression. Il SHALL refuser les chemins relatifs, traversants,
+non dédiés, symboliques ou imbriqués et les verrous occupés, non ordinaires ou
+à liens matériels. Une erreur ou un état recréé SHALL interdire le démarrage.
+
+#### Scenario: Verrou détenu ou cible invalide
+- **WHEN** un broker conserve le verrou ou une cible de purge est invalide
+- **THEN** l'outil échoue avant toute suppression
+- **AND** une cible déjà contrôlée conserve ses données
+
+#### Scenario: Purge échouée
+- **WHEN** une suppression échoue ou qu'un autre processus recrée l'état
+- **THEN** l'outil signale l'échec et CAB ne démarre pas une session sur cet état partiel
+
+### Requirement: Prévol neuf après purge
+Après la purge, CAB SHALL reconnecter le broker par OpenCode, vérifier le
+contexte et le modèle et créer une nouvelle session maîtresse. Avant tout
+travail, il SHALL exiger un appel réel à broker_readiness donnant READY sans
+demande ou permission parasite, puis un test CAB complet avec un requestId
+inédit, une décision explicite, une réponse MCP corrélée et l'exécution unique
+de true. Aucune ancienne preuve SHALL valider ce prévol.
+
+#### Scenario: Nouvelle session vérifiée
+- **WHEN** la purge réussit et CAB ouvre une nouvelle session maîtresse
+- **THEN** seuls les résultats de sa readiness et de son test CAB complet autorisent le premier mandat
