@@ -144,3 +144,14 @@ SHALL être journalisées dans le magasin local du superviseur.
 - **WHEN** un client local consulte l'état d'un job dont le gate est ouvert
 - **THEN** il reçoit l'état de supervision et la raison de non-terminalité sans
   contenu de projet, secret ni décision détaillée
+
+### Requirement: Gel des relances pendant une récupération
+Le superviseur MUST suspendre les messages de reprise lorsque le contrat expose une récupération en cours. Il MUST NOT relancer l'ancienne session ou la candidate pendant le prévol. Après transfert confirmé, il MUST suivre exclusivement la nouvelle session du même job et conserver le gate OPEN. Il MUST NOT créer la session candidate ni décider le transfert.
+
+#### Scenario: Récupération préparée
+- **WHEN** le contrat expose une récupération préparée non terminée
+- **THEN** le superviseur attend avec une cause observable sans envoyer de message
+
+#### Scenario: Récupération terminée
+- **WHEN** le contrôleur a confirmé le transfert
+- **THEN** le superviseur reprend ses contrôles sur la nouvelle session sans relancer l'ancienne

@@ -4,6 +4,18 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Récupération explicite de session dans le même job par `/job/recover`, en
+  deux phases avec contexte et prévol natif vérifiés. Jalons, périmètre et
+  corrélation stricte conservés ; anciennes autorisations invalidées, gate
+  ouvert et gel persistant en cas de preuve manquante.
+- Refus des validations hors session, suspension du superviseur pendant le
+  prévol et verrou des outils natifs pour les mandats lecture seule.
+- Tests HTTP isolés de récupération, de refus, de concurrence et de reprise.
+  Correctif source sans publication, installation ni nouvelle dépendance.
+- Alignement du broker, du contrôleur, du superviseur, du plugin, de la
+  commande `/cab` et du projet sur `0.86.7` pour ce correctif, avec nouveau
+  cachebuster du plugin. Schémas de persistance et protocole MCP inchangés.
+
 - Rappels en mode manuel : aucun thread ni tour Codex auxiliaire ; la
   décision reste réservée à l'orchestrateur principal sur l'interface HTTP.
   Mode automatique, corrélation et consommation unique préservés.

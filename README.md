@@ -111,6 +111,19 @@ commande système, commande OpenSpec ou opération d’archivage est soumise par
 OpenCode comme mandat unitaire, puis exécutée seulement après une décision
 Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
 
+En cas de récupération sans effet non maîtrisé, l'orchestrateur peut remplacer
+la session par `POST /job/recover` (`prepare`, puis `complete`) après contrôles
+techniques et prévol CAB réservé. Le RUN reste ouvert ; le job, le périmètre et
+le dernier jalon sont conservés. Le superviseur suspend les relances pendant
+le gel et suit ensuite la nouvelle session. Les anciennes autorisations
+exécutables ne sont jamais réutilisées. Un échec ou une preuve locale perdue
+après redémarrage conserve le gel sans fabriquer de réussite. Voir
+`TECHNICAL.md` et le protocole de la skill pour le contrat détaillé.
+
+Les mandats lecture seule désactivent explicitement les outils natifs et
+d'écriture dans le message OpenCode. Les opérations suivantes gardent leurs
+permissions natives et décisions CAB unitaires.
+
 `/cab stop` exige un gate terminal validé, arrête explicitement le superviseur
 puis le contrôleur et les ressources CAB qu'elle a créées, sans fermer OpenCode
 ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
@@ -258,7 +271,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.86.6`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.86.7`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
