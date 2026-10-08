@@ -98,12 +98,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.86\.6$/m);
-  assert.match(manifest, /"version": "0\.86\.6\+codex\./);
-  assert.match(controller, /version: "0\.86\.6"/);
-  assert.match(supervisor, /const version = "0\.86\.6"/);
-  assert.match(broker, /SERVER_VERSION = "0\.86\.6"/);
-  assert.match(project, /^version = "0\.86\.6"$/m);
+  assert.match(command, /^version: 0\.86\.7$/m);
+  assert.match(manifest, /"version": "0\.86\.7\+codex\./);
+  assert.match(controller, /version: "0\.86\.7"/);
+  assert.match(supervisor, /const version = "0\.86\.7"/);
+  assert.match(broker, /SERVER_VERSION = "0\.86\.7"/);
+  assert.match(project, /^version = "0\.86\.7"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -170,4 +170,20 @@ test("le protocole exige un rapport par archive et empêche une clôture sans pr
   assert.match(run, /Ne demande pas la clôture normale `TERMINÉ` sans preuve du rapport/);
   assert.match(run, /Si l'archivage échoue/);
   assert.match(run, /`BLOQUÉ` ou un arrêt explicite/);
+});
+
+test("le protocole distribué protège la lecture seule et décrit la récupération explicite", () => {
+  for (const path of [
+    new URL("../.codex/commands/cab.md", import.meta.url),
+    new URL("../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md", import.meta.url),
+  ]) {
+    const protocol = readFileSync(path, "utf8");
+    for (const tool of ["bash", "edit", "write", "apply_patch", "task", "skill"]) {
+      assert.ok(protocol.includes(`"${tool}":false`));
+    }
+    assert.match(protocol, /POST \/job\/recover/);
+    assert.match(protocol, /phase: "prepare"/);
+    assert.match(protocol, /phase: "complete"/);
+    assert.match(protocol, /permissions natives\n`ask`/);
+  }
 });

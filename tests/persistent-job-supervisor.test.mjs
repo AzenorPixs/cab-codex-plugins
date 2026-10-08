@@ -256,3 +256,59 @@ test("restaure l'état persistant de supervision après redémarrage", async (co
 
   assert.equal(status.lastResumeAttempt.result, "sent");
 });
+
+test("gèle les relances pendant la récupération et suit ensuite la session transférée", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "cab-supervisor-recovery-"));
+  const controllerPort = await availablePort();
+  const opencodePort = await availablePort();
+  const supervisorPort = await availablePort();
+  const messages = [];
+  const job = {
+    jobId: "job-recovery-supervisor", sessionId: "ses_old", directory,
+    criteria: ["preuve"], armed: true, terminalGate: { status: "OPEN" },
+    recovery: { sessionId: "ses_new" },
+  };
+  const controller = createServer((request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(request.url === "/status" ? controllerStatus() : job));
+  });
+  await new Promise((resolve) => controller.listen(controllerPort, "127.0.0.1", resolve));
+  const opencode = createServer(async (request, response) => {
+    if (request.url === "/global/event") {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      return;
+    }
+    if (request.method === "POST") {
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      messages.push({ url: request.url, body: JSON.parse(body) });
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ id: "ses_new", directory }));
+  });
+  await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
+  const supervisor = spawn(process.execPath, [supervisorPath], {
+    env: { ...process.env, OC_Codex_WORKSPACE: directory,
+      OC_Codex_CONTROLLER_URL: `http://127.0.0.1:${controllerPort}`,
+      OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
+      OC_Codex_SUPERVISOR_STATUS_PORT: String(supervisorPort),
+      OC_Codex_SUPERVISOR_RESUME_DELAY_MS: "1000", OC_Codex_SUPERVISOR_POLL_INTERVAL_MS: "250" },
+    stdio: "ignore",
+  });
+  context.after(async () => {
+    const stopped = new Promise((resolve) => supervisor.once("exit", resolve));
+    supervisor.kill("SIGTERM"); await stopped;
+    controller.closeAllConnections(); opencode.closeAllConnections();
+    await new Promise((resolve) => controller.close(resolve));
+    await new Promise((resolve) => opencode.close(resolve));
+    rmSync(directory, { force: true, recursive: true });
+  });
+  await delay(1300);
+  assert.deepEqual(messages, []);
+  const status = await (await fetch(`http://127.0.0.1:${supervisorPort}/status`)).json();
+  assert.equal(status.reason, "session-recovery-pending");
+  job.sessionId = "ses_new"; job.recovery = null;
+  await waitFor(() => messages.length === 1, "La session transférée n'a pas été suivie.");
+  assert.equal(messages[0].url, "/session/ses_new/message");
+  assert.match(messages[0].body.parts[0].text, /REPRISE_CAB_SUPERVISEUR/);
+});

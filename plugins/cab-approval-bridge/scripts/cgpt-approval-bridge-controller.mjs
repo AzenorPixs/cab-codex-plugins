@@ -87,6 +87,7 @@ const unmatchedNativePermissions = new Map();
 const reminderNotifications = new Map();
 let job = null;
 let jobPersistence = Promise.resolve();
+let recoveryTransitionInFlight = false;
 
 try {
   const persisted = JSON.parse(readFileSync(reminderStatePath, "utf8"));
@@ -141,6 +142,9 @@ function publicJob() {
     armedAt: job.armedAt,
     updatedAt: job.updatedAt,
     disarmedAt: job.disarmedAt || null,
+    recovery: job.recovery || null,
+    recoveryHistory: job.recoveryHistory || [],
+    revokedSessions: job.revokedSessions || [],
     terminalGate: { ...terminalGate },
   };
 }
@@ -179,6 +183,7 @@ function resetTerminalGate(reason, persist = true) {
 }
 
 function terminalGateFailure(declaredState) {
+  if (job?.recovery && declaredState !== "BLOQUÉ") return "session-recovery-pending";
   if (!new Set(["TERMINÉ", "BLOQUÉ"]).has(declaredState)) return "terminal-state-required";
   if (status.activeValidations.length > 0) return "active-validations";
   if (!status.brokerReadiness) return "broker-readiness-missing";
@@ -305,8 +310,196 @@ function approvedOperation(approval) {
   );
 }
 
+function operationAllowed(operation, requestId) {
+  if (recoveryTransitionInFlight) return false;
+  if (job?.revokedSessions?.includes(operation?.sessionId)) return false;
+  if (!job?.armed) return true;
+  if (!operation || operation.directory !== job.directory) return false;
+  if (job.recovery) {
+    return operation.sessionId === job.recovery.sessionId &&
+      requestId === job.recovery.preflightRequestId &&
+      operation.kind === "bash" && operation.target === "/usr/bin/true";
+  }
+  return operation.sessionId === job.sessionId;
+}
+
+function recoveryFailure(reason) {
+  throw new Error(reason);
+}
+
+async function recoveryJson(path) {
+  const response = await fetch(
+    `${opencodeUrl}${path}?directory=${encodeURIComponent(job.directory)}`,
+    { signal: AbortSignal.timeout(10_000) }
+  );
+  if (!response.ok) recoveryFailure("opencode-control-unavailable");
+  return response.json();
+}
+
+async function checkRecoveryContext(candidate) {
+  if (!job?.armed || terminalGate.status !== "OPEN") recoveryFailure("job-not-recoverable");
+  if (job.currentCabMandate) recoveryFailure("current-mandate-not-closed");
+  if (reconcilingPermissions.size || active.size || reminderNotifications.size) {
+    recoveryFailure("validation-in-flight");
+  }
+  for (const validation of validations.values()) {
+    if (!httpDecisions.has(validation.requestId)) recoveryFailure("undecided-validation");
+  }
+  if (status.brokerReadiness?.status !== "READY" ||
+      Number(status.brokerReadiness.pending_count) !== 0) {
+    recoveryFailure("broker-not-ready");
+  }
+  const health = await recoveryJson("/global/health");
+  const path = await recoveryJson("/path");
+  const mcp = await recoveryJson("/mcp");
+  const busy = await recoveryJson("/session/status");
+  const permissions = await recoveryJson("/permission");
+  if (health.healthy !== true || path.directory !== job.directory ||
+      mcp["cgpt-validation"]?.status !== "connected") {
+    recoveryFailure("opencode-context-divergent");
+  }
+  if (!Array.isArray(permissions) || permissions.length) recoveryFailure("native-permissions-unresolved");
+  if (!busy || typeof busy !== "object" || Array.isArray(busy)) recoveryFailure("session-status-invalid");
+  for (const id of [job.sessionId, candidate.sessionId]) {
+    const session = await recoveryJson(`/session/${encodeURIComponent(id)}`);
+    if (session.id !== id || session.directory !== job.directory) recoveryFailure("session-context-divergent");
+    if (busy[id] && busy[id].type !== "idle") recoveryFailure("session-not-idle");
+  }
+}
+
+async function checkRecoveryPreflight(recovery) {
+  const validation = validations.get(recovery.preflightRequestId);
+  const decision = httpDecisions.get(recovery.preflightRequestId);
+  if (!validation || decision?.decision !== "approved" ||
+      !validation.operationConsumed || validation.operationInvalidated ||
+      validation.operation?.sessionId !== recovery.sessionId ||
+      validation.operation?.directory !== job.directory ||
+      validation.operation?.target !== "/usr/bin/true") {
+    recoveryFailure("preflight-permission-not-consumed");
+  }
+  const messages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  if (!Array.isArray(messages)) recoveryFailure("preflight-messages-invalid");
+  let submitted = false;
+  let approvalEnd = null;
+  let commandEnd = null;
+  let ready = false;
+  let commandCount = 0;
+  for (const message of messages) {
+    if (!Array.isArray(message.parts)) recoveryFailure("preflight-messages-invalid");
+    for (const part of message.parts) {
+      if (part.type !== "tool") continue;
+      const state = part.state;
+      const approvalTool = ["cgpt-validation_request_validation", "cgpt-validation_poll_approval",
+        "cgpt-validation_get_approval"].includes(part.tool);
+      if (part.tool === "cgpt-validation_request_validation") {
+        const input = state?.input;
+        if (submitted || input?.requestId !== recovery.preflightRequestId ||
+            input.approval_id !== validation.approvalId || input.change_id !== validation.changeId ||
+            input.session_id !== recovery.sessionId || input.directory !== job.directory ||
+            JSON.stringify(input.files) !== "[]" || JSON.stringify(input.commands) !== '["/usr/bin/true"]') {
+          recoveryFailure("preflight-request-divergent");
+        }
+        submitted = true;
+        // Un délai MCP ne remplace pas la preuve : un polling corrélé doit encore réussir.
+        if (state.status === "error") continue;
+      }
+      if (!state || state.status !== "completed") recoveryFailure("preflight-tool-not-completed");
+      if (approvalTool) {
+        if (!submitted || (part.tool !== "cgpt-validation_request_validation" &&
+            state.input?.approval_id !== validation.approvalId)) recoveryFailure("preflight-poll-divergent");
+        let output;
+        try { output = JSON.parse(state.output); } catch { recoveryFailure("preflight-approval-invalid"); }
+        if (output.requestId !== recovery.preflightRequestId ||
+            output.approval_id !== validation.approvalId || output.change_id !== validation.changeId ||
+            output.session_id !== recovery.sessionId || output.directory !== job.directory ||
+            JSON.stringify(output.files) !== "[]" ||
+            JSON.stringify(output.commands) !== '["/usr/bin/true"]') {
+          recoveryFailure("preflight-approval-divergent");
+        }
+        if (output.status === "APPROVED") approvalEnd = state.time?.end;
+        else if (output.status !== "PENDING") recoveryFailure("preflight-approval-not-approved");
+      } else if (part.tool === "bash") {
+        commandCount += 1;
+        if (!Number.isFinite(approvalEnd) || !Number.isFinite(state.time?.start) ||
+            state.time.start < approvalEnd || state.input?.command !== "/usr/bin/true" ||
+            state.metadata?.exit !== 0 || !Number.isFinite(state.time?.end)) {
+          recoveryFailure("preflight-command-invalid");
+        }
+        commandEnd = state.time.end;
+      } else if (part.tool === "cgpt-validation_broker_readiness") {
+        let output;
+        try { output = JSON.parse(state.output); } catch { recoveryFailure("preflight-readiness-invalid"); }
+        if (Number.isFinite(commandEnd) && Number.isFinite(state.time?.start) &&
+            state.time.start >= commandEnd && output.status === "READY" &&
+            output.pending_count === 0) ready = true;
+      } else {
+        recoveryFailure("preflight-unexpected-tool");
+      }
+    }
+  }
+  if (!submitted || commandCount !== 1 || !ready) recoveryFailure("preflight-proof-missing");
+}
+
+async function recoverJob(payload) {
+  const keys = ["jobId", "expectedSessionId", "sessionId", "recoveryId", "preflightRequestId"];
+  if (!payload || !["prepare", "complete"].includes(payload.phase) ||
+      keys.some((key) => typeof payload[key] !== "string" || !payload[key]) ||
+      !payload.sessionId.startsWith("ses_") ||
+      payload.sessionId === payload.expectedSessionId) recoveryFailure("recovery-contract-invalid");
+  if (!job || payload.jobId !== job.jobId || payload.expectedSessionId !== job.sessionId) {
+    recoveryFailure("recovery-job-divergent");
+  }
+  if (payload.phase === "prepare") {
+    if (job.recovery || job.revokedSessions?.includes(payload.sessionId) ||
+        job.recoveryHistory?.some((entry) => entry.recoveryId === payload.recoveryId ||
+          entry.preflightRequestId === payload.preflightRequestId) ||
+        validations.has(payload.preflightRequestId) || httpDecisions.has(payload.preflightRequestId)) {
+      recoveryFailure("recovery-identity-reused");
+    }
+  } else if (!job.recovery || keys.some((key) => job.recovery[key] !== payload[key])) {
+    recoveryFailure("recovery-not-prepared");
+  }
+  await checkRecoveryContext(payload);
+  if (payload.phase === "complete") await checkRecoveryPreflight(job.recovery);
+  if (status.brokerReadiness?.status !== "READY" ||
+      Number(status.brokerReadiness.pending_count) !== 0) recoveryFailure("broker-not-ready");
+  const previousJob = job;
+  const previousGate = { ...terminalGate };
+  const snapshot = structuredClone(job);
+  if (payload.phase === "prepare") {
+    snapshot.recovery = { ...Object.fromEntries(keys.map((key) => [key, payload[key]])),
+      preparedAt: new Date().toISOString() };
+    snapshot.revokedSessions = [...new Set([...(snapshot.revokedSessions || []), job.sessionId])];
+    snapshot.recovery.invalidatedRequestIds = [...validations.values()]
+      .filter((validation) => validation.operation?.sessionId === job.sessionId)
+      .map((validation) => validation.requestId);
+  } else {
+    snapshot.sessionId = payload.sessionId;
+    snapshot.recoveryHistory = [...(snapshot.recoveryHistory || []),
+      { ...snapshot.recovery, completedAt: new Date().toISOString() }];
+    snapshot.recovery = null;
+  }
+  job = snapshot;
+  resetTerminalGate("session-recovery", false);
+  try {
+    await persistJob();
+  } catch {
+    job = previousJob;
+    Object.assign(terminalGate, previousGate);
+    recoveryFailure("recovery-persistence-failed");
+  }
+  for (const validation of validations.values()) {
+    if (job.revokedSessions?.includes(validation.operation?.sessionId)) {
+      validation.operationInvalidated = true;
+    }
+  }
+  updateStatus(`job-recovery-${payload.phase}`, { recoveryId: payload.recoveryId });
+  return publicJob();
+}
+
 function matchesApprovedOperation(permission, operation) {
-  if (!operation || permission.sessionID !== operation.sessionId) {
+  if (!operation || job?.revokedSessions?.includes(operation.sessionId) ||
+      permission.sessionID !== operation.sessionId) {
     return false;
   }
 
@@ -331,9 +524,8 @@ function matchesApprovedOperation(permission, operation) {
 
   const command = permission.metadata.command;
   const strictCommands =
-    job?.strictCommands === true &&
-    job.sessionId === operation.sessionId &&
-    job.directory === operation.directory;
+    job?.recovery?.sessionId === operation.sessionId ||
+    (job?.strictCommands === true && job.directory === operation.directory);
 
   return (
     command === operation.target ||
@@ -364,7 +556,9 @@ function nativePermissionSummary(permission) {
 
 function isCorrelatedNativePermission(permission) {
   for (const validation of validations.values()) {
-    if (matchesApprovedOperation(permission, validation.operation)) {
+    if (!validation.operationConsumed && !validation.operationInvalidated &&
+        operationAllowed(validation.operation, validation.requestId) &&
+        matchesApprovedOperation(permission, validation.operation)) {
       return true;
     }
   }
@@ -443,6 +637,8 @@ async function reconcileNativePermissions() {
 async function transmitApprovedOperation(validation) {
   if (
     !validation.operation ||
+    !operationAllowed(validation.operation, validation.requestId) ||
+    validation.operationInvalidated ||
     validation.operationConsumed ||
     reconcilingPermissions.has(validation.requestId)
   ) {
@@ -474,7 +670,8 @@ async function transmitApprovedOperation(validation) {
       matchesApprovedOperation(candidate, validation.operation)
     );
 
-    if (permission) {
+    if (permission && operationAllowed(validation.operation, validation.requestId) &&
+        !validation.operationInvalidated) {
       const reply = await fetch(
       `${opencodeUrl}/session/${encodeURIComponent(
         validation.operation.sessionId
@@ -782,7 +979,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.86.6",
+      version: "0.86.7",
     },
   });
 
@@ -1278,6 +1475,34 @@ createServer(
       return;
     }
 
+    if (request.method === "POST" && url.pathname === "/job/recover") {
+      if (recoveryTransitionInFlight) {
+        response.writeHead(409, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: "recovery-transition-in-flight" }));
+        return;
+      }
+      recoveryTransitionInFlight = true;
+      try {
+        const recovered = await recoverJob(await readJson(request));
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify(recovered));
+      } catch (cause) {
+        response.writeHead(409, { "content-type": "application/json" });
+        response.end(JSON.stringify({ error: cause.message }));
+      } finally {
+        recoveryTransitionInFlight = false;
+      }
+      return;
+    }
+
+    if (request.method === "POST" && recoveryTransitionInFlight &&
+        (url.pathname.startsWith("/job/") || url.pathname.startsWith("/validation/") ||
+         url.pathname.startsWith("/decision/"))) {
+      response.writeHead(409, { "content-type": "application/json" });
+      response.end(JSON.stringify({ error: "recovery-transition-in-flight" }));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/job/arm") {
       try {
         const candidate = validJobContract(await readJson(request));
@@ -1306,6 +1531,16 @@ createServer(
           return;
         }
 
+        if (job?.recovery || (job?.jobId === candidate.jobId &&
+            job.revokedSessions?.includes(candidate.sessionId))) {
+          response.writeHead(409, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "job-session-revoked-or-recovering" }));
+          return;
+        }
+        if (job?.jobId === candidate.jobId) {
+          candidate.recoveryHistory = job.recoveryHistory || [];
+          candidate.revokedSessions = job.revokedSessions || [];
+        }
         job = candidate;
         resetTerminalGate("job-armed", false);
         await persistJob();
@@ -1523,13 +1758,20 @@ createServer(
           );
         }
 
+        const operation = approvedOperation(approval);
+        if (!operationAllowed(operation, requestId)) {
+          response.writeHead(409, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
+          return;
+        }
         const previous =
           validations.get(requestId);
 
         if (
           previous &&
           (previous.approvalId !== approvalId ||
-            previous.changeId !== changeId)
+            previous.changeId !== changeId ||
+            JSON.stringify(previous.operation) !== JSON.stringify(operation))
         ) {
           throw new Error(
             "requestId déjà associé à une autre validation."
@@ -1561,7 +1803,7 @@ createServer(
             approvalId,
             changeId,
             summary,
-            operation: approvedOperation(approval),
+            operation,
           };
 
           validations.set(
@@ -1609,6 +1851,12 @@ createServer(
         const requestId = approval?.requestId;
         const approvalId = approval?.approval_id;
         const changeId = approval?.change_id;
+        const operation = approvedOperation(approval);
+        if (!operationAllowed(operation, requestId)) {
+          response.writeHead(409, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
+          return;
+        }
         let validation = validations.get(requestId);
 
         if (!validation && typeof requestId === "string" && typeof approvalId === "string" && typeof changeId === "string") {
@@ -1743,6 +1991,10 @@ createServer(
             throw new Error(
               "Validation inconnue."
             );
+          }
+          if (validation.operationInvalidated ||
+              !operationAllowed(validation.operation, requestId)) {
+            throw new Error("Validation hors session admise.");
           }
 
           httpDecisions.set(requestId, {

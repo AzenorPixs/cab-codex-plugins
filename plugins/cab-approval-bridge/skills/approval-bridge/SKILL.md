@@ -219,3 +219,52 @@ Avant de modifier le modèle d’un agent OC :
 - Arrêter uniquement le contrôleur démarré par `/cab`.
 - Ne pas arrêter directement `cgpt-validation` : il est géré par OpenCode.
 - Ne pas fermer OpenCode ni son conteneur sans instruction explicite.
+
+
+## Récupération contrôlée de session dans le même RUN
+
+Après un écart refusé sans effet, interrompre l'ancienne session, traiter son
+rapport et clôturer le mandat courant avec `/job/progress`. Ne pas réarmer le
+job pour remplacer sa session : `/job/arm` reste immuable. Créer la candidate
+par l'API native OpenCode dans le même `directory`, avec permissions natives
+`ask`, sans lui confier de travail métier.
+
+Utiliser `POST /job/recover` en deux phases. Le corps commun contient `jobId`,
+`expectedSessionId` (ancienne session), `sessionId` (candidate), `recoveryId`
+inédit et `preflightRequestId` inédit ; ajouter `phase: "prepare"`, puis
+`phase: "complete"`. Le contrôleur vérifie par HTTP le contexte, MCP, les
+sessions inactives et l'absence de permissions/demandes non résolues. Un mandat
+indécis doit recevoir une décision explicite ; une transmission encore en
+cours impose une réconciliation avant un nouvel essai.
+
+Après prepare, le job et le superviseur sont gelés. Seul le prévol réservé de
+la candidate est admis : `broker_readiness`, `request_validation` pour la
+commande exacte `/usr/bin/true`, décision explicite corrélée, permission
+native unique, exécution exit 0, puis `broker_readiness = READY` sans demande
+en attente. Aucun suffixe ni autre outil natif. Le contrôleur vérifie les
+preuves dans les messages OpenCode avant complete ; une déclaration de
+réussite ne suffit pas. Aucun appel de récupération ne vaut décision CAB.
+
+Après complete, relire `/job` et `/status` : même job, même change et critères,
+dernier jalon conservé, nouvelle session, `strictCommands` préservé et gate
+OPEN. Les anciennes autorisations exécutables sont invalidées et l'historique
+non secret est conservé. Le superviseur suit désormais la session transférée.
+Un échec conserve le gel ; ne pas purger le RUN ni inventer de gate terminal.
+Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
+locale du prévol : si elles sont perdues, la récupération reste refusée et
+nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
+un prévol échoué par une nouvelle tentative implicite.
+
+## Mandats d'inventaire ou d'analyse en lecture seule
+
+Dans le corps de messagerie OpenCode, désactiver explicitement les outils :
+
+```json
+{"tools":{"bash":false,"edit":false,"write":false,"apply_patch":false,"task":false,"skill":false}}
+```
+
+Conserver seulement les outils de lecture et recherche autorisés. Le texte
+« lecture seule » ne remplace pas ce verrou. Aucune configuration persistante
+OpenCode n'est modifiée. Au mandat exécutable suivant, réactiver explicitement
+les seuls outils nécessaires ; leurs permissions natives restent `ask` et
+chaque opération conserve son mandat CAB unitaire, sans autorisation générale.

@@ -7,7 +7,7 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "0.86.6";
+const version = "0.86.7";
 const workspace = envValue("OC_Codex_WORKSPACE");
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -100,6 +100,7 @@ async function fetchJson(url, options = {}) {
 
 function resumeAllowed(status, job) {
   if (!job || !job.armed) return "job-unarmed";
+  if (job.recovery) return "session-recovery-pending";
   if (job.terminalGate?.status === "VALIDATED") return "terminal-gate-validated";
   if (status.opencodeSse !== "connected") return "opencode-sse-unavailable";
   if (!status.brokerReadiness) return "broker-readiness-missing";

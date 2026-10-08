@@ -32,7 +32,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.86.6` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.86.7` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -175,7 +175,7 @@ MCP. Un RUN CAB ne doit pas les remplacer par des processus éphémères.
 L'interface du contrôleur écoute par défaut sur `127.0.0.1:8788`. La
 configuration admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce
 port n'est pas un transport MCP. Elle expose `GET /status`, `GET /job`, `POST
-/job/arm`, `POST /job/progress`, `POST /job/disarm`, `POST
+/job/arm`, `POST /job/progress`, `POST /job/recover`, `POST /job/disarm`, `POST
 /job/terminal-gate`, `POST /broker/readiness`, `POST /validation/request`,
 `POST /validation/reminder` et `GET` ou `POST /decision/<requestId>` ; les
 décisions admises sont `approved`, `rejected` et `needs_clarification`.
@@ -186,11 +186,41 @@ doivent contenir exactement la commande approuvée, sans suffixe ni
 instrumentation de sortie. Cette option est persistée et exposée par
 `GET /job` ; le comportement existant est conservé pour les autres jobs.
 
+La récupération explicite `POST /job/recover` remplace une session dans le
+même RUN, sans utiliser `/job/arm` ni désarmer le job. Son corps porte `phase`
+(`prepare` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
+`recoveryId` et `preflightRequestId`. prepare contrôle le contexte OpenCode,
+MCP, l'inactivité des deux sessions et l'absence de mandat indécis ou de
+permission non résolue ; il persiste le gel et invalide les autorisations
+exécutables de l'ancienne session sans réécrire leurs décisions.
+
+Pendant ce gel, seule la commande exacte `/usr/bin/true` du prévol réservé
+est admise, avec décision explicite et consommation unique. complete vérifie
+la décision locale et les messages natifs : réponse MCP APPROVED corrélée,
+commande exit 0 puis broker_readiness READY pending_count 0. Le transfert
+conserve le job, le change, les critères, le dernier jalon et strictCommands,
+avec historique des récupérations et sessions révoquées, gate OPEN. Les
+mutations concurrentes sont refusées pendant les contrôles et la persistance.
+Un échec conserve le gel ; les sessions révoquées restent interdites après
+redémarrage. Les décisions locales du prévol ne sont pas reconstruites après
+redémarrage : leur absence interdit complete et requiert une décision humaine.
+Le prévol admet un polling MCP corrélé après délai de request_validation ;
+la réponse APPROVED réelle, l'exécution unique et la readiness finale restent
+requises. Aucune installation ni migration du broker n'est nécessaire au
+correctif source.
+
+Pour les mandats lecture seule, le protocole distribué désactive explicitement
+bash, edit, write, apply_patch, task et skill via le champ tools du message.
+Un mandat exécutable réactive seulement ses outils nécessaires avec permissions
+natives ask et décision CAB unitaire. Ce verrou ne modifie pas la configuration
+persistante OpenCode.
+
 Le superviseur écoute par défaut sur `127.0.0.1:8789`. Il conserve son état
 dans `.opencode/state/cgpt-approval-bridge/`, observe le contrat de job et la
 session OpenCode, puis adresse une reprise à la même session après 60 secondes
 par défaut si le gate terminal est ouvert. Il ne crée ni session de
-remplacement, ni mandat, ni décision CAB.
+remplacement, ni mandat, ni décision CAB. Lorsqu’une récupération est préparée,
+il suspend les relances ; après complete, il suit la session transférée.
 
 ## 8. Supervision OpenCode
 
@@ -211,7 +241,7 @@ termine ni ne démarre directement le broker, qui est détenu par OpenCode.
 
 Après la purge d'un nouveau RUN et ce contrôle, CAB crée une nouvelle session
 maîtresse persistante par `POST /session` ; seule une reprise du même RUN
-réutilise sa session. CAB transmet les mandats uniquement par
+réutilise sa session, sauf remplacement explicitement vérifié par /job/recover. CAB transmet les mandats uniquement par
 `POST /session/<id>/message`. Le test de bout en bout et le travail ultérieur
 restent dans cette session visible du développeur.
 
