@@ -87,7 +87,8 @@ async function setup(context, strictCommands = true) {
   async function post(path, data) {
     const r = await fetch(base + path, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify(data) });
-    return { status: r.status, body: await r.json() };
+    const body = await r.text();
+    return { status: r.status, body: body ? JSON.parse(body) : null };
   }
   context.after(async () => {
     await stop();
@@ -228,6 +229,58 @@ test("refuse true avec un change divergent sans purger ni valider la récupérat
   }
   assert.equal(after.terminalGate.status, "OPEN");
   assert.equal(h.native.replies.length, 0);
+});
+
+test("refuse les champs absents avant enregistrement et conserve le job gelé", async (context) => {
+  for (const field of ["approval_id", "files"]) {
+    await context.test(field, async (nested) => {
+      const h = await setup(nested);
+      assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
+      const before = await h.get("/job");
+      const malformed = h.approval(h.recovery.preflightRequestId);
+      delete malformed[field];
+      const refused = await h.validate(malformed);
+      assert.equal(refused.status, 400);
+      assert.equal(refused.body, null);
+      const complete = await h.post("/job/recover", { ...h.recovery, phase: "complete" });
+      assert.equal(complete.status, 409);
+      assert.equal(complete.body.error, "preflight-permission-not-consumed");
+      const after = await h.get("/job");
+      for (const key of ["jobId", "sessionId", "changeId", "lastProvenMilestone", "recovery", "terminalGate"]) {
+        assert.deepEqual(after[key], before[key]);
+      }
+      assert.equal(after.terminalGate.status, "OPEN");
+      assert.deepEqual(h.native.replies, []);
+      assert.deepEqual(h.native.messages, []);
+    });
+  }
+});
+
+test("un refus explicite pour délai prescrit omis ne consomme aucune permission", async (context) => {
+  const h = await setup(context);
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
+  const submitted = { ...h.approval(h.recovery.preflightRequestId), interval_seconds: 3 };
+  assert.equal(Object.hasOwn(submitted, "timeout_seconds"), false);
+  assert.equal((await h.validate(submitted)).status, 202);
+  const reason = "CGPT refuse timeout_seconds prescrit omis, aucun effet autorisé";
+  assert.equal((await h.post(`/decision/${submitted.requestId}`, { decision: "rejected", reason })).status, 201);
+  await waitFor(async () => (await h.get("/status")).activeValidationCount === 0);
+  const decision = await h.get(`/decision/${submitted.requestId}`);
+  assert.equal(decision.decision, "rejected");
+  assert.equal(decision.reason, reason);
+  h.native.messages = [{ parts: [{ type: "tool", tool: "cgpt-validation_request_validation",
+    state: { status: "completed", input: submitted,
+      output: JSON.stringify({ ...submitted, status: "REJECTED" }), time: { start: 1, end: 2 } } }] }];
+  const before = await h.get("/job");
+  const complete = await h.post("/job/recover", { ...h.recovery, phase: "complete" });
+  assert.equal(complete.status, 409);
+  assert.equal(complete.body.error, "preflight-permission-not-consumed");
+  const after = await h.get("/job");
+  for (const key of ["jobId", "sessionId", "changeId", "lastProvenMilestone", "recovery", "terminalGate"]) {
+    assert.deepEqual(after[key], before[key]);
+  }
+  assert.equal(after.terminalGate.status, "OPEN");
+  assert.deepEqual(h.native.replies, []);
 });
 
 test("refuse les fausses preuves natives et garde le gel", async (context) => {

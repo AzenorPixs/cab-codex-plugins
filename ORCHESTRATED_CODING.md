@@ -425,12 +425,27 @@ un prévol échoué par une nouvelle tentative implicite.
 
 ## Nouvelle session CAB après prévol de récupération divergent
 
-Après le feu vert de la session, l'orchestrateur est autorisé sans nouvelle
-confirmation à ouvrir une nouvelle session CAB lorsqu'une récupération échouée
-prouve à la fois la transmission de `true` au lieu de `/usr/bin/true` et un
-`change_id` divergent du change attendu. Le mandat erroné reste refusé, sans
-normalisation. Cette exception ne couvre aucun autre échec et n'est jamais
-exécutée automatiquement par `/job/recover`.
+Après le feu vert de la session, l'orchestrateur déclenche sans nouvelle
+confirmation une nouvelle session CAB lorsqu'un prévol de récupération
+divergent ou incomplet est prouvé par les appels natifs, refusé avant
+exécution et sans effet observé ou inconnu. L'automatisation appartient à
+l'orchestrateur du RUN ; elle n'est jamais exécutée automatiquement par
+`/job/recover`, qui conserve son refus strict et son gel.
+
+L'exception couvre un champ prescrit absent ou altéré : `requestId`,
+`approval_id`, `change_id`, `session_id`, `directory`, `files`, `commands`,
+`title`, `summary`, `timeout_seconds` ou `interval_seconds`. Elle inclut une
+commande `true` au lieu de `/usr/bin/true`, un suffixe, un change divergent,
+ainsi qu'une demande malformée rejetée avant enregistrement. Il n'est pas
+nécessaire de cumuler deux écarts. Le mandat erroné reste refusé, sans
+normalisation ni exécution. Comparer les arguments natifs au mandat réellement
+prescrit ; un paramètre non prescrit ne devient pas une divergence inventée.
+
+Un HTTP 409 seul, un texte de l'agent ou un délai MCP seul ne suffit pas.
+Après un délai MCP ordinaire, interroger uniquement le même `approval_id`
+par `poll_approval` ou `get_approval`, sans nouvelle demande ni purge.
+Les preuves natives de l'écart, du refus et de l'absence d'effet restent
+obligatoires, y compris lorsque la demande n'a pas été enregistrée.
 
 Geler le travail, traiter les rapports, réconcilier les effets et refuser les
 permissions divergentes ; clôturer les demandes restantes sans les approuver.
@@ -453,7 +468,7 @@ chemins personnalisés. Les gardes de chemin et de verrou restent obligatoires.
 Approbations, journal, job et autres états techniques sont supprimés sans
 lecture, sauvegarde ou restauration ; checkpoint métier, sources, secrets,
 rapports et historiques natifs restent hors purge. Une purge partielle
-interdit le démarrage.
+interdit le démarrage et exige l'autorité indispensable.
 
 Créer une nouvelle session CAB et un nouveau job technique, avec des
 identifiants de session, job, requête et approbation neufs. Le prévol de ce
@@ -461,14 +476,26 @@ redémarrage exige exactement `/usr/bin/true`, sans suffixe, avec le
 `change_id` attendu du checkpoint, une décision explicite, une réponse MCP
 corrélée, une permission consommée une seule fois et exit 0. Exiger ensuite
 `broker_readiness = READY` sans demande ni permission parasite. Un nouveau
-prévol divergent interdit la reprise.
+prévol divergent interdit la reprise métier et relance cette procédure si
+les mêmes préconditions de sûreté sont à nouveau prouvées.
+
+Le RUN parent reste en attente non terminale pendant ces récupérations.
+Tracer chaque tentative dans le checkpoint : numéro, identifiants,
+horodatages, cause, arguments attendus et observés, références des preuves
+natives. Renouveler les tentatives sans limite jusqu'au prévol exact réussi
+ou à l'arrêt explicite du développeur, tant que les préconditions restent
+prouvées. Ne lancer aucune tentative simultanée ni dupliquer une tentative
+non réconciliée. Maintenir le suivi de progression à la cadence existante,
+sans boucle serrée. Ce seul échec ne termine pas le RUN parent.
 
 Réconcilier les fichiers et les preuves conservées, puis reprendre au premier
 jalon non prouvé, sans rejouer les écritures validées ni les autorisations
 consommées et sans réadopter l'ancien job ou ses décisions. Le RUN métier
 conserve son checkpoint externe ; la récupération ordinaire reste sans purge.
 Une preuve manquante ne vaut jamais succès et n'autorise aucun rejeu aveugle.
-Les permissions techniques de la plateforme restent applicables.
+Effet inconnu, propriété incertaine ou garde non établie imposent de demander
+l'autorité indispensable. Les permissions techniques de la plateforme restent
+applicables.
 
 ## Compactage coordonné et continuité
 

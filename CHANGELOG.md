@@ -4,6 +4,17 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Récupération automatique orchestrée après prévol divergent ou incomplet
+  prouvé et refusé sans effet, notamment champs et délais prescrits omis.
+  Le double écart `true` / `change_id` n'est plus requis ; une nouvelle
+  divergence sûre renouvelle la procédure sans terminer le RUN parent.
+- Checkpoint métier, identifiants neufs, prévol exact, décisions explicites
+  et gardes de purge conservés. Un délai MCP seul reste traité par polling ;
+  effets inconnus, preuves absentes ou purge partielle bloquent la reprise.
+- Briques versionnées alignées sur `0.87.1`, nouveau cachebuster du plugin,
+  tests de protocole et de refus HTTP. Aucun nouvel endpoint, schéma,
+  déploiement, purge réelle ou publication.
+
 - Protocole des sessions pilotées extrait vers ORCHESTRATED_CODING.md dans
   les huit projets et templates possédant AGENTS.md. Les règles générales
   imposent la lecture du document local ; les contrats techniques, cadences,
