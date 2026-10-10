@@ -110,28 +110,49 @@ de job ; son absence SHALL préserver la corrélation instrumentée existante.
 ### Requirement: Réveil corrélé de l'orchestrateur
 Le contrôleur SHALL accepter une relance corrélée sur une interface HTTP locale
 et vérifier son `requestId`, son `approval_id` et son `change_id` avant toute
-action. Pour une relance valide sans décision terminale, il SHALL tenter, dans
-l'ordre, de transmettre l'événement structuré à la tâche orchestratrice
-persistante, de planifier un heartbeat lié à cette tâche avec la consigne
-d'examiner le mandat sans l'approuver implicitement, puis de conserver une
-notification locale persistante si le réveil est indisponible. Aucune de ces
-actions ne SHALL créer, modifier ou consommer une décision.
+action. Pour une relance valide sans décision terminale en mode manuel, il
+SHALL signaler le rappel corrélé dans son statut sans créer de thread ni de
+tour Codex App Server. Cette protection SHALL s'appliquer également aux
+heartbeats de relance. La demande SHALL rester indécise jusqu'à une décision
+HTTP explicite et corrélée de l'orchestrateur principal. En mode automatique,
+le contrôleur SHALL conserver son chemin existant de transmission structurée
+à la tâche orchestratrice persistante, de heartbeat lié à cette tâche et de
+notification locale persistante lorsque le réveil est indisponible. Une
+relance SHALL NOT créer, modifier ou consommer une décision ou une permission.
+
+#### Scenario: Rappels manuels répétés
+- **WHEN** le contrôleur reçoit plusieurs relances corrélées d'une demande
+  sans décision avec `OC_Codex_DECISION_MODE=manual`
+- **THEN** il retourne une réponse non décisionnelle, rend le rappel observable
+  et ne lance aucun `thread/start` ni `turn/start`
+- **AND** `GET /decision/<requestId>` reste indisponible
+
+#### Scenario: Décision explicite après un rappel manuel
+- **WHEN** l'orchestrateur principal publie une décision valide sur
+  `POST /decision/<requestId>` après un rappel manuel
+- **THEN** le contrôleur mémorise cette décision une seule fois avec les
+  identifiants de la demande
+- **AND** une seconde décision ou une relance terminale est refusée
 
 #### Scenario: Événement structuré transmis
-- **WHEN** le contrôleur reçoit une relance corrélée et sa tâche orchestratrice persistante est disponible
-- **THEN** il transmet `requestId`, `change_id`, session OpenCode, âge, opération et dernier état connu sans créer de décision
+- **WHEN** le contrôleur reçoit une relance corrélée en mode automatique et
+  sa tâche orchestratrice persistante est disponible
+- **THEN** il transmet `requestId`, `change_id`, session OpenCode, âge,
+  opération et dernier état connu sans créer de décision
 
 #### Scenario: Réveil indisponible
-- **WHEN** le contrôleur ne peut pas transmettre l'événement ni planifier son heartbeat
-- **THEN** il conserve une notification locale persistante pour l'orchestrateur et retourne un état de relance non décisionnel
+- **WHEN** le contrôleur en mode automatique ne peut pas transmettre
+  l'événement ni planifier son heartbeat
+- **THEN** il conserve une notification locale persistante pour
+  l'orchestrateur et retourne un état de relance non décisionnel
 
 ### Requirement: Contrat de supervision de job local
 
 Le contrôleur SHALL accepter et exposer exclusivement sur son interface locale
 un contrat de supervision de job non secret, corrélé à une session OpenCode et
-à son gate terminal. Il SHALL refuser un contrat incomplet, une mise à jour qui
-substitue la session d'un job existant, ou une désactivation sans gate terminal
-validé. Son statut public SHALL résumer le job armé et son gate sans exposer le
+à son gate terminal. Il SHALL refuser un contrat incomplet, une substitution implicite de session
+sur /job/arm, ou une désactivation sans gate terminal validé. Seule la
+récupération explicite /job/recover définie ci-dessous MAY remplacer la session. Son statut public SHALL résumer le job armé et son gate sans exposer le
 contenu du projet ni une décision CAB.
 Le champ facultatif `strictCommands` SHALL être booléen, valoir `false` par
 défaut et être conservé dans le contrat persistant et son état public. Le
@@ -147,3 +168,56 @@ contrôleur SHALL refuser toute autre valeur avant d'armer le job.
 - **WHEN** un client arme un job avec une valeur non booléenne de
   `strictCommands`
 - **THEN** le contrôleur refuse le contrat et ne l'arme pas
+
+### Requirement: Interface explicite de récupération
+POST /job/recover MUST accepter prepare et complete, corrélés par jobId, expectedSessionId, sessionId, recoveryId et preflightRequestId uniques. Le contrôleur MUST refuser les mutations concurrentes pendant la transition. Il MUST NOT désarmer le job, purger le RUN, fabriquer une décision ou valider le gate pour ce remplacement.
+
+#### Scenario: Transition concurrente
+- **WHEN** une mutation est demandée pendant un contrôle asynchrone de récupération
+- **THEN** elle est refusée sans modifier le contrat
+
+### Requirement: Préconditions techniques de récupération
+prepare et complete MUST vérifier un job armé avec gate OPEN, mandat courant clôturé, aucune demande indécise, aucun rappel, aucune permission native ni transmission en cours. Via OpenCode dans directory, ils MUST vérifier santé, chemin, MCP connecté et les deux sessions inactives dans cette racine. Un contrôle indisponible ou divergent MUST refuser la transition.
+
+#### Scenario: Précondition manquante
+- **WHEN** une permission, une session occupée, une demande indécise ou un contexte divergent est observé
+- **THEN** la transition est refusée sans transfert ni approbation implicite
+
+### Requirement: Gel et persistance de récupération
+prepare MUST persister un gel observable sans contenu de projet ni secret et invalider les autorisations exécutables de l'ancienne session sans modifier les décisions historiques. Le gel et les sessions révoquées MUST survivre à un redémarrage. Un échec de complete MUST conserver le gel.
+
+#### Scenario: Redémarrage pendant une récupération
+- **WHEN** le contrôleur redémarre après prepare et avant complete
+- **THEN** le gel est restauré et aucune ancienne autorisation n'est exécutée
+
+### Requirement: Prévol natif avant transfert
+complete MUST exiger une décision locale approved, une réponse MCP APPROVED corrélée au preflightRequestId réservé, une unique permission /usr/bin/true consommée et une commande exacte terminée exit 0. Les messages natifs OpenCode MUST ensuite prouver broker_readiness READY pending_count 0. Une affirmation du client, une preuve absente ou divergente, ou un autre outil natif exécuté MUST refuser le transfert.
+
+#### Scenario: Polling corrélé après délai MCP
+- **WHEN** request_validation expire côté client et poll_approval ou get_approval retourne une réponse APPROVED réellement corrélée avant la commande
+- **THEN** complete MAY accepter cette réponse native après vérification de toutes les autres preuves
+
+#### Scenario: Prévol non prouvé
+- **WHEN** le client affirme une réussite mais les messages natifs ne la prouvent pas
+- **THEN** complete refuse le transfert et conserve le gel
+
+### Requirement: Conservation du même job
+Après complete, le contrôleur MUST conserver jobId, directory, changeId, criteria, lastProvenMilestone et strictCommands, remplacer uniquement la session, persister l'historique non secret des récupérations et conserver gate OPEN. Les sessions révoquées MUST rester sans permission exécutable même après désarmement.
+
+#### Scenario: Transfert prouvé
+- **WHEN** les préconditions et le prévol sont prouvés
+- **THEN** complete remplace la session et conserve le périmètre, le dernier jalon et le gate OPEN
+
+### Requirement: Session admise pour les validations
+Pour un job armé, le contrôleur MUST refuser toute nouvelle validation dont la session ou directory diverge du contrat. Pendant la récupération, il MUST admettre uniquement le preflightRequestId réservé, files vide et commands contenant /usr/bin/true seul, dans la session candidate et directory du job.
+
+#### Scenario: Mauvaise session
+- **WHEN** une demande vise une session ou un répertoire non admis
+- **THEN** le contrôleur refuse la validation sans décision ni permission
+
+### Requirement: Prévol strict et autorisations invalidées
+La commande réservée MUST être corrélée exactement sans suffixe, quelle que soit strictCommands, et nécessiter une décision explicite unique. Une décision consommée ou invalidée MUST NOT répondre once de nouveau ; la décision historique MUST rester inchangée.
+
+#### Scenario: Suffixe ou ancienne décision
+- **WHEN** une permission ajoute un suffixe au prévol ou vise une autorisation invalidée de l'ancienne session
+- **THEN** aucune permission once n'est transmise

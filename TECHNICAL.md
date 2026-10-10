@@ -32,7 +32,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.86.5` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.86.8` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -175,7 +175,7 @@ MCP. Un RUN CAB ne doit pas les remplacer par des processus éphémères.
 L'interface du contrôleur écoute par défaut sur `127.0.0.1:8788`. La
 configuration admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce
 port n'est pas un transport MCP. Elle expose `GET /status`, `GET /job`, `POST
-/job/arm`, `POST /job/progress`, `POST /job/disarm`, `POST
+/job/arm`, `POST /job/progress`, `POST /job/recover`, `POST /job/disarm`, `POST
 /job/terminal-gate`, `POST /broker/readiness`, `POST /validation/request`,
 `POST /validation/reminder` et `GET` ou `POST /decision/<requestId>` ; les
 décisions admises sont `approved`, `rejected` et `needs_clarification`.
@@ -186,11 +186,41 @@ doivent contenir exactement la commande approuvée, sans suffixe ni
 instrumentation de sortie. Cette option est persistée et exposée par
 `GET /job` ; le comportement existant est conservé pour les autres jobs.
 
+La récupération explicite `POST /job/recover` remplace une session dans le
+même RUN, sans utiliser `/job/arm` ni désarmer le job. Son corps porte `phase`
+(`prepare` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
+`recoveryId` et `preflightRequestId`. prepare contrôle le contexte OpenCode,
+MCP, l'inactivité des deux sessions et l'absence de mandat indécis ou de
+permission non résolue ; il persiste le gel et invalide les autorisations
+exécutables de l'ancienne session sans réécrire leurs décisions.
+
+Pendant ce gel, seule la commande exacte `/usr/bin/true` du prévol réservé
+est admise, avec décision explicite et consommation unique. complete vérifie
+la décision locale et les messages natifs : réponse MCP APPROVED corrélée,
+commande exit 0 puis broker_readiness READY pending_count 0. Le transfert
+conserve le job, le change, les critères, le dernier jalon et strictCommands,
+avec historique des récupérations et sessions révoquées, gate OPEN. Les
+mutations concurrentes sont refusées pendant les contrôles et la persistance.
+Un échec conserve le gel ; les sessions révoquées restent interdites après
+redémarrage. Les décisions locales du prévol ne sont pas reconstruites après
+redémarrage : leur absence interdit complete et requiert une décision humaine.
+Le prévol admet un polling MCP corrélé après délai de request_validation ;
+la réponse APPROVED réelle, l'exécution unique et la readiness finale restent
+requises. Aucune installation ni migration du broker n'est nécessaire au
+correctif source.
+
+Pour les mandats lecture seule, le protocole distribué désactive explicitement
+bash, edit, write, apply_patch, task et skill via le champ tools du message.
+Un mandat exécutable réactive seulement ses outils nécessaires avec permissions
+natives ask et décision CAB unitaire. Ce verrou ne modifie pas la configuration
+persistante OpenCode.
+
 Le superviseur écoute par défaut sur `127.0.0.1:8789`. Il conserve son état
 dans `.opencode/state/cgpt-approval-bridge/`, observe le contrat de job et la
 session OpenCode, puis adresse une reprise à la même session après 60 secondes
 par défaut si le gate terminal est ouvert. Il ne crée ni session de
-remplacement, ni mandat, ni décision CAB.
+remplacement, ni mandat, ni décision CAB. Lorsqu’une récupération est préparée,
+il suspend les relances ; après complete, il suit la session transférée.
 
 ## 8. Supervision OpenCode
 
@@ -211,9 +241,37 @@ termine ni ne démarre directement le broker, qui est détenu par OpenCode.
 
 Après la purge d'un nouveau RUN et ce contrôle, CAB crée une nouvelle session
 maîtresse persistante par `POST /session` ; seule une reprise du même RUN
-réutilise sa session. CAB transmet les mandats uniquement par
+réutilise sa session, sauf remplacement explicitement vérifié par /job/recover. CAB transmet les mandats uniquement par
 `POST /session/<id>/message`. Le test de bout en bout et le travail ultérieur
 restent dans cette session visible du développeur.
+
+### Cadences de la boucle de pilotage
+
+L'orchestrateur consomme le SSE en temps réel et contrôle les demandes et les
+rapports toutes les 3 secondes. Pendant l'analyse ou la rédaction de l'agent
+de codage, les vérifications de progression sont espacées de 7 secondes fixes,
+sans ralentir le contrôle CAB. Ces cadences ne changent pas les délais
+techniques du superviseur, les heartbeats ou les rappels du broker.
+
+Après un échec du benchmark PLLM, le même RUN reste en attente non terminale.
+Le benchmark est retenté toutes les 30 minutes (1 800 secondes), sans limite
+de tentatives, jusqu'à reprise sûre ou arrêt explicite du développeur. Chaque
+échec fixe la prochaine échéance ; le checkpoint non secret conserve RUN,
+horodatages, causes, résultats et échéance. Une interruption conserve cette
+échéance et impose la réconciliation des tentatives en cours ou d'effet inconnu,
+sans essais simultanés ni duplication. La supervision reste active, sans
+attente bloquante de trente minutes ni fermeture ou redémarrage des processus.
+
+Une réussite exige la réconciliation des contextes, santé OpenCode, MCP,
+readiness CAB réelle et permissions avant reprise. Un blocage distinct suit
+la récupération CAB ; le benchmark ne vaut jamais approbation et ne rejoue
+aucun mandat consommé. Les sondes statistiques restent prévues toutes les
+30 minutes sans arrêter le travail pour attendre un créneau ; une sonde
+échouée seule ne suspend pas le RUN.
+
+Ces obligations appartiennent au protocole de l'orchestrateur distribué dans
+la commande et les skills. Elles n'ajoutent pas un ordonnanceur autonome de
+benchmark PLLM au broker, au contrôleur ou au superviseur.
 
 ## 9. Readiness et healthcheck
 
@@ -242,11 +300,13 @@ de compactage conjoint est déjà implémenté dans le contrôleur.
 Le broker publie périodiquement cette readiness au contrôleur local.
 
 Lorsqu'un mandat notifié reste PENDING sans décision, le broker adresse aussi
-au contrôleur une relance corrélée toutes les trente secondes. Le contrôleur
-transmet l'événement à sa tâche orchestratrice, planifie un heartbeat de
-reprise si nécessaire et conserve une notification locale persistante lorsque
-le réveil reste indisponible. Cette relance ne constitue jamais une décision
-ni une permission OpenCode.
+au contrôleur une relance corrélée toutes les trente secondes. En mode
+manuel, le contrôleur signale le rappel dans son statut sans créer de thread
+ni de tour Codex ; seul l'orchestrateur principal publie la décision HTTP.
+La même garde protège les heartbeats de relance. En mode automatique, le
+contrôleur conserve la transmission à sa tâche orchestratrice, le heartbeat
+de reprise et la notification locale persistante en cas d'indisponibilité.
+Cette relance ne constitue jamais une décision ni une permission OpenCode.
 
 Le healthcheck vérifie la santé OpenCode, le contrôleur, le superviseur, Codex
 App Server, le SSE OpenCode et la fraîcheur de `broker_readiness`. Un état
@@ -332,8 +392,9 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
 - `OC_Codex_STATUS_PORT`
 - `OC_Codex_RECONNECT_MS`
 - `OC_Codex_DECISION_MODE` : `manual` par défaut ou `automatic` pour
-  conserver les demandes PENDING jusqu'à une décision corrélée sur l'interface
-  HTTP locale
+  utiliser le chemin de décision existant via Codex App Server ; en mode
+  manuel, les demandes restent PENDING jusqu'à une décision HTTP explicite,
+  et les rappels ne lancent aucun thread ni tour Codex auxiliaire
 - `OC_Codex_CONTROLLER_URL`
 - `OC_Codex_SUPERVISOR_URL`
 - `OC_Codex_SUPERVISOR_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement

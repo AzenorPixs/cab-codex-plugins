@@ -325,28 +325,75 @@ archivage OpenSpec reste un mandat distinct et exige une validation explicite
 de CGPT après contrôle des critères, des tests et de la cohérence entre code,
 spécifications et documentation.
 
+#### Cadences de pilotage et attente PLLM
+
+L'orchestrateur DOIT traiter les événements SSE OpenCode en temps réel et
+contrôler les demandes et les rapports toutes les 3 secondes dans la boucle
+de pilotage. Pendant l'analyse ou la rédaction de l'agent de codage, il DOIT
+utiliser des pauses fixes de 7 secondes entre deux vérifications de progression.
+Ces pauses NE DOIVENT PAS ralentir le SSE ni le contrôle CAB toutes les
+3 secondes. Les temporisations techniques du superviseur, des heartbeats et
+des rappels du broker restent distinctes.
+
+Lors d'un échec du benchmark PLLM, l'orchestrateur DOIT conserver le même RUN
+en attente non terminale et retenter le benchmark toutes les 30 minutes
+(1 800 secondes), indéfiniment, sans limite de tentatives, jusqu'à reprise
+sûre du RUN ou arrêt explicite du développeur. La prochaine échéance est
+calculée depuis l'échec observé de la dernière tentative. Le checkpoint non
+secret conserve le RUN, les horodatages, causes et résultats des tentatives
+ainsi que la prochaine échéance. Après interruption, conserver cette échéance
+et réconcilier toute tentative en cours ou d'effet inconnu avant de retenter ;
+ne jamais lancer de tentatives simultanées ou dupliquer un essai non réconcilié.
+La supervision reste active, sans attente bloquante de trente minutes. Ce seul
+échec NE DOIT PAS clôturer le RUN ni fermer ou redémarrer les processus.
+
+Après une réussite observée, réconcilier les contextes, la santé OpenCode, MCP,
+la readiness CAB réelle et les permissions avant reprise. Si la reprise n'est
+pas sûre, appliquer la récupération CAB et conserver sa cause observable.
+La réussite du benchmark ne vaut jamais approbation, ne rejoue aucun mandat
+consommé et ne contourne aucun blocage CAB distinct.
+
+Les sondes statistiques DOIVENT être prévues toutes les 30 minutes, en
+complément des sondes initiale et finale. Poursuivre le travail entre les
+échéances, sans arrêter le travail pour attendre un créneau. Signaler les
+relèves manquées sans reconstruction rétroactive. Une sonde statistique
+échouée reste distincte d'un échec du benchmark PLLM et ne suspend pas, à elle
+seule, le RUN.
+
 #### Compactage coordonné des deux agents
 
 L'orchestrateur DOIT piloter un cycle commun de compactage des sessions de
 l'orchestrateur et de l'agent de codage toutes les 1 h 30 (5 400 secondes).
 À l'échéance, il DOIT suspendre l'attribution de nouveaux mandats, laisser
 l'opération autorisée en cours se terminer et traiter son rapport. Il DOIT
-ensuite lancer les deux compactages en parallèle, sans attendre la fin de
-l'un pour déclencher l'autre, dans un même cycle identifié et horodaté.
+ensuite vérifier les API natives exposées pour les sessions réellement
+pilotées. Lorsque les deux sont disponibles, il DOIT lancer les deux
+compactages en parallèle dans un même cycle identifié et horodaté ; sinon,
+il DOIT compacter les seules sessions accessibles et tracer ce qui n'a pas
+été exécuté.
 
-Le checkpoint non secret DOIT conserver les deux identifiants de session, le
+Le checkpoint non secret DOIT conserver les identifiants de session disponibles
+et signaler ceux non exposés sans les inventer, le
 périmètre, les mandats consommés, les preuves et la prochaine action. Les deux
 résultats natifs DOIVENT être observés et corrélés aux sessions réellement
 pilotées ; une session auxiliaire, un accusé de lancement ou un résumé rédigé
 manuellement NE DOIT PAS être présenté comme un compactage achevé.
 
-Avant reprise, l'orchestrateur DOIT réconcilier les deux contextes, la santé
-OpenCode, MCP, la readiness CAB et l'absence de permission parasite. Un
+Les deux preuves natives sont requises pour déclarer la réussite conjointe,
+pas pour reprendre un RUN dont l'état reste exploitable. Avant reprise,
+l'orchestrateur DOIT réconcilier les deux contextes, la santé OpenCode, MCP,
+la readiness CAB et l'absence de permission parasite. Un
 compactage NE DOIT PAS rejouer un mandat, autoriser une opération, modifier le
 modèle ou fermer/redémarrer un processus. Si une API native est indisponible
 ou si l'un des compactages échoue, conserver le cycle incomplet, sa cause et
-ses preuves ; ne pas annoncer une synchronisation réussie. Tout retard dû à
-un mandat en cours DOIT rester observable, sans réussite rétroactive.
+ses preuves ; ne pas annoncer une synchronisation réussie. Ce seul écart
+NE DOIT PAS classer le RUN `BLOQUÉ`, arrêter CAB, demander une dérogation ni
+différer les statistiques. Une reprise sûre DOIT poursuivre les mandats déjà
+autorisés ; un compactage encore en cours ou une réconciliation impossible
+DOIT suspendre les seules opérations concernées selon les règles CAB.
+L'orchestrateur NE DOIT PAS répéter aveuglément une opération d'effet inconnu
+ni attendre une API absente ; il réexamine sa disponibilité à la prochaine
+échéance du cycle. Tout retard DOIT rester observable, sans réussite rétroactive.
 
 #### Statistiques d'archivage
 
