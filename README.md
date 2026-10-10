@@ -231,15 +231,21 @@ ressources CAB en cours restent inchangées.
 À la fin, elle récapitule les versions GitHub et locales du plugin, du
 contrôleur, du superviseur déployé, du broker actif et de la commande CAB.
 
-Après une récupération échouée prouvant à la fois `true` au lieu de
-`/usr/bin/true` et un `change_id` divergent, le protocole autorise une nouvelle
-session CAB avec purge de ses deux espaces techniques résolus, sans nouvelle
-confirmation après le feu vert. Cette exception exige l'inactivité et les
-effets réconciliés, les permissions neutralisées et un checkpoint métier
-préservé hors purge. Nouveau job, identifiants neufs et prévol exact avec le
-bon change sont requis avant reprise, sans rejouer les écritures validées.
+Après un prévol de récupération divergent ou incomplet prouvé et refusé sans
+effet, le protocole déclenche une nouvelle session CAB avec purge des deux
+espaces techniques résolus, sans nouvelle confirmation après le feu vert.
+Les champs ou délais prescrits omis sont couverts ; deux écarts simultanés
+ne sont plus nécessaires. Cette exception exige propriété/inactivité prouvées,
+permissions neutralisées et checkpoint métier préservé hors purge. Nouveau
+job, identifiants neufs et prévol exact avec le bon change sont requis avant
+reprise, sans rejouer les écritures validées. Une nouvelle divergence sûre
+relance la procédure et garde le RUN parent non terminal. Un timeout MCP seul
+conserve le polling de la même approbation ; effet inconnu, preuve absente,
+espace partagé ou purge partielle bloque la reprise automatique.
 OpenCode reste ouvert ; la récupération ordinaire reste sans purge et les
-gardes de l'outil de purge sont conservées.
+gardes de l'outil de purge sont conservées. L'automatisation est effectuée par
+l'orchestrateur appliquant le protocole distribué, sans nouvel automate dans
+le broker ou l'API `/job/recover`.
 
 ## Organisation du dépôt
 terme
@@ -387,7 +393,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.87.0`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.87.1`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

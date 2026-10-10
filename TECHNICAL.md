@@ -37,7 +37,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.87.0` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.87.1` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -228,11 +228,17 @@ correctif source.
 
 ### Exception après échec du prévol de récupération
 
-Le double écart prouvé `true` au lieu de `/usr/bin/true` et `change_id`
-divergent autorise l'orchestrateur, après le feu vert, à ouvrir une nouvelle
-session CAB sans redemander confirmation. `/job/recover` reste inchangé et
-conserve son gel ; il ne purge ni ne valide ce prévol. L'exception est décrite
-dans le skill et `references/session-reset.md`, et non dans un nouvel endpoint.
+Un prévol de récupération divergent ou incomplet, prouvé par les arguments
+natifs et refusé avant exécution sans effet observé ou inconnu, déclenche une
+nouvelle session CAB sans redemander confirmation après le feu vert. Cela
+inclut les champs ou délais prescrits omis, dont `approval_id`, `files` et
+`timeout_seconds`, une demande malformée avant enregistrement, une commande
+ou un change divergent ; il n'est pas nécessaire de cumuler deux écarts.
+Un HTTP 409 seul, une affirmation textuelle ou un délai MCP seul ne suffit
+pas : le délai ordinaire conserve le polling du même `approval_id`.
+L'automatisation appartient à l'orchestrateur. `/job/recover` reste inchangé
+et conserve son gel ; il ne purge ni ne valide ce prévol. L'exception est
+décrite dans le skill et `references/session-reset.md`, sans nouvel endpoint.
 
 Avant suppression, réconcilier les effets, refuser les permissions erronées,
 clôturer les demandes restantes et prouver l'inactivité du contexte. Préserver
@@ -247,7 +253,14 @@ et du projet, avec ses mêmes gardes. La nouvelle session et le nouveau job
 ont des identifiants neufs et le change attendu du checkpoint. Le test de ce
 redémarrage exige exactement `/usr/bin/true`, sans suffixe, avec le bon
 `change_id`, décision explicite et consommation unique, exit 0, puis readiness
-READY sans permission parasite. Réconcilier les fichiers et reprendre au
+READY sans permission parasite. Un prévol de nouveau divergent interdit la
+reprise métier et relance la procédure lorsque toutes les préconditions sont
+à nouveau prouvées. Le RUN parent reste non terminal, sans limite de tentatives
+sûres, sans concurrence ni doublon d'une tentative non réconciliée. Le checkpoint
+trace numéro, identifiants, horodatages, cause, arguments attendus/observés et
+preuves natives. Un arrêt explicite, une preuve absente, un effet inconnu ou
+une purge partielle impose l'arrêt de cette reprise automatique.
+Réconcilier les fichiers et reprendre au
 premier jalon non prouvé, sans rejouer les écritures validées. Les reprises
 ordinaires restent sans purge ; les états supprimés ne sont pas restaurés.
 

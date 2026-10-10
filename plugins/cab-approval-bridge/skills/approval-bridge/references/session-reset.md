@@ -67,11 +67,20 @@ définie ci-dessous ; elle ne relâche aucune garde de chemin ou de verrou.
 
 ## Exception : récupération échouée au prévol divergent
 
-Après le feu vert, l'orchestrateur est autorisé sans nouvelle confirmation à
-reprendre une nouvelle session CAB si les preuves de la récupération échouée
-montrent ensemble `true` au lieu de `/usr/bin/true` et un `change_id`
-divergent. Refuser le mandat erroné sans normalisation. Aucun autre échec
-n'autorise cette exception ; `/job/recover` ne l'exécute jamais automatiquement.
+Après le feu vert, l'orchestrateur déclenche sans nouvelle confirmation une
+nouvelle session CAB pour un prévol de récupération divergent ou incomplet,
+prouvé par les appels natifs et refusé avant exécution sans effet observé ou
+inconnu. Cela inclut un champ prescrit absent ou altéré (dont `approval_id`,
+`files` et `timeout_seconds`), une commande ou un `change_id` divergent,
+ainsi qu'une demande malformée rejetée avant enregistrement. Il n'est pas
+nécessaire de cumuler deux écarts. Refuser le mandat erroné sans normalisation.
+L'automatisation appartient à l'orchestrateur ; `/job/recover` conserve son
+refus et son gel et ne l'exécute jamais automatiquement.
+
+Un HTTP 409 seul, un texte de l'agent ou un délai MCP seul ne suffit pas :
+vérifier les arguments réellement prescrits et leurs preuves natives.
+Après un délai MCP ordinaire, interroger uniquement le même `approval_id`
+sans créer de demande ni purger le runtime.
 
 Avant l'étape 1, geler le travail, traiter les rapports, réconcilier les effets,
 refuser les permissions divergentes et clôturer les demandes restantes sans
@@ -98,7 +107,17 @@ identifiants neufs de session, job, requête et approbation. Conserver le change
 attendu et les critères du checkpoint, jamais le change divergent. Le prévol
 exact `/usr/bin/true` exige décision explicite, réponse MCP corrélée,
 consommation native unique, exit 0 et readiness finale READY sans demande ni
-permission parasite. Un nouveau prévol divergent interdit la reprise.
+permission parasite.
+
+Un nouveau prévol divergent interdit la reprise métier et relance cette
+procédure si les mêmes préconditions de sûreté sont à nouveau prouvées.
+Le RUN parent reste en attente non terminale. Tracer chaque tentative dans
+le checkpoint : numéro, identifiants, horodatages, cause, arguments attendus
+et observés et références des preuves natives. Renouveler les tentatives
+sans limite tant que les préconditions restent prouvées, jusqu'au prévol
+exact réussi ou à l'arrêt explicite du développeur. Ne lancer aucune tentative
+simultanée ni dupliquer une tentative non réconciliée ; maintenir le suivi
+de progression à la cadence existante, sans boucle serrée.
 
 Réconcilier ensuite les fichiers et les preuves externes, puis reprendre au
 premier jalon non prouvé, sans rejouer les écritures validées ni les décisions
