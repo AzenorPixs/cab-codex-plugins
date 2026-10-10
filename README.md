@@ -70,6 +70,80 @@ OpenCode ── SSE HTTP direct ──► supervision CAB
 
 Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
+## Architecture technique détaillée
+
+Cette vue détaille les composants et les échanges du protocole CAB. Elle
+distingue le transport MCP, les interfaces HTTP locales, la décision Codex,
+la permission native OpenCode et la supervision du job.
+
+```mermaid
+flowchart TB
+    D["Développeur"]
+    C["Codex — orchestrateur / validateur<br/>Commande /cab et skills CAB"]
+
+    subgraph OC["OpenCode"]
+        O["Agent de codage<br/>Session persistante"]
+        P["Permission native<br/>limitée à une opération"]
+        X["Exécution de l'opération<br/>puis rapport et preuves"]
+        O -->|"Demande de permission"| P
+        P -->|"Autorisation unique"| X
+        X -->|"Résultat"| O
+    end
+
+    subgraph CAB["Infrastructure CAB"]
+        B["Broker MCP local<br/>Corrélation et readiness"]
+        E[("Approbations persistantes<br/>Journal et intégrité")]
+        T["Contrôleur Codex<br/>API HTTP locale"]
+        S["Superviseur durable<br/>Contrôle et reprise du job"]
+        J[("Contrat de job, jalons<br/>Gate terminal et état de supervision")]
+
+        B <-->|"Persistance"| E
+        B <-->|"HTTP local : demande, décision, readiness"| T
+        T <-->|"Persistance du job"| J
+        S <-->|"Persistance de supervision"| J
+        S <-->|"HTTP : statut, job et gate"| T
+    end
+
+    A["Codex App Server<br/>Session Codex de validation"]
+
+    D -->|"Objectif, périmètre et validations"| C
+    D -->|"Interaction directe"| O
+    C <-->|"HTTP : pilotage et rapports"| T
+    C -->|"Mode manuel par défaut : décision explicite"| T
+
+    O <-->|"MCP stdio local : demande et réponse corrélées"| B
+    O -.->|"SSE HTTP direct : événements"| T
+    O -.->|"SSE HTTP direct : événements"| S
+    S -.->|"HTTP : reprise de la même session si admissible"| O
+
+    T -->|"HTTP : approved corrélé → réponse once"| P
+
+    T -.->|"Mode automatique : demande de validation"| A
+    A -.->|"Décision Codex structurée"| T
+```
+
+- **Un mandat = une opération** : un fichier ou une commande, avec
+  corrélation de `requestId`, `approval_id`, `change_id`, de la session et du
+  répertoire.
+- Le broker transporte et persiste ; **Codex décide**. Le contrôleur transmet
+  l'approbation à la permission native correspondante avec une réponse
+  `once`, consommable une seule fois.
+- Les événements SSE et les relances techniques ne donnent aucune
+  autorisation. Une décision absente ne vaut jamais approbation.
+- Le gate terminal contrôle la clôture du job ; il reste distinct des
+  décisions unitaires et ne remplace pas une permission OpenCode.
+- Le mode manuel, utilisé par défaut, attend une décision HTTP explicite de
+  l'orchestrateur sur `POST /decision/<requestId>`. Le mode automatique
+  sollicite une session Codex de validation via Codex App Server.
+- Le broker notifie le contrôleur sur `POST /validation/request` et récupère
+  la décision sur `GET /decision/<requestId>`. La readiness est publiée
+  séparément ; `READY` ne vaut jamais approbation.
+
+Les cylindres représentent les états persistants des composants, sans
+imposer un fichier ou un emplacement partagé. Les flèches en pointillés
+identifient les voies SSE, les reprises techniques et le chemin de décision
+du mode automatique.
+
 ## Ce que fournit CAB
 
 - broker MCP persistant ;
@@ -168,7 +242,7 @@ OpenCode reste ouvert ; la récupération ordinaire reste sans purge et les
 gardes de l'outil de purge sont conservées.
 
 ## Organisation du dépôt
-
+terme
 ```text
 CAB/
 ├── src/                       # bridge Python initié par OpenCode
@@ -248,7 +322,7 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 | `OC_Codex_STATUS_PORT` | port local du contrôleur |
 | `OC_Codex_RECONNECT_MS` | délai de reconnexion SSE |
 | `OC_Codex_CONTROLLER_URL` | endpoint de statut utilisé par le healthcheck |
-| `OC_Codex_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readiness |
+| `OC_Codex_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readinessterme |
 | `OC_Codex_SUPERVISOR_URL` | endpoint de statut du superviseur utilisé par le healthcheck |
 | `OC_Codex_SUPERVISOR_STATUS_HOST` | adresse loopback du superviseur |
 | `OC_Codex_SUPERVISOR_STATUS_PORT` | port local du superviseur, `8789` par défaut |
@@ -269,13 +343,29 @@ Les secrets doivent rester hors du dépôt Git et des journaux.
 
 ## Persistance
 
-Par défaut, CAB utilise :
+Par défaut, le broker utilise le home du processus OpenCode qui le lance :
 
 ```text
-/workspace/.opencode/state/cgpt-approval-bridge/
+$HOME/.opencode/state/cgpt-approval-bridge/
 ```
 
-pour ses états runtime. Ce répertoire n'est pas une source du projet et ne doit pas être publié avec une release.
+Le contrôleur et le superviseur utilisent par défaut l'espace situé dans le
+workspace du projet piloté :
+
+```text
+<workspace>/.opencode/state/cgpt-approval-bridge/
+```
+
+Les variables de configuration peuvent personnaliser les chemins du broker
+et celui de l'état du superviseur. Les espaces runtime doivent être résolus
+depuis la configuration effective ; `/workspace` est seulement un exemple de
+racine de projet. Ces espaces ne sont pas des sources du projet et ne doivent
+pas être publiés avec une release.
+
+Le contrôleur démarre sans job uniquement si son fichier de contrat est
+absent. Un JSON malformé ou une autre erreur de lecture interrompt son
+démarrage avec un diagnostic sans contenu persistant. Le fichier est conservé
+pour une intervention autorisée ; aucun état n'est réparé automatiquement.
 
 ## Readiness
 
@@ -297,11 +387,14 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.86.9`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.87.0`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
 
+- **ORCHESTRATED_CODING.md** — document facultatif, réservé aux projets
+  nécessitant des sessions pilotées ; AGENTS.md impose alors sa lecture aux
+  deux agents concernés pour le protocole et ses contrats techniques.
 - **PROJECT.md** — but, architecture et périmètre ;
 - **TECHNICAL.md** — protocoles, persistance, supervision et configuration ;
 - **BUILD.md** — installation, packaging et distribution ;

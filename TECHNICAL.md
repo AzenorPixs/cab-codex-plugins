@@ -4,6 +4,11 @@
 
 Ce document décrit le fonctionnement technique de CAB. Il complète `PROJECT.md` sans reprendre son cadrage fonctionnel et `BUILD.md` sans traiter du packaging ou de la publication.
 
+Le déroulement d'une session orchestrateur–agent de codage et ses contrats
+de pilotage sont regroupés dans `ORCHESTRATED_CODING.md` à la racine du projet.
+AGENTS.md conserve les règles générales et impose cette référence aux sessions
+pilotées ; le présent document reste le cadrage technique des composants CAB.
+
 ## 2. Arborescence technique
 
 ```text
@@ -32,7 +37,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.86.9` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.87.0` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -159,6 +164,16 @@ seulement après contrôle de son éligibilité, des validations et de la
 cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
+
+Au démarrage, le contrôleur restaure `controller-job.json` depuis son espace
+runtime. Seule l'absence du fichier (`ENOENT`) permet un démarrage sans job.
+Un JSON malformé ou une autre erreur de lecture arrête le démarrage avec un
+code non nul avant l'ouverture HTTP et les interactions OpenCode ou Codex App
+Server. Le diagnostic distingue JSON invalide et lecture impossible sans
+reprendre le contenu, le message brut de l'erreur ou le chemin runtime.
+Le fichier reste intact ; aucune réparation ou réinitialisation automatique
+n'est effectuée. Les contrats valides, leurs jalons, leur gate et leurs
+métadonnées de récupération conservent leur comportement de restauration.
 
 Le plugin distribue les modèles de services utilisateur
 `cgpt-approval-bridge-controller.service` et

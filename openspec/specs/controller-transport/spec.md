@@ -64,6 +64,31 @@ Le contrôleur SHALL exposer son état public sur `GET /status`, dont l'état du
 - **WHEN** un healthcheck appelle `GET /status`
 - **THEN** il reçoit un objet JSON sans secret ni décision détaillée
 
+### Requirement: Verrou de clôture de job corrélé
+Le contrôleur SHALL exiger un gate terminal local avant de confirmer la
+clôture normale d'un job CAB. Le gate SHALL être refusé tant qu'une validation
+est active ou en attente, ou tant qu'un état terminal explicite `TERMINÉ` ou
+`BLOQUÉ` n'est pas fourni. Il SHALL rester distinct de toute décision de
+mandat et ne SHALL jamais approuver une opération OpenCode.
+
+#### Scenario: Clôture prématurée refusée
+- **WHEN** une clôture est demandée alors qu'une validation est active ou en attente
+- **THEN** le contrôleur la refuse, expose la raison sans secret et conserve le job ouvert
+
+#### Scenario: Gate terminal valide
+- **WHEN** une clôture normale est demandée avec un état terminal explicite et sans validation active ou en attente
+- **THEN** le contrôleur confirme le gate terminal et rend son état observable
+
+### Requirement: État terminal observable
+Le contrôleur SHALL exposer sur `GET /status` un résumé non sensible du gate
+terminal, comprenant son état, sa raison et l'état terminal déclaré. Une
+attente, un silence SSE, un rapport intermédiaire ou la fin d'un tour Codex ne
+SHALL jamais être interprété comme un état terminal.
+
+#### Scenario: Jalon intermédiaire non terminal
+- **WHEN** le contrôleur observe la fin d'un tour Codex sans état terminal déclaré
+- **THEN** son statut indique que le gate terminal n'est pas validé
+
 ### Requirement: Corrélation sûre des commandes Bash instrumentées
 Le contrôleur SHALL corréler une permission Bash à la commande approuvée
 lorsque OpenCode y ajoute exclusivement une instrumentation de sortie
@@ -221,3 +246,43 @@ La commande réservée MUST être corrélée exactement sans suffixe, quelle que
 #### Scenario: Suffixe ou ancienne décision
 - **WHEN** une permission ajoute un suffixe au prévol ou vise une autorisation invalidée de l'ancienne session
 - **THEN** aucune permission once n'est transmise
+
+### Requirement: Restauration explicite du job au démarrage
+
+Le contrôleur MUST restaurer un contrat de job valide selon le format existant.
+Seule l'absence du fichier, signalée par ENOENT, MAY être traitée comme un
+démarrage normal sans job. Les jalons, le gate et les métadonnées de récupération
+MUST rester conservés lors d'une restauration valide.
+
+#### Scenario: Fichier absent
+- **WHEN** le fichier de contrat est absent
+- **THEN** le contrôleur peut démarrer sans job enregistré
+
+#### Scenario: Contrat valide
+- **WHEN** le fichier contient un contrat valide avec un gate ouvert et des métadonnées de récupération
+- **THEN** le contrôleur restaure ce contrat sans inventer de jalon ni d'état terminal
+
+### Requirement: Refus des erreurs de restauration du job
+
+Un JSON malformé ou une erreur de lecture autre que ENOENT MUST arrêter le
+démarrage du contrôleur avec un code non nul avant toute interface HTTP ou
+interaction avec OpenCode ou Codex App Server. Le fichier persistant MUST
+rester inchangé, sans suppression ni réparation automatique.
+
+#### Scenario: JSON malformé
+- **WHEN** le fichier de contrat ne peut pas être décodé comme JSON
+- **THEN** le contrôleur échoue au démarrage sans interaction externe et conserve le fichier intact
+
+#### Scenario: Erreur de lecture
+- **WHEN** la lecture du fichier de contrat échoue avec une erreur autre que ENOENT
+- **THEN** le contrôleur échoue au démarrage sans assimiler cette erreur à un job absent
+
+### Requirement: Diagnostic de restauration sans contenu persistant
+
+Un refus de restauration MUST produire un diagnostic explicite distinguant
+un JSON malformé d'une lecture impossible. Ce diagnostic MUST NOT reprendre
+le contenu persistant, le message brut de l'exception ou le chemin runtime.
+
+#### Scenario: Contenu non exposé
+- **WHEN** un contrat malformé contient un marqueur synthétique
+- **THEN** le diagnostic identifie l'échec de décodage sans afficher ce marqueur ni le chemin runtime

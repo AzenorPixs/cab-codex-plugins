@@ -89,6 +89,80 @@ OpenCode ───────── SSE HTTP direct ─────────
 
 Le transport entre OpenCode et le broker est exclusivement **MCP stdio local**. Le broker n'expose pas de serveur MCP réseau.
 
+### 4.1 Architecture technique détaillée
+
+Cette vue détaille les composants et les échanges du protocole CAB. Elle
+distingue le transport MCP, les interfaces HTTP locales, la décision Codex,
+la permission native OpenCode et la supervision du job.
+
+```mermaid
+flowchart TB
+    D["Développeur"]
+    C["Codex — orchestrateur / validateur<br/>Commande /cab et skills CAB"]
+
+    subgraph OC["OpenCode"]
+        O["Agent de codage<br/>Session persistante"]
+        P["Permission native<br/>limitée à une opération"]
+        X["Exécution de l'opération<br/>puis rapport et preuves"]
+        O -->|"Demande de permission"| P
+        P -->|"Autorisation unique"| X
+        X -->|"Résultat"| O
+    end
+
+    subgraph CAB["Infrastructure CAB"]
+        B["Broker MCP local<br/>Corrélation et readiness"]
+        E[("Approbations persistantes<br/>Journal et intégrité")]
+        T["Contrôleur Codex<br/>API HTTP locale"]
+        S["Superviseur durable<br/>Contrôle et reprise du job"]
+        J[("Contrat de job, jalons<br/>Gate terminal et état de supervision")]
+
+        B <-->|"Persistance"| E
+        B <-->|"HTTP local : demande, décision, readiness"| T
+        T <-->|"Persistance du job"| J
+        S <-->|"Persistance de supervision"| J
+        S <-->|"HTTP : statut, job et gate"| T
+    end
+
+    A["Codex App Server<br/>Session Codex de validation"]
+
+    D -->|"Objectif, périmètre et validations"| C
+    D -->|"Interaction directe"| O
+    C <-->|"HTTP : pilotage et rapports"| T
+    C -->|"Mode manuel par défaut : décision explicite"| T
+
+    O <-->|"MCP stdio local : demande et réponse corrélées"| B
+    O -.->|"SSE HTTP direct : événements"| T
+    O -.->|"SSE HTTP direct : événements"| S
+    S -.->|"HTTP : reprise de la même session si admissible"| O
+
+    T -->|"HTTP : approved corrélé → réponse once"| P
+
+    T -.->|"Mode automatique : demande de validation"| A
+    A -.->|"Décision Codex structurée"| T
+```
+
+- **Un mandat = une opération** : un fichier ou une commande, avec
+  corrélation de `requestId`, `approval_id`, `change_id`, de la session et du
+  répertoire.
+- Le broker transporte et persiste ; **Codex décide**. Le contrôleur transmet
+  l'approbation à la permission native correspondante avec une réponse
+  `once`, consommable une seule fois.
+- Les événements SSE et les relances techniques ne donnent aucune
+  autorisation. Une décision absente ne vaut jamais approbation.
+- Le gate terminal contrôle la clôture du job ; il reste distinct des
+  décisions unitaires et ne remplace pas une permission OpenCode.
+- Le mode manuel, utilisé par défaut, attend une décision HTTP explicite de
+  l'orchestrateur sur `POST /decision/<requestId>`. Le mode automatique
+  sollicite une session Codex de validation via Codex App Server.
+- Le broker notifie le contrôleur sur `POST /validation/request` et récupère
+  la décision sur `GET /decision/<requestId>`. La readiness est publiée
+  séparément ; `READY` ne vaut jamais approbation.
+
+Les cylindres représentent les états persistants des composants, sans
+imposer un fichier ou un emplacement partagé. Les flèches en pointillés
+identifient les voies SSE, les reprises techniques et le chemin de décision
+du mode automatique.
+
 ## 5. Composants
 
 ### 5.1 Broker MCP
