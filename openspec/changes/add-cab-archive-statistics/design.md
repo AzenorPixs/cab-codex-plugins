@@ -29,8 +29,11 @@ archiver une autre évolution ni ajouter un collecteur runtime ou une dépendanc
   En cas d'échec, le cycle reste incomplet, la cause est signalée et l'écriture
   seule peut être reprise ; ne pas réarchiver. Le broker et le gate HTTP
   existant ne lisent pas le projet : ce contrôle appartient à l'orchestrateur.
-- Conserver la version de base commune `0.85.2` avec le cachebuster Codex du
-  plugin. Les versions des schémas de persistance et MCP restent inchangées.
+- La release initiale de cette intégration utilisait la version de base
+  commune `0.85.2`, avec le cachebuster Codex du plugin. Le rapprochement CGP
+  du 2026-10-10 aligne le delta encore actif sur la référence actuelle
+  `0.87.1`, sans réécrire la release initiale ni ses preuves. Les versions
+  des schémas de persistance et MCP restent inchangées.
 
 ## Risks / Trade-offs
 

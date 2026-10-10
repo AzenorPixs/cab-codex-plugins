@@ -98,12 +98,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.87\.1$/m);
-  assert.match(manifest, /"version": "0\.87\.1\+codex\./);
-  assert.match(controller, /version: "0\.87\.1"/);
-  assert.match(supervisor, /const version = "0\.87\.1"/);
-  assert.match(broker, /SERVER_VERSION = "0\.87\.1"/);
-  assert.match(project, /^version = "0\.87\.1"$/m);
+  assert.match(command, /^version: 0\.87\.2$/m);
+  assert.match(manifest, /"version": "0\.87\.2\+codex\./);
+  assert.match(controller, /version: "0\.87\.2"/);
+  assert.match(supervisor, /const version = "0\.87\.2"/);
+  assert.match(broker, /SERVER_VERSION = "0\.87\.2"/);
+  assert.match(project, /^version = "0\.87\.2"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -233,7 +233,7 @@ test("le protocole distribue des cadences indépendantes et une attente PLLM per
   }
 });
 
-test("le prévol incomplet déclenche une récupération sûre sans terminer le RUN", () => {
+test("le prévol divergent conserve la candidate et le job dans le protocole distribué", () => {
   const sections = [];
   for (const path of [
     "../ORCHESTRATED_CODING.md",
@@ -241,59 +241,28 @@ test("le prévol incomplet déclenche une récupération sûre sans terminer le 
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
   ]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
-    const heading = "## Nouvelle session CAB après prévol de récupération divergent";
+    const heading = "## Prévol de récupération divergent dans la même session";
     const start = source.indexOf(heading);
     assert.notEqual(start, -1, path);
     const end = source.indexOf("\n## ", start + heading.length);
-    const section = source.slice(start, end === -1 ? undefined : end)
-      .replace(/\s+/g, " ").trim();
+    const section = source.slice(start, end === -1 ? undefined : end);
     sections.push(section);
-    assert.match(section, /sans nouvelle confirmation/, path);
-    assert.match(section, /divergent ou incomplet est prouvé par les appels natifs, refusé avant exécution/, path);
-    for (const field of ["requestId", "approval_id", "change_id", "session_id",
-      "directory", "files", "commands", "title", "summary", "timeout_seconds", "interval_seconds"]) {
-      assert.ok(section.includes(`\`${field}\``), `${path}: ${field}`);
+    for (const invariant of ["conserver la session candidate", "phase: \"retry\"",
+      "previousPreflightRequestId", "Ne pas réarmer, désarmer ou abandonner le job",
+      "sans\nrejouer les écritures validées", "Le superviseur reste gelé",
+      "Une erreur générique, un timeout", "l'ancienne session révoquée"]) {
+      assert.ok(section.includes(invariant), `${path}: ${invariant}`);
     }
-    assert.match(section, /demande malformée rejetée avant enregistrement/, path);
-    assert.match(section, /pas nécessaire de cumuler deux écarts/, path);
-    assert.match(section, /un paramètre non prescrit ne devient pas une divergence inventée/, path);
-    assert.match(section, /Un HTTP 409 seul, un texte de l'agent ou un délai MCP seul ne suffit pas/, path);
-    assert.match(section, /interroger uniquement le même `approval_id`/, path);
-    assert.match(section, /sans nouvelle demande ni purge/, path);
-    assert.match(section, /L'automatisation appartient à l'orchestrateur du RUN/, path);
-    assert.match(section, /n'est jamais exécutée automatiquement par `\/job\/recover`/, path);
-    assert.match(section, /aucun mandat actif ou en attente, aucune permission non résolue et aucun effet inconnu/, path);
-    assert.match(section, /checkpoint métier non secret/, path);
-    assert.match(section, /gate OPEN, sans fabriquer un gate valide/, path);
-    assert.match(section, /<home OpenCode>\/\.opencode\/state\/cgpt-approval-bridge\//, path);
-    assert.match(section, /<racine projet>\/\.opencode\/state\/cgpt-approval-bridge\//, path);
-    assert.match(section, /identifiants de session, job, requête et approbation neufs/, path);
-    assert.match(section, /exactement `\/usr\/bin\/true`, sans suffixe, avec le `change_id` attendu/, path);
-    assert.match(section, /sans rejouer les écritures validées/, path);
-    assert.match(section, /récupération ordinaire reste sans purge/, path);
-    assert.match(section, /Une purge partielle interdit le démarrage/, path);
-    assert.match(section, /RUN parent reste en attente non terminale/, path);
-    assert.match(section, /Renouveler les tentatives sans limite/, path);
-    assert.match(section, /Ne lancer aucune tentative simultanée ni dupliquer une tentative non réconciliée/, path);
-    assert.match(section, /arguments attendus et observés, références des preuves natives/, path);
-    assert.match(section, /relance cette procédure si les mêmes préconditions de sûreté sont à nouveau prouvées/, path);
-    assert.match(section, /Effet inconnu, propriété incertaine ou garde non établie/, path);
+    assert.equal(source.includes("## Nouvelle session CAB après prévol de récupération divergent"), false);
   }
   assert.equal(sections[0], sections[1]);
   assert.equal(sections[1], sections[2]);
   const reset = readFileSync(new URL(
-    "../plugins/cab-approval-bridge/skills/approval-bridge/references/session-reset.md",
-    import.meta.url
-  ), "utf8").replace(/\s+/g, " ");
-  assert.match(reset, /sans nouvelle confirmation/);
-  assert.match(reset, /checkpoint métier externe sont distincts/);
-  assert.match(reset, /ne prétend pas réussir `\/cab stop` normal/);
-  assert.match(reset, /--confirm-new-session --state-dir/);
-  assert.match(reset, /approval_id/);
-  assert.match(reset, /timeout_seconds/);
-  assert.match(reset, /Le RUN parent reste en attente non terminale/);
-  assert.match(reset, /sans limite tant que les préconditions restent prouvées/);
-  assert.match(reset, /sans créer de demande ni purger le runtime/);
+    "../plugins/cab-approval-bridge/skills/approval-bridge/references/session-reset.md", import.meta.url
+  ), "utf8");
+  assert.ok(reset.includes("il ne déclenche jamais cette purge"));
+  assert.ok(reset.includes("--confirm-new-session --state-dir"));
+  assert.ok(reset.includes("[SKILL.md](../SKILL.md)"));
 });
 
 test("les sondes statistiques n'arrêtent pas le travail pour attendre le créneau", () => {

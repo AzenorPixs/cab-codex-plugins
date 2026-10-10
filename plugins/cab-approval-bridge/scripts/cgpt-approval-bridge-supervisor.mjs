@@ -7,11 +7,12 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "0.87.1";
+const version = "0.87.2";
 const workspace = envValue("OC_Codex_WORKSPACE");
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
-const controllerUrl = (envValue("OC_Codex_CONTROLLER_URL") || "http://127.0.0.1:8788").replace(/\/$/, "");
+const controllerUrl = (envValue("OC_Codex_CONTROLLER_URL") || "http://127.0.0.1:8788")
+  .replace(/\/+$/, "").replace(/\/status$/, "");
 const opencodeUrl = (envValue("OC_Codex_OPENCODE_URL") || "http://127.0.0.1:4096").replace(/\/$/, "");
 const resumeDelayMs = Number(envValue("OC_Codex_SUPERVISOR_RESUME_DELAY_MS") || "60000");
 const pollIntervalMs = Number(envValue("OC_Codex_SUPERVISOR_POLL_INTERVAL_MS") || "5000");
@@ -53,6 +54,7 @@ const state = {
   resumeInFlight: false,
 };
 let statePersistence = Promise.resolve();
+let supervisedJob = null;
 
 try {
   const persisted = JSON.parse(readFileSync(statePath, "utf8"));
@@ -126,6 +128,53 @@ function inactivityAgeMs() {
   return Number.isFinite(lastActivity) ? Date.now() - lastActivity : resumeDelayMs;
 }
 
+function selectSupervisedJob(job) {
+  supervisedJob = job?.armed
+    ? { jobId: job.jobId, sessionId: job.sessionId, directory: job.directory }
+    : null;
+  if (state.jobId !== (supervisedJob?.jobId || null) ||
+      state.sessionId !== (supervisedJob?.sessionId || null) ||
+      state.directory !== (supervisedJob?.directory || null)) {
+    Object.assign(state, {
+      jobId: supervisedJob?.jobId || null,
+      sessionId: supervisedJob?.sessionId || null,
+      directory: supervisedJob?.directory || null,
+      lastActivityAt: null,
+    });
+  }
+}
+
+function observeSessionEvent(frame) {
+  const data = frame.split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice(5).trimStart()).join("\n");
+  if (!data) return null;
+  let envelope;
+  try {
+    envelope = JSON.parse(data);
+  } catch (cause) {
+    if (!(cause instanceof SyntaxError)) throw cause;
+    state.lastEventError = "invalid-sse-json";
+    return "invalid-event";
+  }
+  const event = envelope?.payload || envelope;
+  if (!supervisedJob || typeof event?.type !== "string" ||
+      !/^(session|message|permission)\./.test(event.type)) return null;
+  const properties = event.properties;
+  const sessionId = properties?.sessionID || properties?.info?.sessionID ||
+    properties?.part?.sessionID ||
+    (event.type.startsWith("session.") ? properties?.info?.id : null);
+  const directories = [envelope?.directory, event.directory,
+    properties?.directory, properties?.info?.directory];
+  if (sessionId !== supervisedJob.sessionId ||
+      directories.some((directory) => directory !== undefined && directory !== supervisedJob.directory)) {
+    return null;
+  }
+  state.lastActivityAt = new Date().toISOString();
+  state.lastEventError = null;
+  return "session-activity";
+}
+
 async function reconcile() {
   try {
     const [status, job] = await Promise.all([
@@ -133,6 +182,7 @@ async function reconcile() {
       fetchJson(`${controllerUrl}/job`),
     ]);
 
+    selectSupervisedJob(job);
     state.lastReconciliationAt = new Date().toISOString();
     const denial = resumeAllowed(status, job);
 
@@ -215,12 +265,11 @@ async function consumeOpenCodeEvents() {
       const { done, value } = await reader.read();
       if (done) break;
       buffer += decoder.decode(value, { stream: true });
-      const frames = buffer.split("\n\n");
+      const frames = buffer.split(/\r?\n\r?\n/);
       buffer = frames.pop() || "";
 
       for (const frame of frames) {
-        if (/^data:\s*/m.test(frame)) {
-          state.lastActivityAt = new Date().toISOString();
+        if (observeSessionEvent(frame)) {
           await persistState();
         }
       }

@@ -37,7 +37,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.87.1` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.87.2` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -107,9 +107,9 @@ La purge efface également les checkpoints, anciens jobs, rappels, états de
 remédiation et conflits Syncthing. Seul l'inode de `broker.instance.lock` reste
 vide, verrouillé jusqu'à la fin de la purge. Un état recréé ou une erreur
 interdit le démarrage. Sources, secrets, configurations, rapports et historiques
-natifs des agents restent hors purge. Une reprise ordinaire ne purge rien ;
-seule l'exception après prévol divergent de la section 7 autorise le
-remplacement du runtime neutralisé, avec checkpoint métier externe préservé.
+natifs des agents restent hors purge. Une reprise ne purge rien, y compris
+après prévol divergent : candidate, job et preuves sont conservés selon la
+section 7.
 
 ## 5. États d'approbation
 
@@ -189,6 +189,12 @@ d'exécution. `/cab stop` arrête explicitement le superviseur, puis le
 contrôleur, sans supprimer les unités, arrêter OpenCode ou arrêter le broker
 MCP. Un RUN CAB ne doit pas les remplacer par des processus éphémères.
 
+Le gate terminal contrôle également les demandes locales sans décision,
+indépendamment du compteur actif et de la dernière readiness broker. En mode
+manuel, le retrait d'une demande du compteur actif ne la rend pas décidée :
+un ancien `pending_count: 0` ne permet pas de clôturer tant qu'elle reste
+indécise. Ce contrôle ne crée ni décision ni permission.
+
 L'interface du contrôleur écoute par défaut sur `127.0.0.1:8788`. La
 configuration admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce
 port n'est pas un transport MCP. Elle expose `GET /status`, `GET /job`, `POST
@@ -205,7 +211,7 @@ instrumentation de sortie. Cette option est persistée et exposée par
 
 La récupération explicite `POST /job/recover` remplace une session dans le
 même RUN, sans utiliser `/job/arm` ni désarmer le job. Son corps porte `phase`
-(`prepare` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
+(`prepare`, `retry` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
 `recoveryId` et `preflightRequestId`. prepare contrôle le contexte OpenCode,
 MCP, l'inactivité des deux sessions et l'absence de mandat indécis ou de
 permission non résolue ; il persiste le gel et invalide les autorisations
@@ -226,43 +232,35 @@ la réponse APPROVED réelle, l'exécution unique et la readiness finale restent
 requises. Aucune installation ni migration du broker n'est nécessaire au
 correctif source.
 
-### Exception après échec du prévol de récupération
+### Retry après prévol de récupération divergent
 
-Un prévol de récupération divergent ou incomplet, prouvé par les arguments
-natifs et refusé avant exécution sans effet observé ou inconnu, déclenche une
-nouvelle session CAB sans redemander confirmation après le feu vert. Cela
-inclut les champs ou délais prescrits omis, dont `approval_id`, `files` et
-`timeout_seconds`, une demande malformée avant enregistrement, une commande
-ou un change divergent ; il n'est pas nécessaire de cumuler deux écarts.
-Un HTTP 409 seul, une affirmation textuelle ou un délai MCP seul ne suffit
-pas : le délai ordinaire conserve le polling du même `approval_id`.
-L'automatisation appartient à l'orchestrateur. `/job/recover` reste inchangé
-et conserve son gel ; il ne purge ni ne valide ce prévol. L'exception est
-décrite dans le skill et `references/session-reset.md`, sans nouvel endpoint.
+Après refus sans effet, conserver la candidate, le job et le runtime. Aucun
+renouvellement de session, abandon technique ni purge n'est autorisé par cet
+incident. POST /job/recover accepte phase retry avec jobId, expectedSessionId,
+sessionId candidate et recoveryId inchangés, previousPreflightRequestId égal
+à la réservation courante et preflightRequestId inédit. Les préconditions de
+contexte, santé, MCP, inactivité et absence de permissions ou demandes non
+résolues restent obligatoires.
 
-Avant suppression, réconcilier les effets, refuser les permissions erronées,
-clôturer les demandes restantes et prouver l'inactivité du contexte. Préserver
-hors runtime le checkpoint métier, les jalons et preuves des écritures validées.
-Arrêter les seules ressources CAB et déconnecter le broker nativement ; le
-job technique gelé peut être abandonné sans gate terminal inventé. OpenCode
-reste ouvert. Effets inconnus, propriété incertaine ou espace partagé
-interdisent la purge.
+Le contrôleur exige un refus natif REJECTED corrélé à une décision locale
+rejected non consommée, ou une erreur native MCP -32602 avant enregistrement.
+Un délai seul, une erreur générique, une décision approved, une commande ou
+un autre outil natif interdit retry. Le polling ordinaire conserve approval_id.
 
-L'outil existant purge les deux espaces réellement résolus du home OpenCode
-et du projet, avec ses mêmes gardes. La nouvelle session et le nouveau job
-ont des identifiants neufs et le change attendu du checkpoint. Le test de ce
-redémarrage exige exactement `/usr/bin/true`, sans suffixe, avec le bon
-`change_id`, décision explicite et consommation unique, exit 0, puis readiness
-READY sans permission parasite. Un prévol de nouveau divergent interdit la
-reprise métier et relance la procédure lorsque toutes les préconditions sont
-à nouveau prouvées. Le RUN parent reste non terminal, sans limite de tentatives
-sûres, sans concurrence ni doublon d'une tentative non réconciliée. Le checkpoint
-trace numéro, identifiants, horodatages, cause, arguments attendus/observés et
-preuves natives. Un arrêt explicite, une preuve absente, un effet inconnu ou
-une purge partielle impose l'arrêt de cette reprise automatique.
-Réconcilier les fichiers et reprendre au
-premier jalon non prouvé, sans rejouer les écritures validées. Les reprises
-ordinaires restent sans purge ; les états supprimés ne sont pas restaurés.
+retry persiste les identifiants antérieurs et une empreinte SHA-256 du préfixe
+des parties tool natives, sans contenu de message. retry et complete vérifient
+ce préfixe ; seules les nouvelles preuves après cette frontière composent le
+nouveau prévol. Un historique altéré ou perdu conserve le gel. Les anciennes
+requêtes et approbations ne sont pas réutilisables ; décisions, critères,
+jalons et strictCommands restent intacts. Le superviseur attend complete.
+
+Le nouveau prévol exige /usr/bin/true exact avec le change attendu, décision
+explicite, réponse MCP corrélée, permission once, exit 0 puis READY sans demande
+ni permission parasite. complete conserve la candidate et le job. Un nouvel
+écart sûr autorise seulement un nouveau retry explicite dans cette même
+candidate, sans concurrence ni rejeu du travail prouvé. Le checkpoint métier
+conserve les tentatives et leurs références natives. Une preuve locale perdue
+après redémarrage n'est pas recréée implicitement. OpenCode reste ouvert.
 
 Pour les mandats lecture seule, le protocole distribué désactive explicitement
 bash, edit, write, apply_patch, task et skill via le champ tools du message.
@@ -276,6 +274,14 @@ session OpenCode, puis adresse une reprise à la même session après 60 seconde
 par défaut si le gate terminal est ouvert. Il ne crée ni session de
 remplacement, ni mandat, ni décision CAB. Lorsqu’une récupération est préparée,
 il suspend les relances ; après complete, il suit la session transférée.
+
+L'activité SSE est corrélée au job, à sa session et au répertoire lorsqu'il
+est fourni par l'événement. Les événements d'autres sessions ou répertoires,
+les heartbeats de transport et les trames sans identité exploitable ne
+repoussent pas la reprise. Un JSON SSE invalide reste observable sans contenu
+brut dans `lastEventError`, sans actualiser l'activité. Un changement de job,
+session ou répertoire invalide l'ancienne horloge ; les états déjà enregistrés
+restent lisibles sans migration. Le gel de récupération reste prioritaire.
 
 ## 8. Supervision OpenCode
 
@@ -333,10 +339,22 @@ benchmark PLLM au broker, au contrôleur ou au superviseur.
 ### Compactage coordonné des contextes
 
 Le protocole impose un cycle commun toutes les 1 h 30 (5 400 secondes), piloté
-par l'orchestrateur à une frontière entre mandats. Il déclenche en parallèle
-les compactages des deux sessions réellement actives, puis attend leurs deux
-preuves et réconcilie les contextes et CAB avant de reprendre. L'horloge et
-les éventuels retards de fin de mandat sont conservés dans le checkpoint.
+par l'orchestrateur à une frontière entre mandats. Après traitement du rapport
+et sauvegarde du checkpoint, il vérifie les API natives réellement exposées.
+Si les deux sont disponibles, il déclenche les compactages en parallèle ;
+sinon, il compacte les seules sessions accessibles et trace les opérations
+non exécutées. Les deux preuves natives sont requises pour déclarer une
+réussite conjointe, pas pour reprendre un RUN dont l'état reste exploitable.
+Une API absente ou un échec avec contexte préservé laisse le cycle incomplet
+avec sa cause. Après réconciliation sûre des contextes, santé OpenCode, MCP,
+readiness CAB et permissions, les mandats déjà autorisés se poursuivent.
+Ce seul écart ne bloque pas le RUN, n'arrête pas CAB, ne requiert pas de
+dérogation et ne diffère pas les statistiques. Un compactage encore en cours,
+un effet inconnu ou une réconciliation impossible suspend les opérations
+concernées, sans rejeu aveugle. Une API absente est réexaminée à la prochaine
+échéance, calculée depuis le déclenchement du cycle courant. L'horloge,
+les sessions disponibles ou non exposées, les résultats et les éventuels
+retards de fin de mandat sont conservés dans le checkpoint.
 
 OpenCode expose `POST /session/<id>/summarize`. Codex App Server expose
 `thread/compact/start` sur la connexion qui possède la session active : sa
@@ -450,7 +468,10 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
   utiliser le chemin de décision existant via Codex App Server ; en mode
   manuel, les demandes restent PENDING jusqu'à une décision HTTP explicite,
   et les rappels ne lancent aucun thread ni tour Codex auxiliaire
-- `OC_Codex_CONTROLLER_URL`
+- `OC_Codex_CONTROLLER_URL` : URL commune au healthcheck et au superviseur ;
+  accepte la base HTTP du contrôleur ou son endpoint `/status`, avec slash
+  final éventuel. Les deux clients résolvent `/status` une seule fois ; le
+  superviseur retrouve la base pour `/job`
 - `OC_Codex_SUPERVISOR_URL`
 - `OC_Codex_SUPERVISOR_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
 - `OC_Codex_SUPERVISOR_STATUS_PORT`
@@ -472,8 +493,8 @@ piloté.
 
 - `/cab start` purge les seuls anciens états CAB après contrôle d'inactivité,
   vérifie `/mcp`, initialise la supervision et crée une nouvelle session
-  maîtresse ; la reprise ordinaire conserve son état, hors exception de
-  prévol divergent avec checkpoint métier externe définie en section 7 ;
+  maîtresse ; la reprise conserve son état, y compris après prévol divergent
+  dans la candidate selon la section 7 ;
 - `/cab run` arme un contrat de job durable et actualise ses jalons avant de
   transmettre les mandats ; le superviseur reprend cette même session tant que
   le gate terminal reste ouvert ;

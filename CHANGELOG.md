@@ -2,7 +2,24 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 0.87.2 — 2026-10-10
+
+- Prévol de récupération divergent : conserver la candidate, le même job, le RUN et le runtime, sans renouvellement ni purge.
+- Retry explicite après refus sans effet, identifiants neufs, preuves natives séparées par une frontière vérifiée et gel jusqu'au prévol exact.
+- Protocole, cadrages et tests alignés ; version 0.87.2 synchronisée. Le remplacement initial CISMP reste inchangé. Aucun déploiement ni publication.
+
 ## Unreleased
+
+- Correction CGP-20261010-05 à 07 : le gate refuse les demandes locales
+  indécises même avec un ancien compteur broker nul ; le healthcheck et le
+  superviseur acceptent la même URL de base ou `/status`, avec les alias
+  historiques et le slash final.
+- Activité SSE corrélée à la session du job : trafic étranger, heartbeats et
+  trames non exploitables ne retardent plus sa reprise. L'ancienne activité
+  est invalidée lors d'un changement de contexte ; gel de récupération et
+  décisions unitaires préservés, sans migration ni nouvelle dépendance.
+- Régressions isolées avec services simulés ; version source 0.87.1 conservée,
+  sans publication, installation de profil ni intervention sur un service réel.
 
 - Récupération automatique orchestrée après prévol divergent ou incomplet
   prouvé et refusé sans effet, notamment champs et délais prescrits omis.

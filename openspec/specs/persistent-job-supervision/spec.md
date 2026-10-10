@@ -240,32 +240,45 @@ toutes les trois secondes.
 - **WHEN** une demande CAB arrive alors que l'agent de codage analyse ou rédige
 - **THEN** le SSE reste traité en temps réel et le contrôle des demandes et rapports continue toutes les trois secondes, indépendamment des vérifications de progression espacées de sept secondes fixes
 
-### Requirement: Reprise métier après remplacement exceptionnel du runtime
+### Requirement: Activité corrélée à la session du job
+Le superviseur SHALL attribuer l'activité SSE uniquement à la session du job
+surveillé, avec vérification du répertoire lorsqu'il est fourni. Les trames
+étrangères, de transport, invalides ou sans identité exploitable SHALL NOT
+actualiser cette horloge. Un changement de job, session ou répertoire SHALL
+invalider l'ancienne activité. Le gel de récupération SHALL rester prioritaire.
 
-Après le prévol neuf, l'orchestrateur MUST réconcilier checkpoint métier,
-change, fichiers et preuves natives, puis reprendre au premier jalon non
-prouvé. Il MUST NOT rejouer écritures validées ou autorisations consommées,
-réadopter l'ancien job, déduire un succès d'une preuve absente ni rejouer
-aveuglément. Le RUN parent MUST rester non terminal pendant les récupérations
-admissibles.
+#### Scenario: Activité de la session surveillée
+- **WHEN** un événement de session, message ou permission identifie la session du job et ne présente pas de répertoire divergent
+- **THEN** le superviseur actualise l'activité de ce contexte
 
-#### Scenario: Écriture déjà validée avant l'incident
-- **WHEN** le checkpoint et les fichiers prouvent cette écriture après le prévol neuf
-- **THEN** le nouveau job MUST poursuivre le travail restant sans répéter l'écriture
+#### Scenario: Trafic étranger continu
+- **WHEN** des événements d'une autre session ou d'un autre répertoire arrivent pendant l'inactivité du job
+- **THEN** ils ne retardent pas son examen de reprise à l'échéance configurée
 
-#### Scenario: Effet non prouvé
-- **WHEN** un effet antérieur reste inconnu ou les preuves du checkpoint sont insuffisantes
-- **THEN** l'orchestrateur MUST suspendre les opérations concernées et demander l'autorité indispensable sans rejouer le travail
+#### Scenario: Transport ou événement non exploitable
+- **WHEN** une trame est un heartbeat, un événement de connexion, invalide ou sans session identifiable
+- **THEN** l'horloge d'activité du job reste inchangée sans fabriquer de progression
 
-#### Scenario: Récupérations sûres répétées
-- **WHEN** plusieurs prévols successifs divergent sans effet et chaque frontière est réconciliée
-- **THEN** l'orchestrateur MUST renouveler les tentatives sans limite tant que les préconditions restent prouvées, sans concurrence ni doublon d'une tentative non réconciliée, avec suivi à la cadence existante sans boucle serrée
-- **AND** le checkpoint non secret MUST tracer numéro, identifiants, horodatages, cause, arguments attendus et observés et références des preuves natives de chaque tentative
+#### Scenario: Session transférée ou contexte remplacé
+- **WHEN** le contrat admet un nouveau job, répertoire ou identifiant de session
+- **THEN** l'activité de l'ancien contexte ne repousse pas la reprise du nouveau
+
+#### Scenario: Récupération gelée
+- **WHEN** le contrat expose une récupération en cours
+- **THEN** aucun événement SSE ne déverrouille une relance ni ne remplace la décision de transfert
+
+### Requirement: Reprise métier après prévol corrigé dans la même session
+L'orchestrateur MUST conserver le RUN, le job, les jalons, critères et preuves pendant les retries du prévol dans la candidate conservée. Il MUST reprendre seulement après complete au premier jalon non prouvé sans rejouer écriture validée ou autorisation consommée. Le superviseur MUST rester gelé pendant retry.
+
+#### Scenario: Tentatives successives
+- **WHEN** les prévols divergent sans effet et chaque frontière est réconciliée
+- **THEN** les nouvelles tentatives explicites conservent la candidate et le job, sans concurrence ni doublon, avec suivi à la cadence existante
+- **AND** le checkpoint conserve numéro, identifiants, horodatages, causes et références des preuves natives
+
+#### Scenario: Reprise sûre
+- **WHEN** le prévol corrigé est prouvé et complete réussit
+- **THEN** le superviseur suit la candidate devenue session du job sans rejeu du travail prouvé
 
 #### Scenario: Interruption ou arrêt explicite
-- **WHEN** une interruption laisse une tentative non réconciliée ou le développeur demande l'arrêt
-- **THEN** l'orchestrateur MUST interrompre la reprise automatique sans lancer de tentative supplémentaire avant réconciliation ou nouvelle autorisation appropriée
-
-#### Scenario: Purge incomplète
-- **WHEN** l'outil de purge échoue ou un état est recréé pendant la procédure
-- **THEN** l'orchestrateur MUST NOT démarrer de nouvelle session sur cet état et MUST demander l'autorité indispensable
+- **WHEN** une tentative reste non réconciliée ou le développeur demande l'arrêt
+- **THEN** aucune tentative supplémentaire ne part avant réconciliation ou autorisation appropriée

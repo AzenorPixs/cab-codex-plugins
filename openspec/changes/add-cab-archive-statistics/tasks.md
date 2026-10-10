@@ -14,7 +14,7 @@
 - [x] 3.2 Incrémenter tous les composants versionnés de 0.85.1 à 0.85.2 et vérifier leur cohérence.
 - [x] 3.3 Examiner le diff et les limites de validation ; ne pas publier ni déployer.
 
-## Preuves et limites
+## Preuves et limites historiques de l'intégration 0.85.2
 
 - `openspec validate add-cab-archive-statistics --strict` : réussi.
 - `openspec validate --specs --strict` : 7 spécifications valides.
@@ -30,3 +30,11 @@
   commit ou push effectué. Le change reste ouvert, avec ses deltas synchronisés.
 - Tools Codex était déjà revenu à son état initial lors du contrôle ; aucun
   fichier de ce dépôt n'a été modifié dans ce travail.
+
+## État après rapprochement CGP du 2026-10-10
+
+Les cases cochées et les résultats ci-dessus décrivent l'intégration initiale,
+pas une réexécution des validations sur les sources actuelles. Le delta de
+distribution est aligné sur la référence `0.87.1` ; les validations de ce
+rapprochement sont distinctes des preuves historiques. Le change reste ouvert.
+Cette mise en cohérence n'autorise ni archivage, ni publication, ni déploiement.

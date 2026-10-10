@@ -43,6 +43,91 @@ function controllerStatus() {
   };
 }
 
+test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transport", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "cab-supervisor-sse-scope-"));
+  const supervisorPort = await availablePort();
+  const statePath = join(directory, "supervisor-state.json");
+  const job = { jobId: "job-sse-scope", sessionId: "ses_sse_scope", directory,
+    criteria: ["activité corrélée"], armed: true, terminalGate: { status: "OPEN" } };
+  writeFileSync(statePath, JSON.stringify({ jobId: job.jobId, sessionId: job.sessionId,
+    directory, lastActivityAt: new Date().toISOString() }));
+  const controller = createServer((request, response) => {
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(request.url === "/status" ? controllerStatus() : job));
+  });
+  await new Promise((resolve) => controller.listen(0, "127.0.0.1", resolve));
+  const messages = [];
+  let stream;
+  const opencode = createServer(async (request, response) => {
+    if (request.url === "/global/event") {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write('data: {"type":"server.connected"}\n\n');
+      stream = response;
+      return;
+    }
+    if (request.method === "POST") {
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      messages.push({ url: request.url, body: JSON.parse(body) });
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ id: job.sessionId, directory }));
+  });
+  await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
+  const supervisor = spawn(process.execPath, [supervisorPath], {
+    env: { ...process.env, OC_Codex_WORKSPACE: directory,
+      OC_Codex_CONTROLLER_URL: `http://127.0.0.1:${controller.address().port}`,
+      OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencode.address().port}`,
+      OC_Codex_SUPERVISOR_STATUS_HOST: "127.0.0.1",
+      OC_Codex_SUPERVISOR_STATUS_PORT: String(supervisorPort),
+      OC_Codex_SUPERVISOR_STATE_PATH: statePath,
+      OC_Codex_SUPERVISOR_RESUME_DELAY_MS: "1000", OC_Codex_SUPERVISOR_POLL_INTERVAL_MS: "250" },
+    stdio: "ignore",
+  });
+  let traffic;
+  context.after(async () => {
+    clearInterval(traffic);
+    const stopped = new Promise((resolve) => supervisor.once("exit", resolve));
+    supervisor.kill("SIGTERM");
+    await stopped;
+    controller.closeAllConnections();
+    opencode.closeAllConnections();
+    await new Promise((resolve) => controller.close(resolve));
+    await new Promise((resolve) => opencode.close(resolve));
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const status = async () => (await fetch(`http://127.0.0.1:${supervisorPort}/status`)).json();
+  await waitFor(() => Boolean(stream), "Le flux SSE n'a pas été ouvert.");
+  const before = (await status()).lastActivityAt;
+  stream.write(`data: ${JSON.stringify({ directory, payload: {
+    type: "message.updated", properties: { info: { sessionID: job.sessionId } },
+  } })}\n\n`);
+  let targetedAt;
+  await waitFor(async () => {
+    targetedAt = (await status()).lastActivityAt;
+    return targetedAt !== before;
+  }, "L'activité ciblée n'a pas été observée.");
+  const foreign = [
+    { directory, payload: { type: "message.updated", properties: { info: { sessionID: "ses_foreign" } } } },
+    { directory: "/other", payload: { type: "session.status", properties: { sessionID: job.sessionId } } },
+    { type: "server.heartbeat", properties: { sessionID: job.sessionId } },
+    { type: "message.updated", properties: {} },
+  ];
+  function emitForeign() {
+    for (const event of foreign) stream.write(`data: ${JSON.stringify(event)}\n\n`);
+    stream.write("data: invalid-json\n\n");
+  }
+  emitForeign();
+  await delay(100);
+  assert.equal((await status()).lastActivityAt, targetedAt, "Le trafic étranger ne vaut pas activité du job.");
+  traffic = setInterval(emitForeign, 40);
+  await waitFor(() => messages.length === 1, "Le trafic étranger a empêché la reprise du job inactif.");
+  assert.equal(messages[0].url, "/session/ses_sse_scope/message");
+  job.sessionId = "ses_sse_transferred";
+  await waitFor(() => messages.length === 2, "L'activité de l'ancienne session a retardé le contexte transféré.");
+  assert.equal(messages[1].url, "/session/ses_sse_transferred/message");
+});
+
 test("relance une seule fois une session armée dont le gate reste ouvert", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-supervisor-test-"));
   const controllerPort = await availablePort();

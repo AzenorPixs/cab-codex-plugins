@@ -202,8 +202,8 @@ décision d'approbation.
 - `/cab start` : purge l'ancien état technique après contrôle d'inactivité,
   vérifie le MCP actif, initialise la supervision et crée une nouvelle session
   maîtresse ; la reprise ordinaire conserve son état et sa session, sauf
-  remplacement vérifié par `/job/recover`. L'exception de prévol divergent
-  décrite en section 7 autorise une nouvelle session CAB avec purge bornée ;
+  remplacement vérifié par `/job/recover`. Un prévol divergent conserve sa
+  candidate et le runtime selon la section 7 ;
 - `/cab test` : vérifie le chemin complet de validation dans cette session ;
 - `/cab run` : maintient le job piloté et ses mandats unitaires dans cette
   même session, sauf récupération explicite contrôlée conservant le RUN ;
@@ -232,19 +232,14 @@ peut demander au contrôleur un remplacement explicite de session dans le même
 job après gel, réconciliation technique et prévol natif prouvé. Le périmètre,
 les critères et le dernier jalon sont conservés ; les anciennes autorisations
 exécutables sont invalidées. Le superviseur ne crée pas la nouvelle session.
-Après un prévol de récupération divergent ou incomplet prouvé et refusé sans
-effet, l'orchestrateur ouvre automatiquement une nouvelle session CAB avec
-purge des deux espaces runtime résolus, sans nouveau feu vert. Cela inclut
-les champs ou délais prescrits omis, sans exiger deux écarts simultanés.
-Cette exception exige neutralisation du job gelé et des permissions,
-propriété/inactivité prouvées et checkpoint métier externe conservant les
-écritures validées et leurs preuves. Chaque tentative exige un prévol exact
-avec le bon change ; une nouvelle divergence sûre relance la procédure et
-laisse le RUN parent non terminal, sans rejeu des écritures validées.
-Un timeout MCP seul conserve le polling de la même approbation. Effets
-inconnus, preuves absentes, espace partagé ou purge partielle interdisent
-la reprise automatique. La référence de purge conserve toutes ses gardes.
-OpenCode reste ouvert et `/job/recover` ne purge jamais lui-même.
+Après un prévol de récupération divergent ou incomplet refusé sans effet,
+l'orchestrateur conserve sa candidate, le job et le runtime sans renouvellement
+ni purge. Il réconcilie les demandes, permissions et preuves avant retry
+explicite dans /job/recover, avec requête et approbation neuves. Le contrôleur
+conserve le gel jusqu'au prévol exact et complete prouvé ; les preuves
+historiques restent intactes et aucun travail validé n'est rejoué. Un délai
+MCP seul conserve le polling de la même approbation. Effet inconnu ou preuve
+manquante suspend la reprise ; OpenCode reste ouvert.
 
 Les mandats lecture seule désactivent les outils natifs et d'écriture via
 l'API de messagerie, plutôt que de dépendre du seul texte du mandat.
