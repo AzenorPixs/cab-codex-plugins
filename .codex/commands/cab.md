@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.86.5
+version: 0.86.8
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -21,6 +21,40 @@ Un tour OpenCode achevé n’est jamais une fin de job. Tant que le job n’est 
 terminé, ni bloqué, ni explicitement arrêté, lire son dernier résultat dans la
 session persistante et transmettre le mandat suivant dans cette même session.
 Ne jamais envoyer de réponse finale au développeur pendant cet état RUN.
+
+## Cadences de pilotage et attente PLLM
+
+Traite les événements SSE OpenCode en temps réel et contrôle les demandes et
+les rapports toutes les 3 secondes dans la boucle de pilotage. Pendant
+l'analyse ou la rédaction de l'agent de codage, utilise des pauses fixes de
+7 secondes entre deux vérifications de progression. Ces pauses ne ralentissent
+ni le SSE ni le contrôle CAB toutes les 3 secondes. Les temporisations
+techniques du superviseur, des heartbeats et des rappels du broker restent
+distinctes.
+
+Après un échec du benchmark PLLM, conserve le même RUN en attente non terminale
+et retente le benchmark toutes les 30 minutes (1 800 secondes), indéfiniment,
+sans limite de tentatives, jusqu'à reprise sûre du RUN ou arrêt explicite du
+développeur. Calcule la prochaine échéance depuis l'échec observé de la dernière
+tentative. Conserve dans le checkpoint non secret le RUN, les horodatages,
+causes, résultats et la prochaine échéance. Après interruption, conserve cette
+échéance et réconcilie toute tentative en cours ou d'effet inconnu avant de
+retenter. Ne lance jamais de tentatives simultanées ni ne duplique un essai
+non réconcilié. Maintiens la supervision sans attente bloquante de trente
+minutes ; ce seul échec ne clôture pas le RUN et ne ferme ni ne redémarre les
+processus.
+
+Après une réussite observée, réconcilie les contextes, la santé OpenCode, MCP,
+la readiness CAB réelle et les permissions avant reprise. Si la reprise n'est
+pas sûre, applique la récupération CAB et conserve sa cause observable.
+La réussite du benchmark ne vaut jamais approbation, ne rejoue aucun mandat
+consommé et ne contourne aucun blocage CAB distinct.
+
+Prévois les sondes statistiques toutes les 30 minutes, en complément des
+sondes initiale et finale. Poursuis le travail entre les échéances, sans
+arrêter le travail pour attendre un créneau. Signale les relèves manquées
+sans reconstruction rétroactive. Une sonde statistique échouée reste distincte
+d'un échec du benchmark PLLM et ne suspend pas, à elle seule, le RUN.
 
 ## Compactage coordonné toutes les 1 h 30
 
@@ -333,3 +367,52 @@ CAB vers son marketplace Git est l'unique modification de marketplace autorisée
 5. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
 6. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
 7. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.
+
+
+## Récupération contrôlée de session dans le même RUN
+
+Après un écart refusé sans effet, interrompre l'ancienne session, traiter son
+rapport et clôturer le mandat courant avec `/job/progress`. Ne pas réarmer le
+job pour remplacer sa session : `/job/arm` reste immuable. Créer la candidate
+par l'API native OpenCode dans le même `directory`, avec permissions natives
+`ask`, sans lui confier de travail métier.
+
+Utiliser `POST /job/recover` en deux phases. Le corps commun contient `jobId`,
+`expectedSessionId` (ancienne session), `sessionId` (candidate), `recoveryId`
+inédit et `preflightRequestId` inédit ; ajouter `phase: "prepare"`, puis
+`phase: "complete"`. Le contrôleur vérifie par HTTP le contexte, MCP, les
+sessions inactives et l'absence de permissions/demandes non résolues. Un mandat
+indécis doit recevoir une décision explicite ; une transmission encore en
+cours impose une réconciliation avant un nouvel essai.
+
+Après prepare, le job et le superviseur sont gelés. Seul le prévol réservé de
+la candidate est admis : `broker_readiness`, `request_validation` pour la
+commande exacte `/usr/bin/true`, décision explicite corrélée, permission
+native unique, exécution exit 0, puis `broker_readiness = READY` sans demande
+en attente. Aucun suffixe ni autre outil natif. Le contrôleur vérifie les
+preuves dans les messages OpenCode avant complete ; une déclaration de
+réussite ne suffit pas. Aucun appel de récupération ne vaut décision CAB.
+
+Après complete, relire `/job` et `/status` : même job, même change et critères,
+dernier jalon conservé, nouvelle session, `strictCommands` préservé et gate
+OPEN. Les anciennes autorisations exécutables sont invalidées et l'historique
+non secret est conservé. Le superviseur suit désormais la session transférée.
+Un échec conserve le gel ; ne pas purger le RUN ni inventer de gate terminal.
+Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
+locale du prévol : si elles sont perdues, la récupération reste refusée et
+nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
+un prévol échoué par une nouvelle tentative implicite.
+
+## Mandats d'inventaire ou d'analyse en lecture seule
+
+Dans le corps de messagerie OpenCode, désactiver explicitement les outils :
+
+```json
+{"tools":{"bash":false,"edit":false,"write":false,"apply_patch":false,"task":false,"skill":false}}
+```
+
+Conserver seulement les outils de lecture et recherche autorisés. Le texte
+« lecture seule » ne remplace pas ce verrou. Aucune configuration persistante
+OpenCode n'est modifiée. Au mandat exécutable suivant, réactiver explicitement
+les seuls outils nécessaires ; leurs permissions natives restent `ask` et
+chaque opération conserve son mandat CAB unitaire, sans autorisation générale.

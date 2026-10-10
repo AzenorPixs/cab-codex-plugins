@@ -1,4 +1,4 @@
 [project]
 name = "cab"
-version = "0.86.5"
+version = "0.86.8"
 dependencies = []

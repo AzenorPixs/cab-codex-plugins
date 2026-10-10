@@ -98,12 +98,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.86\.5$/m);
-  assert.match(manifest, /"version": "0\.86\.5\+codex\./);
-  assert.match(controller, /version: "0\.86\.5"/);
-  assert.match(supervisor, /const version = "0\.86\.5"/);
-  assert.match(broker, /SERVER_VERSION = "0\.86\.5"/);
-  assert.match(project, /^version = "0\.86\.5"$/m);
+  assert.match(command, /^version: 0\.86\.8$/m);
+  assert.match(manifest, /"version": "0\.86\.8\+codex\./);
+  assert.match(controller, /version: "0\.86\.8"/);
+  assert.match(supervisor, /const version = "0\.86\.8"/);
+  assert.match(broker, /SERVER_VERSION = "0\.86\.8"/);
+  assert.match(project, /^version = "0\.86\.8"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -170,4 +170,69 @@ test("le protocole exige un rapport par archive et empêche une clôture sans pr
   assert.match(run, /Ne demande pas la clôture normale `TERMINÉ` sans preuve du rapport/);
   assert.match(run, /Si l'archivage échoue/);
   assert.match(run, /`BLOQUÉ` ou un arrêt explicite/);
+});
+
+test("le protocole distribué protège la lecture seule et décrit la récupération explicite", () => {
+  for (const path of [
+    new URL("../.codex/commands/cab.md", import.meta.url),
+    new URL("../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md", import.meta.url),
+  ]) {
+    const protocol = readFileSync(path, "utf8");
+    for (const tool of ["bash", "edit", "write", "apply_patch", "task", "skill"]) {
+      assert.ok(protocol.includes(`"${tool}":false`));
+    }
+    assert.match(protocol, /POST \/job\/recover/);
+    assert.match(protocol, /phase: "prepare"/);
+    assert.match(protocol, /phase: "complete"/);
+    assert.match(protocol, /permissions natives\n`ask`/);
+  }
+});
+
+test("le protocole distribue des cadences indépendantes et une attente PLLM persistante", () => {
+  for (const path of [
+    "../AGENTS.md",
+    "../.codex/commands/cab.md",
+    "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+  ]) {
+    const protocol = readFileSync(new URL(path, import.meta.url), "utf8")
+      .replace(/\s+/g, " ");
+    assert.match(protocol, /SSE OpenCode en temps réel/, path);
+    assert.match(protocol, /demandes et les rapports toutes les 3 secondes/, path);
+    assert.match(protocol, /pauses fixes de 7 secondes/, path);
+    assert.match(protocol, /vérifications de progression/, path);
+    assert.match(protocol, /temporisations techniques du superviseur/, path);
+    assert.match(protocol, /même RUN en attente non terminale/, path);
+    assert.match(protocol, /benchmark toutes les 30 minutes \(1 800 secondes\), indéfiniment, sans limite de tentatives/, path);
+    assert.match(protocol, /jusqu'à reprise sûre du RUN ou arrêt explicite du développeur/, path);
+    assert.match(protocol, /échéance.*depuis l'échec observé de la dernière tentative/, path);
+    assert.match(protocol, /checkpoint non secret/, path);
+    assert.match(protocol, /tentative en cours ou d'effet inconnu avant de retenter/, path);
+    assert.match(protocol, /tentatives simultanées/, path);
+    assert.match(protocol, /sans attente bloquante de trente minutes/, path);
+    assert.match(protocol, /readiness CAB réelle et les permissions avant reprise/, path);
+    assert.match(protocol, /ne vaut jamais approbation, ne rejoue aucun mandat consommé/, path);
+    assert.match(protocol, /ne contourne aucun blocage CAB distinct/, path);
+  }
+});
+
+test("les sondes statistiques n'arrêtent pas le travail pour attendre le créneau", () => {
+  for (const path of [
+    "../AGENTS.md",
+    "../.codex/commands/cab.md",
+    "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+    "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
+  ]) {
+    const protocol = readFileSync(new URL(path, import.meta.url), "utf8")
+      .replace(/\s+/g, " ");
+    assert.match(protocol, /sondes statistiques.*toutes les 30 minutes|sonde toutes les 30 minutes/, path);
+    assert.match(protocol, /sans arrêter le travail pour attendre un créneau/, path);
+    assert.match(protocol, /sonde statistique échouée reste distincte d'un échec du benchmark PLLM/, path);
+    assert.match(protocol, /ne suspend pas, à elle seule, le RUN/, path);
+  }
+  const stats = readFileSync(new URL(
+    "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
+    import.meta.url
+  ), "utf8");
+  assert.match(stats, /retentée une seule fois immédiatement/);
+  assert.match(stats, /relève manquée NE DOIT PAS être recréée rétroactivement/);
 });

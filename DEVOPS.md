@@ -1,7 +1,21 @@
 # DEVOPS.md — cab
 
-Version : 0.2
+Version : 0.5
 
+Généré automatiquement par Debian Installeur Unifié (DIU).
+Début du relevé (UTC) : 2026-10-09T14:22:13Z
+Environnement d'exécution DIU : PROXMOX
+
+Les sondes système concernent le contexte d'exécution DIU.
+Les outils DevOps sont interrogés avec les binaires indiqués dans leurs rubriques.
+Les dépendances Python sont recherchées en priorité dans les venv du projet, puis dans le Python DevOps en repli explicite.
+Dans l’inventaire Python, la flèche indique le Python sondé ; Installation indique le chemin observé dans les métadonnées.
+Les dépendances Python attendues proviennent de [project].dependencies dans pyproject.toml.
+Les dépendances JavaScript sont regroupées par manifeste et catégorie sous NPM et OpenCode.
+Leurs déclarations, versions verrouillées npm et métadonnées locales sont distinctes ; un verrou ne prouve pas une installation.
+Les contraintes JavaScript ne sont pas résolues et cet inventaire ne prouve pas le chargement de plugins OpenCode.
+Un inventaire multi-environnements ne valide pas un environnement Python unique.
+Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de réussite des tests du projet.
 
 # Système d'exploitation
 
@@ -10,7 +24,7 @@ Version : 0.2
 
 # Docker
 
-  * 29.8.2
+  * 29.9.0
   * /usr/bin/docker
 
 
@@ -28,7 +42,7 @@ Version : 0.2
 
 # Go
 
-  * 1.27.1
+  * 1.27.2
   * /home/devops/go/current/bin/go
 
 
@@ -46,13 +60,13 @@ Version : 0.2
 
 # OpenCode
 
-  * 1.18.34
+  * 1.18.35
   * /home/devops/.opencode/bin/opencode
 
 
 # OpenSpec
 
-  * 1.14.0
+  * 1.14.1
   * /home/devops/.local/npm/bin/openspec
 
 

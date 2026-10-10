@@ -29,6 +29,21 @@ après contrôle de la cohérence et des validations.
                      Analyse / Revue / Validation
 ```
 
+## Cadences de pilotage
+
+Le protocole CAB prévoit les événements SSE en temps réel et le contrôle des
+demandes et rapports toutes les **3 secondes**. Pendant l'analyse ou la
+rédaction de l'agent de codage, les vérifications de progression sont espacées
+de **7 secondes** fixes, indépendamment du contrôle CAB.
+
+Après échec du benchmark PLLM, l'orchestrateur conserve le même RUN en attente
+et retente toutes les **30 minutes**, sans limite de tentatives, jusqu'à
+reprise sûre ou arrêt explicite du développeur. La reprise conserve les
+contrôles CAB et les mandats unitaires. Les sondes statistiques sont prévues
+toutes les **30 minutes**, sans arrêter le travail pour attendre le créneau.
+Ces obligations du protocole distribué ne constituent pas un nouvel automate
+de benchmark dans les composants CAB.
+
 ## Statistiques après archivage
 
 Le plugin CAB embarque `coding-session-statistics`. Son protocole impose un
@@ -110,6 +125,19 @@ décision CAB. Chaque édition, commande Bash,
 commande système, commande OpenSpec ou opération d’archivage est soumise par
 OpenCode comme mandat unitaire, puis exécutée seulement après une décision
 Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
+
+En cas de récupération sans effet non maîtrisé, l'orchestrateur peut remplacer
+la session par `POST /job/recover` (`prepare`, puis `complete`) après contrôles
+techniques et prévol CAB réservé. Le RUN reste ouvert ; le job, le périmètre et
+le dernier jalon sont conservés. Le superviseur suspend les relances pendant
+le gel et suit ensuite la nouvelle session. Les anciennes autorisations
+exécutables ne sont jamais réutilisées. Un échec ou une preuve locale perdue
+après redémarrage conserve le gel sans fabriquer de réussite. Voir
+`TECHNICAL.md` et le protocole de la skill pour le contrat détaillé.
+
+Les mandats lecture seule désactivent explicitement les outils natifs et
+d'écriture dans le message OpenCode. Les opérations suivantes gardent leurs
+permissions natives et décisions CAB unitaires.
 
 `/cab stop` exige un gate terminal validé, arrête explicitement le superviseur
 puis le contrôleur et les ressources CAB qu'elle a créées, sans fermer OpenCode
@@ -221,6 +249,11 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 Les noms historiques équivalents préfixés `OC_CGPT_` restent acceptés pour la
 compatibilité avec les installations existantes.
 
+Le mode `OC_Codex_DECISION_MODE=manual`, utilisé par défaut, conserve les
+demandes en attente d'une décision HTTP explicite de l'orchestrateur
+principal. Les rappels corrélés restent observables sans créer de thread ni
+de tour Codex auxiliaire. Le mode `automatic` conserve son fonctionnement.
+
 Les secrets doivent rester hors du dépôt Git et des journaux.
 
 ## Persistance
@@ -253,7 +286,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.86.5`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.86.8`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

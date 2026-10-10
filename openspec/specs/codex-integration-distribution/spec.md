@@ -170,7 +170,7 @@ Son installation SHALL rendre ce skill disponible sans plugin Tools Codex
 et sans skill `cgpt` externe. Le protocole et la commande CAB SHALL imposer
 sa production de statistiques après chaque archivage réussi selon
 `archive-session-statistics`. Les composants versionnés SHALL partager la
-version de base `0.85.2`, le plugin pouvant ajouter un cachebuster Codex.
+version de base `0.86.8`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
 
@@ -180,7 +180,7 @@ version de base `0.85.2`, le plugin pouvant ajouter un cachebuster Codex.
 #### Scenario: Release cohérente
 
 - **WHEN** la release est validée
-- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.85.2`
+- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.86.8`
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 La commande `/cab start` et la skill du plugin SHALL imposer la purge complète
@@ -240,3 +240,17 @@ de true. Aucune ancienne preuve SHALL valider ce prévol.
 #### Scenario: Nouvelle session vérifiée
 - **WHEN** la purge réussit et CAB ouvre une nouvelle session maîtresse
 - **THEN** seuls les résultats de sa readiness et de son test CAB complet autorisent le premier mandat
+
+### Requirement: Prévention des outils natifs en lecture seule
+Le protocole distribué MUST demander à l'orchestrateur de désactiver explicitement bash, edit, write, apply_patch, task et skill pour tout mandat d'inventaire ou d'analyse en lecture seule. Les outils de lecture et recherche autorisés MAY rester disponibles. 
+
+#### Scenario: Inventaire protégé
+- **WHEN** un inventaire lecture seule est transmis par l'API de messagerie OpenCode
+- **THEN** ses outils natifs et d'écriture sont désactivés explicitement et aucun mandat exécutable implicite n'est accordé
+
+### Requirement: Réactivation limitée des outils exécutables
+La restriction lecture seule MUST NOT modifier la configuration persistante OpenCode ni produire une approbation générale. Un futur mandat exécutable MUST réactiver uniquement ses outils nécessaires, conserver une permission native ask et un mandat CAB unitaire.
+
+#### Scenario: Mandat exécutable suivant
+- **WHEN** l'orchestrateur passe d'un inventaire à une opération native
+- **THEN** seuls les outils nécessaires sont réactivés et l'opération exige sa propre décision CAB

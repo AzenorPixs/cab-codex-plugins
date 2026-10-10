@@ -42,6 +42,15 @@ validité ni d’un élargissement de périmètre. Un archivage OpenSpec reste u
 mandat distinct, décidé seulement après vérification des critères d’acceptation,
 des validations et de la cohérence finale.
 
+Le protocole impose le SSE en temps réel et le contrôle des demandes et
+rapports toutes les 3 secondes. Les vérifications de progression pendant
+l'analyse ou la rédaction sont espacées de 7 secondes fixes. Un benchmark
+PLLM échoué est retenté toutes les 30 minutes, sans limite, dans le même RUN
+jusqu'à reprise sûre ou arrêt explicite ; cet échec seul ne termine pas le RUN.
+Les sondes statistiques suivent une cadence de 30 minutes sans arrêter le
+travail pour attendre l'échéance. `AGENTS.md` et le skill distribué précisent
+les contrôles et preuves exigés avant reprise.
+
 ### 3.4 Corrélation explicite
 
 Chaque demande est corrélée par un `requestId` stable. Une décision doit correspondre à la demande exacte qui l'a provoquée. Une décision déjà consommée ne doit pas pouvoir être remplacée par une décision contradictoire.
@@ -118,10 +127,11 @@ décision d'approbation.
 
 - `/cab start` : purge l'ancien état technique après contrôle d'inactivité,
   vérifie le MCP actif, initialise la supervision et crée une nouvelle session
-  maîtresse ; la reprise du même RUN conserve son état et sa session ;
+  maîtresse ; la reprise du même RUN conserve son état et sa session, sauf remplacement
+  explicitement vérifié par `/job/recover` ;
 - `/cab test` : vérifie le chemin complet de validation dans cette session ;
 - `/cab run` : maintient le job piloté et ses mandats unitaires dans cette
-  même session ;
+  même session, sauf récupération explicite contrôlée conservant le RUN ;
 - `/cab update` : actualise séparément le plugin CAB depuis sa marketplace,
   installe ou actualise le superviseur local sans le démarrer, puis actualise
   la commande de profil depuis `AzenorPixs/cab-codex-plugins`, seulement
@@ -142,7 +152,13 @@ CAB expose quatre états synthétiques :
 
 CAB est conçu pour supporter les redémarrages, arrêts non propres, validations en attente, notifications interrompues, indisponibilités temporaires du contrôleur, pertes de SSE et tentatives de remédiation interrompues.
 
-La récupération ne doit jamais inventer une décision métier.
+La récupération ne doit jamais inventer une décision métier. L'orchestrateur
+peut demander au contrôleur un remplacement explicite de session dans le même
+job après gel, réconciliation technique et prévol natif prouvé. Le périmètre,
+les critères et le dernier jalon sont conservés ; les anciennes autorisations
+exécutables sont invalidées. Le superviseur ne crée pas la nouvelle session.
+Les mandats lecture seule désactivent les outils natifs et d'écriture via
+l'API de messagerie, plutôt que de dépendre du seul texte du mandat.
 
 ## 8. Remédiation
 
