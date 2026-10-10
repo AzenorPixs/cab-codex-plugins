@@ -170,48 +170,47 @@ Son installation SHALL rendre ce skill disponible sans plugin Tools Codex
 et sans skill `cgpt` externe. Le protocole et la commande CAB SHALL imposer
 sa production de statistiques après chaque archivage réussi selon
 `archive-session-statistics`. Les composants versionnés SHALL partager la
-version de base `0.86.8`, le plugin pouvant ajouter un cachebuster Codex.
+version de base `0.86.9`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
-
 - **WHEN** le plugin CAB est installé depuis sa marketplace
 - **THEN** les skills `approval-bridge` et `coding-session-statistics` sont présents dans le paquet et résolus depuis son manifeste
 
 #### Scenario: Release cohérente
-
 - **WHEN** la release est validée
-- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.86.8`
+- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.86.9`
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
-La commande `/cab start` et la skill du plugin SHALL imposer la purge complète
-des espaces runtime CAB avant chaque nouvelle session, quelle que soit la
-quantité ou la cohérence de leurs traces précédentes. Une reprise du même RUN,
-un compactage, une reconnexion ou les sous-commandes `run`, `test`, `update` et
-`stop` SHALL conserver l'état courant sans déclencher cette purge.
+
+La commande `/cab start` et la skill SHALL purger le runtime avant chaque
+nouvelle session CAB. Une reprise du même RUN, un compactage, une reconnexion
+ou `run`, `test`, `update`, `stop` SHALL conserver le runtime, sauf l'exception
+« Nouvelle session après prévol de récupération divergent » définie ici.
 
 #### Scenario: Ancien état disponible
 - **WHEN** `/cab start` ouvre une nouvelle session et aucun travail précédent n'est actif
-- **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur
-- **AND** aucune ancienne session maîtresse ou décision n'est réadoptée
+- **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur sans réadopter leur job ou leurs décisions
 
 #### Scenario: Reprise du même RUN
-- **WHEN** CAB réconcilie le même RUN après interruption, compactage ou reconnexion
-- **THEN** il conserve les preuves et demandes de ce RUN sans purge
+- **WHEN** CAB reprend le même RUN sans satisfaire l'exception de prévol divergent
+- **THEN** les preuves et demandes restent conservées sans purge
 
 #### Scenario: Sous-commande sans nouveau démarrage
-- **WHEN** `/cab run`, `/cab test`, `/cab update` ou `/cab stop` est exécutée
-- **THEN** elle ne déclenche pas une purge de début de session
+- **WHEN** `run`, `test`, `update` ou `stop` est exécutée sans l'exception
+- **THEN** elle ne déclenche aucune purge de début de session
 
 ### Requirement: Arrêt contrôlé avant purge
-L'orchestrateur SHALL prouver la propriété et l'inactivité du contexte, sans
-RUN actif, session occupée, mandat en cours ou permission native non résolue.
-Il SHALL arrêter les ressources CAB, déconnecter le broker par l'API native
-OpenCode et vérifier son verrou avant toute purge. Il SHALL NOT tuer ou lancer
-directement le broker ni fermer ou redémarrer le processus OpenCode.
+
+L'orchestrateur SHALL prouver propriété et inactivité du contexte, sans session
+occupée, mandat en cours ni permission non résolue. Un RUN actif SHALL
+interdire la purge, sauf son job technique gelé neutralisé selon l'exception
+de prévol divergent. Il SHALL arrêter les ressources CAB, déconnecter le
+broker nativement et vérifier son verrou, sans tuer le broker ni fermer ou
+redémarrer OpenCode.
 
 #### Scenario: Travail actif ou inactivité non prouvée
-- **WHEN** un travail ou une permission reste actif, ou que la propriété et l'inactivité du contexte ne sont pas prouvées
-- **THEN** CAB refuse la purge et signale la cause sans effacer l'état
+- **WHEN** un travail reste actif, une propriété est inconnue ou un effet reste non réconcilié
+- **THEN** la purge est refusée sans effacer le runtime
 
 ### Requirement: Outil de purge distribué et borné
 Le plugin SHALL distribuer `scripts/cgpt-approval-bridge-reset.py`. L'outil
@@ -230,16 +229,17 @@ non dédiés, symboliques ou imbriqués et les verrous occupés, non ordinaires 
 - **THEN** l'outil signale l'échec et CAB ne démarre pas une session sur cet état partiel
 
 ### Requirement: Prévol neuf après purge
-Après la purge, CAB SHALL reconnecter le broker par OpenCode, vérifier le
-contexte et le modèle et créer une nouvelle session maîtresse. Avant tout
-travail, il SHALL exiger un appel réel à broker_readiness donnant READY sans
-demande ou permission parasite, puis un test CAB complet avec un requestId
-inédit, une décision explicite, une réponse MCP corrélée et l'exécution unique
-de true. Aucune ancienne preuve SHALL valider ce prévol.
+
+Après purge, CAB SHALL reconnecter le broker, vérifier contexte et modèle,
+créer une nouvelle session et exiger broker_readiness READY sans demande ni
+permission parasite. Un test CAB SHALL prouver décision explicite, réponse MCP
+corrélée et exécution unique de true ; dans l'exception de prévol divergent,
+la commande SHALL être exactement /usr/bin/true avec le change_id attendu.
+Aucune ancienne preuve SHALL valider ce prévol.
 
 #### Scenario: Nouvelle session vérifiée
-- **WHEN** la purge réussit et CAB ouvre une nouvelle session maîtresse
-- **THEN** seuls les résultats de sa readiness et de son test CAB complet autorisent le premier mandat
+- **WHEN** la purge réussit et la nouvelle session passe sa readiness et son test CAB
+- **THEN** seuls ces résultats neufs autorisent le premier mandat
 
 ### Requirement: Prévention des outils natifs en lecture seule
 Le protocole distribué MUST demander à l'orchestrateur de désactiver explicitement bash, edit, write, apply_patch, task et skill pour tout mandat d'inventaire ou d'analyse en lecture seule. Les outils de lecture et recherche autorisés MAY rester disponibles. 
@@ -254,3 +254,57 @@ La restriction lecture seule MUST NOT modifier la configuration persistante Open
 #### Scenario: Mandat exécutable suivant
 - **WHEN** l'orchestrateur passe d'un inventaire à une opération native
 - **THEN** seuls les outils nécessaires sont réactivés et l'opération exige sa propre décision CAB
+
+### Requirement: Nouvelle session après prévol de récupération divergent
+
+Après le feu vert, l'orchestrateur MUST être autorisé sans nouvelle confirmation
+à reprendre une nouvelle session CAB si une récupération échouée prouve à la
+fois true au lieu de /usr/bin/true et un change_id divergent. Il MUST refuser
+le mandat erroné sans normalisation. Cette exception MUST NOT couvrir les
+autres échecs et MUST NOT être exécutée automatiquement par /job/recover.
+
+#### Scenario: Double écart prouvé
+- **WHEN** le prévol de récupération échoué a transmis true et un autre change_id
+- **THEN** l'orchestrateur peut appliquer l'exception après ses contrôles obligatoires sans redemander le feu vert
+
+#### Scenario: Autre incident
+- **WHEN** les deux écarts ne sont pas prouvés ensemble
+- **THEN** les règles ordinaires de récupération et d'autorisation restent applicables
+
+### Requirement: Neutralisation avant abandon technique
+
+Avant purge exceptionnelle, l'orchestrateur MUST geler le travail, traiter les
+rapports, réconcilier les effets, refuser les permissions divergentes et
+clôturer les demandes restantes. Il MUST prouver l'inactivité des sessions et
+du contexte. Un job gelé avec gate OPEN MAY être abandonné par arrêt technique
+dans cette seule procédure, sans déclarer un gate valide ni désarmer
+artificiellement le job.
+
+#### Scenario: Job gelé et sessions inactives
+- **WHEN** le double écart et l'absence d'effets inconnus ou de permissions restantes sont prouvés
+- **THEN** l'orchestrateur arrête les seules ressources CAB du contexte sans fabriquer une clôture normale
+
+### Requirement: Deux espaces runtime et preuves hors purge
+
+La purge exceptionnelle MUST utiliser l'outil existant sur les deux espaces
+réellement résolus du home OpenCode et de la racine projet, en tenant compte
+des chemins personnalisés. Avant suppression, checkpoint métier et preuves
+des écritures validées MUST être préservés hors cibles. Un espace partagé avec
+un autre travail, une preuve absente ou une cible non sûre MUST interdire la
+purge. Les gardes de verrou et de chemin MUST rester inchangées.
+
+#### Scenario: Préservation du travail prouvé
+- **WHEN** les deux espaces dédiés sont purgés
+- **THEN** approbations, journal, job et autres états techniques disparaissent ; sources, checkpoint métier, rapports et historiques natifs restent hors purge
+
+### Requirement: Prévol exact de la nouvelle session exceptionnelle
+
+Après purge exceptionnelle, l'orchestrateur MUST créer une nouvelle session
+et un nouveau job technique avec des identifiants neufs. Le prévol MUST
+utiliser exactement /usr/bin/true, sans suffixe, avec le change_id attendu du
+checkpoint, décision explicite, permission consommée une seule fois et exit 0.
+La readiness finale MUST être READY sans demande ni permission parasite.
+
+#### Scenario: Prévol encore divergent
+- **WHEN** true, un suffixe ou un autre change_id apparaît dans le nouveau prévol
+- **THEN** la reprise métier reste interdite, sans normalisation ni approbation implicite

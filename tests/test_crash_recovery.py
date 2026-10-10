@@ -287,7 +287,7 @@ class CrashRecoveryTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         response = json.loads(result.stdout)
         self.assertEqual(response["id"], 1)
-        self.assertEqual(response["result"]["serverInfo"]["version"], "0.86.8")
+        self.assertEqual(response["result"]["serverInfo"]["version"], "0.86.9")
         events = bridge.journal.read_events()
         self.assertTrue(any(
             event["event_type"] == "BROKER_CRASH_RECOVERY_COMPLETED"

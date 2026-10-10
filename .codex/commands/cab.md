@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.86.8
+version: 0.86.9
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -125,7 +125,9 @@ purge des seuls espaces CAB, après preuve d'inactivité, arrêt des ressources
 et déconnexion native du broker ; elle ne ferme pas OpenCode. Le plugin
 distribue `scripts/cgpt-approval-bridge-reset.py` pour l'exécution contrôlée.
 Une purge échouée ou incomplète impose `CAB_INACTIF`, sans premier mandat.
-La reprise du même RUN conserve ses preuves et ne relance pas cette purge.
+La reprise ordinaire du même RUN conserve ses preuves et ne relance pas cette
+purge. La seule exception est la nouvelle session CAB après prévol de
+récupération divergent définie ci-dessous.
 
 1. Vérifie qu’OpenCode répond sur `127.0.0.1:4096`.
 2. Vérifie que la configuration OpenCode déclare `cgpt-validation` comme serveur MCP local `stdio`.
@@ -397,11 +399,60 @@ Après complete, relire `/job` et `/status` : même job, même change et critèr
 dernier jalon conservé, nouvelle session, `strictCommands` préservé et gate
 OPEN. Les anciennes autorisations exécutables sont invalidées et l'historique
 non secret est conservé. Le superviseur suit désormais la session transférée.
-Un échec conserve le gel ; ne pas purger le RUN ni inventer de gate terminal.
+Un échec conserve le gel ; la récupération ordinaire ne purge pas le RUN et
+n'invente aucun gate terminal. La seule exception de purge est définie dans
+« Nouvelle session CAB après prévol de récupération divergent » ci-dessous.
 Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
 locale du prévol : si elles sont perdues, la récupération reste refusée et
 nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
 un prévol échoué par une nouvelle tentative implicite.
+
+## Nouvelle session CAB après prévol de récupération divergent
+
+Après le feu vert de la session, l'orchestrateur est autorisé sans nouvelle
+confirmation à ouvrir une nouvelle session CAB lorsqu'une récupération échouée
+prouve à la fois la transmission de `true` au lieu de `/usr/bin/true` et un
+`change_id` divergent du change attendu. Le mandat erroné reste refusé, sans
+normalisation. Cette exception ne couvre aucun autre échec et n'est jamais
+exécutée automatiquement par `/job/recover`.
+
+Geler le travail, traiter les rapports, réconcilier les effets et refuser les
+permissions divergentes ; clôturer les demandes restantes sans les approuver.
+Exiger la propriété du contexte, les sessions inactives, aucun mandat actif
+ou en attente, aucune permission non résolue et aucun effet inconnu. Un espace
+partagé avec un autre travail ou une preuve incertaine interdit la purge.
+
+Préserver hors des cibles un checkpoint métier non secret : objectif, change
+attendu, jalons, écritures validées et preuves natives, prochaine action, motif
+de l'échec et chemins résolus. Arrêter les ressources CAB du contexte et
+déconnecter nativement le broker selon `references/session-reset.md`.
+L'abandon de ce seul job technique gelé est autorisé même avec gate OPEN, sans
+fabriquer un gate valide ni désarmer artificiellement le job. Ne pas fermer
+ou redémarrer OpenCode.
+
+Purger avec l'outil distribué les seuls espaces réellement résolus
+`<home OpenCode>/.opencode/state/cgpt-approval-bridge/` et
+`<racine projet>/.opencode/state/cgpt-approval-bridge/`, en tenant compte des
+chemins personnalisés. Les gardes de chemin et de verrou restent obligatoires.
+Approbations, journal, job et autres états techniques sont supprimés sans
+lecture, sauvegarde ou restauration ; checkpoint métier, sources, secrets,
+rapports et historiques natifs restent hors purge. Une purge partielle
+interdit le démarrage.
+
+Créer une nouvelle session CAB et un nouveau job technique, avec des
+identifiants de session, job, requête et approbation neufs. Le prévol de ce
+redémarrage exige exactement `/usr/bin/true`, sans suffixe, avec le
+`change_id` attendu du checkpoint, une décision explicite, une réponse MCP
+corrélée, une permission consommée une seule fois et exit 0. Exiger ensuite
+`broker_readiness = READY` sans demande ni permission parasite. Un nouveau
+prévol divergent interdit la reprise.
+
+Réconcilier les fichiers et les preuves conservées, puis reprendre au premier
+jalon non prouvé, sans rejouer les écritures validées ni les autorisations
+consommées et sans réadopter l'ancien job ou ses décisions. Le RUN métier
+conserve son checkpoint externe ; la récupération ordinaire reste sans purge.
+Une preuve manquante ne vaut jamais succès et n'autorise aucun rejeu aveugle.
+Les permissions techniques de la plateforme restent applicables.
 
 ## Mandats d'inventaire ou d'analyse en lecture seule
 

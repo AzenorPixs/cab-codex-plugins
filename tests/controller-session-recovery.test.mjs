@@ -214,6 +214,22 @@ test("prévol strict même sans strictCommands et consommation unique", async (c
   assert.equal(h.native.replies.length, 1);
 });
 
+test("refuse true avec un change divergent sans purger ni valider la récupération", async (context) => {
+  const h = await setup(context);
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
+  const before = await h.get("/job");
+  const divergent = h.approval(h.recovery.preflightRequestId, "ses_new", "true");
+  divergent.change_id = "another-change";
+  assert.equal((await h.validate(divergent)).status, 409);
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 409);
+  const after = await h.get("/job");
+  for (const key of ["jobId", "sessionId", "changeId", "lastProvenMilestone", "recovery", "terminalGate"]) {
+    assert.deepEqual(after[key], before[key]);
+  }
+  assert.equal(after.terminalGate.status, "OPEN");
+  assert.equal(h.native.replies.length, 0);
+});
+
 test("refuse les fausses preuves natives et garde le gel", async (context) => {
   const h = await setup(context);
   await h.post("/job/recover", { ...h.recovery, phase: "prepare" });

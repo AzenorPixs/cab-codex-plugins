@@ -98,12 +98,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.86\.8$/m);
-  assert.match(manifest, /"version": "0\.86\.8\+codex\./);
-  assert.match(controller, /version: "0\.86\.8"/);
-  assert.match(supervisor, /const version = "0\.86\.8"/);
-  assert.match(broker, /SERVER_VERSION = "0\.86\.8"/);
-  assert.match(project, /^version = "0\.86\.8"$/m);
+  assert.match(command, /^version: 0\.86\.9$/m);
+  assert.match(manifest, /"version": "0\.86\.9\+codex\./);
+  assert.match(controller, /version: "0\.86\.9"/);
+  assert.match(supervisor, /const version = "0\.86\.9"/);
+  assert.match(broker, /SERVER_VERSION = "0\.86\.9"/);
+  assert.match(project, /^version = "0\.86\.9"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -213,6 +213,43 @@ test("le protocole distribue des cadences indépendantes et une attente PLLM per
     assert.match(protocol, /ne vaut jamais approbation, ne rejoue aucun mandat consommé/, path);
     assert.match(protocol, /ne contourne aucun blocage CAB distinct/, path);
   }
+});
+
+test("l'exception de purge garde le double écart, les preuves et le prévol exact", () => {
+  for (const path of [
+    "../AGENTS.md",
+    "../.codex/commands/cab.md",
+    "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+  ]) {
+    const source = readFileSync(new URL(path, import.meta.url), "utf8");
+    const start = source.indexOf("Nouvelle session CAB après prévol de récupération divergent");
+    // L'initialisation peut référencer le titre ; sélectionner la section elle-même.
+    const section = source.slice(source.indexOf("\n", source.indexOf(
+      "# Nouvelle session CAB après prévol de récupération divergent"
+    ))).replace(/\s+/g, " ");
+    assert.notEqual(start, -1, path);
+    assert.match(section, /sans nouvelle confirmation/, path);
+    assert.match(section, /à la fois la transmission de `true` au lieu de `\/usr\/bin\/true` et un `change_id` divergent/, path);
+    assert.match(section, /ne couvre aucun autre échec/, path);
+    assert.match(section, /n'est jamais exécutée automatiquement par `\/job\/recover`/, path);
+    assert.match(section, /aucun mandat actif ou en attente, aucune permission non résolue et aucun effet inconnu/, path);
+    assert.match(section, /checkpoint métier non secret/, path);
+    assert.match(section, /gate OPEN, sans fabriquer un gate valide/, path);
+    assert.match(section, /<home OpenCode>\/\.opencode\/state\/cgpt-approval-bridge\//, path);
+    assert.match(section, /<racine projet>\/\.opencode\/state\/cgpt-approval-bridge\//, path);
+    assert.match(section, /identifiants de session, job, requête et approbation neufs/, path);
+    assert.match(section, /exactement `\/usr\/bin\/true`, sans suffixe, avec le `change_id` attendu/, path);
+    assert.match(section, /sans rejouer les écritures validées/, path);
+    assert.match(section, /récupération ordinaire reste sans purge/, path);
+  }
+  const reset = readFileSync(new URL(
+    "../plugins/cab-approval-bridge/skills/approval-bridge/references/session-reset.md",
+    import.meta.url
+  ), "utf8").replace(/\s+/g, " ");
+  assert.match(reset, /sans nouvelle confirmation/);
+  assert.match(reset, /checkpoint métier externe sont distincts/);
+  assert.match(reset, /ne prétend pas réussir `\/cab stop` normal/);
+  assert.match(reset, /--confirm-new-session --state-dir/);
 });
 
 test("les sondes statistiques n'arrêtent pas le travail pour attendre le créneau", () => {

@@ -32,7 +32,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.86.8` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.86.9` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -102,7 +102,9 @@ La purge efface également les checkpoints, anciens jobs, rappels, états de
 remédiation et conflits Syncthing. Seul l'inode de `broker.instance.lock` reste
 vide, verrouillé jusqu'à la fin de la purge. Un état recréé ou une erreur
 interdit le démarrage. Sources, secrets, configurations, rapports et historiques
-natifs des agents restent hors purge. Une reprise du même RUN ne purge rien.
+natifs des agents restent hors purge. Une reprise ordinaire ne purge rien ;
+seule l'exception après prévol divergent de la section 7 autorise le
+remplacement du runtime neutralisé, avec checkpoint métier externe préservé.
 
 ## 5. États d'approbation
 
@@ -208,6 +210,31 @@ Le prévol admet un polling MCP corrélé après délai de request_validation ;
 la réponse APPROVED réelle, l'exécution unique et la readiness finale restent
 requises. Aucune installation ni migration du broker n'est nécessaire au
 correctif source.
+
+### Exception après échec du prévol de récupération
+
+Le double écart prouvé `true` au lieu de `/usr/bin/true` et `change_id`
+divergent autorise l'orchestrateur, après le feu vert, à ouvrir une nouvelle
+session CAB sans redemander confirmation. `/job/recover` reste inchangé et
+conserve son gel ; il ne purge ni ne valide ce prévol. L'exception est décrite
+dans le skill et `references/session-reset.md`, et non dans un nouvel endpoint.
+
+Avant suppression, réconcilier les effets, refuser les permissions erronées,
+clôturer les demandes restantes et prouver l'inactivité du contexte. Préserver
+hors runtime le checkpoint métier, les jalons et preuves des écritures validées.
+Arrêter les seules ressources CAB et déconnecter le broker nativement ; le
+job technique gelé peut être abandonné sans gate terminal inventé. OpenCode
+reste ouvert. Effets inconnus, propriété incertaine ou espace partagé
+interdisent la purge.
+
+L'outil existant purge les deux espaces réellement résolus du home OpenCode
+et du projet, avec ses mêmes gardes. La nouvelle session et le nouveau job
+ont des identifiants neufs et le change attendu du checkpoint. Le test de ce
+redémarrage exige exactement `/usr/bin/true`, sans suffixe, avec le bon
+`change_id`, décision explicite et consommation unique, exit 0, puis readiness
+READY sans permission parasite. Réconcilier les fichiers et reprendre au
+premier jalon non prouvé, sans rejouer les écritures validées. Les reprises
+ordinaires restent sans purge ; les états supprimés ne sont pas restaurés.
 
 Pour les mandats lecture seule, le protocole distribué désactive explicitement
 bash, edit, write, apply_patch, task et skill via le champ tools du message.
@@ -417,7 +444,8 @@ piloté.
 
 - `/cab start` purge les seuls anciens états CAB après contrôle d'inactivité,
   vérifie `/mcp`, initialise la supervision et crée une nouvelle session
-  maîtresse ; la reprise du même RUN conserve son état ;
+  maîtresse ; la reprise ordinaire conserve son état, hors exception de
+  prévol divergent avec checkpoint métier externe définie en section 7 ;
 - `/cab run` arme un contrat de job durable et actualise ses jalons avant de
   transmettre les mandats ; le superviseur reprend cette même session tant que
   le gate terminal reste ouvert ;
