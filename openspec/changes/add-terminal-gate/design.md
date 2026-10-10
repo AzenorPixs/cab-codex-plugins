@@ -2,6 +2,10 @@
 
 ## Context
 
+Ce design décrit l'introduction du gate en `0.84.4`. Son contexte et son plan
+de migration initiaux sont conservés ; la décision ci-dessous distingue
+l'extension ultérieure vers un contrat de job durable.
+
 Le contrôleur conserve déjà les validations actives et le statut du broker,
 mais `/cab stop` ne dispose d'aucun contrat technique de clôture. Voir
 `proposal.md` pour la motivation.
@@ -27,9 +31,14 @@ mais `/cab stop` ne dispose d'aucun contrat technique de clôture. Voir
   résultat de gate ; le contrôleur vérifie ses propres validations actives et
   l'état broker connu. Cette vérification locale est préférable à une simple
   instruction de prompt, car elle est appliquée hors du modèle.
-- Le gate reste en mémoire et est exposé dans `/status`. Il est réinitialisé à
-  la prochaine validation reçue afin qu'un ancien gate ne couvre pas un nouveau
-  mandat.
+- Dans la conception initiale `0.84.4`, le gate restait en mémoire et était
+  exposé dans `/status`. Le contrat de job durable introduit ultérieurement
+  le conserve dans `controller-job.json` et restaure son état au démarrage
+  avec les jalons et les métadonnées de récupération du job. Le gate reste
+  réinitialisé à la prochaine validation reçue afin qu'un ancien gate ne
+  couvre pas un nouveau mandat. Le contrat courant de restauration relève
+  de `openspec/specs/controller-transport/spec.md` et de
+  `openspec/specs/persistent-job-supervision/spec.md`.
 - `/cab stop` doit demander le gate avant d'arrêter le service. L'arrêt forcé
   explicite du développeur reste hors de ce mécanisme.
 

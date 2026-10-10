@@ -182,8 +182,8 @@ CAB, y compris ses conflits Syncthing, sans le restaurer. Elle vérifie d'abord
 l'inactivité du contexte, arrête les ressources CAB et déconnecte le broker
 par OpenCode ; sources, secrets, rapports et historiques natifs restent hors
 purge. Le plugin fournit l'outil de purge et son protocole. Une reprise
-ordinaire conserve son état ; la seule exception de prévol divergent décrite
-ci-dessous préserve le checkpoint métier hors runtime.
+conserve son état, y compris après prévol de récupération divergent dans la
+candidate, selon la procédure ci-dessous.
 
 `/cab start` reconnecte et vérifie le MCP actif par `/mcp`, installe de façon différée les
 services utilisateur du contrôleur et du superviseur sans les activer au
@@ -231,21 +231,15 @@ ressources CAB en cours restent inchangées.
 À la fin, elle récapitule les versions GitHub et locales du plugin, du
 contrôleur, du superviseur déployé, du broker actif et de la commande CAB.
 
-Après un prévol de récupération divergent ou incomplet prouvé et refusé sans
-effet, le protocole déclenche une nouvelle session CAB avec purge des deux
-espaces techniques résolus, sans nouvelle confirmation après le feu vert.
-Les champs ou délais prescrits omis sont couverts ; deux écarts simultanés
-ne sont plus nécessaires. Cette exception exige propriété/inactivité prouvées,
-permissions neutralisées et checkpoint métier préservé hors purge. Nouveau
-job, identifiants neufs et prévol exact avec le bon change sont requis avant
-reprise, sans rejouer les écritures validées. Une nouvelle divergence sûre
-relance la procédure et garde le RUN parent non terminal. Un timeout MCP seul
-conserve le polling de la même approbation ; effet inconnu, preuve absente,
-espace partagé ou purge partielle bloque la reprise automatique.
-OpenCode reste ouvert ; la récupération ordinaire reste sans purge et les
-gardes de l'outil de purge sont conservées. L'automatisation est effectuée par
-l'orchestrateur appliquant le protocole distribué, sans nouvel automate dans
-le broker ou l'API `/job/recover`.
+Après un prévol de récupération divergent ou incomplet refusé sans effet,
+conserver la session candidate où le prévol a divergé, le même job et leurs
+preuves, sans purge ni renouvellement. L'orchestrateur réconcilie puis demande
+retry explicite à /job/recover avec requête et approbation neuves. Le contrôleur
+vérifie le refus et l'absence d'effet, préserve l'historique et impose un nouveau
+prévol exact avant complete. Un timeout MCP seul conserve le polling de la même
+approbation. Effet inconnu ou preuve absente suspend la reprise. Le superviseur
+reste gelé jusqu'à complete ; OpenCode reste ouvert. Le remplacement initial
+prévu par CISMP et la purge avant un nouveau RUN restent inchangés.
 
 ## Organisation du dépôt
 terme
@@ -327,7 +321,7 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 | `OC_Codex_STATUS_HOST` | adresse loopback du contrôleur : `127.0.0.1` ou `::1` |
 | `OC_Codex_STATUS_PORT` | port local du contrôleur |
 | `OC_Codex_RECONNECT_MS` | délai de reconnexion SSE |
-| `OC_Codex_CONTROLLER_URL` | endpoint de statut utilisé par le healthcheck |
+| `OC_Codex_CONTROLLER_URL` | base HTTP du contrôleur ou endpoint `/status`, avec slash final éventuel, communs au healthcheck et au superviseur |
 | `OC_Codex_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readinessterme |
 | `OC_Codex_SUPERVISOR_URL` | endpoint de statut du superviseur utilisé par le healthcheck |
 | `OC_Codex_SUPERVISOR_STATUS_HOST` | adresse loopback du superviseur |
@@ -344,6 +338,12 @@ Le mode `OC_Codex_DECISION_MODE=manual`, utilisé par défaut, conserve les
 demandes en attente d'une décision HTTP explicite de l'orchestrateur
 principal. Les rappels corrélés restent observables sans créer de thread ni
 de tour Codex auxiliaire. Le mode `automatic` conserve son fonctionnement.
+
+Une demande locale indécise bloque le gate terminal même si le dernier
+compteur broker était nul. Pour la supervision, seule l'activité SSE de la
+session du job, sans répertoire divergent, repousse la reprise ; le trafic
+étranger et les heartbeats ne constituent pas une activité de cette session.
+Un changement de contexte invalide l'ancienne horloge d'activité.
 
 Les secrets doivent rester hors du dépôt Git et des journaux.
 
@@ -393,7 +393,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.87.1`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `0.87.2`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

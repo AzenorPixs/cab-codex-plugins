@@ -19,7 +19,7 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - `broker_health` reste réservé au diagnostic détaillé.
 - Le contrôleur `../../scripts/cgpt-approval-bridge-controller.mjs` (chemin relatif à ce `SKILL.md`) s’exécute exclusivement hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1`. L’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté.
 - Le contrôleur est géré par le service utilisateur `cgpt-approval-bridge-controller.service`, avec `Restart=on-failure` pendant son exécution. `/cab start` installe ses ressources sans l'activer, puis le démarre explicitement ; `/cab stop` l'arrête. Ne pas utiliser un processus éphémère ou un `nohup` pour un RUN CAB.
-- Le contrôleur n’écoute que `127.0.0.1`.
+- Le contrôleur n'écoute que `127.0.0.1` ou `::1`, avec `127.0.0.1` par défaut.
 - OpenCode est observé indépendamment via son SSE HTTP direct.
 - Après reconnexion SSE ou divergence, réconcilier l’état réel par HTTP auprès d’OpenCode.
 - Les validations normales passent par MCP stdio.
@@ -161,8 +161,8 @@ Avant toute nouvelle session, appliquer intégralement la
 que soit l'ancien état, y compris en présence de conflits Syncthing. Le script
 `../../scripts/cgpt-approval-bridge-reset.py` est fourni par ce plugin.
 Une reprise ordinaire du même RUN conserve son état et commence par la
-réconciliation. Seule l'exception de prévol de récupération divergent définie
-ci-dessous autorise une nouvelle session CAB avec purge contrôlée.
+réconciliation. Un prévol de récupération divergent conserve la candidate,
+le job et le runtime selon la procédure ci-dessous, sans purge ni renouvellement.
 
 1. Vérifier `GET /global/health` d’OpenCode.
 2. Vérifier que `cgpt-validation` est déclaré comme MCP local `stdio`.
@@ -171,18 +171,19 @@ ci-dessous autorise une nouvelle session CAB avec purge contrôlée.
 5. Relever par API, pour l’agent de codage ciblé, le fournisseur, le modèle et le niveau de raisonnement effectivement configurés. Vérifier que le fournisseur et le modèle sont publiés par OpenCode sans lire de secret.
 6. Créer une session de prévol temporaire sans outil ni accès au projet, lui adresser une requête inoffensive en imposant exactement ces paramètres et vérifier la réponse ainsi que ses métadonnées observées. Fermer la session temporaire après le contrôle.
 7. Si la réponse, le fournisseur, le modèle ou le raisonnement est absent ou divergent, publier `CAB_INACTIF` avec la cause et ne créer ni session persistante ni contrôleur. Ne jamais corriger la configuration à la place du développeur.
-8. Installer ou actualiser les ressources utilisateur du contrôleur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
+8. Installer ou actualiser les ressources utilisateur du contrôleur et du superviseur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
 9. Vérifier le statut local du contrôleur.
-10. Démarrer ou maintenir le SSE direct OpenCode.
-11. Créer une nouvelle session maîtresse pour un nouveau RUN via `POST /session` ; réutiliser la session seulement pour une reprise du même RUN. Conserver son identifiant et adresser tous les mandats par `POST /session/<id>/message`.
-12. Appeler `broker_readiness` dans cette session, sans accès au projet.
-13. Interpréter `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`.
-14. Réconcilier l’état OpenCode via HTTP après chaque reconnexion ou divergence, puis revalider `/mcp` avant tout mandat.
-15. Vérifier qu’aucune approbation parasite n’est en attente.
-16. Tester `request_validation` avec un `requestId` inédit dans la session persistante.
-17. Rendre une décision Codex explicite unique.
-18. Vérifier la réponse MCP corrélée reçue par OpenCode dans cette session.
-19. Créer le heartbeat de trente secondes uniquement après validation complète.
+10. Démarrer explicitement `cgpt-approval-bridge-supervisor.service` après le contrôleur, sans activation au login. Vérifier son statut local et `Restart=on-failure` ; il supervise le job sans créer de décision ni de session de remplacement.
+11. Démarrer ou maintenir le SSE direct OpenCode.
+12. Créer une nouvelle session maîtresse pour un nouveau RUN via `POST /session` ; réutiliser la session seulement pour une reprise du même RUN. Conserver son identifiant et adresser tous les mandats par `POST /session/<id>/message`.
+13. Appeler `broker_readiness` dans cette session, sans accès au projet.
+14. Interpréter `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`.
+15. Réconcilier l’état OpenCode via HTTP après chaque reconnexion ou divergence, puis revalider `/mcp` avant tout mandat.
+16. Vérifier qu’aucune approbation parasite n’est en attente.
+17. Tester `request_validation` avec un `requestId` inédit dans la session persistante.
+18. Rendre une décision Codex explicite unique.
+19. Vérifier la réponse MCP corrélée reçue par OpenCode dans cette session.
+20. Créer le heartbeat de trente secondes uniquement après validation complète.
 
 ## Mandats unitaires d’un job piloté
 
@@ -250,11 +251,16 @@ Avant de modifier le modèle d’un agent OC :
 
 ## Arrêt
 
+- Avant tout arrêt normal, demander `POST /job/terminal-gate` avec l'état explicite `TERMINÉ` ou `BLOQUÉ`. Si le gate est refusé, conserver le job ouvert et reprendre le pilotage ou signaler le blocage ; après validation, désarmer le contrat correspondant par `POST /job/disarm`.
 - Supprimer les heartbeats et healthchecks créés par `/cab`.
 - Fermer les clients SSE créés par `/cab`.
-- Arrêter uniquement le contrôleur démarré par `/cab`.
+- Arrêter explicitement le superviseur démarré par `/cab`, puis le contrôleur, avec `systemctl --user stop` sur leurs services respectifs. Conserver les unités installées et inactives, sans les désactiver ni les supprimer.
 - Ne pas arrêter directement `cgpt-validation` : il est géré par OpenCode.
 - Ne pas fermer OpenCode ni son conteneur sans instruction explicite.
+
+Cette procédure normale reste distincte d'un arrêt forcé explicitement demandé
+par le développeur. Un prévol de récupération divergent ne permet aucun
+abandon de job.
 
 
 ## Récupération contrôlée de session dans le même RUN
@@ -286,86 +292,68 @@ dernier jalon conservé, nouvelle session, `strictCommands` préservé et gate
 OPEN. Les anciennes autorisations exécutables sont invalidées et l'historique
 non secret est conservé. Le superviseur suit désormais la session transférée.
 Un échec conserve le gel ; la récupération ordinaire ne purge pas le RUN et
-n'invente aucun gate terminal. La seule exception de purge est définie dans
-« Nouvelle session CAB après prévol de récupération divergent » ci-dessous.
+n'invente aucun gate terminal. Un prévol divergent suit la procédure sans
+purge décrite dans
+« Prévol de récupération divergent dans la même session » ci-dessous.
 Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
 locale du prévol : si elles sont perdues, la récupération reste refusée et
 nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
 un prévol échoué par une nouvelle tentative implicite.
 
-## Nouvelle session CAB après prévol de récupération divergent
+## Prévol de récupération divergent dans la même session
 
-Après le feu vert de la session, l'orchestrateur déclenche sans nouvelle
-confirmation une nouvelle session CAB lorsqu'un prévol de récupération
-divergent ou incomplet est prouvé par les appels natifs, refusé avant
-exécution et sans effet observé ou inconnu. L'automatisation appartient à
-l'orchestrateur du RUN ; elle n'est jamais exécutée automatiquement par
-`/job/recover`, qui conserve son refus strict et son gel.
+Après un prévol divergent ou incomplet prouvé et refusé avant exécution sans
+effet, conserver la session candidate où le prévol a divergé, le même job,
+le RUN et le runtime. Ne créer aucune autre session ni aucun job de remplacement,
+ne purger aucun état et ne pas revenir à l'ancienne session révoquée.
+Le remplacement initial prévu par CISMP reste inchangé ; cette règle concerne
+les échecs du prévol dans sa candidate. OpenCode reste ouvert.
 
-L'exception couvre un champ prescrit absent ou altéré : `requestId`,
-`approval_id`, `change_id`, `session_id`, `directory`, `files`, `commands`,
-`title`, `summary`, `timeout_seconds` ou `interval_seconds`. Elle inclut une
-commande `true` au lieu de `/usr/bin/true`, un suffixe, un change divergent,
-ainsi qu'une demande malformée rejetée avant enregistrement. Il n'est pas
-nécessaire de cumuler deux écarts. Le mandat erroné reste refusé, sans
-normalisation ni exécution. Comparer les arguments natifs au mandat réellement
-prescrit ; un paramètre non prescrit ne devient pas une divergence inventée.
+Comparer les appels natifs au mandat réellement prescrit, notamment
+`requestId`, `approval_id`, `change_id`, `session_id`, `directory`, `files`,
+`commands`, `title`, `summary`, `timeout_seconds` et `interval_seconds`.
+Un champ omis, `true` au lieu de `/usr/bin/true`, un suffixe ou un change erroné
+reste refusé sans normalisation. Un paramètre non prescrit ne devient pas une
+divergence inventée. Un HTTP 409 seul ou un texte de l'agent ne prouve pas le
+refus sans effet. Après un délai MCP seul, interroger uniquement le même
+`approval_id` par `poll_approval` ou `get_approval`, sans nouvelle demande.
 
-Un HTTP 409 seul, un texte de l'agent ou un délai MCP seul ne suffit pas.
-Après un délai MCP ordinaire, interroger uniquement le même `approval_id`
-par `poll_approval` ou `get_approval`, sans nouvelle demande ni purge.
-Les preuves natives de l'écart, du refus et de l'absence d'effet restent
-obligatoires, y compris lorsque la demande n'a pas été enregistrée.
+Geler le travail, traiter les rapports, refuser les permissions divergentes,
+clôturer les demandes restantes sans les approuver et réconcilier les effets.
+Exiger santé, contexte, MCP connecté, sessions inactives, aucun mandat actif
+ou en attente, aucune permission non résolue et aucun effet inconnu.
+Une décision `approved`, consommée ou une preuve incertaine interdit retry.
 
-Geler le travail, traiter les rapports, réconcilier les effets et refuser les
-permissions divergentes ; clôturer les demandes restantes sans les approuver.
-Exiger la propriété du contexte, les sessions inactives, aucun mandat actif
-ou en attente, aucune permission non résolue et aucun effet inconnu. Un espace
-partagé avec un autre travail ou une preuve incertaine interdit la purge.
+Demander explicitement `POST /job/recover` avec `phase: "retry"`, les mêmes
+`jobId`, `expectedSessionId`, `sessionId` candidate et `recoveryId`,
+`previousPreflightRequestId` égal à la réservation actuelle et un
+`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job.
+Le contrôleur exige un refus natif `REJECTED` corrélé à la décision locale
+`rejected` non consommée, ou une erreur native MCP `-32602` avant enregistrement.
+Une erreur générique, un timeout, une commande ou un autre outil natif laisse
+le gel conservé et exige la réconciliation ou l'autorité indispensable.
 
-Préserver hors des cibles un checkpoint métier non secret : objectif, change
-attendu, jalons, écritures validées et preuves natives, prochaine action, motif
-de l'échec et chemins résolus. Arrêter les ressources CAB du contexte et
-déconnecter nativement le broker selon `references/session-reset.md`.
-L'abandon de ce seul job technique gelé est autorisé même avec gate OPEN, sans
-fabriquer un gate valide ni désarmer artificiellement le job. Ne pas fermer
-ou redémarrer OpenCode.
+Le contrôleur conserve les identifiants antérieurs et l'empreinte du préfixe
+des parties natives, sans contenu de message. Il vérifie ce préfixe à chaque
+retry et complete ; une preuve modifiée ou perdue interdit la transition.
+Le nouvel essai utilise des `requestId` et `approval_id` neufs ; les anciennes
+décisions restent intactes et ne sont jamais réutilisées. Une perte de preuves
+locales après redémarrage ne permet pas leur reconstruction implicite.
 
-Purger avec l'outil distribué les seuls espaces réellement résolus
-`<home OpenCode>/.opencode/state/cgpt-approval-bridge/` et
-`<racine projet>/.opencode/state/cgpt-approval-bridge/`, en tenant compte des
-chemins personnalisés. Les gardes de chemin et de verrou restent obligatoires.
-Approbations, journal, job et autres états techniques sont supprimés sans
-lecture, sauvegarde ou restauration ; checkpoint métier, sources, secrets,
-rapports et historiques natifs restent hors purge. Une purge partielle
-interdit le démarrage et exige l'autorité indispensable.
+Dans la même candidate, exiger exactement `/usr/bin/true`, sans suffixe, avec
+le `change_id` attendu, une décision explicite, une réponse MCP corrélée, une
+permission native unique, exit 0 puis `broker_readiness = READY` sans demande
+ni permission parasite. Appeler complete avec la nouvelle réservation et
+relire `/job` et `/status` avant tout mandat métier. Le superviseur reste gelé
+jusqu'à complete ; il suit ensuite cette candidate devenue session du job.
 
-Créer une nouvelle session CAB et un nouveau job technique, avec des
-identifiants de session, job, requête et approbation neufs. Le prévol de ce
-redémarrage exige exactement `/usr/bin/true`, sans suffixe, avec le
-`change_id` attendu du checkpoint, une décision explicite, une réponse MCP
-corrélée, une permission consommée une seule fois et exit 0. Exiger ensuite
-`broker_readiness = READY` sans demande ni permission parasite. Un nouveau
-prévol divergent interdit la reprise métier et relance cette procédure si
-les mêmes préconditions de sûreté sont à nouveau prouvées.
-
-Le RUN parent reste en attente non terminale pendant ces récupérations.
-Tracer chaque tentative dans le checkpoint : numéro, identifiants,
-horodatages, cause, arguments attendus et observés, références des preuves
-natives. Renouveler les tentatives sans limite jusqu'au prévol exact réussi
-ou à l'arrêt explicite du développeur, tant que les préconditions restent
-prouvées. Ne lancer aucune tentative simultanée ni dupliquer une tentative
-non réconciliée. Maintenir le suivi de progression à la cadence existante,
-sans boucle serrée. Ce seul échec ne termine pas le RUN parent.
-
-Réconcilier les fichiers et les preuves conservées, puis reprendre au premier
-jalon non prouvé, sans rejouer les écritures validées ni les autorisations
-consommées et sans réadopter l'ancien job ou ses décisions. Le RUN métier
-conserve son checkpoint externe ; la récupération ordinaire reste sans purge.
-Une preuve manquante ne vaut jamais succès et n'autorise aucun rejeu aveugle.
-Effet inconnu, propriété incertaine ou garde non établie imposent de demander
-l'autorité indispensable. Les permissions techniques de la plateforme restent
-applicables.
+Un nouvel écart sûr reprend cette procédure dans la même candidate, sans
+concurrence ni doublon d'une tentative non réconciliée, jusqu'au prévol exact
+ou arrêt explicite. Conserver le RUN en attente non terminale, le checkpoint
+métier non secret, numéro, identifiants, horodatages, cause, arguments attendus
+et observés et références des preuves natives. Maintenir le suivi à la cadence
+existante sans boucle serrée. Reprendre au premier jalon non prouvé, sans
+rejouer les écritures validées ni les autorisations consommées.
 
 ## Mandats d'inventaire ou d'analyse en lecture seule
 

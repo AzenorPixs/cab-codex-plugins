@@ -170,7 +170,7 @@ Son installation SHALL rendre ce skill disponible sans plugin Tools Codex
 et sans skill `cgpt` externe. Le protocole et la commande CAB SHALL imposer
 sa production de statistiques après chaque archivage réussi selon
 `archive-session-statistics`. Les composants versionnés SHALL partager la
-version de base `0.87.1`, le plugin pouvant ajouter un cachebuster Codex.
+version de base `0.87.2`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
 - **WHEN** le plugin CAB est installé depuis sa marketplace
@@ -178,33 +178,31 @@ version de base `0.87.1`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Release cohérente
 - **WHEN** la release est validée
-- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.87.1`
+- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.87.2`
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 
 La commande `/cab start` et la skill SHALL purger le runtime avant chaque
 nouvelle session CAB. Une reprise du même RUN, un compactage, une reconnexion
-ou `run`, `test`, `update`, `stop` SHALL conserver le runtime, sauf l'exception
-« Nouvelle session après prévol de récupération divergent » définie ici.
+ou `run`, `test`, `update`, `stop` SHALL conserver le runtime ; un prévol de récupération divergent SHALL NOT déclencher une nouvelle session ni une purge.
 
 #### Scenario: Ancien état disponible
 - **WHEN** `/cab start` ouvre une nouvelle session et aucun travail précédent n'est actif
 - **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur sans réadopter leur job ou leurs décisions
 
 #### Scenario: Reprise du même RUN
-- **WHEN** CAB reprend le même RUN sans satisfaire l'exception de prévol divergent
+- **WHEN** CAB reprend le même RUN y compris après un prévol de récupération divergent
 - **THEN** les preuves et demandes restent conservées sans purge
 
 #### Scenario: Sous-commande sans nouveau démarrage
-- **WHEN** `run`, `test`, `update` ou `stop` est exécutée sans l'exception
+- **WHEN** `run`, `test`, `update` ou `stop` est exécutée sans nouveau démarrage
 - **THEN** elle ne déclenche aucune purge de début de session
 
 ### Requirement: Arrêt contrôlé avant purge
 
 L'orchestrateur SHALL prouver propriété et inactivité du contexte, sans session
 occupée, mandat en cours ni permission non résolue. Un RUN actif SHALL
-interdire la purge, sauf son job technique gelé neutralisé selon l'exception
-de prévol divergent. Il SHALL arrêter les ressources CAB, déconnecter le
+interdire la purge. Il SHALL arrêter les ressources CAB, déconnecter le
 broker nativement et vérifier son verrou, sans tuer le broker ni fermer ou
 redémarrer OpenCode.
 
@@ -233,8 +231,7 @@ non dédiés, symboliques ou imbriqués et les verrous occupés, non ordinaires 
 Après purge, CAB SHALL reconnecter le broker, vérifier contexte et modèle,
 créer une nouvelle session et exiger broker_readiness READY sans demande ni
 permission parasite. Un test CAB SHALL prouver décision explicite, réponse MCP
-corrélée et exécution unique de true ; dans l'exception de prévol divergent,
-la commande SHALL être exactement /usr/bin/true avec le change_id attendu.
+corrélée et exécution unique de true.
 Aucune ancienne preuve SHALL valider ce prévol.
 
 #### Scenario: Nouvelle session vérifiée
@@ -255,83 +252,6 @@ La restriction lecture seule MUST NOT modifier la configuration persistante Open
 - **WHEN** l'orchestrateur passe d'un inventaire à une opération native
 - **THEN** seuls les outils nécessaires sont réactivés et l'opération exige sa propre décision CAB
 
-### Requirement: Nouvelle session après prévol de récupération divergent
-
-Après le feu vert, l'orchestrateur MUST déclencher sans nouvelle confirmation
-une nouvelle session CAB pour un prévol divergent ou incomplet prouvé et
-refusé avant exécution sans effet, après toutes les préconditions de sûreté.
-Le mandat MUST rester refusé sans normalisation. L'automatisation MUST
-appartenir à l'orchestrateur ; /job/recover MUST NOT purger ni approuver.
-
-#### Scenario: Champ ou délai prescrit omis
-- **WHEN** les arguments natifs omettent ou altèrent un identifiant, une cible, une commande, une métadonnée ou un délai prescrit, dont approval_id, files ou timeout_seconds
-- **THEN** l'orchestrateur MUST appliquer la procédure après preuve native du refus et de l'absence d'effet ; une demande malformée avant enregistrement MAY être admise sur ces mêmes preuves, sans nouveau feu vert ni état terminal du RUN parent
-
-#### Scenario: Commande ou change divergent
-- **WHEN** le prévol transmet true au lieu de /usr/bin/true, un suffixe ou un autre change_id et le mandat est refusé sans effet
-- **THEN** l'exception MUST être admissible sans exiger deux écarts simultanés et sans normaliser ni approuver la demande
-
-#### Scenario: Double écart prouvé
-- **WHEN** le prévol de récupération échoué a transmis true et un autre change_id
-- **THEN** l'orchestrateur MUST appliquer l'exception après ses contrôles obligatoires sans redemander le feu vert
-
-#### Scenario: Autre incident
-- **WHEN** l'incident ne prouve pas un prévol divergent admissible et présente seulement un HTTP 409, un texte de l'agent ou un paramètre non prescrit
-- **THEN** l'orchestrateur MUST conserver les règles ordinaires sans inventer une divergence ou une autorisation de purge
-
-#### Scenario: Réponse MCP temporairement absente
-- **WHEN** request_validation atteint son délai sans preuve native de divergence
-- **THEN** l'orchestrateur MUST interroger le même approval_id sans créer une nouvelle demande ni purger pour ce seul délai
-
-#### Scenario: Effet ou propriété incertain
-- **WHEN** un effet reste inconnu, une preuve manque ou le contexte n'est pas exclusivement maîtrisé
-- **THEN** l'orchestrateur MUST interdire l'exception automatique et demander l'autorité indispensable
-
-### Requirement: Neutralisation avant abandon technique
-
-Avant purge exceptionnelle, l'orchestrateur MUST geler le travail, traiter les
-rapports, réconcilier les effets et neutraliser demandes et permissions sans
-les approuver. Les gardes de propriété, inactivité et preuves MUST être
-établies. Le seul job technique gelé avec gate OPEN MAY être abandonné sans
-fabriquer un gate valide ni le désarmer artificiellement.
-
-#### Scenario: Job gelé et sessions inactives
-- **WHEN** un prévol admissible, la propriété du contexte, les sessions inactives et l'absence de mandat actif ou en attente, de permission non résolue et d'effet inconnu sont prouvés
-- **THEN** l'orchestrateur MUST arrêter les seules ressources CAB du contexte sans fabriquer une clôture normale ni fermer OpenCode
-
-#### Scenario: Demande ou permission restante
-- **WHEN** un mandat indécis, une permission divergente ou une transmission reste à réconcilier
-- **THEN** l'orchestrateur MUST refuser les permissions divergentes et clôturer les demandes sans les approuver, puis vérifier à nouveau toutes les préconditions avant purge
-
-### Requirement: Deux espaces runtime et preuves hors purge
-
-La purge exceptionnelle MUST utiliser l'outil existant sur les deux espaces
-réellement résolus du home OpenCode et de la racine projet, en tenant compte
-des chemins personnalisés. Avant suppression, checkpoint métier et preuves
-des écritures validées MUST être préservés hors cibles. Un espace partagé avec
-un autre travail, une preuve absente ou une cible non sûre MUST interdire la
-purge. Les gardes de verrou et de chemin MUST rester inchangées.
-
-#### Scenario: Préservation du travail prouvé
-- **WHEN** les deux espaces dédiés sont purgés
-- **THEN** approbations, journal, job et autres états techniques disparaissent ; sources, checkpoint métier, rapports et historiques natifs restent hors purge
-
-### Requirement: Prévol exact de la nouvelle session exceptionnelle
-
-Après purge, l'orchestrateur MUST créer une session et un job technique neufs.
-Le prévol MUST utiliser exactement /usr/bin/true sans suffixe, le change_id
-attendu, une décision explicite, une réponse MCP corrélée, une permission
-consommée une fois et exit 0. La readiness finale MUST être READY sans demande
-ni permission parasite. Un échec MUST interdire la reprise métier.
-
-#### Scenario: Prévol encore divergent
-- **WHEN** un nouveau prévol est refusé sans effet et les préconditions sont à nouveau établies
-- **THEN** l'orchestrateur MUST relancer la procédure avec identifiants de session, job, requête et approbation neufs, sans approbation implicite ni état terminal du RUN parent
-
-#### Scenario: Prévol exact réussi
-- **WHEN** le nouveau prévol apporte toutes les preuves exactes et la readiness finale requise
-- **THEN** le travail métier MAY reprendre au premier jalon non prouvé après réconciliation du checkpoint, du change attendu et des critères
-
 ### Requirement: Référence locale du protocole de codage piloté
 
 ORCHESTRATED_CODING.md MAY être absent d'un projet sans besoin de pilotage.
@@ -351,3 +271,25 @@ MUST définir le protocole technique sans étendre les autorisations.
 #### Scenario: Projet sans besoin de pilotage
 - **WHEN** le projet ne nécessite pas de session menée par un agent orchestrateur
 - **THEN** l'absence du fichier facultatif est normale et ne bloque pas le travail direct
+
+### Requirement: Prévol divergent dans la même session
+Après un prévol divergent ou incomplet refusé sans effet, l'orchestrateur MUST conserver session candidate, job, RUN et runtime. Il MUST NOT renouveler la session, abandonner le job ni purger pour cet incident. Le mandat erroné MUST rester refusé sans normalisation.
+
+#### Scenario: Champ ou commande divergent
+- **WHEN** un champ prescrit manque ou diverge et le prévol est refusé avant exécution sans effet
+- **THEN** l'orchestrateur réconcilie puis demande retry dans la même candidate avec identifiants de requête et approbation neufs
+
+#### Scenario: Délai MCP seul
+- **WHEN** seule la réponse MCP manque sans divergence prouvée
+- **THEN** l'orchestrateur interroge le même approval_id sans nouvelle demande ni retry
+
+### Requirement: Prévol corrigé avant reprise métier
+Après retry explicite, l'orchestrateur MUST exiger /usr/bin/true exact, change attendu, décision explicite corrélée, permission native unique, exit 0 puis broker_readiness READY sans demande ni permission parasite. Il MUST conserver le gel jusqu'à complete prouvé.
+
+#### Scenario: Échec répété sans effet
+- **WHEN** le prévol diverge de nouveau et les préconditions de retry sont rétablies
+- **THEN** une nouvelle tentative explicite reste dans la même candidate et le même job, sans concurrence ni rejeu d'écriture
+
+#### Scenario: Preuve ou effet incertain
+- **WHEN** une preuve manque ou un effet reste inconnu
+- **THEN** l'orchestrateur suspend les opérations et demande l'autorité indispensable sans purge ni renouvellement

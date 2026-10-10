@@ -290,6 +290,61 @@ test("propage les trois identifiants à une décision manuelle", async (context)
   });
 });
 
+test("CGP05 refuse le gate tant qu'une validation manuelle locale reste indécise", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "cab-gate-pending-"));
+  const fakeCodex = join(directory, "fake-codex.cjs");
+  writeFileSync(fakeCodex, "#!/usr/bin/env node\nprocess.stdin.resume();\n", { mode: 0o755 });
+  const opencode = createServer((request, response) => {
+    if (request.url.startsWith("/global/event")) {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write('data: {"type":"server.connected"}\n\n');
+      return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(request.url.startsWith("/global/health") ? { healthy: true } : []));
+  });
+  await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
+  const baseUrl = `http://127.0.0.1:${await availablePort()}`;
+  const controller = spawn(process.execPath, [controllerPath], {
+    env: { ...process.env, CODEX_COMMAND: fakeCodex,
+      OC_Codex_WORKSPACE: directory, OC_Codex_OUTSIDE_SANDBOX: "1",
+      OC_Codex_DECISION_MODE: "manual", OC_Codex_STATUS_HOST: "127.0.0.1",
+      OC_Codex_STATUS_PORT: new URL(baseUrl).port,
+      OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencode.address().port}` },
+    stdio: "ignore",
+  });
+  context.after(async () => {
+    const stopped = new Promise((resolve) => controller.once("exit", resolve));
+    controller.kill("SIGTERM");
+    await stopped;
+    opencode.closeAllConnections();
+    await new Promise((resolve) => opencode.close(resolve));
+    rmSync(directory, { recursive: true, force: true });
+  });
+  await waitForStatus(baseUrl);
+  const post = (path, body) => fetch(`${baseUrl}${path}`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+  });
+  assert.equal((await post("/broker/readiness", { status: "READY", pending_count: 0 })).status, 202);
+  assert.equal((await post("/validation/request", { approval: {
+    requestId: "request-gate-pending", approval_id: "approval-gate-pending",
+    change_id: "change-gate-pending", title: "Validation sans effet", summary: "Test isolé",
+    session_id: "ses_gate_pending", directory, files: [], commands: ["printf fixture"],
+  } })).status, 202);
+  assert.equal((await (await fetch(`${baseUrl}/status`)).json()).activeValidationCount, 0);
+  for (const state of ["TERMINÉ", "BLOQUÉ"]) {
+    assert.equal((await post("/job/terminal-gate", { state })).status, 409);
+  }
+  assert.equal((await fetch(`${baseUrl}/decision/request-gate-pending`)).status, 404);
+  assert.equal((await post("/decision/request-gate-pending", {
+    decision: "rejected", instructions: "Ne rien exécuter.", rationale: "Test sans effet.",
+  })).status, 201);
+  assert.equal((await post("/broker/readiness", { status: "READY", pending_count: 1 })).status, 202);
+  assert.equal((await post("/job/terminal-gate", { state: "TERMINÉ" })).status, 409);
+  assert.equal((await post("/broker/readiness", { status: "READY", pending_count: 0 })).status, 202);
+  assert.equal((await post("/job/terminal-gate", { state: "TERMINÉ" })).status, 201);
+});
+
 test("relances manuelles sans tour Codex, puis décision explicite unique", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-controller-reminder-"));
   const fakeCodex = join(directory, "fake-codex.cjs");

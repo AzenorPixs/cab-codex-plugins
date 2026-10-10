@@ -161,26 +161,22 @@ purge complètement l'ancien runtime avant une nouvelle session, observe
 l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que `/cab test`
 utilise la nouvelle session maîtresse. Une reprise ordinaire doit préserver
 ses preuves sans purge ; sa session est conservée, sauf remplacement explicite
-vérifié par `/job/recover`. La purge exceptionnelle après prévol divergent
-préserve ses preuves métier hors runtime. L'intégration du correctif de récupération doit
-vérifier le gel du superviseur, le prévol natif réservé et l'invalidation des
-anciennes autorisations. L'exception de prévol divergent ou incomplet refusé
-sans effet couvre notamment les champs et délais prescrits omis. Elle exige
-de vérifier les deux cibles de purge et la préservation du checkpoint métier
-externe, puis un prévol neuf exact sans rejeu d'écriture validée. Une nouvelle
-divergence sûre renouvelle la procédure sans terminer le RUN parent ; les
-preuves absentes, effets inconnus et purges partielles restent bloquants.
-Un simple délai MCP conserve le polling de la même approbation.
-L'outil de purge et les API restent
-inchangés ; l'exception appartient au protocole distribué. Les tests locaux utilisent des services simulés ;
-le déploiement et les contrôles d'un service installé restent distincts.
+vérifié par `/job/recover`. Un prévol divergent conserve sa candidate et le
+runtime. L'intégration du correctif doit vérifier le gel du superviseur, retry
+explicite après refus sans effet, les identifiants neufs et la frontière native
+conservée. complete exige toujours le prévol exact sans rejouer les écritures
+validées. Un timeout seul conserve le polling de la même approbation ; effets
+inconnus et preuves absentes suspendent la reprise. L'outil de purge et ses
+gardes restent inchangés et réservés aux nouveaux RUN. Les tests locaux
+utilisent des services simulés ; déploiement et contrôles d'une installation
+réelle restent distincts.
 
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.
 
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `0.87.1` pour le broker,
+artefacts distribués. La version de base actuelle est `0.87.2` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
