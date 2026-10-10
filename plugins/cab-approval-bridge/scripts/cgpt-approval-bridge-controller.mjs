@@ -103,8 +103,11 @@ try {
   if (persisted && typeof persisted === "object") {
     job = persisted;
   }
-} catch {
-  // L'absence de contrat persistant est l'état initial normal.
+} catch (cause) {
+  if (cause.code !== "ENOENT") {
+    const reason = cause instanceof SyntaxError ? "JSON invalide" : "lecture impossible";
+    throw new Error(`Restauration du contrat de job impossible : ${reason}.`);
+  }
 }
 
 const status = {
@@ -979,7 +982,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "0.86.9",
+      version: "0.87.0",
     },
   });
 

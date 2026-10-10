@@ -98,12 +98,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.86\.9$/m);
-  assert.match(manifest, /"version": "0\.86\.9\+codex\./);
-  assert.match(controller, /version: "0\.86\.9"/);
-  assert.match(supervisor, /const version = "0\.86\.9"/);
-  assert.match(broker, /SERVER_VERSION = "0\.86\.9"/);
-  assert.match(project, /^version = "0\.86\.9"$/m);
+  assert.match(command, /^version: 0\.87\.0$/m);
+  assert.match(manifest, /"version": "0\.87\.0\+codex\./);
+  assert.match(controller, /version: "0\.87\.0"/);
+  assert.match(supervisor, /const version = "0\.87\.0"/);
+  assert.match(broker, /SERVER_VERSION = "0\.87\.0"/);
+  assert.match(project, /^version = "0\.87\.0"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -147,9 +147,27 @@ test("la marketplace CAB distribue les statistiques avec le plugin existant", ()
   assert.match(skill, /sondes périodiques non activées/);
 });
 
+test("AGENTS renvoie au protocole local dédié avec ses contrats techniques", () => {
+  const agents = readFileSync(new URL("../AGENTS.md", import.meta.url), "utf8");
+  const reference = agents.match(/\[ORCHESTRATED_CODING\.md\]\((ORCHESTRATED_CODING\.md)\)/);
+  assert.ok(reference, "Le renvoi local doit exister dans AGENTS.md.");
+  assert.match(agents.replace(/\s+/g, " "), /les deux agents DOIVENT lire intégralement/);
+  assert.match(agents, /est un fichier facultatif/);
+  assert.match(agents.replace(/\s+/g, " "), /Son absence est normale pour les autres projets/);
+  assert.doesNotMatch(agents, /### Protocole de communication OpenCode ↔ CGPT via CAB/);
+  const protocol = readFileSync(new URL(`../${reference[1]}`, import.meta.url), "utf8");
+  for (const endpoint of ["POST /job/arm", "POST /job/progress", "POST /job/recover",
+    "POST /job/terminal-gate", "POST /job/disarm", "GET /decision/<requestId>"]) {
+    assert.ok(protocol.includes(endpoint), endpoint);
+  }
+  assert.match(protocol, /MCP stdio local/);
+  assert.match(protocol, /strictCommands/);
+  assert.match(protocol, /session directe SCM/);
+});
+
 test("le protocole exige un rapport par archive et empêche une clôture sans preuve", () => {
   const protocolPaths = [
-    "../AGENTS.md",
+    "../ORCHESTRATED_CODING.md",
     "../.codex/commands/cab.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
     "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
@@ -190,7 +208,7 @@ test("le protocole distribué protège la lecture seule et décrit la récupéra
 
 test("le protocole distribue des cadences indépendantes et une attente PLLM persistante", () => {
   for (const path of [
-    "../AGENTS.md",
+    "../ORCHESTRATED_CODING.md",
     "../.codex/commands/cab.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
   ]) {
@@ -217,7 +235,7 @@ test("le protocole distribue des cadences indépendantes et une attente PLLM per
 
 test("l'exception de purge garde le double écart, les preuves et le prévol exact", () => {
   for (const path of [
-    "../AGENTS.md",
+    "../ORCHESTRATED_CODING.md",
     "../.codex/commands/cab.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
   ]) {
@@ -254,7 +272,7 @@ test("l'exception de purge garde le double écart, les preuves et le prévol exa
 
 test("les sondes statistiques n'arrêtent pas le travail pour attendre le créneau", () => {
   for (const path of [
-    "../AGENTS.md",
+    "../ORCHESTRATED_CODING.md",
     "../.codex/commands/cab.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
     "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",

@@ -4,6 +4,24 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Protocole des sessions pilotées extrait vers ORCHESTRATED_CODING.md dans
+  les huit projets et templates possédant AGENTS.md. Les règles générales
+  imposent la lecture du document local ; les contrats techniques, cadences,
+  mandats, récupération et clôture y sont regroupés. Les tests de distribution
+  vérifient le renvoi et le contenu dédié, sans déclencher de session pilotée.
+  Le document est facultatif à l'échelle du projet et réservé aux besoins de
+  pilotage ; son absence ne bloque pas les autres projets ou les sessions directes.
+
+- Correction CGP-05 : seule l'absence de `controller-job.json` autorise un
+  démarrage sans job. Un JSON malformé ou une autre erreur de lecture refuse
+  désormais le démarrage avant HTTP et les interactions avec les composants
+  pilotés, avec un diagnostic sans contenu persistant ni chemin runtime.
+- Contrats valides, gel, sessions révoquées et fichiers en erreur préservés ;
+  aucune réparation automatique, migration ou nouvelle dépendance.
+- Tests isolés de restauration et de non-divulgation, puis alignement des
+  composants versionnés sur `0.87.0` avec nouveau cachebuster du plugin,
+  sans installation de profil, déploiement de service ni changement de schéma.
+
 - Exception de protocole après récupération CAB échouée prouvant `true` au
   lieu de `/usr/bin/true` et un `change_id` divergent : nouvelle session CAB
   autorisée après neutralisation du contexte et purge des deux espaces runtime
