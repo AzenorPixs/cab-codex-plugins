@@ -1,4 +1,5 @@
 import fcntl
+import hashlib
 import importlib.util
 import os
 import json
@@ -43,6 +44,45 @@ class SessionResetTest(unittest.TestCase):
         self.assertEqual((self.state / reset.INSTANCE_LOCK).stat().st_size, 0)
         self.assertEqual(outside.read_text(), "preserve")
         self.assertEqual(reset.reset_directories([str(self.state)])[0]["removed_entries"], 0)
+
+    def test_two_runtime_spaces_preserve_external_checkpoint_and_validated_write(self):
+        broker_state = self.state
+        project = self.root / "project"
+        project_state = project / ".opencode/state" / reset.STATE_DIRECTORY
+        project_state.mkdir(parents=True)
+        source = project / "validated-source.txt"
+        source.write_text("already validated write\n", encoding="utf-8")
+        source_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+        source_stat = source.stat()
+        output = project / "output"
+        output.mkdir()
+        checkpoint = output / "cismp-state.json"
+        checkpoint.write_text(json.dumps({
+            "change_id": "expected-change",
+            "dernier_jalon_prouve": "write-validated",
+            "validated_write": {"path": str(source), "sha256": source_hash},
+            "prochaine_action": "run remaining validation",
+        }), encoding="utf-8")
+        report = project / "STATISTIQUES.md"
+        report.write_text("preserved report\n", encoding="utf-8")
+        history = self.root / "native-session-history.json"
+        history.write_text('{"proof":"native reference"}\n', encoding="utf-8")
+        preserved = {p: p.read_bytes() for p in [checkpoint, report, history]}
+        for directory in [broker_state, project_state]:
+            for name in ["approvals.json", "events.ndjson", "controller-job.json",
+                         "journal.checkpoint.json", "supervisor-state.json",
+                         "approvals.sync-conflict-20261010-test.json"]:
+                (directory / name).write_text("unread old technical state", encoding="utf-8")
+        result = reset.reset_directories([str(broker_state), str(project_state)])
+        self.assertEqual(len(result), 2)
+        for directory in [broker_state, project_state]:
+            self.assertEqual(list(directory.iterdir()), [directory / reset.INSTANCE_LOCK])
+            self.assertEqual((directory / reset.INSTANCE_LOCK).stat().st_size, 0)
+        for p, content in preserved.items():
+            self.assertEqual(p.read_bytes(), content)
+        self.assertEqual(hashlib.sha256(source.read_bytes()).hexdigest(), source_hash)
+        self.assertEqual(source.stat().st_mtime_ns, source_stat.st_mtime_ns)
+        self.assertEqual(json.loads(checkpoint.read_text())["change_id"], "expected-change")
 
     def test_busy_second_broker_preserves_both_directories(self):
         second = self.root / "second" / reset.STATE_DIRECTORY
@@ -164,7 +204,7 @@ class SessionResetTest(unittest.TestCase):
                 process.communicate()
                 raise
         self.assertEqual(process.returncode, 0, errors)
-        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "0.86.8")
+        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "0.86.9")
         readiness = json.loads(replies[2]["result"]["content"][0]["text"])
         self.assertEqual(readiness["pending_count"], 0)
         self.assertEqual(readiness["root_cause"], "CONTROLLER_UNREACHABLE")

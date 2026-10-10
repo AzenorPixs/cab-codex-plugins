@@ -3,13 +3,17 @@
 Exécuter cette procédure avant chaque nouvelle session CAB, même si son ancien
 état semble sain, vide ou indispensable à un ancien codage. L'invocation de
 `/cab start` autorise cette purge technique sans nouvelle confirmation. Ne pas
-la déclencher pour une reprise du même RUN, un compactage, une reconnexion,
-un nouveau mandat ou change, ni pour `run`, `test`, `update` ou `stop`.
+la déclencher pour une reprise ordinaire du même RUN, un compactage, une
+reconnexion, un nouveau mandat ou change, ni pour `run`, `test`, `update` ou
+`stop`. La seule exception est la récupération échouée au prévol divergent
+définie ci-dessous ; elle ne relâche aucune garde de chemin ou de verrou.
 
 1. Résoudre la racine du projet et le contexte propriétaire du broker par les
    métadonnées OpenCode. Passer leur `directory` explicitement à toutes les
-   requêtes de contexte. Vérifier l'absence de RUN actif, de session occupée,
-   d'opération en cours et de permission native non résolue. Une propriété ou
+   requêtes de contexte. Vérifier l'absence de RUN actif, sauf son seul job
+   technique gelé neutralisé selon l'exception ci-dessous, ainsi que l'absence
+   de session occupée, d'opération en cours et de permission native non résolue.
+   Une propriété ou
    inactivité inconnue impose `CAB_INACTIF`, sans purge. Ne pas interrompre un
    autre travail pour obtenir ces préconditions.
 2. Arrêter les anciens heartbeats et clients SSE CAB, puis les services
@@ -57,9 +61,52 @@ un nouveau mandat ou change, ni pour `run`, `test`, `update` ou `stop`.
 8. Appeler réellement `broker_readiness` dans cette session et exiger `READY`,
    zéro demande en attente et aucune permission parasite. Refaire `/cab test`
    avec un `requestId` inédit, une décision explicite, une réponse MCP corrélée
-   et l'exécution unique de `true` avant tout mandat de travail.
+   et l'exécution unique de `true` avant tout mandat de travail. Dans
+   l'exception ci-dessous, exiger exactement `/usr/bin/true`, sans suffixe,
+   avec le `change_id` attendu du checkpoint ; `true` n'est pas équivalent.
+
+## Exception : récupération échouée au prévol divergent
+
+Après le feu vert, l'orchestrateur est autorisé sans nouvelle confirmation à
+reprendre une nouvelle session CAB si les preuves de la récupération échouée
+montrent ensemble `true` au lieu de `/usr/bin/true` et un `change_id`
+divergent. Refuser le mandat erroné sans normalisation. Aucun autre échec
+n'autorise cette exception ; `/job/recover` ne l'exécute jamais automatiquement.
+
+Avant l'étape 1, geler le travail, traiter les rapports, réconcilier les effets,
+refuser les permissions divergentes et clôturer les demandes restantes sans
+les approuver. Prouver les sessions inactives, l'absence de mandat actif ou en
+attente et de permission non résolue. Effet inconnu, propriété incertaine ou
+espace partagé avec un autre travail : refuser la purge.
+
+Préserver hors des deux cibles un checkpoint métier non secret avec objectif,
+change attendu, jalons, écritures validées, références des preuves natives,
+prochaine action, motif de l'échec et chemins résolus. Vérifier que ces preuves
+restent disponibles avant la suppression irréversible ; ne pas copier ni
+restaurer l'ancien runtime pour les reconstituer. Checkpoints techniques dans
+le runtime et checkpoint métier externe sont distincts.
+
+L'abandon du seul job technique gelé est autorisé même avec gate OPEN, après
+ces contrôles. Suivre les étapes 1 à 6 pour arrêter uniquement les ressources
+CAB, déconnecter nativement le broker et purger approbations, journal, job et
+autres états techniques dans les deux espaces résolus. Ne pas fabriquer un
+gate valide, désarmer artificiellement le job, fermer ou redémarrer OpenCode.
+Cet arrêt technique exceptionnel ne prétend pas réussir `/cab stop` normal.
+
+Aux étapes 7 et 8, créer une nouvelle session et un nouveau job technique avec
+identifiants neufs de session, job, requête et approbation. Conserver le change
+attendu et les critères du checkpoint, jamais le change divergent. Le prévol
+exact `/usr/bin/true` exige décision explicite, réponse MCP corrélée,
+consommation native unique, exit 0 et readiness finale READY sans demande ni
+permission parasite. Un nouveau prévol divergent interdit la reprise.
+
+Réconcilier ensuite les fichiers et les preuves externes, puis reprendre au
+premier jalon non prouvé, sans rejouer les écritures validées ni les décisions
+consommées. Ne réadopter ni ancien job ni ancienne session. Une preuve absente
+n'autorise aucun rejeu aveugle ; conserver le blocage concerné et demander
+l'autorité indispensable. Les permissions de la plateforme restent requises.
 
 La purge ne constitue jamais une approbation d'action et ne rejoue aucune
 décision. La persistance et la reprise après crash restent applicables pendant
-le RUN courant. Les statistiques d'une archive doivent être publiées avant sa
+le RUN courant hors cette exception strictement bornée. Les statistiques d'une archive doivent être publiées avant sa
 clôture ; un rapport existant n'appartient pas à l'état technique à purger.

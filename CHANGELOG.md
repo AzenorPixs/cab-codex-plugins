@@ -4,6 +4,15 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Exception de protocole après récupération CAB échouée prouvant `true` au
+  lieu de `/usr/bin/true` et un `change_id` divergent : nouvelle session CAB
+  autorisée après neutralisation du contexte et purge des deux espaces runtime
+  résolus, checkpoint métier et preuves préservés hors purge.
+- Nouveau job et prévol exact avec le bon change avant reprise au premier
+  jalon non prouvé, sans rejouer les écritures validées. Les reprises ordinaires
+  restent sans purge ; gardes, API et outil de purge inchangés. Versions
+  distribuées alignées sur `0.86.9`, sans déploiement ni purge réelle.
+
 - Protocole CAB : benchmark PLLM retenté toutes les 30 minutes sans limite
   jusqu'à reprise sûre du même RUN ou arrêt explicite ; checkpoint des
   tentatives, supervision maintenue et contrôles CAB requis avant reprise.

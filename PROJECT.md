@@ -127,8 +127,9 @@ décision d'approbation.
 
 - `/cab start` : purge l'ancien état technique après contrôle d'inactivité,
   vérifie le MCP actif, initialise la supervision et crée une nouvelle session
-  maîtresse ; la reprise du même RUN conserve son état et sa session, sauf remplacement
-  explicitement vérifié par `/job/recover` ;
+  maîtresse ; la reprise ordinaire conserve son état et sa session, sauf
+  remplacement vérifié par `/job/recover`. L'exception de prévol divergent
+  décrite en section 7 autorise une nouvelle session CAB avec purge bornée ;
 - `/cab test` : vérifie le chemin complet de validation dans cette session ;
 - `/cab run` : maintient le job piloté et ses mandats unitaires dans cette
   même session, sauf récupération explicite contrôlée conservant le RUN ;
@@ -157,6 +158,16 @@ peut demander au contrôleur un remplacement explicite de session dans le même
 job après gel, réconciliation technique et prévol natif prouvé. Le périmètre,
 les critères et le dernier jalon sont conservés ; les anciennes autorisations
 exécutables sont invalidées. Le superviseur ne crée pas la nouvelle session.
+Après récupération échouée avec `true` au lieu de `/usr/bin/true` et un
+`change_id` divergent prouvés ensemble, le protocole autorise une nouvelle
+session CAB avec purge des deux espaces runtime résolus. Cette exception
+exige neutralisation du job gelé et des permissions, inactivité prouvée et
+checkpoint métier externe conservant les écritures validées et leurs preuves.
+La nouvelle session et son nouveau job reprennent seulement après prévol
+exact avec le bon change, sans rejeu des écritures validées. Aucun autre échec
+n'autorise cette purge ; `AGENTS.md` et la référence de purge précisent les
+gardes. OpenCode reste ouvert et `/job/recover` ne purge jamais lui-même.
+
 Les mandats lecture seule désactivent les outils natifs et d'écriture via
 l'API de messagerie, plutôt que de dépendre du seul texte du mandat.
 
