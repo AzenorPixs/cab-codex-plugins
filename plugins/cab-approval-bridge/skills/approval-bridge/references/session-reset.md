@@ -3,13 +3,16 @@
 Exécuter cette procédure avant chaque nouvelle session CAB, même si son ancien
 état semble sain, vide ou indispensable à un ancien codage. L'invocation de
 `/cab start` autorise cette purge technique sans nouvelle confirmation. Ne pas
-la déclencher pour une reprise du même RUN, un compactage, une reconnexion,
-un nouveau mandat ou change, ni pour `run`, `test`, `update` ou `stop`.
+la déclencher pour une reprise ordinaire du même RUN, un compactage, une
+reconnexion, un nouveau mandat ou change, ni pour `run`, `test`, `update` ou
+`stop`. Un prévol de récupération divergent conserve la candidate, le job
+et le runtime ; il ne déclenche jamais cette purge.
 
 1. Résoudre la racine du projet et le contexte propriétaire du broker par les
    métadonnées OpenCode. Passer leur `directory` explicitement à toutes les
-   requêtes de contexte. Vérifier l'absence de RUN actif, de session occupée,
-   d'opération en cours et de permission native non résolue. Une propriété ou
+   requêtes de contexte. Vérifier l'absence de RUN actif ainsi que l'absence
+   de session occupée, d'opération en cours et de permission native non résolue.
+   Une propriété ou
    inactivité inconnue impose `CAB_INACTIF`, sans purge. Ne pas interrompre un
    autre travail pour obtenir ces préconditions.
 2. Arrêter les anciens heartbeats et clients SSE CAB, puis les services
@@ -59,7 +62,12 @@ un nouveau mandat ou change, ni pour `run`, `test`, `update` ou `stop`.
    avec un `requestId` inédit, une décision explicite, une réponse MCP corrélée
    et l'exécution unique de `true` avant tout mandat de travail.
 
-La purge ne constitue jamais une approbation d'action et ne rejoue aucune
-décision. La persistance et la reprise après crash restent applicables pendant
-le RUN courant. Les statistiques d'une archive doivent être publiées avant sa
-clôture ; un rapport existant n'appartient pas à l'état technique à purger.
+## Prévol de récupération divergent : aucune purge
+
+Conserver la session candidate, le job, le runtime et les preuves. Réconcilier
+puis utiliser retry explicite selon la section « Prévol de récupération
+divergent dans la même session » de [SKILL.md](../SKILL.md). Un refus de
+récupération n'autorise ni nouvelle session CAB ni abandon technique du job.
+Un délai MCP seul conserve le polling du même approval_id, sans nouvelle demande.
+La purge d'un nouveau RUN reste distincte et conserve toutes les gardes ci-dessus.
+Les rapports d'archive restent hors runtime et doivent être vérifiés avant clôture.

@@ -4,6 +4,11 @@
 
 Ce document décrit le fonctionnement technique de CAB. Il complète `PROJECT.md` sans reprendre son cadrage fonctionnel et `BUILD.md` sans traiter du packaging ou de la publication.
 
+Le déroulement d'une session orchestrateur–agent de codage et ses contrats
+de pilotage sont regroupés dans `ORCHESTRATED_CODING.md` à la racine du projet.
+AGENTS.md conserve les règles générales et impose cette référence aux sessions
+pilotées ; le présent document reste le cadrage technique des composants CAB.
+
 ## 2. Arborescence technique
 
 ```text
@@ -32,7 +37,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.86.7` pour le broker, le contrôleur et le
+La version de projet actuelle est `0.87.2` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -102,7 +107,9 @@ La purge efface également les checkpoints, anciens jobs, rappels, états de
 remédiation et conflits Syncthing. Seul l'inode de `broker.instance.lock` reste
 vide, verrouillé jusqu'à la fin de la purge. Un état recréé ou une erreur
 interdit le démarrage. Sources, secrets, configurations, rapports et historiques
-natifs des agents restent hors purge. Une reprise du même RUN ne purge rien.
+natifs des agents restent hors purge. Une reprise ne purge rien, y compris
+après prévol divergent : candidate, job et preuves sont conservés selon la
+section 7.
 
 ## 5. États d'approbation
 
@@ -158,6 +165,16 @@ cohérence finale.
 
 `OC_CGPT_OUTSIDE_SANDBOX=1` reste un alias de compatibilité.
 
+Au démarrage, le contrôleur restaure `controller-job.json` depuis son espace
+runtime. Seule l'absence du fichier (`ENOENT`) permet un démarrage sans job.
+Un JSON malformé ou une autre erreur de lecture arrête le démarrage avec un
+code non nul avant l'ouverture HTTP et les interactions OpenCode ou Codex App
+Server. Le diagnostic distingue JSON invalide et lecture impossible sans
+reprendre le contenu, le message brut de l'erreur ou le chemin runtime.
+Le fichier reste intact ; aucune réparation ou réinitialisation automatique
+n'est effectuée. Les contrats valides, leurs jalons, leur gate et leurs
+métadonnées de récupération conservent leur comportement de restauration.
+
 Le plugin distribue les modèles de services utilisateur
 `cgpt-approval-bridge-controller.service` et
 `cgpt-approval-bridge-supervisor.service`. `/cab start` installe ou actualise
@@ -171,6 +188,12 @@ Les unités appliquent `Restart=on-failure` tant qu'elles sont en cours
 d'exécution. `/cab stop` arrête explicitement le superviseur, puis le
 contrôleur, sans supprimer les unités, arrêter OpenCode ou arrêter le broker
 MCP. Un RUN CAB ne doit pas les remplacer par des processus éphémères.
+
+Le gate terminal contrôle également les demandes locales sans décision,
+indépendamment du compteur actif et de la dernière readiness broker. En mode
+manuel, le retrait d'une demande du compteur actif ne la rend pas décidée :
+un ancien `pending_count: 0` ne permet pas de clôturer tant qu'elle reste
+indécise. Ce contrôle ne crée ni décision ni permission.
 
 L'interface du contrôleur écoute par défaut sur `127.0.0.1:8788`. La
 configuration admet uniquement les adresses loopback `127.0.0.1` et `::1`. Ce
@@ -188,7 +211,7 @@ instrumentation de sortie. Cette option est persistée et exposée par
 
 La récupération explicite `POST /job/recover` remplace une session dans le
 même RUN, sans utiliser `/job/arm` ni désarmer le job. Son corps porte `phase`
-(`prepare` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
+(`prepare`, `retry` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
 `recoveryId` et `preflightRequestId`. prepare contrôle le contexte OpenCode,
 MCP, l'inactivité des deux sessions et l'absence de mandat indécis ou de
 permission non résolue ; il persiste le gel et invalide les autorisations
@@ -209,6 +232,36 @@ la réponse APPROVED réelle, l'exécution unique et la readiness finale restent
 requises. Aucune installation ni migration du broker n'est nécessaire au
 correctif source.
 
+### Retry après prévol de récupération divergent
+
+Après refus sans effet, conserver la candidate, le job et le runtime. Aucun
+renouvellement de session, abandon technique ni purge n'est autorisé par cet
+incident. POST /job/recover accepte phase retry avec jobId, expectedSessionId,
+sessionId candidate et recoveryId inchangés, previousPreflightRequestId égal
+à la réservation courante et preflightRequestId inédit. Les préconditions de
+contexte, santé, MCP, inactivité et absence de permissions ou demandes non
+résolues restent obligatoires.
+
+Le contrôleur exige un refus natif REJECTED corrélé à une décision locale
+rejected non consommée, ou une erreur native MCP -32602 avant enregistrement.
+Un délai seul, une erreur générique, une décision approved, une commande ou
+un autre outil natif interdit retry. Le polling ordinaire conserve approval_id.
+
+retry persiste les identifiants antérieurs et une empreinte SHA-256 du préfixe
+des parties tool natives, sans contenu de message. retry et complete vérifient
+ce préfixe ; seules les nouvelles preuves après cette frontière composent le
+nouveau prévol. Un historique altéré ou perdu conserve le gel. Les anciennes
+requêtes et approbations ne sont pas réutilisables ; décisions, critères,
+jalons et strictCommands restent intacts. Le superviseur attend complete.
+
+Le nouveau prévol exige /usr/bin/true exact avec le change attendu, décision
+explicite, réponse MCP corrélée, permission once, exit 0 puis READY sans demande
+ni permission parasite. complete conserve la candidate et le job. Un nouvel
+écart sûr autorise seulement un nouveau retry explicite dans cette même
+candidate, sans concurrence ni rejeu du travail prouvé. Le checkpoint métier
+conserve les tentatives et leurs références natives. Une preuve locale perdue
+après redémarrage n'est pas recréée implicitement. OpenCode reste ouvert.
+
 Pour les mandats lecture seule, le protocole distribué désactive explicitement
 bash, edit, write, apply_patch, task et skill via le champ tools du message.
 Un mandat exécutable réactive seulement ses outils nécessaires avec permissions
@@ -221,6 +274,14 @@ session OpenCode, puis adresse une reprise à la même session après 60 seconde
 par défaut si le gate terminal est ouvert. Il ne crée ni session de
 remplacement, ni mandat, ni décision CAB. Lorsqu’une récupération est préparée,
 il suspend les relances ; après complete, il suit la session transférée.
+
+L'activité SSE est corrélée au job, à sa session et au répertoire lorsqu'il
+est fourni par l'événement. Les événements d'autres sessions ou répertoires,
+les heartbeats de transport et les trames sans identité exploitable ne
+repoussent pas la reprise. Un JSON SSE invalide reste observable sans contenu
+brut dans `lastEventError`, sans actualiser l'activité. Un changement de job,
+session ou répertoire invalide l'ancienne horloge ; les états déjà enregistrés
+restent lisibles sans migration. Le gel de récupération reste prioritaire.
 
 ## 8. Supervision OpenCode
 
@@ -245,15 +306,55 @@ réutilise sa session, sauf remplacement explicitement vérifié par /job/recove
 `POST /session/<id>/message`. Le test de bout en bout et le travail ultérieur
 restent dans cette session visible du développeur.
 
+### Cadences de la boucle de pilotage
+
+L'orchestrateur consomme le SSE en temps réel et contrôle les demandes et les
+rapports toutes les 3 secondes. Pendant l'analyse ou la rédaction de l'agent
+de codage, les vérifications de progression sont espacées de 7 secondes fixes,
+sans ralentir le contrôle CAB. Ces cadences ne changent pas les délais
+techniques du superviseur, les heartbeats ou les rappels du broker.
+
+Après un échec du benchmark PLLM, le même RUN reste en attente non terminale.
+Le benchmark est retenté toutes les 30 minutes (1 800 secondes), sans limite
+de tentatives, jusqu'à reprise sûre ou arrêt explicite du développeur. Chaque
+échec fixe la prochaine échéance ; le checkpoint non secret conserve RUN,
+horodatages, causes, résultats et échéance. Une interruption conserve cette
+échéance et impose la réconciliation des tentatives en cours ou d'effet inconnu,
+sans essais simultanés ni duplication. La supervision reste active, sans
+attente bloquante de trente minutes ni fermeture ou redémarrage des processus.
+
+Une réussite exige la réconciliation des contextes, santé OpenCode, MCP,
+readiness CAB réelle et permissions avant reprise. Un blocage distinct suit
+la récupération CAB ; le benchmark ne vaut jamais approbation et ne rejoue
+aucun mandat consommé. Les sondes statistiques restent prévues toutes les
+30 minutes sans arrêter le travail pour attendre un créneau ; une sonde
+échouée seule ne suspend pas le RUN.
+
+Ces obligations appartiennent au protocole de l'orchestrateur distribué dans
+la commande et les skills. Elles n'ajoutent pas un ordonnanceur autonome de
+benchmark PLLM au broker, au contrôleur ou au superviseur.
+
 ## 9. Readiness et healthcheck
 
 ### Compactage coordonné des contextes
 
 Le protocole impose un cycle commun toutes les 1 h 30 (5 400 secondes), piloté
-par l'orchestrateur à une frontière entre mandats. Il déclenche en parallèle
-les compactages des deux sessions réellement actives, puis attend leurs deux
-preuves et réconcilie les contextes et CAB avant de reprendre. L'horloge et
-les éventuels retards de fin de mandat sont conservés dans le checkpoint.
+par l'orchestrateur à une frontière entre mandats. Après traitement du rapport
+et sauvegarde du checkpoint, il vérifie les API natives réellement exposées.
+Si les deux sont disponibles, il déclenche les compactages en parallèle ;
+sinon, il compacte les seules sessions accessibles et trace les opérations
+non exécutées. Les deux preuves natives sont requises pour déclarer une
+réussite conjointe, pas pour reprendre un RUN dont l'état reste exploitable.
+Une API absente ou un échec avec contexte préservé laisse le cycle incomplet
+avec sa cause. Après réconciliation sûre des contextes, santé OpenCode, MCP,
+readiness CAB et permissions, les mandats déjà autorisés se poursuivent.
+Ce seul écart ne bloque pas le RUN, n'arrête pas CAB, ne requiert pas de
+dérogation et ne diffère pas les statistiques. Un compactage encore en cours,
+un effet inconnu ou une réconciliation impossible suspend les opérations
+concernées, sans rejeu aveugle. Une API absente est réexaminée à la prochaine
+échéance, calculée depuis le déclenchement du cycle courant. L'horloge,
+les sessions disponibles ou non exposées, les résultats et les éventuels
+retards de fin de mandat sont conservés dans le checkpoint.
 
 OpenCode expose `POST /session/<id>/summarize`. Codex App Server expose
 `thread/compact/start` sur la connexion qui possède la session active : sa
@@ -367,7 +468,10 @@ Une divergence ambiguë conduit à `HUMAN_REQUIRED`.
   utiliser le chemin de décision existant via Codex App Server ; en mode
   manuel, les demandes restent PENDING jusqu'à une décision HTTP explicite,
   et les rappels ne lancent aucun thread ni tour Codex auxiliaire
-- `OC_Codex_CONTROLLER_URL`
+- `OC_Codex_CONTROLLER_URL` : URL commune au healthcheck et au superviseur ;
+  accepte la base HTTP du contrôleur ou son endpoint `/status`, avec slash
+  final éventuel. Les deux clients résolvent `/status` une seule fois ; le
+  superviseur retrouve la base pour `/job`
 - `OC_Codex_SUPERVISOR_URL`
 - `OC_Codex_SUPERVISOR_STATUS_HOST` : `127.0.0.1` ou `::1` uniquement
 - `OC_Codex_SUPERVISOR_STATUS_PORT`
@@ -389,7 +493,8 @@ piloté.
 
 - `/cab start` purge les seuls anciens états CAB après contrôle d'inactivité,
   vérifie `/mcp`, initialise la supervision et crée une nouvelle session
-  maîtresse ; la reprise du même RUN conserve son état ;
+  maîtresse ; la reprise conserve son état, y compris après prévol divergent
+  dans la candidate selon la section 7 ;
 - `/cab run` arme un contrat de job durable et actualise ses jalons avant de
   transmettre les mandats ; le superviseur reprend cette même session tant que
   le gate terminal reste ouvert ;

@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.86.7
+version: 0.87.2
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -22,21 +22,66 @@ terminé, ni bloqué, ni explicitement arrêté, lire son dernier résultat dans
 session persistante et transmettre le mandat suivant dans cette même session.
 Ne jamais envoyer de réponse finale au développeur pendant cet état RUN.
 
+## Cadences de pilotage et attente PLLM
+
+Traite les événements SSE OpenCode en temps réel et contrôle les demandes et
+les rapports toutes les 3 secondes dans la boucle de pilotage. Pendant
+l'analyse ou la rédaction de l'agent de codage, utilise des pauses fixes de
+7 secondes entre deux vérifications de progression. Ces pauses ne ralentissent
+ni le SSE ni le contrôle CAB toutes les 3 secondes. Les temporisations
+techniques du superviseur, des heartbeats et des rappels du broker restent
+distinctes.
+
+Après un échec du benchmark PLLM, conserve le même RUN en attente non terminale
+et retente le benchmark toutes les 30 minutes (1 800 secondes), indéfiniment,
+sans limite de tentatives, jusqu'à reprise sûre du RUN ou arrêt explicite du
+développeur. Calcule la prochaine échéance depuis l'échec observé de la dernière
+tentative. Conserve dans le checkpoint non secret le RUN, les horodatages,
+causes, résultats et la prochaine échéance. Après interruption, conserve cette
+échéance et réconcilie toute tentative en cours ou d'effet inconnu avant de
+retenter. Ne lance jamais de tentatives simultanées ni ne duplique un essai
+non réconcilié. Maintiens la supervision sans attente bloquante de trente
+minutes ; ce seul échec ne clôture pas le RUN et ne ferme ni ne redémarre les
+processus.
+
+Après une réussite observée, réconcilie les contextes, la santé OpenCode, MCP,
+la readiness CAB réelle et les permissions avant reprise. Si la reprise n'est
+pas sûre, applique la récupération CAB et conserve sa cause observable.
+La réussite du benchmark ne vaut jamais approbation, ne rejoue aucun mandat
+consommé et ne contourne aucun blocage CAB distinct.
+
+Prévois les sondes statistiques toutes les 30 minutes, en complément des
+sondes initiale et finale. Poursuis le travail entre les échéances, sans
+arrêter le travail pour attendre un créneau. Signale les relèves manquées
+sans reconstruction rétroactive. Une sonde statistique échouée reste distincte
+d'un échec du benchmark PLLM et ne suspend pas, à elle seule, le RUN.
+
 ## Compactage coordonné toutes les 1 h 30
 
 L'orchestrateur pilote un cycle commun toutes les 5 400 secondes pour sa
 session réelle et la session de codage. À l'échéance, n'attribue plus de mandat,
 laisse le mandat courant s'achever et traite son rapport. Sauvegarde le
-checkpoint non secret, puis déclenche les deux compactages en parallèle sous
-un même identifiant de cycle. Ne compacte pas une conversation auxiliaire à
-la place de l'orchestrateur réellement actif.
+checkpoint non secret, puis vérifie les API natives réellement exposées pour
+les deux sessions actives. Si les deux sont disponibles, déclenche leurs
+compactages en parallèle sous un même identifiant de cycle ; sinon, compacte
+les seules sessions accessibles et trace les opérations non exécutées.
+Ne compacte pas une conversation auxiliaire à la place de l'orchestrateur
+réellement actif.
 
-Exige deux preuves natives de fin, corrélées aux bonnes sessions, avant de
-réconcilier les contextes, santé, MCP et readiness CAB et de poursuivre.
-Un accusé de lancement n'est pas une fin de compactage. Si une API manque ou
-si une seule moitié réussit, conserve l'état incomplet et la cause ; ne
-fabrique ni compactage, ni réussite, ni approbation. Ce cycle ne ferme ou ne
-redémarre aucun processus et ne rejoue aucun mandat consommé.
+Exige deux preuves natives de fin, corrélées aux bonnes sessions, pour déclarer
+une réussite conjointe. Un accusé de lancement n'est pas une fin de compactage.
+Une API absente ou un échec avec contexte préservé laisse le cycle incomplet
+avec sa cause ; après réconciliation sûre des contextes, santé OpenCode, MCP,
+readiness CAB et permissions, poursuis les mandats déjà autorisés. Ce seul
+écart ne classe pas le RUN `BLOQUÉ`, n'arrête pas CAB, ne demande pas de
+dérogation et ne diffère pas les statistiques. Un compactage encore en cours,
+un effet inconnu ou une réconciliation impossible suspend les opérations
+concernées. Ne relance pas aveuglément une opération d'effet inconnu et
+n'attends pas une API absente : réexamine sa disponibilité à la prochaine
+échéance, calculée depuis le déclenchement du cycle courant. Conserve dans le
+checkpoint les sessions, horodatages, résultats et retards observés, sans
+inventer d'identifiant non exposé. Ce cycle ne ferme ou ne redémarre aucun
+processus et ne rejoue aucun mandat consommé.
 
 ## Syntaxe
 
@@ -91,7 +136,9 @@ purge des seuls espaces CAB, après preuve d'inactivité, arrêt des ressources
 et déconnexion native du broker ; elle ne ferme pas OpenCode. Le plugin
 distribue `scripts/cgpt-approval-bridge-reset.py` pour l'exécution contrôlée.
 Une purge échouée ou incomplète impose `CAB_INACTIF`, sans premier mandat.
-La reprise du même RUN conserve ses preuves et ne relance pas cette purge.
+La reprise ordinaire du même RUN conserve ses preuves et ne relance pas cette
+purge, y compris après prévol de récupération divergent : conserver la
+candidate et le job selon la procédure ci-dessous.
 
 1. Vérifie qu’OpenCode répond sur `127.0.0.1:4096`.
 2. Vérifie que la configuration OpenCode déclare `cgpt-validation` comme serveur MCP local `stdio`.
@@ -363,11 +410,69 @@ Après complete, relire `/job` et `/status` : même job, même change et critèr
 dernier jalon conservé, nouvelle session, `strictCommands` préservé et gate
 OPEN. Les anciennes autorisations exécutables sont invalidées et l'historique
 non secret est conservé. Le superviseur suit désormais la session transférée.
-Un échec conserve le gel ; ne pas purger le RUN ni inventer de gate terminal.
+Un échec conserve le gel ; la récupération ordinaire ne purge pas le RUN et
+n'invente aucun gate terminal. Un prévol divergent suit la procédure sans
+purge décrite dans
+« Prévol de récupération divergent dans la même session » ci-dessous.
 Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
 locale du prévol : si elles sont perdues, la récupération reste refusée et
 nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
 un prévol échoué par une nouvelle tentative implicite.
+
+## Prévol de récupération divergent dans la même session
+
+Après un prévol divergent ou incomplet prouvé et refusé avant exécution sans
+effet, conserver la session candidate où le prévol a divergé, le même job,
+le RUN et le runtime. Ne créer aucune autre session ni aucun job de remplacement,
+ne purger aucun état et ne pas revenir à l'ancienne session révoquée.
+Le remplacement initial prévu par CISMP reste inchangé ; cette règle concerne
+les échecs du prévol dans sa candidate. OpenCode reste ouvert.
+
+Comparer les appels natifs au mandat réellement prescrit, notamment
+`requestId`, `approval_id`, `change_id`, `session_id`, `directory`, `files`,
+`commands`, `title`, `summary`, `timeout_seconds` et `interval_seconds`.
+Un champ omis, `true` au lieu de `/usr/bin/true`, un suffixe ou un change erroné
+reste refusé sans normalisation. Un paramètre non prescrit ne devient pas une
+divergence inventée. Un HTTP 409 seul ou un texte de l'agent ne prouve pas le
+refus sans effet. Après un délai MCP seul, interroger uniquement le même
+`approval_id` par `poll_approval` ou `get_approval`, sans nouvelle demande.
+
+Geler le travail, traiter les rapports, refuser les permissions divergentes,
+clôturer les demandes restantes sans les approuver et réconcilier les effets.
+Exiger santé, contexte, MCP connecté, sessions inactives, aucun mandat actif
+ou en attente, aucune permission non résolue et aucun effet inconnu.
+Une décision `approved`, consommée ou une preuve incertaine interdit retry.
+
+Demander explicitement `POST /job/recover` avec `phase: "retry"`, les mêmes
+`jobId`, `expectedSessionId`, `sessionId` candidate et `recoveryId`,
+`previousPreflightRequestId` égal à la réservation actuelle et un
+`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job.
+Le contrôleur exige un refus natif `REJECTED` corrélé à la décision locale
+`rejected` non consommée, ou une erreur native MCP `-32602` avant enregistrement.
+Une erreur générique, un timeout, une commande ou un autre outil natif laisse
+le gel conservé et exige la réconciliation ou l'autorité indispensable.
+
+Le contrôleur conserve les identifiants antérieurs et l'empreinte du préfixe
+des parties natives, sans contenu de message. Il vérifie ce préfixe à chaque
+retry et complete ; une preuve modifiée ou perdue interdit la transition.
+Le nouvel essai utilise des `requestId` et `approval_id` neufs ; les anciennes
+décisions restent intactes et ne sont jamais réutilisées. Une perte de preuves
+locales après redémarrage ne permet pas leur reconstruction implicite.
+
+Dans la même candidate, exiger exactement `/usr/bin/true`, sans suffixe, avec
+le `change_id` attendu, une décision explicite, une réponse MCP corrélée, une
+permission native unique, exit 0 puis `broker_readiness = READY` sans demande
+ni permission parasite. Appeler complete avec la nouvelle réservation et
+relire `/job` et `/status` avant tout mandat métier. Le superviseur reste gelé
+jusqu'à complete ; il suit ensuite cette candidate devenue session du job.
+
+Un nouvel écart sûr reprend cette procédure dans la même candidate, sans
+concurrence ni doublon d'une tentative non réconciliée, jusqu'au prévol exact
+ou arrêt explicite. Conserver le RUN en attente non terminale, le checkpoint
+métier non secret, numéro, identifiants, horodatages, cause, arguments attendus
+et observés et références des preuves natives. Maintenir le suivi à la cadence
+existante sans boucle serrée. Reprendre au premier jalon non prouvé, sans
+rejouer les écritures validées ni les autorisations consommées.
 
 ## Mandats d'inventaire ou d'analyse en lecture seule
 

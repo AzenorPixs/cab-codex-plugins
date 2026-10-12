@@ -2,7 +2,74 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 0.87.2 — 2026-10-10
+
+- Prévol de récupération divergent : conserver la candidate, le même job, le RUN et le runtime, sans renouvellement ni purge.
+- Retry explicite après refus sans effet, identifiants neufs, preuves natives séparées par une frontière vérifiée et gel jusqu'au prévol exact.
+- Protocole, cadrages et tests alignés ; version 0.87.2 synchronisée. Le remplacement initial CISMP reste inchangé. Aucun déploiement ni publication.
+
 ## Unreleased
+
+- Correction CGP-20261010-05 à 07 : le gate refuse les demandes locales
+  indécises même avec un ancien compteur broker nul ; le healthcheck et le
+  superviseur acceptent la même URL de base ou `/status`, avec les alias
+  historiques et le slash final.
+- Activité SSE corrélée à la session du job : trafic étranger, heartbeats et
+  trames non exploitables ne retardent plus sa reprise. L'ancienne activité
+  est invalidée lors d'un changement de contexte ; gel de récupération et
+  décisions unitaires préservés, sans migration ni nouvelle dépendance.
+- Régressions isolées avec services simulés ; version source 0.87.1 conservée,
+  sans publication, installation de profil ni intervention sur un service réel.
+
+- Récupération automatique orchestrée après prévol divergent ou incomplet
+  prouvé et refusé sans effet, notamment champs et délais prescrits omis.
+  Le double écart `true` / `change_id` n'est plus requis ; une nouvelle
+  divergence sûre renouvelle la procédure sans terminer le RUN parent.
+- Checkpoint métier, identifiants neufs, prévol exact, décisions explicites
+  et gardes de purge conservés. Un délai MCP seul reste traité par polling ;
+  effets inconnus, preuves absentes ou purge partielle bloquent la reprise.
+- Briques versionnées alignées sur `0.87.1`, nouveau cachebuster du plugin,
+  tests de protocole et de refus HTTP. Aucun nouvel endpoint, schéma,
+  déploiement, purge réelle ou publication.
+
+- Protocole des sessions pilotées extrait vers ORCHESTRATED_CODING.md dans
+  les huit projets et templates possédant AGENTS.md. Les règles générales
+  imposent la lecture du document local ; les contrats techniques, cadences,
+  mandats, récupération et clôture y sont regroupés. Les tests de distribution
+  vérifient le renvoi et le contenu dédié, sans déclencher de session pilotée.
+  Le document est facultatif à l'échelle du projet et réservé aux besoins de
+  pilotage ; son absence ne bloque pas les autres projets ou les sessions directes.
+
+- Correction CGP-05 : seule l'absence de `controller-job.json` autorise un
+  démarrage sans job. Un JSON malformé ou une autre erreur de lecture refuse
+  désormais le démarrage avant HTTP et les interactions avec les composants
+  pilotés, avec un diagnostic sans contenu persistant ni chemin runtime.
+- Contrats valides, gel, sessions révoquées et fichiers en erreur préservés ;
+  aucune réparation automatique, migration ou nouvelle dépendance.
+- Tests isolés de restauration et de non-divulgation, puis alignement des
+  composants versionnés sur `0.87.0` avec nouveau cachebuster du plugin,
+  sans installation de profil, déploiement de service ni changement de schéma.
+
+- Exception de protocole après récupération CAB échouée prouvant `true` au
+  lieu de `/usr/bin/true` et un `change_id` divergent : nouvelle session CAB
+  autorisée après neutralisation du contexte et purge des deux espaces runtime
+  résolus, checkpoint métier et preuves préservés hors purge.
+- Nouveau job et prévol exact avec le bon change avant reprise au premier
+  jalon non prouvé, sans rejouer les écritures validées. Les reprises ordinaires
+  restent sans purge ; gardes, API et outil de purge inchangés. Versions
+  distribuées alignées sur `0.86.9`, sans déploiement ni purge réelle.
+
+- Protocole CAB : benchmark PLLM retenté toutes les 30 minutes sans limite
+  jusqu'à reprise sûre du même RUN ou arrêt explicite ; checkpoint des
+  tentatives, supervision maintenue et contrôles CAB requis avant reprise.
+- SSE en temps réel et contrôle des demandes/rapports toutes les 3 secondes ;
+  vérifications de progression pendant analyse/rédaction espacées de
+  7 secondes fixes, indépendamment de la boucle CAB.
+- Sondes statistiques toutes les 30 minutes sans arrêter le travail pour
+  attendre le créneau ; leur échec reste distinct d'un échec du benchmark PLLM.
+- Alignement des briques distribuées sur `0.86.8` avec nouveau cachebuster du
+  plugin et contrôles de distribution. Évolution du protocole de
+  l'orchestrateur sans nouvel automate PLLM ni déploiement de service.
 
 - Récupération explicite de session dans le même job par `/job/recover`, en
   deux phases avec contexte et prévol natif vérifiés. Jalons, périmètre et

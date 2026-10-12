@@ -163,54 +163,52 @@ superviseur SHALL annoncer la même version de base.
   l'active pas pour le login
 
 ### Requirement: Skill de statistiques embarqué dans CAB
+
 Le plugin `cab-approval-bridge` SHALL distribuer le skill
 `coding-session-statistics` et ses métadonnées sous son répertoire `skills/`.
 Son installation SHALL rendre ce skill disponible sans plugin Tools Codex
 et sans skill `cgpt` externe. Le protocole et la commande CAB SHALL imposer
 sa production de statistiques après chaque archivage réussi selon
 `archive-session-statistics`. Les composants versionnés SHALL partager la
-version de base `0.86.7`, le plugin pouvant ajouter un cachebuster Codex.
+version de base `0.87.2`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
 - **WHEN** le plugin CAB est installé depuis sa marketplace
-- **THEN** les skills `approval-bridge` et `coding-session-statistics` sont
-  présents dans le paquet et résolus depuis son manifeste
+- **THEN** les skills `approval-bridge` et `coding-session-statistics` sont présents dans le paquet et résolus depuis son manifeste
 
 #### Scenario: Release cohérente
 - **WHEN** la release est validée
-- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande
-  annoncent tous la version de base `0.86.7`
+- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.87.2`
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
-La commande `/cab start` et la skill du plugin SHALL imposer la purge complète
-des espaces runtime CAB avant chaque nouvelle session, quelle que soit la
-quantité ou la cohérence de leurs traces précédentes. Une reprise du même RUN,
-un compactage, une reconnexion ou les sous-commandes `run`, `test`, `update` et
-`stop` SHALL conserver l'état courant sans déclencher cette purge.
+
+La commande `/cab start` et la skill SHALL purger le runtime avant chaque
+nouvelle session CAB. Une reprise du même RUN, un compactage, une reconnexion
+ou `run`, `test`, `update`, `stop` SHALL conserver le runtime ; un prévol de récupération divergent SHALL NOT déclencher une nouvelle session ni une purge.
 
 #### Scenario: Ancien état disponible
 - **WHEN** `/cab start` ouvre une nouvelle session et aucun travail précédent n'est actif
-- **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur
-- **AND** aucune ancienne session maîtresse ou décision n'est réadoptée
+- **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur sans réadopter leur job ou leurs décisions
 
 #### Scenario: Reprise du même RUN
-- **WHEN** CAB réconcilie le même RUN après interruption, compactage ou reconnexion
-- **THEN** il conserve les preuves et demandes de ce RUN sans purge
+- **WHEN** CAB reprend le même RUN y compris après un prévol de récupération divergent
+- **THEN** les preuves et demandes restent conservées sans purge
 
 #### Scenario: Sous-commande sans nouveau démarrage
-- **WHEN** `/cab run`, `/cab test`, `/cab update` ou `/cab stop` est exécutée
-- **THEN** elle ne déclenche pas une purge de début de session
+- **WHEN** `run`, `test`, `update` ou `stop` est exécutée sans nouveau démarrage
+- **THEN** elle ne déclenche aucune purge de début de session
 
 ### Requirement: Arrêt contrôlé avant purge
-L'orchestrateur SHALL prouver la propriété et l'inactivité du contexte, sans
-RUN actif, session occupée, mandat en cours ou permission native non résolue.
-Il SHALL arrêter les ressources CAB, déconnecter le broker par l'API native
-OpenCode et vérifier son verrou avant toute purge. Il SHALL NOT tuer ou lancer
-directement le broker ni fermer ou redémarrer le processus OpenCode.
+
+L'orchestrateur SHALL prouver propriété et inactivité du contexte, sans session
+occupée, mandat en cours ni permission non résolue. Un RUN actif SHALL
+interdire la purge. Il SHALL arrêter les ressources CAB, déconnecter le
+broker nativement et vérifier son verrou, sans tuer le broker ni fermer ou
+redémarrer OpenCode.
 
 #### Scenario: Travail actif ou inactivité non prouvée
-- **WHEN** un travail ou une permission reste actif, ou que la propriété et l'inactivité du contexte ne sont pas prouvées
-- **THEN** CAB refuse la purge et signale la cause sans effacer l'état
+- **WHEN** un travail reste actif, une propriété est inconnue ou un effet reste non réconcilié
+- **THEN** la purge est refusée sans effacer le runtime
 
 ### Requirement: Outil de purge distribué et borné
 Le plugin SHALL distribuer `scripts/cgpt-approval-bridge-reset.py`. L'outil
@@ -229,16 +227,16 @@ non dédiés, symboliques ou imbriqués et les verrous occupés, non ordinaires 
 - **THEN** l'outil signale l'échec et CAB ne démarre pas une session sur cet état partiel
 
 ### Requirement: Prévol neuf après purge
-Après la purge, CAB SHALL reconnecter le broker par OpenCode, vérifier le
-contexte et le modèle et créer une nouvelle session maîtresse. Avant tout
-travail, il SHALL exiger un appel réel à broker_readiness donnant READY sans
-demande ou permission parasite, puis un test CAB complet avec un requestId
-inédit, une décision explicite, une réponse MCP corrélée et l'exécution unique
-de true. Aucune ancienne preuve SHALL valider ce prévol.
+
+Après purge, CAB SHALL reconnecter le broker, vérifier contexte et modèle,
+créer une nouvelle session et exiger broker_readiness READY sans demande ni
+permission parasite. Un test CAB SHALL prouver décision explicite, réponse MCP
+corrélée et exécution unique de true.
+Aucune ancienne preuve SHALL valider ce prévol.
 
 #### Scenario: Nouvelle session vérifiée
-- **WHEN** la purge réussit et CAB ouvre une nouvelle session maîtresse
-- **THEN** seuls les résultats de sa readiness et de son test CAB complet autorisent le premier mandat
+- **WHEN** la purge réussit et la nouvelle session passe sa readiness et son test CAB
+- **THEN** seuls ces résultats neufs autorisent le premier mandat
 
 ### Requirement: Prévention des outils natifs en lecture seule
 Le protocole distribué MUST demander à l'orchestrateur de désactiver explicitement bash, edit, write, apply_patch, task et skill pour tout mandat d'inventaire ou d'analyse en lecture seule. Les outils de lecture et recherche autorisés MAY rester disponibles. 
@@ -253,3 +251,45 @@ La restriction lecture seule MUST NOT modifier la configuration persistante Open
 #### Scenario: Mandat exécutable suivant
 - **WHEN** l'orchestrateur passe d'un inventaire à une opération native
 - **THEN** seuls les outils nécessaires sont réactivés et l'opération exige sa propre décision CAB
+
+### Requirement: Référence locale du protocole de codage piloté
+
+ORCHESTRATED_CODING.md MAY être absent d'un projet sans besoin de pilotage.
+AGENTS.md MUST préciser ce caractère facultatif et conditionnel. Lorsqu'un
+projet nécessite une session orchestrateur–agent de codage, il MUST disposer
+de ce document et les deux agents MUST le lire avant le pilotage. Le document
+MUST définir le protocole technique sans étendre les autorisations.
+
+#### Scenario: Session pilotée
+- **WHEN** un orchestrateur prépare une session de codage pilotée dans un projet
+- **THEN** les deux agents lisent le document dédié de ce projet avant les opérations de pilotage
+
+#### Scenario: Session directe
+- **WHEN** SCM est exécuté directement sans agent de codage piloté
+- **THEN** la référence documentaire ne déclenche ni CAB, ni OpenCode, ni sondes statistiques de pilotage
+
+#### Scenario: Projet sans besoin de pilotage
+- **WHEN** le projet ne nécessite pas de session menée par un agent orchestrateur
+- **THEN** l'absence du fichier facultatif est normale et ne bloque pas le travail direct
+
+### Requirement: Prévol divergent dans la même session
+Après un prévol divergent ou incomplet refusé sans effet, l'orchestrateur MUST conserver session candidate, job, RUN et runtime. Il MUST NOT renouveler la session, abandonner le job ni purger pour cet incident. Le mandat erroné MUST rester refusé sans normalisation.
+
+#### Scenario: Champ ou commande divergent
+- **WHEN** un champ prescrit manque ou diverge et le prévol est refusé avant exécution sans effet
+- **THEN** l'orchestrateur réconcilie puis demande retry dans la même candidate avec identifiants de requête et approbation neufs
+
+#### Scenario: Délai MCP seul
+- **WHEN** seule la réponse MCP manque sans divergence prouvée
+- **THEN** l'orchestrateur interroge le même approval_id sans nouvelle demande ni retry
+
+### Requirement: Prévol corrigé avant reprise métier
+Après retry explicite, l'orchestrateur MUST exiger /usr/bin/true exact, change attendu, décision explicite corrélée, permission native unique, exit 0 puis broker_readiness READY sans demande ni permission parasite. Il MUST conserver le gel jusqu'à complete prouvé.
+
+#### Scenario: Échec répété sans effet
+- **WHEN** le prévol diverge de nouveau et les préconditions de retry sont rétablies
+- **THEN** une nouvelle tentative explicite reste dans la même candidate et le même job, sans concurrence ni rejeu d'écriture
+
+#### Scenario: Preuve ou effet incertain
+- **WHEN** une preuve manque ou un effet reste inconnu
+- **THEN** l'orchestrateur suspend les opérations et demande l'autorité indispensable sans purge ni renouvellement

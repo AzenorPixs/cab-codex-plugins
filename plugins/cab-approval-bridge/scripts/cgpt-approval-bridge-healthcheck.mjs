@@ -4,9 +4,10 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const controllerUrl =
-  envValue("OC_Codex_CONTROLLER_URL") ||
-  "http://127.0.0.1:8788/status";
+const controllerBaseUrl = (
+  envValue("OC_Codex_CONTROLLER_URL") || "http://127.0.0.1:8788"
+).replace(/\/+$/, "").replace(/\/status$/, "");
+const controllerUrl = `${controllerBaseUrl}/status`;
 
 const supervisorUrl =
   envValue("OC_Codex_SUPERVISOR_URL") ||
