@@ -64,6 +64,36 @@ Le contrôleur SHALL exposer son état public sur `GET /status`, dont l'état du
 - **WHEN** un healthcheck appelle `GET /status`
 - **THEN** il reçoit un objet JSON sans secret ni décision détaillée
 
+### Requirement: Verrou de clôture de job corrélé
+Le contrôleur SHALL exiger un gate terminal local avant toute clôture normale.
+Il SHALL le refuser tant qu'une validation est active ou indécise localement,
+qu'une demande broker est en attente ou qu'un état explicite `TERMINÉ` ou
+`BLOQUÉ` manque. Un ancien compteur broker nul SHALL NOT remplacer une décision
+locale absente. Le gate SHALL rester distinct des décisions et SHALL NOT
+approuver une opération OpenCode.
+
+#### Scenario: Clôture prématurée refusée
+- **WHEN** une clôture est demandée alors qu'une validation est active ou en attente
+- **THEN** le contrôleur la refuse, expose la raison sans secret et conserve le job ouvert
+
+#### Scenario: Validation manuelle avec ancien compteur nul
+- **WHEN** une demande manuelle locale reste sans décision et la dernière readiness indique pending_count zéro
+- **THEN** le contrôleur refuse le gate et conserve la demande indécise
+
+#### Scenario: Gate terminal valide
+- **WHEN** une clôture normale est demandée avec un état terminal explicite et sans validation active ou en attente
+- **THEN** le contrôleur confirme le gate terminal et rend son état observable
+
+### Requirement: État terminal observable
+Le contrôleur SHALL exposer sur `GET /status` un résumé non sensible du gate
+terminal, comprenant son état, sa raison et l'état terminal déclaré. Une
+attente, un silence SSE, un rapport intermédiaire ou la fin d'un tour Codex ne
+SHALL jamais être interprété comme un état terminal.
+
+#### Scenario: Jalon intermédiaire non terminal
+- **WHEN** le contrôleur observe la fin d'un tour Codex sans état terminal déclaré
+- **THEN** son statut indique que le gate terminal n'est pas validé
+
 ### Requirement: Corrélation sûre des commandes Bash instrumentées
 Le contrôleur SHALL corréler une permission Bash à la commande approuvée
 lorsque OpenCode y ajoute exclusivement une instrumentation de sortie
@@ -170,14 +200,14 @@ contrôleur SHALL refuser toute autre valeur avant d'armer le job.
 - **THEN** le contrôleur refuse le contrat et ne l'arme pas
 
 ### Requirement: Interface explicite de récupération
-POST /job/recover MUST accepter prepare et complete, corrélés par jobId, expectedSessionId, sessionId, recoveryId et preflightRequestId uniques. Le contrôleur MUST refuser les mutations concurrentes pendant la transition. Il MUST NOT désarmer le job, purger le RUN, fabriquer une décision ou valider le gate pour ce remplacement.
+POST /job/recover MUST accepter prepare, retry et complete, corrélés par jobId, expectedSessionId, sessionId, recoveryId et preflightRequestId uniques. Le contrôleur MUST refuser les mutations concurrentes pendant la transition. Il MUST NOT désarmer le job, purger le RUN, fabriquer une décision ou valider le gate pour ce remplacement.
 
 #### Scenario: Transition concurrente
 - **WHEN** une mutation est demandée pendant un contrôle asynchrone de récupération
 - **THEN** elle est refusée sans modifier le contrat
 
 ### Requirement: Préconditions techniques de récupération
-prepare et complete MUST vérifier un job armé avec gate OPEN, mandat courant clôturé, aucune demande indécise, aucun rappel, aucune permission native ni transmission en cours. Via OpenCode dans directory, ils MUST vérifier santé, chemin, MCP connecté et les deux sessions inactives dans cette racine. Un contrôle indisponible ou divergent MUST refuser la transition.
+prepare, retry et complete MUST vérifier un job armé avec gate OPEN, mandat courant clôturé, aucune demande indécise, aucun rappel, aucune permission native ni transmission en cours. Via OpenCode dans directory, ils MUST vérifier santé, chemin, MCP connecté et les deux sessions inactives dans cette racine. Un contrôle indisponible ou divergent MUST refuser la transition.
 
 #### Scenario: Précondition manquante
 - **WHEN** une permission, une session occupée, une demande indécise ou un contexte divergent est observé
@@ -221,3 +251,95 @@ La commande réservée MUST être corrélée exactement sans suffixe, quelle que
 #### Scenario: Suffixe ou ancienne décision
 - **WHEN** une permission ajoute un suffixe au prévol ou vise une autorisation invalidée de l'ancienne session
 - **THEN** aucune permission once n'est transmise
+
+### Requirement: Restauration explicite du job au démarrage
+
+Le contrôleur MUST restaurer un contrat de job valide selon le format existant.
+Seule l'absence du fichier, signalée par ENOENT, MAY être traitée comme un
+démarrage normal sans job. Les jalons, le gate et les métadonnées de récupération
+MUST rester conservés lors d'une restauration valide.
+
+#### Scenario: Fichier absent
+- **WHEN** le fichier de contrat est absent
+- **THEN** le contrôleur peut démarrer sans job enregistré
+
+#### Scenario: Contrat valide
+- **WHEN** le fichier contient un contrat valide avec un gate ouvert et des métadonnées de récupération
+- **THEN** le contrôleur restaure ce contrat sans inventer de jalon ni d'état terminal
+
+### Requirement: Refus des erreurs de restauration du job
+
+Un JSON malformé ou une erreur de lecture autre que ENOENT MUST arrêter le
+démarrage du contrôleur avec un code non nul avant toute interface HTTP ou
+interaction avec OpenCode ou Codex App Server. Le fichier persistant MUST
+rester inchangé, sans suppression ni réparation automatique.
+
+#### Scenario: JSON malformé
+- **WHEN** le fichier de contrat ne peut pas être décodé comme JSON
+- **THEN** le contrôleur échoue au démarrage sans interaction externe et conserve le fichier intact
+
+#### Scenario: Erreur de lecture
+- **WHEN** la lecture du fichier de contrat échoue avec une erreur autre que ENOENT
+- **THEN** le contrôleur échoue au démarrage sans assimiler cette erreur à un job absent
+
+### Requirement: Diagnostic de restauration sans contenu persistant
+
+Un refus de restauration MUST produire un diagnostic explicite distinguant
+un JSON malformé d'une lecture impossible. Ce diagnostic MUST NOT reprendre
+le contenu persistant, le message brut de l'exception ou le chemin runtime.
+
+#### Scenario: Contenu non exposé
+- **WHEN** un contrat malformé contient un marqueur synthétique
+- **THEN** le diagnostic identifie l'échec de décodage sans afficher ce marqueur ni le chemin runtime
+
+### Requirement: URL du contrôleur compatible entre clients locaux
+Le superviseur et le healthcheck SHALL accepter `OC_Codex_CONTROLLER_URL`
+comme base HTTP ou comme endpoint `/status`, avec slash final facultatif.
+Ils SHALL résoudre `/status` une seule fois ; le superviseur SHALL retrouver
+la base pour `/job`. Les valeurs par défaut et les alias `OC_CGPT_` SHALL
+rester compatibles, sans nouveau paramètre.
+
+#### Scenario: Base HTTP fournie
+- **WHEN** la variable contient la base du contrôleur
+- **THEN** les deux clients interrogent son endpoint /status et le superviseur interroge /job
+
+#### Scenario: Endpoint de statut fourni
+- **WHEN** la variable contient l'endpoint /status, avec ou sans slash final
+- **THEN** aucun client n'ajoute un second /status et le superviseur interroge /job depuis la base
+
+#### Scenario: Alias historique ou valeur par défaut
+- **WHEN** l'alias OC_CGPT_CONTROLLER_URL est utilisé ou aucune URL n'est fournie
+- **THEN** les clients conservent ces modes de configuration et les mêmes endpoints
+
+### Requirement: Retry explicite dans la candidate conservée
+retry MUST conserver jobId, expectedSessionId, sessionId et recoveryId. Il MUST exiger previousPreflightRequestId égal à la réservation courante et preflightRequestId inédit. Il MUST conserver gel, gate, jalons et critères, réserver seulement le nouvel essai et persister son historique sans modifier les décisions antérieures.
+
+#### Scenario: Identité périmée ou session différente
+- **WHEN** retry réutilise un identifiant, change de session ou présente une réservation périmée
+- **THEN** le contrôleur refuse sans changer le job
+
+### Requirement: Refus natif sans effet avant retry
+retry MUST vérifier les préconditions techniques et le refus sans consommation de la tentative précédente. Il MUST refuser une preuve absente, un délai seul, une décision approved, une commande ou un autre outil natif. Il MUST conserver les preuves historiques sans les traiter comme le prévol du nouvel essai.
+
+#### Scenario: Refus enregistré
+- **WHEN** une réponse native REJECTED correspond à une décision locale rejected non consommée
+- **THEN** retry MAY réserver un essai neuf dans la même candidate après réconciliation
+
+#### Scenario: Refus avant enregistrement
+- **WHEN** une erreur native MCP -32602 prouve un rejet de paramètres avant enregistrement, sans validation locale ni effet
+- **THEN** retry MAY conserver cette preuve et réserver un essai neuf
+
+#### Scenario: Effet ou décision non prouvé
+- **WHEN** la tentative est approuvée, consommée, en attente ou seulement interrompue
+- **THEN** retry refuse et le gel reste conservé
+
+### Requirement: Frontière native vérifiée entre tentatives
+retry MUST persister une empreinte du préfixe des parties tool natives et les identifiants antérieurs sans contenu de message. retry et complete MUST vérifier que ce préfixe reste identique et contrôler le nouvel essai après cette frontière. Les identifiants de requête et approbation antérieurs MUST NOT être réutilisés.
+
+#### Scenario: Historique altéré ou tronqué
+- **WHEN** une partie native antérieure est perdue, changée ou réordonnée
+- **THEN** la transition refuse sans transfert ni autorisation implicite
+
+#### Scenario: Nouveau prévol exact
+- **WHEN** les preuves historiques sont intactes et le nouvel essai satisfait les contrôles stricts existants
+- **THEN** complete accepte le même job et la même candidate sans compter les refus précédents comme des exécutions

@@ -87,7 +87,8 @@ async function setup(context, strictCommands = true) {
   async function post(path, data) {
     const r = await fetch(base + path, { method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify(data) });
-    return { status: r.status, body: await r.json() };
+    const body = await r.text();
+    return { status: r.status, body: body ? JSON.parse(body) : null };
   }
   context.after(async () => {
     await stop();
@@ -108,21 +109,24 @@ async function setup(context, strictCommands = true) {
     directory, files: [], commands: [command], summary: "fixture synthétique" });
   async function validate(a) { return post("/validation/request", { approval: a }); }
   async function approve(id) { return post(`/decision/${id}`, { decision: "approved" }); }
-  async function preflight() {
+  async function preflight(alreadyApproved = false) {
+    const repliesBefore = native.replies.length;
     const a = approval(recovery.preflightRequestId);
-    assert.equal((await validate(a)).status, 202);
-    assert.equal((await approve(a.requestId)).status, 201);
+    if (!alreadyApproved) {
+      assert.equal((await validate(a)).status, 202);
+      assert.equal((await approve(a.requestId)).status, 201);
+    }
     native.permissions = [{ id: "permission-preflight", sessionID: "ses_new", permission: "bash",
       metadata: { command: "/usr/bin/true" } }];
-    await waitFor(() => native.replies.length === 1);
-    native.messages = [{ parts: [
+    await waitFor(() => native.replies.length === repliesBefore + 1);
+    native.messages.push({ parts: [
       { type: "tool", tool: "cgpt-validation_request_validation", state: { status: "completed",
         input: a, output: JSON.stringify({ ...a, status: "APPROVED" }), time: { start: 1, end: 2 } } },
       { type: "tool", tool: "bash", state: { status: "completed", input: { command: "/usr/bin/true" },
         metadata: { exit: 0 }, time: { start: 3, end: 4 } } },
       { type: "tool", tool: "cgpt-validation_broker_readiness", state: { status: "completed",
         output: JSON.stringify({ status: "READY", pending_count: 0 }), time: { start: 5, end: 6 } } },
-    ] }];
+    ] });
   }
   return { native, get, post, recovery, contract, approval, validate, approve, preflight, start, stop };
 }
@@ -214,6 +218,74 @@ test("prévol strict même sans strictCommands et consommation unique", async (c
   assert.equal(h.native.replies.length, 1);
 });
 
+test("refuse true avec un change divergent sans purger ni valider la récupération", async (context) => {
+  const h = await setup(context);
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
+  const before = await h.get("/job");
+  const divergent = h.approval(h.recovery.preflightRequestId, "ses_new", "true");
+  divergent.change_id = "another-change";
+  assert.equal((await h.validate(divergent)).status, 409);
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 409);
+  const after = await h.get("/job");
+  for (const key of ["jobId", "sessionId", "changeId", "lastProvenMilestone", "recovery", "terminalGate"]) {
+    assert.deepEqual(after[key], before[key]);
+  }
+  assert.equal(after.terminalGate.status, "OPEN");
+  assert.equal(h.native.replies.length, 0);
+});
+
+test("refuse les champs absents avant enregistrement et conserve le job gelé", async (context) => {
+  for (const field of ["approval_id", "files"]) {
+    await context.test(field, async (nested) => {
+      const h = await setup(nested);
+      assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
+      const before = await h.get("/job");
+      const malformed = h.approval(h.recovery.preflightRequestId);
+      delete malformed[field];
+      const refused = await h.validate(malformed);
+      assert.equal(refused.status, 400);
+      assert.equal(refused.body, null);
+      const complete = await h.post("/job/recover", { ...h.recovery, phase: "complete" });
+      assert.equal(complete.status, 409);
+      assert.equal(complete.body.error, "preflight-permission-not-consumed");
+      const after = await h.get("/job");
+      for (const key of ["jobId", "sessionId", "changeId", "lastProvenMilestone", "recovery", "terminalGate"]) {
+        assert.deepEqual(after[key], before[key]);
+      }
+      assert.equal(after.terminalGate.status, "OPEN");
+      assert.deepEqual(h.native.replies, []);
+      assert.deepEqual(h.native.messages, []);
+    });
+  }
+});
+
+test("un refus explicite pour délai prescrit omis ne consomme aucune permission", async (context) => {
+  const h = await setup(context);
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
+  const submitted = { ...h.approval(h.recovery.preflightRequestId), interval_seconds: 3 };
+  assert.equal(Object.hasOwn(submitted, "timeout_seconds"), false);
+  assert.equal((await h.validate(submitted)).status, 202);
+  const reason = "CGPT refuse timeout_seconds prescrit omis, aucun effet autorisé";
+  assert.equal((await h.post(`/decision/${submitted.requestId}`, { decision: "rejected", reason })).status, 201);
+  await waitFor(async () => (await h.get("/status")).activeValidationCount === 0);
+  const decision = await h.get(`/decision/${submitted.requestId}`);
+  assert.equal(decision.decision, "rejected");
+  assert.equal(decision.reason, reason);
+  h.native.messages = [{ parts: [{ type: "tool", tool: "cgpt-validation_request_validation",
+    state: { status: "completed", input: submitted,
+      output: JSON.stringify({ ...submitted, status: "REJECTED" }), time: { start: 1, end: 2 } } }] }];
+  const before = await h.get("/job");
+  const complete = await h.post("/job/recover", { ...h.recovery, phase: "complete" });
+  assert.equal(complete.status, 409);
+  assert.equal(complete.body.error, "preflight-permission-not-consumed");
+  const after = await h.get("/job");
+  for (const key of ["jobId", "sessionId", "changeId", "lastProvenMilestone", "recovery", "terminalGate"]) {
+    assert.deepEqual(after[key], before[key]);
+  }
+  assert.equal(after.terminalGate.status, "OPEN");
+  assert.deepEqual(h.native.replies, []);
+});
+
 test("refuse les fausses preuves natives et garde le gel", async (context) => {
   const h = await setup(context);
   await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
@@ -270,4 +342,137 @@ test("accepte un polling MCP corrélé après délai sans inventer de preuve", a
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 409);
   approval.state.input.approval_id = h.approval("preflight-1").approval_id;
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 200);
+});
+
+async function refusedPreflight(h) {
+  const a = h.approval(h.recovery.preflightRequestId);
+  assert.equal((await h.validate(a)).status, 202);
+  assert.equal((await h.post(`/decision/${a.requestId}`, { decision: "rejected" })).status, 201);
+  await waitFor(async () => (await h.get("/status")).activeValidationCount === 0);
+  h.native.messages.push({ parts: [{ type: "tool", tool: "cgpt-validation_request_validation",
+    state: { status: "completed", input: a, output: JSON.stringify({ ...a, status: "REJECTED" }),
+      time: { start: 1, end: 2 } } }] });
+  return a;
+}
+
+function retryPayload(h, next = "preflight-2") {
+  return { ...h.recovery, phase: "retry", previousPreflightRequestId: h.recovery.preflightRequestId,
+    preflightRequestId: next };
+}
+
+test("retry conserve la candidate et les refus puis complete vérifie seulement le nouvel essai", async (context) => {
+  const h = await setup(context);
+  await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+  const refused = await refusedPreflight(h);
+  const before = await h.get("/job");
+  const retry = retryPayload(h);
+  assert.equal((await h.post("/job/recover", retry)).status, 200);
+  const after = await h.get("/job");
+  for (const key of ["jobId", "sessionId", "directory", "changeId", "criteria", "lastProvenMilestone",
+    "strictCommands", "revokedSessions"]) assert.deepEqual(after[key], before[key]);
+  assert.equal(after.terminalGate.status, "OPEN");
+  assert.equal(after.recovery.sessionId, "ses_new");
+  assert.equal(after.recovery.attempts.length, 1);
+  assert.equal((await h.post("/job/recover", retry)).status, 409);
+  assert.equal((await h.post("/job/recover", { ...retry, sessionId: "ses_other" })).status, 409);
+  assert.equal((await h.validate(refused)).status, 409);
+  const reusedApproval = { ...h.approval("preflight-2"), approval_id: refused.approval_id };
+  assert.equal((await h.validate(reusedApproval)).status, 409);
+  h.recovery.preflightRequestId = "preflight-2";
+  await h.preflight();
+  const history = structuredClone(h.native.messages);
+  h.native.messages[0].parts[0].state.output = "changed";
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).body.error,
+    "preflight-history-divergent");
+  h.native.messages = history;
+  const completed = await h.post("/job/recover", { ...h.recovery, phase: "complete" });
+  assert.equal(completed.status, 200);
+  assert.equal(completed.body.sessionId, "ses_new");
+  assert.equal(completed.body.jobId, before.jobId);
+  assert.equal(completed.body.recoveryHistory[0].attempts.length, 1);
+  assert.equal((await h.get(`/decision/${refused.requestId}`)).decision, "rejected");
+  assert.equal(h.native.replies.length, 1);
+  await h.stop(); await h.start();
+  assert.deepEqual((await h.get("/job")).recoveryHistory, completed.body.recoveryHistory);
+});
+
+test("retry refuse absence de preuve, timeout, effet natif et identités réutilisées", async (context) => {
+  const h = await setup(context);
+  await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+  const retry = retryPayload(h);
+  assert.equal((await h.post("/job/recover", retry)).status, 409);
+  h.native.messages = [{ parts: [{ type: "tool", tool: "cgpt-validation_request_validation",
+    state: { status: "error", input: h.approval("preflight-1"), error: "MCP timeout" } }] }];
+  assert.equal((await h.post("/job/recover", retry)).status, 409);
+  h.native.messages = [];
+  await refusedPreflight(h);
+  h.native.messages[0].parts.push({ type: "tool", tool: "bash", state: { status: "completed" } });
+  assert.equal((await h.post("/job/recover", retry)).status, 409);
+  h.native.messages[0].parts.pop();
+  for (const payload of [{ ...retry, preflightRequestId: "preflight-1" },
+    { ...retry, previousPreflightRequestId: "stale" }, { ...retry, recoveryId: "other" }]) {
+    assert.equal((await h.post("/job/recover", payload)).status, 409);
+  }
+  h.native.permissions = [{ id: "unresolved" }];
+  assert.equal((await h.post("/job/recover", retry)).status, 409);
+  h.native.permissions = [];
+  h.native.busy = { ses_new: { type: "busy" } };
+  assert.equal((await h.post("/job/recover", retry)).status, 409);
+  h.native.busy = {};
+  assert.equal((await h.post("/job/recover", retry)).status, 200);
+});
+
+test("retry refuse un prévol approuvé ou consommé", async (context) => {
+  const h = await setup(context);
+  await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+  const a = h.approval("preflight-1");
+  await h.validate(a); await h.approve(a.requestId);
+  await waitFor(async () => (await h.get("/status")).activeValidationCount === 0);
+  assert.equal((await h.post("/job/recover", retryPayload(h))).status, 409);
+  // La consommation et les preuves exactes ne transforment pas approved en refus.
+  await h.preflight(true);
+  assert.equal((await h.post("/job/recover", retryPayload(h))).status, 409);
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 200);
+});
+
+test("retry accepte un rejet MCP avant enregistrement et garde les frontières successives", async (context) => {
+  const h = await setup(context);
+  await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+  const malformed = h.approval("preflight-1");
+  delete malformed.files;
+  h.native.messages = [{ parts: [{ type: "tool", tool: "cgpt-validation_request_validation",
+    state: { status: "error", input: malformed, error: "MCP error -32602: mandat invalide" } }] }];
+  assert.equal((await h.post("/job/recover", retryPayload(h))).status, 200);
+  h.recovery.preflightRequestId = "preflight-2";
+  await refusedPreflight(h);
+  const history = structuredClone(h.native.messages);
+  h.native.messages.shift();
+  assert.equal((await h.post("/job/recover", retryPayload(h, "preflight-3"))).status, 409);
+  h.native.messages = history;
+  assert.equal((await h.post("/job/recover", retryPayload(h, "preflight-3"))).status, 200);
+  h.recovery.preflightRequestId = "preflight-3";
+  await h.preflight();
+  assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 200);
+  assert.equal((await h.get("/job")).recoveryHistory[0].attempts.length, 2);
+});
+
+test("retry sérialise les mutations et ne reconstruit pas une décision perdue", async (context) => {
+  const h = await setup(context);
+  await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+  await refusedPreflight(h);
+  const retry = retryPayload(h);
+  h.native.delayPath = true;
+  const first = h.post("/job/recover", retry);
+  await waitFor(() => h.native.releasePath !== null);
+  assert.equal((await h.post("/job/recover", retry)).status, 409);
+  assert.equal((await h.post("/job/progress", { jobId: h.contract.jobId, currentCabMandate: "race" })).status, 409);
+  h.native.delayPath = false; h.native.releasePath();
+  assert.equal((await first).status, 200);
+  h.recovery.preflightRequestId = "preflight-2";
+  await refusedPreflight(h);
+  const before = await h.get("/job");
+  await h.stop(); await h.start();
+  assert.deepEqual((await h.get("/job")).recovery, before.recovery);
+  assert.equal((await h.post("/job/recover", retryPayload(h, "preflight-3"))).status, 409);
+  assert.equal((await h.get("/job")).terminalGate.status, "OPEN");
 });

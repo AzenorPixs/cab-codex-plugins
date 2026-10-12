@@ -42,6 +42,15 @@ validité ni d’un élargissement de périmètre. Un archivage OpenSpec reste u
 mandat distinct, décidé seulement après vérification des critères d’acceptation,
 des validations et de la cohérence finale.
 
+Le protocole impose le SSE en temps réel et le contrôle des demandes et
+rapports toutes les 3 secondes. Les vérifications de progression pendant
+l'analyse ou la rédaction sont espacées de 7 secondes fixes. Un benchmark
+PLLM échoué est retenté toutes les 30 minutes, sans limite, dans le même RUN
+jusqu'à reprise sûre ou arrêt explicite ; cet échec seul ne termine pas le RUN.
+Les sondes statistiques suivent une cadence de 30 minutes sans arrêter le
+travail pour attendre l'échéance. `AGENTS.md` et le skill distribué précisent
+les contrôles et preuves exigés avant reprise.
+
 ### 3.4 Corrélation explicite
 
 Chaque demande est corrélée par un `requestId` stable. Une décision doit correspondre à la demande exacte qui l'a provoquée. Une décision déjà consommée ne doit pas pouvoir être remplacée par une décision contradictoire.
@@ -79,6 +88,80 @@ OpenCode ───────── SSE HTTP direct ─────────
 ```
 
 Le transport entre OpenCode et le broker est exclusivement **MCP stdio local**. Le broker n'expose pas de serveur MCP réseau.
+
+### 4.1 Architecture technique détaillée
+
+Cette vue détaille les composants et les échanges du protocole CAB. Elle
+distingue le transport MCP, les interfaces HTTP locales, la décision Codex,
+la permission native OpenCode et la supervision du job.
+
+```mermaid
+flowchart TB
+    D["Développeur"]
+    C["Codex — orchestrateur / validateur<br/>Commande /cab et skills CAB"]
+
+    subgraph OC["OpenCode"]
+        O["Agent de codage<br/>Session persistante"]
+        P["Permission native<br/>limitée à une opération"]
+        X["Exécution de l'opération<br/>puis rapport et preuves"]
+        O -->|"Demande de permission"| P
+        P -->|"Autorisation unique"| X
+        X -->|"Résultat"| O
+    end
+
+    subgraph CAB["Infrastructure CAB"]
+        B["Broker MCP local<br/>Corrélation et readiness"]
+        E[("Approbations persistantes<br/>Journal et intégrité")]
+        T["Contrôleur Codex<br/>API HTTP locale"]
+        S["Superviseur durable<br/>Contrôle et reprise du job"]
+        J[("Contrat de job, jalons<br/>Gate terminal et état de supervision")]
+
+        B <-->|"Persistance"| E
+        B <-->|"HTTP local : demande, décision, readiness"| T
+        T <-->|"Persistance du job"| J
+        S <-->|"Persistance de supervision"| J
+        S <-->|"HTTP : statut, job et gate"| T
+    end
+
+    A["Codex App Server<br/>Session Codex de validation"]
+
+    D -->|"Objectif, périmètre et validations"| C
+    D -->|"Interaction directe"| O
+    C <-->|"HTTP : pilotage et rapports"| T
+    C -->|"Mode manuel par défaut : décision explicite"| T
+
+    O <-->|"MCP stdio local : demande et réponse corrélées"| B
+    O -.->|"SSE HTTP direct : événements"| T
+    O -.->|"SSE HTTP direct : événements"| S
+    S -.->|"HTTP : reprise de la même session si admissible"| O
+
+    T -->|"HTTP : approved corrélé → réponse once"| P
+
+    T -.->|"Mode automatique : demande de validation"| A
+    A -.->|"Décision Codex structurée"| T
+```
+
+- **Un mandat = une opération** : un fichier ou une commande, avec
+  corrélation de `requestId`, `approval_id`, `change_id`, de la session et du
+  répertoire.
+- Le broker transporte et persiste ; **Codex décide**. Le contrôleur transmet
+  l'approbation à la permission native correspondante avec une réponse
+  `once`, consommable une seule fois.
+- Les événements SSE et les relances techniques ne donnent aucune
+  autorisation. Une décision absente ne vaut jamais approbation.
+- Le gate terminal contrôle la clôture du job ; il reste distinct des
+  décisions unitaires et ne remplace pas une permission OpenCode.
+- Le mode manuel, utilisé par défaut, attend une décision HTTP explicite de
+  l'orchestrateur sur `POST /decision/<requestId>`. Le mode automatique
+  sollicite une session Codex de validation via Codex App Server.
+- Le broker notifie le contrôleur sur `POST /validation/request` et récupère
+  la décision sur `GET /decision/<requestId>`. La readiness est publiée
+  séparément ; `READY` ne vaut jamais approbation.
+
+Les cylindres représentent les états persistants des composants, sans
+imposer un fichier ou un emplacement partagé. Les flèches en pointillés
+identifient les voies SSE, les reprises techniques et le chemin de décision
+du mode automatique.
 
 ## 5. Composants
 
@@ -118,8 +201,9 @@ décision d'approbation.
 
 - `/cab start` : purge l'ancien état technique après contrôle d'inactivité,
   vérifie le MCP actif, initialise la supervision et crée une nouvelle session
-  maîtresse ; la reprise du même RUN conserve son état et sa session, sauf remplacement
-  explicitement vérifié par `/job/recover` ;
+  maîtresse ; la reprise ordinaire conserve son état et sa session, sauf
+  remplacement vérifié par `/job/recover`. Un prévol divergent conserve sa
+  candidate et le runtime selon la section 7 ;
 - `/cab test` : vérifie le chemin complet de validation dans cette session ;
 - `/cab run` : maintient le job piloté et ses mandats unitaires dans cette
   même session, sauf récupération explicite contrôlée conservant le RUN ;
@@ -148,6 +232,15 @@ peut demander au contrôleur un remplacement explicite de session dans le même
 job après gel, réconciliation technique et prévol natif prouvé. Le périmètre,
 les critères et le dernier jalon sont conservés ; les anciennes autorisations
 exécutables sont invalidées. Le superviseur ne crée pas la nouvelle session.
+Après un prévol de récupération divergent ou incomplet refusé sans effet,
+l'orchestrateur conserve sa candidate, le job et le runtime sans renouvellement
+ni purge. Il réconcilie les demandes, permissions et preuves avant retry
+explicite dans /job/recover, avec requête et approbation neuves. Le contrôleur
+conserve le gel jusqu'au prévol exact et complete prouvé ; les preuves
+historiques restent intactes et aucun travail validé n'est rejoué. Un délai
+MCP seul conserve le polling de la même approbation. Effet inconnu ou preuve
+manquante suspend la reprise ; OpenCode reste ouvert.
+
 Les mandats lecture seule désactivent les outils natifs et d'écriture via
 l'API de messagerie, plutôt que de dépendre du seul texte du mandat.
 

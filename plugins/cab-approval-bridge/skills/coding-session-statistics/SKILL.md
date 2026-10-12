@@ -71,7 +71,13 @@ Pour chaque relève, enregistrer :
 - débit = tokens de sortie divisés par la durée entre premier et dernier token ;
 - succès, échec ou relève manquée.
 
-Piloter la cadence par horloge, heartbeat, SSE ou mécanisme de planification disponible ; ne pas maintenir une commande `sleep` bloquante. Une relève manquée NE DOIT PAS être recréée rétroactivement : la signaler comme manquée. Une sonde échouée peut être retentée une seule fois immédiatement et les deux tentatives doivent rester visibles.
+Piloter la cadence par horloge, heartbeat, SSE ou mécanisme de planification disponible ; ne pas maintenir une commande `sleep` bloquante. Poursuivre le travail entre les échéances, sans arrêter le travail pour attendre un créneau de 30 minutes. Une relève manquée NE DOIT PAS être recréée rétroactivement : la signaler comme manquée. Une sonde échouée peut être retentée une seule fois immédiatement et les deux tentatives doivent rester visibles.
+
+Une sonde statistique échouée reste distincte d'un échec du benchmark PLLM :
+elle ne suspend pas, à elle seule, le RUN. Les nouvelles tentatives illimitées
+du benchmark PLLM toutes les 30 minutes relèvent du protocole `approval-bridge`
+et ne remplacent pas la règle de tentative unique immédiate d'une sonde
+statistique échouée.
 
 Dans le rapport, calculer séparément pour chaque configuration d'agent de codage :
 
