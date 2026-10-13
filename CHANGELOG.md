@@ -2,6 +2,21 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.0.0 — 2026-10-13
+
+- Plusieurs RUN CISMP dans un OpenCode et un broker stdio communs : réservation
+  atomique des changes et intentions, ressources en lecture/écriture et dépendances.
+- Contextes de jobs, permissions once, décisions, générations, gates et reprises
+  séparés ; intégration commune exclusive et libération après preuves.
+- Readiness et supervision par RUN ; purge globale refusée si un change reste
+  réservé ; pas de redémarrage aveugle par le healthcheck en mode concurrent.
+- Commande, skills et distribution actualisés ; prompts pilotés des huit projets
+  synchronisés, CISM, CAISM et les prompts directs conservés.
+- Compatibilité du mode historique unique. Le profil concurrent utilise un seul
+  contexte de répertoire ; worktrees et déploiement restent hors qualification.
+- Sources préparées et vérifiées localement ; aucune installation de profil,
+  activation de service, opération Git ou publication de release effectuée.
+
 ## 0.87.2 — 2026-10-10
 
 - Prévol de récupération divergent : conserver la candidate, le même job, le RUN et le runtime, sans renouvellement ni purge.
@@ -9,6 +24,20 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 - Protocole, cadrages et tests alignés ; version 0.87.2 synchronisée. Le remplacement initial CISMP reste inchangé. Aucun déploiement ni publication.
 
 ## Unreleased
+
+- Corrections ACSM du 2026-10-13 : validation des contrats persistés avant
+  HTTP et interactions externes ; refus explicite des racines, structures
+  et types invalides, sans divulgation ni réécriture du fichier.
+- Statut du superviseur complété par le jalon, le gate observé et un compteur
+  persistant des émissions de reprise, conservé au redémarrage et au transfert
+  du même job. Ancien compteur inconnu, nouveau job à zéro et émission interdite
+  en cas d'échec de persistance ; règles de relance et permissions préservées.
+- Deltas actifs rapprochés des références 0.87.2, exigences longues réparties
+  sans perte de clauses ou de scénarios et inventaire PROJECT complété.
+  Étape initiale de correction sans incrément de version, archivage, publication
+  ou déploiement. Les quatre propositions approuvées et les trois changes
+  historiques finalisés ont ensuite été archivés le 2026-10-13, chacun avec
+  son rapport STATISTIQUES.md vérifié ; les références restent inchangées.
 
 - Correction CGP-20261010-05 à 07 : le gate refuse les demandes locales
   indécises même avec un ancien compteur broker nul ; le healthcheck et le

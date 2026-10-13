@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,6 +42,163 @@ function controllerStatus() {
     brokerReadiness: { status: "READY", pending_count: 0 },
   };
 }
+
+async function statusFixture(context, initialState) {
+  const directory = mkdtempSync(join(tmpdir(), "cab-supervisor-status-"));
+  const statePath = join(directory, "supervisor-state.json");
+  const port = await availablePort();
+  const job = { jobId: "job-status", sessionId: "ses_status", directory, armed: true,
+    criteria: ["preuve"], lastProvenMilestone: "tests-proved",
+    terminalGate: { status: "OPEN" }, recovery: { sessionId: "ses_next" } };
+  if (initialState) writeFileSync(statePath, JSON.stringify(initialState(job)));
+  const control = { job, unavailable: false, sessionUnavailable: false, failMessage: false };
+  const messages = [];
+  const controller = createServer((request, response) => {
+    if (control.unavailable) { response.writeHead(503).end(); return; }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify(request.url === "/status" ? controllerStatus() : control.job));
+  });
+  await new Promise((resolve) => controller.listen(0, "127.0.0.1", resolve));
+  const opencode = createServer(async (request, response) => {
+    if (request.url === "/global/event") {
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.write('data: {"type":"server.connected"}\n\n');
+      return;
+    }
+    if (request.method === "POST") {
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      messages.push({ body: JSON.parse(body), persisted: JSON.parse(readFileSync(statePath, "utf8")) });
+      control.job.recovery = { sessionId: "ses_next" };
+      if (control.failMessage) { response.writeHead(503).end(); return; }
+    } else if (control.sessionUnavailable) {
+      response.writeHead(503).end(); return;
+    }
+    response.writeHead(200, { "content-type": "application/json" });
+    response.end(JSON.stringify({ id: control.job?.sessionId }));
+  });
+  await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
+  let supervisor;
+  async function stop() {
+    if (!supervisor || supervisor.exitCode !== null || supervisor.signalCode !== null) return;
+    const stopped = new Promise((resolve) => supervisor.once("exit", resolve));
+    supervisor.kill("SIGTERM");
+    await stopped;
+  }
+  async function status() {
+    const response = await fetch(`http://127.0.0.1:${port}/status`);
+    assert.equal(response.status, 200);
+    return response.json();
+  }
+  async function start() {
+    supervisor = spawn(process.execPath, [supervisorPath], {
+      env: { ...process.env, OC_Codex_WORKSPACE: directory,
+        OC_Codex_CONTROLLER_URL: `http://127.0.0.1:${controller.address().port}`,
+        OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencode.address().port}`,
+        OC_Codex_SUPERVISOR_STATUS_PORT: String(port), OC_Codex_SUPERVISOR_STATE_PATH: statePath,
+        OC_Codex_SUPERVISOR_RESUME_DELAY_MS: "1000", OC_Codex_SUPERVISOR_POLL_INTERVAL_MS: "250" },
+      stdio: "ignore",
+    });
+    await waitFor(async () => {
+      try { return (await status()).jobId === control.job?.jobId; }
+      catch (cause) { if (cause instanceof TypeError) return false; throw cause; }
+    }, "Le statut du job n'est pas disponible.");
+  }
+  context.after(async () => {
+    await stop();
+    controller.closeAllConnections(); opencode.closeAllConnections();
+    await new Promise((resolve) => controller.close(resolve));
+    await new Promise((resolve) => opencode.close(resolve));
+    rmSync(directory, { recursive: true, force: true });
+  });
+  await start();
+  return { directory, statePath, control, messages, status, stop, start };
+}
+
+test("publie le jalon et le gate observés sans hériter du job précédent", async (context) => {
+  const h = await statusFixture(context);
+  let status = await h.status();
+  assert.equal(status.lastProvenMilestone, "tests-proved");
+  assert.deepEqual(status.terminalGate, { status: "OPEN" });
+  assert.equal(status.resumeAttemptCount, 0);
+  h.control.job = { ...h.control.job, jobId: "other-job", lastProvenMilestone: null,
+    terminalGate: { status: "VALIDATED" } };
+  await waitFor(async () => (await h.status()).jobId === "other-job", "Nouveau job non observé.");
+  status = await h.status();
+  assert.equal(status.lastProvenMilestone, null);
+  assert.deepEqual(status.terminalGate, { status: "VALIDATED" });
+  assert.equal(status.resumeAttemptCount, 0);
+  h.control.job = null;
+  await waitFor(async () => (await h.status()).jobId === null, "Job désarmé non observé.");
+  assert.equal((await h.status()).terminalGate, null);
+  assert.equal((await h.status()).lastProvenMilestone, null);
+});
+
+test("compte les émissions réussies et échouées après persistance", async (context) => {
+  const h = await statusFixture(context);
+  assert.equal((await h.status()).resumeAttemptCount, 0);
+  h.control.job.recovery = null;
+  await waitFor(async () => (await h.status()).lastResumeAttempt?.result === "sent", "Reprise non envoyée.");
+  assert.equal(h.messages[0].persisted.resumeAttemptCount, 1);
+  assert.equal((await h.status()).resumeAttemptCount, 1);
+  h.control.failMessage = true;
+  h.control.job.recovery = null;
+  await waitFor(() => h.messages.length === 2, "Émission échouée non observée.");
+  await waitFor(async () => (await h.status()).lastResumeAttempt?.result === "failed", "Échec non publié.");
+  assert.equal(h.messages[1].persisted.resumeAttemptCount, 2);
+  assert.equal((await h.status()).resumeAttemptCount, 2);
+});
+
+test("conserve le compteur au redémarrage et au transfert, puis repart à zéro pour un autre job", async (context) => {
+  const h = await statusFixture(context, (job) => ({ jobId: job.jobId, sessionId: job.sessionId,
+    directory: job.directory, resumeAttemptCount: 7 }));
+  assert.equal((await h.status()).resumeAttemptCount, 7);
+  await h.stop(); await h.start();
+  assert.equal((await h.status()).resumeAttemptCount, 7);
+  h.control.job.sessionId = "ses_transferred";
+  await waitFor(async () => (await h.status()).sessionId === "ses_transferred", "Transfert non observé.");
+  assert.equal((await h.status()).resumeAttemptCount, 7);
+  h.control.job = { ...h.control.job, jobId: "job-new" };
+  await waitFor(async () => (await h.status()).jobId === "job-new", "Nouveau job non observé.");
+  assert.equal((await h.status()).resumeAttemptCount, 0);
+});
+
+test("garde inconnu le compteur historique même après une nouvelle émission", async (context) => {
+  const h = await statusFixture(context, (job) => ({ jobId: job.jobId, sessionId: job.sessionId,
+    directory: job.directory, lastResumeAttempt: { result: "sent" } }));
+  assert.equal((await h.status()).resumeAttemptCount, null);
+  h.control.job.recovery = null;
+  await waitFor(() => h.messages.length === 1, "Reprise historique non émise.");
+  assert.equal(h.messages[0].persisted.resumeAttemptCount, null);
+  assert.equal((await h.status()).resumeAttemptCount, null);
+});
+
+test("une préparation abandonnée ou une réconciliation échouée ne compte pas une émission", async (context) => {
+  const h = await statusFixture(context);
+  h.control.sessionUnavailable = true;
+  h.control.job.recovery = null;
+  await waitFor(async () => (await h.status()).reason === "reconciliation-failed", "Préparation échouée non observée.");
+  assert.equal((await h.status()).resumeAttemptCount, 0);
+  assert.deepEqual(h.messages, []);
+  const before = (await h.status()).lastReconciliationAt;
+  h.control.unavailable = true;
+  await delay(350);
+  const status = await h.status();
+  assert.equal(status.lastReconciliationAt, before);
+  assert.equal(status.lastProvenMilestone, "tests-proved");
+  assert.equal(status.resumeAttemptCount, 0);
+});
+
+test("un échec de persistance interdit l'émission et conserve le compteur", async (context) => {
+  const h = await statusFixture(context);
+  await waitFor(() => existsSync(h.statePath), "État initial non persisté.");
+  rmSync(h.statePath);
+  mkdirSync(h.statePath);
+  h.control.job.recovery = null;
+  await waitFor(async () => (await h.status()).reason === "resume-persistence-failed", "Échec de persistance non publié.");
+  assert.equal((await h.status()).resumeAttemptCount, 0);
+  assert.deepEqual(h.messages, []);
+});
 
 test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transport", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "cab-supervisor-sse-scope-"));

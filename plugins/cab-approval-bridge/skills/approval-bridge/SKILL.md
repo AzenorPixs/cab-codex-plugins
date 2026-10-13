@@ -7,6 +7,52 @@ description: Met en place, teste et supervise le dialogue OpenCode–Codex via b
 
 Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par Codex.
 
+## RUN concurrents CAB 1.0.0
+
+Lire [le contrat concurrent](references/concurrent-runs.md) dans le skill
+approval-bridge et ORCHESTRATED_CODING.md du projet. Les procédures de purge,
+de déconnexion MCP et d'arrêt des services ci-dessous concernent seulement
+une réinitialisation globale exclusive ; elles ne s'appliquent pas à l'ajout,
+à la reprise ou à la clôture d'un RUN dans une infrastructure partagée.
+
+Pour /cab start --run <run_id>, fixer ownerId et vérifier l'infrastructure
+commune sans reconnecter le broker. Créer la nouvelle session de codage,
+examiner les candidats puis réserver atomiquement change et intention par
+POST /runs/reserve. Armer le job sous /runs/<run_id>/job/arm après réservation.
+Le prévol et chaque mandat incluent run_id, reservation_version et le manifeste
+de ressources requis ; la réservation ne vaut jamais approbation.
+
+/cab run, /cab test, /cab stop et toute récupération ciblent explicitement
+--run <run_id>. Les interfaces sans cible sont limitées au contexte unique ;
+une ambiguïté est refusée. /cab stop désarme et libère uniquement le RUN après
+gate et réconciliation ; il n'arrête les services communs qu'en l'absence de
+tout autre RUN réservé. /cab update prépare un jeu complet sans remplacer
+les modules d'une infrastructure active ni redémarrer ses services.
+
+Consulter GET /runs avant chaque sélection et relire la version après toute
+extension ou récupération. Chaque change suivant conserve le RUN parent,
+mais emploie une nouvelle session, un jobId et une génération neufs. Les
+checkpoints sont output/<prompt>/<run_id>/state.json ; les sous-jobs utilisent
+celui du parent. Une attente de dépendance reste non terminale.
+
+Dans le répertoire partagé, déclarer /runs/<run_id>/ready avec version et
+evidence après les validations locales à un jalon stable. /integration
+attend la cohorte stable et sa quiescence native ; les opérations des autres
+RUN sont suspendues. Le propriétaire peut déclarer project:* en lecture pour
+ses contrôles globaux. Libérer avec acquire=false, published et les evidence
+de publication. Relire referenceVersion ; les autres RUN utilisent /reconcile
+avec preuves de réexamen et la nouvelle version retournée avant tout mandat.
+Une réservation avec écritures ne peut être livrée sans cette publication.
+
+Installer ensemble controller.mjs, job-context.mjs, supervisor.mjs,
+supervisor-context.mjs, runs.mjs, registry-lock.py et les autres scripts,
+avec leurs noms complets cgpt-approval-bridge-*. Les imports relatifs et le
+verrou Python exigent ce jeu complet dans le même répertoire. La mise à jour
+atomique prépare le jeu complet et sa validation avant publication ; les
+anciennes copies d'un seul script ne suffisent plus. Ne pas déployer un jeu
+mixte sur une session active. Conserver les procédures de prévol modèle,
+permissions ask, mandats unitaires, preuves natives et statistiques existantes.
+
 ## Invariants
 
 - `cgpt-validation` est un serveur MCP local `stdio` lancé par OpenCode.
@@ -24,7 +70,7 @@ Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, s
 - Après reconnexion SSE ou divergence, réconcilier l’état réel par HTTP auprès d’OpenCode.
 - Les validations normales passent par MCP stdio.
 - L’état `GET /mcp` du serveur OpenCode est la source de vérité de connexion MCP pour les sessions persistantes ; une sortie CLI ne peut pas s’y substituer.
-- Une nouvelle session CAB purge entièrement son ancien état technique et crée une nouvelle session maîtresse après confirmation de `cgpt-validation: connected`. La réutilisation d'une session concerne seulement la reprise du même RUN. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
+- Une réinitialisation globale exclusive CAB purge entièrement son ancien état technique et crée une nouvelle session maîtresse après confirmation de `cgpt-validation: connected`. La réutilisation d'une session concerne seulement la reprise du même RUN. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
 - Chaque opération OpenCode nécessitant une permission native constitue un mandat unitaire. Avant cette opération, l’agent soumet `request_validation` avec l’identifiant de session, le répertoire cible et exactement un fichier relatif ou une commande complète. Le contrôleur ne transmet `once` qu’après une décision CAB `approved` explicite et corrélée à ce mandat unique ; cette décision est consommée après une seule permission native correspondante.
 - La fin d’un tour OpenCode ne constitue pas la fin du job : conserver la boucle de pilotage et transmettre le mandat suivant dans la même session jusqu’à un état terminal explicite.
 - Ne jamais lire, journaliser ou afficher de secret.
@@ -156,7 +202,7 @@ agents. Cette obligation ne remplace pas l'autorisation d'archivage.
 
 ## Ordre de mise en place
 
-Avant toute nouvelle session, appliquer intégralement la
+Avant une réinitialisation globale exclusive, appliquer intégralement la
 [procédure de purge](references/session-reset.md). Elle est obligatoire quel
 que soit l'ancien état, y compris en présence de conflits Syncthing. Le script
 `../../scripts/cgpt-approval-bridge-reset.py` est fourni par ce plugin.
@@ -251,7 +297,7 @@ Avant de modifier le modèle d’un agent OC :
 
 ## Arrêt
 
-- Avant tout arrêt normal, demander `POST /job/terminal-gate` avec l'état explicite `TERMINÉ` ou `BLOQUÉ`. Si le gate est refusé, conserver le job ouvert et reprendre le pilotage ou signaler le blocage ; après validation, désarmer le contrat correspondant par `POST /job/disarm`.
+- Avant tout arrêt normal, demander `POST /runs/<run_id>/job/terminal-gate` avec l'état explicite `TERMINÉ` ou `BLOQUÉ`. Si le gate est refusé, conserver le job ouvert et reprendre le pilotage ou signaler le blocage ; après validation, désarmer le contrat correspondant par `POST /runs/<run_id>/job/disarm`.
 - Supprimer les heartbeats et healthchecks créés par `/cab`.
 - Fermer les clients SSE créés par `/cab`.
 - Arrêter explicitement le superviseur démarré par `/cab`, puis le contrôleur, avec `systemctl --user stop` sur leurs services respectifs. Conserver les unités installées et inactives, sans les désactiver ni les supprimer.
@@ -266,12 +312,12 @@ abandon de job.
 ## Récupération contrôlée de session dans le même RUN
 
 Après un écart refusé sans effet, interrompre l'ancienne session, traiter son
-rapport et clôturer le mandat courant avec `/job/progress`. Ne pas réarmer le
-job pour remplacer sa session : `/job/arm` reste immuable. Créer la candidate
+rapport et clôturer le mandat courant avec `/runs/<run_id>/job/progress`. Ne pas réarmer le
+job pour remplacer sa session : `/runs/<run_id>/job/arm` reste immuable. Créer la candidate
 par l'API native OpenCode dans le même `directory`, avec permissions natives
 `ask`, sans lui confier de travail métier.
 
-Utiliser `POST /job/recover` en deux phases. Le corps commun contient `jobId`,
+Utiliser `POST /runs/<run_id>/job/recover` en deux phases. Le corps commun contient `jobId`,
 `expectedSessionId` (ancienne session), `sessionId` (candidate), `recoveryId`
 inédit et `preflightRequestId` inédit ; ajouter `phase: "prepare"`, puis
 `phase: "complete"`. Le contrôleur vérifie par HTTP le contexte, MCP, les
@@ -324,7 +370,7 @@ Exiger santé, contexte, MCP connecté, sessions inactives, aucun mandat actif
 ou en attente, aucune permission non résolue et aucun effet inconnu.
 Une décision `approved`, consommée ou une preuve incertaine interdit retry.
 
-Demander explicitement `POST /job/recover` avec `phase: "retry"`, les mêmes
+Demander explicitement `POST /runs/<run_id>/job/recover` avec `phase: "retry"`, les mêmes
 `jobId`, `expectedSessionId`, `sessionId` candidate et `recoveryId`,
 `previousPreflightRequestId` égal à la réservation actuelle et un
 `preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job.

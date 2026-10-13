@@ -8,13 +8,11 @@ Garantir un bilan auditable pour chaque archivage OpenSpec piloté par CAB.
 
 ### Requirement: Collecte auditable par spécification
 
-L'orchestrateur CAB SHALL charger le skill embarqué `coding-session-statistics`
-et préparer la collecte au début de chaque change piloté. Il SHALL conserver
-les bornes temporelles, l'identité du change et de la session, le relevé du
-quota hebdomadaire Codex et les sondes prévues par le skill. Il SHALL utiliser
-l'outil natif de lecture des quotas sans exiger le skill `cgpt`. Il SHALL
-signaler `N/A` avec sa cause pour toute donnée inaccessible ou collecte
-tardive et SHALL ne jamais reconstruire rétroactivement une mesure.
+L'orchestrateur CAB SHALL charger le skill embarqué `coding-session-statistics` et
+préparer la collecte au début de chaque change piloté. L'orchestrateur CAB SHALL
+conserver les bornes temporelles, l'identité du change et de la session, le relevé du
+quota hebdomadaire Codex et les sondes prévues par le skill. L'orchestrateur CAB SHALL
+utiliser l'outil natif de lecture des quotas sans exiger le skill `cgpt`.
 
 #### Scenario: Collecte commencée tardivement
 
@@ -28,13 +26,12 @@ tardive et SHALL ne jamais reconstruire rétroactivement une mesure.
 
 ### Requirement: Rapport obligatoire après chaque archivage réussi
 
-Après chaque archivage OpenSpec explicitement autorisé et réussi,
-l'orchestrateur SHALL faire produire `STATISTIQUES.md` dans le dossier réel
-`openspec/changes/archive/<archive>/`. Il SHALL relever les quotas finaux et
-la fin de session après archivage et avant la synthèse. Le rapport SHALL
-respecter les six sections du skill, les pourcentages, les preuves disponibles,
-les durées et la distinction entre refus, erreur et exécution réussie.
-Chaque archive SHALL posséder son propre rapport, y compris dans un lot.
+Après chaque archivage OpenSpec explicitement autorisé et réussi, l'orchestrateur SHALL
+faire produire `STATISTIQUES.md` dans le dossier réel
+`openspec/changes/archive/<archive>/`. L'orchestrateur CAB SHALL relever les quotas
+finaux et la fin de session après archivage et avant la synthèse. Le rapport SHALL
+respecter les six sections du skill, les pourcentages, les preuves disponibles, les
+durées et la distinction entre refus, erreur et exécution réussie.
 
 #### Scenario: Archivage unitaire réussi
 
@@ -90,3 +87,27 @@ il MUST NOT suspendre le RUN au seul motif de cet échec.
 
 - **WHEN** une relève est manquée ou une sonde statistique échoue
 - **THEN** le rapport conserve la cause sans inventer de mesure et le RUN poursuit son travail autorisé
+
+### Requirement: Données statistiques absentes ou tardives
+
+L'orchestrateur CAB SHALL signaler `N/A` avec sa cause pour toute donnée inaccessible ou
+collecte tardive et SHALL ne jamais reconstruire rétroactivement une mesure.
+
+#### Scenario: Données statistiques absentes ou tardives
+- **WHEN** une mesure est inaccessible ou la collecte commence tardivement
+- **THEN** le rapport indique N/A avec sa cause sans reconstruire la mesure
+
+### Requirement: Rapport individuel pour chaque archive
+
+Chaque archive SHALL posséder son propre rapport, y compris dans un lot.
+
+#### Scenario: Rapport individuel pour chaque archive
+- **WHEN** plusieurs changes sont archivés dans un lot autorisé
+- **THEN** chaque archive reçoit son propre rapport
+
+### Requirement: Attribution des mesures concurrentes
+Le rapport de chaque change MUST identifier RUN et sessions. Les mesures partagées, notamment le quota de compte, MUST être marquées partagées et MUST NOT être attribuées exclusivement au change sans preuve. La publication du rapport MUST précéder la libération normale de la réservation.
+
+#### Scenario: Isolation concurrente
+- **WHEN** deux RUN utilisent le même quota
+- **THEN** chaque rapport distingue sa télémétrie et la variation globale du compte

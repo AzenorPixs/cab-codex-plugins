@@ -11,6 +11,7 @@ const statePath =
   process.env.OPENCODE_SSE_STATE_PATH ||
   "/tmp/opencode-sse-client-status.json";
 
+const version = "1.0.0";
 let connections = 0;
 
 async function publish(state) {
@@ -19,7 +20,7 @@ async function publish(state) {
 
   await writeFile(
     temporary,
-    `${JSON.stringify(state)}\n`,
+    `${JSON.stringify({ version, ...state })}\n`,
     "utf8"
   );
 
@@ -40,7 +41,7 @@ async function connect() {
   );
 
   const response = await fetch(
-    `${baseUrl}/event`,
+    `${baseUrl}/global/event`,
     {
       headers: {
         Accept:

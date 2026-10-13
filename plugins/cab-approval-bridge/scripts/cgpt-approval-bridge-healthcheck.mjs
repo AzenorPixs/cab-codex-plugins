@@ -1,5 +1,3 @@
-import { execFileSync } from "node:child_process";
-
 function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
@@ -8,6 +6,7 @@ const controllerBaseUrl = (
   envValue("OC_Codex_CONTROLLER_URL") || "http://127.0.0.1:8788"
 ).replace(/\/+$/, "").replace(/\/status$/, "");
 const controllerUrl = `${controllerBaseUrl}/status`;
+const version = "1.0.0";
 
 const supervisorUrl =
   envValue("OC_Codex_SUPERVISOR_URL") ||
@@ -156,7 +155,9 @@ async function check() {
     }
 
     if (
-      status.appServer !== "ready"
+      (status.mode === "concurrent"
+        ? Object.values(status.runs || {}).some((run) => run.appServer !== "ready")
+        : status.appServer !== "ready")
     ) {
       throw new HealthError(
         `Codex App Server: ${status.appServer}.`,
@@ -178,9 +179,9 @@ async function check() {
       );
     }
 
-    validateBrokerReadiness(
-      status
-    );
+    if (status.mode === "concurrent") {
+      for (const run of Object.values(status.runs || {})) validateBrokerReadiness(run);
+    } else validateBrokerReadiness(status);
 
     try {
       await fetchJson(supervisorUrl);
@@ -195,38 +196,8 @@ async function check() {
 
     return status;
   } catch (error) {
-    if (
-      error.restartController
-    ) {
-      execFileSync(
-        "systemctl",
-        [
-          "--user",
-          "restart",
-          "cgpt-approval-bridge-controller.service",
-        ],
-        {
-          stdio: "inherit",
-        }
-      );
-    }
-
-    if (
-      error.restartSupervisor
-    ) {
-      execFileSync(
-        "systemctl",
-        [
-          "--user",
-          "restart",
-          "cgpt-approval-bridge-supervisor.service",
-        ],
-        {
-          stdio: "inherit",
-        }
-      );
-    }
-
+    // A health snapshot cannot authorize restarting infrastructure shared by RUNs.
+    // The orchestrator must reconcile reservations before any lifecycle action.
     throw error;
   }
 }

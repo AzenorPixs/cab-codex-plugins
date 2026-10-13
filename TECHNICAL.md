@@ -20,6 +20,12 @@ CAB/
 │   ├── skills/coding-session-statistics/SKILL.md
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-job-context.mjs
+│       ├── cgpt-approval-bridge-runs.mjs
+│       ├── cgpt-approval-bridge-registry-lock.py
+│       ├── cgpt-approval-bridge-supervisor.mjs
+│       ├── cgpt-approval-bridge-supervisor-context.mjs
+│       ├── cgpt-approval-bridge-prompts.py
 │       ├── cgpt-approval-bridge-reset.py
 │       ├── cgpt-approval-bridge-healthcheck.mjs
 │       └── cgpt-approval-bridge-opencode-sse-client.mjs
@@ -37,7 +43,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.87.2` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.0.0` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -175,6 +181,14 @@ Le fichier reste intact ; aucune réparation ou réinitialisation automatique
 n'est effectuée. Les contrats valides, leurs jalons, leur gate et leurs
 métadonnées de récupération conservent leur comportement de restauration.
 
+Un JSON syntaxiquement valide est également contrôlé comme contrat : racine
+objet non nulle et non tableau, identités, répertoire absolu, critères et types
+persistés attendus. Une racine scalaire, un contrat incomplet ou un type
+incompatible refuse le démarrage avec le diagnostic distinct « contrat
+invalide ». Les champs historiques facultatifs et les extensions compatibles
+restent acceptés ; le chargement ne réinitialise pas les dates, jalons, gate,
+récupérations ou sessions révoquées et ne réécrit pas le fichier.
+
 Le plugin distribue les modèles de services utilisateur
 `cgpt-approval-bridge-controller.service` et
 `cgpt-approval-bridge-supervisor.service`. `/cab start` installe ou actualise
@@ -282,6 +296,19 @@ repoussent pas la reprise. Un JSON SSE invalide reste observable sans contenu
 brut dans `lastEventError`, sans actualiser l'activité. Un changement de job,
 session ou répertoire invalide l'ancienne horloge ; les états déjà enregistrés
 restent lisibles sans migration. Le gel de récupération reste prioritaire.
+
+Le statut public du superviseur expose `lastProvenMilestone` et `terminalGate`
+depuis le dernier contrat observé ; ils sont indisponibles sans job armé.
+`lastReconciliationAt` et la cause courante distinguent une observation passée
+d'une réconciliation échouée. `resumeAttemptCount` compte les émissions de
+reprise du job, séparément du résultat de `lastResumeAttempt`. L'incrément
+est persisté avant émission ; un échec de cette persistance interdit la
+requête et publie `resume-persistence-failed`. Un refus ou une préparation
+abandonnée avant émission ne compte pas, contrairement à un échec réseau
+après émission. Le compteur est conservé au redémarrage et lors du transfert
+de session du même job ; un autre job commence à zéro. Un ancien état sans
+compteur publie `null` tant que ce job reste surveillé, sans reconstruction
+de son historique. Aucun paramètre de configuration supplémentaire n'est requis.
 
 ## 8. Supervision OpenCode
 
@@ -531,3 +558,51 @@ motivées. Le broker et le contrôleur ne rédigent ni n'approuvent le rapport.
 ## 18. Secrets
 
 Les clés HMAC et autres secrets doivent être injectés par l'environnement et rester hors Git, des journaux, des diagnostics et des sorties utilisateur.
+
+## Contextes concurrents 1.0.0
+
+Le contrôleur importe cgpt-approval-bridge-job-context.mjs : chaque contexte
+possède ses décisions, validations, gate et récupération. Le registre
+cgpt-approval-bridge-runs.mjs persiste controller-runs.json avec remplacement
+synchronisé et un verrou flock tenu par cgpt-approval-bridge-registry-lock.py.
+L'état de job est sous runs/<runId>/<contextId>/ ; une extension ou récupération
+incrémente version sans changer contextId. Les requestId admis restent inscrits
+après redémarrage ; sans preuve restaurable, une ancienne demande est refusée.
+
+GET /runs expose les propriétaires. POST /runs/reserve prend runId, ownerId,
+sessionId, directory, changeId, selectionKey, resources et dependsOn.
+Les routes /runs/<runId>/job/... et /runs/<runId>/decision/<requestId> isolent
+les jobs. /extend, /integration et /release contrôlent version et quiescence.
+Une libération delivered=true exige gate TERMINÉ, désarmement, contrôle natif
+et références de preuves examinées par Codex. CAB ne lit pas le projet pour
+valider le rapport à la place de l'orchestrateur.
+
+request_validation conserve ses champs historiques et ajoute run_id,
+reservation_version et resources de commande. broker_readiness accepte run_id
+et publie by_run, by_session et infrastructure_status. Les vues ciblées
+n'absorbent pas le pending_count métier des autres RUN. Le superviseur utilise
+cgpt-approval-bridge-supervisor-context.mjs et un flux SSE commun, en conservant
+activité et reprise par RUN. Une mutation historique ambiguë reçoit HTTP 409.
+
+Les clés file: sont canoniques, sans traversal ni sortie par lien symbolique.
+Les répertoires couvrent leurs descendants. Les ressources read/read peuvent
+coexister ; les recouvrements impliquant write sont refusés. Les effets shell
+sont décrits par un manifeste examiné par Codex, sans analyse implicite du shell.
+Les dépendances historiques hors registre doivent être prouvées par Codex.
+
+Le healthcheck est diagnostic et ne redémarre aucun service. Toute action
+de cycle de vie exige une réconciliation coordonnée des réservations. Une
+purge refuse un registre RESERVED ou invalide même après arrêt des processus.
+Le protocole et les exemples complets sont dans la référence concurrent-runs.md
+embarquée. Aucune variable supplémentaire n'est requise pour le profil commun.
+
+Dans le répertoire partagé, POST /runs/<runId>/ready déclare un jalon stable
+avec version et evidence après validation locale. /integration attend la
+stabilité et la quiescence des RUN réservés, suspend leurs nouvelles opérations
+et admet project:* en lecture pour les contrôles globaux du propriétaire.
+La libération précise published et evidence et incrémente referenceVersion.
+Les autres RUN utilisent /reconcile avec version, referenceVersion et preuves
+après réexamen de la base et des validations affectées. Le nouveau numéro de
+réservation invalide les anciens mandats. Une réservation avec écritures ne
+peut être livrée sans publication sous cette barrière. Les validations globales
+portent sur l'état combiné des changes au jalon stable.
