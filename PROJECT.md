@@ -59,7 +59,7 @@ Chaque demande est corrélée par un `requestId` stable. Une décision doit corr
 
 CAB conserve l'état courant des approbations, leur historique, les éléments nécessaires à la reprise après interruption et les informations de diagnostic.
 
-Cette persistance couvre le RUN courant et sa reprise. Chaque nouvelle session
+Cette persistance couvre le RUN courant et sa reprise. Une réinitialisation globale exclusive
 CAB purge d'abord l'intégralité de son ancien état technique, y compris les
 conflits Syncthing, puis réinitialise le broker et la supervision. Les rapports
 et historiques natifs des agents sont conservés hors de cet espace runtime.
@@ -101,7 +101,7 @@ flowchart TB
     C["Codex — orchestrateur / validateur<br/>Commande /cab et skills CAB"]
 
     subgraph OC["OpenCode"]
-        O["Agent de codage<br/>Session persistante"]
+        O["Agent de codage<br/>Sessions persistantes par RUN"]
         P["Permission native<br/>limitée à une opération"]
         X["Exécution de l'opération<br/>puis rapport et preuves"]
         O -->|"Demande de permission"| P
@@ -114,7 +114,7 @@ flowchart TB
         E[("Approbations persistantes<br/>Journal et intégrité")]
         T["Contrôleur Codex<br/>API HTTP locale"]
         S["Superviseur durable<br/>Contrôle et reprise du job"]
-        J[("Contrat de job, jalons<br/>Gate terminal et état de supervision")]
+        J[("Contrats par RUN, jalons<br/>Gate terminal et état de supervision")]
 
         B <-->|"Persistance"| E
         B <-->|"HTTP local : demande, décision, readiness"| T
@@ -268,6 +268,8 @@ OpenSpec est la source de vérité normative des capacités CAB. La décompositi
 - `approval-persistence` : magasin durable, journal intègre et reprise ;
 - `controller-transport` : contrôleur Codex local et contrat HTTP ;
 - `supervision-remediation` : readiness, SSE et remédiations contrôlées ;
+- `persistent-job-supervision` : contrat durable, gate terminal et reprise
+  corrélée de la session ;
 - `codex-integration-distribution` : plugin Codex, commande d'orchestration
   `/cab` et distribution.
 - `archive-session-statistics` : collecte auditable et rapport obligatoire
@@ -326,3 +328,23 @@ Codex intervient en analyse, en revue de code, et en validateur.
 - `openspec/specs/` : contrats fonctionnels et techniques normatifs.
 
 ## 16. Documentation officiel
+
+## Pilotage concurrent 1.0.0
+
+Le profil concurrent partage un OpenCode, un broker MCP stdio et un contexte
+absolu de projet. Plusieurs RUN possèdent chacun leur session, contrat,
+permissions et preuves. Un registre technique réserve atomiquement changes,
+intentions et ressources ; Codex examine les dépendances et conserve l'autorité
+de décision. Une réservation ne vaut jamais approbation.
+
+Le même RUN peut enchaîner des changes après libération prouvée, avec une
+nouvelle session et une génération fraîche. L'intégration commune est exclusive.
+Le cycle parent reste en attente si le travail restant dépend d'un autre RUN.
+Le démarrage d'un RUN rejoint l'infrastructure sans purge. Les procédures de
+purge et d'arrêt communes décrites ailleurs s'appliquent seulement à une
+réinitialisation globale exclusive, après quiescence et réconciliation.
+
+La capacité OpenSpec concurrent-run-coordination définit ces garanties.
+Le protocole détaillé est dans ORCHESTRATED_CODING.md. Les worktrees ne font
+pas partie du profil concurrent initial. Les prompts directs ne sont pas
+exécutés en concurrence avec ces RUN et ne sont pas modifiés par cette évolution.

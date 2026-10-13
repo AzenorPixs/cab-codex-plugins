@@ -30,16 +30,13 @@ de projets pilotés.
   piloté particulier
 
 ### Requirement: Contrat HTTP de validation
-Le contrôleur SHALL accepter une demande sur `POST /validation/request`,
-mémoriser une décision explicite et unique sous le `requestId` de la demande,
-et la restituer par `GET /decision/<requestId>`. Toute décision restituée SHALL
-inclure le même `requestId`, l'`approval_id` et le `change_id` de la demande
-notifiée. Le contrôleur SHALL accepter les décisions `approved`, `rejected` et
-`needs_clarification` et SHALL refuser une seconde décision pour le même
-`requestId`. Le mode de décision SHALL être `manual` par défaut. Lorsque
-`OC_Codex_DECISION_MODE=manual`, le contrôleur SHALL conserver la demande en
-attente et SHALL attendre une décision valide envoyée sur
-`POST /decision/<requestId>` sans lancer de décision automatique.
+
+Le contrôleur SHALL accepter une demande sur `POST /validation/request`, mémoriser une
+décision explicite et unique sous le `requestId` de la demande, et la restituer par `GET
+/decision/<requestId>`. Toute décision restituée SHALL inclure le même `requestId`,
+l'`approval_id` et le `change_id` de la demande notifiée. Le contrôleur SHALL accepter
+les décisions `approved`, `rejected` et `needs_clarification` et SHALL refuser une
+seconde décision pour le même `requestId`.
 
 #### Scenario: Décision manuelle valide
 - **WHEN** une décision `needs_clarification` valide est envoyée sur `POST /decision/<requestId>` pour une demande notifiée en mode manuel
@@ -65,6 +62,7 @@ Le contrôleur SHALL exposer son état public sur `GET /status`, dont l'état du
 - **THEN** il reçoit un objet JSON sans secret ni décision détaillée
 
 ### Requirement: Verrou de clôture de job corrélé
+
 Le contrôleur SHALL exiger un gate terminal local avant toute clôture normale.
 Il SHALL le refuser tant qu'une validation est active ou indécise localement,
 qu'une demande broker est en attente ou qu'un état explicite `TERMINÉ` ou
@@ -85,6 +83,7 @@ approuver une opération OpenCode.
 - **THEN** le contrôleur confirme le gate terminal et rend son état observable
 
 ### Requirement: État terminal observable
+
 Le contrôleur SHALL exposer sur `GET /status` un résumé non sensible du gate
 terminal, comprenant son état, sa raison et l'état terminal déclaré. Une
 attente, un silence SSE, un rapport intermédiaire ou la fin d'un tour Codex ne
@@ -95,16 +94,12 @@ SHALL jamais être interprété comme un état terminal.
 - **THEN** son statut indique que le gate terminal n'est pas validé
 
 ### Requirement: Corrélation sûre des commandes Bash instrumentées
-Le contrôleur SHALL corréler une permission Bash à la commande approuvée
-lorsque OpenCode y ajoute exclusivement une instrumentation de sortie
-déterministe connue. Il SHALL vérifier que la commande métier approuvée reste
-inchangée et SHALL refuser toute transformation qui ajoute, retire ou modifie
-une opération métier. Une permission corrélée SHALL rester consommable une
-seule fois. Pour un job déclarant `strictCommands: true`, le contrôleur
-SHALL exiger une commande de permission strictement identique à celle du
-mandat et SHALL refuser également l'instrumentation de sortie reconnue.
-Cette restriction SHALL s'appliquer à la session et au répertoire du contrat
-de job ; son absence SHALL préserver la corrélation instrumentée existante.
+
+Le contrôleur SHALL corréler une permission Bash à la commande approuvée lorsque
+OpenCode y ajoute exclusivement une instrumentation de sortie déterministe connue. Le
+contrôleur SHALL vérifier que la commande métier approuvée reste inchangée et SHALL
+refuser toute transformation qui ajoute, retire ou modifie une opération métier. Une
+permission corrélée SHALL rester consommable une seule fois.
 
 #### Scenario: Commande exacte
 - **WHEN** OpenCode demande une permission Bash dont la commande est identique
@@ -138,17 +133,12 @@ de job ; son absence SHALL préserver la corrélation instrumentée existante.
   permission et ne réutilise pas la décision pour une seconde permission
 
 ### Requirement: Réveil corrélé de l'orchestrateur
-Le contrôleur SHALL accepter une relance corrélée sur une interface HTTP locale
-et vérifier son `requestId`, son `approval_id` et son `change_id` avant toute
-action. Pour une relance valide sans décision terminale en mode manuel, il
-SHALL signaler le rappel corrélé dans son statut sans créer de thread ni de
-tour Codex App Server. Cette protection SHALL s'appliquer également aux
-heartbeats de relance. La demande SHALL rester indécise jusqu'à une décision
-HTTP explicite et corrélée de l'orchestrateur principal. En mode automatique,
-le contrôleur SHALL conserver son chemin existant de transmission structurée
-à la tâche orchestratrice persistante, de heartbeat lié à cette tâche et de
-notification locale persistante lorsque le réveil est indisponible. Une
-relance SHALL NOT créer, modifier ou consommer une décision ou une permission.
+
+Le contrôleur SHALL accepter une relance corrélée sur une interface HTTP locale et
+vérifier son `requestId`, son `approval_id` et son `change_id` avant toute action. Pour
+une relance valide sans décision terminale en mode manuel, le contrôleur SHALL signaler
+le rappel corrélé dans son statut sans créer de thread ni de tour Codex App Server.
+Cette protection SHALL s'appliquer également aux heartbeats de relance.
 
 #### Scenario: Rappels manuels répétés
 - **WHEN** le contrôleur reçoit plusieurs relances corrélées d'une demande
@@ -178,15 +168,11 @@ relance SHALL NOT créer, modifier ou consommer une décision ou une permission.
 
 ### Requirement: Contrat de supervision de job local
 
-Le contrôleur SHALL accepter et exposer exclusivement sur son interface locale
-un contrat de supervision de job non secret, corrélé à une session OpenCode et
-à son gate terminal. Il SHALL refuser un contrat incomplet, une substitution implicite de session
-sur /job/arm, ou une désactivation sans gate terminal validé. Seule la
-récupération explicite /job/recover définie ci-dessous MAY remplacer la session. Son statut public SHALL résumer le job armé et son gate sans exposer le
-contenu du projet ni une décision CAB.
-Le champ facultatif `strictCommands` SHALL être booléen, valoir `false` par
-défaut et être conservé dans le contrat persistant et son état public. Le
-contrôleur SHALL refuser toute autre valeur avant d'armer le job.
+Le contrôleur SHALL accepter et exposer exclusivement sur son interface locale un
+contrat de supervision de job non secret, corrélé à une session OpenCode et à son gate
+terminal. Le contrôleur SHALL refuser un contrat incomplet, une substitution implicite
+de session sur /job/arm, ou une désactivation sans gate terminal validé. Seule la
+récupération explicite /job/recover définie ci-dessous MAY remplacer la session.
 
 #### Scenario: Tentative de désarmement prématuré
 
@@ -254,10 +240,11 @@ La commande réservée MUST être corrélée exactement sans suffixe, quelle que
 
 ### Requirement: Restauration explicite du job au démarrage
 
-Le contrôleur MUST restaurer un contrat de job valide selon le format existant.
-Seule l'absence du fichier, signalée par ENOENT, MAY être traitée comme un
-démarrage normal sans job. Les jalons, le gate et les métadonnées de récupération
-MUST rester conservés lors d'une restauration valide.
+Le contrôleur MUST valider puis restaurer le contrat persistant selon les
+formats supportés. La racine MUST être un objet JSON non nul, distinct d'un
+tableau, avec les champs obligatoires et types attendus. Seul ENOENT MAY
+permettre un démarrage sans job. La restauration valide MUST préserver
+jalons, gate et métadonnées de récupération sans les réinitialiser.
 
 #### Scenario: Fichier absent
 - **WHEN** le fichier de contrat est absent
@@ -267,12 +254,24 @@ MUST rester conservés lors d'une restauration valide.
 - **WHEN** le fichier contient un contrat valide avec un gate ouvert et des métadonnées de récupération
 - **THEN** le contrôleur restaure ce contrat sans inventer de jalon ni d'état terminal
 
+#### Scenario: Racine JSON invalide pour un contrat
+- **WHEN** le fichier contient null, un booléen, un nombre, une chaîne ou un tableau JSON
+- **THEN** le contrôleur refuse la restauration sans assimiler ce contenu à un fichier absent
+
+#### Scenario: Objet incomplet ou types invalides
+- **WHEN** un objet JSON omet un champ obligatoire du format supporté ou présente un type incompatible
+- **THEN** le contrôleur refuse la restauration sans réparer le contrat
+
+#### Scenario: Format historique supporté
+- **WHEN** un contrat valide d'un format supporté omet un champ historiquement facultatif
+- **THEN** le contrôleur conserve sa compatibilité et ne réinitialise pas ses jalons, son gate ou ses preuves
+
 ### Requirement: Refus des erreurs de restauration du job
 
-Un JSON malformé ou une erreur de lecture autre que ENOENT MUST arrêter le
-démarrage du contrôleur avec un code non nul avant toute interface HTTP ou
-interaction avec OpenCode ou Codex App Server. Le fichier persistant MUST
-rester inchangé, sans suppression ni réparation automatique.
+Un JSON malformé, un contrat invalide ou une erreur de lecture autre que
+ENOENT MUST arrêter le démarrage avec un code non nul avant HTTP et toute
+interaction OpenCode ou Codex App Server. Le fichier persistant MUST rester
+inchangé, sans suppression ni réparation automatique.
 
 #### Scenario: JSON malformé
 - **WHEN** le fichier de contrat ne peut pas être décodé comme JSON
@@ -282,15 +281,23 @@ rester inchangé, sans suppression ni réparation automatique.
 - **WHEN** la lecture du fichier de contrat échoue avec une erreur autre que ENOENT
 - **THEN** le contrôleur échoue au démarrage sans assimiler cette erreur à un job absent
 
+#### Scenario: Contrat décodé mais invalide
+- **WHEN** le JSON est décodé mais sa structure ne satisfait pas le format de contrat supporté
+- **THEN** le contrôleur échoue avant toute interface ou interaction externe et conserve le fichier intact
+
 ### Requirement: Diagnostic de restauration sans contenu persistant
 
-Un refus de restauration MUST produire un diagnostic explicite distinguant
-un JSON malformé d'une lecture impossible. Ce diagnostic MUST NOT reprendre
-le contenu persistant, le message brut de l'exception ou le chemin runtime.
+Un refus de restauration MUST distinguer JSON malformé, lecture impossible
+et contrat invalide. Le diagnostic MUST NOT reprendre le contenu persistant,
+le message brut de l'exception ou le chemin runtime.
 
 #### Scenario: Contenu non exposé
 - **WHEN** un contrat malformé contient un marqueur synthétique
 - **THEN** le diagnostic identifie l'échec de décodage sans afficher ce marqueur ni le chemin runtime
+
+#### Scenario: Contrat invalide non divulgué
+- **WHEN** un objet de contrat invalide contient un marqueur synthétique
+- **THEN** le diagnostic indique un contrat invalide sans exposer le marqueur, le chemin ou l'exception brute
 
 ### Requirement: URL du contrôleur compatible entre clients locaux
 Le superviseur et le healthcheck SHALL accepter `OC_Codex_CONTROLLER_URL`
@@ -343,3 +350,57 @@ retry MUST persister une empreinte du préfixe des parties tool natives et les i
 #### Scenario: Nouveau prévol exact
 - **WHEN** les preuves historiques sont intactes et le nouvel essai satisfait les contrôles stricts existants
 - **THEN** complete accepte le même job et la même candidate sans compter les refus précédents comme des exécutions
+
+### Requirement: Mode manuel et décision HTTP explicite
+
+Le mode de décision SHALL être `manual` par défaut. Lorsque
+`OC_Codex_DECISION_MODE=manual`, le contrôleur SHALL conserver la demande en attente et
+SHALL attendre une décision valide envoyée sur `POST /decision/<requestId>` sans lancer
+de décision automatique.
+
+#### Scenario: Mode manuel et décision HTTP explicite
+- **WHEN** une demande est notifiée en mode manuel sans décision
+- **THEN** le contrôleur attend POST /decision/<requestId> sans lancer de décision automatique
+
+### Requirement: Commandes strictes dans le contexte du job
+
+Pour un job déclarant `strictCommands: true`, le contrôleur SHALL exiger une commande de
+permission strictement identique à celle du mandat et SHALL refuser également
+l'instrumentation de sortie reconnue. Cette restriction SHALL s'appliquer à la session
+et au répertoire du contrat de job ; son absence SHALL préserver la corrélation
+instrumentée existante.
+
+#### Scenario: Commandes strictes dans le contexte du job
+- **WHEN** un job strict demande une permission avec le suffixe de sortie reconnu
+- **THEN** le contrôleur refuse la corrélation dans la session et le répertoire de ce job
+
+### Requirement: Neutralité et réveil automatique corrélé
+
+La demande SHALL rester indécise jusqu'à une décision HTTP explicite et corrélée de
+l'orchestrateur principal. En mode automatique, le contrôleur SHALL conserver son chemin
+existant de transmission structurée à la tâche orchestratrice persistante, de heartbeat
+lié à cette tâche et de notification locale persistante lorsque le réveil est
+indisponible. Une relance SHALL NOT créer, modifier ou consommer une décision ou une
+permission.
+
+#### Scenario: Neutralité et réveil automatique corrélé
+- **WHEN** un rappel automatique ne peut être transmis à la tâche persistante ni à son heartbeat
+- **THEN** le contrôleur conserve une notification locale sans créer ou consommer de décision ni de permission
+
+### Requirement: Statut du job et option de commandes strictes
+
+Le statut public du contrôleur SHALL résumer le job armé et son gate sans exposer le
+contenu du projet ni une décision CAB. Le champ facultatif `strictCommands` SHALL être
+booléen, valoir `false` par défaut et être conservé dans le contrat persistant et son
+état public. Le contrôleur SHALL refuser toute autre valeur avant d'armer le job.
+
+#### Scenario: Statut du job et option de commandes strictes
+- **WHEN** un client arme un job avec strictCommands non booléen
+- **THEN** le contrôleur refuse le contrat avant armement ; un contrat valide conserve son option et expose son gate sans contenu du projet
+
+### Requirement: Contextes de contrôleur isolés par RUN
+Le contrôleur MUST héberger plusieurs contextes de job isolés. Les routes /runs/<runId>/job/... et /runs/<runId>/decision/<requestId> MUST cibler un seul contexte. Une mutation sans cible ambiguë MUST être refusée. Une récupération MUST conserver le propriétaire du change et invalider les anciennes permissions.
+
+#### Scenario: Isolation concurrente
+- **WHEN** A possède une validation indécise et B termine
+- **THEN** le gate de B ne dépend pas du compteur métier de A

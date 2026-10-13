@@ -13,6 +13,8 @@ from pathlib import Path
 
 STATE_DIRECTORY = "cgpt-approval-bridge"
 INSTANCE_LOCK = "broker.instance.lock"
+REGISTRY_LOCK = "registry.instance.lock"
+VERSION = "1.0.0"
 
 
 def validate_directory(value):
@@ -54,10 +56,40 @@ def reset_directories(values):
                 raise RuntimeError("Un broker détient encore le verrou CAB ; purge refusée.") from exc
             locked.append((directory, handle))
 
+        # A stopped controller may still own durable changes: silence is not release.
+        preserved_locks = {directory: {INSTANCE_LOCK} for directory, _ in locked}
+        for directory, _ in locked:
+            registry_path = directory / "controller-runs.json"
+            if registry_path.exists() or (directory / REGISTRY_LOCK).exists():
+                descriptor = os.open(directory / REGISTRY_LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+                lock = stack.enter_context(os.fdopen(descriptor, "r+b"))
+                metadata = os.fstat(descriptor)
+                if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
+                    raise ValueError("Verrou de registre invalide ; purge refusée.")
+                try:
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError as exc:
+                    raise RuntimeError("Une autorité CAB est active ; purge refusée.") from exc
+                preserved_locks[directory].add(REGISTRY_LOCK)
+            if registry_path.exists() or registry_path.is_symlink():
+                descriptor = os.open(registry_path, os.O_RDONLY | os.O_NOFOLLOW)
+                source = stack.enter_context(os.fdopen(descriptor, "r", encoding="utf-8"))
+                if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+                    raise ValueError("Registre invalide ; purge refusée.")
+                try:
+                    registry = json.load(source)
+                except (ValueError, UnicodeError) as exc:
+                    raise ValueError("Registre illisible ; purge refusée.") from exc
+                if not isinstance(registry, dict) or registry.get("schemaVersion") != 1 or not isinstance(registry.get("runs"), list):
+                    raise ValueError("Registre invalide ; purge refusée.")
+                if any(not isinstance(run, dict) or run.get("state") not in ("DELIVERED", "ABANDONED")
+                       for run in registry["runs"]):
+                    raise RuntimeError("Des changes restent réservés ; purge globale refusée.")
+
         for directory, handle in locked:
             removed = 0
             for entry in directory.iterdir():
-                if entry.name == INSTANCE_LOCK:
+                if entry.name in preserved_locks[directory]:
                     continue
                 if entry.is_symlink() or not entry.is_dir():
                     entry.unlink()
@@ -69,7 +101,7 @@ def reset_directories(values):
             handle.truncate(0)
             handle.flush()
             os.fsync(handle.fileno())
-            remaining = [entry.name for entry in directory.iterdir() if entry.name != INSTANCE_LOCK]
+            remaining = [entry.name for entry in directory.iterdir() if entry.name not in preserved_locks[directory]]
             if remaining:
                 raise RuntimeError("L'état CAB a été recréé pendant la purge ; démarrage refusé.")
             reports.append({"directory": str(directory), "removed_entries": removed,

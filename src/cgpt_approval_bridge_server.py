@@ -52,6 +52,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import socket
 import sys
 import threading
@@ -67,7 +68,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "0.87.2"
+SERVER_VERSION = "1.0.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -2798,6 +2799,10 @@ def validate_controller_decision(
     ):
         return False
 
+    if item.get("run_id") and (decision.get("run_id") != item["run_id"] or
+            decision.get("reservation_version") != item.get("reservation_version")):
+        return False
+
     approval_id = item.get(
         "approval_id"
     )
@@ -3460,7 +3465,12 @@ def validate_existing_approval(
     session_id,
     directory,
     commands,
+    run_identity=None,
 ):
+    if bool(item.get("run_id")) != bool(run_identity):
+        return False
+    if run_identity and any(item.get(k) != v for k, v in run_identity.items()):
+        return False
     if item.get(
         "change_id"
     ) != change_id:
@@ -3543,6 +3553,24 @@ def do_propose(args):
         "directory",
         500,
     )
+
+    run_id = optional_str(args, "run_id", 100)
+    run_identity = {}
+    if run_id:
+        version = args.get("reservation_version")
+        resources = args.get("resources", [])
+        if (not session_id or not request_id or not approval_id or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", run_id)
+                or type(version) is not int or version < 1
+                or not isinstance(resources, list) or len(resources) > 256
+                or any(not isinstance(r, dict) or r.get("mode") not in ("read", "write")
+                       or not isinstance(r.get("key"), str) or not r["key"] or len(r["key"]) > 500
+                       for r in resources)):
+            raise ValidationError("identite RUN ou ressources invalides")
+        if commands and not resources:
+            raise ValidationError("ressources explicites requises pour une commande concurrente")
+        run_identity = {"run_id": run_id, "reservation_version": version, "resources": resources}
+    elif "reservation_version" in args or "resources" in args:
+        raise ValidationError("run_id requis pour la reservation")
 
     if bool(session_id) != bool(directory):
         raise ValidationError(
@@ -3679,6 +3707,7 @@ def do_propose(args):
                 session_id,
                 directory,
                 commands,
+                run_identity,
             ):
                 raise ValidationError(
                     "retry incompatible avec "
@@ -3738,6 +3767,7 @@ def do_propose(args):
             now = utc_now()
 
             item = {
+                **run_identity,
                 "approval_id": approval_id,
                 "requestId": request_id,
                 "legacy_requestIds": [],
@@ -7923,7 +7953,7 @@ def classify_readiness_status(health, human_required, auto_recovery_available):
     return "READY"
 
 
-def do_readiness():
+def do_readiness(args=None):
     """Expose un snapshot compact et stable pour /poc test et heartbeat."""
     health = do_health()
 
@@ -7954,7 +7984,7 @@ def do_readiness():
     if pending_count is None:
         pending_count = len(approvals)
 
-    return {
+    snapshot = {
         "schema_version": 1,
         "status": status,
         "ready": status == "READY",
@@ -7983,6 +8013,47 @@ def do_readiness():
         ),
         "checked_at": utc_now(),
     }
+
+    common = {"STORE_UNHEALTHY", "JOURNAL_UNHEALTHY", "JOURNAL_INTEGRITY_FAILURE",
+              "STORE_JOURNAL_DIVERGENCE", "WORKER_POOL_SATURATED", "CONTROLLER_UNREACHABLE"}
+    scoped_causes = {"NONE", "NOTIFICATION_LEASE_STUCK", "CONTROLLER_DECISION_PATH_STALLED",
+                     "DECISION_WAIT_WITHOUT_PROGRESS", "SESSION_STALLED", "SESSION_PROGRESS_DEGRADED"}
+    infrastructure_status = status if snapshot["root_cause"] not in scoped_causes else "READY"
+    by_run = {}
+    by_session = {}
+    path = store_path()
+    try:
+        with locked_store(path):
+            stored = load_store(path)["approvals"]
+            for approval_id, item in stored.items():
+                run_id = item.get("run_id")
+                session_id = item.get("session_id")
+                for key, groups in ((run_id, by_run), (session_id, by_session)):
+                    if not key:
+                        continue
+                    group = groups.setdefault(key, {"pending_count": 0, "stalled_count": 0})
+                    if item.get("status") == "PENDING":
+                        group["pending_count"] += 1
+                        if str(approvals.get(approval_id, {}).get("state", "")).startswith("STALLED_"):
+                            group["stalled_count"] += 1
+    except (StoreError, ValidationError, OSError):
+        infrastructure_status = "HUMAN_REQUIRED" if human_required else "BLOCKED"
+        status = infrastructure_status
+        snapshot.update(status=status, ready=False, root_cause="STORE_UNHEALTHY")
+    for group in list(by_run.values()) + list(by_session.values()):
+        group["status"] = "BLOCKED" if group["stalled_count"] else "READY"
+        group["root_cause"] = "RUN_APPROVAL_STALLED" if group["stalled_count"] else "NONE"
+    snapshot.update(infrastructure_status=infrastructure_status, by_run=by_run, by_session=by_session)
+    run_id = optional_str(args or {}, "run_id", 100)
+    if run_id:
+        group = by_run.get(run_id, {"pending_count": 0, "stalled_count": 0,
+                                   "status": "READY", "root_cause": "NONE"})
+        snapshot.update(group)
+        if infrastructure_status != "READY":
+            snapshot.update(status=status, root_cause=snapshot["root_cause"])
+        snapshot.update(run_id=run_id, ready=snapshot["status"] == "READY")
+    return snapshot
+
 
 def publish_readiness_to_controller():
     """Publie le snapshot readiness au controleur local."""
@@ -8256,6 +8327,11 @@ def start_background_reconciliation():
 
 
 APPROVAL_REQUEST_PROPERTIES = {
+    "run_id": {"type": "string"},
+    "reservation_version": {"type": "integer", "minimum": 1},
+    "resources": {"type": "array", "items": {"type": "object",
+        "properties": {"key": {"type": "string"}, "mode": {"enum": ["read", "write"]}},
+        "required": ["key", "mode"], "additionalProperties": False}},
     "change_id": {
         "type": "string",
     },
@@ -8412,7 +8488,7 @@ TOOLS = [
         ),
         "inputSchema": {
             "type": "object",
-            "properties": {},
+            "properties": {"run_id": {"type": "string"}},
         },
     },
     {
@@ -9078,7 +9154,7 @@ def handle_request(
             payload = do_health()
 
         elif name == "broker_readiness":
-            payload = do_readiness()
+            payload = do_readiness(args)
 
         elif name == "broker_remediation_registry":
             payload = do_remediation_registry(args)

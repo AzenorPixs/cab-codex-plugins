@@ -181,3 +181,13 @@ Utiliser des tableaux Markdown pour les comparaisons répétées. Pour les chemi
 ## Production de fichier
 
 Dans un cycle CAB, créer systématiquement `STATISTIQUES.md` dans le dossier réel de chaque évolution OpenSpec archivée, selon le protocole ci-dessus. Hors de ce cycle, si l'utilisateur demande un fichier, utiliser l'emplacement explicitement demandé. Respecter les autorisations du projet, UTF-8 et une fin de ligne Unix LF, puis vérifier qu'il existe exactement six titres de niveau 2.
+
+## Attribution concurrente CAB 1.0.0
+
+Identifier run_id, change_id, toutes les sessions natives et les bornes du
+change. Filtrer les événements, mandats, refus, commandes et permissions par
+RUN ; les mesures globales ne prouvent pas un effet dans ce RUN. Le quota de
+compte reste partagé et sa variation ne doit pas être répartie arbitrairement
+entre sessions. Publier un rapport par archive et vérifier ses six sections,
+UTF-8/LF et totaux avant la libération normale de la réservation. Une session
+SCM directe n'invoque pas cette compétence ni ses sondes.

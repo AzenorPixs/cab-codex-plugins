@@ -6,14 +6,13 @@ Cette capacité définit le cycle de validation CAB entre OpenCode et CGPT, sans
 ## Requirements
 
 ### Requirement: Demande corrélée et décision explicite
-CAB SHALL attribuer ou accepter un `requestId` stable pour chaque demande de
-validation et ne SHALL appliquer une décision que si son `requestId`, son
-`approval_id` et son `change_id` correspondent à la demande en attente. Le
-broker SHALL rechercher la décision contrôleur par le `requestId` métier.
-L'absence de décision SHALL conserver la demande dans un état non terminal et
-ne SHALL jamais être interprétée comme une approbation. Lorsqu'un contrôleur
-est configuré en mode manuel, l'absence de décision automatique SHALL
-conserver la demande PENDING jusqu'à la réception d'une décision corrélée.
+
+CAB SHALL attribuer ou accepter un `requestId` stable pour chaque demande de validation
+et ne SHALL appliquer une décision que si son `requestId`, son `approval_id` et son
+`change_id` correspondent à la demande en attente. Le broker SHALL rechercher la
+décision contrôleur par le `requestId` métier. L'absence de décision SHALL conserver la
+demande dans un état non terminal et ne SHALL jamais être interprétée comme une
+approbation.
 
 #### Scenario: Approbation corrélée
 - **WHEN** une demande PENDING reçoit une décision `approved` dont les identifiants correspondent à sa demande
@@ -53,3 +52,19 @@ décision, et ne SHALL jamais transmettre une permission OpenCode.
 #### Scenario: Décision disponible avant la relance
 - **WHEN** une décision corrélée devient disponible avant l'intervalle de relance
 - **THEN** le broker n'envoie pas de relance et applique seulement la décision conformément au cycle existant
+
+### Requirement: Attente manuelle de décision corrélée
+
+Lorsqu'un contrôleur est configuré en mode manuel, l'absence de décision automatique
+SHALL conserver la demande PENDING jusqu'à la réception d'une décision corrélée.
+
+#### Scenario: Attente manuelle de décision corrélée
+- **WHEN** le contrôleur est en mode manuel et aucune décision corrélée n'est disponible
+- **THEN** la demande demeure PENDING sans approbation implicite
+
+### Requirement: Identité du RUN concurrent
+En mode concurrent, chaque demande MUST inclure run_id, reservation_version et les ressources de commande. Le contrôleur MUST vérifier leur correspondance avec la réservation et la session native avant once. Les interfaces historiques MAY rester disponibles seulement dans un contexte unique.
+
+#### Scenario: Isolation concurrente
+- **WHEN** une demande porte une ancienne génération
+- **THEN** la permission est refusée sans effet

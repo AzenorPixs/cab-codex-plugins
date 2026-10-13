@@ -3,7 +3,7 @@
 Version : 0.5
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-10T13:22:51Z
+Début du relevé (UTC) : 2026-10-13T04:56:13Z
 Environnement d'exécution DIU : PROXMOX
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -60,7 +60,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # OpenCode
 
-  * 1.18.35
+  * 1.19.0
   * /home/devops/.opencode/bin/opencode
 
 
@@ -114,7 +114,7 @@ La détection ne vérifie pas le fonctionnement du mode headless.
 
 ## Chromium
 
-  * 154.0.8037.92
+  * 155.0.8059.39
   * /usr/bin/chromium
   * Mode headless : --headless
 

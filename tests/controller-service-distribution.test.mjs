@@ -44,8 +44,8 @@ test("la commande CAB installe sans activer, démarre et arrête explicitement",
     command,
     /systemctl --user stop cgpt-approval-bridge-supervisor\.service/
   );
-  assert.match(command, /POST \/job\/arm/);
-  assert.match(command, /POST \/job\/disarm/);
+  assert.match(command, /POST \/runs\/<run_id>\/job\/arm/);
+  assert.match(command, /POST \/runs\/<run_id>\/job\/disarm/);
 });
 
 test("distribue un superviseur utilisateur inactif par défaut", () => {
@@ -98,12 +98,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.87\.2$/m);
-  assert.match(manifest, /"version": "0\.87\.2\+codex\./);
-  assert.match(controller, /version: "0\.87\.2"/);
-  assert.match(supervisor, /const version = "0\.87\.2"/);
-  assert.match(broker, /SERVER_VERSION = "0\.87\.2"/);
-  assert.match(project, /^version = "0\.87\.2"$/m);
+  assert.match(command, /^version: 1\.0\.0$/m);
+  assert.match(manifest, /"version": "1\.0\.0\+codex\./);
+  assert.match(controller, /const version = "1\.0\.0"/);
+  assert.match(supervisor, /const version = "1\.0\.0"/);
+  assert.match(broker, /SERVER_VERSION = "1\.0\.0"/);
+  assert.match(project, /^version = "1\.0\.0"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -156,8 +156,8 @@ test("AGENTS renvoie au protocole local dédié avec ses contrats techniques", (
   assert.match(agents.replace(/\s+/g, " "), /Son absence est normale pour les autres projets/);
   assert.doesNotMatch(agents, /### Protocole de communication OpenCode ↔ CGPT via CAB/);
   const protocol = readFileSync(new URL(`../${reference[1]}`, import.meta.url), "utf8");
-  for (const endpoint of ["POST /job/arm", "POST /job/progress", "POST /job/recover",
-    "POST /job/terminal-gate", "POST /job/disarm", "GET /decision/<requestId>"]) {
+  for (const endpoint of ["POST /runs/<run_id>/job/arm", "POST /runs/<run_id>/job/progress", "POST /runs/<run_id>/job/recover",
+    "POST /runs/<run_id>/job/terminal-gate", "POST /runs/<run_id>/job/disarm", "GET /decision/<requestId>"]) {
     assert.ok(protocol.includes(endpoint), endpoint);
   }
   assert.match(protocol, /MCP stdio local/);
@@ -199,7 +199,7 @@ test("le protocole distribué protège la lecture seule et décrit la récupéra
     for (const tool of ["bash", "edit", "write", "apply_patch", "task", "skill"]) {
       assert.ok(protocol.includes(`"${tool}":false`));
     }
-    assert.match(protocol, /POST \/job\/recover/);
+    assert.match(protocol, /POST \/runs\/<run_id>\/job\/recover/);
     assert.match(protocol, /phase: "prepare"/);
     assert.match(protocol, /phase: "complete"/);
     assert.match(protocol, /permissions natives\n`ask`/);

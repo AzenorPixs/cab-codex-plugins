@@ -201,6 +201,13 @@ commande système, commande OpenSpec ou opération d’archivage est soumise par
 OpenCode comme mandat unitaire, puis exécutée seulement après une décision
 Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
 
+Le statut du superviseur publie le dernier jalon et le gate observés ainsi
+qu'un compteur persistant des tentatives de reprise, distinct de leur succès.
+Un ancien compteur absent reste inconnu ; un nouveau job commence à zéro.
+Le contrôleur refuse au démarrage un contrat persistant invalide, même si sa
+syntaxe JSON est correcte, sans réécrire le fichier ni perdre silencieusement
+le job. Les diagnostics distinguent lecture, syntaxe et contrat invalide.
+
 En cas de récupération sans effet non maîtrisé, l'orchestrateur peut remplacer
 la session par `POST /job/recover` (`prepare`, puis `complete`) après contrôles
 techniques et prévol CAB réservé. Le RUN reste ouvert ; le job, le périmètre et
@@ -393,7 +400,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.87.2`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.0.0`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -406,3 +413,19 @@ installations locales.
 - **BUILD.md** — installation, packaging et distribution ;
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
+
+## Plusieurs sessions CISMP — CAB 1.0.0
+
+Un seul OpenCode et un seul broker stdio peuvent servir plusieurs RUN dans
+un même contexte de répertoire. Chaque change est réservé atomiquement par
+son RUN ; les ressources et dépendances sont contrôlées avant mandat. Les
+jobs, décisions, permissions et récupérations restent séparés. La présence
+de plusieurs changes OpenSpec n'est plus une ambiguïté lorsque leur attribution
+est explicite. L'intégration commune reste exclusive et la livraison exige
+les validations, l'archive et son rapport.
+
+Consulter GET /runs puis utiliser les routes /runs/<runId>/... ; les anciens
+endpoints restent réservés au contexte historique unique. Lire
+ORCHESTRATED_CODING.md et la référence du skill approval-bridge avant activation.
+Le démarrage d'un second RUN ne purge pas le broker. CISM, CAISM et les prompts
+directs restent exclus. Les worktrees nécessitent une qualification distincte.
