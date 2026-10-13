@@ -4,6 +4,10 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## 1.0.0 — 2026-10-13
 
+- Schémas d'architecture fonctionnelle et technique détaillée de PROJECT.md
+  et README.md alignés sur les sessions parallèles, le broker unique, les
+  réservations, les contextes par RUN et la barrière d'intégration.
+
 - Plusieurs RUN CISMP dans un OpenCode et un broker stdio communs : réservation
   atomique des changes et intentions, ressources en lecture/écriture et dépendances.
 - Contextes de jobs, permissions once, décisions, générations, gates et reprises
