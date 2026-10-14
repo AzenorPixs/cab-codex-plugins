@@ -416,8 +416,7 @@ dernier jalon conservé, nouvelle session, `strictCommands` préservé et gate
 OPEN. Les anciennes autorisations exécutables sont invalidées et l'historique
 non secret est conservé. Le superviseur suit désormais la session transférée.
 Un échec conserve le gel ; la récupération ordinaire ne purge pas le RUN et
-n'invente aucun gate terminal. Un prévol divergent suit la procédure sans
-purge décrite dans
+n'invente aucun gate terminal. La seule exception de purge est définie dans
 « Prévol de récupération divergent dans la même session » ci-dessous.
 Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
 locale du prévol : si elles sont perdues, la récupération reste refusée et
@@ -451,11 +450,17 @@ Une décision `approved`, consommée ou une preuve incertaine interdit retry.
 Demander explicitement `POST /runs/<run_id>/job/recover` avec `phase: "retry"`, les mêmes
 `jobId`, `expectedSessionId`, `sessionId` candidate et `recoveryId`,
 `previousPreflightRequestId` égal à la réservation actuelle et un
-`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job.
+`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job pendant retry.
 Le contrôleur exige un refus natif `REJECTED` corrélé à la décision locale
 `rejected` non consommée, ou une erreur native MCP `-32602` avant enregistrement.
-Une erreur générique, un timeout, une commande ou un autre outil natif laisse
-le gel conservé et exige la réconciliation ou l'autorité indispensable.
+Depuis CAB 1.0.2, après timeout de `request_validation`, `poll_approval` ou
+`get_approval` sur le même `approval_id` peut prouver ce refus. Vérifier dans
+l'ordre natif `requestId`, `approval_id`, `session_id`, `directory`, `change_id`,
+`files` et `commands` ; toutes les demandes enregistrées doivent être refusées.
+Un `PENDING` corrélé reste non terminal ; aucune nouvelle demande n'est admise
+avant retry. Une erreur générique, un timeout seul, un polling divergent,
+une commande ou un autre outil natif laisse le gel conservé et exige la
+réconciliation ou l'autorité indispensable.
 
 Le contrôleur conserve les identifiants antérieurs et l'empreinte du préfixe
 des parties natives, sans contenu de message. Il vérifie ce préfixe à chaque
@@ -478,6 +483,15 @@ métier non secret, numéro, identifiants, horodatages, cause, arguments attendu
 et observés et références des preuves natives. Maintenir le suivi à la cadence
 existante sans boucle serrée. Reprendre au premier jalon non prouvé, sans
 rejouer les écritures validées ni les autorisations consommées.
+
+
+Cette conservation s'applique à retry et ne retire jamais l'autorité d'un
+arrêt ciblé explicitement demandé par le développeur. Un tel arrêt reste
+distinct : réconcilier les effets et demandes, obtenir le gate `BLOQUÉ`,
+désarmer uniquement le job concerné et libérer sa réservation avec preuves,
+sans purge ni suppression des historiques. Une nouvelle session ou un nouveau
+job exige une autorisation explicite de reprise ; ne fermer ni redémarrer
+OpenCode, le broker ou les services communs des autres RUN.
 
 ## Compactage coordonné et continuité
 

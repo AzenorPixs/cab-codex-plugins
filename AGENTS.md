@@ -242,6 +242,8 @@ Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimé
 * `openspec/config.yaml`
 * `openspec/changes/`
 * `openspec/specs/`
+* `openspec/specs/`
+* `PROMPTS/`
 
 ## 9. Sources du projet
 
@@ -335,6 +337,7 @@ openspec/config.yaml
 openspec/changes/
 openspec/specs/
 output/
+PROMPTS/
 reports/
 ```
 

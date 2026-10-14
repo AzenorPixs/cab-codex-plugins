@@ -276,6 +276,14 @@ Les mandats lecture seule désactivent explicitement les outils natifs et
 d'écriture dans le message OpenCode. Les opérations suivantes gardent leurs
 permissions natives et décisions CAB unitaires.
 
+Depuis 1.0.1, les jobs armés vérifient les règles natives avant admission,
+approbation et transmission de `once`. Une règle finale globale `ask` est
+requise pour le type `bash` ou `edit` concerné ; une preuve absente ou
+permissive est refusée. Pour réactiver les outils, utiliser `noReply`, rétablir
+`ask` par PATCH et le vérifier, puis générer sans nouveau champ `tools`.
+Ce garde ne modifie pas les permissions et exige leur stabilité pendant
+l'exécution. Le détail et les diagnostics sont dans `TECHNICAL.md`.
+
 `/cab stop` exige un gate terminal validé, arrête explicitement le superviseur
 puis le contrôleur et les ressources CAB qu'elle a créées, sans fermer OpenCode
 ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
@@ -302,6 +310,14 @@ prévol exact avant complete. Un timeout MCP seul conserve le polling de la mêm
 approbation. Effet inconnu ou preuve absente suspend la reprise. Le superviseur
 reste gelé jusqu'à complete ; OpenCode reste ouvert. Le remplacement initial
 prévu par CISMP et la purge avant un nouveau RUN restent inchangés.
+
+Depuis CAB 1.0.2, retry accepte aussi le REJECTED obtenu par poll_approval ou
+get_approval après timeout de request_validation, pour la même approbation,
+avec décision locale rejected non consommée et identités/opération exactes.
+Un timeout seul ou PENDING seul reste insuffisant ; chaque demande enregistrée
+doit avoir un refus terminal. Un arrêt ciblé explicitement demandé par le
+développeur reste distinct de retry : gate BLOQUÉ et réconciliation avant
+désarmement et libération, sans purge ni interruption des autres RUN.
 
 ## Organisation du dépôt
 terme
@@ -455,7 +471,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.0.0`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.0.2`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

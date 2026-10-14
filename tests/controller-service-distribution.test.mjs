@@ -12,6 +12,28 @@ const supervisorServicePath = new URL(
   import.meta.url
 );
 
+test("les briques distribuées publient la même version de base 1.0.2", () => {
+  const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
+    .match(/^version = "([^"]+)"$/m)[1];
+  assert.equal(version, "1.0.2");
+  const plugin = JSON.parse(readFileSync(
+    new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
+  assert.match(plugin.version, /^1\.0\.2\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.0\.2$/m);
+  for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
+    const root = new URL(directory, import.meta.url);
+    for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
+      const source = readFileSync(new URL(name, root), "utf8");
+      const versions = [...source.matchAll(/\b(?:VERSION|SERVER_VERSION|version)\s*[:=]\s*"([^"]+)"/g)];
+      assert.ok(versions.length, name);
+      for (const match of versions) assert.equal(match[1], version, name);
+    }
+  }
+  for (const path of [servicePath, supervisorServicePath]) {
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.0\.2 /m);
+  }
+});
+
 test("distribue une unité utilisateur inactive par défaut", () => {
   const service = readFileSync(servicePath, "utf8");
 
@@ -98,12 +120,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 1\.0\.0$/m);
-  assert.match(manifest, /"version": "1\.0\.0\+codex\./);
-  assert.match(controller, /const version = "1\.0\.0"/);
-  assert.match(supervisor, /const version = "1\.0\.0"/);
-  assert.match(broker, /SERVER_VERSION = "1\.0\.0"/);
-  assert.match(project, /^version = "1\.0\.0"$/m);
+  assert.match(command, /^version: 1\.0\.2$/m);
+  assert.match(manifest, /"version": "1\.0\.2\+codex\./);
+  assert.match(controller, /const version = "1\.0\.2"/);
+  assert.match(supervisor, /const version = "1\.0\.2"/);
+  assert.match(broker, /SERVER_VERSION = "1\.0\.2"/);
+  assert.match(project, /^version = "1\.0\.2"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -233,6 +255,19 @@ test("le protocole distribue des cadences indépendantes et une attente PLLM per
   }
 });
 
+test("la réactivation sûre est distribuée sans tools true pendant la génération", () => {
+  for (const path of [commandPath,
+    new URL("../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md", import.meta.url)]) {
+    const protocol = readFileSync(path, "utf8");
+    const section = protocol.slice(protocol.indexOf("## Réactivation sûre des outils — CAB 1.0.1"));
+    assert.match(section, /noReply: true/);
+    assert.match(section, /PATCH/);
+    assert.match(section, /Relire la session/);
+    assert.match(section, /message de génération sans champ `tools`/);
+    assert.match(section, /native-permission-ask-required/);
+  }
+});
+
 test("le prévol divergent conserve la candidate et le job dans le protocole distribué", () => {
   const sections = [];
   for (const path of [
@@ -250,7 +285,7 @@ test("le prévol divergent conserve la candidate et le job dans le protocole dis
     for (const invariant of ["conserver la session candidate", "phase: \"retry\"",
       "previousPreflightRequestId", "Ne pas réarmer, désarmer ou abandonner le job",
       "sans\nrejouer les écritures validées", "Le superviseur reste gelé",
-      "Une erreur générique, un timeout", "l'ancienne session révoquée"]) {
+      "Une erreur générique, un timeout seul", "l'ancienne session révoquée"]) {
       assert.ok(section.includes(invariant), `${path}: ${invariant}`);
     }
     assert.equal(source.includes("## Nouvelle session CAB après prévol de récupération divergent"), false);
@@ -285,4 +320,19 @@ test("les sondes statistiques n'arrêtent pas le travail pour attendre le créne
   ), "utf8");
   assert.match(stats, /retentée une seule fois immédiatement/);
   assert.match(stats, /relève manquée NE DOIT PAS être recréée rétroactivement/);
+});
+
+
+test("le refus par polling après timeout est distribué avec une sortie humaine explicite", () => {
+  for (const path of ["../ORCHESTRATED_CODING.md", "../.codex/commands/cab.md",
+    "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md"]) {
+    const source = readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
+    for (const clause of ["Depuis CAB 1.0.2", "`poll_approval` ou `get_approval`",
+      "Un `PENDING` corrélé reste non terminal", "toutes les demandes enregistrées doivent être refusées",
+      "Ne pas réarmer, désarmer ou abandonner le job pendant retry",
+      "arrêt ciblé explicitement demandé par le développeur", "obtenir le gate `BLOQUÉ`",
+      "sans purge ni suppression des historiques", "autorisation explicite de reprise"]) {
+      assert.ok(source.includes(clause), `${path}: ${clause}`);
+    }
+  }
 });
