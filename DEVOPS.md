@@ -3,8 +3,8 @@
 Version : 0.5
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-14T05:36:05Z
-Environnement d'exécution DIU : PHYSICAL
+Début du relevé (UTC) : 2026-10-14T18:23:58Z
+Environnement d'exécution DIU : PROXMOX
 
 Les sondes système concernent le contexte d'exécution DIU.
 Les outils DevOps sont interrogés avec les binaires indiqués dans leurs rubriques.
@@ -121,6 +121,6 @@ La détection ne vérifie pas le fonctionnement du mode headless.
 
 ## Firefox
 
-  * 153.4.0esr
+  * 153.5.0esr
   * /usr/bin/firefox
   * Mode headless : --headless
