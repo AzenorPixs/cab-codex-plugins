@@ -57,74 +57,115 @@ résolue ou déclarée comme blocage, sans réarchiver le change.
 ## Architecture
 
 ```text
-OpenCode
-   │ MCP stdio
+OpenCode unique : sessions A, B, … — un RUN par session
+   │ MCP stdio commun
    ▼
-CAB Broker
+Broker CAB unique — corrélation et readiness par RUN
    │ HTTP local
    ▼
-Contrôleur Codex ──► Codex App Server
+Contrôleur unique ──► contextes A, B, … ──► Codex / Codex App Server
+   │
+   └── Registre : réservations exclusives et intégration coordonnée
 
-OpenCode ── SSE HTTP direct ──► supervision CAB
+OpenCode ── SSE HTTP commun ──► superviseur unique ──► suivi par RUN
 ```
 
 Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Architecture technique détaillée
 
-Cette vue détaille les composants et les échanges du protocole CAB. Elle
-distingue le transport MCP, les interfaces HTTP locales, la décision Codex,
-la permission native OpenCode et la supervision du job.
+Cette vue détaille le profil concurrent CAB 1.0.0 : un processus OpenCode,
+un broker MCP stdio, un contrôleur et un superviseur communs, avec des
+contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
+s'applique aux autres RUN admis. Les contextes et la barrière sont des
+éléments internes, pas des services supplémentaires.
 
 ```mermaid
 flowchart TB
     D["Développeur"]
-    C["Codex — orchestrateur / validateur<br/>Commande /cab et skills CAB"]
+    C["Codex — orchestrateur / validateur<br/>Pilotage et décisions corrélés par RUN"]
 
-    subgraph OC["OpenCode"]
-        O["Agent de codage<br/>Session persistante"]
-        P["Permission native<br/>limitée à une opération"]
-        X["Exécution de l'opération<br/>puis rapport et preuves"]
-        O -->|"Demande de permission"| P
-        P -->|"Autorisation unique"| X
-        X -->|"Résultat"| O
+    subgraph OC["Un processus OpenCode — répertoire commun"]
+        subgraph RUN1["Session A — RUN A — change réservé A"]
+            O1["Agent de codage A"]
+            P1["Permission native A<br/>une opération : once"]
+            X1["Exécution A<br/>rapport et preuves"]
+            O1 -->|"Demande de permission"| P1
+            P1 -->|"Autorisation unique"| X1
+            X1 -->|"Résultat"| O1
+        end
+        subgraph RUN2["Session B — RUN B — change réservé B"]
+            O2["Agent de codage B"]
+            P2["Permission native B<br/>une opération : once"]
+            X2["Exécution B<br/>rapport et preuves"]
+            O2 -->|"Demande de permission"| P2
+            P2 -->|"Autorisation unique"| X2
+            X2 -->|"Résultat"| O2
+        end
+        M["Connexion MCP stdio commune<br/>demandes identifiées par RUN et session"]
+        F["Flux SSE commun<br/>événements natifs par session"]
+        O1 <--> M
+        O2 <--> M
+        O1 -.-> F
+        O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB"]
-        B["Broker MCP local<br/>Corrélation et readiness"]
-        E[("Approbations persistantes<br/>Journal et intégrité")]
-        T["Contrôleur Codex<br/>API HTTP locale"]
-        S["Superviseur durable<br/>Contrôle et reprise du job"]
-        J[("Contrat de job, jalons<br/>Gate terminal et état de supervision")]
-
+    subgraph CAB["Infrastructure CAB 1.0.0 partagée"]
+        B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
+        E[("Approbations persistantes<br/>journal et intégrité")]
+        subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
+            T["Routage et contrôle d'identité<br/>session, répertoire, RUN, change, génération"]
+            R[("Registre durable des réservations<br/>changes, intentions, ressources, dépendances<br/>écriture atomique et verrou flock")]
+            I["Barrière d'intégration exclusive<br/>jalons stables et quiescence de tous les RUN<br/>publication puis réconciliation de référence"]
+            T1["Contexte RUN A<br/>décisions, mandats, gate, récupération"]
+            T2["Contexte RUN B<br/>décisions, mandats, gate, récupération"]
+            T <-->|"Réserver, étendre, vérifier, libérer"| R
+            R <-->|"Propriétaire et version de référence"| I
+            T <-->|"Routes /runs/A/..."| T1
+            T <-->|"Routes /runs/B/..."| T2
+        end
+        subgraph SUP["Un superviseur durable"]
+            S["Répartition des événements SSE"]
+            S1["Suivi et reprise RUN A"]
+            S2["Suivi et reprise RUN B"]
+            S --> S1
+            S --> S2
+        end
+        J1[("États persistants RUN A<br/>job, jalons, gate et supervision")]
+        J2[("États persistants RUN B<br/>job, jalons, gate et supervision")]
         B <-->|"Persistance"| E
-        B <-->|"HTTP local : demande, décision, readiness"| T
-        T <-->|"Persistance du job"| J
-        S <-->|"Persistance de supervision"| J
-        S <-->|"HTTP : statut, job et gate"| T
+        B <-->|"HTTP : demande et décision corrélées"| T
+        T1 <-->|"Persistance"| J1
+        T2 <-->|"Persistance"| J2
+        S1 <-->|"Persistance"| J1
+        S2 <-->|"Persistance"| J2
+        S1 <-->|"HTTP : statut, progression, gate"| T
+        S2 <-->|"HTTP : statut, progression, gate"| T
     end
 
-    A["Codex App Server<br/>Session Codex de validation"]
+    A["Codex App Server — mode automatique<br/>validation isolée et corrélée par RUN"]
+    W[("Répertoire de projet partagé<br/>opérations limitées aux ressources réservées")]
 
-    D -->|"Objectif, périmètre et validations"| C
-    D -->|"Interaction directe"| O
-    C <-->|"HTTP : pilotage et rapports"| T
+    D -->|"Objectifs, périmètres et validations"| C
+    C <-->|"HTTP : registre et pilotage par RUN"| T
     C -->|"Mode manuel par défaut : décision explicite"| T
-
-    O <-->|"MCP stdio local : demande et réponse corrélées"| B
-    O -.->|"SSE HTTP direct : événements"| T
-    O -.->|"SSE HTTP direct : événements"| S
-    S -.->|"HTTP : reprise de la même session si admissible"| O
-
-    T -->|"HTTP : approved corrélé → réponse once"| P
-
-    T -.->|"Mode automatique : demande de validation"| A
-    A -.->|"Décision Codex structurée"| T
+    M <-->|"MCP stdio local"| B
+    F -.->|"SSE HTTP direct"| T
+    F -.->|"SSE HTTP direct"| S
+    S1 -.->|"Reprise de la session A si admissible"| O1
+    S2 -.->|"Reprise de la session B si admissible"| O2
+    T1 -->|"approved corrélé : once pour A"| P1
+    T2 -->|"approved corrélé : once pour B"| P2
+    T1 -.->|"Demande de validation automatique"| A
+    T2 -.->|"Demande de validation automatique"| A
+    A -.->|"Décision structurée corrélée"| T
+    X1 -->|"Ressources couvertes par A"| W
+    X2 -->|"Ressources couvertes par B"| W
 ```
 
 - **Un mandat = une opération** : un fichier ou une commande, avec
-  corrélation de `requestId`, `approval_id`, `change_id`, de la session et du
-  répertoire.
+  corrélation de `requestId`, `approval_id`, `change_id`, `run_id`,
+  `reservation_version`, de la session et du répertoire.
 - Le broker transporte et persiste ; **Codex décide**. Le contrôleur transmet
   l'approbation à la permission native correspondante avec une réponse
   `once`, consommable une seule fois.
@@ -138,11 +179,25 @@ flowchart TB
 - Le broker notifie le contrôleur sur `POST /validation/request` et récupère
   la décision sur `GET /decision/<requestId>`. La readiness est publiée
   séparément ; `READY` ne vaut jamais approbation.
+- Avant de travailler, chaque RUN réserve atomiquement son change, son
+  intention de sélection et ses ressources, après examen des dépendances.
+  Les lectures peuvent coexister ; un recouvrement impliquant une écriture
+  est refusé. Codex examine aussi les dépendances sémantiques.
+- Le contrôleur vérifie la couverture de chaque mandat et sa génération
+  avant de transmettre `once` à la permission native de la bonne session.
+  Les décisions, gates, reprises et checkpoints restent propres au RUN.
+- L'intégration attend des jalons stables et la quiescence de tous les RUN
+  réservés. Un seul RUN contrôle et publie l'état combiné ; les autres
+  suspendent leurs opérations puis réconcilient la nouvelle référence.
+  Une libération exige les contrôles et preuves applicables.
+- Ajouter un RUN ne purge ni ne reconnecte le broker. Les opérations
+  globales de cycle de vie exigent une réconciliation coordonnée.
 
 Les cylindres représentent les états persistants des composants, sans
 imposer un fichier ou un emplacement partagé. Les flèches en pointillés
 identifient les voies SSE, les reprises techniques et le chemin de décision
-du mode automatique.
+du mode automatique. La publication désigne l'intégration dans la référence
+commune du projet ; elle n'autorise pas un commit ou un déploiement.
 
 ## Ce que fournit CAB
 
@@ -201,6 +256,13 @@ commande système, commande OpenSpec ou opération d’archivage est soumise par
 OpenCode comme mandat unitaire, puis exécutée seulement après une décision
 Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
 
+Le statut du superviseur publie le dernier jalon et le gate observés ainsi
+qu'un compteur persistant des tentatives de reprise, distinct de leur succès.
+Un ancien compteur absent reste inconnu ; un nouveau job commence à zéro.
+Le contrôleur refuse au démarrage un contrat persistant invalide, même si sa
+syntaxe JSON est correcte, sans réécrire le fichier ni perdre silencieusement
+le job. Les diagnostics distinguent lecture, syntaxe et contrat invalide.
+
 En cas de récupération sans effet non maîtrisé, l'orchestrateur peut remplacer
 la session par `POST /job/recover` (`prepare`, puis `complete`) après contrôles
 techniques et prévol CAB réservé. Le RUN reste ouvert ; le job, le périmètre et
@@ -213,6 +275,14 @@ après redémarrage conserve le gel sans fabriquer de réussite. Voir
 Les mandats lecture seule désactivent explicitement les outils natifs et
 d'écriture dans le message OpenCode. Les opérations suivantes gardent leurs
 permissions natives et décisions CAB unitaires.
+
+Depuis 1.0.1, les jobs armés vérifient les règles natives avant admission,
+approbation et transmission de `once`. Une règle finale globale `ask` est
+requise pour le type `bash` ou `edit` concerné ; une preuve absente ou
+permissive est refusée. Pour réactiver les outils, utiliser `noReply`, rétablir
+`ask` par PATCH et le vérifier, puis générer sans nouveau champ `tools`.
+Ce garde ne modifie pas les permissions et exige leur stabilité pendant
+l'exécution. Le détail et les diagnostics sont dans `TECHNICAL.md`.
 
 `/cab stop` exige un gate terminal validé, arrête explicitement le superviseur
 puis le contrôleur et les ressources CAB qu'elle a créées, sans fermer OpenCode
@@ -393,7 +463,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `0.87.2`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.0.1`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -406,3 +476,19 @@ installations locales.
 - **BUILD.md** — installation, packaging et distribution ;
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
+
+## Plusieurs sessions CISMP — CAB 1.0.0
+
+Un seul OpenCode et un seul broker stdio peuvent servir plusieurs RUN dans
+un même contexte de répertoire. Chaque change est réservé atomiquement par
+son RUN ; les ressources et dépendances sont contrôlées avant mandat. Les
+jobs, décisions, permissions et récupérations restent séparés. La présence
+de plusieurs changes OpenSpec n'est plus une ambiguïté lorsque leur attribution
+est explicite. L'intégration commune reste exclusive et la livraison exige
+les validations, l'archive et son rapport.
+
+Consulter GET /runs puis utiliser les routes /runs/<runId>/... ; les anciens
+endpoints restent réservés au contexte historique unique. Lire
+ORCHESTRATED_CODING.md et la référence du skill approval-bridge avant activation.
+Le démarrage d'un second RUN ne purge pas le broker. CISM, CAISM et les prompts
+directs restent exclus. Les worktrees nécessitent une qualification distincte.

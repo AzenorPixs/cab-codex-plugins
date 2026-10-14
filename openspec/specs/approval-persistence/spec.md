@@ -9,8 +9,8 @@ Cette capacité garantit que les états d'approbation et leur historique survive
 CAB SHALL enregistrer l'état courant des approbations dans un magasin persistant
 avant de confirmer une transition métier. Le magasin SHALL garantir
 l'exclusivité d'une instance pour un même espace persistant. Cette persistance
-SHALL couvrir le RUN et sa reprise après interruption. Au démarrage d'une
-nouvelle session CAB, l'orchestrateur SHALL purger les anciens états selon le
+SHALL couvrir le RUN et sa reprise après interruption. Lors d'une
+réinitialisation globale exclusive CAB, l'orchestrateur SHALL purger les anciens états selon le
 contrat de démarrage ; aucune trace ni décision de la session précédente SHALL
 être restaurée automatiquement.
 
@@ -19,7 +19,7 @@ contrat de démarrage ; aucune trace ni décision de la session précédente SHA
 - **THEN** la demande reste récupérable avec le même identifiant et le même état métier
 
 #### Scenario: Nouvelle session CAB
-- **WHEN** l'orchestrateur démarre une nouvelle session après l'arrêt des ressources de l'ancienne
+- **WHEN** l'orchestrateur démarre une réinitialisation globale exclusive après libération et arrêt des ressources de tous les RUN
 - **THEN** les anciens magasin, journal, checkpoints et états de supervision sont purgés ensemble
 - **AND** aucune ancienne demande, décision ou trace de codage n'est restaurée
 
@@ -38,13 +38,13 @@ CAB SHALL seulement réparer automatiquement une divergence technique non ambigu
 - **THEN** CAB ne crée aucune décision et exige une intervention humaine
 
 ### Requirement: Recherches indexées pendant la récupération initiale
-CAB SHALL construire un index temporaire des couples `(approval_id, event_type)`
-depuis une seule lecture initiale du journal pour les recherches de présence
-de la première boucle de réparation après un arrêt non propre. CAB SHALL
-préserver les validations d'identifiants, les écritures durables, les contrôles
-de cohérence et d'intégrité, les verrous et les règles de reprise existants.
-CAB SHALL NOT conserver cet index dans un cache global ou le réutiliser après
-cette boucle. Une recherche sans index SHALL conserver son comportement actuel.
+
+CAB SHALL construire un index temporaire des couples `(approval_id, event_type)` depuis
+une seule lecture initiale du journal pour les recherches de présence de la première
+boucle de réparation après un arrêt non propre. CAB SHALL préserver les validations
+d'identifiants, les écritures durables, les contrôles de cohérence et d'intégrité, les
+verrous et les règles de reprise existants. CAB SHALL NOT conserver cet index dans un
+cache global ou le réutiliser après cette boucle.
 
 #### Scenario: Journal déjà cohérent
 - **WHEN** le broker reprend après un arrêt non propre et les événements de création et terminaux des approbations existent déjà
@@ -65,16 +65,12 @@ cette boucle. Une recherche sans index SHALL conserver son comportement actuel.
 - **THEN** CAB conserve les contrôles existants et exige HUMAN_REQUIRED sans inventer de décision métier
 
 ### Requirement: Recherches indexées pendant la liste des approbations
-CAB SHALL construire un index temporaire des couples `(approval_id, event_type)`
-depuis une seule lecture initiale du journal avant la boucle de réparation de
-chaque appel de liste portant sur un magasin non vide. CAB SHALL utiliser cet
-index pour les recherches de présence de cette boucle, y compris les éléments
-exclus du résultat par le filtre ou la limite. CAB SHALL préserver les verrous,
-les validations d'arguments et d'identifiants, les expirations sauvegardées avant
-journalisation, les append durables et leurs contrôles existants, la propagation
-des erreurs, le tri, le compte total, le filtre et la limite. CAB SHALL NOT
-conserver l'index après l'appel ou le réutiliser dans un autre appel. Les
-recherches sans index SHALL conserver leur comportement existant.
+
+CAB SHALL construire un index temporaire des couples `(approval_id, event_type)` depuis
+une seule lecture initiale du journal avant la boucle de réparation de chaque appel de
+liste portant sur un magasin non vide. CAB SHALL utiliser cet index pour les recherches
+de présence de cette boucle, y compris les éléments exclus du résultat par le filtre ou
+la limite.
 
 #### Scenario: Journal cohérent et résultat filtré
 - **WHEN** un appel de liste rencontre un magasin non vide et un journal cohérent
@@ -114,8 +110,35 @@ pendant la purge ; ses anciennes métadonnées SHALL être supprimées.
 
 #### Scenario: Journal orphelin ou fichier de conflit
 - **WHEN** l'ancien état CAB contient un journal incohérent ou des fichiers sync-conflict
-- **THEN** la nouvelle session purge l'intégralité de cet état sans tenter de le réparer ou de rejouer ses décisions
+- **THEN** la réinitialisation globale exclusive purge l'intégralité de cet état sans tenter de le réparer ou de rejouer ses décisions
 
 #### Scenario: Fichier extérieur référencé par un lien interne
 - **WHEN** l'espace CAB contient un lien symbolique vers un fichier extérieur
 - **THEN** la purge supprime le lien sans lire ni supprimer sa cible
+
+### Requirement: Recherches sans index après récupération
+
+Une recherche sans index SHALL conserver son comportement actuel.
+
+#### Scenario: Recherches sans index après récupération
+- **WHEN** une recherche est exécutée sans index temporaire
+- **THEN** elle conserve son comportement antérieur
+
+### Requirement: Garanties conservées par la liste indexée
+
+CAB SHALL préserver les verrous, les validations d'arguments et d'identifiants, les
+expirations sauvegardées avant journalisation, les append durables et leurs contrôles
+existants, la propagation des erreurs, le tri, le compte total, le filtre et la limite.
+CAB SHALL NOT conserver l'index après l'appel ou le réutiliser dans un autre appel. Les
+recherches sans index SHALL conserver leur comportement existant.
+
+#### Scenario: Garanties conservées par la liste indexée
+- **WHEN** deux appels successifs de liste réparent un événement manquant
+- **THEN** chaque appel utilise son propre index et conserve verrous, expirations, erreurs, tri, total, filtre et limite
+
+### Requirement: Persistance partagée des RUN concurrents
+Le démarrage ou la clôture d’un RUN concurrent MUST conserver le magasin, le journal et les décisions des autres RUN. La purge globale MUST être refusée tant qu’une réservation active existe. Le registre MUST conserver les requestId déjà admis après crash sans rejouer leur permission.
+
+#### Scenario: Isolation concurrente
+- **WHEN** un deuxième RUN rejoint le broker
+- **THEN** les preuves existantes restent intactes

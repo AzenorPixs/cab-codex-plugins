@@ -19,6 +19,28 @@ spec.loader.exec_module(reset)
 
 
 class SessionResetTest(unittest.TestCase):
+    def test_concurrent_reservation_survives_stopped_processes(self):
+        registry = self.state / "controller-runs.json"
+        registry.write_text(json.dumps({"schemaVersion": 1, "runs": [{"state": "RESERVED"}]}))
+        source = self.state / "approvals.json"
+        source.write_text("preserved")
+        with self.assertRaisesRegex(RuntimeError, "réservés"):
+            reset.reset_directories([str(self.state)])
+        self.assertEqual(source.read_text(), "preserved")
+        self.assertEqual(json.loads(registry.read_text())["runs"][0]["state"], "RESERVED")
+
+    def test_concurrent_registry_authority_and_malformed_state_refuse_purge(self):
+        registry = self.state / "controller-runs.json"
+        registry.write_text("broken")
+        with self.assertRaisesRegex(ValueError, "illisible"):
+            reset.reset_directories([str(self.state)])
+        registry.write_text(json.dumps({"schemaVersion": 1, "runs": []}))
+        with (self.state / reset.REGISTRY_LOCK).open("r+b") as handle:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with self.assertRaisesRegex(RuntimeError, "autorité"):
+                reset.reset_directories([str(self.state)])
+        self.assertTrue(registry.is_file())
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix="cab-reset-test-", dir=ROOT)
         self.addCleanup(self.temporary.cleanup)
@@ -204,7 +226,7 @@ class SessionResetTest(unittest.TestCase):
                 process.communicate()
                 raise
         self.assertEqual(process.returncode, 0, errors)
-        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "0.87.2")
+        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "1.0.1")
         readiness = json.loads(replies[2]["result"]["content"][0]["text"])
         self.assertEqual(readiness["pending_count"], 0)
         self.assertEqual(readiness["root_cause"], "CONTROLLER_UNREACHABLE")

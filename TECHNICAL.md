@@ -20,6 +20,12 @@ CAB/
 │   ├── skills/coding-session-statistics/SKILL.md
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-job-context.mjs
+│       ├── cgpt-approval-bridge-runs.mjs
+│       ├── cgpt-approval-bridge-registry-lock.py
+│       ├── cgpt-approval-bridge-supervisor.mjs
+│       ├── cgpt-approval-bridge-supervisor-context.mjs
+│       ├── cgpt-approval-bridge-prompts.py
 │       ├── cgpt-approval-bridge-reset.py
 │       ├── cgpt-approval-bridge-healthcheck.mjs
 │       └── cgpt-approval-bridge-opencode-sse-client.mjs
@@ -37,7 +43,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `0.87.2` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.0.0` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -175,6 +181,14 @@ Le fichier reste intact ; aucune réparation ou réinitialisation automatique
 n'est effectuée. Les contrats valides, leurs jalons, leur gate et leurs
 métadonnées de récupération conservent leur comportement de restauration.
 
+Un JSON syntaxiquement valide est également contrôlé comme contrat : racine
+objet non nulle et non tableau, identités, répertoire absolu, critères et types
+persistés attendus. Une racine scalaire, un contrat incomplet ou un type
+incompatible refuse le démarrage avec le diagnostic distinct « contrat
+invalide ». Les champs historiques facultatifs et les extensions compatibles
+restent acceptés ; le chargement ne réinitialise pas les dates, jalons, gate,
+récupérations ou sessions révoquées et ne réécrit pas le fichier.
+
 Le plugin distribue les modèles de services utilisateur
 `cgpt-approval-bridge-controller.service` et
 `cgpt-approval-bridge-supervisor.service`. `/cab start` installe ou actualise
@@ -211,7 +225,7 @@ instrumentation de sortie. Cette option est persistée et exposée par
 
 La récupération explicite `POST /job/recover` remplace une session dans le
 même RUN, sans utiliser `/job/arm` ni désarmer le job. Son corps porte `phase`
-(`prepare`, `retry` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
+(`prepare`, `retry`, `reconcile` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
 `recoveryId` et `preflightRequestId`. prepare contrôle le contexte OpenCode,
 MCP, l'inactivité des deux sessions et l'absence de mandat indécis ou de
 permission non résolue ; il persiste le gel et invalide les autorisations
@@ -262,11 +276,60 @@ candidate, sans concurrence ni rejeu du travail prouvé. Le checkpoint métier
 conserve les tentatives et leurs références natives. Une preuve locale perdue
 après redémarrage n'est pas recréée implicitement. OpenCode reste ouvert.
 
+### Réconciliation humaine du prévol exécuté sans once
+
+La phase distincte `reconcile` traite uniquement un prévol `/usr/bin/true`
+approuvé et exécuté sous `tools.bash=true`, sans permission native `once`.
+Elle exige `developerAuthorization`, référence non secrète de l'accord humain
+spécifique, les identités de récupération conservées, `previousPreflightRequestId`
+et un `preflightRequestId` neuf. Les préconditions techniques restent requises.
+La règle finale de permission `bash` de la candidate doit être `ask` avec
+pattern `*`. Le message natif parent doit prouver `tools.bash=true`, la réponse
+MCP doit être APPROVED corrélée avec reviewer CGPT, et la seule commande exacte
+doit être terminée exit 0 après cette réponse, puis READY sans attente.
+
+Toute consommation locale connue, autre outil, commande divergente ou preuve
+absente refuse cette réconciliation. L'ancienne tentative reste invalide :
+`EXECUTED_WITHOUT_NATIVE_ONCE`, référence d'autorisation, date, identifiants et
+empreinte native sont persistés. Sa décision ne change pas ; son autorisation
+exécutable locale est invalidée seulement après persistance. Après redémarrage
+coordonné, les mêmes preuves natives et l'accord humain permettent de conserver
+cette frontière sans reconstruire la décision locale perdue. Le nouveau prévol
+exige sa propre décision et consommation `once` avant `complete`. Le `retry`
+ordinaire n'est pas assoupli.
+
+OpenCode 1.19.0 transforme `tools.bash=true` en permission native `allow`.
+Pour réactiver un outil, envoyer le message de cadrage avec `noReply`, rétablir
+ensuite explicitement les permissions `ask` par PATCH de session, les relire,
+puis lancer le message exécutable sans champ `tools`. Ne pas utiliser `true`
+pour réactiver Bash dans un message qui déclenche immédiatement la génération.
+
 Pour les mandats lecture seule, le protocole distribué désactive explicitement
 bash, edit, write, apply_patch, task et skill via le champ tools du message.
 Un mandat exécutable réactive seulement ses outils nécessaires avec permissions
 natives ask et décision CAB unitaire. Ce verrou ne modifie pas la configuration
 persistante OpenCode.
+
+### Garde des permissions natives — CAB 1.0.1
+
+Pour un job armé, l'admission d'une validation exécutable, l'enregistrement
+d'une décision `approved` manuelle ou automatique et la transmission native
+de `once` vérifient par HTTP la session, son répertoire et ses règles. La
+dernière règle couvrant le type `bash` ou `edit` doit avoir pattern `*` et
+action `ask`, y compris lorsqu'un nom de permission contient des jokers.
+Une règle spécifique en dernière position est refusée de façon conservatrice.
+La candidate est également contrôlée pendant prepare, retry, reconcile et
+complete. Une transition ou décision concurrente est recontrôlée après
+chaque attente avant mutation ; un refus explicite reste possible sous allow.
+
+Les diagnostics sont `native-permission-ask-required`,
+`native-permission-control-unavailable`, `native-permission-context-divergent`
+et `preflight-native-ask-required` pour la candidate. Le contrôle HTTP est
+borné à dix secondes. Il n'écrit pas de permission, ne consomme pas de mandat
+en cas d'échec et préserve les usages historiques sans job armé.
+La réactivation suit `noReply`, PATCH `ask`, lecture native puis génération
+sans nouveau champ `tools`. CAB ne peut rendre une modification externe des
+règles atomique avec l'exécution native ; leur stabilité reste requise.
 
 Le superviseur écoute par défaut sur `127.0.0.1:8789`. Il conserve son état
 dans `.opencode/state/cgpt-approval-bridge/`, observe le contrat de job et la
@@ -282,6 +345,19 @@ repoussent pas la reprise. Un JSON SSE invalide reste observable sans contenu
 brut dans `lastEventError`, sans actualiser l'activité. Un changement de job,
 session ou répertoire invalide l'ancienne horloge ; les états déjà enregistrés
 restent lisibles sans migration. Le gel de récupération reste prioritaire.
+
+Le statut public du superviseur expose `lastProvenMilestone` et `terminalGate`
+depuis le dernier contrat observé ; ils sont indisponibles sans job armé.
+`lastReconciliationAt` et la cause courante distinguent une observation passée
+d'une réconciliation échouée. `resumeAttemptCount` compte les émissions de
+reprise du job, séparément du résultat de `lastResumeAttempt`. L'incrément
+est persisté avant émission ; un échec de cette persistance interdit la
+requête et publie `resume-persistence-failed`. Un refus ou une préparation
+abandonnée avant émission ne compte pas, contrairement à un échec réseau
+après émission. Le compteur est conservé au redémarrage et lors du transfert
+de session du même job ; un autre job commence à zéro. Un ancien état sans
+compteur publie `null` tant que ce job reste surveillé, sans reconstruction
+de son historique. Aucun paramètre de configuration supplémentaire n'est requis.
 
 ## 8. Supervision OpenCode
 
@@ -531,3 +607,51 @@ motivées. Le broker et le contrôleur ne rédigent ni n'approuvent le rapport.
 ## 18. Secrets
 
 Les clés HMAC et autres secrets doivent être injectés par l'environnement et rester hors Git, des journaux, des diagnostics et des sorties utilisateur.
+
+## Contextes concurrents 1.0.0
+
+Le contrôleur importe cgpt-approval-bridge-job-context.mjs : chaque contexte
+possède ses décisions, validations, gate et récupération. Le registre
+cgpt-approval-bridge-runs.mjs persiste controller-runs.json avec remplacement
+synchronisé et un verrou flock tenu par cgpt-approval-bridge-registry-lock.py.
+L'état de job est sous runs/<runId>/<contextId>/ ; une extension ou récupération
+incrémente version sans changer contextId. Les requestId admis restent inscrits
+après redémarrage ; sans preuve restaurable, une ancienne demande est refusée.
+
+GET /runs expose les propriétaires. POST /runs/reserve prend runId, ownerId,
+sessionId, directory, changeId, selectionKey, resources et dependsOn.
+Les routes /runs/<runId>/job/... et /runs/<runId>/decision/<requestId> isolent
+les jobs. /extend, /integration et /release contrôlent version et quiescence.
+Une libération delivered=true exige gate TERMINÉ, désarmement, contrôle natif
+et références de preuves examinées par Codex. CAB ne lit pas le projet pour
+valider le rapport à la place de l'orchestrateur.
+
+request_validation conserve ses champs historiques et ajoute run_id,
+reservation_version et resources de commande. broker_readiness accepte run_id
+et publie by_run, by_session et infrastructure_status. Les vues ciblées
+n'absorbent pas le pending_count métier des autres RUN. Le superviseur utilise
+cgpt-approval-bridge-supervisor-context.mjs et un flux SSE commun, en conservant
+activité et reprise par RUN. Une mutation historique ambiguë reçoit HTTP 409.
+
+Les clés file: sont canoniques, sans traversal ni sortie par lien symbolique.
+Les répertoires couvrent leurs descendants. Les ressources read/read peuvent
+coexister ; les recouvrements impliquant write sont refusés. Les effets shell
+sont décrits par un manifeste examiné par Codex, sans analyse implicite du shell.
+Les dépendances historiques hors registre doivent être prouvées par Codex.
+
+Le healthcheck est diagnostic et ne redémarre aucun service. Toute action
+de cycle de vie exige une réconciliation coordonnée des réservations. Une
+purge refuse un registre RESERVED ou invalide même après arrêt des processus.
+Le protocole et les exemples complets sont dans la référence concurrent-runs.md
+embarquée. Aucune variable supplémentaire n'est requise pour le profil commun.
+
+Dans le répertoire partagé, POST /runs/<runId>/ready déclare un jalon stable
+avec version et evidence après validation locale. /integration attend la
+stabilité et la quiescence des RUN réservés, suspend leurs nouvelles opérations
+et admet project:* en lecture pour les contrôles globaux du propriétaire.
+La libération précise published et evidence et incrémente referenceVersion.
+Les autres RUN utilisent /reconcile avec version, referenceVersion et preuves
+après réexamen de la base et des validations affectées. Le nouveau numéro de
+réservation invalide les anciens mandats. Une réservation avec écritures ne
+peut être livrée sans publication sous cette barrière. Les validations globales
+portent sur l'état combiné des changes au jalon stable.

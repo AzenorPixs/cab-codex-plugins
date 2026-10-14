@@ -173,3 +173,51 @@ test("refuse une erreur de lecture sans la traiter comme ENOENT", async (context
   assert.match(output, /Restauration du contrat de job impossible : lecture impossible/);
   assert.equal(readFileSync(witness, "utf8"), "unchanged");
 });
+
+for (const value of [null, false, 42, "synthetic-private-marker", [], {},
+  { jobId: "synthetic-private-marker" }]) {
+  test(`refuse une racine ou un contrat invalide : ${JSON.stringify(value)}`, async (context) => {
+    const h = await fixture(context);
+    const content = JSON.stringify(value);
+    writeFileSync(h.jobPath, content);
+    h.start();
+    const output = await h.exit();
+    assert.match(output, /Restauration du contrat de job impossible : contrat invalide/);
+    assert.equal(output.includes("synthetic-private-marker"), false);
+    assert.equal(readFileSync(h.jobPath, "utf8"), content);
+  });
+}
+
+test("restaure le format minimal historique sans réécrire ses champs facultatifs", async (context) => {
+  const h = await fixture(context);
+  const contract = { jobId: "job-legacy", sessionId: "ses_legacy", directory: h.directory,
+    criteria: [], changeId: null, armed: false, extension: { witness: "preserved" } };
+  const content = JSON.stringify(contract);
+  writeFileSync(h.jobPath, content);
+  h.start();
+  const restored = await h.job();
+  assert.equal(restored.jobId, contract.jobId);
+  assert.equal(restored.armed, false);
+  assert.equal(restored.strictCommands, false);
+  assert.equal(restored.terminalGate.status, "OPEN");
+  assert.equal(readFileSync(h.jobPath, "utf8"), content);
+});
+
+for (const invalidFields of [
+  { directory: "relative" }, { criteria: [42] }, { armed: "true" },
+  { changeId: 42 }, { strictCommands: "false" }, { terminalGate: [] },
+  { terminalGate: { status: "invented" } }, { revokedSessions: [42] },
+  { recovery: [] }, { recoveryHistory: [null] }, { lastProvenMilestone: 42 },
+  { recovery: { sessionId: 42 } }, { recovery: { attempts: {} } },
+  { recovery: { attempts: [{}] } }, { recovery: { invalidatedRequestIds: [42] } },
+]) {
+  test(`refuse les types persistés invalides : ${JSON.stringify(invalidFields)}`, async (context) => {
+    const h = await fixture(context);
+    const content = JSON.stringify({ jobId: "job-invalid", sessionId: "ses_invalid",
+      directory: h.directory, criteria: [], armed: true, ...invalidFields });
+    writeFileSync(h.jobPath, content);
+    h.start();
+    assert.match(await h.exit(), /contrat invalide/);
+    assert.equal(readFileSync(h.jobPath, "utf8"), content);
+  });
+}
