@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.0.0
+version: 1.0.2
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -492,11 +492,17 @@ Une décision `approved`, consommée ou une preuve incertaine interdit retry.
 Demander explicitement `POST /runs/<run_id>/job/recover` avec `phase: "retry"`, les mêmes
 `jobId`, `expectedSessionId`, `sessionId` candidate et `recoveryId`,
 `previousPreflightRequestId` égal à la réservation actuelle et un
-`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job.
+`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job pendant retry.
 Le contrôleur exige un refus natif `REJECTED` corrélé à la décision locale
 `rejected` non consommée, ou une erreur native MCP `-32602` avant enregistrement.
-Une erreur générique, un timeout, une commande ou un autre outil natif laisse
-le gel conservé et exige la réconciliation ou l'autorité indispensable.
+Depuis CAB 1.0.2, après timeout de `request_validation`, `poll_approval` ou
+`get_approval` sur le même `approval_id` peut prouver ce refus. Vérifier dans
+l'ordre natif `requestId`, `approval_id`, `session_id`, `directory`, `change_id`,
+`files` et `commands` ; toutes les demandes enregistrées doivent être refusées.
+Un `PENDING` corrélé reste non terminal ; aucune nouvelle demande n'est admise
+avant retry. Une erreur générique, un timeout seul, un polling divergent,
+une commande ou un autre outil natif laisse le gel conservé et exige la
+réconciliation ou l'autorité indispensable.
 
 Le contrôleur conserve les identifiants antérieurs et l'empreinte du préfixe
 des parties natives, sans contenu de message. Il vérifie ce préfixe à chaque
@@ -520,6 +526,15 @@ et observés et références des preuves natives. Maintenir le suivi à la caden
 existante sans boucle serrée. Reprendre au premier jalon non prouvé, sans
 rejouer les écritures validées ni les autorisations consommées.
 
+
+Cette conservation s'applique à retry et ne retire jamais l'autorité d'un
+arrêt ciblé explicitement demandé par le développeur. Un tel arrêt reste
+distinct : réconcilier les effets et demandes, obtenir le gate `BLOQUÉ`,
+désarmer uniquement le job concerné et libérer sa réservation avec preuves,
+sans purge ni suppression des historiques. Une nouvelle session ou un nouveau
+job exige une autorisation explicite de reprise ; ne fermer ni redémarrer
+OpenCode, le broker ou les services communs des autres RUN.
+
 ## Mandats d'inventaire ou d'analyse en lecture seule
 
 Dans le corps de messagerie OpenCode, désactiver explicitement les outils :
@@ -533,3 +548,27 @@ Conserver seulement les outils de lecture et recherche autorisés. Le texte
 OpenCode n'est modifiée. Au mandat exécutable suivant, réactiver explicitement
 les seuls outils nécessaires ; leurs permissions natives restent `ask` et
 chaque opération conserve son mandat CAB unitaire, sans autorisation générale.
+
+## Réactivation sûre des outils — CAB 1.0.1
+
+OpenCode peut convertir `tools: true` en permission native `allow`. Avant
+un mandat exécutable, attendre l'inactivité de la session ciblée, réactiver
+uniquement les outils nécessaires dans un message avec `noReply: true`, puis
+rétablir les règles `ask` par PATCH de cette seule session. Relire la session
+et vérifier pour chaque type natif nécessaire (`bash` ou `edit`) une dernière
+règle applicable de pattern `*` et d'action `ask`, y compris les noms à jokers.
+Une règle spécifique ultérieure ou une preuve absente suspend le mandat.
+
+Ensuite seulement, envoyer le message de génération sans champ `tools` qui
+réécrirait ces règles. Un `tools: true` dans ce message peut annuler le PATCH.
+La séquence `noReply`, PATCH, lecture native, génération est requise aussi
+pour le prévol de récupération. Elle ne constitue aucune approbation CAB.
+
+Pour les jobs armés, le contrôleur vérifie les règles avant admission et avant
+une décision `approved`, ainsi qu'avant transmission de `once`. Les refus
+`native-permission-ask-required`, `native-permission-control-unavailable` et
+`native-permission-context-divergent` imposent une réconciliation. prepare
+refuse une candidate sans Bash `ask` par `preflight-native-ask-required`.
+Ces contrôles ne modifient aucune permission ; les règles doivent rester
+stables pendant le mandat. Une modification externe après contrôle n'est
+pas atomique avec l'exécution native et reste hors garantie du contrôleur.

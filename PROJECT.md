@@ -294,6 +294,14 @@ manquante suspend la reprise ; OpenCode reste ouvert.
 Les mandats lecture seule désactivent les outils natifs et d'écriture via
 l'API de messagerie, plutôt que de dépendre du seul texte du mandat.
 
+Depuis CAB 1.0.2, retry accepte aussi le REJECTED obtenu par poll_approval ou
+get_approval après timeout de request_validation, pour la même approbation,
+avec décision locale rejected non consommée et identités/opération exactes.
+Un timeout seul ou PENDING seul reste insuffisant ; chaque demande enregistrée
+doit avoir un refus terminal. Un arrêt ciblé explicitement demandé par le
+développeur reste distinct de retry : gate BLOQUÉ et réconciliation avant
+désarmement et libération, sans purge ni interruption des autres RUN.
+
 ## 8. Remédiation
 
 CAB distingue observation, diagnostic, remédiation contrôlée et intervention manuelle.

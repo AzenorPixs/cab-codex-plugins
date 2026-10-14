@@ -2,6 +2,22 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.0.1 — 2026-10-14
+
+- Garde des permissions natives des jobs armés avant admission, approbation
+  manuelle/automatique et transmission de `once` ; refus explicite des règles
+  absentes, permissives, invalides ou indisponibles et contrôle de la candidate
+  avant prévol. Les décisions consommées et la remédiation CISMP3 existante
+  restent préservées.
+- Réactivation sûre documentée : `noReply`, PATCH des règles `ask`, lecture
+  native puis génération sans réécriture par `tools: true`.
+- Alignement des briques distribuées sur `1.0.1` avec cachebuster neuf,
+  sans nouvelle dépendance, migration, changement de schéma ou protocole MCP.
+  Une règle finale globale `ask` est exigée pour le type natif concerné ;
+  les usages sans job armé conservent leur compatibilité. Aucune mise en
+  service sur les RUN actifs ; une dérive externe après contrôle reste hors
+  garantie atomique de CAB.
+
 ## 1.0.0 — 2026-10-13
 
 - Schémas d'architecture fonctionnelle et technique détaillée de PROJECT.md
@@ -28,6 +44,15 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 - Protocole, cadrages et tests alignés ; version 0.87.2 synchronisée. Le remplacement initial CISMP reste inchangé. Aucun déploiement ni publication.
 
 ## Unreleased
+
+- Correctif source 1.0.2 : retry accepte un refus REJECTED obtenu par
+  poll_approval/get_approval après timeout MCP, corrélé à une décision locale
+  rejected non consommée. Candidate, job, gel et frontières natives conservés ;
+  timeout seul, polling divergent, preuve perdue et effets restent refusés.
+- Huit ORCHESTRATED_CODING.md, skill et commande CAB alignés ; arrêt ciblé
+  explicite du développeur distingué de retry. Briques distribuées 1.0.2 et
+  cachebuster neuf, sans migration, nouvelle dépendance, installation ou
+  intervention sur les RUN actifs.
 
 - Corrections ACSM du 2026-10-13 : validation des contrats persistés avant
   HTTP et interactions externes ; refus explicite des racines, structures

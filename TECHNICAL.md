@@ -43,7 +43,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `1.0.0` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.0.2` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -225,7 +225,7 @@ instrumentation de sortie. Cette option est persistée et exposée par
 
 La récupération explicite `POST /job/recover` remplace une session dans le
 même RUN, sans utiliser `/job/arm` ni désarmer le job. Son corps porte `phase`
-(`prepare`, `retry` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
+(`prepare`, `retry`, `reconcile` ou `complete`), `jobId`, `expectedSessionId`, `sessionId`,
 `recoveryId` et `preflightRequestId`. prepare contrôle le contexte OpenCode,
 MCP, l'inactivité des deux sessions et l'absence de mandat indécis ou de
 permission non résolue ; il persiste le gel et invalide les autorisations
@@ -276,11 +276,68 @@ candidate, sans concurrence ni rejeu du travail prouvé. Le checkpoint métier
 conserve les tentatives et leurs références natives. Une preuve locale perdue
 après redémarrage n'est pas recréée implicitement. OpenCode reste ouvert.
 
+Depuis CAB 1.0.2, retry accepte aussi le REJECTED obtenu par poll_approval ou
+get_approval après timeout de request_validation, pour la même approbation,
+avec décision locale rejected non consommée et identités/opération exactes.
+Un timeout seul ou PENDING seul reste insuffisant ; chaque demande enregistrée
+doit avoir un refus terminal. Un arrêt ciblé explicitement demandé par le
+développeur reste distinct de retry : gate BLOQUÉ et réconciliation avant
+désarmement et libération, sans purge ni interruption des autres RUN.
+
+### Réconciliation humaine du prévol exécuté sans once
+
+La phase distincte `reconcile` traite uniquement un prévol `/usr/bin/true`
+approuvé et exécuté sous `tools.bash=true`, sans permission native `once`.
+Elle exige `developerAuthorization`, référence non secrète de l'accord humain
+spécifique, les identités de récupération conservées, `previousPreflightRequestId`
+et un `preflightRequestId` neuf. Les préconditions techniques restent requises.
+La règle finale de permission `bash` de la candidate doit être `ask` avec
+pattern `*`. Le message natif parent doit prouver `tools.bash=true`, la réponse
+MCP doit être APPROVED corrélée avec reviewer CGPT, et la seule commande exacte
+doit être terminée exit 0 après cette réponse, puis READY sans attente.
+
+Toute consommation locale connue, autre outil, commande divergente ou preuve
+absente refuse cette réconciliation. L'ancienne tentative reste invalide :
+`EXECUTED_WITHOUT_NATIVE_ONCE`, référence d'autorisation, date, identifiants et
+empreinte native sont persistés. Sa décision ne change pas ; son autorisation
+exécutable locale est invalidée seulement après persistance. Après redémarrage
+coordonné, les mêmes preuves natives et l'accord humain permettent de conserver
+cette frontière sans reconstruire la décision locale perdue. Le nouveau prévol
+exige sa propre décision et consommation `once` avant `complete`. Le `retry`
+ordinaire n'est pas assoupli.
+
+OpenCode 1.19.0 transforme `tools.bash=true` en permission native `allow`.
+Pour réactiver un outil, envoyer le message de cadrage avec `noReply`, rétablir
+ensuite explicitement les permissions `ask` par PATCH de session, les relire,
+puis lancer le message exécutable sans champ `tools`. Ne pas utiliser `true`
+pour réactiver Bash dans un message qui déclenche immédiatement la génération.
+
 Pour les mandats lecture seule, le protocole distribué désactive explicitement
 bash, edit, write, apply_patch, task et skill via le champ tools du message.
 Un mandat exécutable réactive seulement ses outils nécessaires avec permissions
 natives ask et décision CAB unitaire. Ce verrou ne modifie pas la configuration
 persistante OpenCode.
+
+### Garde des permissions natives — CAB 1.0.1
+
+Pour un job armé, l'admission d'une validation exécutable, l'enregistrement
+d'une décision `approved` manuelle ou automatique et la transmission native
+de `once` vérifient par HTTP la session, son répertoire et ses règles. La
+dernière règle couvrant le type `bash` ou `edit` doit avoir pattern `*` et
+action `ask`, y compris lorsqu'un nom de permission contient des jokers.
+Une règle spécifique en dernière position est refusée de façon conservatrice.
+La candidate est également contrôlée pendant prepare, retry, reconcile et
+complete. Une transition ou décision concurrente est recontrôlée après
+chaque attente avant mutation ; un refus explicite reste possible sous allow.
+
+Les diagnostics sont `native-permission-ask-required`,
+`native-permission-control-unavailable`, `native-permission-context-divergent`
+et `preflight-native-ask-required` pour la candidate. Le contrôle HTTP est
+borné à dix secondes. Il n'écrit pas de permission, ne consomme pas de mandat
+en cas d'échec et préserve les usages historiques sans job armé.
+La réactivation suit `noReply`, PATCH `ask`, lecture native puis génération
+sans nouveau champ `tools`. CAB ne peut rendre une modification externe des
+règles atomique avec l'exécution native ; leur stabilité reste requise.
 
 Le superviseur écoute par défaut sur `127.0.0.1:8789`. Il conserve son état
 dans `.opencode/state/cgpt-approval-bridge/`, observe le contrat de job et la

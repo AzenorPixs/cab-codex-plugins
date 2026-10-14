@@ -16,7 +16,7 @@ async function waitFor(check) {
 }
 async function setup(t) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
-  const native = { permissions: [], replies: [], busy: {}, messages: {} };
+  const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {} };
   const children = [];
   const opencode = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -35,7 +35,8 @@ async function setup(t) {
       native.replies.push({ path: url.pathname, body: JSON.parse(body) });
       native.permissions = native.permissions.filter((p) => !url.pathname.endsWith('/' + p.id)); payload = true;
     } else if (url.pathname.endsWith('/message')) payload = native.messages[url.pathname.split('/')[2]] || [];
-    else if (url.pathname.startsWith('/session/')) payload = { id: url.pathname.split('/')[2], directory };
+    else if (url.pathname.startsWith('/session/')) payload = { id: url.pathname.split('/')[2], directory,
+      permission: native.rules[url.pathname.split('/')[2]] || [{ permission: '*', pattern: '*', action: 'ask' }] };
     else { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload));
   });
@@ -122,6 +123,23 @@ test('trois sessions, permissions once exactes et décisions isolées', async (t
   const decision = (await h.get('/runs/a/decision/request-a')).body;
   assert.equal(decision.run_id, 'a'); assert.equal(decision.reservation_version, runs[0].version);
   assert.equal((await h.post('/job/progress', { jobId: 'job-a' })).status, 409);
+});
+
+test('une session allow est refusée sans bloquer la permission once d’un autre RUN', async (t) => {
+  const h = await setup(t);
+  const a = await h.reserve('a');
+  const b = await h.reserve('b');
+  h.native.rules.ses_a = [{ permission: 'bash', pattern: '*', action: 'allow' }];
+  const refused = await h.post('/validation/request', { approval: h.approval(a, 'unsafe-a') });
+  assert.equal(refused.body.error, 'native-permission-ask-required');
+  assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'safe-b') })).status, 202);
+  h.native.permissions = [{ id: 'safe-b-permission', sessionID: 'ses_b', permission: 'bash',
+    metadata: { command: '/usr/bin/true' } }];
+  assert.equal((await h.post('/runs/b/decision/safe-b', { decision: 'approved' })).status, 201);
+  await waitFor(() => h.native.replies.length === 1);
+  assert.equal(h.native.replies[0].path, '/session/ses_b/permissions/safe-b-permission');
+  assert.deepEqual(h.native.replies[0].body, { response: 'once' });
+  assert.equal((await h.get('/runs/a/job')).body.sessionId, 'ses_a');
 });
 
 test('un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée', async (t) => {
@@ -254,7 +272,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.0.0');
+  assert.equal(initialized.result.serverInfo.version, '1.0.2');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

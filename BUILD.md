@@ -177,12 +177,19 @@ gardes restent inchangés et réservés aux nouveaux RUN. Les tests locaux
 utilisent des services simulés ; déploiement et contrôles d'une installation
 réelle restent distincts.
 
+La qualification source 1.0.2 doit couvrir les refus REJECTED obtenus par
+poll_approval et get_approval après timeout, ainsi que les refus des preuves
+divergentes, incomplètes ou accompagnées d'effets. La décision locale rejected
+non consommée reste obligatoire ; les versions installées et les RUN gelés ne
+sont pas migrés par ces tests. Les huit ORCHESTRATED_CODING.md et le skill
+source doivent porter la même règle sans écraser leurs clauses spécifiques.
+
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.
 
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `1.0.0` pour le broker,
+artefacts distribués. La version de base actuelle est `1.0.2` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -225,6 +232,14 @@ Aucune donnée runtime provenant de `.opencode/state`, d'un cache Codex ou d'une
 
 ## 11. Contrôles avant release
 
+Le correctif source 1.0.1 ajoute le contrôle des règles natives des jobs armés.
+Vérifier les refus sous `allow`, sous règles absentes ou indisponibles, les
+dérives entre admission/décision/transmission et l'isolation entre RUN. La
+réactivation distribuée suit `noReply`, PATCH `ask` vérifié puis génération
+sans champ `tools`. Les tests HTTP simulés restent distincts d'une intégration
+OpenCode réelle. Le jeu complet installé et les RUN actifs ne sont pas modifiés
+par la préparation source ; sa mise en service exige une coordination séparée.
+
 Avant publication :
 
 1. vérifier la syntaxe Python ;
@@ -264,7 +279,7 @@ Le projet actuel ne définit aucune image Docker CAB.
 Installer le jeu complet des scripts du plugin dans un même répertoire : le
 contrôleur et le superviseur importent les modules job-context, supervisor-context
 et runs ; le registre lance registry-lock.py avec Python 3. Ces fichiers sont
-indissociables et doivent partager la version 1.0.0. Aucune dépendance tierce
+indissociables et doivent partager la version source courante 1.0.2. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.

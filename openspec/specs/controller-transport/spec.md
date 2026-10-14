@@ -186,7 +186,7 @@ récupération explicite /job/recover définie ci-dessous MAY remplacer la sessi
 - **THEN** le contrôleur refuse le contrat et ne l'arme pas
 
 ### Requirement: Interface explicite de récupération
-POST /job/recover MUST accepter prepare, retry et complete, corrélés par jobId, expectedSessionId, sessionId, recoveryId et preflightRequestId uniques. Le contrôleur MUST refuser les mutations concurrentes pendant la transition. Il MUST NOT désarmer le job, purger le RUN, fabriquer une décision ou valider le gate pour ce remplacement.
+POST /job/recover MUST accepter prepare, retry, reconcile et complete, corrélés par jobId, expectedSessionId, sessionId, recoveryId et preflightRequestId uniques. Le contrôleur MUST refuser les mutations concurrentes pendant la transition. Il MUST NOT désarmer le job, purger le RUN, fabriquer une décision ou valider le gate pour ce remplacement.
 
 #### Scenario: Transition concurrente
 - **WHEN** une mutation est demandée pendant un contrôle asynchrone de récupération
@@ -326,18 +326,30 @@ retry MUST conserver jobId, expectedSessionId, sessionId et recoveryId. Il MUST 
 - **THEN** le contrôleur refuse sans changer le job
 
 ### Requirement: Refus natif sans effet avant retry
-retry MUST vérifier les préconditions techniques et le refus sans consommation de la tentative précédente. Il MUST refuser une preuve absente, un délai seul, une décision approved, une commande ou un autre outil natif. Il MUST conserver les preuves historiques sans les traiter comme le prévol du nouvel essai.
+retry MUST vérifier les préconditions techniques et le refus sans consommation de chaque demande enregistrée de la tentative précédente. Il MUST accepter REJECTED direct ou obtenu par poll_approval/get_approval corrélé après timeout MCP, avec décision locale rejected non consommée. Un délai seul, une preuve absente/divergente, approved, une commande ou un autre outil natif MUST refuser retry. Les preuves historiques MUST rester intactes.
 
 #### Scenario: Refus enregistré
 - **WHEN** une réponse native REJECTED correspond à une décision locale rejected non consommée
 - **THEN** retry MAY réserver un essai neuf dans la même candidate après réconciliation
+
+#### Scenario: Refus obtenu après timeout
+- **WHEN** request_validation expire puis poll_approval ou get_approval retourne REJECTED pour la même demande enregistrée, avec identités et opération corrélées et décision locale rejected non consommée
+- **THEN** retry accepte cette preuve après vérification des autres préconditions, sans désarmement ni remplacement de candidate
+
+#### Scenario: Polling intermédiaire
+- **WHEN** un polling corrélé retourne PENDING avant un REJECTED corrélé
+- **THEN** seul le refus terminal prouve la fin sans effet ; PENDING seul ne permet pas retry
+
+#### Scenario: Polling divergent ou absent
+- **WHEN** la réponse modifie requestId, approval_id, session_id, directory, change_id, files ou commands, précède sa demande, ou ne confirme aucun refus terminal
+- **THEN** retry refuse et conserve le gel et la réservation actuelle
 
 #### Scenario: Refus avant enregistrement
 - **WHEN** une erreur native MCP -32602 prouve un rejet de paramètres avant enregistrement, sans validation locale ni effet
 - **THEN** retry MAY conserver cette preuve et réserver un essai neuf
 
 #### Scenario: Effet ou décision non prouvé
-- **WHEN** la tentative est approuvée, consommée, en attente ou seulement interrompue
+- **WHEN** la tentative est approuvée, consommée, en attente, seulement interrompue, en erreur générique ou privée de sa décision locale
 - **THEN** retry refuse et le gel reste conservé
 
 ### Requirement: Frontière native vérifiée entre tentatives
@@ -404,3 +416,46 @@ Le contrôleur MUST héberger plusieurs contextes de job isolés. Les routes /ru
 #### Scenario: Isolation concurrente
 - **WHEN** A possède une validation indécise et B termine
 - **THEN** le gate de B ne dépend pas du compteur métier de A
+
+### Requirement: Réconciliation humaine du prévol exécuté sans permission native
+La phase reconcile de /job/recover MUST être explicitement demandée par l'orchestrateur avec developerAuthorization, une référence non vide à l'accord spécifique du développeur. Elle MUST conserver job, RUN, candidate, gel et critères. Elle MUST vérifier les préconditions techniques, les identités de récupération, previousPreflightRequestId et un preflightRequestId inédit. Le retry ordinaire MUST conserver ses refus existants.
+
+#### Scenario: Prévol inoffensif exécuté sous allow
+- **WHEN** l'historique natif prouve que le message utilisateur parent du prévol portait tools.bash=true, une réponse MCP APPROVED corrélée avec reviewer CGPT, exactement une commande /usr/bin/true terminée exit 0 après cette réponse, puis broker_readiness READY sans attente
+- **THEN** reconcile MUST exiger la règle native finale bash ask dans la candidate, refuser toute consommation locale connue et réserver uniquement un essai neuf
+- **AND** reconcile MUST conserver l'empreinte et les identifiants de l'ancien essai avec outcome EXECUTED_WITHOUT_NATIVE_ONCE, horodatage et référence d'autorisation, sans modifier la décision précédente ni prétendre que once a été consommée
+
+#### Scenario: Historique natif utilisable après redémarrage coordonné
+- **WHEN** les décisions locales ne sont plus disponibles après un redémarrage du contrôleur et l'accord humain spécifique ainsi que toutes les preuves natives du cas allow sont vérifiés
+- **THEN** reconcile MAY conserver cette frontière historique sans reconstruire une décision locale, consommer une permission ou valider complete
+- **AND** le nouvel essai MUST encore prouver sa propre décision locale, sa réponse MCP, une permission once consommée, exit 0 et READY avant complete
+
+#### Scenario: Effet ou preuve non conforme
+- **WHEN** l'accord manque, la candidate reste sous allow, l'historique est altéré, une permission est consommée localement, la commande diverge ou un autre outil natif est observé
+- **THEN** reconcile MUST refuser la transition sans invalider l'ancien mandat ni lever le gel
+
+### Requirement: Permission native vérifiée avant approbation exécutable
+Pour un job armé, le contrôleur MUST vérifier par HTTP la session et le répertoire du mandat avant admission et avant enregistrement d'une décision approved. La dernière règle couvrant le type natif bash ou edit MUST avoir pattern `*` et action ask. Les jokers du nom de permission MUST être pris en compte. Une règle absente, malformée, plus spécifique en dernière position ou une réponse indisponible MUST refuser l'opération avec un diagnostic explicite sans décision implicite.
+
+#### Scenario: Outil réactivé en allow
+- **WHEN** une validation exécutable de job armé vise une session dont la dernière règle native est allow
+- **THEN** le contrôleur refuse avant enregistrement de la validation et ne transmet aucune permission
+
+#### Scenario: Règle modifiée avant décision
+- **WHEN** la règle devient allow après admission mais avant une décision approved manuelle ou automatique
+- **THEN** aucune décision approved n'est enregistrée et un refus explicite reste possible
+
+#### Scenario: Ancien usage sans job armé
+- **WHEN** une validation est utilisée sans job armé
+- **THEN** sa compatibilité historique est préservée
+
+### Requirement: Garde natif lors du prévol et de la transmission
+Les contrôles de récupération MUST vérifier la règle Bash ask de la candidate avant prévol. Avant de transmettre once pour un job armé, le contrôleur MUST vérifier de nouveau les règles de la session. Après chaque contrôle asynchrone, il MUST réévaluer l'admission et l'absence de décision concurrente. Un échec MUST conserver les décisions antérieures, le gel éventuel et l'absence de consommation.
+
+#### Scenario: Candidate permissive
+- **WHEN** prepare vise une candidate sans règle Bash ask vérifiable
+- **THEN** prepare est refusé sans modifier le job ni approuver le prévol
+
+#### Scenario: Dérive avant once
+- **WHEN** une règle permissive apparaît avant la transmission native
+- **THEN** once n'est pas transmis et l'approbation historique reste intacte
