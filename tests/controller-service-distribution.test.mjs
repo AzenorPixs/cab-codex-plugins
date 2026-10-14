@@ -12,6 +12,28 @@ const supervisorServicePath = new URL(
   import.meta.url
 );
 
+test("les briques distribuées publient la même version de base 1.0.1", () => {
+  const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
+    .match(/^version = "([^"]+)"$/m)[1];
+  assert.equal(version, "1.0.1");
+  const plugin = JSON.parse(readFileSync(
+    new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
+  assert.match(plugin.version, /^1\.0\.1\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.0\.1$/m);
+  for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
+    const root = new URL(directory, import.meta.url);
+    for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
+      const source = readFileSync(new URL(name, root), "utf8");
+      const versions = [...source.matchAll(/\b(?:VERSION|SERVER_VERSION|version)\s*[:=]\s*"([^"]+)"/g)];
+      assert.ok(versions.length, name);
+      for (const match of versions) assert.equal(match[1], version, name);
+    }
+  }
+  for (const path of [servicePath, supervisorServicePath]) {
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.0\.1 /m);
+  }
+});
+
 test("distribue une unité utilisateur inactive par défaut", () => {
   const service = readFileSync(servicePath, "utf8");
 
@@ -44,8 +66,8 @@ test("la commande CAB installe sans activer, démarre et arrête explicitement",
     command,
     /systemctl --user stop cgpt-approval-bridge-supervisor\.service/
   );
-  assert.match(command, /POST \/job\/arm/);
-  assert.match(command, /POST \/job\/disarm/);
+  assert.match(command, /POST \/runs\/<run_id>\/job\/arm/);
+  assert.match(command, /POST \/runs\/<run_id>\/job\/disarm/);
 });
 
 test("distribue un superviseur utilisateur inactif par défaut", () => {
@@ -98,12 +120,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 0\.87\.2$/m);
-  assert.match(manifest, /"version": "0\.87\.2\+codex\./);
-  assert.match(controller, /version: "0\.87\.2"/);
-  assert.match(supervisor, /const version = "0\.87\.2"/);
-  assert.match(broker, /SERVER_VERSION = "0\.87\.2"/);
-  assert.match(project, /^version = "0\.87\.2"$/m);
+  assert.match(command, /^version: 1\.0\.1$/m);
+  assert.match(manifest, /"version": "1\.0\.1\+codex\./);
+  assert.match(controller, /const version = "1\.0\.1"/);
+  assert.match(supervisor, /const version = "1\.0\.1"/);
+  assert.match(broker, /SERVER_VERSION = "1\.0\.1"/);
+  assert.match(project, /^version = "1\.0\.1"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -156,8 +178,8 @@ test("AGENTS renvoie au protocole local dédié avec ses contrats techniques", (
   assert.match(agents.replace(/\s+/g, " "), /Son absence est normale pour les autres projets/);
   assert.doesNotMatch(agents, /### Protocole de communication OpenCode ↔ CGPT via CAB/);
   const protocol = readFileSync(new URL(`../${reference[1]}`, import.meta.url), "utf8");
-  for (const endpoint of ["POST /job/arm", "POST /job/progress", "POST /job/recover",
-    "POST /job/terminal-gate", "POST /job/disarm", "GET /decision/<requestId>"]) {
+  for (const endpoint of ["POST /runs/<run_id>/job/arm", "POST /runs/<run_id>/job/progress", "POST /runs/<run_id>/job/recover",
+    "POST /runs/<run_id>/job/terminal-gate", "POST /runs/<run_id>/job/disarm", "GET /decision/<requestId>"]) {
     assert.ok(protocol.includes(endpoint), endpoint);
   }
   assert.match(protocol, /MCP stdio local/);
@@ -199,7 +221,7 @@ test("le protocole distribué protège la lecture seule et décrit la récupéra
     for (const tool of ["bash", "edit", "write", "apply_patch", "task", "skill"]) {
       assert.ok(protocol.includes(`"${tool}":false`));
     }
-    assert.match(protocol, /POST \/job\/recover/);
+    assert.match(protocol, /POST \/runs\/<run_id>\/job\/recover/);
     assert.match(protocol, /phase: "prepare"/);
     assert.match(protocol, /phase: "complete"/);
     assert.match(protocol, /permissions natives\n`ask`/);
@@ -230,6 +252,19 @@ test("le protocole distribue des cadences indépendantes et une attente PLLM per
     assert.match(protocol, /readiness CAB réelle et les permissions avant reprise/, path);
     assert.match(protocol, /ne vaut jamais approbation, ne rejoue aucun mandat consommé/, path);
     assert.match(protocol, /ne contourne aucun blocage CAB distinct/, path);
+  }
+});
+
+test("la réactivation sûre est distribuée sans tools true pendant la génération", () => {
+  for (const path of [commandPath,
+    new URL("../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md", import.meta.url)]) {
+    const protocol = readFileSync(path, "utf8");
+    const section = protocol.slice(protocol.indexOf("## Réactivation sûre des outils — CAB 1.0.1"));
+    assert.match(section, /noReply: true/);
+    assert.match(section, /PATCH/);
+    assert.match(section, /Relire la session/);
+    assert.match(section, /message de génération sans champ `tools`/);
+    assert.match(section, /native-permission-ask-required/);
   }
 });
 

@@ -24,6 +24,12 @@ CAB/
 │   ├── systemd/cgpt-approval-bridge-controller.service
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
+│       ├── cgpt-approval-bridge-job-context.mjs
+│       ├── cgpt-approval-bridge-runs.mjs
+│       ├── cgpt-approval-bridge-registry-lock.py
+│       ├── cgpt-approval-bridge-supervisor.mjs
+│       ├── cgpt-approval-bridge-supervisor-context.mjs
+│       ├── cgpt-approval-bridge-prompts.py
 │       ├── cgpt-approval-bridge-reset.py
 │       ├── cgpt-approval-bridge-healthcheck.mjs
 │       └── cgpt-approval-bridge-opencode-sse-client.mjs
@@ -69,8 +75,8 @@ le cache du plugin.
 
 ### 4.4 Supervision système
 
-Le healthcheck actuel peut redémarrer le contrôleur ou le superviseur avec
-`systemctl --user`. Une distribution sans systemd utilisateur devra fournir un
+Le healthcheck 1.0.0 observe le contrôleur et le superviseur sans les redémarrer.
+Les actions de cycle de vie restent pilotées après réconciliation. Une distribution sans systemd utilisateur devra fournir un
 mécanisme équivalent ou adapter ces composants.
 
 ## 5. Installation du broker dans OpenCode
@@ -176,7 +182,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `0.87.2` pour le broker,
+artefacts distribués. La version de base actuelle est `1.0.0` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -219,6 +225,14 @@ Aucune donnée runtime provenant de `.opencode/state`, d'un cache Codex ou d'une
 
 ## 11. Contrôles avant release
 
+Le correctif source 1.0.1 ajoute le contrôle des règles natives des jobs armés.
+Vérifier les refus sous `allow`, sous règles absentes ou indisponibles, les
+dérives entre admission/décision/transmission et l'isolation entre RUN. La
+réactivation distribuée suit `noReply`, PATCH `ask` vérifié puis génération
+sans champ `tools`. Les tests HTTP simulés restent distincts d'une intégration
+OpenCode réelle. Le jeu complet installé et les RUN actifs ne sont pas modifiés
+par la préparation source ; sa mise en service exige une coordination séparée.
+
 Avant publication :
 
 1. vérifier la syntaxe Python ;
@@ -252,3 +266,22 @@ Une conteneurisation éventuelle devra respecter l'architecture CAB, notamment :
 - séparation entre environnement OpenCode et contrôleur hors sandbox.
 
 Le projet actuel ne définit aucune image Docker CAB.
+
+## Distribution concurrente 1.0.0
+
+Installer le jeu complet des scripts du plugin dans un même répertoire : le
+contrôleur et le superviseur importent les modules job-context, supervisor-context
+et runs ; le registre lance registry-lock.py avec Python 3. Ces fichiers sont
+indissociables et doivent partager la version 1.0.0. Aucune dépendance tierce
+n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
+
+Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.
+Ne pas remplacer un jeu actif ni reconnecter le broker pendant des RUN sans
+coordination. Le retour à 0.87.2 exige libération ou gel réconcilié de tous les
+RUN et conservation des preuves ; son contrôleur ne comprend pas le registre
+concurrent. La mise à jour ne migre pas silencieusement un job actif.
+
+Le script cgpt-approval-bridge-prompts.py permet une revue sans écriture puis
+une application explicite aux projets passés par --project. Il ne touche que
+les neuf prompts pilotés et leur protocole ; les prompts directs sont contrôlés
+par empreinte. Les sources PROMPTS restent non versionnées dans leurs projets.

@@ -71,3 +71,13 @@ récupération n'autorise ni nouvelle session CAB ni abandon technique du job.
 Un délai MCP seul conserve le polling du même approval_id, sans nouvelle demande.
 La purge d'un nouveau RUN reste distincte et conserve toutes les gardes ci-dessus.
 Les rapports d'archive restent hors runtime et doivent être vérifiés avant clôture.
+
+## Infrastructure concurrente 1.0.0
+
+Cette procédure concerne uniquement une réinitialisation globale exclusive.
+L'ajout, la reprise ou la clôture d'un RUN ne l'exécute jamais. Le script refuse
+une autorité de registre active et toute réservation RESERVED, même après arrêt
+du contrôleur. Réconcilier et libérer les réservations par les routes ciblées ;
+ne pas effacer le registre pour contourner un blocage. Une purge refusée laisse
+les preuves intactes. Le verrou registry.instance.lock reste stable comme celui
+du broker. Le retour à 0.87.2 nécessite une décision de repli après quiescence.

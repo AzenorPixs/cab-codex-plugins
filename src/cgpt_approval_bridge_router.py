@@ -16,6 +16,8 @@ import time
 
 import cgpt_approval_bridge_server as server
 
+VERSION = "1.0.1"
+
 
 def parse_files(value):
     """Decoupe la liste de fichiers frugale."""
@@ -26,16 +28,19 @@ def parse_files(value):
 def cmd_propose(ns):
     """OC -> request_validation : cree un PENDING persistant."""
     try:
-        item = server.do_propose(
-            {
+        payload = {
                 "change_id": ns.change_id,
                 "title": ns.title,
                 "files": parse_files(ns.files),
                 "summary": ns.summary or "",
                 "approval_id": ns.approval_id or "",
             }
-        )
-    except (server.ValidationError, server.StoreError) as exc:
+        if ns.run_id:
+            payload.update(run_id=ns.run_id, reservation_version=ns.reservation_version,
+                           resources=json.loads(ns.resources), session_id=ns.session_id,
+                           directory=ns.directory, commands=json.loads(ns.commands))
+        item = server.do_propose(payload)
+    except (server.ValidationError, server.StoreError, ValueError) as exc:
         print("erreur propose : %s" % exc, file=sys.stderr)
         return 1
     print(json.dumps(item, ensure_ascii=False))
@@ -97,6 +102,12 @@ def build_parser():
     p_propose.add_argument("--files", required=True, help="liste separee par virgules")
     p_propose.add_argument("--summary", default="")
     p_propose.add_argument("--approval-id", default="")
+    p_propose.add_argument("--run-id", default="")
+    p_propose.add_argument("--reservation-version", type=int)
+    p_propose.add_argument("--session-id", default="")
+    p_propose.add_argument("--directory", default="")
+    p_propose.add_argument("--resources", default="[]", help="Manifeste JSON des ressources de commande.")
+    p_propose.add_argument("--commands", default="[]", help="Liste JSON contenant au plus une commande.")
     p_poll = sub.add_parser("poll", help="attend la decision CGPT")
     p_poll.add_argument("--approval-id", required=True)
     p_poll.add_argument("--timeout", type=int, default=600)

@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 0.87.2
+version: 1.0.1
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -8,6 +8,52 @@ Réponds en français. Cette commande est globale : elle ne modifie jamais le pr
 Le développeur accorde une autorisation permanente pour le cycle de vie et les vérifications propres à `/cab`. Ne sollicite donc pas de validation applicative supplémentaire pour lancer, initialiser, superviser, tester ou clôturer le pilotage. Respecte néanmoins toute autorisation technique que l’environnement impose lui-même pour une exécution hors sandbox.
 
 Argument reçu : `$ARGUMENTS`
+
+## RUN concurrents CAB 1.0.0
+
+Lire le contrat concurrent references/concurrent-runs.md du skill approval-bridge dans le skill
+approval-bridge et ORCHESTRATED_CODING.md du projet. Les procédures de purge,
+de déconnexion MCP et d'arrêt des services ci-dessous concernent seulement
+une réinitialisation globale exclusive ; elles ne s'appliquent pas à l'ajout,
+à la reprise ou à la clôture d'un RUN dans une infrastructure partagée.
+
+Pour /cab start --run <run_id>, fixer ownerId et vérifier l'infrastructure
+commune sans reconnecter le broker. Créer la nouvelle session de codage,
+examiner les candidats puis réserver atomiquement change et intention par
+POST /runs/reserve. Armer le job sous /runs/<run_id>/job/arm après réservation.
+Le prévol et chaque mandat incluent run_id, reservation_version et le manifeste
+de ressources requis ; la réservation ne vaut jamais approbation.
+
+/cab run, /cab test, /cab stop et toute récupération ciblent explicitement
+--run <run_id>. Les interfaces sans cible sont limitées au contexte unique ;
+une ambiguïté est refusée. /cab stop désarme et libère uniquement le RUN après
+gate et réconciliation ; il n'arrête les services communs qu'en l'absence de
+tout autre RUN réservé. /cab update prépare un jeu complet sans remplacer
+les modules d'une infrastructure active ni redémarrer ses services.
+
+Consulter GET /runs avant chaque sélection et relire la version après toute
+extension ou récupération. Chaque change suivant conserve le RUN parent,
+mais emploie une nouvelle session, un jobId et une génération neufs. Les
+checkpoints sont output/<prompt>/<run_id>/state.json ; les sous-jobs utilisent
+celui du parent. Une attente de dépendance reste non terminale.
+
+Dans le répertoire partagé, déclarer /runs/<run_id>/ready avec version et
+evidence après les validations locales à un jalon stable. /integration
+attend la cohorte stable et sa quiescence native ; les opérations des autres
+RUN sont suspendues. Le propriétaire peut déclarer project:* en lecture pour
+ses contrôles globaux. Libérer avec acquire=false, published et les evidence
+de publication. Relire referenceVersion ; les autres RUN utilisent /reconcile
+avec preuves de réexamen et la nouvelle version retournée avant tout mandat.
+Une réservation avec écritures ne peut être livrée sans cette publication.
+
+Installer ensemble controller.mjs, job-context.mjs, supervisor.mjs,
+supervisor-context.mjs, runs.mjs, registry-lock.py et les autres scripts,
+avec leurs noms complets cgpt-approval-bridge-*. Les imports relatifs et le
+verrou Python exigent ce jeu complet dans le même répertoire. La mise à jour
+atomique prépare le jeu complet et sa validation avant publication ; les
+anciennes copies d'un seul script ne suffisent plus. Ne pas déployer un jeu
+mixte sur une session active. Conserver les procédures de prévol modèle,
+permissions ask, mandats unitaires, preuves natives et statistiques existantes.
 
 ## Continuité du job
 
@@ -129,7 +175,7 @@ Le broker :
 
 Avant les étapes ci-dessous, appliquer intégralement
 `references/session-reset.md` depuis le skill `approval-bridge` du plugin
-CAB installé. Toute nouvelle session impose la purge complète du runtime CAB,
+CAB installé. Toute réinitialisation globale exclusive impose la purge complète du runtime CAB,
 y compris journal, approbations, anciens jobs, checkpoints et conflits
 Syncthing, sans lire ou restaurer l'ancien contenu. La commande autorise cette
 purge des seuls espaces CAB, après preuve d'inactivité, arrêt des ressources
@@ -180,11 +226,11 @@ Exécute un job piloté dans la session persistante après un `/cab start` et un
 
 1. Constitue un contrat de job : identifiant de job, session OpenCode,
    répertoire cible, change OpenSpec éventuel et critères de fin. Arme-le par
-   `POST /job/arm` du contrôleur avant tout mandat. Ce contrat ne vaut jamais
+   `POST /runs/<run_id>/job/arm` du contrôleur avant tout mandat. Ce contrat ne vaut jamais
    une décision d'approbation d'action et ne contient ni secret ni contenu du
    projet. Si le prompt parent exige l'identité stricte des commandes, notamment
    CISMP, arme ce contrat avec `strictCommands: true` pour refuser tout suffixe.
-   Publie chaque jalon prouvé et mandat courant par `POST /job/progress`.
+   Publie chaque jalon prouvé et mandat courant par `POST /runs/<run_id>/job/progress`.
    Pour chaque change, charge le skill `coding-session-statistics` du plugin
    CAB avant le premier travail et prépare les relevés et sondes prévus. Ajoute
    aux critères de fin la preuve du rapport après archivage définie ci-dessous.
@@ -219,7 +265,7 @@ synthèse, puis transmets un mandat d'édition distinct pour ce seul rapport.
 La commande `/cab` ne rédige pas elle-même de fichier dans le projet piloté.
 
 Vérifie l'existence, les six sections, UTF-8/LF et la cohérence des totaux,
-puis publie ce jalon prouvé par `POST /job/progress` avant de demander le gate
+puis publie ce jalon prouvé par `POST /runs/<run_id>/job/progress` avant de demander le gate
 terminal normal `TERMINÉ`. Un lot exige un rapport par archive, avec le
 périmètre et les bornes propres à chaque change. Le skill lit les quotas
 avec l'outil natif Codex et n'exige pas le skill `cgpt`.
@@ -373,7 +419,7 @@ CAB vers son marketplace Git est l'unique modification de marketplace autorisée
 
 ## `/cab stop`
 
-1. Avant tout arrêt normal, appelle `POST /job/terminal-gate` du contrôleur avec l'état terminal explicite `TERMINÉ` ou `BLOQUÉ`. Si le contrôleur refuse le gate, ne clôture pas le job et reprends le pilotage ou restitue le blocage observé. Après un gate validé, désarme le contrat correspondant par `POST /job/disarm`. Cette vérification est distincte d'un arrêt forcé explicitement demandé par le développeur.
+1. Avant tout arrêt normal, appelle `POST /runs/<run_id>/job/terminal-gate` du contrôleur avec l'état terminal explicite `TERMINÉ` ou `BLOQUÉ`. Si le contrôleur refuse le gate, ne clôture pas le job et reprends le pilotage ou restitue le blocage observé. Après un gate validé, désarme le contrat correspondant par `POST /runs/<run_id>/job/disarm`. Cette vérification est distincte d'un arrêt forcé explicitement demandé par le développeur.
 2. Supprime tous les heartbeats et cron healthchecks créés par `/cab`, dont « Surveillance CAB ».
 3. Ferme les flux SSE ouverts par `/cab`.
 4. Arrête explicitement le superviseur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-supervisor.service`, puis arrête explicitement et proprement le contrôleur avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime leurs unités : elles restent installées mais inactives jusqu’au prochain `/cab start`.
@@ -385,12 +431,12 @@ CAB vers son marketplace Git est l'unique modification de marketplace autorisée
 ## Récupération contrôlée de session dans le même RUN
 
 Après un écart refusé sans effet, interrompre l'ancienne session, traiter son
-rapport et clôturer le mandat courant avec `/job/progress`. Ne pas réarmer le
-job pour remplacer sa session : `/job/arm` reste immuable. Créer la candidate
+rapport et clôturer le mandat courant avec `/runs/<run_id>/job/progress`. Ne pas réarmer le
+job pour remplacer sa session : `/runs/<run_id>/job/arm` reste immuable. Créer la candidate
 par l'API native OpenCode dans le même `directory`, avec permissions natives
 `ask`, sans lui confier de travail métier.
 
-Utiliser `POST /job/recover` en deux phases. Le corps commun contient `jobId`,
+Utiliser `POST /runs/<run_id>/job/recover` en deux phases. Le corps commun contient `jobId`,
 `expectedSessionId` (ancienne session), `sessionId` (candidate), `recoveryId`
 inédit et `preflightRequestId` inédit ; ajouter `phase: "prepare"`, puis
 `phase: "complete"`. Le contrôleur vérifie par HTTP le contexte, MCP, les
@@ -443,7 +489,7 @@ Exiger santé, contexte, MCP connecté, sessions inactives, aucun mandat actif
 ou en attente, aucune permission non résolue et aucun effet inconnu.
 Une décision `approved`, consommée ou une preuve incertaine interdit retry.
 
-Demander explicitement `POST /job/recover` avec `phase: "retry"`, les mêmes
+Demander explicitement `POST /runs/<run_id>/job/recover` avec `phase: "retry"`, les mêmes
 `jobId`, `expectedSessionId`, `sessionId` candidate et `recoveryId`,
 `previousPreflightRequestId` égal à la réservation actuelle et un
 `preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job.
@@ -487,3 +533,27 @@ Conserver seulement les outils de lecture et recherche autorisés. Le texte
 OpenCode n'est modifiée. Au mandat exécutable suivant, réactiver explicitement
 les seuls outils nécessaires ; leurs permissions natives restent `ask` et
 chaque opération conserve son mandat CAB unitaire, sans autorisation générale.
+
+## Réactivation sûre des outils — CAB 1.0.1
+
+OpenCode peut convertir `tools: true` en permission native `allow`. Avant
+un mandat exécutable, attendre l'inactivité de la session ciblée, réactiver
+uniquement les outils nécessaires dans un message avec `noReply: true`, puis
+rétablir les règles `ask` par PATCH de cette seule session. Relire la session
+et vérifier pour chaque type natif nécessaire (`bash` ou `edit`) une dernière
+règle applicable de pattern `*` et d'action `ask`, y compris les noms à jokers.
+Une règle spécifique ultérieure ou une preuve absente suspend le mandat.
+
+Ensuite seulement, envoyer le message de génération sans champ `tools` qui
+réécrirait ces règles. Un `tools: true` dans ce message peut annuler le PATCH.
+La séquence `noReply`, PATCH, lecture native, génération est requise aussi
+pour le prévol de récupération. Elle ne constitue aucune approbation CAB.
+
+Pour les jobs armés, le contrôleur vérifie les règles avant admission et avant
+une décision `approved`, ainsi qu'avant transmission de `once`. Les refus
+`native-permission-ask-required`, `native-permission-control-unavailable` et
+`native-permission-context-divergent` imposent une réconciliation. prepare
+refuse une candidate sans Bash `ask` par `preflight-native-ask-required`.
+Ces contrôles ne modifient aucune permission ; les règles doivent rester
+stables pendant le mandat. Une modification externe après contrôle n'est
+pas atomique avec l'exécution native et reste hors garantie du contrôleur.

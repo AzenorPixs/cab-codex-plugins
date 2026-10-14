@@ -8,41 +8,11 @@ interruption conversationnelle ne soit jamais confondue avec une fin de job.
 
 ### Requirement: Compactage coordonné des deux sessions
 
-L'orchestrateur SHALL déclencher un cycle commun de compactage de sa session
-et de la session de codage toutes les 1 h 30 (5 400 secondes). À l'échéance,
-il SHALL suspendre les nouveaux mandats le temps d'achever le mandat
-autorisé en cours, traiter son rapport et sauvegarder le checkpoint, puis
-vérifier les API natives exposées pour les sessions réellement pilotées.
-Lorsque les deux API sont disponibles, il SHALL lancer les deux compactages
-en parallèle ; sinon, il SHALL compacter les seules sessions accessibles et
-tracer les opérations non exécutées. Le cycle SHALL conserver un identifiant
-commun, les identifiants de session disponibles et ceux explicitement non exposés,
-les horodatages, résultats natifs et éventuels retards dans le checkpoint non
-secret. La prochaine échéance SHALL être calculée depuis le déclenchement du
-cycle commun, sans remplacer un échec par une réussite rétroactive.
-
-Un accusé de lancement, un résumé manuel ou le compactage d'une session
-auxiliaire SHALL NOT constituer la preuve de compactage de l'orchestrateur
-réel. Les deux fins natives corrélées SHALL être requises pour déclarer une
-réussite conjointe, pas pour reprendre un RUN dont l'état reste exploitable.
-Une API de compactage absente SHALL NOT être assimilée à une perte de contexte
-lorsque la conversation active, le checkpoint et les preuves disponibles
-permettent de vérifier la continuité ; les identifiants non exposés SHALL être
-signalés sans être inventés.
-Avant reprise des mandats, l'orchestrateur SHALL réconcilier les deux contextes,
-la santé OpenCode, MCP et la readiness CAB, et vérifier l'absence d'approbation
-parasite. Si une API requise est indisponible ou si un compactage échoue,
-il SHALL conserver le
-cycle incomplet et signaler sa cause sans annoncer une synchronisation
-réussie. Ce seul écart SHALL NOT classer le RUN `BLOQUÉ`, arrêter CAB, demander
-une dérogation humaine ni différer les statistiques ; après réconciliation
-sûre, l'orchestrateur SHALL poursuivre les mandats déjà autorisés. Un compactage
-encore en cours ou une réconciliation impossible SHALL suspendre les opérations
-concernées selon le protocole CAB. L'orchestrateur SHALL NOT répéter aveuglément
-une opération d'effet inconnu ni attendre une API absente ; il SHALL réexaminer
-sa disponibilité à la prochaine échéance du cycle. Ce cycle SHALL NOT créer
-une approbation, rejouer une opération,
-changer le modèle ni fermer ou redémarrer les processus des agents.
+L'orchestrateur SHALL déclencher un cycle commun de compactage de sa session et de la
+session de codage toutes les 1 h 30 (5 400 secondes). À l'échéance, l'orchestrateur
+SHALL suspendre les nouveaux mandats le temps d'achever le mandat autorisé en cours,
+traiter son rapport et sauvegarder le checkpoint, puis vérifier les API natives exposées
+pour les sessions réellement pilotées.
 
 #### Scenario: Échéance entre deux mandats
 
@@ -76,13 +46,11 @@ changer le modèle ni fermer ou redémarrer les processus des agents.
 
 ### Requirement: Contrat de job durable et non secret
 
-CAB SHALL enregistrer atomiquement un contrat de job local avant sa
-supervision. Le contrat SHALL contenir un identifiant de job, l'identifiant de
-la session OpenCode, le répertoire absolu, le change OpenSpec éventuel, les
-critères de fin, le dernier jalon prouvé, le mandat courant éventuel,
-`terminal_gate` et les métadonnées de reprise. Il SHALL exclure tout secret,
-contenu de fichier du projet et décision CAB. Une instance redémarrée SHALL
-restaurer le contrat sans déduire de jalon ni d'état terminal.
+CAB SHALL enregistrer atomiquement un contrat de job local avant sa supervision. Le
+contrat SHALL contenir un identifiant de job, l'identifiant de la session OpenCode, le
+répertoire absolu, le change OpenSpec éventuel, les critères de fin, le dernier jalon
+prouvé, le mandat courant éventuel, `terminal_gate` et les métadonnées de reprise. Le
+contrat SHALL exclure tout secret, contenu de fichier du projet et décision CAB.
 
 #### Scenario: Reprise après redémarrage du superviseur
 
@@ -109,14 +77,12 @@ observée.
 
 ### Requirement: Relance technique corrélée à la session
 
-Après une pause de reprise configurable de 60 secondes par défaut, le
-superviseur SHALL vérifier la disponibilité d'OpenCode, le SSE, la readiness
-CAB et le gate terminal avant d'adresser un message structuré de reprise à la
-session enregistrée. Ce message SHALL demander l'examen du dernier état, du
-flux SSE et du protocole CAB, puis la poursuite du premier jalon non prouvé.
-Il SHALL interdire toute réponse finale tant que le gate reste ouvert. Le
-superviseur SHALL limiter une relance à une tentative en cours et conserver le
-résultat observé. Il SHALL ne créer ni décision, ni approbation, ni mandat.
+Après une pause de reprise configurable de 60 secondes par défaut, le superviseur SHALL
+vérifier la disponibilité d'OpenCode, le SSE, la readiness CAB et le gate terminal avant
+d'adresser un message structuré de reprise à la session enregistrée. Ce message SHALL
+demander l'examen du dernier état, du flux SSE et du protocole CAB, puis la poursuite du
+premier jalon non prouvé. Le message de reprise SHALL interdire toute réponse finale
+tant que le gate reste ouvert.
 
 #### Scenario: Session inactive et reprise admissible
 
@@ -133,17 +99,23 @@ résultat observé. Il SHALL ne créer ni décision, ni approbation, ni mandat.
 
 ### Requirement: Observabilité sans secret
 
-Le superviseur SHALL fournir localement un état public sans secret comprenant
-l'identifiant de job, l'état de supervision, le dernier jalon prouvé, l'âge de
-la dernière activité, le nombre et le résultat de la dernière tentative de
-reprise, le gate terminal et la cause courante. Les transitions de supervision
-SHALL être journalisées dans le magasin local du superviseur.
+Le superviseur SHALL publier localement, sans secret, l'identité du job,
+l'état de supervision, le dernier jalon prouvé, l'âge de la dernière activité,
+le nombre et le résultat des tentatives de reprise, le gate terminal et la
+cause courante. Jalons et gate SHALL provenir du contrat observé du contrôleur.
+Les transitions SHALL être journalisées dans le magasin local du superviseur.
 
 #### Scenario: Consultation d'un job non terminal
-
 - **WHEN** un client local consulte l'état d'un job dont le gate est ouvert
-- **THEN** il reçoit l'état de supervision et la raison de non-terminalité sans
-  contenu de projet, secret ni décision détaillée
+- **THEN** il reçoit l'état de supervision et la raison de non-terminalité sans contenu de projet, secret ni décision détaillée
+
+#### Scenario: Jalon et gate observés
+- **WHEN** le superviseur réconcilie un job portant un jalon prouvé et un gate OPEN
+- **THEN** son statut publie ce jalon et ce gate pour l'identité du job observé
+
+#### Scenario: Réconciliation indisponible
+- **WHEN** le contrat courant ne peut plus être relu
+- **THEN** le statut rend l'échec et la dernière réconciliation observables sans présenter une nouvelle preuve de jalon ou de gate
 
 ### Requirement: Gel des relances pendant une récupération
 Le superviseur MUST suspendre les messages de reprise lorsque le contrat expose une récupération en cours. Il MUST NOT relancer l'ancienne session ou la candidate pendant le prévol. Après transfert confirmé, il MUST suivre exclusivement la nouvelle session du même job et conserver le gate OPEN. Il MUST NOT créer la session candidate ni décider le transfert.
@@ -282,3 +254,138 @@ L'orchestrateur MUST conserver le RUN, le job, les jalons, critères et preuves 
 #### Scenario: Interruption ou arrêt explicite
 - **WHEN** une tentative reste non réconciliée ou le développeur demande l'arrêt
 - **THEN** aucune tentative supplémentaire ne part avant réconciliation ou autorisation appropriée
+
+### Requirement: Compteur persistant des tentatives de reprise
+
+Le superviseur MUST exposer `resumeAttemptCount` par job. Un job neuf MUST
+commencer à zéro. Avant chaque émission de reprise, le compteur connu MUST
+être incrémenté et persisté avec la tentative ; un échec de persistance MUST
+interdire l'émission. Le compteur MUST distinguer tentative et succès et
+survivre au redémarrage et au transfert de session du même job.
+
+#### Scenario: Émission réussie ou échouée
+- **WHEN** une requête de reprise est émise puis réussit ou échoue
+- **THEN** elle compte une tentative et son résultat reste publié séparément
+
+#### Scenario: Préparation sans émission
+- **WHEN** une relance est refusée, gelée ou abandonnée avant son émission
+- **THEN** le compteur ne change pas
+
+#### Scenario: Persistance impossible
+- **WHEN** l'enregistrement du compteur et de la tentative échoue
+- **THEN** aucune requête de reprise n'est émise
+
+#### Scenario: Même job après interruption ou transfert
+- **WHEN** le superviseur redémarre ou suit une nouvelle session du même job
+- **THEN** il conserve le compteur connu de ce job
+
+### Requirement: Compatibilité du statut de supervision historique
+
+Un état ancien dépourvu de compteur MUST rester lisible et publier
+`resumeAttemptCount: null` pour ce job. Le superviseur MUST NOT reconstruire
+le nombre de tentatives depuis la dernière tentative. Un nouveau job MUST
+réinitialiser son compteur à zéro et MUST NOT hériter du jalon ou du gate
+du job précédent.
+
+#### Scenario: Ancien état sans compteur
+- **WHEN** le superviseur restaure un état historique sans compteur pour le même job
+- **THEN** le compteur reste inconnu, y compris après de nouvelles tentatives de ce job
+
+#### Scenario: Nouveau job
+- **WHEN** le contrat observé désigne un autre job
+- **THEN** son compteur commence à zéro et son jalon et son gate proviennent de son propre contrat
+
+### Requirement: Sessions accessibles et traces du compactage commun
+
+Lorsque les deux API sont disponibles, l'orchestrateur SHALL lancer les deux compactages
+en parallèle ; sinon, l'orchestrateur SHALL compacter les seules sessions accessibles et
+tracer les opérations non exécutées. Le cycle SHALL conserver un identifiant commun, les
+identifiants de session disponibles et ceux explicitement non exposés, les horodatages,
+résultats natifs et éventuels retards dans le checkpoint non secret.
+
+#### Scenario: Sessions accessibles et traces du compactage commun
+- **WHEN** une seule API native de compactage est exposée
+- **THEN** l'orchestrateur compacte cette session et trace l'autre comme non exécutée sous le même identifiant de cycle
+
+### Requirement: Échéance suivante du compactage commun
+
+La prochaine échéance SHALL être calculée depuis le déclenchement du cycle commun, sans
+remplacer un échec par une réussite rétroactive.
+
+#### Scenario: Échéance suivante du compactage commun
+- **WHEN** un cycle de compactage commence après un retard de fin de mandat
+- **THEN** la prochaine échéance part du déclenchement observé sans transformer un ancien échec en réussite
+
+### Requirement: Preuves natives du compactage conjoint
+
+Un accusé de lancement, un résumé manuel ou le compactage d'une session auxiliaire SHALL
+NOT constituer la preuve de compactage de l'orchestrateur réel. Les deux fins natives
+corrélées SHALL être requises pour déclarer une réussite conjointe, pas pour reprendre
+un RUN dont l'état reste exploitable.
+
+#### Scenario: Preuves natives du compactage conjoint
+- **WHEN** seul un accusé de lancement ou le compactage d'une session auxiliaire existe
+- **THEN** aucune réussite conjointe des deux sessions réelles n'est déclarée
+
+### Requirement: Continuité et réconciliation après compactage
+
+Une API de compactage absente SHALL NOT être assimilée à une perte de contexte lorsque
+la conversation active, le checkpoint et les preuves disponibles permettent de vérifier
+la continuité ; les identifiants non exposés SHALL être signalés sans être inventés.
+Avant reprise des mandats, l'orchestrateur SHALL réconcilier les deux contextes, la
+santé OpenCode, MCP et la readiness CAB, et vérifier l'absence d'approbation parasite.
+
+#### Scenario: Continuité et réconciliation après compactage
+- **WHEN** une API est absente mais la conversation active et le checkpoint restent exploitables
+- **THEN** la continuité est vérifiée sans inventer d'identifiant, puis contextes, santé, MCP, readiness et approbations sont réconciliés
+
+### Requirement: Compactage incomplet avec reprise sûre
+
+Si une API requise est indisponible ou si un compactage échoue, l'orchestrateur SHALL
+conserver le cycle incomplet et signaler sa cause sans annoncer une synchronisation
+réussie. Ce seul écart SHALL NOT classer le RUN `BLOQUÉ`, arrêter CAB, demander une
+dérogation humaine ni différer les statistiques ; après réconciliation sûre,
+l'orchestrateur SHALL poursuivre les mandats déjà autorisés.
+
+#### Scenario: Compactage incomplet avec reprise sûre
+- **WHEN** le compactage échoue mais la réconciliation confirme une reprise sûre
+- **THEN** le cycle reste incomplet avec sa cause et les mandats autorisés continuent sans blocage fondé sur ce seul échec ni report des statistiques
+
+### Requirement: Suspension et neutralité du compactage
+
+Un compactage encore en cours ou une réconciliation impossible SHALL suspendre les
+opérations concernées selon le protocole CAB. L'orchestrateur SHALL NOT répéter
+aveuglément une opération d'effet inconnu ni attendre une API absente ; l'orchestrateur
+SHALL réexaminer sa disponibilité à la prochaine échéance du cycle. Ce cycle SHALL NOT
+créer une approbation, rejouer une opération, changer le modèle ni fermer ou redémarrer
+les processus des agents.
+
+#### Scenario: Suspension et neutralité du compactage
+- **WHEN** un compactage reste en cours ou son effet est inconnu
+- **THEN** les opérations concernées sont suspendues sans répétition aveugle, nouvelle approbation, rejeu ou redémarrage d'agent
+
+### Requirement: Restauration sans jalon inventé
+
+Une instance redémarrée SHALL restaurer le contrat sans déduire de jalon ni d'état
+terminal.
+
+#### Scenario: Restauration sans jalon inventé
+- **WHEN** une instance redémarre avec un contrat persistant valide
+- **THEN** elle restaure ce contrat sans déduire un jalon ou un état terminal
+
+### Requirement: Tentative unique et neutralité de la relance
+
+Le superviseur SHALL limiter une relance à une tentative en cours et conserver le
+résultat observé. Le message de reprise SHALL ne créer ni décision, ni approbation, ni
+mandat.
+
+#### Scenario: Tentative unique et neutralité de la relance
+- **WHEN** une tentative de reprise est encore en cours
+- **THEN** le superviseur n'en lance pas une seconde et ne crée ni décision, ni approbation, ni mandat
+
+### Requirement: Supervision de plusieurs RUN
+Le superviseur MUST suivre chaque RUN séparément, avec son activité SSE, sa session, son gate, son compteur de reprise et sa récupération. Les relances MUST rester techniques et corrélées au RUN. L’arrêt d’un RUN MUST NOT interrompre la supervision des autres.
+
+#### Scenario: Isolation concurrente
+- **WHEN** un événement de A arrive
+- **THEN** l’horloge de B reste inchangée

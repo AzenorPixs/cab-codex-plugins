@@ -628,6 +628,13 @@ async function testCommandCorrelation(context, strictCommands) {
       return;
     }
 
+    if (request.url.startsWith("/session/ses_command_test?")) {
+      response.writeHead(200, { "content-type": "application/json" });
+      response.end(JSON.stringify({ id: "ses_command_test", directory: "/workspace",
+        permission: [{ permission: "bash", pattern: "*", action: "ask" }] }));
+      return;
+    }
+
     response.writeHead(404).end();
   });
 

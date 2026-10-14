@@ -3,7 +3,7 @@
 Version : 0.5
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-12T05:33:21Z
+Début du relevé (UTC) : 2026-10-14T05:36:05Z
 Environnement d'exécution DIU : PHYSICAL
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -114,7 +114,7 @@ La détection ne vérifie pas le fonctionnement du mode headless.
 
 ## Chromium
 
-  * 154.0.8037.92
+  * 155.0.8059.39
   * /usr/bin/chromium
   * Mode headless : --headless
 

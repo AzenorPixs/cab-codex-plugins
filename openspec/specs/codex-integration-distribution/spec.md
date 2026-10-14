@@ -21,68 +21,16 @@ healthcheck et SSE dans une arborescence distribuable cohérente.
 - **THEN** la marketplace et le plugin sont pris depuis la racine du dépôt, sans déplacement sous `.codex/`
 
 ### Requirement: Commande de pilotage sûre
-La commande Codex `/cab` SHALL être versionnée dans
-`.codex/commands/cab.md` et proposer `start`, `run`, `test`, `update` et
-`stop`. Elle SHALL orchestrer les ressources de communication CAB entre le
-broker MCP et l'agent Codex, sans rendre de décision d'approbation ni modifier
-le projet piloté. Elle SHALL préserver OpenCode et le broker MCP géré par
-OpenCode lors de l'arrêt.
 
-Avant de créer une session de codage, `/cab start` SHALL consulter `GET /mcp`
-du serveur OpenCode et exiger que `cgpt-validation` soit `connected`. En cas
-d'échec, elle MAY réinitialiser l'instance par `POST /instance/dispose`, puis
-SHALL attendre un état sain ; elle SHALL ne jamais démarrer ni arrêter le
-broker directement. Après la purge d'un nouveau RUN et ce contrôle, elle SHALL créer une nouvelle
-session maîtresse OpenCode persistante. Elle MAY réutiliser la session seulement
-pour la reprise du même RUN, sans purge. Elle SHALL transmettre les mandats par
-la messagerie native de cette session.
-
-Après la preuve MCP et avant de créer cette session persistante,
-`/cab start` SHALL vérifier le fournisseur, le modèle et le niveau de
-raisonnement effectivement configurés pour l'agent de codage ciblé. Elle SHALL
-vérifier leur disponibilité via l'API OpenCode, soumettre une requête
-temporaire sans outil ni accès au projet et contrôler les métadonnées
-réellement observées. Si une valeur est absente, indisponible ou divergente,
-elle SHALL publier `CAB_INACTIF` avec la cause et ne créer aucune session
-persistante. Elle SHALL ne jamais modifier la configuration choisie par le
-développeur.
-
-`/cab update` SHALL vérifier que la marketplace `cab_codex_plugins` utilise la
-source Git `AzenorPixs/cab-codex-plugins`, branche `main`, avec une extraction
-sparse `.agents/plugins` et `plugins`. Si une source locale homonyme est
-détectée, elle SHALL mémoriser sa racine, la remplacer par la source Git et la
-restaurer si l'ajout Git échoue. Elle SHALL actualiser l'instantané Git par
-`codex plugin marketplace upgrade cab_codex_plugins`, comparer le manifeste
-distant de `cab-approval-bridge` à la version installée et appeler
-`codex plugin add cab-approval-bridge@cab_codex_plugins` seulement si le
-manifeste distant est strictement plus récent. Elle SHALL refuser une version
-absente ou invalide et SHALL vérifier la version installée après la réinstallation.
-
-`/cab update` SHALL aussi télécharger exclusivement
-`.codex/commands/cab.md` depuis `https://github.com/AzenorPixs/cab-codex-plugins`,
-branche `main`, vérifier son frontmatter versionné et comparer cette version
-SemVer à la copie de profil Codex. Elle SHALL remplacer atomiquement cette
-copie seulement si GitHub fournit une version strictement plus récente. Une
-copie locale sans version MAY être remplacée par une copie GitHub valide. Un
-échec réseau, une redirection d'hôte, une version invalide ou une version
-distante égale ou antérieure SHALL préserver la copie locale. Elle SHALL ne
-démarrer, arrêter ni modifier aucune ressource CAB ou configuration Codex, à
-l'exception du déploiement atomique du superviseur et de son unité systemd
-utilisateur ainsi que de la migration réversible de sa marketplace locale vers
-la source Git spécifiée. Elle SHALL installer ou actualiser le superviseur
-depuis le plugin installé lorsqu'il est absent ou divergent, puis recharger
-systemd sans l'activer ni le démarrer.
-
-À la fin, `/cab update` SHALL afficher un résumé séparant les versions GitHub
-et locales du manifeste du plugin, du contrôleur, du superviseur, du broker et
-de la commande `/cab`. La version locale du superviseur SHALL provenir du
-script déployé dans le profil Codex. La version locale du broker SHALL provenir de
-`broker_readiness.server_version`. Toute version indisponible SHALL être
-signalée comme telle sans être déduite d'une autre source.
+La commande Codex `/cab` SHALL être versionnée dans `.codex/commands/cab.md` et proposer
+`start`, `run`, `test`, `update` et `stop`. La commande `/cab` SHALL orchestrer les
+ressources de communication CAB entre le broker MCP et l'agent Codex, sans rendre de
+décision d'approbation ni modifier le projet piloté. La commande `/cab` SHALL préserver
+OpenCode et le broker MCP géré par OpenCode lors de l'arrêt.
 
 #### Scenario: Démarrage CAB
 - **WHEN** `/cab start` est exécutée
-- **THEN** elle purge le runtime selon le contrat de nouvelle session, vérifie `/mcp`, initialise le contrôleur et la supervision CAB, puis crée une nouvelle session maîtresse sans prendre de décision métier
+- **THEN** elle rejoint le runtime sans purge, ou le purge lors d’une réinitialisation globale exclusive, vérifie `/mcp`, initialise le contrôleur et la supervision CAB, puis crée une nouvelle session maîtresse sans prendre de décision métier
 
 #### Scenario: MCP non connecté
 - **WHEN** `GET /mcp` ne présente pas `cgpt-validation` comme `connected`
@@ -170,7 +118,7 @@ Son installation SHALL rendre ce skill disponible sans plugin Tools Codex
 et sans skill `cgpt` externe. Le protocole et la commande CAB SHALL imposer
 sa production de statistiques après chaque archivage réussi selon
 `archive-session-statistics`. Les composants versionnés SHALL partager la
-version de base `0.87.2`, le plugin pouvant ajouter un cachebuster Codex.
+version de base `1.0.0`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
 - **WHEN** le plugin CAB est installé depuis sa marketplace
@@ -178,16 +126,16 @@ version de base `0.87.2`, le plugin pouvant ajouter un cachebuster Codex.
 
 #### Scenario: Release cohérente
 - **WHEN** la release est validée
-- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `0.87.2`
+- **THEN** le broker, le contrôleur, le superviseur, le plugin et la commande annoncent tous la version de base `1.0.0`
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 
-La commande `/cab start` et la skill SHALL purger le runtime avant chaque
-nouvelle session CAB. Une reprise du même RUN, un compactage, une reconnexion
+La commande `/cab start` et la skill SHALL purger le runtime uniquement lors d'une
+réinitialisation globale exclusive CAB. Une reprise du même RUN, un compactage, une reconnexion
 ou `run`, `test`, `update`, `stop` SHALL conserver le runtime ; un prévol de récupération divergent SHALL NOT déclencher une nouvelle session ni une purge.
 
 #### Scenario: Ancien état disponible
-- **WHEN** `/cab start` ouvre une nouvelle session et aucun travail précédent n'est actif
+- **WHEN** `/cab start` réinitialise l'infrastructure exclusive sans réservation active
 - **THEN** le protocole purge les états historiques du broker, du contrôleur et du superviseur sans réadopter leur job ou leurs décisions
 
 #### Scenario: Reprise du même RUN
@@ -246,11 +194,15 @@ Le protocole distribué MUST demander à l'orchestrateur de désactiver explicit
 - **THEN** ses outils natifs et d'écriture sont désactivés explicitement et aucun mandat exécutable implicite n'est accordé
 
 ### Requirement: Réactivation limitée des outils exécutables
-La restriction lecture seule MUST NOT modifier la configuration persistante OpenCode ni produire une approbation générale. Un futur mandat exécutable MUST réactiver uniquement ses outils nécessaires, conserver une permission native ask et un mandat CAB unitaire.
+La restriction lecture seule MUST NOT modifier la configuration persistante OpenCode ni produire une approbation générale. La réactivation MUST limiter les outils au mandat unitaire, utiliser noReply, rétablir ask par PATCH de la seule session ciblée et le vérifier par lecture native avant génération. Le message de génération MUST NOT réécrire tools. Une preuve absente ou divergente MUST suspendre le mandat.
 
 #### Scenario: Mandat exécutable suivant
 - **WHEN** l'orchestrateur passe d'un inventaire à une opération native
-- **THEN** seuls les outils nécessaires sont réactivés et l'opération exige sa propre décision CAB
+- **THEN** seuls les outils nécessaires sont réactivés sans génération, ask est rétabli et vérifié, puis l'opération exige sa propre décision CAB
+
+#### Scenario: Réactivation permissive détectée
+- **WHEN** tools true produit une règle allow ou qu'un contrôle natif échoue
+- **THEN** aucun mandat exécutable n'est généré tant que ask n'est pas prouvé
 
 ### Requirement: Référence locale du protocole de codage piloté
 
@@ -293,3 +245,136 @@ Après retry explicite, l'orchestrateur MUST exiger /usr/bin/true exact, change 
 #### Scenario: Preuve ou effet incertain
 - **WHEN** une preuve manque ou un effet reste inconnu
 - **THEN** l'orchestrateur suspend les opérations et demande l'autorité indispensable sans purge ni renouvellement
+
+### Requirement: Connexion MCP et création du RUN CAB
+
+Avant de créer une session de codage, `/cab start` SHALL consulter `GET /mcp` du serveur
+OpenCode et exiger que `cgpt-validation` soit `connected`. En cas d'échec, `/cab start`
+MAY réinitialiser l'instance par `POST /instance/dispose`, puis SHALL attendre un état
+sain ; `/cab start` SHALL ne jamais démarrer ni arrêter le broker directement. 
+
+#### Scenario: Connexion MCP et création du RUN CAB
+- **WHEN** la purge du nouveau RUN est terminée mais cgpt-validation n'est pas connecté
+- **THEN** aucune session de codage n'est créée avant un état MCP sain et CAB ne lance ni n'arrête directement le broker
+
+#### Scenario: Création après raccordement sain
+- **WHEN** l'initialisation globale exclusive ou la jonction sans purge est réconciliée et MCP est sain
+- **THEN** `/cab start` SHALL créer une nouvelle session maîtresse OpenCode persistante
+
+### Requirement: Messagerie et reprise du même RUN CAB
+
+`/cab start` MAY réutiliser la session seulement pour la reprise du même RUN, sans
+purge. `/cab start` SHALL transmettre les mandats par la messagerie native de cette
+session.
+
+#### Scenario: Messagerie et reprise du même RUN CAB
+- **WHEN** CAB reprend le même RUN avec sa session persistante
+- **THEN** il conserve cette session sans purge et transmet les mandats par sa messagerie native
+
+### Requirement: Prévol de l'identité du modèle OpenCode
+
+Après la preuve MCP et avant de créer cette session persistante, `/cab start` SHALL
+vérifier le fournisseur, le modèle et le niveau de raisonnement effectivement configurés
+pour l'agent de codage ciblé. `/cab start` SHALL vérifier leur disponibilité via l'API
+OpenCode, soumettre une requête temporaire sans outil ni accès au projet et contrôler
+les métadonnées réellement observées.
+
+#### Scenario: Prévol de l'identité du modèle OpenCode
+- **WHEN** le MCP est connecté avant la création de la session persistante
+- **THEN** le prévol sans outil ni accès au projet contrôle fournisseur, modèle, raisonnement, disponibilité et métadonnées observées
+
+### Requirement: Refus d'un prévol modèle non conforme
+
+Si une valeur est absente, indisponible ou divergente, `/cab start` SHALL publier
+`CAB_INACTIF` avec la cause et ne créer aucune session persistante. `/cab start` SHALL
+ne jamais modifier la configuration choisie par le développeur.
+
+#### Scenario: Refus d'un prévol modèle non conforme
+- **WHEN** une valeur de modèle attendue est absente ou divergente
+- **THEN** CAB publie CAB_INACTIF avec sa cause, ne crée pas de session persistante et ne modifie pas la configuration choisie
+
+### Requirement: Source Git et migration réversible de la marketplace CAB
+
+`/cab update` SHALL vérifier que la marketplace `cab_codex_plugins` utilise la source
+Git `AzenorPixs/cab-codex-plugins`, branche `main`, avec une extraction sparse
+`.agents/plugins` et `plugins`. Si une source locale homonyme est détectée, `/cab
+update` SHALL mémoriser sa racine, la remplacer par la source Git et la restaurer si
+l'ajout Git échoue.
+
+#### Scenario: Source Git et migration réversible de la marketplace CAB
+- **WHEN** la marketplace CAB utilise une source locale homonyme et l'ajout Git échoue
+- **THEN** la racine mémorisée est restaurée et les contraintes de source, branche et extraction sparse restent contrôlées
+
+### Requirement: Actualisation conditionnelle du plugin CAB
+
+`/cab update` SHALL actualiser l'instantané Git par `codex plugin marketplace upgrade
+cab_codex_plugins`, comparer le manifeste distant de `cab-approval-bridge` à la version
+installée et appeler `codex plugin add cab-approval-bridge@cab_codex_plugins` seulement
+si le manifeste distant est strictement plus récent. `/cab update` SHALL refuser une
+version absente ou invalide et SHALL vérifier la version installée après la
+réinstallation.
+
+#### Scenario: Actualisation conditionnelle du plugin CAB
+- **WHEN** le manifeste distant fournit une version strictement plus récente
+- **THEN** la commande native réinstalle le plugin puis vérifie la version réellement installée
+
+### Requirement: Source et remplacement atomique de la commande de profil CAB
+
+`/cab update` SHALL aussi télécharger exclusivement `.codex/commands/cab.md` depuis
+`https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, vérifier son
+frontmatter versionné et comparer cette version SemVer à la copie de profil Codex. `/cab
+update` SHALL remplacer atomiquement cette copie seulement si GitHub fournit une version
+strictement plus récente. Une copie locale sans version MAY être remplacée par une copie
+GitHub valide.
+
+#### Scenario: Source et remplacement atomique de la commande de profil CAB
+- **WHEN** la commande GitHub possède une version valide strictement plus récente que la copie de profil
+- **THEN** la copie est remplacée atomiquement après validation de sa source et de son frontmatter
+
+### Requirement: Préservation des ressources pendant la mise à jour CAB
+
+Un échec réseau, une redirection d'hôte, une version invalide ou une version distante
+égale ou antérieure SHALL préserver la copie locale. `/cab update` SHALL ne démarrer,
+arrêter ni modifier aucune ressource CAB ou configuration Codex, à l'exception du
+déploiement atomique du superviseur et de son unité systemd utilisateur ainsi que de la
+migration réversible de sa marketplace locale vers la source Git spécifiée.
+
+#### Scenario: Préservation des ressources pendant la mise à jour CAB
+- **WHEN** le téléchargement échoue ou la version distante n'est pas plus récente
+- **THEN** la commande locale et les ressources CAB sont conservées hors des seules exceptions documentées
+
+### Requirement: Déploiement du superviseur sans démarrage
+
+`/cab update` SHALL installer ou actualiser le superviseur depuis le plugin installé
+lorsqu'il est absent ou divergent, puis recharger systemd sans l'activer ni le démarrer.
+
+#### Scenario: Déploiement du superviseur sans démarrage
+- **WHEN** le superviseur installé est absent ou divergent
+- **THEN** la commande le déploie depuis le plugin et recharge systemd sans activation ni démarrage
+
+### Requirement: Résumé des versions réellement observées
+
+À la fin, `/cab update` SHALL afficher un résumé séparant les versions GitHub et locales
+du manifeste du plugin, du contrôleur, du superviseur, du broker et de la commande
+`/cab`. La version locale du superviseur SHALL provenir du script déployé dans le profil
+Codex. La version locale du broker SHALL provenir de `broker_readiness.server_version`.
+Toute version indisponible SHALL être signalée comme telle sans être déduite d'une autre
+source.
+
+#### Scenario: Résumé des versions réellement observées
+- **WHEN** une mise à jour CAB termine avec une version du broker actif inaccessible
+- **THEN** le résumé distingue GitHub et local et indique la valeur indisponible sans la déduire du paquet
+
+### Requirement: Distribution concurrente 1.0.0
+Les briques CAB MUST déclarer la version 1.0.0. La distribution MUST inclure registre, contextes isolés, verrou et règles de réservation dans la commande, les skills et le protocole. Les prompts pilotés des huit projets inventoriés MUST être synchronisés. CISM, CAISM et les prompts directs MUST rester inchangés.
+
+#### Scenario: Isolation concurrente
+- **WHEN** la distribution est contrôlée
+- **THEN** les versions et contrats sont cohérents sans activation des services
+
+### Requirement: Distribution cohérente du correctif 1.0.1
+Le broker, le contrôleur, le superviseur, les scripts versionnés, la commande et le plugin MUST publier la version de base 1.0.1. Le plugin MUST utiliser un cachebuster neuf. Les versions de schéma et de protocole MCP MUST rester inchangées. La préparation source MUST NOT modifier les services actifs, les caches installés ou les états des RUN.
+
+#### Scenario: Jeu source vérifié
+- **WHEN** les contrôles de distribution du correctif réussissent
+- **THEN** les versions exécutables sont cohérentes sans annoncer un déploiement actif
