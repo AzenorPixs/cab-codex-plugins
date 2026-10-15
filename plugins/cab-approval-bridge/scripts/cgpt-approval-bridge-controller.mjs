@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { createJobContext } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, RunRegistry, VERSION } from './cgpt-approval-bridge-runs.mjs';
 
-const version = "1.0.1";
+const version = "1.0.2";
 if (version !== VERSION) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];

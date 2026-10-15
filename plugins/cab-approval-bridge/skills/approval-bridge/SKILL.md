@@ -306,7 +306,8 @@ Avant de modifier le modèle d’un agent OC :
 
 Cette procédure normale reste distincte d'un arrêt forcé explicitement demandé
 par le développeur. Un prévol de récupération divergent ne permet aucun
-abandon de job.
+abandon implicite de job ; un arrêt ciblé explicitement demandé par le
+développeur suit la procédure distincte décrite ci-dessous.
 
 
 ## Récupération contrôlée de session dans le même RUN
@@ -373,11 +374,17 @@ Une décision `approved`, consommée ou une preuve incertaine interdit retry.
 Demander explicitement `POST /runs/<run_id>/job/recover` avec `phase: "retry"`, les mêmes
 `jobId`, `expectedSessionId`, `sessionId` candidate et `recoveryId`,
 `previousPreflightRequestId` égal à la réservation actuelle et un
-`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job.
+`preflightRequestId` inédit. Ne pas réarmer, désarmer ou abandonner le job pendant retry.
 Le contrôleur exige un refus natif `REJECTED` corrélé à la décision locale
 `rejected` non consommée, ou une erreur native MCP `-32602` avant enregistrement.
-Une erreur générique, un timeout, une commande ou un autre outil natif laisse
-le gel conservé et exige la réconciliation ou l'autorité indispensable.
+Depuis CAB 1.0.2, après timeout de `request_validation`, `poll_approval` ou
+`get_approval` sur le même `approval_id` peut prouver ce refus. Vérifier dans
+l'ordre natif `requestId`, `approval_id`, `session_id`, `directory`, `change_id`,
+`files` et `commands` ; toutes les demandes enregistrées doivent être refusées.
+Un `PENDING` corrélé reste non terminal ; aucune nouvelle demande n'est admise
+avant retry. Une erreur générique, un timeout seul, un polling divergent,
+une commande ou un autre outil natif laisse le gel conservé et exige la
+réconciliation ou l'autorité indispensable.
 
 Le contrôleur conserve les identifiants antérieurs et l'empreinte du préfixe
 des parties natives, sans contenu de message. Il vérifie ce préfixe à chaque
@@ -400,6 +407,15 @@ métier non secret, numéro, identifiants, horodatages, cause, arguments attendu
 et observés et références des preuves natives. Maintenir le suivi à la cadence
 existante sans boucle serrée. Reprendre au premier jalon non prouvé, sans
 rejouer les écritures validées ni les autorisations consommées.
+
+
+Cette conservation s'applique à retry et ne retire jamais l'autorité d'un
+arrêt ciblé explicitement demandé par le développeur. Un tel arrêt reste
+distinct : réconcilier les effets et demandes, obtenir le gate `BLOQUÉ`,
+désarmer uniquement le job concerné et libérer sa réservation avec preuves,
+sans purge ni suppression des historiques. Une nouvelle session ou un nouveau
+job exige une autorisation explicite de reprise ; ne fermer ni redémarrer
+OpenCode, le broker ou les services communs des autres RUN.
 
 ## Mandats d'inventaire ou d'analyse en lecture seule
 

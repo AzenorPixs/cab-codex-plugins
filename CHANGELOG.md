@@ -45,6 +45,15 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 
 ## Unreleased
 
+- Correctif source 1.0.2 : retry accepte un refus REJECTED obtenu par
+  poll_approval/get_approval après timeout MCP, corrélé à une décision locale
+  rejected non consommée. Candidate, job, gel et frontières natives conservés ;
+  timeout seul, polling divergent, preuve perdue et effets restent refusés.
+- Huit ORCHESTRATED_CODING.md, skill et commande CAB alignés ; arrêt ciblé
+  explicite du développeur distingué de retry. Briques distribuées 1.0.2 et
+  cachebuster neuf, sans migration, nouvelle dépendance, installation ou
+  intervention sur les RUN actifs.
+
 - Corrections ACSM du 2026-10-13 : validation des contrats persistés avant
   HTTP et interactions externes ; refus explicite des racines, structures
   et types invalides, sans divulgation ni réécriture du fichier.
