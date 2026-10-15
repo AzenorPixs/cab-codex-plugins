@@ -538,6 +538,96 @@ function retryPayload(h, next = "preflight-2") {
     preflightRequestId: next };
 }
 
+async function refusedAfterTimeout(h, tool = "cgpt-validation_poll_approval") {
+  const a = await refusedPreflight(h);
+  const request = h.native.messages.at(-1).parts[0];
+  request.state = { status: "error", input: a, error: "MCP error -32001: Request timed out",
+    time: { start: 1, end: 2 } };
+  const poll = { type: "tool", tool, state: { status: "completed",
+    input: { approval_id: a.approval_id }, output: JSON.stringify({ ...a, status: "REJECTED" }),
+    time: { start: 3, end: 4 } } };
+  h.native.messages.at(-1).parts.push(poll);
+  return { a, request, poll };
+}
+
+for (const tool of ["cgpt-validation_poll_approval", "cgpt-validation_get_approval"]) {
+  test(`retry accepte le refus par ${tool} après timeout et conserve la frontière`, async (context) => {
+    const h = await setup(context);
+    await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+    const { a, poll } = await refusedAfterTimeout(h, tool);
+    const pending = structuredClone(poll);
+    pending.state.output = JSON.stringify({ ...a, status: "PENDING" });
+    h.native.messages[0].parts.splice(1, 0, pending);
+    const before = await h.get("/job");
+    assert.equal((await h.post("/job/recover", retryPayload(h))).status, 200);
+    const after = await h.get("/job");
+    for (const key of ["jobId", "sessionId", "directory", "changeId", "criteria", "lastProvenMilestone",
+      "strictCommands", "revokedSessions"]) assert.deepEqual(after[key], before[key]);
+    assert.equal(after.terminalGate.status, "OPEN");
+    assert.equal(after.terminalGate.validatedAt, null);
+    assert.equal(after.recovery.sessionId, "ses_new");
+    assert.equal(after.recovery.attempts[0].nativeToolCount, 3);
+    assert.deepEqual(after.recovery.attempts[0].approvalIds, [a.approval_id]);
+    assert.equal((await h.get(`/decision/${a.requestId}`)).decision, "rejected");
+    assert.deepEqual(h.native.replies, []);
+    h.recovery.preflightRequestId = "preflight-2";
+    await h.preflight();
+    const history = structuredClone(h.native.messages);
+    poll.state.output = "altered";
+    assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).body.error,
+      "preflight-history-divergent");
+    h.native.messages = history;
+    assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 200);
+    assert.equal(h.native.replies.length, 1);
+  });
+}
+
+test("retry refuse chaque identité ou opération de polling divergente sans mutation", async (context) => {
+  const h = await setup(context);
+  await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+  const { a } = await refusedAfterTimeout(h);
+  const good = structuredClone(h.native.messages);
+  const before = await h.get("/job");
+  const changes = [
+    (parts) => { parts[1].state.input.approval_id = "foreign"; },
+    ...["requestId", "approval_id", "session_id", "directory", "change_id", "files", "commands"].map(
+      (key) => (parts) => {
+        parts[1].state.output = JSON.stringify({ ...a, status: "REJECTED",
+          [key]: Array.isArray(a[key]) ? ["foreign"] : "foreign" });
+      }),
+    ...["requestId", "approval_id", "session_id", "directory", "change_id", "files", "commands"].map(
+      (key) => (parts) => { parts[0].state.input[key] = Array.isArray(a[key]) ? ["foreign"] : "foreign"; }),
+    (parts) => { parts.reverse(); },
+    (parts) => { parts.pop(); },
+    (parts) => { parts[1].state.output = JSON.stringify({ ...a, status: "PENDING" }); },
+    (parts) => { parts[1].state.output = JSON.stringify({ ...a, status: "APPROVED" }); },
+    (parts) => { parts[1].state.output = "invalid-json"; },
+    (parts) => { parts[1].state.status = "error"; },
+    (parts) => { parts[0].state.error = "MCP error -32000: connection lost"; },
+    (parts) => { parts.push({ type: "tool", tool: "bash", state: { status: "completed" } }); },
+  ];
+  for (const change of changes) {
+    h.native.messages = structuredClone(good);
+    change(h.native.messages[0].parts);
+    assert.equal((await h.post("/job/recover", retryPayload(h))).status, 409);
+    assert.deepEqual(await h.get("/job"), before);
+    assert.deepEqual(h.native.replies, []);
+  }
+  h.native.messages = good;
+  assert.equal((await h.post("/job/recover", retryPayload(h))).status, 200);
+});
+
+test("retry refuse un refus de polling sans décision locale restaurée", async (context) => {
+  const h = await setup(context);
+  await h.post("/job/recover", { ...h.recovery, phase: "prepare" });
+  await refusedAfterTimeout(h);
+  const before = await h.get("/job");
+  await h.stop(); await h.start();
+  assert.equal((await h.post("/job/recover", retryPayload(h))).status, 409);
+  assert.deepEqual((await h.get("/job")).recovery, before.recovery);
+  assert.deepEqual(h.native.replies, []);
+});
+
 test("retry conserve la candidate et les refus puis complete vérifie seulement le nouvel essai", async (context) => {
   const h = await setup(context);
   await h.post("/job/recover", { ...h.recovery, phase: "prepare" });

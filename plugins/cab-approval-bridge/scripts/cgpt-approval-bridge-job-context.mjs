@@ -209,7 +209,7 @@ function updateStatus(type, details = {}) {
 
 function publicStatus() {
   return {
-    version: "1.0.1",
+    version: "1.0.2",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -491,37 +491,74 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
   const current = currentRecoveryTools(recovery, parts, messages);
   const requestIds = new Set([recovery.preflightRequestId]);
   const approvalIds = new Set();
+  const submitted = new Map();
   let refused = false;
   for (const part of current) {
     const state = part.state;
     if (part.tool === "cgpt-validation_broker_readiness" && state?.status === "completed") continue;
-    if (part.tool !== "cgpt-validation_request_validation") {
+    let attempt;
+    if (part.tool === "cgpt-validation_request_validation") {
+      const input = state?.input;
+      const recorded = validations.get(input?.requestId);
+      if (recorded) {
+        if (httpDecisions.get(input.requestId)?.decision !== "rejected" || recorded.operationConsumed ||
+            input.approval_id !== recorded.approvalId || input.change_id !== recorded.changeId ||
+            input.session_id !== recovery.sessionId || input.directory !== job.directory ||
+            JSON.stringify(input.files) !== "[]" ||
+            JSON.stringify(input.commands) !== '["/usr/bin/true"]' ||
+            recorded.operation?.sessionId !== input.session_id ||
+            recorded.operation?.directory !== input.directory ||
+            recorded.operation?.kind !== "bash" || recorded.operation?.target !== "/usr/bin/true" ||
+            submitted.has(input.approval_id)) {
+          recoveryFailure("preflight-refusal-not-proved");
+        }
+        attempt = { input, rejected: false };
+        submitted.set(input.approval_id, attempt);
+        requestIds.add(input.requestId);
+        approvalIds.add(input.approval_id);
+        // Le timeout seul ne prouve rien ; seul un polling corrélé peut le compléter.
+        if (state.status === "error") {
+          if (typeof state.error !== "string" ||
+              !/^(?:MCP(?: error)? -32001:? )?(?:Request timed out|MCP timeout)$/i.test(state.error)) {
+            recoveryFailure("preflight-refusal-not-proved");
+          }
+          continue;
+        }
+      } else {
+        if (state?.status !== "error" || typeof state.error !== "string" ||
+            !/^MCP error -32602:/.test(state.error)) {
+          recoveryFailure("preflight-refusal-not-proved");
+        }
+        refused = true;
+        if (typeof input?.requestId === "string") requestIds.add(input.requestId);
+        if (typeof input?.approval_id === "string") approvalIds.add(input.approval_id);
+        continue;
+      }
+    } else if (["cgpt-validation_poll_approval", "cgpt-validation_get_approval"].includes(part.tool)) {
+      attempt = submitted.get(state?.input?.approval_id);
+      if (!attempt) recoveryFailure("preflight-refusal-not-proved");
+    } else {
       recoveryFailure("preflight-effect-not-excluded");
     }
-    const input = state?.input;
-    const recorded = validations.get(input?.requestId);
-    if (recorded) {
-      let output;
-      try { output = JSON.parse(state.output); } catch { recoveryFailure("preflight-refusal-not-proved"); }
-      if (state.status !== "completed" || httpDecisions.get(input.requestId)?.decision !== "rejected" ||
-          recorded.operationConsumed || input.approval_id !== recorded.approvalId ||
-          input.session_id !== recovery.sessionId || input.directory !== job.directory ||
-          output.status !== "REJECTED" || output.requestId !== input.requestId ||
-          output.approval_id !== input.approval_id || output.session_id !== input.session_id ||
-          output.directory !== input.directory || output.change_id !== input.change_id ||
-          JSON.stringify(output.files) !== JSON.stringify(input.files) ||
-          JSON.stringify(output.commands) !== JSON.stringify(input.commands)) {
-        recoveryFailure("preflight-refusal-not-proved");
-      }
-    } else if (state?.status !== "error" || typeof state.error !== "string" ||
-        !/^MCP error -32602:/.test(state.error)) {
+    let output;
+    try { output = JSON.parse(state?.output); } catch { recoveryFailure("preflight-refusal-not-proved"); }
+    const input = attempt.input;
+    if (state.status !== "completed" || !output ||
+        ["requestId", "approval_id", "session_id", "directory", "change_id", "files", "commands"].some(
+          (key) => JSON.stringify(output[key]) !== JSON.stringify(input[key])) ||
+        !["PENDING", "REJECTED"].includes(output.status) ||
+        (attempt.rejected && output.status !== "REJECTED")) {
       recoveryFailure("preflight-refusal-not-proved");
     }
-    refused = true;
-    if (typeof input?.requestId === "string") requestIds.add(input.requestId);
-    if (typeof input?.approval_id === "string") approvalIds.add(input.approval_id);
+    if (output.status === "REJECTED") {
+      attempt.rejected = true;
+      refused = true;
+    }
   }
-  if (!refused || requestIds.has(nextRequestId)) recoveryFailure("preflight-refusal-not-proved");
+  if (!refused || [...submitted.values()].some((attempt) => !attempt.rejected) ||
+      (validation && !submitted.has(validation.approvalId)) || requestIds.has(nextRequestId)) {
+    recoveryFailure("preflight-refusal-not-proved");
+  }
   return { preflightRequestId: recovery.preflightRequestId, requestIds: [...requestIds],
     approvalIds: [...approvalIds], nativeToolCount: parts.length,
     nativeToolHash: recoveryToolsHash(parts), refusedAt: new Date().toISOString() };
@@ -1288,7 +1325,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.0.1",
+      version: "1.0.2",
     },
   });
 

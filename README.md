@@ -311,6 +311,14 @@ approbation. Effet inconnu ou preuve absente suspend la reprise. Le superviseur
 reste gelé jusqu'à complete ; OpenCode reste ouvert. Le remplacement initial
 prévu par CISMP et la purge avant un nouveau RUN restent inchangés.
 
+Depuis CAB 1.0.2, retry accepte aussi le REJECTED obtenu par poll_approval ou
+get_approval après timeout de request_validation, pour la même approbation,
+avec décision locale rejected non consommée et identités/opération exactes.
+Un timeout seul ou PENDING seul reste insuffisant ; chaque demande enregistrée
+doit avoir un refus terminal. Un arrêt ciblé explicitement demandé par le
+développeur reste distinct de retry : gate BLOQUÉ et réconciliation avant
+désarmement et libération, sans purge ni interruption des autres RUN.
+
 ## Organisation du dépôt
 terme
 ```text
@@ -463,7 +471,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.0.1`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.0.2`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

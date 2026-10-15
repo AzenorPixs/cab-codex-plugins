@@ -43,7 +43,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `1.0.0` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.0.2` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -275,6 +275,14 @@ ni permission parasite. complete conserve la candidate et le job. Un nouvel
 candidate, sans concurrence ni rejeu du travail prouvé. Le checkpoint métier
 conserve les tentatives et leurs références natives. Une preuve locale perdue
 après redémarrage n'est pas recréée implicitement. OpenCode reste ouvert.
+
+Depuis CAB 1.0.2, retry accepte aussi le REJECTED obtenu par poll_approval ou
+get_approval après timeout de request_validation, pour la même approbation,
+avec décision locale rejected non consommée et identités/opération exactes.
+Un timeout seul ou PENDING seul reste insuffisant ; chaque demande enregistrée
+doit avoir un refus terminal. Un arrêt ciblé explicitement demandé par le
+développeur reste distinct de retry : gate BLOQUÉ et réconciliation avant
+désarmement et libération, sans purge ni interruption des autres RUN.
 
 ### Réconciliation humaine du prévol exécuté sans once
 

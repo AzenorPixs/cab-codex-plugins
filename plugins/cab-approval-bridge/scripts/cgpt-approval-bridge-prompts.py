@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import tempfile
 
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 PILOTED = ("ACSP", "ACSMP", "CISMP", "DOPP", "ISMP", "PPSCP", "RSMP", "SCMP", "SPCMP")
 MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"
 PREVIOUS_BLOCK_SHA256 = ("c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859",
