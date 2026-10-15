@@ -5,7 +5,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.0.2";
+export const VERSION = "1.1.0";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -67,7 +67,7 @@ function readRegistry(path) {
 }
 
 export class RunRegistry {
-  constructor(directory, stateDirectory) {
+  constructor(directory, stateDirectory, { observe = () => {} } = {}) {
     this.directory = realpathSync(directory);
     this.stateDirectory = stateDirectory;
     if (realTarget(stateDirectory) !== resolve(stateDirectory)) throw new CoordinationError('registry-path-invalid');
@@ -80,6 +80,9 @@ export class RunRegistry {
     this.requestOwners = {};
     this.history = [];
     this.referenceVersion = 0;
+    this.integrationQueue = [];
+    this.schemaVersion = 1;
+    this.observe = observe;
     this.restore();
   }
   restore() {
@@ -89,14 +92,17 @@ export class RunRegistry {
     this.requestOwners = {};
     this.history = [];
     this.referenceVersion = 0;
+    this.integrationQueue = [];
+    this.schemaVersion = 1;
     const data = readRegistry(this.path);
     if (data !== undefined) {
-      if (!record(data) || data.schemaVersion !== 1 || data.project !== this.directory ||
+      if (!record(data) || ![1, 2].includes(data.schemaVersion) || data.project !== this.directory ||
           !Array.isArray(data.runs) || !Number.isSafeInteger(data.sequence) || data.sequence < 0 ||
           (data.integrationOwner !== null && !id(data.integrationOwner))) {
         throw new CoordinationError("registry-restoration-invalid");
       }
       this.sequence = data.sequence;
+      this.schemaVersion = data.schemaVersion;
       this.referenceVersion = data.referenceVersion === undefined ? 0 : data.referenceVersion;
       if (!Number.isSafeInteger(this.referenceVersion) || this.referenceVersion < 0) {
         throw new CoordinationError('registry-restoration-invalid');
@@ -118,14 +124,37 @@ export class RunRegistry {
         run.referenceVersion ??= 0;
         run.integrationReady ??= false;
         run.integrationCompleted ??= false;
+        run.requiresPublication ??= run.resources.some((r) => r.mode === 'write');
+        run.phase ??= 'WORK';
         if (!Number.isSafeInteger(run.version) || run.version < 1 || run.version > this.sequence ||
             !Number.isSafeInteger(run.contextId) || run.contextId < 1 || run.contextId > run.version ||
             !Number.isSafeInteger(run.referenceVersion) || run.referenceVersion < 0 || run.referenceVersion > this.referenceVersion ||
             typeof run.integrationReady !== 'boolean' || typeof run.integrationCompleted !== 'boolean' ||
+            typeof run.requiresPublication !== 'boolean' || !['WORK', 'REPORT'].includes(run.phase) ||
+            (run.resources.some((r) => r.mode === 'write') && !run.requiresPublication) ||
+            (run.publishedReferenceVersion !== undefined && (!Number.isSafeInteger(run.publishedReferenceVersion) ||
+              run.publishedReferenceVersion < 1 || run.publishedReferenceVersion > this.referenceVersion)) ||
             !["RESERVED", "DELIVERED", "ABANDONED"].includes(run.state) || this.runs.has(run.runId)) {
           throw new CoordinationError("registry-restoration-invalid");
         }
         this.runs.set(run.runId, structuredClone(run));
+      }
+      if (data.integrationQueue !== undefined && (!Array.isArray(data.integrationQueue) ||
+          data.integrationQueue.some((entry, index, entries) => !record(entry) || !id(entry.runId) ||
+            this.runs.get(entry.runId)?.state !== 'RESERVED' || this.runs.get(entry.runId)?.phase !== 'WORK' ||
+            entry.contextId !== this.runs.get(entry.runId)?.contextId ||
+            typeof entry.requestedAt !== 'string' || !Number.isFinite(Date.parse(entry.requestedAt)) ||
+            entries.findIndex((other) => other.runId === entry.runId) !== index))) {
+        throw new CoordinationError('registry-restoration-invalid');
+      }
+      this.integrationQueue = data.integrationQueue || [];
+      for (const run of this.runs.values()) if (run.phase === 'REPORT') {
+        if (!run.integrationCompleted || !Number.isSafeInteger(run.publishedReferenceVersion) ||
+            run.publishedReferenceVersion < 1 || run.publishedReferenceVersion > this.referenceVersion ||
+            run.resources.length !== 1 || run.resources[0].mode !== 'write' ||
+            run.resources[0].key !== `file:${this.reportTarget(run, run.reportFile)}`) {
+          throw new CoordinationError('registry-restoration-invalid');
+        }
       }
       const active = [...this.runs.values()].filter((run) => run.state === "RESERVED");
       for (const run of active) this.checkConflicts(run, active.filter((other) => other !== run));
@@ -166,9 +195,10 @@ export class RunRegistry {
     if (this.failed || !this.lock || this.lock.exitCode !== null) throw new CoordinationError("registry-unavailable", 503);
   }
   snapshot() {
-    return structuredClone({ schemaVersion: 1, version: VERSION, project: this.directory,
+    return structuredClone({ schemaVersion: this.schemaVersion, version: VERSION, project: this.directory,
       sequence: this.sequence, integrationOwner: this.integrationOwner,
       referenceVersion: this.referenceVersion,
+      integrationQueue: this.integrationQueue,
       requestOwners: this.requestOwners, history: this.history, runs: [...this.runs.values()] });
   }
   persist() {
@@ -189,6 +219,7 @@ export class RunRegistry {
       this.failed = true;
       throw new CoordinationError("registry-persistence-failed", 503);
     } finally { if (fd !== undefined) closeSync(fd); }
+    this.observe(this.snapshot());
   }
   validate(payload) {
     if (!record(payload) || !id(payload.runId) || !id(payload.ownerId) || !id(payload.changeId) ||
@@ -222,6 +253,7 @@ export class RunRegistry {
   reserve(payload) {
     this.assertHealthy();
     if (this.integrationOwner) throw new CoordinationError('integration-in-progress');
+    if (this.integrationQueue.length) throw new CoordinationError('integration-queued');
     const candidate = this.validate(payload);
     const prior = this.runs.get(candidate.runId);
     if (prior && (prior.state === "RESERVED" || prior.ownerId !== candidate.ownerId)) {
@@ -237,7 +269,8 @@ export class RunRegistry {
       directory: candidate.directory, changeId: candidate.changeId, selectionKey: candidate.selectionKey,
       resources: candidate.resources, dependsOn: candidate.dependsOn, state: "RESERVED",
       version, contextId: version, referenceVersion: this.referenceVersion,
-      integrationReady: false, integrationCompleted: false, reservedAt: new Date().toISOString() };
+      integrationReady: false, integrationCompleted: false, phase: 'WORK',
+      requiresPublication: candidate.resources.some((r) => r.mode === 'write'), reservedAt: new Date().toISOString() };
     this.runs.set(run.runId, run);
     this.persist();
     return structuredClone(run);
@@ -251,13 +284,70 @@ export class RunRegistry {
   }
   extend(runId, payload) {
     const run = this.owned(runId, payload.version);
+    if (run.phase === 'REPORT') throw new CoordinationError('report-phase-only');
+    if (this.integrationOwner && this.integrationOwner !== runId) throw new CoordinationError('integration-suspended');
+    if (!this.integrationOwner && this.integrationQueue.length && run.integrationReady) throw new CoordinationError('integration-draining');
     const resources = this.validate({ ...run, resources: [...run.resources, ...(payload.resources || [])] }).resources;
     this.checkConflicts({ ...run, resources });
     run.resources = resources;
+    run.requiresPublication ||= resources.some((r) => r.mode === 'write');
     run.integrationReady = false;
     run.version = ++this.sequence;
     this.persist();
     return structuredClone(run);
+  }
+  reduce(runId, payload) {
+    const run = this.owned(runId, payload.version);
+    if (run.phase === 'REPORT') throw new CoordinationError('report-phase-only');
+    if (this.integrationOwner) throw new CoordinationError('integration-in-progress');
+    if (this.integrationQueue.length && run.integrationReady) throw new CoordinationError('integration-draining');
+    const resources = this.validate({ ...run, resources: payload.resources }).resources;
+    for (const resource of resources) {
+      if (!run.resources.some((r) => (r.mode === 'write' || resource.mode === 'read') &&
+          (r.key === 'project:*' || r.key === resource.key ||
+            (r.key.startsWith('file:') && resource.key.startsWith(`${r.key}/`))))) {
+        throw new CoordinationError('resource-reduction-outside-reservation');
+      }
+    }
+    run.resources = resources; run.integrationReady = false; run.version = ++this.sequence;
+    this.schemaVersion = 2; this.persist(); return structuredClone(run);
+  }
+  requestIntegration(runId, version, cancel = false) {
+    const run = this.owned(runId, version);
+    if (run.phase === 'REPORT') throw new CoordinationError('report-phase-only');
+    if (this.integrationOwner === runId) throw new CoordinationError('integration-still-owned');
+    const queued = this.integrationQueue.some((e) => e.runId === runId);
+    if (queued === !cancel) return this.snapshot();
+    if (cancel) this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
+    else this.integrationQueue.push({
+      runId, contextId: run.contextId, requestedAt: new Date().toISOString() });
+    this.schemaVersion = 2; this.persist(); return this.snapshot();
+  }
+  reportTarget(run, file) {
+    if (typeof file !== 'string' || !/^openspec\/changes\/archive\/[A-Za-z0-9][A-Za-z0-9_.-]*\/STATISTIQUES\.md$/.test(file) ||
+        !/^\d{4}-\d{2}-\d{2}-/.test(file.split('/')[3]) || file.split('/')[3].slice(11) !== run.changeId ||
+        canonicalResource({ key: `file:${file}`, mode: 'write' }, this.directory).key !== `file:${file}`) {
+      throw new CoordinationError('report-target-invalid');
+    }
+    return file;
+  }
+  closing(runId, payload) {
+    const run = this.owned(runId, payload.version);
+    if (this.integrationOwner) throw new CoordinationError('integration-in-progress');
+    if (!run.integrationCompleted) throw new CoordinationError('integration-publication-required');
+    const file = this.reportTarget(run, payload.reportFile);
+    if (run.phase === 'REPORT') {
+      if (run.reportFile !== file) throw new CoordinationError('report-target-invalid');
+      return structuredClone(run);
+    }
+    const resources = [{ key: `file:${file}`, mode: 'write' }];
+    this.checkConflicts({ ...run, resources });
+    run.resources = resources; run.phase = 'REPORT'; run.reportFile = file;
+    run.requiresPublication = true;
+    run.publishedReferenceVersion ??= run.referenceVersion;
+    run.integrationReady = true; run.version = ++this.sequence;
+    this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
+    this.schemaVersion = 2; this.persist(); return structuredClone(run);
   }
   claimRequest(runId, requestId, digest, known) {
     this.assertHealthy();
@@ -284,7 +374,10 @@ export class RunRegistry {
   covers(runId, version, resources) {
     const run = this.owned(runId, version);
     if (this.integrationOwner && this.integrationOwner !== runId) throw new CoordinationError('integration-suspended');
-    if (run.referenceVersion !== this.referenceVersion) throw new CoordinationError('reference-reconciliation-required');
+    if (!this.integrationOwner && this.integrationQueue.length && run.integrationReady && run.phase !== 'REPORT') {
+      throw new CoordinationError('integration-draining');
+    }
+    if (run.phase !== 'REPORT' && run.referenceVersion !== this.referenceVersion) throw new CoordinationError('reference-reconciliation-required');
     if (!Array.isArray(resources) || !resources.length) throw new CoordinationError("command-resources-required");
     for (const resource of resources.map((r) => canonicalResource(r, this.directory))) {
       if (this.integrationOwner === runId && resource.key === 'project:*' && resource.mode === 'read') continue;
@@ -299,6 +392,7 @@ export class RunRegistry {
   ready(runId, version) {
     const run = this.owned(runId, version);
     if (run.referenceVersion !== this.referenceVersion) throw new CoordinationError('reference-reconciliation-required');
+    if (run.integrationReady) return;
     run.integrationReady = true;
     this.persist();
   }
@@ -306,6 +400,9 @@ export class RunRegistry {
     const run = this.owned(runId, version);
     if (this.integrationOwner) throw new CoordinationError('integration-in-progress');
     if (referenceVersion !== this.referenceVersion) throw new CoordinationError('reference-version-stale');
+    if (this.integrationQueue.length && run.integrationReady && run.referenceVersion === referenceVersion && run.phase !== 'REPORT') {
+      throw new CoordinationError('integration-draining');
+    }
     run.referenceVersion = referenceVersion;
     run.integrationReady = false;
     run.version = ++this.sequence;
@@ -314,17 +411,22 @@ export class RunRegistry {
   }
   modifying(runId) {
     const run = this.runs.get(runId);
+    if (run.phase === 'REPORT') return;
     run.integrationReady = false;
     run.integrationCompleted = false;
     this.persist();
   }
   integration(runId, version, acquire, published = false) {
     const run = this.owned(runId, version);
+    if (run.phase === 'REPORT') throw new CoordinationError('report-phase-only');
     if (acquire && this.integrationOwner && this.integrationOwner !== runId) {
       throw new CoordinationError("integration-already-owned");
     }
     if (!acquire && this.integrationOwner !== runId) throw new CoordinationError("integration-not-owned");
-    if (acquire && [...this.runs.values()].some((r) => r.state === 'RESERVED' &&
+    if (acquire && this.integrationQueue.length && this.integrationQueue[0].runId !== runId) {
+      throw new CoordinationError('integration-queue-order');
+    }
+    if (acquire && [...this.runs.values()].some((r) => r.state === 'RESERVED' && r.phase !== 'REPORT' &&
         (!r.integrationReady || r.referenceVersion !== this.referenceVersion))) {
       throw new CoordinationError('integration-cohort-not-ready');
     }
@@ -333,6 +435,8 @@ export class RunRegistry {
       this.referenceVersion += 1;
       run.referenceVersion = this.referenceVersion;
       run.integrationCompleted = published;
+      if (published) run.publishedReferenceVersion = this.referenceVersion;
+      this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
     }
     this.persist();
   }
@@ -345,10 +449,11 @@ export class RunRegistry {
   release(runId, version, delivered) {
     const run = this.owned(runId, version);
     if (this.integrationOwner === runId) throw new CoordinationError("integration-still-owned");
-    if (delivered && run.resources.some((r) => r.mode === 'write') && !run.integrationCompleted) {
+    if (delivered && run.requiresPublication && !run.integrationCompleted) {
       throw new CoordinationError('integration-publication-required');
     }
-    if (delivered && run.referenceVersion !== this.referenceVersion) throw new CoordinationError('reference-reconciliation-required');
+    if (delivered && run.phase !== 'REPORT' && run.referenceVersion !== this.referenceVersion) throw new CoordinationError('reference-reconciliation-required');
+    this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
     run.state = delivered ? "DELIVERED" : "ABANDONED";
     run.version = ++this.sequence;
     this.persist();

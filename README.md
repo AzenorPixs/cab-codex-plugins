@@ -46,6 +46,23 @@ de benchmark dans les composants CAB.
 
 ## Statistiques après archivage
 
+CAB prépare désormais des statistiques dans son contrôleur, sans RUN
+d'observation supplémentaire : `GET /statistics` et
+`GET /runs/<runId>/statistics?format=markdown` donnent les agrégats et un
+brouillon à six sections. `contextId` sélectionne un ancien change du RUN.
+Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
+les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
+le complète depuis les preuves autorisées et mandate sa publication.
+
+Le profil optimisé ajoute une file FIFO `/integration-request`, une réduction
+quiescente `/resources` et une phase `/closing` après publication, limitée au
+rapport de sa propre archive. Le rapport est préparé en continu puis finalisé
+hors exclusion globale, avec décisions explicites et permission native `once`.
+La livraison exige toujours le rapport vérifié et le gate. Les anciennes
+interfaces restent disponibles. Voir [le protocole](ORCHESTRATED_CODING.md).
+Ces fonctions sont préparées dans les sources ; l'installation active nécessite
+une mise à jour coordonnée distincte.
+
 Le plugin CAB embarque `coding-session-statistics`. Son protocole impose un
 rapport `STATISTIQUES.md` dans chaque dossier d'archive OpenSpec après un
 archivage autorisé et réussi, avant la clôture normale du travail. La collecte
@@ -471,7 +488,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.0.2`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.1.0`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

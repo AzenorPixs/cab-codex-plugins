@@ -26,6 +26,7 @@ CAB/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-job-context.mjs
 │       ├── cgpt-approval-bridge-runs.mjs
+│       ├── cgpt-approval-bridge-statistics.mjs
 │       ├── cgpt-approval-bridge-registry-lock.py
 │       ├── cgpt-approval-bridge-supervisor.mjs
 │       ├── cgpt-approval-bridge-supervisor-context.mjs
@@ -64,6 +65,14 @@ Le broker n'utilise actuellement aucune dépendance Python tierce.
 - possibilité d'exécuter le contrôleur hors sandbox.
 
 ### 4.3 Statistiques de session
+
+Le contrôleur distribué importe aussi `cgpt-approval-bridge-statistics.mjs` ;
+installer ce module avec le jeu complet. Il fournit les exports locaux JSON
+et Markdown à partir des métadonnées existantes, sans RUN d'audit, dépendance
+supplémentaire ni accès direct aux quotas du compte. Le snapshot runtime privé
+reste exclu du paquet. Les nouvelles transitions utilisent le registre schéma 2 ;
+ne pas mélanger ces sources avec un ancien contrôleur lors de l'installation.
+Cette préparation source n'installe rien et ne migre aucun RUN actif.
 
 Le skill `coding-session-statistics` est embarqué dans le plugin CAB avec
 ses métadonnées. Il utilise l'historique persistant et l'outil natif Codex
@@ -189,7 +198,7 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `1.0.2` pour le broker,
+artefacts distribués. La version de base actuelle est `1.1.0` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -279,7 +288,7 @@ Le projet actuel ne définit aucune image Docker CAB.
 Installer le jeu complet des scripts du plugin dans un même répertoire : le
 contrôleur et le superviseur importent les modules job-context, supervisor-context
 et runs ; le registre lance registry-lock.py avec Python 3. Ces fichiers sont
-indissociables et doivent partager la version source courante 1.0.2. Aucune dépendance tierce
+indissociables et doivent partager la version source courante 1.1.0. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.

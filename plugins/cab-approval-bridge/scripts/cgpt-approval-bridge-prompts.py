@@ -8,11 +8,10 @@ from pathlib import Path
 import re
 import tempfile
 
-VERSION = "1.0.2"
+VERSION = "1.1.0"
 PILOTED = ("ACSP", "ACSMP", "CISMP", "DOPP", "ISMP", "PPSCP", "RSMP", "SCMP", "SPCMP")
 MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"
-PREVIOUS_BLOCK_SHA256 = ("c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859",
-                         "43119dded169df0b84a85af8d8dc4ec5ec9b7787b8044f89aa735b45f3722ce4")
+PREVIOUS_BLOCK_SHA256 = ('c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859', '43119dded169df0b84a85af8d8dc4ec5ec9b7787b8044f89aa735b45f3722ce4', 'a4182b778a8d94fcd5be415db51e57ec769502decd96adf57dd8e02e3b0ad5b8')
 PROMPT_END = "<!-- CAB-PROMPT-END -->"
 BLOCK = """
 ## CAB 1.0.0 — réservations et RUN concurrents
@@ -47,8 +46,19 @@ réservation n'approuve jamais une opération ; un mandat reste un fichier
 ou une commande exacte avec une décision explicite et once unique.
 
 Avant extension, obtenir POST /runs/<run_id>/extend avec la version courante.
+Préparer une opération complète et vérifiable par fichier avant armement,
+sans reformulation du contenu approuvé ; traiter immédiatement les demandes
+et rapports dans la boucle SSE existante, avec décision et once par opération.
+Préparer les statistiques pendant le travail via GET /runs/<run_id>/statistics
+et format=markdown, sans RUN d'observation ni appel LLM supplémentaire.
+Après quiescence, /resources avec version, resources et evidence peut réduire
+la portée sans l'élargir ; conserver la nouvelle génération retournée.
+Soumettre /integration-request avec version et evidence : file FIFO durable,
+annulation explicite cancel=true, aucune libération par timeout. Dès une demande,
+terminer l'opération autorisée puis atteindre /ready sans nouveau mandat stable.
 L'intégration dans la référence commune exige l'exclusion /integration,
-les validations combinées, l'archivage autorisé et STATISTIQUES.md prouvé.
+les validations combinées et l'archivage autorisé. La clôture exige le rapport
+STATISTIQUES.md vérifié, même lorsque sa rédaction suit la publication.
 Dans le répertoire partagé, chaque RUN atteint d'abord un jalon stable avec
 ses validations locales et le déclare par /ready avec version et evidence.
 L'intégration attend ces jalons et la quiescence native ; les nouvelles
@@ -58,7 +68,12 @@ La libération /integration avec acquire=false précise published et, en cas
 de publication, ses evidence. Les autres RUN réconcilient referenceVersion
 par /reconcile, avec preuves et nouvelle version de réservation, avant reprise.
 Réexaminer les validations affectées sans rejouer les effets déjà prouvés.
-La libération /release exige gate, désarmement, preuves et réconciliation ;
+Après publication prouvée et libération de l'exclusion, /closing avec version,
+evidence et reportFile limite irréversiblement le RUN au STATISTIQUES.md de sa
+propre archive. Les pairs réconcilient et reprennent ; le rapport reste sous
+mandat unitaire et attend toute autre exclusion. Finaliser les bornes après
+archive et publier le brouillon vérifié, avec N/A pour les mesures absentes.
+La libération /release exige gate, désarmement, preuves et réconciliation métier ;
 ni délai, ni silence, ni interruption ne libère automatiquement le change.
 Prévol divergent : conserver la candidate, le RUN et les preuves ; utiliser
 la récupération prepare/retry/complete sans purge ni renouvellement.

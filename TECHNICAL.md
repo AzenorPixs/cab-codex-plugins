@@ -22,6 +22,7 @@ CAB/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-job-context.mjs
 │       ├── cgpt-approval-bridge-runs.mjs
+│       ├── cgpt-approval-bridge-statistics.mjs
 │       ├── cgpt-approval-bridge-registry-lock.py
 │       ├── cgpt-approval-bridge-supervisor.mjs
 │       ├── cgpt-approval-bridge-supervisor-context.mjs
@@ -43,7 +44,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `1.0.2` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.1.0` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -610,7 +611,56 @@ est un critère de fin du job avant toute clôture normale `TERMINÉ`. Le
 contrôle est assuré par l'orchestrateur ; le gate HTTP existant ne lit pas
 le projet. Si la publication échoue, le cycle reste incomplet et seul le
 rapport est repris, sans réarchivage. Les mesures absentes restent `N/A`
-motivées. Le broker et le contrôleur ne rédigent ni n'approuvent le rapport.
+motivées. Le contrôleur peut fournir un brouillon déterministe depuis ses
+agrégats filtrés ; seul l'orchestrateur vérifie et fait publier le rapport.
+Le service n'écrit jamais dans l'archive et ne décide aucune approbation.
+
+Le profil optimisé prépare les agrégats pendant le travail. Après publication
+et archive prouvées, la phase /closing limite la réservation au rapport et
+libère les ressources métier. Le rapport et le gate restent obligatoires avant
+livraison ; une nouvelle référence ne défait pas cette publication figée.
+
+### Statistiques natives et coordination optimisée
+
+Le module `cgpt-approval-bridge-statistics.mjs` consomme les transitions du
+registre, les demandes relayées du broker, les décisions/once du job-context
+et les métadonnées SSE. Il ne lance ni agent, ni benchmark, ni historique brut.
+Son snapshot runtime `controller-statistics.json` est privé (0600), atomique
+et regroupé toutes les 5 secondes. Une défaillance reste visible sans modifier
+les décisions. La reprise conserve les agrégats et marque la coupure inconnue.
+Les corps, commandes, URL et sorties ne sont jamais conservés. La lecture
+refuse liens, snapshots enrichis et fichiers dépassant 64 MiB.
+
+GET /statistics expose les catégories reservation, changes, native et
+nativeChanges. Les deux premières concernent les réservations ; les deux
+dernières les états busy observés, sans preuve de codage productif. RSMP et
+inventaires sont exclus des catégories changes ; les prévols le sont des quatre.
+Les durées ZERO, MONO, MULTI, exactement deux, au moins trois et INCONNU sont
+distinctes. Les latences réception/décision et décision/once ont compteur,
+moyenne et quantiles médiane/p95 sur les dernières 2048 observations.
+Les tentatives HTTP, y compris avant admission, ne sont pas des refus distincts.
+
+GET /runs/<runId>/statistics expose un contexte, même après livraison ; contextId
+sélectionne un ancien change et format=markdown prépare les six sections.
+Quotas, tokens, modèles, coûts, chemins, URL et sondes absents restent N/A.
+L'orchestrateur complète seulement les preuves autorisées puis mandate le fichier.
+La collecte intégrée concerne le profil concurrent par RUN ; elle ne transforme
+pas une session SCM en session pilotée.
+
+POST /runs/<runId>/integration-request (version, evidence, cancel optionnel)
+gère une file FIFO persistante. Les pairs terminent leur opération autorisée et
+déclarent /ready ; les RUN stables ne reprennent pas de nouveau mandat pendant
+le drainage. La tête acquiert sous les gardes natives existantes, sans expiration.
+/reconcile garde sa place en file. POST /runs/<runId>/resources réduit uniquement
+la portée, avec preuves et quiescence ; la nouvelle génération invalide l'ancienne.
+POST /runs/<runId>/closing (version, evidence, reportFile) est irréversible,
+post-publication et limité au STATISTIQUES.md de l'archive du change.
+Les nouvelles routes ne remplacent pas les routes historiques.
+
+Le registre reste en schéma 1 tant que ces nouvelles transitions ne sont pas
+utilisées ; leur utilisation publie un schéma 2 durable. Le contrôleur source
+restaure les deux. Un ancien jeu de composants ne doit pas charger ce nouveau
+schéma : déploiement ou retour arrière exigent une réconciliation coordonnée.
 
 ## 18. Secrets
 
@@ -655,10 +705,10 @@ embarquée. Aucune variable supplémentaire n'est requise pour le profil commun.
 
 Dans le répertoire partagé, POST /runs/<runId>/ready déclare un jalon stable
 avec version et evidence après validation locale. /integration attend la
-stabilité et la quiescence des RUN réservés, suspend leurs nouvelles opérations
+stabilité des RUN métier et la quiescence native de tous les RUN, suspend leurs nouvelles opérations
 et admet project:* en lecture pour les contrôles globaux du propriétaire.
 La libération précise published et evidence et incrémente referenceVersion.
-Les autres RUN utilisent /reconcile avec version, referenceVersion et preuves
+Les autres RUN métier utilisent /reconcile avec version, referenceVersion et preuves
 après réexamen de la base et des validations affectées. Le nouveau numéro de
 réservation invalide les anciens mandats. Une réservation avec écritures ne
 peut être livrée sans publication sous cette barrière. Les validations globales
