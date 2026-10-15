@@ -2,6 +2,20 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.1.0 — préparation source du 2026-10-15
+
+- Alignement demandé des briques, du manifeste, des unités systemd et de la
+  commande `/cab` sur `1.1.0`, avec cachebuster neuf pour le plugin.
+- Statistiques intégrées au contrôleur : agrégats persistants filtrés, exports
+  JSON et brouillon Markdown par contexte, latences médiane/p95, couverture
+  inconnue et déduplication SSE, sans RUN d'observation ni appel LLM supplémentaire.
+- File FIFO d'intégration, réduction quiescente des ressources et phase
+  documentaire après publication pour finaliser le rapport hors exclusion globale.
+  Les mandats unitaires, once, rapport vérifié et gate restent obligatoires.
+- Cadrages et distribution source alignés ; registre schéma 2 pour les nouvelles
+  transitions, lecture des schémas 1/2. Aucun déploiement ni migration de RUN actif,
+  aucune publication Git ; les références historiques des correctifs sont conservées.
+
 ## 1.0.1 — 2026-10-14
 
 - Garde des permissions natives des jobs armés avant admission, approbation

@@ -7,7 +7,7 @@ import readline from "node:readline";
 
 // A context owns its decisions, gates and recovery; OpenCode and MCP stay shared.
 export function createJobContext({ workspace, stateDirectory, run = null,
-  admitOperation = () => true, ownsSession = () => true }) {
+  admitOperation = () => true, ownsSession = () => true, observe = () => {} }) {
 function envValue(name) {
   const legacyName = name.replace("OC_Codex_", "OC_CGPT_");
   return process.env[name] || process.env[legacyName];
@@ -205,11 +205,12 @@ function updateStatus(type, details = {}) {
     type,
     ...details,
   };
+  observe(type, details);
 }
 
 function publicStatus() {
   return {
-    version: "1.0.2",
+    version: "1.1.0",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1325,7 +1326,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.0.2",
+      version: "1.1.0",
     },
   });
 
@@ -1499,7 +1500,7 @@ async function handleValidation(request) {
   const entry = {
     requestId: request.requestId,
     receivedAt:
-      new Date().toISOString(),
+      new Date(request.receivedAt ?? Date.now()).toISOString(),
   };
 
   resetTerminalGate("validation-received");
@@ -1517,6 +1518,7 @@ async function handleValidation(request) {
     "validation-received",
     {
       requestId: request.requestId,
+      receivedAt: Date.parse(entry.receivedAt),
     }
   );
 
@@ -2047,6 +2049,7 @@ const handle = async (request, response, url) => {
             changeId,
             summary,
             operation,
+            receivedAt: request.cabReceivedAt,
           };
 
           validations.set(

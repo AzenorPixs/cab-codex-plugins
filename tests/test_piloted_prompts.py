@@ -27,6 +27,16 @@ class PilotedPromptsTest(unittest.TestCase):
         source = 'Ne jamais lire un secret.\nPermissions natives ask.\nUn mandat = une opération.\n'
         self.assertTrue(prompts.transform(source, "ACSP").startswith(source))
 
+    def test_optimized_protocol_is_idempotent_and_preserves_unitary_permissions(self):
+        source = "Un mandat = une opération. Permissions natives ask.\n"
+        changed = prompts.transform(source, "CISMP")
+        for route in ("/integration-request", "/closing", "/resources", "/statistics"):
+            self.assertIn(route, changed)
+        self.assertIn("sans RUN d'observation", changed)
+        self.assertIn("ou une commande exacte", changed)
+        self.assertEqual(prompts.transform(changed, "CISMP"), changed)
+        self.assertTrue(changed.startswith(source))
+
 
 if __name__ == "__main__":
     unittest.main()

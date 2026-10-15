@@ -2,6 +2,8 @@
 
 ## 1. Objet
 
+Version de référence des briques CAB : `1.1.0`.
+
 Codex Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **Codex**.
 
 CAB permet à OpenCode de soumettre à Codex des demandes de validation explicites pendant une session de travail, puis de recevoir une décision corrélée. Le pont transporte, persiste et supervise ces échanges sans décider à la place de Codex et sans modifier le projet piloté.
@@ -13,6 +15,13 @@ CAB vise un pilotage OpenCode–Codex explicite, observable, traçable, persista
 CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni un moteur de décision autonome, ni une source de vérité fonctionnelle du projet piloté.
 
 ## 3. Principes architecturaux
+
+Le profil optimisé prépare les statistiques directement dans le contrôleur à
+partir des transitions CAB et du SSE, sans RUN d'observation supplémentaire.
+La file d'intégration et la phase documentaire réduisent les attentes communes :
+la publication reste exclusive, tandis que le rapport est finalisé ensuite sur
+sa seule ressource. Les décisions unitaires, once et le gate restent obligatoires.
+Le contrat détaillé est dans `ORCHESTRATED_CODING.md` et OpenSpec.
 
 ### 3.1 Séparation des responsabilités
 

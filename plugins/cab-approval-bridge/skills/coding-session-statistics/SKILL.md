@@ -9,6 +9,18 @@ Produire un rapport factuel à partir de l'historique persistant de la session c
 
 ## Sources et méthode
 
+En profil concurrent avec statistiques intégrées, commencer par
+GET /runs/<runId>/statistics?format=markdown et l'export JSON correspondant.
+Préciser contextId pour un ancien change du même RUN. Le contrôleur prépare
+automatiquement les agrégats filtrés ; aucun RUN d'audit ni nouvelle sonde
+n'est nécessaire pour les reconstruire. Compléter seulement depuis les sources
+autorisées et les relevés/sondes prévus, conserver les N/A, vérifier le brouillon
+et obtenir le mandat d'édition du seul rapport. Ne pas présenter ce brouillon
+comme une preuve de test, d'archivage, de publication ou de gate validé.
+Après publication technique, la phase /closing décrite dans la référence
+concurrent-runs permet la rédaction hors exclusion globale ; la réservation
+et l'obligation du rapport vérifié restent conservées jusqu'à la clôture.
+
 1. Identifier précisément la session et utiliser son historique complet, sans exposer de secret ni lire de source exclue par les règles du projet.
 2. Agréger les données plutôt que recopier les contenus des messages ou les longues sorties d'outils.
 3. Distinguer systématiquement :

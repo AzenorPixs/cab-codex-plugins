@@ -20,7 +20,7 @@ async function waitFor(check, milliseconds = 15000) {
   throw new Error('native integration timeout');
 }
 
-test('OpenCode natif : trois sessions et un seul broker source 1.0.2 dans un contexte isolé',
+test('OpenCode natif : trois sessions et un seul broker source 1.1.0 dans un contexte isolé',
   { skip: !binary, timeout: 45000 }, async (t) => {
     const temporary = mkdtempSync(join(tmpdir(), 'cab-native-opencode-'));
     const workspace = join(temporary, 'workspace'); mkdirSync(workspace);
@@ -69,11 +69,12 @@ test('OpenCode natif : trois sessions et un seul broker source 1.0.2 dans un con
       try { return (await request(base + '/global/health')).healthy; } catch { return false; } }, 20000);
     controller = spawn(process.execPath, [fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url))],
       { env: { PATH: process.env.PATH, OC_Codex_WORKSPACE: workspace, OC_Codex_OUTSIDE_SANDBOX: '1',
-        OC_Codex_OPENCODE_URL: base, OC_Codex_STATUS_PORT: String(controllerPort), OC_Codex_DECISION_MODE: 'manual' }, stdio: 'ignore' });
+        OC_Codex_OPENCODE_URL: base, OC_Codex_STATUS_PORT: String(controllerPort), OC_Codex_DECISION_MODE: 'manual',
+        CODEX_COMMAND: 'cab-test-unused-app-server' }, stdio: 'ignore' });
     await waitFor(async () => { try { return Boolean(await request(controllerBase + '/status')); } catch { return false; } });
     const mcp = await native('/mcp');
     assert.equal(mcp['cgpt-validation'].status, 'connected');
-    await waitFor(async () => (await request(controllerBase + '/status')).brokerReadiness?.server_version === '1.0.2');
+    await waitFor(async () => (await request(controllerBase + '/status')).brokerReadiness?.server_version === '1.1.0');
     const sessions = await Promise.all(['a', 'b', 'c'].map((id) => native('/session', 'POST', { title: 'CAB isolated fixture ' + id })));
     const reservations = [];
     for (let i = 0; i < sessions.length; i++) {
@@ -88,7 +89,7 @@ test('OpenCode natif : trois sessions et un seul broker source 1.0.2 dans un con
     assert.equal((await request(controllerBase + '/status')).activeRunCount, 3);
     assert.equal(new Set(sessions.map((s) => s.id)).size, 3);
     const brokers = readFileSync(starts, 'utf8').trim().split('\n').map(JSON.parse);
-    assert.equal(brokers.length, 1); assert.equal(brokers[0].version, '1.0.2');
+    assert.equal(brokers.length, 1); assert.equal(brokers[0].version, '1.1.0');
     for (const run of reservations) {
       await request(controllerBase + '/runs/' + run.runId + '/job/terminal-gate', 'POST', { state: 'BLOQUÉ' });
       await request(controllerBase + '/runs/' + run.runId + '/job/disarm', 'POST', { jobId: 'job-' + run.runId.split('-')[1] });

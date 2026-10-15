@@ -4,9 +4,10 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { createJobContext } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, RunRegistry, VERSION } from './cgpt-approval-bridge-runs.mjs';
+import { SessionStatistics, VERSION as STATISTICS_VERSION } from './cgpt-approval-bridge-statistics.mjs';
 
-const version = "1.0.2";
-if (version !== VERSION) throw new Error('CAB component version mismatch');
+const version = "1.1.0";
+if (version !== VERSION || version !== STATISTICS_VERSION) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspaceInput = envValue('OC_Codex_WORKSPACE');
@@ -22,13 +23,21 @@ const stateDirectory = join(workspace, '.opencode', 'state', 'cgpt-approval-brid
 const port = Number(envValue('OC_Codex_STATUS_PORT') || 8788);
 const opencodeUrl = (envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096').replace(/\/$/, '');
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
-const registry = new RunRegistry(workspace, stateDirectory);
+const statistics = new SessionStatistics(stateDirectory);
+function observeStatistics(callback) {
+  try { callback(); } catch { statistics.error = 'statistics-observation-unavailable'; }
+}
+const registry = new RunRegistry(workspace, stateDirectory, {
+  observe: (snapshot) => observeStatistics(() => statistics.registry(snapshot)),
+});
 await registry.acquireAuthority();
+statistics.registry(registry.snapshot());
 const contexts = new Map();
 const transitions = new Set();
 let broker = null;
 let sseState = 'connecting';
 let reconnectTimer;
+let sseGeneration = 0;
 const legacy = createJobContext({ workspace, stateDirectory, admitOperation: () => {
   try { registry.assertHealthy(); return true; } catch { return false; }
 } });
@@ -51,6 +60,7 @@ function contextFor(run) {
   let context;
   context = createJobContext({
     workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run,
+    observe: (type, details) => observeStatistics(() => statistics.observe(run, type, details)),
     ownsSession: (session) => context.sessions().includes(session),
     admitOperation: (operation) => {
       try {
@@ -75,9 +85,12 @@ function statusFor(runId, context) {
   const status = context.publicStatus();
   const run = registry.runs.get(runId);
   const reason = registry.integrationOwner && registry.integrationOwner !== runId ? 'integration-suspended'
-    : run.referenceVersion !== registry.referenceVersion ? 'reference-reconciliation-required' : null;
+    : run.phase !== 'REPORT' && run.referenceVersion !== registry.referenceVersion ? 'reference-reconciliation-required'
+      : registry.integrationQueue.length && run.integrationReady && run.phase !== 'REPORT' && !registry.integrationOwner
+        ? 'integration-draining' : null;
   return { ...status, coordination: { reason, integrationReady: run.integrationReady,
-    referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion },
+    referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion,
+    phase: run.phase, integrationQueue: registry.integrationQueue },
     ...(reason ? { brokerReadiness: { ...status.brokerReadiness, status: 'BLOCKED', ready: false, root_cause: reason } } : {}) };
 }
 function proofReferences(payload) {
@@ -116,6 +129,7 @@ async function checkNative(sessionId, idle = false) {
     if (!busy || typeof busy !== 'object' || Array.isArray(busy) ||
         !Array.isArray(permissions) || (busy[sessionId] && busy[sessionId].type !== 'idle') ||
         permissions.some((p) => p.sessionID === sessionId)) throw new CoordinationError('native-session-not-quiescent');
+    observeStatistics(() => statistics.nativeSnapshot(busy));
   }
 }
 function singleContext() {
@@ -147,12 +161,33 @@ if (contexts.size && legacy.publicJob()?.armed) throw new Error('Legacy job must
 legacy.start();
 
 const server = createServer(async (request, response) => {
+  request.cabReceivedAt = Date.now();
   let transitionRun = null;
+  let observedRun = null;
+  let attemptedReservation = null;
   try {
     const url = new URL(request.url, 'http://localhost');
     const payload = request.method === 'POST' ? await readJson(request) : null;
     request.cabPayload = payload;
     registry.assertHealthy();
+    const statisticsMatch = url.pathname.match(/^\/runs\/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})\/statistics$/);
+    if (request.method === 'GET' && (url.pathname === '/statistics' || statisticsMatch)) {
+      const runId = statisticsMatch?.[1];
+      const contextId = url.searchParams.has('contextId') ? Number(url.searchParams.get('contextId')) : undefined;
+      if (contextId !== undefined && (!Number.isSafeInteger(contextId) || contextId < 1)) {
+        throw new CoordinationError('statistics-context-invalid', 400);
+      }
+      const current = registry.runs.get(runId);
+      const selectedContext = contextId ?? current?.contextId;
+      const result = statistics.summary(runId, selectedContext);
+      if (runId && !result.contexts.length) throw new CoordinationError('statistics-not-found', 404);
+      if (url.searchParams.get('format') === 'markdown') {
+        if (!runId) throw new CoordinationError('statistics-context-required', 400);
+        response.writeHead(200, { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'no-store' });
+        response.end(statistics.markdown(runId, selectedContext));
+      } else json(response, 200, result);
+      return;
+    }
     if (request.method === 'GET' && url.pathname === '/runs') {
       json(response, 200, registry.snapshot()); return;
     }
@@ -167,6 +202,7 @@ const server = createServer(async (request, response) => {
       return;
     }
     if (request.method === 'POST' && url.pathname === '/runs/reserve') {
+      attemptedReservation = payload;
       if (legacy.publicJob()?.armed) throw new CoordinationError('legacy-job-active');
       await checkNative(payload.sessionId);
       const run = registry.reserve(payload);
@@ -193,12 +229,25 @@ const server = createServer(async (request, response) => {
     if (runId) {
       const run = registry.runs.get(runId);
       if (!run || run.state !== 'RESERVED') throw new CoordinationError('run-not-reserved');
+      observedRun = run;
       if (request.method === 'POST' && transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/job/recover', '/job/terminal-gate', '/job/disarm'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/recover', '/job/terminal-gate', '/job/disarm'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      if (request.method === 'POST' && ['/integration-request', '/resources', '/closing'].includes(url.pathname)) {
+        if (context.pendingEffects() || context.publicJob()?.recovery) throw new CoordinationError('run-not-quiescent');
+        registry.owned(runId, payload.version);
+        proofReferences(payload);
+        await checkNative(context.publicJob()?.sessionId || run.sessionId, true);
+        if (url.pathname === '/integration-request') {
+          if (payload.cancel !== undefined && typeof payload.cancel !== 'boolean') throw new CoordinationError('integration-action-required', 400);
+          json(response, 200, registry.requestIntegration(runId, payload.version, payload.cancel || false));
+        } else if (url.pathname === '/resources') json(response, 200, registry.reduce(runId, payload));
+        else json(response, 200, registry.closing(runId, payload));
+        return;
+      }
       if (request.method === 'POST' && ['/ready', '/reconcile'].includes(url.pathname)) {
         if (context.pendingEffects() || context.publicJob()?.recovery) throw new CoordinationError('run-not-quiescent');
         registry.owned(runId, payload.version);
@@ -291,6 +340,8 @@ const server = createServer(async (request, response) => {
     const newSession = context.publicJob()?.sessionId;
     if (runId && oldSession && newSession !== oldSession) registry.transfer(runId, newSession);
   } catch (cause) {
+    observeStatistics(() => statistics.httpFailure(observedRun, cause.code));
+    observeStatistics(() => statistics.admissionFailure(attemptedReservation, cause.code));
     if (!response.headersSent) json(response, cause.status || 409, { error: cause.code || cause.message });
     else response.destroy();
   } finally { if (transitionRun) transitions.delete(transitionRun); }
@@ -302,6 +353,16 @@ async function consumeEvents() {
     const response = await fetch(opencodeUrl + '/global/event');
     if (!response.ok || !response.body) throw new Error('SSE unavailable');
     sseState = 'connected';
+    const generation = ++sseGeneration;
+    statistics.connection(true);
+    void fetch(opencodeUrl + '/session/status?directory=' + encodeURIComponent(workspace),
+      { signal: AbortSignal.timeout(10000) }).then(async (state) => {
+      if (!state.ok) throw new Error('native baseline unavailable');
+      const baseline = await state.json();
+      if (sseState === 'connected' && generation === sseGeneration) {
+        observeStatistics(() => statistics.nativeSnapshot(baseline, true));
+      }
+    }).catch(() => { statistics.error = 'statistics-native-baseline-unavailable'; });
     legacy.onConnect();
     for (const [, context] of activeContexts()) context.onConnect();
     const decoder = new TextDecoder();
@@ -316,9 +377,10 @@ async function consumeEvents() {
         if (!data) continue;
         let event;
         try { event = JSON.parse(data); } catch { continue; }
+        observeStatistics(() => statistics.nativeEvent(event));
         legacy.onEvent(event);
         const props = event.payload?.properties || event.properties || {};
-        const session = props.sessionID || props.sessionId || props.info?.sessionID || props.info?.id;
+        const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID || props.info?.id;
         for (const [, context] of activeContexts()) {
           if (context.sessions().includes(session)) context.onEvent(event);
         }
@@ -326,14 +388,17 @@ async function consumeEvents() {
     }
   } catch { /* Connection state is published below; no event or effect is invented. */ }
   sseState = 'reconnecting';
+  sseGeneration++;
+  statistics.connection(false);
   legacy.onDisconnect();
   for (const [, context] of activeContexts()) context.onDisconnect();
   reconnectTimer = setTimeout(() => { void consumeEvents(); }, reconnectMs);
 }
-function shutdown() {
+async function shutdown() {
   clearTimeout(reconnectTimer);
   registry.close();
   server.close();
+  await statistics.close();
   process.exit(0);
 }
 process.on('SIGTERM', shutdown);

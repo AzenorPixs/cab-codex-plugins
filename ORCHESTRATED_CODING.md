@@ -271,6 +271,14 @@ spécifications et documentation.
 
 ### Statistiques d'archivage
 
+Préparer en continu les agrégats natifs via GET /runs/<runId>/statistics et
+le brouillon format=markdown. Le contrôleur produit ce brouillon déterministe
+sans RUN d'observation ni appel LLM supplémentaire ; l'orchestrateur conserve
+sa vérification et le mandat de publication. Après archive et publication
+prouvées, le profil /closing permet de finaliser le seul rapport hors exclusion
+globale, sans libérer la réservation avant rapport vérifié et gate.
+
+
 Après chaque archivage OpenSpec autorisé et réussi, produire un rapport par
 archive dans `openspec/changes/archive/<archive>/STATISTIQUES.md`, avec un
 mandat d'édition distinct pour ce seul fichier lorsque le protocole CAB
@@ -689,6 +697,12 @@ deviner ses effets. Codex examine son manifeste avant décision. Une réservatio
 ne vaut jamais approbation. Garder les permissions natives ask et ne transmettre
 aucun outil mutable sans le mandat exact.
 
+Préparer une opération complète et vérifiable par fichier, avec contenu exact,
+manifeste et outils disponibles avant armement. Traiter immédiatement demandes
+et rapports par le SSE et la boucle existante ; ne pas reformuler le contenu
+approuvé, fractionner une édition évitable ou répéter un contrôle sans nouvel
+événement. Une seconde opération exige toujours une nouvelle décision et once.
+
 broker_readiness accepte run_id. Les compteurs ciblés ne couvrent que ce RUN ;
 les défaillances du magasin, du journal ou du transport commun restent communes.
 Les requêtes et permissions d'une autre session ne sont ni consommées ni closes.
@@ -712,17 +726,37 @@ Les anciennes permissions consommées ne sont jamais transposées.
 Avant élargissement, fermer le mandat courant puis POST /runs/<runId>/extend
 avec version et resources supplémentaires. Réutiliser la version retournée.
 Une extension conflictuelle suspend le nouveau périmètre sans toucher aux autres.
+Pour réduire la portée, POST /runs/<runId>/resources avec version, resources
+et evidence après clôture du mandat et quiescence native. Chaque nouvelle
+ressource est incluse dans l'ancienne, sans escalade read vers write ; reprendre
+la génération retournée. Retirer les lectures globales devenues inutiles.
+L'obligation de publication des écritures antérieures reste conservée.
 
 Dans le répertoire partagé, chaque RUN déclare un jalon stable après ses
 validations locales par POST /runs/<runId>/ready avec version et evidence.
-L'intégration attend que tous les RUN réservés soient stables, sans mandat,
+L'intégration attend que les RUN métier réservés soient stables, sans mandat,
 récupération ou effet en attente. Les validations globales portent sur l'état
 combiné de ces changes stables ; chaque RUN conserve ses preuves locales.
+La quiescence native couvre aussi les RUN en phase documentaire : une écriture
+de rapport en cours doit finir avant acquisition et toute nouvelle édition
+attend la levée de l'exclusion.
+
+Le profil optimisé soumet d'abord POST /runs/<runId>/integration-request avec
+version et evidence. GET /runs expose integrationQueue, FIFO durable par
+contexte. Dès qu'une demande existe, terminer seulement l'opération autorisée
+en cours, traiter son rapport, atteindre le prochain jalon sûr puis déclarer
+/ready. Un RUN stable attend alors sans nouveau mandat. Les nouvelles
+réservations attendent ; seule la tête peut acquérir après les contrôles natifs.
+Une annulation explicite utilise la même route avec cancel=true, version et
+evidence ; elle ne libère ni réservation ni effet. La réconciliation d'une
+référence ne change pas la position en file. Aucun timeout ne décide ni ne
+libère. Le mode historique sans file reste disponible.
 
 Pour publier dans la référence commune, obtenir POST /runs/<runId>/integration
 avec version et acquire=true. Revalider la base courante et les résultats
-combinés, synchroniser et archiver sous autorisations explicites, puis vérifier
-STATISTIQUES.md. Les opérations Git restent soumises à une autorisation distincte.
+combinés, synchroniser et archiver sous autorisations explicites. Préparer les
+agrégats statistiques avant acquisition. Les opérations Git restent soumises
+à une autorisation distincte.
 Pendant l'exclusion, les nouvelles opérations des autres RUN sont suspendues.
 Le propriétaire peut déclarer project:* en lecture pour ses tests globaux.
 Libérer avec acquire=false, published (booléen) et, si true, evidence après
@@ -734,6 +768,16 @@ puis utiliser la nouvelle version de réservation retournée. Une réservation
 avec écritures ne peut être livrée sans publication sous cette barrière.
 Ni CAB ni le superviseur ne valident les preuves à la place de Codex.
 
+Après publication prouvée, libérer l'exclusion avant la rédaction finale du
+rapport, puis POST /runs/<runId>/closing avec version, evidence et reportFile
+égal à openspec/changes/archive/<date>-<changeId>/STATISTIQUES.md. La phase
+REPORT est irréversible dans ce contexte : elle abandonne les autres ressources
+et n'autorise que ce fichier. Conserver la génération retournée. Les pairs
+réconcilient immédiatement la référence et reprennent ; les éditions natives
+du rapport restent suspendues pendant toute autre exclusion et soumises à once.
+Une référence ultérieure ne défait pas la publication figée de cette phase.
+Sans closing, le mode historique conserve les gardes de référence existantes.
+
 Après gate individuel, désarmement et réconciliation, POST /runs/<runId>/release
 porte version, delivered (booléen) et evidence (références non secrètes des
 preuves). delivered=true exige un gate TERMINÉ, la livraison et le rapport
@@ -743,6 +787,32 @@ Sans candidat disponible, distinguer attente de dépendance, conflit de ressourc
 et absence de travail restant prouvée. Seul ce dernier constat, sans autre RUN
 actif ni exigence restante, permet une fin globale. Les sous-jobs rendent le
 contrôle au cycle parent et n'arrêtent pas l'infrastructure commune.
+
+#### Statistiques intégrées
+
+La collecte du contrôleur est automatique pour chaque contexte concurrent ;
+elle consomme transitions CAB et métadonnées SSE déjà reçues, sans RUN d'audit,
+appel LLM ni historique brut supplémentaire. GET /statistics donne les agrégats
+globaux ; GET /runs/<runId>/statistics donne ceux du contexte courant. Ajouter
+contextId pour une génération de change antérieure, y compris après livraison.
+format=markdown fournit le brouillon à six sections, prêt à examiner avant
+mandat de publication. Préparer le brouillon en continu, compléter les bornes
+après archive et les preuves accessibles, puis publier le seul rapport via CAB.
+
+Les corps, commandes, URL et sorties sont exclus de la collecte. Les éléments
+absents restent N/A motivés ; les relevés natifs de quotas et sondes existants
+restent à la charge de l'orchestrateur, sans nouvel agent d'observation. Busy
+ne prouve pas du codage productif. Les catégories reservation/native incluent
+RSMP et inventaires ; changes/nativeChanges les excluent. Les prévols sont
+exclus des quatre catégories. ZERO et INCONNU restent distincts. Les quantiles
+médiane/p95 portent sur les dernières 2048 observations, avec compteur total.
+Les tentatives HTTP, y compris avant admission, ne sont pas des refus distincts
+de permission ; leurs bornes ne constituent pas une durée causale exhaustive.
+
+La persistance statistique est regroupée et indépendante des décisions ;
+une erreur est visible dans l'export. Ni l'export ni le brouillon ne valide les
+tests, l'archive ou le rapport, et aucun quota partagé n'est ventilé arbitrairement.
+Le rapport vérifié reste obligatoire avant gate TERMINÉ et /release.
 
 #### Récupération, purge et arrêt
 

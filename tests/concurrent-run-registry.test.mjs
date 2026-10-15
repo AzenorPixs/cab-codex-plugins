@@ -153,3 +153,85 @@ test("le registre refuse liens et identités de contexte invalides sans exposer 
   symlinkSync(state, linkState);
   assert.throws(() => new RunRegistry(directory, linkState), /registry-path-invalid/);
 });
+
+test('file FIFO durable, drainage des RUN prêts et ordre conservé après réconciliation', async (t) => {
+  const { registry, candidate, directory, state } = await setup(t);
+  const a = registry.reserve(candidate('a')); const b = registry.reserve(candidate('b'));
+  registry.requestIntegration('a', a.version); registry.requestIntegration('b', b.version);
+  registry.requestIntegration('a', a.version);
+  assert.deepEqual(registry.integrationQueue.map((e) => e.runId), ['a', 'b']);
+  assert.equal(new RunRegistry(directory, state).snapshot().schemaVersion, 2);
+  assert.deepEqual(new RunRegistry(directory, state).integrationQueue, registry.integrationQueue);
+  assert.throws(() => registry.reserve(candidate('c')), /integration-queued/);
+  assert.ok(registry.covers('b', b.version, b.resources));
+  registry.ready('a', a.version); registry.ready('b', b.version);
+  assert.throws(() => registry.covers('b', b.version, b.resources), /integration-draining/);
+  assert.throws(() => registry.extend('b', { version: b.version,
+    resources: [{ key: 'file:tests/b.py', mode: 'read' }] }), /integration-draining/);
+  assert.throws(() => registry.reconcile('b', b.version, registry.referenceVersion), /integration-draining/);
+  assert.throws(() => registry.integration('b', b.version, true), /integration-queue-order/);
+  registry.integration('a', a.version, true);
+  assert.ok(registry.covers('a', a.version, [{ key: 'project:*', mode: 'read' }]));
+  registry.integration('a', a.version, false, true);
+  const refreshed = registry.reconcile('b', b.version, registry.referenceVersion);
+  assert.deepEqual(registry.integrationQueue.map((e) => e.runId), ['b']);
+  registry.ready('b', refreshed.version); registry.integration('b', refreshed.version, true);
+  assert.throws(() => registry.requestIntegration('b', refreshed.version, true), /integration-still-owned/);
+});
+
+test('annulation explicite de file et réduction de ressources ne transfèrent aucune permission', async (t) => {
+  const { registry, candidate } = await setup(t);
+  const a = registry.reserve(candidate('a', [{ key: 'project:*', mode: 'read' }]));
+  assert.throws(() => registry.reserve(candidate('b')), /resource-conflict/);
+  assert.throws(() => registry.reduce('a', { version: a.version,
+    resources: [{ key: 'file:src/a.py', mode: 'write' }] }), /reduction-outside/);
+  const reduced = registry.reduce('a', { version: a.version, resources: [{ key: 'file:src/a.py', mode: 'read' }] });
+  assert.throws(() => registry.covers('a', a.version, a.resources), /version-stale/);
+  registry.reserve(candidate('b'));
+  registry.requestIntegration('a', reduced.version);
+  registry.requestIntegration('a', reduced.version, true);
+  assert.equal(registry.integrationQueue.length, 0);
+  assert.equal(registry.owned('a', reduced.version).state, 'RESERVED');
+});
+
+test('réduire toutes les écritures ne contourne pas l’obligation de publication', async (t) => {
+  const { registry, candidate } = await setup(t); const a = registry.reserve(candidate('a'));
+  const reduced = registry.reduce('a', { version: a.version, resources: [{ key: 'file:src/a.py', mode: 'read' }] });
+  assert.throws(() => registry.release('a', reduced.version, true), /integration-publication-required/);
+});
+
+test('closing libère les fichiers métier, conserve la publication et isole son propre rapport', async (t) => {
+  const { registry, candidate, directory, state } = await setup(t);
+  const a = registry.reserve(candidate('a')); registry.ready('a', a.version);
+  assert.throws(() => registry.closing('a', { version: a.version,
+    reportFile: 'openspec/changes/archive/2026-10-15-change-a/STATISTIQUES.md' }), /publication-required/);
+  registry.integration('a', a.version, true); registry.integration('a', a.version, false, true);
+  const reportFile = 'openspec/changes/archive/2026-10-15-change-a/STATISTIQUES.md';
+  assert.throws(() => registry.closing('a', { version: a.version,
+    reportFile: 'openspec/changes/archive/2026-10-15-change-b/STATISTIQUES.md' }), /report-target-invalid/);
+  assert.throws(() => registry.closing('a', { version: a.version,
+    reportFile: 'openspec/changes/archive/2026-10-15-another-change-a/STATISTIQUES.md' }), /report-target-invalid/);
+  const closing = registry.closing('a', { version: a.version, reportFile });
+  assert.throws(() => registry.covers('a', a.version, a.resources), /version-stale/);
+  assert.throws(() => registry.covers('a', closing.version, a.resources), /outside-reservation/);
+  assert.throws(() => registry.extend('a', { version: closing.version, resources: a.resources }), /report-phase-only/);
+  assert.throws(() => registry.integration('a', closing.version, true), /report-phase-only/);
+  const b = registry.reserve(candidate('b', a.resources));
+  registry.ready('b', b.version); registry.integration('b', b.version, true);
+  assert.throws(() => registry.covers('a', closing.version, closing.resources), /integration-suspended/);
+  registry.integration('b', b.version, false, true);
+  registry.modifying('a');
+  assert.ok(registry.covers('a', closing.version, closing.resources));
+  const restored = new RunRegistry(directory, state);
+  assert.equal(restored.runs.get('a').phase, 'REPORT');
+  assert.equal(restored.runs.get('a').integrationCompleted, true);
+  assert.equal(registry.release('a', closing.version, true).state, 'DELIVERED');
+});
+
+test('file ou phase documentaire corrompue échoue fermée à la restauration', async (t) => {
+  const { registry, candidate, directory, state } = await setup(t);
+  const a = registry.reserve(candidate('a')); registry.requestIntegration('a', a.version);
+  const data = registry.snapshot(); data.integrationQueue.push({ ...data.integrationQueue[0] });
+  writeFileSync(registry.path, JSON.stringify(data));
+  assert.throws(() => new RunRegistry(directory, state), /registry-restoration-invalid/);
+});

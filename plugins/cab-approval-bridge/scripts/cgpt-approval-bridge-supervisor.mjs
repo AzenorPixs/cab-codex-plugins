@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext } from './cgpt-approval-bridge-supervisor-context.mjs';
 
-const version = "1.0.2";
+const version = "1.1.0";
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspace = envValue('OC_Codex_WORKSPACE');
