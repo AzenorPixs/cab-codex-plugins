@@ -60,6 +60,13 @@ rapport de sa propre archive. Le rapport est préparé en continu puis finalisé
 hors exclusion globale, avec décisions explicites et permission native `once`.
 La livraison exige toujours le rapport vérifié et le gate. Les anciennes
 interfaces restent disponibles. Voir [le protocole](ORCHESTRATED_CODING.md).
+La préparation précède la file et les pairs rejoignent leur prochain jalon
+stable prouvé. `GET /runs/<runId>/integration-status` explique les obstacles
+techniques sans contenu. L'option `completion` de `/integration` réunit
+publication, libération et passage en `REPORT` avec reçu durable idempotent.
+Les lectures natives de cohorte sont regroupées et toute divergence est refusée.
+Le registre schéma 3 de cette option nécessite les nouvelles sources ; aucun
+rapport, relevé final ou gate ne prolonge la fenêtre critique de publication.
 Ces fonctions sont préparées dans les sources ; l'installation active nécessite
 une mise à jour coordonnée distincte.
 
@@ -246,8 +253,19 @@ de décision d'approbation.
 /cab test
 /cab run
 /cab update
+/cab status
+/cab status --run <run_id>
 /cab stop
 ```
+
+`/cab status` produit ponctuellement le tableau **RUN / Nom du change — Actions
+réalisées — Actions en cours — Actions restant à réaliser**. Chaque ligne
+affiche **ACTIF**, **EN ATTENTE DE RUN** avec le pair et sa cause, ou l’état
+interne/terminal/indéterminé prouvé. La collecte recoupe CAB, les états natifs
+accessibles et les checkpoints/tâches ; une ancienne attente déjà levée est
+écartée. Aucune activité, dépendance ou réussite de test n’est inventée. Le
+filtre `--run` vise un identifiant exact. Cette consultation ne démarre aucun
+service, n’envoie aucun message et ne modifie aucun projet.
 
 Chaque nouvelle session `/cab start` purge entièrement l'ancien état technique
 CAB, y compris ses conflits Syncthing, sans le restaurer. Elle vérifie d'abord
@@ -488,7 +506,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.1.0`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.2.1`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation

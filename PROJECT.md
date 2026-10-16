@@ -2,7 +2,7 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `1.1.0`.
+Version de référence des briques CAB : `1.2.1`.
 
 Codex Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **Codex**.
 
@@ -22,6 +22,12 @@ La file d'intégration et la phase documentaire réduisent les attentes communes
 la publication reste exclusive, tandis que le rapport est finalisé ensuite sur
 sa seule ressource. Les décisions unitaires, once et le gate restent obligatoires.
 Le contrat détaillé est dans `ORCHESTRATED_CODING.md` et OpenSpec.
+
+Le premier lot de réduction de l'exclusion prépare avant le drainage, expose
+les obstacles par RUN et regroupe les observations natives. Une transition
+optionnelle publie, libère et limite atomiquement le RUN à son rapport, avec
+reçu durable idempotent. Les validations de l'état partagé restent requises ;
+les instantanés de validation ne font pas partie de ce profil.
 
 ### 3.1 Séparation des responsabilités
 
@@ -258,6 +264,9 @@ une publication échouée laisse le cycle incomplet, sans réarchivage.
 communication entre le broker MCP et l'agent Codex ; elle ne rend aucune
 décision d'approbation.
 
+- `/cab status` : affiche en lecture seule un tableau synthétique par RUN et
+  change, avec réalisé, en cours, restant, activité ou attente explicite d’un
+  pair ; les preuves actuelles sont recoupées sans modifier le projet suivi ;
 - `/cab start` : purge l'ancien état technique après contrôle d'inactivité,
   vérifie le MCP actif, initialise la supervision et crée une nouvelle session
   maîtresse ; la reprise ordinaire conserve son état et sa session, sauf

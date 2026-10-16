@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { RunRegistry } from "../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs";
+import { CoordinationError, RunRegistry } from "../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs";
 
 async function setup(t) {
   const directory = mkdtempSync(join(tmpdir(), "cab-registry-"));
@@ -24,6 +24,126 @@ async function setup(t) {
   });
   return { directory, state, registry, candidate };
 }
+
+const completion = (run, transactionId = 'publish-a') => ({ version: run.version, referenceVersion: 0,
+  acquire: false, published: true, evidence: ['validated current base and own archive'],
+  completion: { transactionId, reportFile: `openspec/changes/archive/2026-10-16-${run.changeId}/STATISTIQUES.md` } });
+
+test('publication et REPORT sont observés en une seule transition durable', async (t) => {
+  const { registry, candidate, directory, state } = await setup(t);
+  const a = registry.reserve(candidate('a')); const b = registry.reserve(candidate('b'));
+  registry.requestIntegration('a', a.version); registry.requestIntegration('b', b.version);
+  registry.ready('a', a.version); registry.ready('b', b.version);
+  registry.integration('a', a.version, true);
+  const observed = []; registry.observe = (snapshot) => observed.push(snapshot);
+  const request = completion(a); const receipt = registry.completeIntegration('a', request);
+  assert.equal(observed.length, 1);
+  assert.equal(observed[0].integrationOwner, null);
+  assert.equal(observed[0].runs.find((r) => r.runId === 'a').phase, 'REPORT');
+  assert.equal(observed[0].schemaVersion, 3);
+  assert.deepEqual(registry.integrationQueue.map((r) => r.runId), ['b']);
+  const report = registry.owned('a', receipt.version);
+  assert.deepEqual(report.resources, [{ key: 'file:' + request.completion.reportFile, mode: 'write' }]);
+  assert.throws(() => registry.covers('a', a.version, a.resources), /version-stale/);
+  assert.throws(() => registry.covers('a', receipt.version, a.resources), /outside-reservation/);
+  assert.deepEqual(registry.completeIntegration('a', request), receipt);
+  assert.equal(observed.length, 1);
+  const restored = new RunRegistry(directory, state);
+  assert.deepEqual(restored.integrationCompletions['publish-a'], receipt);
+  const next = registry.reconcile('b', b.version, registry.referenceVersion);
+  registry.ready('b', next.version); registry.integration('b', next.version, true);
+  assert.deepEqual(registry.completionReceipt('a', request), receipt);
+  assert.throws(() => registry.covers('a', receipt.version, report.resources), /integration-suspended/);
+});
+
+test('une transaction divergente ou sans garde ne modifie ni barrière ni référence', async (t) => {
+  const { registry, candidate } = await setup(t);
+  const a = registry.reserve(candidate('a')); const request = completion(a);
+  assert.throws(() => registry.completeIntegration('a', request), /integration-not-owned/);
+  registry.ready('a', a.version); registry.integration('a', a.version, true);
+  const before = registry.snapshot();
+  for (const bad of [
+    { ...request, version: a.version + 1 }, { ...request, referenceVersion: 5 },
+    { ...request, published: false }, { ...request, evidence: [] },
+    { ...request, completion: { ...request.completion, reportFile: 'openspec/changes/archive/2026-10-16-change-b/STATISTIQUES.md' } },
+  ]) {
+    assert.throws(() => registry.completeIntegration('a', bad), CoordinationError);
+    assert.deepEqual(registry.snapshot(), before);
+  }
+  registry.completeIntegration('a', request);
+  const after = registry.snapshot();
+  for (const bad of [{ ...request, evidence: ['different proof'] }, { ...request, version: a.version + 1 }]) {
+    assert.throws(() => registry.completionReceipt('a', bad), /transaction-divergent/);
+    assert.deepEqual(registry.snapshot(), after);
+  }
+  assert.throws(() => registry.completionReceipt('b', request), /transaction-divergent/);
+});
+
+test('le reçu survit à la reprise et au change suivant du même RUN', async (t) => {
+  const { registry, candidate, directory, state } = await setup(t);
+  const a = registry.reserve(candidate('a')); const request = completion(a);
+  registry.ready('a', a.version); registry.integration('a', a.version, true);
+  const receipt = registry.completeIntegration('a', request);
+  const exited = new Promise((resolve) => registry.lock.once('exit', resolve));
+  registry.close(); await exited;
+  const restored = new RunRegistry(directory, state); await restored.acquireAuthority();
+  try {
+    const before = restored.snapshot();
+    assert.deepEqual(restored.completeIntegration('a', request), receipt);
+    assert.deepEqual(restored.snapshot(), before);
+    restored.release('a', receipt.version, true);
+    const next = restored.reserve({ ...candidate('a'), changeId: 'next-a', selectionKey: 'next-a', sessionId: 'ses_next' });
+    assert.deepEqual(restored.completeIntegration('a', request), receipt);
+    assert.equal(restored.owned('a', next.version).phase, 'WORK');
+    assert.equal(new RunRegistry(directory, state).schemaVersion, 3);
+    restored.requestIntegration('a', next.version);
+    assert.equal(new RunRegistry(directory, state).schemaVersion, 3);
+  } finally {
+    const ended = new Promise((resolve) => restored.lock.once('exit', resolve)); restored.close(); await ended;
+  }
+});
+
+test('une persistance échouée conserve sur disque la barrière sans publication partielle', async (t) => {
+  const { registry, candidate, directory, state } = await setup(t);
+  const a = registry.reserve(candidate('a'));
+  registry.ready('a', a.version); registry.integration('a', a.version, true);
+  const before = readFileSync(registry.path, 'utf8');
+  registry.persist = () => { registry.failed = true; throw new CoordinationError('registry-persistence-failed', 503); };
+  assert.throws(() => registry.completeIntegration('a', completion(a)), /persistence-failed/);
+  assert.equal(readFileSync(registry.path, 'utf8'), before);
+  const restored = new RunRegistry(directory, state);
+  assert.equal(restored.integrationOwner, 'a'); assert.equal(restored.referenceVersion, 0);
+  assert.equal(restored.runs.get('a').phase, 'WORK');
+  assert.throws(() => registry.completionReceipt('a', completion(a)), /registry-unavailable/);
+});
+
+test('un reçu corrompu est refusé à la restauration sans réécriture', async (t) => {
+  const { registry, candidate, directory, state } = await setup(t);
+  const a = registry.reserve(candidate('a'));
+  registry.ready('a', a.version); registry.integration('a', a.version, true);
+  registry.completeIntegration('a', completion(a));
+  for (const corrupt of [
+    (data) => { data.integrationCompletions['publish-a'].referenceVersion = 99; },
+    (data) => { data.runs[0].phase = 'WORK'; },
+    (data) => { data.integrationCompletions['publish-a'].contextId += 1; },
+  ]) {
+    const data = registry.snapshot(); corrupt(data);
+    const bytes = JSON.stringify(data); writeFileSync(registry.path, bytes);
+    assert.throws(() => new RunRegistry(directory, state), /restoration-invalid/);
+    assert.equal(readFileSync(registry.path, 'utf8'), bytes);
+  }
+});
+
+test('un conflit sur le rapport refuse toute publication atomique', async (t) => {
+  const { registry, candidate } = await setup(t);
+  const a = registry.reserve(candidate('a')); const payload = completion(a);
+  const b = registry.reserve(candidate('b', [{ key: 'file:' + payload.completion.reportFile, mode: 'read' }]));
+  registry.ready('a', a.version); registry.ready('b', b.version);
+  registry.integration('a', a.version, true);
+  const before = registry.snapshot();
+  assert.throws(() => registry.completeIntegration('a', payload), /resource-conflict/);
+  assert.deepEqual(registry.snapshot(), before);
+});
 
 test("une sélection atomique admet un seul propriétaire du change ou de son intention", async (t) => {
   const { registry, candidate } = await setup(t);

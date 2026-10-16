@@ -2,6 +2,35 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.2.1 — préparation source
+
+- Ajouter `/cab status` et son filtre exact `--run <run_id>` : tableau français
+  horodaté avec réalisé, en cours, restant et statut explicite par RUN.
+- Recouper preuves et observations actuelles ; afficher le pair réellement
+  bloquant, distinguer orchestrateur actif/codeur idle et écarter les anciennes
+  attentes levées. Signaler contradictions et indisponibilités sans déduction.
+- Consultation ponctuelle en lecture seule, hors boucle de pilotage, sans
+  message, permission, écriture, nouvelle session ou action de cycle de vie.
+- Aligner briques distribuées, commande, manifeste, unités et attentes de tests
+  sur 1.2.1. Aucun déploiement, migration ou intervention sur les RUN actifs.
+
+## 1.2.0 — préparation source
+
+- Alignement des 14 modules, de pyproject, du manifeste avec cachebuster neuf,
+  de la commande `/cab`, des descriptions systemd et des cadrages sur 1.2.0.
+- Premier lot de réduction de l'exclusion : préparation avant drainage,
+  prochain jalon stable prouvé, diagnostics par RUN via `/integration-status`
+  et observations natives regroupées avec recontrôles de divergence.
+- Libération publiée et entrée en `REPORT` atomiques via `completion` et
+  référence attendue ; reçu durable idempotent, génération renouvelée et
+  ressources réduites au seul rapport. Registre schéma 3, lecture 1/2/3,
+  interfaces historiques conservées et retour arrière à réconcilier.
+- Protocole aligné : validations combinées et publication sous exclusion,
+  statistiques et gate après libération. Sources et tests isolés uniquement,
+  sans déploiement, migration de RUN actif ni validation sur instantané.
+- Schémas broker et protocole MCP inchangés ; archives et références
+  historiques conservées. Aucun cache installé, service ou RUN modifié.
+
 ## 1.1.0 — préparation source du 2026-10-15
 
 - Alignement demandé des briques, du manifeste, des unités systemd et de la

@@ -19,6 +19,17 @@ spec.loader.exec_module(reset)
 
 
 class SessionResetTest(unittest.TestCase):
+    def test_schema_three_never_purges_an_active_reservation(self):
+        registry = self.state / "controller-runs.json"
+        registry.write_text(json.dumps({"schemaVersion": 3, "runs": [{"state": "RESERVED"}],
+                                        "integrationCompletions": {}, "integrationQueue": [], "integrationOwner": None}))
+        with self.assertRaisesRegex(RuntimeError, "réservés"):
+            reset.reset_directories([str(self.state)])
+        self.assertTrue(registry.exists())
+        registry.write_text(json.dumps({"schemaVersion": 3, "runs": [{"state": "DELIVERED"}],
+                                        "integrationCompletions": {}, "integrationQueue": [], "integrationOwner": None}))
+        self.assertGreater(reset.reset_directories([str(self.state)])[0]["removed_entries"], 0)
+
     def test_schema_two_preserves_queued_or_reserved_changes(self):
         registry = self.state / "controller-runs.json"
         registry.write_text(json.dumps({"schemaVersion": 2, "runs": [],
@@ -240,7 +251,7 @@ class SessionResetTest(unittest.TestCase):
                 process.communicate()
                 raise
         self.assertEqual(process.returncode, 0, errors)
-        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "1.1.0")
+        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "1.2.1")
         readiness = json.loads(replies[2]["result"]["content"][0]["text"])
         self.assertEqual(readiness["pending_count"], 0)
         self.assertEqual(readiness["root_cause"], "CONTROLLER_UNREACHABLE")

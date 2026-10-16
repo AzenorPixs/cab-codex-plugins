@@ -70,8 +70,11 @@ Le contrôleur distribué importe aussi `cgpt-approval-bridge-statistics.mjs` ;
 installer ce module avec le jeu complet. Il fournit les exports locaux JSON
 et Markdown à partir des métadonnées existantes, sans RUN d'audit, dépendance
 supplémentaire ni accès direct aux quotas du compte. Le snapshot runtime privé
-reste exclu du paquet. Les nouvelles transitions utilisent le registre schéma 2 ;
-ne pas mélanger ces sources avec un ancien contrôleur lors de l'installation.
+reste exclu du paquet. File, réduction et closing utilisent le schéma 2 ;
+la publication atomique avec reçu utilise le schéma 3. Les nouvelles sources
+restaurent 1/2/3 ; ne pas mélanger les composants avec un ancien contrôleur.
+Un retour arrière après utilisation du schéma 3 exige une réconciliation
+coordonnée, jamais une suppression automatique des reçus ou réservations.
 Cette préparation source n'installe rien et ne migre aucun RUN actif.
 
 Le skill `coding-session-statistics` est embarqué dans le plugin CAB avec
@@ -195,10 +198,16 @@ source doivent porter la même règle sans écraser leurs clauses spécifiques.
 
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.
 
+La sous-commande `/cab status` est distribuée dans le même fichier de commande
+Codex ; elle utilise les outils de lecture disponibles et les vues GET
+existantes. Elle n’ajoute ni script, ni dépendance, ni migration runtime.
+La préparation 1.2.1 reste une modification source ; l’installation dans un
+profil et la mise en service des composants sont des opérations distinctes.
+
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `1.1.0` pour le broker,
+artefacts distribués. La version de base actuelle est `1.2.1` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -288,7 +297,7 @@ Le projet actuel ne définit aucune image Docker CAB.
 Installer le jeu complet des scripts du plugin dans un même répertoire : le
 contrôleur et le superviseur importent les modules job-context, supervisor-context
 et runs ; le registre lance registry-lock.py avec Python 3. Ces fichiers sont
-indissociables et doivent partager la version source courante 1.1.0. Aucune dépendance tierce
+indissociables et doivent partager la version source courante 1.2.1. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.
