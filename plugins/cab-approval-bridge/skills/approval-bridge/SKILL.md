@@ -45,7 +45,7 @@ avec preuves de réexamen et la nouvelle version retournée avant tout mandat.
 Une réservation avec écritures ne peut être livrée sans cette publication.
 
 Installer ensemble controller.mjs, job-context.mjs, supervisor.mjs,
-supervisor-context.mjs, runs.mjs, registry-lock.py et les autres scripts,
+supervisor-context.mjs, runs.mjs, statistics.mjs, registry-lock.py et les autres scripts,
 avec leurs noms complets cgpt-approval-bridge-*. Les imports relatifs et le
 verrou Python exigent ce jeu complet dans le même répertoire. La mise à jour
 atomique prépare le jeu complet et sa validation avant publication ; les
@@ -172,6 +172,20 @@ Ce mécanisme ne change pas le modèle, ne rejoue pas de mandat et ne ferme ni
 ne redémarre les processus des agents.
 
 ## Statistiques obligatoires à chaque archivage
+
+Le profil de statistiques intégré et les routes /statistics, /integration-request,
+/resources et /closing sont décrits dans references/concurrent-runs.md. Utiliser
+le brouillon Markdown déterministe du contexte et préparer ses agrégats pendant
+le travail ; aucun RUN d'observation ni appel LLM supplémentaire n'est nécessaire.
+Préparer avant integration-request et viser le prochain jalon stable prouvé.
+GET /runs/<runId>/integration-status expose les obstacles sans autorisation.
+Après archive, validations applicables et publication prouvées, libérer
+l'exclusion sans attendre rapport, relevés finaux ou gate. L'option completion
+de /integration permet une publication/libération/entrée en REPORT atomique et
+un reçu idempotent ; son contrat et le schéma 3 sont dans concurrent-runs.md.
+Le chemin historique reste disponible : libérer puis entrer en closing
+pour le seul rapport. Le mandat distinct, la vérification et le gate restent requis.
+Les mesures absentes restent N/A et les sources confidentielles ne sont pas lues.
 
 Charger le skill voisin `../coding-session-statistics/SKILL.md` dès le début
 de chaque change piloté. Préparer ses relevés de quota et ses sondes avant le

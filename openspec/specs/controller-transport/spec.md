@@ -193,7 +193,7 @@ POST /job/recover MUST accepter prepare, retry, reconcile et complete, corrélé
 - **THEN** elle est refusée sans modifier le contrat
 
 ### Requirement: Préconditions techniques de récupération
-prepare, retry et complete MUST vérifier un job armé avec gate OPEN, mandat courant clôturé, aucune demande indécise, aucun rappel, aucune permission native ni transmission en cours. Via OpenCode dans directory, ils MUST vérifier santé, chemin, MCP connecté et les deux sessions inactives dans cette racine. Un contrôle indisponible ou divergent MUST refuser la transition.
+prepare, retry et complete MUST vérifier un job armé avec gate OPEN, mandat courant clôturé, aucune demande indécise, aucun rappel, aucune permission native ni transmission en cours. Seule la reprise humaine attestée décrite ci-dessous MAY déroger au statut armé et au gate OPEN. Via OpenCode dans directory, ils MUST vérifier santé, chemin, MCP connecté et les deux sessions inactives dans cette racine. Un contrôle indisponible ou divergent MUST refuser la transition.
 
 #### Scenario: Précondition manquante
 - **WHEN** une permission, une session occupée, une demande indécise ou un contexte divergent est observé
@@ -216,6 +216,34 @@ complete MUST exiger une décision locale approved, une réponse MCP APPROVED co
 #### Scenario: Prévol non prouvé
 - **WHEN** le client affirme une réussite mais les messages natifs ne la prouvent pas
 - **THEN** complete refuse le transfert et conserve le gel
+
+### Requirement: Frontière des diagnostics de préparation
+prepare MUST persister count et empreinte des seules parties MCP diagnostiques ou de réconciliation technique déjà présentes dans la candidate. complete MUST vérifier ce préfixe intact avant le prévol. Aucun outil natif ni approve/reject ne peut être masqué. Pour une récupération héritée, seuls les diagnostics terminés avant preparedAt et avant la demande réservée MAY être exclus ; l'historique complet reste conservé.
+
+#### Scenario: Diagnostics puis prévol strict
+- **WHEN** des diagnostics techniques précèdent prepare puis un prévol conforme suit la frontière
+- **THEN** complete vérifie l'historique intact sans compter ces diagnostics comme effets natifs
+
+### Requirement: Autorisation de reprise humaine attestée
+complete MAY recevoir restoredPreflightProof uniquement avec developerAuthorization spécifique, pour le même job désarmé avec gate persistant VALIDATED/BLOQUÉ postérieur au prévol et candidate non révoquée. Ce gate atteste la consommation préalable ; une affirmation de consommation seule MUST NOT suffire. Toutes les autres préconditions techniques restent obligatoires.
+
+#### Scenario: Gate absent ou différent
+- **WHEN** le gate attestant la consommation manque ou sa référence diverge
+- **THEN** complete refuse sans réarmer ni transférer
+
+### Requirement: Preuves strictes de restauration humaine
+La reprise humaine MUST vérifier empreinte canonique du préfixe natif, décision originale, identités, réponse APPROVED avec reviewer CGPT, absence de tools.bash=true pendant le prévol, commande exacte exit 0 et READY sans attente après la commande. Toute preuve absente ou divergente MUST conserver le gel, le job et les décisions.
+
+#### Scenario: Preuve native divergente
+- **WHEN** l'empreinte, la décision, l'identité, la commande, l'attestation de consommation ou la readiness manque ou diverge
+- **THEN** complete refuse sans restaurer de décision ni accorder de permission
+
+### Requirement: Restauration consommée sans rejeu
+Après preuves, la reprise humaine MUST réarmer seulement le même job, restaurer sa décision corrélée comme déjà consommée, persister références et empreintes d'audit puis effectuer le transfert normal avec gate OPEN. Elle MUST NOT transmettre once, exécuter une commande, modifier les messages natifs ou assouplir retry/reconcile.
+
+#### Scenario: Maintenance et reprise autorisées
+- **WHEN** le développeur autorise la reprise du même job désarmé et que le prévol déjà consommé est intégralement prouvé
+- **THEN** complete restaure ces preuves comme consommées et transfère la candidate sans nouvelle permission ni rejeu
 
 ### Requirement: Conservation du même job
 Après complete, le contrôleur MUST conserver jobId, directory, changeId, criteria, lastProvenMilestone et strictCommands, remplacer uniquement la session, persister l'historique non secret des récupérations et conserver gate OPEN. Les sessions révoquées MUST rester sans permission exécutable même après désarmement.
