@@ -3,7 +3,7 @@
 Version : 0.5
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-14T18:23:58Z
+Début du relevé (UTC) : 2026-10-16T16:59:51Z
 Environnement d'exécution DIU : PROXMOX
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -24,7 +24,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Docker
 
-  * 29.9.0
+  * 29.9.1
   * /usr/bin/docker
 
 
@@ -48,25 +48,25 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Node
 
-  * 24.21.0
+  * 24.22.0
   * /home/devops/node/current/bin/node
 
 
 # NPM
 
-  * 11.19.0
+  * 11.19.1
   * /home/devops/node/current/bin/npm
 
 
 # OpenCode
 
-  * 1.19.0
+  * 1.19.2
   * /home/devops/.opencode/bin/opencode
 
 
 # OpenSpec
 
-  * 1.14.1
+  * 1.14.2
   * /home/devops/.local/npm/bin/openspec
 
 
@@ -114,7 +114,7 @@ La détection ne vérifie pas le fonctionnement du mode headless.
 
 ## Chromium
 
-  * 155.0.8059.39
+  * 155.0.8059.79
   * /usr/bin/chromium
   * Mode headless : --headless
 

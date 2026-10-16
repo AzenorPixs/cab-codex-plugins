@@ -14,7 +14,7 @@ from pathlib import Path
 STATE_DIRECTORY = "cgpt-approval-bridge"
 INSTANCE_LOCK = "broker.instance.lock"
 REGISTRY_LOCK = "registry.instance.lock"
-VERSION = "1.0.2"
+VERSION = "1.2.1"
 
 
 def validate_directory(value):
@@ -80,8 +80,10 @@ def reset_directories(values):
                     registry = json.load(source)
                 except (ValueError, UnicodeError) as exc:
                     raise ValueError("Registre illisible ; purge refusée.") from exc
-                if not isinstance(registry, dict) or registry.get("schemaVersion") != 1 or not isinstance(registry.get("runs"), list):
+                if not isinstance(registry, dict) or registry.get("schemaVersion") not in (1, 2, 3) or not isinstance(registry.get("runs"), list):
                     raise ValueError("Registre invalide ; purge refusée.")
+                if registry.get("integrationQueue", []) != [] or registry.get("integrationOwner") is not None:
+                    raise RuntimeError("Une intégration reste réservée ; purge globale refusée.")
                 if any(not isinstance(run, dict) or run.get("state") not in ("DELIVERED", "ABANDONED")
                        for run in registry["runs"]):
                     raise RuntimeError("Des changes restent réservés ; purge globale refusée.")

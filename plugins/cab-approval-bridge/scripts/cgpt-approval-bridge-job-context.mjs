@@ -7,7 +7,8 @@ import readline from "node:readline";
 
 // A context owns its decisions, gates and recovery; OpenCode and MCP stay shared.
 export function createJobContext({ workspace, stateDirectory, run = null,
-  admitOperation = () => true, ownsSession = () => true }) {
+  admitOperation = () => true, ownsSession = () => true, observe = () => {},
+  verifyRestoredPreflight = () => true }) {
 function envValue(name) {
   const legacyName = name.replace("OC_Codex_", "OC_CGPT_");
   return process.env[name] || process.env[legacyName];
@@ -205,11 +206,12 @@ function updateStatus(type, details = {}) {
     type,
     ...details,
   };
+  observe(type, details);
 }
 
 function publicStatus() {
   return {
-    version: "1.0.2",
+    version: "1.2.1",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -304,6 +306,19 @@ function validPersistedJob(payload) {
       if (value[key] !== undefined && !text(value[key])) return false;
     }
     if (value.invalidatedRequestIds !== undefined && !strings(value.invalidatedRequestIds)) return false;
+    if (value.preparationHistory !== undefined && (!record(value.preparationHistory) ||
+        !Number.isSafeInteger(value.preparationHistory.nativeToolCount) ||
+        value.preparationHistory.nativeToolCount < 0 ||
+        !/^[a-f0-9]{64}$/.test(value.preparationHistory.nativeToolHash))) return false;
+    if (value.restoredPreflight !== undefined && (!record(value.restoredPreflight) ||
+        !text(value.restoredPreflight.authorizationReference) ||
+        !text(value.restoredPreflight.blockedGateValidatedAt) ||
+        !text(value.restoredPreflight.restoredAt) ||
+        !text(value.restoredPreflight.requestId) || !text(value.restoredPreflight.approvalId) ||
+        !Number.isSafeInteger(value.restoredPreflight.nativeToolCount) || value.restoredPreflight.nativeToolCount < 1 ||
+        !/^[a-f0-9]{64}$/.test(value.restoredPreflight.nativeToolHash) ||
+        !/^[a-f0-9]{64}$/.test(value.restoredPreflight.decisionHash) ||
+        value.restoredPreflight.nativePermissionReplayed !== false)) return false;
     if (value.attempts !== undefined && (!Array.isArray(value.attempts) || !value.attempts.every((attempt) =>
       record(attempt) && text(attempt.preflightRequestId) && strings(attempt.requestIds) &&
       strings(attempt.approvalIds) && Number.isSafeInteger(attempt.nativeToolCount) &&
@@ -463,9 +478,56 @@ function nativeParentHash(info) {
   return createHash("sha256").update(JSON.stringify({ id: info.id, role: info.role, tools: info.tools })).digest("hex");
 }
 
+function isPreparationDiagnostic(part, parts) {
+  const tool = part.tool;
+  if (["cgpt-validation_broker_readiness", "cgpt-validation_broker_health",
+    "cgpt-validation_list_pending", "cgpt-validation_broker_evaluate_remediation"].includes(tool)) return true;
+  if (tool === "cgpt-validation_cancel_approval") {
+    let output;
+    try { output = JSON.parse(part.state?.output); } catch { return false; }
+    return output.status === "CANCELLED" && output.approval_id === part.state.input?.approval_id &&
+      output.directory === job.directory && output.change_id === job.changeId &&
+      (!run || output.run_id === run.runId);
+  }
+  if (tool !== "cgpt-validation_broker_execute_controlled_remediation" ||
+      part.state?.input?.action_code !== "RECONCILE_PENDING_APPROVALS") return false;
+  const approvalId = part.state.input.approval_id;
+  return parts.some((entry) => {
+    if (entry.tool !== "cgpt-validation_list_pending" || entry.state?.status !== "completed") return false;
+    let output;
+    try { output = JSON.parse(entry.state.output); } catch { return false; }
+    return output.approvals?.some((approval) => approval.approval_id === approvalId &&
+      approval.directory === job.directory && approval.change_id === job.changeId &&
+      (!run || approval.run_id === run.runId)) === true;
+  });
+}
+
+function canonicalRecoveryHash(value) {
+  const ordered = (entry) => Array.isArray(entry) ? entry.map(ordered) :
+    entry !== null && typeof entry === "object"
+      ? Object.fromEntries(Object.keys(entry).sort().map((key) => [key, ordered(entry[key])])) : entry;
+  return createHash("sha256").update(JSON.stringify(ordered(value))).digest("hex");
+}
+
 function currentRecoveryTools(recovery, parts, messages = []) {
+  const preparation = recovery.preparationHistory;
+  if (preparation && (parts.length < preparation.nativeToolCount ||
+      recoveryToolsHash(parts.slice(0, preparation.nativeToolCount)) !== preparation.nativeToolHash)) {
+    recoveryFailure("preflight-history-divergent");
+  }
   const previous = recovery.attempts?.at(-1);
-  if (!previous) return parts;
+  if (!previous) {
+    if (preparation) return parts.slice(preparation.nativeToolCount);
+    // Compatibilité des récupérations déjà préparées : seuls les diagnostics
+    // techniques terminés avant prepare sont exclus du prévol, jamais ses outils.
+    const firstRequest = parts.findIndex((part) => part.tool === "cgpt-validation_request_validation" &&
+      part.state?.input?.requestId === recovery.preflightRequestId);
+    const preparedAt = Date.parse(recovery.preparedAt);
+    return parts.filter((part, index) => !(index < firstRequest && Number.isFinite(preparedAt) &&
+      Number.isFinite(part.state?.time?.start) && Number.isFinite(part.state?.time?.end) &&
+      part.state.time.start <= part.state.time.end && part.state.time.end < preparedAt &&
+      isPreparationDiagnostic(part, parts)));
+  }
   for (const attempt of recovery.attempts || []) {
     if (!attempt.nativeParentId) continue;
     const parent = messages.find((message) => message.info?.id === attempt.nativeParentId);
@@ -658,8 +720,8 @@ async function recoveryJson(path) {
   return response.json();
 }
 
-async function checkRecoveryContext(candidate) {
-  if (!job?.armed || terminalGate.status !== "OPEN") recoveryFailure("job-not-recoverable");
+async function checkRecoveryContext(candidate, blockedRestore = false) {
+  if (!blockedRestore && (!job?.armed || terminalGate.status !== "OPEN")) recoveryFailure("job-not-recoverable");
   if (job.currentCabMandate) recoveryFailure("current-mandate-not-closed");
   if (reconcilingPermissions.size || active.size || reminderNotifications.size) {
     recoveryFailure("validation-in-flight");
@@ -695,9 +757,9 @@ async function checkRecoveryContext(candidate) {
   }
 }
 
-async function checkRecoveryPreflight(recovery) {
-  const validation = validations.get(recovery.preflightRequestId);
-  const decision = httpDecisions.get(recovery.preflightRequestId);
+async function checkRecoveryPreflight(recovery, restored = null) {
+  const validation = restored?.validation || validations.get(recovery.preflightRequestId);
+  const decision = restored?.decision || httpDecisions.get(recovery.preflightRequestId);
   if (!validation || decision?.decision !== "approved" ||
       !validation.operationConsumed || validation.operationInvalidated ||
       validation.operation?.sessionId !== recovery.sessionId ||
@@ -727,6 +789,14 @@ async function checkRecoveryPreflight(recovery) {
       submitted = true;
       // Un délai MCP ne remplace pas la preuve : un polling corrélé doit encore réussir.
       if (state.status === "error") continue;
+    }
+    if (approvalTool && part.tool !== "cgpt-validation_request_validation" &&
+        state?.status === "error" &&
+        state.error === "MCP error -32001: Request timed out") {
+      if (!submitted || state.input?.approval_id !== validation.approvalId) {
+        recoveryFailure("preflight-poll-divergent");
+      }
+      continue;
     }
     if (!state || state.status !== "completed") recoveryFailure("preflight-tool-not-completed");
     if (approvalTool) {
@@ -764,6 +834,89 @@ async function checkRecoveryPreflight(recovery) {
   if (!submitted || commandCount !== 1 || !ready) recoveryFailure("preflight-proof-missing");
 }
 
+// Reprise manuelle d'un prévol déjà consommé, attesté par le gate BLOQUÉ
+// persistant. Cette reconstruction ne transmet aucune permission native.
+async function checkedBlockedPreflightRestore(payload) {
+  const proof = payload.restoredPreflightProof;
+  if (typeof payload.developerAuthorization !== "string" ||
+      !payload.developerAuthorization.trim() || payload.developerAuthorization.length > 500) {
+    recoveryFailure("developer-authorization-required");
+  }
+  if (payload.phase !== "complete" || job.armed || terminalGate.status !== "VALIDATED" ||
+      terminalGate.declaredState !== "BLOQUÉ" || !job.recovery ||
+      job.revokedSessions?.includes(job.recovery.sessionId) ||
+      job.recovery.invalidatedRequestIds?.includes(job.recovery.preflightRequestId) ||
+      proof?.blockedGateValidatedAt !== terminalGate.validatedAt) {
+    recoveryFailure("blocked-preflight-attestation-required");
+  }
+  if (!Number.isSafeInteger(proof.nativeToolCount) || proof.nativeToolCount < 1 ||
+      typeof proof.nativeToolHash !== "string" || !/^[a-f0-9]{64}$/.test(proof.nativeToolHash)) {
+    recoveryFailure("preflight-history-divergent");
+  }
+  const messages = await recoveryJson(`/session/${encodeURIComponent(job.recovery.sessionId)}/message`);
+  const parts = recoveryTools(messages);
+  if (parts.length < proof.nativeToolCount ||
+      canonicalRecoveryHash(parts.slice(0, proof.nativeToolCount)) !== proof.nativeToolHash) {
+    recoveryFailure("preflight-history-divergent");
+  }
+  const current = currentRecoveryTools(job.recovery, parts, messages);
+  const requests = current.filter((part) => part.tool === "cgpt-validation_request_validation");
+  if (requests.length !== 1) recoveryFailure("preflight-request-divergent");
+  const request = requests[0];
+  const approval = request.state?.input;
+  const decision = proof.decision;
+  if (!decision || decision.decision !== "approved" ||
+      decision.requestId !== job.recovery.preflightRequestId ||
+      decision.approval_id !== approval?.approval_id || decision.change_id !== job.changeId ||
+      (run && (decision.run_id !== run.runId || approval.run_id !== run.runId ||
+        decision.reservation_version !== approval.reservation_version))) {
+    recoveryFailure("preflight-approval-divergent");
+  }
+  const approvedResponse = current.some((part) => {
+    if (!["cgpt-validation_request_validation", "cgpt-validation_poll_approval",
+      "cgpt-validation_get_approval"].includes(part.tool) || part.state?.status !== "completed") return false;
+    let output;
+    try { output = JSON.parse(part.state.output); } catch { return false; }
+    return output.status === "APPROVED" && output.reviewer === "CGPT" &&
+      output.requestId === decision.requestId && output.approval_id === decision.approval_id;
+  });
+  if (!approvedResponse) recoveryFailure("preflight-approval-not-approved");
+  const command = current.find((part) => part.tool === "bash");
+  const gateAt = Date.parse(terminalGate.validatedAt);
+  if (!command || !Number.isFinite(gateAt) || !Number.isFinite(command.state?.time?.end) ||
+      command.state.time.end > gateAt) recoveryFailure("blocked-preflight-attestation-required");
+  const sealedReady = parts.slice(0, proof.nativeToolCount).some((part) => {
+    if (part.tool !== "cgpt-validation_broker_readiness" || part.state?.status !== "completed" ||
+        !Number.isFinite(part.state.time?.start) || !Number.isFinite(part.state.time?.end) ||
+        part.state.time.start < command.state.time.end || part.state.time.end > gateAt) return false;
+    let output;
+    try { output = JSON.parse(part.state.output); } catch { return false; }
+    return output.status === "READY" && output.pending_count === 0;
+  });
+  if (!sealedReady) recoveryFailure("blocked-preflight-attestation-required");
+  const preparedAt = Date.parse(job.recovery.preparedAt);
+  if (!Number.isFinite(preparedAt) || command.state.time.start < preparedAt || messages.some((message) => message.info?.role === "user" &&
+      message.info?.tools?.bash === true && message.info.time?.created >= preparedAt &&
+      message.info.time.created <= command.state.time.end)) recoveryFailure("preflight-native-once-not-proved");
+  const validation = { requestId: decision.requestId, approvalId: approval.approval_id,
+    changeId: job.changeId, operation: approvedOperation(approval), operationConsumed: true,
+    operationInvalidated: false };
+  if (validation.operation?.sessionId !== job.recovery.sessionId ||
+      !verifyRestoredPreflight(approval)) recoveryFailure("preflight-approval-divergent");
+  const known = httpDecisions.get(decision.requestId);
+  const existing = validations.get(decision.requestId);
+  if ((known && JSON.stringify(known) !== JSON.stringify(decision)) ||
+      (existing && (!existing.operationConsumed || existing.operationInvalidated))) {
+    recoveryFailure("preflight-restore-conflict");
+  }
+  await checkRecoveryPreflight(job.recovery, { validation, decision });
+  return { validation, decision, audit: { authorizationReference: payload.developerAuthorization,
+    nativeToolCount: proof.nativeToolCount, nativeToolHash: proof.nativeToolHash,
+    blockedGateValidatedAt: terminalGate.validatedAt, restoredAt: new Date().toISOString(),
+    requestId: decision.requestId, approvalId: decision.approval_id,
+    decisionHash: canonicalRecoveryHash(decision), nativePermissionReplayed: false } };
+}
+
 async function recoverJob(payload) {
   const keys = ["jobId", "expectedSessionId", "sessionId", "recoveryId", "preflightRequestId"];
   if (!payload || !["prepare", "retry", "reconcile", "complete"].includes(payload.phase) ||
@@ -791,11 +944,13 @@ async function recoverJob(payload) {
        job.recovery.attempts?.some((attempt) => attempt.requestIds.includes(payload.preflightRequestId)))) {
     recoveryFailure("recovery-identity-reused");
   }
-  await checkRecoveryContext(payload);
+  const restored = payload.restoredPreflightProof === undefined ? null
+    : await checkedBlockedPreflightRestore(payload);
+  await checkRecoveryContext(payload, Boolean(restored));
   const previousAttempt = payload.phase === "retry"
     ? await checkRecoveryRetry(job.recovery, payload.preflightRequestId)
     : payload.phase === "reconcile" ? await checkExecutedPreflight(job.recovery, payload) : null;
-  if (payload.phase === "complete") await checkRecoveryPreflight(job.recovery);
+  if (payload.phase === "complete") await checkRecoveryPreflight(job.recovery, restored);
   if (status.brokerReadiness?.status !== "READY" ||
       Number(status.brokerReadiness.pending_count) !== 0) recoveryFailure("broker-not-ready");
   const previousJob = job;
@@ -804,6 +959,11 @@ async function recoverJob(payload) {
   if (payload.phase === "prepare") {
     snapshot.recovery = { ...Object.fromEntries(keys.map((key) => [key, payload[key]])),
       preparedAt: new Date().toISOString() };
+    const preparationParts = recoveryTools(await recoveryJson(`/session/${encodeURIComponent(payload.sessionId)}/message`));
+    if (preparationParts.some((part) => !isPreparationDiagnostic(part, preparationParts) ||
+        !["completed", "error"].includes(part.state?.status))) recoveryFailure("preflight-preparation-tool-forbidden");
+    snapshot.recovery.preparationHistory = { nativeToolCount: preparationParts.length,
+      nativeToolHash: recoveryToolsHash(preparationParts) };
     snapshot.revokedSessions = [...new Set([...(snapshot.revokedSessions || []), job.sessionId])];
     snapshot.recovery.invalidatedRequestIds = [...validations.values()]
       .filter((validation) => validation.operation?.sessionId === job.sessionId)
@@ -813,6 +973,11 @@ async function recoverJob(payload) {
     snapshot.recovery.preflightRequestId = payload.preflightRequestId;
   } else {
     snapshot.sessionId = payload.sessionId;
+    if (restored) {
+      snapshot.armed = true;
+      snapshot.disarmedAt = null;
+      snapshot.recovery.restoredPreflight = restored.audit;
+    }
     snapshot.recoveryHistory = [...(snapshot.recoveryHistory || []),
       { ...snapshot.recovery, completedAt: new Date().toISOString() }];
     snapshot.recovery = null;
@@ -825,6 +990,11 @@ async function recoverJob(payload) {
     job = previousJob;
     Object.assign(terminalGate, previousGate);
     recoveryFailure("recovery-persistence-failed");
+  }
+  if (restored) {
+    validations.set(restored.validation.requestId, restored.validation);
+    httpDecisions.set(restored.validation.requestId, restored.decision);
+    answered.add(restored.validation.requestId);
   }
   if (payload.phase === "reconcile") {
     const previousValidation = validations.get(previousAttempt.preflightRequestId);
@@ -1325,7 +1495,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.0.2",
+      version: "1.2.1",
     },
   });
 
@@ -1499,7 +1669,7 @@ async function handleValidation(request) {
   const entry = {
     requestId: request.requestId,
     receivedAt:
-      new Date().toISOString(),
+      new Date(request.receivedAt ?? Date.now()).toISOString(),
   };
 
   resetTerminalGate("validation-received");
@@ -1517,6 +1687,7 @@ async function handleValidation(request) {
     "validation-received",
     {
       requestId: request.requestId,
+      receivedAt: Date.parse(entry.receivedAt),
     }
   );
 
@@ -2047,6 +2218,7 @@ const handle = async (request, response, url) => {
             changeId,
             summary,
             operation,
+            receivedAt: request.cabReceivedAt,
           };
 
           validations.set(
