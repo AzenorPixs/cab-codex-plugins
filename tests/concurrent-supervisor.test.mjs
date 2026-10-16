@@ -55,9 +55,13 @@ test('supervision partagée : attente de A, reprise unique de B et compteurs sé
   });
   for (let i = 0; i < 50 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(sent.length, 1); assert.equal(sent[0].sessionId, 'ses_b');
-  await new Promise((r) => setTimeout(r, 1200));
-  assert.equal(sent.length, 1);
-  const state = await (await fetch('http://127.0.0.1:' + port + '/status')).json();
+  let state;
+  for (let i = 0; i < 50; i++) {
+    state = await (await fetch('http://127.0.0.1:' + port + '/status')).json();
+    assert.equal(sent.length, 1);
+    if (state.runs.b.reason === 'session-not-idle') break;
+    await new Promise((r) => setTimeout(r, 50));
+  }
   assert.equal(state.runs.a.resumeAttemptCount, 0); assert.equal(state.runs.b.resumeAttemptCount, 1);
   assert.equal(state.runs.a.reason, 'pending-validations');
   assert.equal(state.runs.b.reason, 'session-not-idle');

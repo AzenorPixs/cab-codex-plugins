@@ -177,7 +177,13 @@ Le profil de statistiques intégré et les routes /statistics, /integration-requ
 /resources et /closing sont décrits dans references/concurrent-runs.md. Utiliser
 le brouillon Markdown déterministe du contexte et préparer ses agrégats pendant
 le travail ; aucun RUN d'observation ni appel LLM supplémentaire n'est nécessaire.
-Après archive et publication prouvées, libérer l'exclusion puis entrer en closing
+Préparer avant integration-request et viser le prochain jalon stable prouvé.
+GET /runs/<runId>/integration-status expose les obstacles sans autorisation.
+Après archive, validations applicables et publication prouvées, libérer
+l'exclusion sans attendre rapport, relevés finaux ou gate. L'option completion
+de /integration permet une publication/libération/entrée en REPORT atomique et
+un reçu idempotent ; son contrat et le schéma 3 sont dans concurrent-runs.md.
+Le chemin historique reste disponible : libérer puis entrer en closing
 pour le seul rapport. Le mandat distinct, la vérification et le gate restent requis.
 Les mesures absentes restent N/A et les sources confidentielles ne sont pas lues.
 

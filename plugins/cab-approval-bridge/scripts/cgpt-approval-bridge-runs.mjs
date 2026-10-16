@@ -1,11 +1,11 @@
 import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync,
   readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.1.0";
+export const VERSION = "1.2.1";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -81,6 +81,7 @@ export class RunRegistry {
     this.history = [];
     this.referenceVersion = 0;
     this.integrationQueue = [];
+    this.integrationCompletions = {};
     this.schemaVersion = 1;
     this.observe = observe;
     this.restore();
@@ -93,10 +94,11 @@ export class RunRegistry {
     this.history = [];
     this.referenceVersion = 0;
     this.integrationQueue = [];
+    this.integrationCompletions = {};
     this.schemaVersion = 1;
     const data = readRegistry(this.path);
     if (data !== undefined) {
-      if (!record(data) || ![1, 2].includes(data.schemaVersion) || data.project !== this.directory ||
+      if (!record(data) || ![1, 2, 3].includes(data.schemaVersion) || data.project !== this.directory ||
           !Array.isArray(data.runs) || !Number.isSafeInteger(data.sequence) || data.sequence < 0 ||
           (data.integrationOwner !== null && !id(data.integrationOwner))) {
         throw new CoordinationError("registry-restoration-invalid");
@@ -148,6 +150,29 @@ export class RunRegistry {
         throw new CoordinationError('registry-restoration-invalid');
       }
       this.integrationQueue = data.integrationQueue || [];
+      if ((data.schemaVersion < 3 && data.integrationCompletions !== undefined) ||
+          (data.schemaVersion === 3 && !record(data.integrationCompletions))) {
+        throw new CoordinationError('registry-restoration-invalid');
+      }
+      this.integrationCompletions = data.integrationCompletions || {};
+      for (const [transactionId, receipt] of Object.entries(this.integrationCompletions)) {
+        const owner = [...this.runs.values(), ...this.history].find((r) =>
+          r.runId === receipt?.runId && r.contextId === receipt?.contextId);
+        if (!record(receipt) || Object.keys(receipt).length !== 9 || !id(transactionId) ||
+            receipt.transactionId !== transactionId || !owner || owner.phase !== 'REPORT' ||
+            !owner.integrationCompleted || owner.reportFile !== receipt.reportFile ||
+            owner.publishedReferenceVersion !== receipt.referenceVersion || owner.version < receipt.version ||
+            !Number.isSafeInteger(receipt.contextId) || receipt.contextId < 1 ||
+            !Number.isSafeInteger(receipt.requestVersion) || receipt.requestVersion < receipt.contextId ||
+            !Number.isSafeInteger(receipt.version) || receipt.version <= receipt.requestVersion || receipt.version > this.sequence ||
+            !Number.isSafeInteger(receipt.previousReferenceVersion) || receipt.previousReferenceVersion < 0 ||
+            receipt.referenceVersion !== receipt.previousReferenceVersion + 1 || receipt.referenceVersion > this.referenceVersion ||
+            typeof receipt.evidenceDigest !== 'string' || !/^[a-f0-9]{64}$/.test(receipt.evidenceDigest)) {
+          throw new CoordinationError('registry-restoration-invalid');
+        }
+        try { this.reportTarget(owner, receipt.reportFile); }
+        catch { throw new CoordinationError('registry-restoration-invalid'); }
+      }
       for (const run of this.runs.values()) if (run.phase === 'REPORT') {
         if (!run.integrationCompleted || !Number.isSafeInteger(run.publishedReferenceVersion) ||
             run.publishedReferenceVersion < 1 || run.publishedReferenceVersion > this.referenceVersion ||
@@ -199,6 +224,7 @@ export class RunRegistry {
       sequence: this.sequence, integrationOwner: this.integrationOwner,
       referenceVersion: this.referenceVersion,
       integrationQueue: this.integrationQueue,
+      ...(this.schemaVersion >= 3 ? { integrationCompletions: this.integrationCompletions } : {}),
       requestOwners: this.requestOwners, history: this.history, runs: [...this.runs.values()] });
   }
   persist() {
@@ -310,7 +336,7 @@ export class RunRegistry {
       }
     }
     run.resources = resources; run.integrationReady = false; run.version = ++this.sequence;
-    this.schemaVersion = 2; this.persist(); return structuredClone(run);
+    this.schemaVersion = Math.max(this.schemaVersion, 2); this.persist(); return structuredClone(run);
   }
   requestIntegration(runId, version, cancel = false) {
     const run = this.owned(runId, version);
@@ -321,7 +347,7 @@ export class RunRegistry {
     if (cancel) this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
     else this.integrationQueue.push({
       runId, contextId: run.contextId, requestedAt: new Date().toISOString() });
-    this.schemaVersion = 2; this.persist(); return this.snapshot();
+    this.schemaVersion = Math.max(this.schemaVersion, 2); this.persist(); return this.snapshot();
   }
   reportTarget(run, file) {
     if (typeof file !== 'string' || !/^openspec\/changes\/archive\/[A-Za-z0-9][A-Za-z0-9_.-]*\/STATISTIQUES\.md$/.test(file) ||
@@ -347,7 +373,76 @@ export class RunRegistry {
     run.publishedReferenceVersion ??= run.referenceVersion;
     run.integrationReady = true; run.version = ++this.sequence;
     this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
-    this.schemaVersion = 2; this.persist(); return structuredClone(run);
+    this.schemaVersion = Math.max(this.schemaVersion, 2); this.persist(); return structuredClone(run);
+  }
+  completionInput(payload) {
+    const completion = payload?.completion;
+    if (!record(completion) || Object.keys(completion).length !== 2 ||
+        !id(completion.transactionId) || typeof completion.reportFile !== 'string' ||
+        payload.acquire !== false || payload.published !== true ||
+        !Number.isSafeInteger(payload.version) || payload.version < 1 ||
+        !Number.isSafeInteger(payload.referenceVersion) || payload.referenceVersion < 0 ||
+        !Array.isArray(payload.evidence) || !payload.evidence.length ||
+        !payload.evidence.every((e) => typeof e === 'string' && e.length > 0 && e.length <= 500)) {
+      throw new CoordinationError('integration-completion-invalid', 400);
+    }
+    return { ...completion, evidenceDigest: createHash('sha256').update(JSON.stringify(payload.evidence)).digest('hex') };
+  }
+  completionReceipt(runId, payload) {
+    this.assertHealthy();
+    const input = this.completionInput(payload);
+    if (!Object.hasOwn(this.integrationCompletions, input.transactionId)) return null;
+    const receipt = this.integrationCompletions[input.transactionId];
+    if (receipt.runId !== runId || receipt.requestVersion !== payload.version ||
+        receipt.previousReferenceVersion !== payload.referenceVersion || receipt.reportFile !== input.reportFile ||
+        receipt.evidenceDigest !== input.evidenceDigest) throw new CoordinationError('integration-transaction-divergent');
+    return structuredClone(receipt);
+  }
+  completeIntegration(runId, payload) {
+    const previous = this.completionReceipt(runId, payload);
+    if (previous) return previous;
+    const input = this.completionInput(payload);
+    const run = this.owned(runId, payload.version);
+    if (this.integrationOwner !== runId) throw new CoordinationError('integration-not-owned');
+    if (run.phase !== 'WORK') throw new CoordinationError('report-phase-only');
+    if (payload.referenceVersion !== this.referenceVersion || run.referenceVersion !== this.referenceVersion) {
+      throw new CoordinationError('reference-version-stale');
+    }
+    const reportFile = this.reportTarget(run, input.reportFile);
+    const resources = [{ key: `file:${reportFile}`, mode: 'write' }];
+    this.checkConflicts({ ...run, resources });
+    const receipt = { transactionId: input.transactionId, runId, contextId: run.contextId,
+      requestVersion: payload.version, previousReferenceVersion: this.referenceVersion,
+      referenceVersion: this.referenceVersion + 1, version: this.sequence + 1,
+      reportFile, evidenceDigest: input.evidenceDigest };
+    this.referenceVersion = receipt.referenceVersion;
+    run.referenceVersion = this.referenceVersion; run.publishedReferenceVersion = this.referenceVersion;
+    run.integrationCompleted = true; run.integrationReady = true; run.requiresPublication = true;
+    run.resources = resources; run.reportFile = reportFile; run.phase = 'REPORT';
+    run.version = ++this.sequence;
+    this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
+    this.integrationOwner = null;
+    this.integrationCompletions[input.transactionId] = receipt;
+    this.schemaVersion = 3;
+    this.persist();
+    return structuredClone(receipt);
+  }
+  integrationBlockers(runId) {
+    const blockers = [];
+    if (this.integrationOwner && this.integrationOwner !== runId) {
+      blockers.push({ runId: this.integrationOwner, reason: 'integration-already-owned' });
+    }
+    if (this.integrationQueue.length && this.integrationQueue[0].runId !== runId) {
+      blockers.push({ runId: this.integrationQueue[0].runId, reason: 'integration-queue-order' });
+    }
+    for (const run of this.runs.values()) {
+      if (run.state !== 'RESERVED' || run.phase === 'REPORT') continue;
+      if (!run.integrationReady) blockers.push({ runId: run.runId, contextId: run.contextId, reason: 'stable-milestone-required' });
+      if (run.referenceVersion !== this.referenceVersion) {
+        blockers.push({ runId: run.runId, contextId: run.contextId, reason: 'reference-reconciliation-required' });
+      }
+    }
+    return blockers;
   }
   claimRequest(runId, requestId, digest, known) {
     this.assertHealthy();

@@ -44,7 +44,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `1.1.0` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.2.1` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -241,7 +241,20 @@ avec historique des récupérations et sessions révoquées, gate OPEN. Les
 mutations concurrentes sont refusées pendant les contrôles et la persistance.
 Un échec conserve le gel ; les sessions révoquées restent interdites après
 redémarrage. Les décisions locales du prévol ne sont pas reconstruites après
-redémarrage : leur absence interdit complete et requiert une décision humaine.
+redémarrage : leur absence interdit complete ordinaire et requiert une décision humaine.
+La reprise humaine ciblée de complete accepte developerAuthorization et
+restoredPreflightProof seulement pour le même job désarmé avec gate persistant
+VALIDATED/BLOQUÉ attestant sa consommation préalable. Le préfixe des parties
+natives est vérifié par empreinte canonique SHA-256 et count ; décision originale,
+identités, APPROVED/reviewer CGPT, commande exacte exit 0 et READY postérieur
+sont recontrôlés. tools.bash=true pendant le prévol est interdit. La décision
+est restaurée comme déjà consommée après persistance du transfert ; aucun once,
+Bash ou message natif n'est rejoué. Référence humaine, empreintes et gate source
+restent dans recoveryHistory ; le même job est réarmé, avec gate OPEN.
+prepare capture aussi une frontière count/SHA des diagnostics MCP techniques
+préalables ; aucun outil natif ni approve/reject n'y est admis. Les récupérations
+héritées n'excluent que les diagnostics terminés avant preparedAt et avant la
+demande réservée. Les frontières et contrôles retry/reconcile restent inchangés.
 Le prévol admet un polling MCP corrélé après délai de request_validation ;
 la réponse APPROVED réelle, l'exécution unique et la readiness finale restent
 requises. Aucune installation ni migration du broker n'est nécessaire au
@@ -576,6 +589,14 @@ cycle de vie des ressources de communication CAB. Elle ne remplace pas le
 broker, ne rend pas de décision d'approbation et ne modifie pas le projet
 piloté.
 
+- `/cab status` et `/cab status --run <run_id>` consultent les vues GET CAB,
+  les états natifs accessibles et les checkpoints/tâches ciblés. Le tableau
+  indique explicitement activité, attente du pair nommé et sa cause, attente
+  interne, arrêt, clôture ou statut indéterminé. Une ancienne attente levée ne
+  prime pas sur une reprise prouvée ; codeur idle et orchestrateur actif sont
+  distincts. La réponse se termine après le rapport, sans boucle de pilotage,
+  message, écriture ni opération de cycle de vie. La commande distribuée
+  définit le format exact et les règles de collecte ;
 - `/cab start` purge les seuls anciens états CAB après contrôle d'inactivité,
   vérifie `/mcp`, initialise la supervision et crée une nouvelle session
   maîtresse ; la reprise conserve son état, y compris après prévol divergent
@@ -657,10 +678,29 @@ POST /runs/<runId>/closing (version, evidence, reportFile) est irréversible,
 post-publication et limité au STATISTIQUES.md de l'archive du change.
 Les nouvelles routes ne remplacent pas les routes historiques.
 
-Le registre reste en schéma 1 tant que ces nouvelles transitions ne sont pas
-utilisées ; leur utilisation publie un schéma 2 durable. Le contrôleur source
-restaure les deux. Un ancien jeu de composants ne doit pas charger ce nouveau
-schéma : déploiement ou retour arrière exigent une réconciliation coordonnée.
+La préparation précède integration-request ; les pairs rejoignent leur prochain
+jalon cohérent avec validations locales, sans attendre la fin de tout le change.
+GET /runs/<runId>/integration-status fournit des obstacles techniques par RUN
+sans contenu ni approbation. Les gardes de cohorte lisent une fois les états et
+permissions globaux, vérifient les identités, puis recontrôlent effets, révision
+du registre et événements SSE pertinents. Une observation modifiée est refusée.
+
+POST /runs/<runId>/integration accepte, uniquement avec acquire=false et
+published=true, referenceVersion attendue et completion {transactionId, reportFile}.
+Avec version et evidence, cette option publie et entre en REPORT en une seule
+persistance : référence, génération, reçu, ressources du rapport et libération.
+La réponse ajoute completion ; le même contenu restitue ce reçu sans effet,
+même après reprise ou livraison. Un contenu divergent est refusé. Un ancien
+reçu ne remplace pas la génération courante. Le gate et le rapport restent requis.
+La fenêtre critique conserve les validations combinées applicables et la preuve
+de publication ; rapport, relevés finaux et gate suivent sa libération.
+
+Le registre reste en schéma 1 tant que les transitions optimisées ne sont pas
+utilisées ; file, réduction et closing utilisent le schéma 2. La publication
+atomique utilise le schéma 3 avec reçus durables et sans rétrogradation implicite.
+Le contrôleur source restaure 1/2/3. Un ancien jeu de composants ne doit pas
+charger un schéma qu'il ne connaît pas : déploiement ou retour arrière exigent
+une réconciliation coordonnée, hors de cette préparation source.
 
 ## 18. Secrets
 

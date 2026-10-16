@@ -6,7 +6,7 @@ import { createJobContext } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, RunRegistry, VERSION } from './cgpt-approval-bridge-runs.mjs';
 import { SessionStatistics, VERSION as STATISTICS_VERSION } from './cgpt-approval-bridge-statistics.mjs';
 
-const version = "1.1.0";
+const version = "1.2.1";
 if (version !== VERSION || version !== STATISTICS_VERSION) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -24,11 +24,13 @@ const port = Number(envValue('OC_Codex_STATUS_PORT') || 8788);
 const opencodeUrl = (envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096').replace(/\/$/, '');
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 const statistics = new SessionStatistics(stateDirectory);
+let registryRevision = 0;
+let nativeGeneration = 0;
 function observeStatistics(callback) {
   try { callback(); } catch { statistics.error = 'statistics-observation-unavailable'; }
 }
 const registry = new RunRegistry(workspace, stateDirectory, {
-  observe: (snapshot) => observeStatistics(() => statistics.registry(snapshot)),
+  observe: (snapshot) => { registryRevision++; observeStatistics(() => statistics.registry(snapshot)); },
 });
 await registry.acquireAuthority();
 statistics.registry(registry.snapshot());
@@ -62,6 +64,14 @@ function contextFor(run) {
     workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run,
     observe: (type, details) => observeStatistics(() => statistics.observe(run, type, details)),
     ownsSession: (session) => context.sessions().includes(session),
+    verifyRestoredPreflight: (approval) => {
+      try {
+        const owner = registry.requestOwners[approval.requestId];
+        const digest = createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex');
+        return owner?.runId === run.runId && owner.digest === digest &&
+          registry.covers(run.runId, approval.reservation_version, approval.resources);
+      } catch { return false; }
+    },
     admitOperation: (operation) => {
       try {
         if (transitions.has(run.runId) || !operation || operation.runId !== run.runId || operation.directory !== workspace ||
@@ -90,8 +100,66 @@ function statusFor(runId, context) {
         ? 'integration-draining' : null;
   return { ...status, coordination: { reason, integrationReady: run.integrationReady,
     referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion,
-    phase: run.phase, integrationQueue: registry.integrationQueue },
+    phase: run.phase, integrationQueue: registry.integrationQueue,
+    integrationBlockers: localIntegrationBlockers(runId) },
     ...(reason ? { brokerReadiness: { ...status.brokerReadiness, status: 'BLOCKED', ready: false, root_cause: reason } } : {}) };
+}
+function localIntegrationBlockers(runId) {
+  const blockers = registry.integrationBlockers(runId);
+  for (const [id, context] of activeContexts()) {
+    const status = context.publicStatus();
+    const entry = (reason) => ({ runId: id, reason });
+    if (status.job?.currentCabMandate) blockers.push(entry('current-mandate-not-closed'));
+    if (status.undecidedValidationCount) blockers.push(entry('undecided-validation'));
+    if (status.unmatchedNativePermissionCount) blockers.push(entry('native-permissions-unresolved'));
+    if (status.job?.recovery) blockers.push(entry('session-recovery-pending'));
+    if (context.pendingEffects()) blockers.push(entry('run-not-quiescent'));
+  }
+  return blockers;
+}
+async function nativeCohort() {
+  const entries = activeContexts().map(([runId, context]) => ({ runId, context,
+    sessionId: context.publicJob()?.sessionId || registry.runs.get(runId).sessionId }));
+  const revision = registryRevision;
+  const generation = nativeGeneration;
+  async function get(path) {
+    try {
+      const response = await fetch(opencodeUrl + path + '?directory=' + encodeURIComponent(workspace),
+        { signal: AbortSignal.timeout(10000) });
+      if (!response.ok) throw new Error('unavailable');
+      return await response.json();
+    } catch { throw new CoordinationError('native-reconciliation-unavailable'); }
+  }
+  const [busy, permissions, ...sessions] = await Promise.all([
+    get('/session/status'), get('/permission'),
+    ...entries.map((entry) => get('/session/' + encodeURIComponent(entry.sessionId))),
+  ]);
+  if (!busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
+      Object.values(busy).some((state) => !state || !['idle', 'busy', 'retry'].includes(state.type)) ||
+      permissions.some((permission) => !permission || typeof permission.sessionID !== 'string' || typeof permission.id !== 'string')) {
+    throw new CoordinationError('native-reconciliation-invalid');
+  }
+  const blockers = [];
+  entries.forEach((entry, index) => {
+    const session = sessions[index];
+    if (session?.id !== entry.sessionId || session.directory !== workspace) throw new CoordinationError('native-session-divergent');
+    if (!entry.context.sessions().includes(entry.sessionId)) throw new CoordinationError('native-observation-changed');
+    if (busy[entry.sessionId] && busy[entry.sessionId].type !== 'idle') {
+      blockers.push({ runId: entry.runId, sessionId: entry.sessionId, reason: 'native-session-busy' });
+    }
+    const count = permissions.filter((permission) => permission.sessionID === entry.sessionId).length;
+    if (count) blockers.push({ runId: entry.runId, sessionId: entry.sessionId, reason: 'native-permissions-unresolved', count });
+  });
+  if (registryRevision !== revision || nativeGeneration !== generation) throw new CoordinationError('native-observation-changed');
+  observeStatistics(() => statistics.nativeSnapshot(busy));
+  return blockers;
+}
+async function checkCohort() {
+  const blockers = await nativeCohort();
+  if (activeContexts().some(([, context]) => context.pendingEffects() || context.publicJob()?.recovery)) {
+    throw new CoordinationError('run-not-quiescent');
+  }
+  if (blockers.length) throw new CoordinationError('native-session-not-quiescent');
 }
 function proofReferences(payload) {
   if (!Array.isArray(payload.evidence) || !payload.evidence.length ||
@@ -223,6 +291,10 @@ const server = createServer(async (request, response) => {
     let runId = match?.[1] || payload?.approval?.run_id || url.searchParams.get('runId');
     const requestId = url.pathname.match(/\/decision\/([^/]+)$/)?.[1];
     if (!runId && requestId && registry.requestOwners[requestId]) runId = registry.requestOwners[requestId].runId;
+    if (match?.[2] === '/integration' && request.method === 'POST' && payload?.completion !== undefined) {
+      const receipt = registry.completionReceipt(runId, payload);
+      if (receipt) { json(response, 200, { ...registry.snapshot(), completion: receipt }); return; }
+    }
     const context = runId ? contexts.get(runId) : singleContext();
     if (!context) throw new CoordinationError('run-not-found', 404);
     if (match) url.pathname = match[2] || '/status';
@@ -236,6 +308,13 @@ const server = createServer(async (request, response) => {
         transitionRun = runId;
       }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      if (request.method === 'GET' && url.pathname === '/integration-status') {
+        const nativeBlockers = await nativeCohort();
+        json(response, 200, { runId, referenceVersion: registry.referenceVersion,
+          integrationOwner: registry.integrationOwner, integrationQueue: registry.integrationQueue,
+          blockers: [...localIntegrationBlockers(runId), ...nativeBlockers],
+          observedAt: new Date().toISOString() }); return;
+      }
       if (request.method === 'POST' && ['/integration-request', '/resources', '/closing'].includes(url.pathname)) {
         if (context.pendingEffects() || context.publicJob()?.recovery) throw new CoordinationError('run-not-quiescent');
         registry.owned(runId, payload.version);
@@ -271,10 +350,14 @@ const server = createServer(async (request, response) => {
         if (payload.acquire) registry.integration(runId, payload.version, true);
         // Once the durable barrier is held, no other RUN can acquire a new permission.
         try {
-          await Promise.all(activeContexts().map(([, c]) => checkNative(c.publicJob()?.sessionId || run.sessionId, true)));
+          await checkCohort();
         } catch (cause) {
           if (payload.acquire) registry.cancelAcquisition(runId);
           throw cause;
+        }
+        if (!payload.acquire && payload.completion !== undefined) {
+          const receipt = registry.completeIntegration(runId, payload);
+          json(response, 200, { ...registry.snapshot(), completion: receipt }); return;
         }
         if (!payload.acquire) registry.integration(runId, payload.version, false, payload.published);
         json(response, 200, registry.snapshot()); return;
@@ -353,6 +436,7 @@ async function consumeEvents() {
     const response = await fetch(opencodeUrl + '/global/event');
     if (!response.ok || !response.body) throw new Error('SSE unavailable');
     sseState = 'connected';
+    nativeGeneration++;
     const generation = ++sseGeneration;
     statistics.connection(true);
     void fetch(opencodeUrl + '/session/status?directory=' + encodeURIComponent(workspace),
@@ -381,6 +465,9 @@ async function consumeEvents() {
         legacy.onEvent(event);
         const props = event.payload?.properties || event.properties || {};
         const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID || props.info?.id;
+        const type = event.payload?.type || event.type;
+        if (['session.status', 'session.idle', 'session.updated', 'session.deleted', 'permission.asked', 'permission.replied'].includes(type) &&
+            activeContexts().some(([, context]) => context.sessions().includes(session))) nativeGeneration++;
         for (const [, context] of activeContexts()) {
           if (context.sessions().includes(session)) context.onEvent(event);
         }
@@ -388,6 +475,7 @@ async function consumeEvents() {
     }
   } catch { /* Connection state is published below; no event or effect is invented. */ }
   sseState = 'reconnecting';
+  nativeGeneration++;
   sseGeneration++;
   statistics.connection(false);
   legacy.onDisconnect();

@@ -12,14 +12,14 @@ const supervisorServicePath = new URL(
   import.meta.url
 );
 
-test("les briques distribuées publient la même version de base 1.1.0", () => {
+test("les briques distribuées publient la même version de base 1.2.1", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "1.1.0");
+  assert.equal(version, "1.2.1");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  assert.match(plugin.version, /^1\.1\.0\+codex\.\d{14}$/);
-  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.1\.0$/m);
+  assert.match(plugin.version, /^1\.2\.1\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.2\.1$/m);
   for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
     const root = new URL(directory, import.meta.url);
     for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
@@ -30,7 +30,7 @@ test("les briques distribuées publient la même version de base 1.1.0", () => {
     }
   }
   for (const path of [servicePath, supervisorServicePath]) {
-    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.1\.0 /m);
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.2\.1 /m);
   }
 });
 
@@ -131,12 +131,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 1\.1\.0$/m);
-  assert.match(manifest, /"version": "1\.1\.0\+codex\./);
-  assert.match(controller, /const version = "1\.1\.0"/);
-  assert.match(supervisor, /const version = "1\.1\.0"/);
-  assert.match(broker, /SERVER_VERSION = "1\.1\.0"/);
-  assert.match(project, /^version = "1\.1\.0"$/m);
+  assert.match(command, /^version: 1\.2\.1$/m);
+  assert.match(manifest, /"version": "1\.2\.1\+codex\./);
+  assert.match(controller, /const version = "1\.2\.1"/);
+  assert.match(supervisor, /const version = "1\.2\.1"/);
+  assert.match(broker, /SERVER_VERSION = "1\.2\.1"/);
+  assert.match(project, /^version = "1\.2\.1"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {
@@ -346,4 +346,38 @@ test("le refus par polling après timeout est distribué avec une sortie humaine
       assert.ok(source.includes(clause), `${path}: ${clause}`);
     }
   }
+});
+
+
+test("status route directement la consultation avant toute boucle de pilotage", () => {
+  const command = readFileSync(commandPath, "utf8");
+  const direct = command.indexOf("Pour l'argument `status` ou `status --run <run_id>`");
+  assert.ok(direct >= 0 && direct < command.indexOf("## RUN concurrents"));
+  assert.match(command.slice(direct, command.indexOf("## RUN concurrents")), /terminer la réponse après le rapport/);
+  const section = command.split("## `/cab status`")[1]?.split("## `/cab start`")[0];
+  assert.ok(section, "La section status doit être distribuée avant start");
+  assert.match(section, /Accepter exactement `status` ou `status --run <run_id>`/);
+  assert.match(section, /Refuser argument manquant, dupliqué, option inconnue ou suffixe/);
+  assert.match(section, /RUN introuvable dans le périmètre consulté/);
+  assert.match(section, /Ne jamais appeler POST, PATCH ou DELETE/);
+  assert.doesNotMatch(section, /^\s*(?:\d+\.\s*)?(?:POST|PATCH|DELETE|systemctl)\s/m);
+  assert.match(section, /n'exécutent pas broker_readiness/);
+});
+
+test("le contrat status conserve le tableau métier, la fraîcheur et les limites des preuves", () => {
+  const command = readFileSync(commandPath, "utf8");
+  const section = command.split("## `/cab status`")[1].split("## `/cab start`")[0];
+  assert.ok(section.includes("| RUN / Nom du change | Actions réalisées | Actions en cours | Actions restant à réaliser |"));
+  for (const source of ["GET /runs", "GET /status", "GET /runs/<run_id>/status", "GET /runs/<run_id>/integration-status", "wait_threads avec timeoutMs:0", "GET /session/status", "output/cismp/<run_id>/state.json", "tasks.md"]) {
+    assert.ok(section.includes(source), source);
+  }
+  for (const state of ["ACTIF", "EN ATTENTE DE RUN", "EN ATTENTE —", "BLOQUÉ", "ARRÊTÉ", "TERMINÉ", "INDÉTERMINÉ"]) {
+    assert.ok(section.includes(state), state);
+  }
+  assert.match(section, /une reprise plus récente corrélée/);
+  assert.match(section, /Une ancienne prochaine_action ne prime pas/);
+  assert.match(section, /Une exclusion actuelle reste affichée même si Codex poursuit/);
+  assert.match(section, /Ne pas transformer tous les obstacles d'intégration/);
+  assert.match(section, /Une coche seule reste une réalisation déclarée/);
+  assert.match(section, /distinguer gate individuel d'un change et état du parent/);
 });

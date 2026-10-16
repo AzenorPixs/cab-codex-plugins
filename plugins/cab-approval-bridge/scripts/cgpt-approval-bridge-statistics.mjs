@@ -3,7 +3,7 @@ import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 
-export const VERSION = "1.1.0";
+export const VERSION = "1.2.1";
 const categories = ['reservation', 'changes', 'native', 'nativeChanges'];
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });
 const preflight = (change) => /^cismp\d*-preflight(?:-|$)/.test(change);

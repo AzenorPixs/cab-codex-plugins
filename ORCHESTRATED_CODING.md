@@ -271,14 +271,6 @@ spécifications et documentation.
 
 ### Statistiques d'archivage
 
-Préparer en continu les agrégats natifs via GET /runs/<runId>/statistics et
-le brouillon format=markdown. Le contrôleur produit ce brouillon déterministe
-sans RUN d'observation ni appel LLM supplémentaire ; l'orchestrateur conserve
-sa vérification et le mandat de publication. Après archive et publication
-prouvées, le profil /closing permet de finaliser le seul rapport hors exclusion
-globale, sans libérer la réservation avant rapport vérifié et gate.
-
-
 Après chaque archivage OpenSpec autorisé et réussi, produire un rapport par
 archive dans `openspec/changes/archive/<archive>/STATISTIQUES.md`, avec un
 mandat d'édition distinct pour ce seul fichier lorsque le protocole CAB
@@ -741,7 +733,11 @@ La quiescence native couvre aussi les RUN en phase documentaire : une écriture
 de rapport en cours doit finir avant acquisition et toute nouvelle édition
 attend la levée de l'exclusion.
 
-Le profil optimisé soumet d'abord POST /runs/<runId>/integration-request avec
+Le demandeur termine analyses, validations locales, commandes et brouillon
+statistique avant de rejoindre la file. Les pairs visent leur prochain jalon
+cohérent prouvé, avec validations locales et aucun effet inconnu ; la fin de
+toutes les tâches du change n'est pas requise pour déclarer ce jalon.
+Le profil optimisé soumet alors POST /runs/<runId>/integration-request avec
 version et evidence. GET /runs expose integrationQueue, FIFO durable par
 contexte. Dès qu'une demande existe, terminer seulement l'opération autorisée
 en cours, traiter son rapport, atteindre le prochain jalon sûr puis déclarer
@@ -757,6 +753,12 @@ avec version et acquire=true. Revalider la base courante et les résultats
 combinés, synchroniser et archiver sous autorisations explicites. Préparer les
 agrégats statistiques avant acquisition. Les opérations Git restent soumises
 à une autorisation distincte.
+L'exclusion couvre seulement la vérification de la base et de la quiescence,
+les validations combinées applicables, la synchronisation, l'archivage et la
+preuve de publication. Aucun rapport statistique, relevé final, compactage,
+benchmark ou gate terminal ne prolonge cette fenêtre. Une correction longue
+est préparée hors exclusion après réconciliation sûre ; un effet inconnu
+interdit toute libération et aucun timeout ne remplace une décision.
 Pendant l'exclusion, les nouvelles opérations des autres RUN sont suspendues.
 Le propriétaire peut déclarer project:* en lecture pour ses tests globaux.
 Libérer avec acquire=false, published (booléen) et, si true, evidence après
@@ -777,6 +779,48 @@ réconcilient immédiatement la référence et reprennent ; les éditions native
 du rapport restent suspendues pendant toute autre exclusion et soumises à once.
 Une référence ultérieure ne défait pas la publication figée de cette phase.
 Sans closing, le mode historique conserve les gardes de référence existantes.
+
+##### Publication et entrée en REPORT atomiques
+
+Le profil optimisé peut effectuer la libération publiée et l'entrée en REPORT
+dans une même transition durable avec POST /runs/<runId>/integration :
+
+```json
+{
+  "version": 42,
+  "referenceVersion": 7,
+  "acquire": false,
+  "published": true,
+  "evidence": ["référence non secrète des validations et de la publication"],
+  "completion": {
+    "transactionId": "publication-change-unique",
+    "reportFile": "openspec/changes/archive/2026-10-16-change-example/STATISTIQUES.md"
+  }
+}
+```
+
+Les numéros viennent du registre courant ; l'exemple ne vaut pas mandat.
+Le contrôleur vérifie propriétaire, génération, référence attendue, cible,
+conflits, effets et quiescence. Il persiste ensemble publication, nouvelle
+référence, nouvelle génération, reçu, réduction au rapport et libération.
+La réponse conserve la vue du registre et ajoute completion, reçu stable.
+Réémettre exactement la même transaction restitue ce reçu, même après reprise,
+livraison ou change suivant, sans effet ni nouvelle référence. Un contenu
+divergent reçoit integration-transaction-divergent. Le reçu n'est pas un gate.
+Après succès, utiliser la génération courante du RUN exposée dans runs ; un
+ancien reçu reste une preuve historique et ne vaut pas génération actuelle.
+
+GET /runs/<runId>/integration-status expose la file, son propriétaire, la
+référence et les obstacles par RUN sans contenu. Ils distinguent jalon absent,
+référence périmée, mandat, validation indécise, récupération, effet non résolu,
+session occupée et permission restante. Une observation invalide ou modifiée
+refuse le diagnostic ou la transition et exige une nouvelle réconciliation.
+Les contrôles de cohorte regroupent les lectures globales, vérifient chaque
+identité native et recontrôlent effets, révisions et événements SSE pertinents.
+Aucune lecture ne met en cache une permission ni ne crée une approbation.
+Le schéma 3 conserve les reçus ; les nouvelles sources lisent aussi 1/2.
+Ne pas charger le schéma 3 avec une ancienne distribution. Aucun déploiement
+ni changement d'état actif n'est implicite dans la préparation des sources.
 
 Après gate individuel, désarmement et réconciliation, POST /runs/<runId>/release
 porte version, delivered (booléen) et evidence (références non secrètes des

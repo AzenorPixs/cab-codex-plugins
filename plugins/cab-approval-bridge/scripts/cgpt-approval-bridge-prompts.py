@@ -8,10 +8,10 @@ from pathlib import Path
 import re
 import tempfile
 
-VERSION = "1.1.0"
+VERSION = "1.2.1"
 PILOTED = ("ACSP", "ACSMP", "CISMP", "DOPP", "ISMP", "PPSCP", "RSMP", "SCMP", "SPCMP")
 MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"
-PREVIOUS_BLOCK_SHA256 = ('c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859', '43119dded169df0b84a85af8d8dc4ec5ec9b7787b8044f89aa735b45f3722ce4', 'a4182b778a8d94fcd5be415db51e57ec769502decd96adf57dd8e02e3b0ad5b8')
+PREVIOUS_BLOCK_SHA256 = ('c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859', '43119dded169df0b84a85af8d8dc4ec5ec9b7787b8044f89aa735b45f3722ce4', 'a4182b778a8d94fcd5be415db51e57ec769502decd96adf57dd8e02e3b0ad5b8', 'b39b23a3dabbc5e1fea41753ef49442ca99425c48f7c30b956bc478b07b02667')
 PROMPT_END = "<!-- CAB-PROMPT-END -->"
 BLOCK = """
 ## CAB 1.0.0 — réservations et RUN concurrents
@@ -53,9 +53,12 @@ Préparer les statistiques pendant le travail via GET /runs/<run_id>/statistics
 et format=markdown, sans RUN d'observation ni appel LLM supplémentaire.
 Après quiescence, /resources avec version, resources et evidence peut réduire
 la portée sans l'élargir ; conserver la nouvelle génération retournée.
+Terminer analyses, validations locales, commandes et brouillon avant la file.
 Soumettre /integration-request avec version et evidence : file FIFO durable,
 annulation explicite cancel=true, aucune libération par timeout. Dès une demande,
-terminer l'opération autorisée puis atteindre /ready sans nouveau mandat stable.
+terminer l'opération autorisée puis atteindre le prochain jalon cohérent validé
+et /ready, sans attendre toutes les tâches du change ni nouveau mandat stable.
+GET /runs/<run_id>/integration-status expose les obstacles par RUN sans contenu.
 L'intégration dans la référence commune exige l'exclusion /integration,
 les validations combinées et l'archivage autorisé. La clôture exige le rapport
 STATISTIQUES.md vérifié, même lorsque sa rédaction suit la publication.
@@ -64,10 +67,19 @@ ses validations locales et le déclare par /ready avec version et evidence.
 L'intégration attend ces jalons et la quiescence native ; les nouvelles
 opérations des autres RUN sont suspendues. Le propriétaire peut déclarer
 project:* en lecture pour ses validations globales sous cette exclusion.
+L'exclusion ne couvre que base, quiescence, validations combinées applicables,
+synchronisation, archive et preuve de publication. Rapport, relevés finaux et
+gate suivent sa libération ; aucun timeout ne libère un effet inconnu.
 La libération /integration avec acquire=false précise published et, en cas
 de publication, ses evidence. Les autres RUN réconcilient referenceVersion
 par /reconcile, avec preuves et nouvelle version de réservation, avant reprise.
 Réexaminer les validations affectées sans rejouer les effets déjà prouvés.
+Le profil optimisé ajoute referenceVersion attendue et completion avec
+transactionId inédit et reportFile pour publier, réduire au rapport et libérer
+en une seule transition durable. Répéter exactement la transaction restitue
+son reçu sans effet ; un contenu divergent est refusé. Conserver la génération
+courante du registre, sans traiter un ancien reçu comme une autorisation.
+Le schéma 3 de ces reçus exige les nouvelles sources, sans migration implicite.
 Après publication prouvée et libération de l'exclusion, /closing avec version,
 evidence et reportFile limite irréversiblement le RUN au STATISTIQUES.md de sa
 propre archive. Les pairs réconcilient et reprennent ; le rapport reste sous
@@ -118,7 +130,7 @@ def transform(text, name):
         "si plusieurs changes actifs rendent le change ciblé ambigu": "si l’attribution du change ciblé reste ambiguë ou si un autre RUN le réserve",
         "Plusieurs changes actifs, un change incomplet ou une incohérence fait passer l’état à `REPRISE`.": "Une incohérence du change réservé par ce RUN fait passer l’état à `REPRISE`. Les autres changes attribués sont suivis par leurs propriétaires.",
         "S’il n’existe aucun candidat, l’orchestrateur vérifie en lecture seule l’absence de change actif et d’exigence validée sans preuve d’implémentation. Cette preuve complète mène à `TERMINÉ` ; toute incertitude mène à `BLOQUÉ`.": "S’il n’existe aucun candidat disponible, l’orchestrateur consulte les réservations et dépendances. Un travail restant réservé, dépendant ou en conflit maintient une attente non terminale. Seule la preuve d’absence de change actif, de RUN actif et d’exigence sans preuve permet `TERMINÉ` ; une incohérence non résolue suit la procédure de reprise.",
-        "l’orchestrateur mandate l’archivage OpenSpec, vérifie son succès, puis revient immédiatement à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.": "l’orchestrateur obtient l’exclusion d’intégration, revalide la base courante, mandate l’archivage OpenSpec et vérifie son succès, STATISTIQUES.md et la publication. Après gate, désarmement et libération réconciliés, il revient à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.",
+        "l’orchestrateur mandate l’archivage OpenSpec, vérifie son succès, puis revient immédiatement à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.": "l’orchestrateur obtient l’exclusion d’intégration, revalide la base courante, mandate l’archivage OpenSpec et vérifie sa publication. Il libère l’exclusion avant STATISTIQUES.md et le gate. Après rapport vérifié, gate, désarmement et libération réconciliés, il revient à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.",
     }
     for before, after in replacements.items():
         text = text.replace(before, after)
