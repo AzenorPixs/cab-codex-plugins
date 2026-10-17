@@ -2,8 +2,10 @@ import { constants, closeSync, existsSync, fstatSync, openSync, readFileSync, re
 import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
+import { ObservationStatistics, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = "1.2.1";
+export const VERSION = "1.3.0";
+if (OBSERVATION_VERSION !== VERSION) throw new Error('CAB statistics component version mismatch');
 const categories = ['reservation', 'changes', 'native', 'nativeChanges'];
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });
 const preflight = (change) => /^cismp\d*-preflight(?:-|$)/.test(change);
@@ -11,6 +13,15 @@ const business = (change) => !preflight(change) && !/^(rsmp-|inventory-)/.test(c
 const finite = (value) => typeof value === 'number' && Number.isFinite(value) && value >= 0;
 const knownId = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(value);
 const metric = () => ({ count: 0, sumMs: 0, samplesMs: [] });
+const globalCauses = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
+const coordinationMetric = (at) => ({ availableFrom: at, resourceWaitMs: 0, sharedHeldMs: 0,
+  exclusiveActiveMs: 0, issuedEffectMs: 0, promotionWaitMs: 0, reconciliationMs: 0, reconciliationCount: 0,
+  globalMs: Object.fromEntries(globalCauses.map((cause) => [cause, 0])) });
+function validCoordination(value) {
+  return onlyKeys(value, Object.keys(coordinationMetric(0))) &&
+    Object.keys(coordinationMetric(0)).filter((key) => key !== 'globalMs').every((key) => finite(value[key])) &&
+    onlyKeys(value.globalMs, globalCauses) && globalCauses.every((key) => finite(value.globalMs[key]));
+}
 function safeParent(path) {
   let existing = resolve(path);
   while (!existsSync(existing) && dirname(existing) !== existing) existing = dirname(existing);
@@ -32,7 +43,7 @@ function quantiles(target) {
 }
 function validSnapshot(value) {
   if (!onlyKeys(value, ['schemaVersion', 'firstAt', 'lastAt', 'restartUnknownMs', 'categories', 'contexts', 'admissions']) ||
-      value.schemaVersion !== 1 || !finite(value.firstAt) || !finite(value.lastAt) ||
+      ![1, 2].includes(value.schemaVersion) || !finite(value.firstAt) || !finite(value.lastAt) ||
       !finite(value.restartUnknownMs) || !value.contexts || Array.isArray(value.contexts) || !value.categories) return false;
   if (!onlyKeys(value.categories, categories) || !categories.every((key) =>
       onlyKeys(value.categories[key], Object.keys(bucket())) && Object.keys(bucket()).every((k) => finite(value.categories[key][k])))) return false;
@@ -43,7 +54,8 @@ function validSnapshot(value) {
         Object.entries(a.causes).every(([code, count]) => /^[a-z][a-z0-9-]{0,79}$/.test(code) && finite(count))))) return false;
   return Object.values(value.contexts).every((c) => onlyKeys(c, ['runId', 'contextId', 'changeId', 'firstAt', 'lastAt',
     'state', 'phase', 'sessionIds', 'reservedMs', 'busyMs', 'idleMs', 'nativeUnknownMs', 'integrationMs', 'queueMs',
-    'staleMs', 'requests', 'tools', 'messages', 'httpFailures', 'latencies']) &&
+    'staleMs', 'requests', 'tools', 'messages', 'httpFailures', 'latencies', 'coordination']) &&
+    (c.coordination === undefined || validCoordination(c.coordination)) &&
     knownId(c.runId) && Number.isSafeInteger(c.contextId) &&
     c.contextId > 0 && knownId(c.changeId) && c.requests && c.tools && c.messages && c.latencies &&
     finite(c.firstAt) && finite(c.lastAt) && ['RESERVED', 'DELIVERED', 'ABANDONED'].includes(c.state) &&
@@ -68,15 +80,16 @@ function validSnapshot(value) {
 
 // Cet observateur n'admet aucune opération et ne lit ni historique ni contenu brut.
 export class SessionStatistics {
-  constructor(stateDirectory, { now = Date.now, persist = true, intervalMs = 5000 } = {}) {
+  constructor(stateDirectory, { now = Date.now, persist = true, intervalMs = 5000, project = null } = {}) {
     this.now = now; this.persistEnabled = persist;
     this.path = join(stateDirectory, 'controller-statistics.json');
     this.runs = []; this.queue = []; this.integrationOwner = null; this.referenceVersion = 0;
+    this.resourceProfile = false; this.accessStates = []; this.globalState = null;
     this.registryKnown = false;
     this.nativeStates = new Map(); this.connected = false; this.dirty = false; this.saving = null;
     this.error = null; this.writeCount = 0; this.droppedEvents = 0;
     const at = now();
-    this.data = { schemaVersion: 1, firstAt: at, lastAt: at, restartUnknownMs: 0,
+    this.data = { schemaVersion: 2, firstAt: at, lastAt: at, restartUnknownMs: 0,
       categories: Object.fromEntries(categories.map((key) => [key, bucket()])), contexts: {}, admissions: {} };
     if (persist) {
       let fd;
@@ -88,6 +101,8 @@ export class SessionStatistics {
         const restored = JSON.parse(readFileSync(fd, 'utf8'));
         if (!validSnapshot(restored)) throw new Error('invalid snapshot');
         this.data = restored;
+        this.data.schemaVersion = 2;
+        for (const context of Object.values(this.data.contexts)) context.coordination ||= coordinationMetric(at);
         this.data.admissions ||= {};
         const gap = Math.max(0, at - restored.lastAt);
         this.data.restartUnknownMs += gap;
@@ -98,6 +113,7 @@ export class SessionStatistics {
       } finally { if (fd !== undefined) closeSync(fd); }
     }
     this.dirty = true;
+    this.observations = new ObservationStatistics(stateDirectory, { now, persist, project });
     if (intervalMs) {
       this.timer = setInterval(() => { this.advance(); void this.flush(); }, intervalMs);
       this.timer.unref();
@@ -111,6 +127,7 @@ export class SessionStatistics {
       firstAt: this.now(), lastAt: this.now(), state: run.state, phase: run.phase || 'WORK', sessionIds: [],
       reservedMs: 0, busyMs: 0, idleMs: 0, nativeUnknownMs: 0, integrationMs: 0, queueMs: 0, staleMs: 0,
       requests: {}, tools: {}, messages: {}, httpFailures: {},
+      coordination: coordinationMetric(this.now()),
       latencies: { requestToDecision: metric(), decisionToOnce: metric(), nativeTool: metric() },
     };
     const context = this.data.contexts[key];
@@ -121,6 +138,24 @@ export class SessionStatistics {
     const elapsed = Math.max(0, at - this.data.lastAt);
     const live = this.runs.filter((r) => r.state === 'RESERVED');
     const registryKnown = this.registryKnown && elapsed <= 15000;
+    const from = Math.max(this.data.lastAt, this.observations?.data.native.firstAt || this.data.lastAt);
+    if (this.observations && at > from) {
+      this.observations.recordInterval({ from, to: at, registryKnown, nativeAvailable: this.connected,
+        scopeRunIds: this.runs.map((r) => r.runId), integrationOwner: this.integrationOwner,
+        globalCause: this.resourceProfile ? this.globalState?.state !== 'RELEASED' ? this.globalState?.cause || null : null : undefined,
+        contexts: live.map((run) => {
+          const accesses = this.accessStates.filter((a) => a.runId === run.runId && a.contextId === run.contextId);
+          return { runId: run.runId, contextId: run.contextId, changeId: run.changeId, sessionId: run.sessionId,
+            nativeType: this.nativeStates.get(run.sessionId) || null,
+            queue: this.queue.some((q) => q.runId === run.runId),
+            stale: !this.resourceProfile && run.phase !== 'REPORT' && run.referenceVersion !== this.referenceVersion,
+            resource: this.resourceProfile ? { waiting: accesses.some((a) => a.state === 'WAITING'),
+              held: accesses.some((a) => ['HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state) && a.protection === 'SHARED'),
+              exclusive: accesses.some((a) => ['HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state) && a.protection === 'EXCLUSIVE'),
+              issued: accesses.some((a) => ['EXECUTING', 'UNKNOWN'].includes(a.state)),
+              promotion: accesses.some((a) => a.state === 'WAITING' && a.promoting) } : null };
+        }) });
+    }
     const reserved = live.filter((r) => !preflight(r.changeId));
     const changes = reserved.filter((r) => business(r.changeId));
     const busy = (r) => this.nativeStates.get(r.sessionId) === 'busy';
@@ -138,11 +173,23 @@ export class SessionStatistics {
     });
     for (const run of live) {
       const c = this.context(run); c.lastAt = at;
+      if (registryKnown && this.observations) this.observations.catalog(run, at);
       if (registryKnown) {
         c.reservedMs += elapsed;
         if (this.integrationOwner === run.runId) c.integrationMs += elapsed;
         if (this.queue.some((q) => q.runId === run.runId)) c.queueMs += elapsed;
-        if (run.referenceVersion !== this.referenceVersion && run.phase !== 'REPORT') c.staleMs += elapsed;
+        if (!this.resourceProfile && run.referenceVersion !== this.referenceVersion && run.phase !== 'REPORT') c.staleMs += elapsed;
+        if (this.resourceProfile) {
+          const accesses = this.accessStates.filter((a) => a.runId === run.runId && a.contextId === run.contextId);
+          if (accesses.some((a) => a.state === 'WAITING')) c.coordination.resourceWaitMs += elapsed;
+          if (accesses.some((a) => a.state === 'WAITING' && a.promoting)) c.coordination.promotionWaitMs += elapsed;
+          if (accesses.some((a) => ['HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state) && a.protection === 'SHARED')) c.coordination.sharedHeldMs += elapsed;
+          if (accesses.some((a) => ['HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state) && a.protection === 'EXCLUSIVE')) c.coordination.exclusiveActiveMs += elapsed;
+          if (accesses.some((a) => ['EXECUTING', 'UNKNOWN'].includes(a.state))) c.coordination.issuedEffectMs += elapsed;
+          if (this.globalState && this.globalState.state !== 'RELEASED' && globalCauses.includes(this.globalState.cause)) {
+            c.coordination.globalMs[this.globalState.cause] += elapsed;
+          }
+        }
       }
       const state = this.nativeStates.get(run.sessionId);
       c[registryKnown && this.connected && ['busy', 'idle'].includes(state)
@@ -153,13 +200,32 @@ export class SessionStatistics {
   registry(snapshot) {
     this.advance();
     this.directory = snapshot.project || this.directory;
+    if (this.directory) this.observations.bind(this.directory);
+    const previous = this.runs;
     this.runs = snapshot.runs.map((r) => ({ runId: r.runId, contextId: r.contextId, changeId: r.changeId,
-      sessionId: r.sessionId, state: r.state, phase: r.phase || 'WORK', referenceVersion: r.referenceVersion }));
+      sessionId: r.sessionId, state: r.state, phase: r.phase || 'WORK', referenceVersion: r.referenceVersion,
+      version: r.version }));
     this.integrationOwner = snapshot.integrationOwner; this.referenceVersion = snapshot.referenceVersion;
+    this.resourceProfile = snapshot.coordinationProtocol === 'resource-scoped-v1';
+    this.globalState = snapshot.coordination?.global ? { cause: snapshot.coordination.global.cause,
+      state: snapshot.coordination.global.state } : null;
+    const accesses = Object.values(snapshot.coordination?.accesses || {});
+    this.accessStates = accesses.filter((a) => ['WAITING', 'HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state)).map((a) => ({
+      runId: a.runId, contextId: a.contextId, state: a.state, protection: a.protection,
+      promoting: a.state === 'WAITING' && accesses.some((holder) => holder.protection === 'EXCLUSIVE' &&
+        ['HELD', 'EXECUTING', 'UNKNOWN'].includes(holder.state) && a.resources?.some((left) => holder.resources?.some((right) =>
+          (left.mode === 'write' || right.mode === 'write') && (left.key === right.key ||
+            (left.key.startsWith('file:') && right.key.startsWith('file:') &&
+              (left.key.startsWith(right.key + '/') || right.key.startsWith(left.key + '/'))))))) }));
     this.registryKnown = true;
     this.queue = snapshot.integrationQueue || [];
     for (const run of this.runs) {
       const c = this.context(run); c.state = run.state; c.phase = run.phase; c.lastAt = this.now();
+      this.observations.catalog(run);
+      const prior = previous.find((r) => r.runId === run.runId && r.contextId === run.contextId);
+      if (!prior || prior.version !== run.version) this.observations.event({ id: prior ? 'generation-' + run.version : 'context-' + run.contextId,
+        runId: run.runId, contextId: run.contextId, changeId: run.changeId, at: this.now(),
+        kind: prior ? 'generation' : 'change-observed', status: null, name: null, durationMs: null });
     }
   }
   connection(connected) {
@@ -181,7 +247,15 @@ export class SessionStatistics {
   observe(run, type, details = {}) {
     if (!run || !knownId(run.runId) || !knownId(run.changeId)) return;
     this.advance(); const c = this.context(run);
+    if (type === 'resource-reconciliation-completed' && finite(details.durationMs)) {
+      c.coordination.reconciliationMs += details.durationMs; c.coordination.reconciliationCount++;
+    }
     const requestId = details.requestId;
+    const eventKind = { 'validation-received': 'request', 'validation-answered': 'decision',
+      'validation-manually-answered': 'decision', 'opencode-permission-approved': 'once', 'validation-failed': 'technical-error' }[type];
+    if (eventKind && knownId(requestId)) this.observations.event({ id: requestId, runId: run.runId,
+      contextId: run.contextId, changeId: run.changeId, at: this.now(), kind: eventKind,
+      status: eventKind === 'decision' ? details.decision : null, name: null, durationMs: null });
     if (knownId(requestId)) {
       if (!Object.hasOwn(c.requests, requestId)) c.requests[requestId] = {};
       const request = c.requests[requestId];
@@ -226,7 +300,11 @@ export class SessionStatistics {
       this.nativeStates.set(session, props.status.type);
     } else if (value.type === 'session.idle') this.nativeStates.set(session, 'idle');
     else if (value.type === 'message.updated' && knownId(props.info?.id) &&
-        ['user', 'assistant'].includes(props.info.role)) c.messages[props.info.id] = props.info.role;
+        ['user', 'assistant'].includes(props.info.role)) {
+      c.messages[props.info.id] = props.info.role;
+      this.observations.event({ id: props.info.id, runId: run.runId, contextId: run.contextId, changeId: run.changeId,
+        at: this.now(), kind: 'message', status: props.info.role, name: null, durationMs: null });
+    }
     else if (value.type === 'message.part.updated' && props.part?.type === 'tool') {
       const part = props.part;
       if (!knownId(part.id)) { this.droppedEvents++; return; }
@@ -241,6 +319,8 @@ export class SessionStatistics {
       if (['completed', 'error'].includes(status) && finite(time?.start) && finite(time?.end) && time.end >= time.start) {
         tool.durationMs = time.end - time.start; sample(c.latencies.nativeTool, tool.durationMs);
       }
+      this.observations.event({ id: part.id, runId: run.runId, contextId: run.contextId, changeId: run.changeId,
+        at: this.now(), kind: 'tool', status, name, durationMs: tool.durationMs === undefined ? null : Math.round(tool.durationMs) });
     }
     this.dirty = true;
   }
@@ -265,11 +345,13 @@ export class SessionStatistics {
           assistant: Object.values(messages).filter((role) => role === 'assistant').length },
         latencies: Object.fromEntries(Object.entries(latencies).map(([key, m]) => [key, quantiles(m)])) };
     });
-    return { schemaVersion: 1, version: VERSION, observedAt: new Date(this.now()).toISOString(),
+    return { schemaVersion: 2, version: VERSION, observedAt: new Date(this.now()).toISOString(),
       firstAt: new Date(this.data.firstAt).toISOString(), lastAt: new Date(this.data.lastAt).toISOString(),
       restartUnknownMs: this.data.restartUnknownMs, categories: structuredClone(this.data.categories), contexts,
       persistence: { status: this.error ? 'DEGRADED' : 'READY', cause: this.error, writes: this.writeCount },
       limitations: ['busy ne prouve pas du codage productif', 'tentatives HTTP distinctes des refus de permission',
+        'coordination depuis availableFrom ; détention, attente, effets émis et gels peuvent se recouvrir',
+        'issuedEffectMs décrit une permission en suivi, pas une durée de codage productif',
         'quotas, tokens, coûts, modèles et sondes non disponibles dans cet agrégat',
         'liste de fichiers et URL non collectée pour préserver la confidentialité',
         'horodatages de réception du contrôleur ; aucune reconstruction des événements manquants'],
@@ -309,7 +391,9 @@ export class SessionStatistics {
       `## 3. Fichiers modifiés\n\nN/A — chemins et contenus exclus de la collecte. Compléter seulement depuis des preuves autorisées.\n\n` +
       `## 4. Commandes\n\nLes compteurs bash figurent ci-dessus. N/A pour les commandes exactes, non conservées. Les erreurs d'outils ne sont pas assimilées à des refus.\n\n` +
       `## 5. Accès web\n\nN/A — URL et arguments non conservés ; aucune visite déduite d'une simple demande.\n\n` +
-      `## 6. Synthèse globale\n\nExclusion propre : ${f(c.integrationMs)} ; présence en file : ${f(c.queueMs)} ; référence à réconcilier : ${f(c.staleMs)}. Ces conditions peuvent se recouvrir et ne s'additionnent pas.\n\n` +
+      `## 6. Synthèse globale\n\nHistorique d'intégration : ${f(c.integrationMs)} ; file historique : ${f(c.queueMs)} ; référence historique : ${f(c.staleMs)}.\n\n` +
+      `Coordination depuis ${new Date(c.coordination.availableFrom).toISOString()} : attente de ressource ${f(c.coordination.resourceWaitMs)}, détention partagée ${f(c.coordination.sharedHeldMs)}, activité exclusive ${f(c.coordination.exclusiveActiveMs)}, promotion ${f(c.coordination.promotionWaitMs)}, réconciliation ciblée ${f(c.coordination.reconciliationMs)} (${c.coordination.reconciliationCount}).\n\n` +
+      `Gels exceptionnels : ${Object.entries(c.coordination.globalMs).map(([cause, ms]) => cause + ' ' + f(ms)).join(' ; ')}. Ces conditions peuvent se recouvrir et ne s'additionnent pas.\n\n` +
       `| Durée de la session observée | Valeur |\n|---|---|\n| Début observé | ${new Date(c.firstAt).toISOString()} |\n` +
       `| Dernière observation, fin à confirmer après archive | ${new Date(c.lastAt).toISOString()} |\n| Durée observée, attentes incluses | ${f(c.lastAt - c.firstAt)} |\n\n` +
       `| Quota Codex 7 jours | Horodatage | Utilisé | Réinitialisation |\n|---|---|---|---|\n` +
@@ -340,6 +424,7 @@ export class SessionStatistics {
       }
     })();
     await this.saving; this.saving = null;
+    await this.observations.flush();
   }
   async close() {
     if (this.closed) return;
@@ -347,5 +432,6 @@ export class SessionStatistics {
     clearInterval(this.timer); this.advance();
     if (this.saving) await this.saving;
     await this.flush();
+    await this.observations.flush();
   }
 }

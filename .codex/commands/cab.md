@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.2.1
+version: 1.3.0
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -9,6 +9,10 @@ Le développeur accorde une autorisation permanente pour le cycle de vie et les 
 
 Argument reçu : `$ARGUMENTS`
 
+Pour stats, statslast, stats 24, stats7 ou stats30, appliquer directement la section `/cab stats` puis terminer après la consultation. Ne déclencher ni skill, ni boucle de pilotage, ni action de cycle de vie. Une cible optionnelle --run <run_id> filtre ce RUN exact ; une syntaxe ambiguë est refusée sans collecte.
+
+Pour pause, resume ou stop avec --run <run_id> ou --all, appliquer la section de suspension ciblée/globale ; ne pas exécuter les procédures start, prévol ou update.
+
 Pour l'argument `status` ou `status --run <run_id>`, appliquer directement la
 section `/cab status` puis terminer la réponse après le rapport. Les sections de
 pilotage, continuité du job, démarrage, prévol modèle, cadence et compactage ne
@@ -16,51 +20,17 @@ s'appliquent pas à cette consultation. Ne déclencher ni skill de pilotage ni
 skill de statistiques ; ne transmettre aucun message à un autre chat ou agent.
 Les arguments status invalides affichent seulement la syntaxe, sans collecte.
 
-## RUN concurrents CAB 1.0.0
+## RUN concurrents CAB 1.3.0
 
-Lire le contrat concurrent references/concurrent-runs.md du skill approval-bridge dans le skill
-approval-bridge et ORCHESTRATED_CODING.md du projet. Les procédures de purge,
-de déconnexion MCP et d'arrêt des services ci-dessous concernent seulement
-une réinitialisation globale exclusive ; elles ne s'appliquent pas à l'ajout,
-à la reprise ou à la clôture d'un RUN dans une infrastructure partagée.
+Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
-Pour /cab start --run <run_id>, fixer ownerId et vérifier l'infrastructure
-commune sans reconnecter le broker. Créer la nouvelle session de codage,
-examiner les candidats puis réserver atomiquement change et intention par
-POST /runs/reserve. Armer le job sous /runs/<run_id>/job/arm après réservation.
-Le prévol et chaque mandat incluent run_id, reservation_version et le manifeste
-de ressources requis ; la réservation ne vaut jamais approbation.
+Le manifeste déclare la portée ; les accès actifs sont temporaires. Les lectures compatibles coexistent, les écritures recouvrantes attendent et /locks/acquire attribue l'ensemble entier ou WAITING sans acquisition partielle. Les fichiers privés prouvés peuvent éviter l'appel de verrou partagé ; leur promotion est coordonnée si un pair les déclare.
 
-/cab run, /cab test, /cab stop et toute récupération ciblent explicitement
---run <run_id>. Les interfaces sans cible sont limitées au contexte unique ;
-une ambiguïté est refusée. /cab stop désarme et libère uniquement le RUN après
-gate et réconciliation ; il n'arrête les services communs qu'en l'absence de
-tout autre RUN réservé. /cab update prépare un jeu complet sans remplacer
-les modules d'une infrastructure active ni redémarrer ses services.
+Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Préparer le contenu exact, obtenir la décision, acquérir juste avant effet et conserver ask/once. Une base périmée exige une nouvelle demande. Terminer les effets natifs corrélés avant /locks/release ; aucun timeout ni idle ne libère un effet inconnu.
 
-Consulter GET /runs avant chaque sélection et relire la version après toute
-extension ou récupération. Chaque change suivant conserve le RUN parent,
-mais emploie une nouvelle session, un jobId et une génération neufs. Les
-checkpoints sont output/<prompt>/<run_id>/state.json ; les sous-jobs utilisent
-celui du parent. Une attente de dépendance reste non terminale.
+Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Dans le répertoire partagé, déclarer /runs/<run_id>/ready avec version et
-evidence après les validations locales à un jalon stable. /integration
-attend la cohorte stable et sa quiescence native ; les opérations des autres
-RUN sont suspendues. Le propriétaire peut déclarer project:* en lecture pour
-ses contrôles globaux. Libérer avec acquire=false, published et les evidence
-de publication. Relire referenceVersion ; les autres RUN utilisent /reconcile
-avec preuves de réexamen et la nouvelle version retournée avant tout mandat.
-Une réservation avec écritures ne peut être livrée sans cette publication.
-
-Installer ensemble controller.mjs, job-context.mjs, supervisor.mjs,
-supervisor-context.mjs, runs.mjs, registry-lock.py et les autres scripts,
-avec leurs noms complets cgpt-approval-bridge-*. Les imports relatifs et le
-verrou Python exigent ce jeu complet dans le même répertoire. La mise à jour
-atomique prépare le jeu complet et sa validation avant publication ; les
-anciennes copies d'un seul script ne suffisent plus. Ne pas déployer un jeu
-mixte sur une session active. Conserver les procédures de prévol modèle,
-permissions ask, mandats unitaires, preuves natives et statistiques existantes.
+Installer ensemble les scripts controller, job-context, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
 
 ## Continuité du job
 
@@ -147,6 +117,9 @@ Les seules sous-commandes admises sont :
 - `/cab update`
 - `/cab status`
 - `/cab status --run <run_id>`
+- `/cab stats`, `/cab statslast`, `/cab stats 24`, `/cab stats7`, `/cab stats30` (option --run <run_id>)
+- `/cab pause --run <run_id>`, `/cab resume --run <run_id>`, `/cab stop --run <run_id>`
+- `/cab pause --all`, `/cab resume --all`, `/cab stop --all`
 
 Sans argument ou avec un argument inconnu, affiche cette syntaxe et n’effectue aucune action.
 
@@ -180,6 +153,20 @@ Le broker :
 `broker_readiness` est l’interface synthétique de supervision.
 `broker_health` reste réservé au diagnostic détaillé.
 
+## `/cab stats`
+
+Accepter exactement stats, statslast, stats 24, stats7 ou stats30, avec au plus une cible --run <run_id>. Les sélections sont current, last, 24h, 7d et 30d. Refuser argument inconnu, cible manquante/dupliquée ou suffixe sans collecte. Consulter uniquement GET /statistics/view?selection=<selection>, avec runId si ciblé et format=markdown si souhaité. Les interfaces historiques /statistics et /runs/<run_id>/statistics restent consultables pour les agrégats et le brouillon à six sections.
+
+Sans cible, présenter chaque change courant séparément ; la dernière sélection exige la dernière livraison observée, pas une publication. Afficher horodatages, sources natives/importées, identités, couverture, dénominateurs, bornes et N/A motivés. Les sources recouvrantes, paires et conditions d'attente ne s'additionnent pas. Les quotas restent partagés ; une variation exige compte/fenêtre/reset comparables. Ne jamais appeler POST, PATCH ou DELETE, démarrer une sonde, modifier le projet, importer automatiquement des données, réveiller un RUN ou créer une surveillance.
+
+## Suspension ciblée ou globale
+
+Une cible --run <run_id> est locale. Lire GET /runs et la génération, puis POST /runs/<run_id>/suspend avec version, action PAUSE, STOP ou RESUME et références non secrètes de l'autorité/evidence. PAUSE/STOP ferme les nouvelles admissions ; conserver les effets et protections jusqu'à leur frontière sûre. RESUME exige leur réconciliation et ne réutilise aucune permission. STOP ne prouve ni livraison ni gate TERMINÉ : suivre le gate/arrêt ciblé autorisé sans arrêter les services des pairs.
+
+--all exprime une demande globale explicite. PAUSE/STOP utilise /coordination/global/request avec cause GLOBAL_PAUSE ou GLOBAL_STOP, scope=all, transactionId, authorization et evidence. Terminer/réconcilier les effets connus sans nouvelle sous-opération, puis /coordination/global/confirm après vérification de toute la cohorte. Une fin inconnue conserve le gel. RESUME vérifie l'état courant, les preuves et le prévol nécessaires puis /coordination/global/release avec transaction/génération et autorisation de reprise. Aucun timeout ne libère le gel ; une pause propre à un RUN reste prioritaire après reprise globale.
+
+Maintenance ou réconciliation de l'infrastructure partagée exigent leur autorité explicite et les causes SHARED_MAINTENANCE ou GLOBAL_RECONCILIATION. Ne jamais utiliser une exclusion globale pour une validation, publication ou un conflit ordinaire. Fermer/redémarrer OpenCode exige une demande distincte. Un arrêt partagé conserve les gates/protections ; une nouvelle session exige une réconciliation autorisée du gel avant toute purge, dont les refus existants restent applicables.
+
 ## `/cab status`
 
 Produire dans ce chat un résumé très synthétique français et horodaté. Cette
@@ -203,7 +190,7 @@ Ne choisir aucun voisin et n'initialiser aucun contexte.
 1. Identifier le contexte et les RUN depuis les sources publiques disponibles :
    GET /runs et GET /status du contrôleur local déjà connu. Pour les seuls RUN
    courants concernés, lire GET /runs/<run_id>/status ; lire
-   GET /runs/<run_id>/integration-status si une coordination doit être éclaircie.
+   GET /runs/<run_id>/integration-status et GET /runs/<run_id>/locks si une coordination doit être éclaircie.
    Utiliser des délais bornés ; une erreur est une indisponibilité, pas un
    ordre de démarrer CAB. Aucune nouvelle configuration n'est créée ou lue
    dans un emplacement sensible pour trouver le contrôleur.

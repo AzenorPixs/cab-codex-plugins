@@ -25,6 +25,7 @@ class CrashRecoveryTest(unittest.TestCase):
         )
         self.directory = Path(directory)
         self.env = {
+            "CGPT_CONTROLLER_URL": "http://127.0.0.1:0",
             "CGPT_APPROVAL_STORE": str(self.directory / "approvals.json"),
             "CGPT_APPROVAL_JOURNAL": str(self.directory / "events.ndjson"),
             "CGPT_JOURNAL_CHECKPOINT_PATH": str(self.directory / "checkpoint.json"),
@@ -287,7 +288,7 @@ class CrashRecoveryTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         response = json.loads(result.stdout)
         self.assertEqual(response["id"], 1)
-        self.assertEqual(response["result"]["serverInfo"]["version"], "1.2.1")
+        self.assertEqual(response["result"]["serverInfo"]["version"], "1.3.0")
         events = bridge.journal.read_events()
         self.assertTrue(any(
             event["event_type"] == "BROKER_CRASH_RECOVERY_COMPLETED"

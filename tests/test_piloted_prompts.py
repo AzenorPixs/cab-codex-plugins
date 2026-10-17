@@ -27,22 +27,27 @@ class PilotedPromptsTest(unittest.TestCase):
         source = 'Ne jamais lire un secret.\nPermissions natives ask.\nUn mandat = une opération.\n'
         self.assertTrue(prompts.transform(source, "ACSP").startswith(source))
 
-    def test_optimized_protocol_is_idempotent_and_preserves_unitary_permissions(self):
+    def test_resource_protocol_is_idempotent_and_preserves_unitary_permissions(self):
         source = "Un mandat = une opération. Permissions natives ask.\n"
         changed = prompts.transform(source, "CISMP")
-        for route in ("/integration-request", "/closing", "/resources", "/statistics"):
+        for route in ("/locks/acquire", "/locks/release", "/publish", "/statistics"):
             self.assertIn(route, changed)
-        self.assertIn("sans RUN d'observation", changed)
-        self.assertIn("ou une commande exacte", changed)
+        for clause in ("resource-scoped-v1", "expected_revisions", "once est unique", "Une réservation ou un verrou n'approuve rien"):
+            self.assertIn(clause, changed)
         self.assertEqual(prompts.transform(changed, "CISMP"), changed)
         self.assertTrue(changed.startswith(source))
 
-    def test_minimal_exclusion_is_prepared_before_queue_and_closes_after_publication(self):
+    def test_global_exclusion_is_exceptional_and_independent_pairs_continue(self):
         changed = prompts.transform("Un mandat = une opération.\n", "CISMP")
-        for clause in ("brouillon avant la file", "/integration-status", "prochain jalon cohérent validé",
-                       "Rapport, relevés finaux et", "transactionId", "referenceVersion attendue", "sans migration implicite"):
+        for clause in ("les ressources indépendantes continuent", "sans /ready de cohorte", "GLOBAL_RECONCILIATION",
+                       "SHARED_MAINTENANCE", "GLOBAL_PAUSE", "GLOBAL_STOP", "STATISTIQUES.md"):
             self.assertIn(clause, changed)
         self.assertEqual(prompts.transform(changed, "CISMP"), changed)
+
+    def test_modified_legacy_block_is_never_overwritten(self):
+        source = "Un mandat = une opération.\n" + prompts.LEGACY_MARKER + "\nbloc modifié\n"
+        with self.assertRaisesRegex(RuntimeError, "manual reconciliation"):
+            prompts.transform(source, "CISMP")
 
 
 if __name__ == "__main__":

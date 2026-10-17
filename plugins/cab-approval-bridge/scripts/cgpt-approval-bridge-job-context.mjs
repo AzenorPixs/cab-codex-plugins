@@ -5,9 +5,12 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import readline from "node:readline";
 
+export const VERSION = "1.3.0";
+
 // A context owns its decisions, gates and recovery; OpenCode and MCP stay shared.
 export function createJobContext({ workspace, stateDirectory, run = null,
   admitOperation = () => true, ownsSession = () => true, observe = () => {},
+  nativeLifecycle = {},
   verifyRestoredPreflight = () => true }) {
 function envValue(name) {
   const legacyName = name.replace("OC_Codex_", "OC_CGPT_");
@@ -211,7 +214,7 @@ function updateStatus(type, details = {}) {
 
 function publicStatus() {
   return {
-    version: "1.2.1",
+    version: "1.3.0",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -371,12 +374,18 @@ function approvedOperation(approval) {
 
   if (files.length === 1 && commands.length === 0) {
     return { sessionId, directory, kind: "edit", target: files[0], runId: approval.run_id,
-      reservationVersion: approval.reservation_version, resources: approval.resources };
+      reservationVersion: approval.reservation_version, resources: approval.resources,
+      operationId: approval.operation_id, operationDigest: approval.operation_digest,
+      expectedRevisions: approval.expected_revisions, accessId: approval.access_id,
+      coordinationProtocol: approval.coordination_protocol };
   }
 
   if (files.length === 0 && commands.length === 1) {
     return { sessionId, directory, kind: "bash", target: commands[0], runId: approval.run_id,
-      reservationVersion: approval.reservation_version, resources: approval.resources };
+      reservationVersion: approval.reservation_version, resources: approval.resources,
+      operationId: approval.operation_id, operationDigest: approval.operation_digest,
+      expectedRevisions: approval.expected_revisions, accessId: approval.access_id,
+      coordinationProtocol: approval.coordination_protocol };
   }
 
   throw new Error(
@@ -384,9 +393,9 @@ function approvedOperation(approval) {
   );
 }
 
-function operationAllowed(operation, requestId) {
+function operationAllowed(operation, requestId, stage = 'prepare') {
   if (closed) return false;
-  if (!admitOperation(operation, requestId)) return false;
+  if (!admitOperation(operation, requestId, stage)) return false;
   if (recoveryTransitionInFlight) return false;
   if (job?.revokedSessions?.includes(operation?.sessionId)) return false;
   if (!job?.armed) return true;
@@ -1183,11 +1192,12 @@ async function transmitApprovedOperation(validation) {
       matchesApprovedOperation(candidate, validation.operation)
     );
 
-    if (permission && operationAllowed(validation.operation, validation.requestId) &&
+    if (permission && operationAllowed(validation.operation, validation.requestId, 'permission') &&
         !validation.operationInvalidated) {
       await checkNativeAsk(validation.operation);
-      if (!operationAllowed(validation.operation, validation.requestId) ||
+      if (!operationAllowed(validation.operation, validation.requestId, 'permission') ||
           validation.operationInvalidated || validation.operationConsumed) return;
+      nativeLifecycle.begin?.(validation.operation, validation.requestId, permission);
       const reply = await fetch(
       `${opencodeUrl}/session/${encodeURIComponent(
         validation.operation.sessionId
@@ -1207,12 +1217,16 @@ async function transmitApprovedOperation(validation) {
       }
 
       validation.operationConsumed = true;
+      nativeLifecycle.issued?.(validation.operation, validation.requestId);
 
       updateStatus("opencode-permission-approved", {
         requestId: validation.requestId,
         permission: permission.permission,
       });
     }
+  } catch (cause) {
+    nativeLifecycle.unknown?.(validation.operation, validation.requestId);
+    throw cause;
   } finally {
     reconcilingPermissions.delete(validation.requestId);
   }
@@ -1495,7 +1509,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.2.1",
+      version: "1.3.0",
     },
   });
 
@@ -1750,14 +1764,19 @@ async function handleValidation(request) {
 
     if (decision.decision === "approved") await checkNativeAsk(request.operation);
     if (httpDecisions.has(request.requestId) || answered.has(request.requestId) ||
-        request.operationInvalidated || !operationAllowed(request.operation, request.requestId)) return;
+        (decision.decision === 'approved' && (request.operationInvalidated ||
+          !operationAllowed(request.operation, request.requestId)))) return;
 
     httpDecisions.set(request.requestId, {
       ...decision,
       requestId: request.requestId,
       approval_id: request.approvalId,
       change_id: request.changeId,
-      ...(run ? { run_id: run.runId, reservation_version: request.operation?.reservationVersion } : {}),
+      ...(run ? { run_id: run.runId, reservation_version: request.operation?.reservationVersion,
+        operation_id: request.operation?.operationId, operation_digest: request.operation?.operationDigest,
+        expected_revisions: request.operation?.expectedRevisions,
+        coordination_protocol: request.operation?.coordinationProtocol, resources: request.operation?.resources,
+        access_id: request.operation?.accessId } : {}),
     });
 
     answered.add(
@@ -2413,15 +2432,15 @@ const handle = async (request, response, url) => {
               "Validation inconnue."
             );
           }
-          if (validation.operationInvalidated ||
-              !operationAllowed(validation.operation, requestId)) {
+          if (decision.decision === 'approved' && (validation.operationInvalidated ||
+              !operationAllowed(validation.operation, requestId))) {
             throw new Error("Validation hors session admise.");
           }
 
           if (decision.decision === "approved" &&
               !(await nativeAskGuard(validation.operation, response))) return;
-          if (httpDecisions.has(requestId) || validation.operationInvalidated ||
-              !operationAllowed(validation.operation, requestId)) {
+          if (httpDecisions.has(requestId) || (decision.decision === 'approved' && (validation.operationInvalidated ||
+              !operationAllowed(validation.operation, requestId)))) {
             throw new Error("Validation déjà décidée ou hors session admise.");
           }
 
@@ -2432,7 +2451,11 @@ const handle = async (request, response, url) => {
               validation.approvalId,
             change_id:
               validation.changeId,
-            ...(run ? { run_id: run.runId, reservation_version: validation.operation?.reservationVersion } : {}),
+            ...(run ? { run_id: run.runId, reservation_version: validation.operation?.reservationVersion,
+              operation_id: validation.operation?.operationId, operation_digest: validation.operation?.operationDigest,
+              expected_revisions: validation.operation?.expectedRevisions,
+              coordination_protocol: validation.operation?.coordinationProtocol, resources: validation.operation?.resources,
+              access_id: validation.operation?.accessId } : {}),
           });
 
           const entry =
@@ -2527,6 +2550,11 @@ return {
       !httpDecisions.has(v.requestId) || (httpDecisions.get(v.requestId)?.decision === "approved" &&
         !v.operationConsumed && !v.operationInvalidated))),
   operation: (requestId) => validations.get(requestId)?.operation,
+  decision: (requestId) => httpDecisions.get(requestId),
+  invalidateOperation: (requestId) => {
+    const validation = validations.get(requestId);
+    if (validation && !validation.operationConsumed) validation.operationInvalidated = true;
+  },
   hasRequest: (requestId) => validations.has(requestId),
   start: () => { startCodex(); startPermissionReconciliation(); },
   onConnect: () => { status.opencodeSse = "connected"; },

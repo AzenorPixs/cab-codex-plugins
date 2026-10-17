@@ -22,6 +22,9 @@ CAB/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-job-context.mjs
 │       ├── cgpt-approval-bridge-runs.mjs
+│       ├── cgpt-approval-bridge-import-observations.mjs
+│       ├── cgpt-approval-bridge-observation-statistics.mjs
+│       ├── cgpt-approval-bridge-resource-coordination.mjs
 │       ├── cgpt-approval-bridge-statistics.mjs
 │       ├── cgpt-approval-bridge-registry-lock.py
 │       ├── cgpt-approval-bridge-supervisor.mjs
@@ -44,7 +47,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `1.2.1` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.3.0` pour le broker, le contrôleur et le
 superviseur. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -641,115 +644,36 @@ et archive prouvées, la phase /closing limite la réservation au rapport et
 libère les ressources métier. Le rapport et le gate restent obligatoires avant
 livraison ; une nouvelle référence ne défait pas cette publication figée.
 
-### Statistiques natives et coordination optimisée
+### Statistiques natives, fenêtres et coordination 1.3.0
 
-Le module `cgpt-approval-bridge-statistics.mjs` consomme les transitions du
-registre, les demandes relayées du broker, les décisions/once du job-context
-et les métadonnées SSE. Il ne lance ni agent, ni benchmark, ni historique brut.
-Son snapshot runtime `controller-statistics.json` est privé (0600), atomique
-et regroupé toutes les 5 secondes. Une défaillance reste visible sans modifier
-les décisions. La reprise conserve les agrégats et marque la coupure inconnue.
-Les corps, commandes, URL et sorties ne sont jamais conservés. La lecture
-refuse liens, snapshots enrichis et fichiers dépassant 64 MiB.
+SessionStatistics conserve ses agrégats et son brouillon individuel à six sections. Son snapshot schéma 2 lit le schéma 1 ; les métriques de ressources portent leur borne availableFrom sans reconstruction rétroactive. ObservationStatistics conserve séparément, dans son magasin schéma 2 lié au projet exact, segments, événements et imports filtrés dans controller-observations.json privé. Les sources se recouvrant ne sont pas additionnées ; busy et issuedEffectMs ne prouvent pas du codage productif.
 
-GET /statistics expose les catégories reservation, changes, native et
-nativeChanges. Les deux premières concernent les réservations ; les deux
-dernières les états busy observés, sans preuve de codage productif. RSMP et
-inventaires sont exclus des catégories changes ; les prévols le sont des quatre.
-Les durées ZERO, MONO, MULTI, exactement deux, au moins trois et INCONNU sont
-distinctes. Les latences réception/décision et décision/once ont compteur,
-moyenne et quantiles médiane/p95 sur les dernières 2048 observations.
-Les tentatives HTTP, y compris avant admission, ne sont pas des refus distincts.
+GET /statistics/view et /runs/<runId>/statistics/view acceptent selection=current|last|24h|7d|30d, runId/contextId et format=markdown. La dernière livraison exige un passage DELIVERED observé, pas une publication ou une lecture. POST /statistics/import reçoit seulement {bundle}, limité à 64 MiB, pour le projet exact ; l'import est durable, idempotent et neutre sur les décisions, permissions et réservations. Les données natives gardent au plus 30 jours et 200000 éléments par famille ; l'absence de couverture reste INCONNU.
 
-GET /runs/<runId>/statistics expose un contexte, même après livraison ; contextId
-sélectionne un ancien change et format=markdown prépare les six sections.
-Quotas, tokens, modèles, coûts, chemins, URL et sondes absents restent N/A.
-L'orchestrateur complète seulement les preuves autorisées puis mandate le fichier.
-La collecte intégrée concerne le profil concurrent par RUN ; elle ne transforme
-pas une session SCM en session pilotée.
+cgpt-approval-bridge-import-observations.mjs lit uniquement les chemins explicites --samples, --config, --monitor, --quota et --proof ; il produit --output sans écraser un fichier existant. --samples est répétable pour des journaux successifs ordonnés, jusqu'à 32 fichiers. L'audit doit déclarer l'arrêt de son collecteur. La lecture JSONL est progressive, limitée à 512 MiB par fichier et 2 MiB par ligne, avec contrôle de stabilité, fichiers ordinaires et refus des liens. Aucun chemin présent dans le contenu n'est suivi. Les quotas restent partagés ; une différence exige même compte, fenêtre et reset.
 
-POST /runs/<runId>/integration-request (version, evidence, cancel optionnel)
-gère une file FIFO persistante. Les pairs terminent leur opération autorisée et
-déclarent /ready ; les RUN stables ne reprennent pas de nouveau mandat pendant
-le drainage. La tête acquiert sous les gardes natives existantes, sans expiration.
-/reconcile garde sa place en file. POST /runs/<runId>/resources réduit uniquement
-la portée, avec preuves et quiescence ; la nouvelle génération invalide l'ancienne.
-POST /runs/<runId>/closing (version, evidence, reportFile) est irréversible,
-post-publication et limité au STATISTIQUES.md de l'archive du change.
-Les nouvelles routes ne remplacent pas les routes historiques.
-
-La préparation précède integration-request ; les pairs rejoignent leur prochain
-jalon cohérent avec validations locales, sans attendre la fin de tout le change.
-GET /runs/<runId>/integration-status fournit des obstacles techniques par RUN
-sans contenu ni approbation. Les gardes de cohorte lisent une fois les états et
-permissions globaux, vérifient les identités, puis recontrôlent effets, révision
-du registre et événements SSE pertinents. Une observation modifiée est refusée.
-
-POST /runs/<runId>/integration accepte, uniquement avec acquire=false et
-published=true, referenceVersion attendue et completion {transactionId, reportFile}.
-Avec version et evidence, cette option publie et entre en REPORT en une seule
-persistance : référence, génération, reçu, ressources du rapport et libération.
-La réponse ajoute completion ; le même contenu restitue ce reçu sans effet,
-même après reprise ou livraison. Un contenu divergent est refusé. Un ancien
-reçu ne remplace pas la génération courante. Le gate et le rapport restent requis.
-La fenêtre critique conserve les validations combinées applicables et la preuve
-de publication ; rapport, relevés finaux et gate suivent sa libération.
-
-Le registre reste en schéma 1 tant que les transitions optimisées ne sont pas
-utilisées ; file, réduction et closing utilisent le schéma 2. La publication
-atomique utilise le schéma 3 avec reçus durables et sans rétrogradation implicite.
-Le contrôleur source restaure 1/2/3. Un ancien jeu de composants ne doit pas
-charger un schéma qu'il ne connaît pas : déploiement ou retour arrière exigent
-une réconciliation coordonnée, hors de cette préparation source.
+La référence concurrent-runs.md détaille accès, révisions, publication, supervision et gel exceptionnel. Le contrôleur distribué utilise ResourceRunRegistry ; le lecteur RunRegistry historique conserve la qualification des anciens formats et ne fournit plus une barrière métier dans le profil courant.
 
 ## 18. Secrets
 
 Les clés HMAC et autres secrets doivent être injectés par l'environnement et rester hors Git, des journaux, des diagnostics et des sorties utilisateur.
 
-## Contextes concurrents 1.0.0
+## Contextes concurrents 1.3.0
 
-Le contrôleur importe cgpt-approval-bridge-job-context.mjs : chaque contexte
-possède ses décisions, validations, gate et récupération. Le registre
-cgpt-approval-bridge-runs.mjs persiste controller-runs.json avec remplacement
-synchronisé et un verrou flock tenu par cgpt-approval-bridge-registry-lock.py.
-L'état de job est sous runs/<runId>/<contextId>/ ; une extension ou récupération
-incrémente version sans changer contextId. Les requestId admis restent inscrits
-après redémarrage ; sans preuve restaurable, une ancienne demande est refusée.
+Le registre controller-runs.json schéma 4 persiste sous autorité flock les identités, portées, accès actifs, files incompatibles, opérations, révisions, reçus et exceptions. Les schémas 1/2/3 sont restaurés en mode migration requise, sans nouvelle permission. Le magasin d'approbations broker conserve son schéma extensible 2 ; les champs d'opération nouveaux sont persistés/corrélés et la capacité resource-scoped-v1 empêche un jeu mixte d'autoriser un effet.
 
-GET /runs expose les propriétaires. POST /runs/reserve prend runId, ownerId,
-sessionId, directory, changeId, selectionKey, resources et dependsOn.
-Les routes /runs/<runId>/job/... et /runs/<runId>/decision/<requestId> isolent
-les jobs. /extend, /integration et /release contrôlent version et quiescence.
-Une libération delivered=true exige gate TERMINÉ, désarmement, contrôle natif
-et références de preuves examinées par Codex. CAB ne lit pas le projet pour
-valider le rapport à la place de l'orchestrateur.
+POST /runs/reserve attribue change/intention ; resources déclare la portée et exclusiveResources demande l'optimisation privée vérifiée. /extend et /resources changent la génération à une frontière sûre. GET /runs/<runId>/locks expose révisions et accès du RUN. /locks/acquire attribue un ensemble complet ou WAITING sans verrou partiel. /locks/attach rattache une correction approuvée dans le même ensemble ; aucune extension de ressources n'attend en détention.
 
-request_validation conserve ses champs historiques et ajoute run_id,
-reservation_version et resources de commande. broker_readiness accepte run_id
-et publie by_run, by_session et infrastructure_status. Les vues ciblées
-n'absorbent pas le pending_count métier des autres RUN. Le superviseur utilise
-cgpt-approval-bridge-supervisor-context.mjs et un flux SSE commun, en conservant
-activité et reprise par RUN. Une mutation historique ambiguë reçoit HTTP 409.
+Les notifications concurrentes du broker utilisent /validation/resource-request et /validation/resource-reminder, absentes des anciens contrôleurs. Les routes historiques restent disponibles sur le contrôleur 1.3.0 sous les mêmes gardes ; aucun repli vers leur chemin ancien ne transporte un RUN vers un ancien contrôleur. Les modules chargés vérifient leurs versions cohérentes avant démarrage.
 
-Les clés file: sont canoniques, sans traversal ni sortie par lien symbolique.
-Les répertoires couvrent leurs descendants. Les ressources read/read peuvent
-coexister ; les recouvrements impliquant write sont refusés. Les effets shell
-sont décrits par un manifeste examiné par Codex, sans analyse implicite du shell.
-Les dépendances historiques hors registre doivent être prouvées par Codex.
+Chaque request_validation ajoute coordination_protocol, operation_id, operation_digest, expected_revisions et access_id optionnel, en plus de run_id, reservation_version et resources. La décision reprend ces identités et le manifeste. Le contenu est préparé hors détention d'écriture inutile ; avant once, le contrôleur recontrôle les accès, révisions, session et règles natives ask. Un jeton restauré ou libéré ne donne pas une nouvelle permission. /locks/reconcile exige la frontière native prouvée et renouvelle token/fencing sans relâcher les fichiers ; une correction utilise une identité neuve.
 
-Le healthcheck est diagnostic et ne redémarre aucun service. Toute action
-de cycle de vie exige une réconciliation coordonnée des réservations. Une
-purge refuse un registre RESERVED ou invalide même après arrêt des processus.
-Le protocole et les exemples complets sont dans la référence concurrent-runs.md
-embarquée. Aucune variable supplémentaire n'est requise pour le profil commun.
+La fin native est corrélée par session, type, empreinte de cible, callID disponible et dates. /locks/release persiste effets connus, révisions et libération avec COMPLETED, NO_EFFECT ou RECONCILED. Une fin inconnue garde sa protection et bloque le gate normal. Une correction a son mandat et once propres. Les alias physiques de fichiers sont refusés et les révisions de sous-arbre remarquent les créations.
 
-Dans le répertoire partagé, POST /runs/<runId>/ready déclare un jalon stable
-avec version et evidence après validation locale. /integration attend la
-stabilité des RUN métier et la quiescence native de tous les RUN, suspend leurs nouvelles opérations
-et admet project:* en lecture pour les contrôles globaux du propriétaire.
-La libération précise published et evidence et incrémente referenceVersion.
-Les autres RUN métier utilisent /reconcile avec version, referenceVersion et preuves
-après réexamen de la base et des validations affectées. Le nouveau numéro de
-réservation invalide les anciens mandats. Une réservation avec écritures ne
-peut être livrée sans publication sous cette barrière. Les validations globales
-portent sur l'état combiné des changes au jalon stable.
+POST /runs/<runId>/publish vérifie toutes les écritures à publier, protections et proofRevisions puis persiste un reçu idempotent, séquence de publication, génération et éventuel REPORT. referenceVersion reste un ordre observable sans invalider automatiquement les pairs. /reconcile porte expectedRevisions et evidence pour les seules ressources affectées. Les anciennes /integration et /integration-request sont refusées ; /integration-status conserve une consultation ciblée sans lecture de cohorte.
+
+POST /runs/<runId>/suspend reçoit PAUSE, STOP ou RESUME avec version/evidence. /coordination/global/request n'admet que GLOBAL_RECONCILIATION, SHARED_MAINTENANCE, GLOBAL_PAUSE ou GLOBAL_STOP, scope=all et référence d'autorité. /confirm vérifie la cohorte native avant HELD ; /release exige les preuves et une reprise explicite. Une défaillance commune de magasin/journal peut fermer conservatoirement l'admission pour réconciliation, sans réparer ni purger. Le superviseur distingue attentes légitimes et reprend seulement après recontrôle ; le healthcheck reste diagnostique.
+
+/coordination/migrate est réservé à une maintenance autorisée et quiescente. Une sauvegarde privée synchronisée précède la conversion ; les identités, demandes consommées, historiques et reçus restent conservés. Les RUN restent en PAUSE et maintenancePreflightRequired interdit le métier jusqu’à un prévol exact /usr/bin/true en read, once acquittée, exit 0 et accès libéré, après levée explicite du gel pour le seul RUN cible. /coordination/rollback avant nouvel usage restaure la sauvegarde exacte sous quiescence. Après nouvelles opérations ou effets, une réconciliation/conversion explicite est requise ; aucun état récent n'est effacé. Les procédures détaillées et exemples sont dans la référence distribuée. Aucune variable d'environnement nouvelle n'est requise.
+
+Les usages historiques uniques sans RUN restent compatibles, mais leurs sessions/racines mutables sont enregistrées dans legacySources. Aucune réservation Multi-RUN ne les dépasse. /coordination/legacy/reconcile n'efface cette trace qu'après clôture historique, quiescence native et preuves examinées sous HELD pour réconciliation/maintenance ; legacyHandoffs conserve le reçu. Cette transition exceptionnelle ne réintroduit pas de barrière ordinaire entre RUN coordonnés.

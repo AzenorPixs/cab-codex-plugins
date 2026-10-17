@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -92,7 +93,7 @@ async function statusFixture(context, initialState) {
   }
   async function start() {
     supervisor = spawn(process.execPath, [supervisorPath], {
-      env: { ...process.env, OC_Codex_WORKSPACE: directory,
+      env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory,
         OC_Codex_CONTROLLER_URL: `http://127.0.0.1:${controller.address().port}`,
         OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencode.address().port}`,
         OC_Codex_SUPERVISOR_STATUS_PORT: String(port), OC_Codex_SUPERVISOR_STATE_PATH: statePath,
@@ -232,7 +233,7 @@ test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transpor
   });
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
   const supervisor = spawn(process.execPath, [supervisorPath], {
-    env: { ...process.env, OC_Codex_WORKSPACE: directory,
+    env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory,
       OC_Codex_CONTROLLER_URL: `http://127.0.0.1:${controller.address().port}`,
       OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencode.address().port}`,
       OC_Codex_SUPERVISOR_STATUS_HOST: "127.0.0.1",
@@ -346,7 +347,7 @@ test("relance une seule fois une session armée dont le gate reste ouvert", asyn
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
     env: {
-      ...process.env,
+      ...fixtureEnvironment,
       OC_CGPT_WORKSPACE: directory,
       OC_CGPT_CONTROLLER_URL: `http://127.0.0.1:${controllerPort}`,
       OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
@@ -403,7 +404,7 @@ test("ne relance pas un job dont le gate est validé", async (context) => {
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
     env: {
-      ...process.env,
+      ...fixtureEnvironment,
       OC_CGPT_WORKSPACE: directory,
       OC_CGPT_CONTROLLER_URL: `http://127.0.0.1:${controllerPort}`,
       OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
@@ -464,7 +465,7 @@ test("restaure l'état persistant de supervision après redémarrage", async (co
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
     env: {
-      ...process.env,
+      ...fixtureEnvironment,
       OC_CGPT_WORKSPACE: directory,
       OC_CGPT_CONTROLLER_URL: `http://127.0.0.1:${controllerPort}`,
       OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
@@ -530,7 +531,7 @@ test("gèle les relances pendant la récupération et suit ensuite la session tr
   });
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
   const supervisor = spawn(process.execPath, [supervisorPath], {
-    env: { ...process.env, OC_Codex_WORKSPACE: directory,
+    env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory,
       OC_Codex_CONTROLLER_URL: `http://127.0.0.1:${controllerPort}`,
       OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
       OC_Codex_SUPERVISOR_STATUS_PORT: String(supervisorPort),

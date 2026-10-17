@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -21,7 +22,7 @@ function startWith(environment) {
     {
       encoding: "utf8",
       env: {
-        ...process.env,
+        ...fixtureEnvironment,
         OC_CGPT_OUTSIDE_SANDBOX: "1",
         OC_CGPT_WORKSPACE: "/workspace",
         ...environment,
@@ -153,7 +154,7 @@ test("propage les trois identifiants à une décision manuelle", async (context)
     [controllerPath],
     {
       env: {
-        ...process.env,
+        ...fixtureEnvironment,
         CODEX_COMMAND: fakeCodex,
         OC_CGPT_OPENCODE_URL: "http://127.0.0.1:9",
         OC_CGPT_OUTSIDE_SANDBOX: "1",
@@ -184,7 +185,7 @@ test("propage les trois identifiants à une décision manuelle", async (context)
   const readiness = await fetch(`${baseUrl}/broker/readiness`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status: "READY", pending_count: 0 }),
+    body: JSON.stringify({ status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 }),
   });
   assert.equal(readiness.status, 202);
 
@@ -306,7 +307,7 @@ test("CGP05 refuse le gate tant qu'une validation manuelle locale reste indécis
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
   const baseUrl = `http://127.0.0.1:${await availablePort()}`;
   const controller = spawn(process.execPath, [controllerPath], {
-    env: { ...process.env, CODEX_COMMAND: fakeCodex,
+    env: { ...fixtureEnvironment, CODEX_COMMAND: fakeCodex,
       OC_Codex_WORKSPACE: directory, OC_Codex_OUTSIDE_SANDBOX: "1",
       OC_Codex_DECISION_MODE: "manual", OC_Codex_STATUS_HOST: "127.0.0.1",
       OC_Codex_STATUS_PORT: new URL(baseUrl).port,
@@ -325,7 +326,7 @@ test("CGP05 refuse le gate tant qu'une validation manuelle locale reste indécis
   const post = (path, body) => fetch(`${baseUrl}${path}`, {
     method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
   });
-  assert.equal((await post("/broker/readiness", { status: "READY", pending_count: 0 })).status, 202);
+  assert.equal((await post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 })).status, 202);
   assert.equal((await post("/validation/request", { approval: {
     requestId: "request-gate-pending", approval_id: "approval-gate-pending",
     change_id: "change-gate-pending", title: "Validation sans effet", summary: "Test isolé",
@@ -339,9 +340,9 @@ test("CGP05 refuse le gate tant qu'une validation manuelle locale reste indécis
   assert.equal((await post("/decision/request-gate-pending", {
     decision: "rejected", instructions: "Ne rien exécuter.", rationale: "Test sans effet.",
   })).status, 201);
-  assert.equal((await post("/broker/readiness", { status: "READY", pending_count: 1 })).status, 202);
+  assert.equal((await post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 1 })).status, 202);
   assert.equal((await post("/job/terminal-gate", { state: "TERMINÉ" })).status, 409);
-  assert.equal((await post("/broker/readiness", { status: "READY", pending_count: 0 })).status, 202);
+  assert.equal((await post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 })).status, 202);
   assert.equal((await post("/job/terminal-gate", { state: "TERMINÉ" })).status, 201);
 });
 
@@ -373,7 +374,7 @@ test("relances manuelles sans tour Codex, puis décision explicite unique", asyn
 
   const controller = spawn(process.execPath, [controllerPath], {
     env: {
-      ...process.env,
+      ...fixtureEnvironment,
       CODEX_COMMAND: fakeCodex,
       CAB_TEST_RPC_LOG: rpcLog,
       OC_CGPT_OPENCODE_URL: "http://127.0.0.1:9",
@@ -513,14 +514,14 @@ test("réconcilie une permission native corrélée apparue après la décision",
 
   const controller = spawn(process.execPath, [controllerPath], {
     env: {
-      ...process.env,
+      ...fixtureEnvironment,
       CODEX_COMMAND: fakeCodex,
       OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
       OC_CGPT_OUTSIDE_SANDBOX: "1",
       OC_CGPT_RECONNECT_MS: "25",
       OC_CGPT_STATUS_HOST: "127.0.0.1",
       OC_CGPT_STATUS_PORT: String(controllerPort),
-      OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
+      OC_CGPT_WORKSPACE: directory,
     },
     stdio: "ignore",
   });
@@ -648,14 +649,14 @@ async function testCommandCorrelation(context, strictCommands) {
 
   const controller = spawn(process.execPath, [controllerPath], {
     env: {
-      ...process.env,
+      ...fixtureEnvironment,
       CODEX_COMMAND: fakeCodex,
       OC_CGPT_OPENCODE_URL: `http://127.0.0.1:${opencodePort}`,
       OC_CGPT_OUTSIDE_SANDBOX: "1",
       OC_CGPT_RECONNECT_MS: "25",
       OC_CGPT_STATUS_HOST: "127.0.0.1",
       OC_CGPT_STATUS_PORT: String(controllerPort),
-      OC_CGPT_WORKSPACE: strictCommands ? directory : "/home/devops/datas/cab",
+      OC_CGPT_WORKSPACE: directory,
     },
     stdio: "ignore",
   });
@@ -813,14 +814,14 @@ test("conserve une décision manuelle rejected face à une décision automatique
     [controllerPath],
     {
       env: {
-        ...process.env,
+        ...fixtureEnvironment,
         CODEX_COMMAND: fakeCodex,
         OC_CGPT_OPENCODE_URL: "http://127.0.0.1:9",
         OC_CGPT_OUTSIDE_SANDBOX: "1",
         OC_CGPT_RECONNECT_MS: "60000",
         OC_CGPT_STATUS_HOST: "127.0.0.1",
         OC_CGPT_STATUS_PORT: String(port),
-        OC_CGPT_WORKSPACE: "/home/devops/datas/cab",
+        OC_CGPT_WORKSPACE: directory,
       },
       stdio: "ignore",
     }

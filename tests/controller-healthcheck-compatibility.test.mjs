@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -53,7 +54,7 @@ for (const prefix of ["OC_Codex_", "OC_CGPT_"]) {
       const supervisorPort = listener.address().port;
       await new Promise((resolve) => listener.close(resolve));
       const environment = {
-        ...process.env, PATH: `${directory}:${process.env.PATH || ""}`,
+        ...fixtureEnvironment, PATH: `${directory}:${process.env.PATH || ""}`,
         OC_Codex_CONTROLLER_URL: "", OC_CGPT_CONTROLLER_URL: "",
         OC_Codex_OPENCODE_URL: "", OC_CGPT_OPENCODE_URL: "",
         OC_Codex_SUPERVISOR_URL: "", OC_CGPT_SUPERVISOR_URL: "",

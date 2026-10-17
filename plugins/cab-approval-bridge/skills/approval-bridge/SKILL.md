@@ -7,51 +7,17 @@ description: Met en place, teste et supervise le dialogue OpenCode–Codex via b
 
 Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par Codex.
 
-## RUN concurrents CAB 1.0.0
+## RUN concurrents CAB 1.3.0
 
-Lire [le contrat concurrent](references/concurrent-runs.md) dans le skill
-approval-bridge et ORCHESTRATED_CODING.md du projet. Les procédures de purge,
-de déconnexion MCP et d'arrêt des services ci-dessous concernent seulement
-une réinitialisation globale exclusive ; elles ne s'appliquent pas à l'ajout,
-à la reprise ou à la clôture d'un RUN dans une infrastructure partagée.
+Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
-Pour /cab start --run <run_id>, fixer ownerId et vérifier l'infrastructure
-commune sans reconnecter le broker. Créer la nouvelle session de codage,
-examiner les candidats puis réserver atomiquement change et intention par
-POST /runs/reserve. Armer le job sous /runs/<run_id>/job/arm après réservation.
-Le prévol et chaque mandat incluent run_id, reservation_version et le manifeste
-de ressources requis ; la réservation ne vaut jamais approbation.
+Le manifeste déclare la portée ; les accès actifs sont temporaires. Les lectures compatibles coexistent, les écritures recouvrantes attendent et /locks/acquire attribue l'ensemble entier ou WAITING sans acquisition partielle. Les fichiers privés prouvés peuvent éviter l'appel de verrou partagé ; leur promotion est coordonnée si un pair les déclare.
 
-/cab run, /cab test, /cab stop et toute récupération ciblent explicitement
---run <run_id>. Les interfaces sans cible sont limitées au contexte unique ;
-une ambiguïté est refusée. /cab stop désarme et libère uniquement le RUN après
-gate et réconciliation ; il n'arrête les services communs qu'en l'absence de
-tout autre RUN réservé. /cab update prépare un jeu complet sans remplacer
-les modules d'une infrastructure active ni redémarrer ses services.
+Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Préparer le contenu exact, obtenir la décision, acquérir juste avant effet et conserver ask/once. Une base périmée exige une nouvelle demande. Terminer les effets natifs corrélés avant /locks/release ; aucun timeout ni idle ne libère un effet inconnu.
 
-Consulter GET /runs avant chaque sélection et relire la version après toute
-extension ou récupération. Chaque change suivant conserve le RUN parent,
-mais emploie une nouvelle session, un jobId et une génération neufs. Les
-checkpoints sont output/<prompt>/<run_id>/state.json ; les sous-jobs utilisent
-celui du parent. Une attente de dépendance reste non terminale.
+Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Dans le répertoire partagé, déclarer /runs/<run_id>/ready avec version et
-evidence après les validations locales à un jalon stable. /integration
-attend la cohorte stable et sa quiescence native ; les opérations des autres
-RUN sont suspendues. Le propriétaire peut déclarer project:* en lecture pour
-ses contrôles globaux. Libérer avec acquire=false, published et les evidence
-de publication. Relire referenceVersion ; les autres RUN utilisent /reconcile
-avec preuves de réexamen et la nouvelle version retournée avant tout mandat.
-Une réservation avec écritures ne peut être livrée sans cette publication.
-
-Installer ensemble controller.mjs, job-context.mjs, supervisor.mjs,
-supervisor-context.mjs, runs.mjs, statistics.mjs, registry-lock.py et les autres scripts,
-avec leurs noms complets cgpt-approval-bridge-*. Les imports relatifs et le
-verrou Python exigent ce jeu complet dans le même répertoire. La mise à jour
-atomique prépare le jeu complet et sa validation avant publication ; les
-anciennes copies d'un seul script ne suffisent plus. Ne pas déployer un jeu
-mixte sur une session active. Conserver les procédures de prévol modèle,
-permissions ask, mandats unitaires, preuves natives et statistiques existantes.
+Installer ensemble les scripts controller, job-context, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
 
 ## Invariants
 
@@ -173,19 +139,7 @@ ne redémarre les processus des agents.
 
 ## Statistiques obligatoires à chaque archivage
 
-Le profil de statistiques intégré et les routes /statistics, /integration-request,
-/resources et /closing sont décrits dans references/concurrent-runs.md. Utiliser
-le brouillon Markdown déterministe du contexte et préparer ses agrégats pendant
-le travail ; aucun RUN d'observation ni appel LLM supplémentaire n'est nécessaire.
-Préparer avant integration-request et viser le prochain jalon stable prouvé.
-GET /runs/<runId>/integration-status expose les obstacles sans autorisation.
-Après archive, validations applicables et publication prouvées, libérer
-l'exclusion sans attendre rapport, relevés finaux ou gate. L'option completion
-de /integration permet une publication/libération/entrée en REPORT atomique et
-un reçu idempotent ; son contrat et le schéma 3 sont dans concurrent-runs.md.
-Le chemin historique reste disponible : libérer puis entrer en closing
-pour le seul rapport. Le mandat distinct, la vérification et le gate restent requis.
-Les mesures absentes restent N/A et les sources confidentielles ne sont pas lues.
+Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.3.0 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
 
 Charger le skill voisin `../coding-session-statistics/SKILL.md` dès le début
 de chaque change piloté. Préparer ses relevés de quota et ses sondes avant le

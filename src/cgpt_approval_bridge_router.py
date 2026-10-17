@@ -16,7 +16,7 @@ import time
 
 import cgpt_approval_bridge_server as server
 
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 
 
 def parse_files(value):
@@ -38,7 +38,11 @@ def cmd_propose(ns):
         if ns.run_id:
             payload.update(run_id=ns.run_id, reservation_version=ns.reservation_version,
                            resources=json.loads(ns.resources), session_id=ns.session_id,
-                           directory=ns.directory, commands=json.loads(ns.commands))
+                           directory=ns.directory, commands=json.loads(ns.commands), requestId=ns.request_id,
+                           coordination_protocol="resource-scoped-v1", operation_id=ns.operation_id,
+                           operation_digest=ns.operation_digest, expected_revisions=json.loads(ns.expected_revisions))
+            if ns.access_id:
+                payload["access_id"] = ns.access_id
         item = server.do_propose(payload)
     except (server.ValidationError, server.StoreError, ValueError) as exc:
         print("erreur propose : %s" % exc, file=sys.stderr)
@@ -104,6 +108,11 @@ def build_parser():
     p_propose.add_argument("--approval-id", default="")
     p_propose.add_argument("--run-id", default="")
     p_propose.add_argument("--reservation-version", type=int)
+    p_propose.add_argument("--request-id", default="")
+    p_propose.add_argument("--operation-id", default="")
+    p_propose.add_argument("--operation-digest", default="")
+    p_propose.add_argument("--expected-revisions", default="{}", help="Revisions JSON des ressources preparees.")
+    p_propose.add_argument("--access-id", default="", help="Identite optionnelle du groupe coherent.")
     p_propose.add_argument("--session-id", default="")
     p_propose.add_argument("--directory", default="")
     p_propose.add_argument("--resources", default="[]", help="Manifeste JSON des ressources de commande.")

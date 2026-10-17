@@ -2,6 +2,14 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.3.0 — préparation source
+
+- Coordination atomique par ressource : portées déclarées distinctes des accès actifs, lectures compatibles, écritures exclusives, FIFO entre conflits et promotion sûre des fichiers privés. Les RUN indépendants continuent pendant validations, synchronisation, archivage et publication ciblés.
+- Révisions et preuves ciblées, suivi des écritures à publier, corrections approuvées dans un ensemble détenu, reçus durables et REPORT. Une fin native inconnue conserve ses protections ; décisions, ask/once et gates restent obligatoires.
+- Gel global limité à réconciliation commune, maintenance partagée, pause ou arrêt globaux explicites. Pause/arrêt ciblés et supervision préservent les pairs. Registre schéma 4, migration et sauvegarde privées, retour arrière contrôlé ; anciennes acquisitions d'intégration globale refusées dans resource-scoped-v1.
+- Statistiques intégrées de contention et d'exceptions, fenêtres natives 24 h/7 j/30 j, courant et dernière livraison observée. /cab stats, statslast, stats 24, stats7 et stats30 restent en lecture seule. Import local filtré/idempotent de l'audit arrêté, sources séparées, lacunes explicites et quotas partagés comparables.
+- Toutes les briques sources, commandes, protocoles et supports de distribution sont alignés sur 1.3.0. Qualification isolée et archivages avec rapports ; aucun Git, déploiement, migration active, propagation interprojets ou intervention sur les RUN actifs.
+
 ## 1.2.1 — préparation source
 
 - Ajouter `/cab status` et son filtre exact `--run <run_id>` : tableau français
