@@ -19,6 +19,24 @@ spec.loader.exec_module(reset)
 
 
 class SessionResetTest(unittest.TestCase):
+    def test_schema_four_refuses_active_access_unknown_effect_and_global_freeze(self):
+        registry = self.state / "controller-runs.json"
+        base = {"schemaVersion": 4, "runs": [{"state": "DELIVERED"}], "integrationQueue": [],
+                "integrationOwner": None, "coordination": {"protocol": "resource-scoped-v1",
+                "accesses": {}, "operations": {}, "global": None}}
+        for field, value in (("accesses", {"a": {"state": "HELD"}}),
+                             ("operations", {"a": {"state": "UNKNOWN"}}),
+                             ("legacySources", [{"sessionId": "ses_legacy", "directory": "/fixture"}]),
+                             ("global", {"state": "HELD"})):
+            data = json.loads(json.dumps(base))
+            data["coordination"][field] = value
+            registry.write_text(json.dumps(data))
+            with self.subTest(field=field), self.assertRaises(RuntimeError):
+                reset.reset_directories([str(self.state)])
+            self.assertTrue(registry.exists())
+        registry.write_text(json.dumps(base))
+        self.assertGreater(reset.reset_directories([str(self.state)])[0]["removed_entries"], 0)
+
     def test_schema_three_never_purges_an_active_reservation(self):
         registry = self.state / "controller-runs.json"
         registry.write_text(json.dumps({"schemaVersion": 3, "runs": [{"state": "RESERVED"}],
@@ -251,7 +269,7 @@ class SessionResetTest(unittest.TestCase):
                 process.communicate()
                 raise
         self.assertEqual(process.returncode, 0, errors)
-        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "1.2.1")
+        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "1.3.0")
         readiness = json.loads(replies[2]["result"]["content"][0]["text"])
         self.assertEqual(readiness["pending_count"], 0)
         self.assertEqual(readiness["root_cause"], "CONTROLLER_UNREACHABLE")

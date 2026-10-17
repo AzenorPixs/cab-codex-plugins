@@ -18,4 +18,8 @@ Le snapshot natif existant reste compatible. Les nouvelles données utilisent un
 
 # Vérification
 
-Tests déterministes des fenêtres, changements de contexte et de portée, concurrence à deux/trois, événements en doublon, livraisons, secrets/champs interdits, import répété/divergent, restauration, liens, erreurs de persistance et intégration HTTP sans effet de permission. Comparaison hors ligne avec les données réelles du job arrêté et contrôle des cinq commandes/version 1.2.2. Régressions CAB Python/Node et validations OpenSpec strictes avant archivage.
+Tests déterministes des fenêtres, changements de contexte et de portée, concurrence à deux/trois, événements en doublon, livraisons, secrets/champs interdits, import répété/divergent, restauration, liens, erreurs de persistance et intégration HTTP sans effet de permission. Comparaison hors ligne avec les données réelles du job arrêté et contrôle des cinq commandes/version 1.3.0. Régressions CAB Python/Node et validations OpenSpec strictes avant archivage.
+
+# Réalisation source 1.3.0
+
+Le magasin d'observations est au schéma 2 avec identité de projet persistée ; le bundle d'import reste au schéma 1. Un magasin sans identité compatible reste intact et signale sa limite. L'import JSONL est progressif (512 MiB par fichier, jusqu'à 32 fichiers ordonnés, 2 MiB par ligne) et refuse les sources liées ou modifiées pendant lecture. Les observations historiques sans file, réconciliation ou métriques de ressources restent inconnues sur ces dimensions. Les premiers/derniers relevés comparables du compte sont conservés sans attribution exclusive au RUN.

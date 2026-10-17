@@ -1,247 +1,78 @@
-# CAB 1.0.0 — pilotage concurrent dans un contexte OpenCode commun
+# CAB 1.3.0 — coordination atomique par ressource
 
-Un processus OpenCode et un broker MCP stdio servent plusieurs sessions.
-Le contrôleur et le superviseur isolent leurs jobs par RUN. Le profil initial
-utilise un même répertoire ; les worktrees exigent une qualification distincte.
+Un processus OpenCode, un broker MCP stdio, un contrôleur et un superviseur servent plusieurs RUN dans un répertoire commun. Chaque RUN conserve session, job, décisions, preuves et checkpoint. Le contrat courant est `resource-scoped-v1` ; l'ancienne barrière ordinaire d'intégration n'est plus admise.
 
-## Identité et sélection
+## Réservation et périmètre
 
-Le RUN parent conserve runId et ownerId pendant son cycle. Chaque change
-emploie une nouvelle session OpenCode et un jobId inédit. Consulter GET /runs
-et OpenSpec avant sélection. Un change présent n'est pas nécessairement pris
-en charge ; une réservation RESERVED appartient exclusivement à son RUN.
+Consulter GET /runs et OpenSpec avant sélection. Réserver exclusivement change et intention avant préparation par POST /runs/reserve : runId, ownerId, sessionId, directory, changeId, selectionKey, resources et dependsOn. Un RUN traite un change réservé à la fois ; les sous-jobs héritent du parent. Chaque change suivant emploie session, jobId et génération neufs.
 
-Avant création ou préparation, soumettre POST /runs/reserve avec :
+Les ressources déclarent la portée autorisée ; leur recouvrement ne bloque plus la réservation des changes compatibles. Examiner les dépendances sémantiques : fichiers distincts ne prouvent pas l'indépendance d'un contrat. Les clés file: sont relatives et canoniques ; un répertoire couvre ses descendants. Les ressources logiques couvrent contrats, bases, ports, sorties et index/références Git distinctement autorisés. Les alias physiques connus sont refusés.
 
-```json
-{
-  "runId": "cismp-example",
-  "ownerId": "codex-example",
-  "sessionId": "ses_example",
-  "directory": "/racine/autorisee",
-  "changeId": "change-example",
-  "selectionKey": "capacite-exigence-version",
-  "resources": [{"key": "file:src/component.py", "mode": "write"}],
-  "dependsOn": []
-}
-```
+Un fichier est partagé par défaut. exclusiveResources, sous-ensemble explicite de fichiers du manifeste, demande l'optimisation privée. CAB la vérifie avant effet. L'arrivée d'un accès recouvrant ferme cette admission exclusive ; le pair attend les effets concernés avant accès partagé, sans drainer les RUN indépendants.
 
-La clé de sélection représente l'intention avant création du change. Examiner
-les dépendances sémantiques, capacités OpenSpec, contrats, lectures, écritures,
-migrations, ports, builds et services partagés. Utiliser des clés file:,
-capability:, contract: ou resource:, avec mode read ou write. Les chemins sont
-relatifs et un répertoire couvre ses descendants. project:* en écriture réserve
-les effets inconnus à l'échelle du projet. Aucune indépendance n'est déduite
-des seuls fichiers. dependsOn identifie les changes livrés dans le registre ;
-Codex vérifie séparément les prérequis historiques établis hors registre.
+/extend et /resources contrôlent génération, portée et frontière sûre. Une réduction ne libère aucun effet inconnu ni obligation de publication. Le checkpoint reste output/<prompt>/<run_id>/state.json ; la reprise historique conserve preuves et propriété sans écraser un pair.
 
-La réservation atomique retourne version et contextId. Un conflit ne donne
-aucune permission : sélectionner un autre candidat compatible ou attendre.
-Un RUN ne possède qu'un change réservé à la fois. Après libération contrôlée,
-le même RUN peut réserver son change suivant avec une nouvelle session et une
-version fraîche ; l'historique et les requestId restent conservés.
+## Préparation, décision et accès
 
-## Mandats et routage
+1. Déclarer entrées, écritures et ressources logiques exactes. Une commande sans manifeste exploitable est refusée ; CAB ne devine pas ses effets et ne réserve pas automatiquement project:*.
+2. Lire GET /runs/<runId>/locks pour les révisions. Une lecture stable acquiert brièvement son ensemble en lecture, lit puis libère ; une observation non stable ne prouve pas une validation.
+3. Préparer le contenu exact. request_validation conserve ses champs et ajoute coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Une édition exige un fichier unique couvert en écriture ; une commande décrit son manifeste complet. L'empreinte représente le contenu examiné par l'orchestrateur.
+4. Attendre la décision explicite sans garder inutilement une écriture exclusive. Une base modifiée impose relecture, nouveau contenu et nouvelle demande ; aucune décision terminale n'est remplacée.
+5. Après approbation, acquérir l'ensemble juste avant effet. Un fichier privé prouvé peut utiliser l'admission exclusive interne sans appel séparé de verrou partagé.
+6. Garder les règles natives ask. CAB recontrôle identité, révisions et protection avant une unique permission once. Ni réservation, ni acquisition, ni readiness ne constitue une approbation.
 
-Les routes sont /runs/<runId>/status, /runs/<runId>/job/arm, progress, recover,
-terminal-gate, disarm et /runs/<runId>/decision/<requestId>. L'armement reprend
-exactement session, change et racine de la réservation ; strictCommands=true.
-Les décisions restent explicites, unitaires, corrélées et consommables une fois.
+POST /runs/<runId>/locks/acquire reçoit version, operationId, operationDigest (SHA-256 hexadécimal), resources et expectedRevisions. Il retourne HELD avec token/fencing, ou HTTP 202 WAITING sans acquisition partielle. Une réémission identique expose l'état courant ; un contenu divergent est refusé. Une base changée pendant l'attente produit STALE sans effet : annuler et préparer une opération neuve.
 
-Chaque request_validation inclut les champs habituels et run_id,
-reservation_version ; une commande déclare aussi resources. Un fichier exige
-une ressource file: en écriture. Une commande shell n'est pas analysée pour
-deviner ses effets. Codex examine son manifeste avant décision. Une réservation
-ne vaut jamais approbation. Garder les permissions natives ask et ne transmettre
-aucun outil mutable sans le mandat exact.
+Les lectures coexistent ; toute écriture exclut les accès recouvrants. La FIFO s'applique entre demandes incompatibles ; une demande indépendante avance et de nouveaux lecteurs ne dépassent pas un écrivain antérieur. Un détenteur n'attend jamais l'extension/conversion de son ensemble : terminer/libérer puis demander l'ensemble complet.
 
-Préparer une opération complète et vérifiable par fichier, avec contenu exact,
-manifeste et outils disponibles avant armement. Traiter immédiatement demandes
-et rapports par le SSE et la boucle existante ; ne pas reformuler le contenu
-approuvé, fractionner une édition évitable ou répéter un contrôle sans nouvel
-événement. Une seconde opération exige toujours une nouvelle décision et once.
+Pour un groupe cohérent, annoncer les sous-opérations, leur access_id commun et operationIds à l'acquisition. Chaque édition/commande garde sa décision et once. Après un effet connu, /locks/attach peut rattacher une correction nouvellement approuvée dans le même ensemble détenu, sans ressource nouvelle ni permission réutilisée. Un drainage global interdit aussi les nouvelles sous-opérations.
 
-broker_readiness accepte run_id. Les compteurs ciblés ne couvrent que ce RUN ;
-les défaillances du magasin, du journal ou du transport commun restent communes.
-Les requêtes et permissions d'une autre session ne sont ni consommées ni closes.
-Après redémarrage, une ancienne demande sans décision restaurable reste à
-réconcilier ; ne pas la rejouer, changer son identité ou inventer son résultat.
+## Fin et reprise des effets
 
-## Cycle, extension et intégration
+La permission émise reste suivie jusqu'à une fin d'outil native corrélée : session, type, cible, identifiant d'appel disponible et bornes temporelles. SSE ou historique HTTP fournit la preuve. idle, silence, timeout et expiration d'approbation ne suffisent pas.
 
-Le checkpoint est output/cismp/<run_id>/state.json pour CISMP et
-output/<prompt>/<run_id>/state.json pour les autres orchestrateurs. Un sous-job
-hérite de celui de son parent. Le registre CAB attribue les changes ; le
-checkpoint conserve les preuves et ne modifie jamais les réservations.
+POST /runs/<runId>/locks/release porte version, operationId, token, fencing, outcome et evidence. COMPLETED exige toutes les fins ; NO_EFFECT exige l'absence d'écriture prouvée. RECONCILED permet une frontière intermédiaire examinée avec effets connus et sous-opérations non commencées annulées ; il ne constitue pas une publication réussie. Une issue inconnue conserve toujours ses protections. /locks/cancel n'annule que les attentes ou acquisitions périmées sans effet commencé.
 
-Si le fichier scopé manque lors d'une reprise, lire l'ancien
-output/<prompt>-state.json en lecture seule, réconcilier RUN, propriété et
-preuves natives, puis migrer seulement ce RUN sans écraser l'état d'un autre.
-Un ancien job armé reste en mode historique sous les interfaces sans RUN
-jusqu'à clôture réconciliée ; l'ajout de RUN concurrents est alors refusé.
-Les anciennes permissions consommées ne sont jamais transposées.
+Les écritures connues avancent les révisions des ressources et invalident les lectures de sous-arbre concernées. Les écritures à publier restent suivies après libération. Après crash, les protections sont restaurées mais l'ancien jeton ne permet aucune nouvelle once. /locks/reconcile vérifie la frontière connue, annule les anciennes sous-opérations non commencées et émet un jeton/fencing neufs sans relâcher les fichiers ; les corrections conservent des identités et décisions neuves. Réconcilier les effets sans rejouer une permission consommée. Le prévol de récupération garde ses règles strictes ; terminer/libérer son accès avant transfert de session.
 
-Avant élargissement, fermer le mandat courant puis POST /runs/<runId>/extend
-avec version et resources supplémentaires. Réutiliser la version retournée.
-Une extension conflictuelle suspend le nouveau périmètre sans toucher aux autres.
-Pour réduire la portée, POST /runs/<runId>/resources avec version, resources
-et evidence après clôture du mandat et quiescence native. Chaque nouvelle
-ressource est incluse dans l'ancienne, sans escalade read vers write ; reprendre
-la génération retournée. Retirer les lectures globales devenues inutiles.
-L'obligation de publication des écritures antérieures reste conservée.
+## Validation, publication et rapport
 
-Dans le répertoire partagé, chaque RUN déclare un jalon stable après ses
-validations locales par POST /runs/<runId>/ready avec version et evidence.
-L'intégration attend que les RUN métier réservés soient stables, sans mandat,
-récupération ou effet en attente. Les validations globales portent sur l'état
-combiné de ces changes stables ; chaque RUN conserve ses preuves locales.
-La quiescence native couvre aussi les RUN en phase documentaire : une écriture
-de rapport en cours doit finir avant acquisition et toute nouvelle édition
-attend la levée de l'exclusion.
+Protéger les seules entrées et effets utiles. openspec validate --all --strict protège en lecture OpenSpec, configuration et changes nécessaires ; les éditions de code indépendantes continuent. Les tests peuvent protéger une base ou des sorties. Une grande portée reste un conflit de ressources, pas une exclusion globale CAB.
 
-Le demandeur termine analyses, validations locales, commandes et brouillon
-statistique avant de rejoindre la file. Les pairs visent leur prochain jalon
-cohérent prouvé, avec validations locales et aucun effet inconnu ; la fin de
-toutes les tâches du change n'est pas requise pour déclarer ce jalon.
-Le profil optimisé soumet alors POST /runs/<runId>/integration-request avec
-version et evidence. GET /runs expose integrationQueue, FIFO durable par
-contexte. Dès qu'une demande existe, terminer seulement l'opération autorisée
-en cours, traiter son rapport, atteindre le prochain jalon sûr puis déclarer
-/ready. Un RUN stable attend alors sans nouveau mandat. Les nouvelles
-réservations attendent ; seule la tête peut acquérir après les contrôles natifs.
-Une annulation explicite utilise la même route avec cancel=true, version et
-evidence ; elle ne libère ni réservation ni effet. La réconciliation d'une
-référence ne change pas la position en file. Aucun timeout ne décide ni ne
-libère. Le mode historique sans file reste disponible.
+Après validation, conserver les protections ou réacquérir et comparer les révisions des preuves avant publication. Réexaminer uniquement les validations/dépendances affectées. La séquence commune de publication ne rend pas les preuves indépendantes périmées. L'orchestrateur examine les preuves métier ; CAB ne lit pas le projet à sa place.
 
-Pour publier dans la référence commune, obtenir POST /runs/<runId>/integration
-avec version et acquire=true. Revalider la base courante et les résultats
-combinés, synchroniser et archiver sous autorisations explicites. Préparer les
-agrégats statistiques avant acquisition. Les opérations Git restent soumises
-à une autorisation distincte.
-L'exclusion couvre seulement la vérification de la base et de la quiescence,
-les validations combinées applicables, la synchronisation, l'archivage et la
-preuve de publication. Aucun rapport statistique, relevé final, compactage,
-benchmark ou gate terminal ne prolonge cette fenêtre. Une correction longue
-est préparée hors exclusion après réconciliation sûre ; un effet inconnu
-interdit toute libération et aucun timeout ne remplace une décision.
-Pendant l'exclusion, les nouvelles opérations des autres RUN sont suspendues.
-Le propriétaire peut déclarer project:* en lecture pour ses tests globaux.
-Libérer avec acquire=false, published (booléen) et, si true, evidence après
-publication prouvée ou abandon réconcilié. La version referenceVersion évolue
-à chaque libération ; les autres RUN attendent la réconciliation par POST
-/runs/<runId>/reconcile avec version, referenceVersion et evidence. Recontrôler
-les empreintes et validations affectées sans rejouer les effets déjà prouvés,
-puis utiliser la nouvelle version de réservation retournée. Une réservation
-avec écritures ne peut être livrée sans publication sous cette barrière.
-Ni CAB ni le superviseur ne valident les preuves à la place de Codex.
+POST /runs/<runId>/publish porte version, transactionId, operationId, token, fencing, outcome=COMPLETED, proofRevisions, evidence et éventuellement reportFile. L'accès couvre toutes les ressources écrites à publier et les dépendances des preuves. Reçu, séquence, révisions, génération et libération sûre sont persistés ensemble. Répéter la transaction restitue le reçu même après livraison, sans nouvelle permission ; un contenu divergent est refusé.
 
-Après publication prouvée, libérer l'exclusion avant la rédaction finale du
-rapport, puis POST /runs/<runId>/closing avec version, evidence et reportFile
-égal à openspec/changes/archive/<date>-<changeId>/STATISTIQUES.md. La phase
-REPORT est irréversible dans ce contexte : elle abandonne les autres ressources
-et n'autorise que ce fichier. Conserver la génération retournée. Les pairs
-réconcilient immédiatement la référence et reprennent ; les éditions natives
-du rapport restent suspendues pendant toute autre exclusion et soumises à once.
-Une référence ultérieure ne défait pas la publication figée de cette phase.
-Sans closing, le mode historique conserve les gardes de référence existantes.
+Synchronisation et archivage OpenSpec restent des mandats distincts autorisés décrivant sources, destinations et parents utiles. Ils attendent les seuls accès incompatibles. Git reste distinctement autorisé ; son index/référence est une ressource logique sans gel des éditions indépendantes.
 
-### Publication et entrée en REPORT atomiques
+Le passage atomique en REPORT, ou /closing après publication, limite irréversiblement le contexte au STATISTIQUES.md de sa propre archive. Écrire et vérifier ce rapport sous son seul accès. Rapport à six sections, preuves, gate individuel, désarmement puis /release restent obligatoires avant livraison. Une archive seule ne prouve pas la fin du change ou du parent.
 
-Le profil optimisé peut effectuer la libération publiée et l'entrée en REPORT
-dans une même transition durable avec POST /runs/<runId>/integration :
+## Pause, arrêt et exceptions communes
 
-```json
-{
-  "version": 42,
-  "referenceVersion": 7,
-  "acquire": false,
-  "published": true,
-  "evidence": ["référence non secrète des validations et de la publication"],
-  "completion": {
-    "transactionId": "publication-change-unique",
-    "reportFile": "openspec/changes/archive/2026-10-16-change-example/STATISTIQUES.md"
-  }
-}
-```
+POST /runs/<runId>/suspend avec version, action=PAUSE|STOP|RESUME et evidence cible ce seul RUN. Les effets en cours restent protégés jusqu'à frontière sûre. STOP ne signifie ni livraison ni gate TERMINÉ. Le superviseur ne relance pas un RUN suspendu ou en attente de ressource.
 
-Les numéros viennent du registre courant ; l'exemple ne vaut pas mandat.
-Le contrôleur vérifie propriétaire, génération, référence attendue, cible,
-conflits, effets et quiescence. Il persiste ensemble publication, nouvelle
-référence, nouvelle génération, reçu, réduction au rapport et libération.
-La réponse conserve la vue du registre et ajoute completion, reçu stable.
-Réémettre exactement la même transaction restitue ce reçu, même après reprise,
-livraison ou change suivant, sans effet ni nouvelle référence. Un contenu
-divergent reçoit integration-transaction-divergent. Le reçu n'est pas un gate.
-Après succès, utiliser la génération courante du RUN exposée dans runs ; un
-ancien reçu reste une preuve historique et ne vaut pas génération actuelle.
+Les seules causes globales sont GLOBAL_RECONCILIATION (état commun non isolable), SHARED_MAINTENANCE (infrastructure/formats communs), GLOBAL_PAUSE et GLOBAL_STOP (demandes explicites concernant tous les RUN).
 
-GET /runs/<runId>/integration-status expose la file, son propriétaire, la
-référence et les obstacles par RUN sans contenu. Ils distinguent jalon absent,
-référence périmée, mandat, validation indécise, récupération, effet non résolu,
-session occupée et permission restante. Une observation invalide ou modifiée
-refuse le diagnostic ou la transition et exige une nouvelle réconciliation.
-Les contrôles de cohorte regroupent les lectures globales, vérifient chaque
-identité native et recontrôlent effets, révisions et événements SSE pertinents.
-Aucune lecture ne met en cache une permission ni ne crée une approbation.
-Le schéma 3 conserve les reçus ; les nouvelles sources lisent aussi 1/2.
-Ne pas charger le schéma 3 avec une ancienne distribution. Aucun déploiement
-ni changement d'état actif n'est implicite dans la préparation des sources.
+POST /coordination/global/request exige transactionId, cause, scope=all, authorization et evidence. DRAINING ferme les admissions. /coordination/global/confirm vérifie la cohorte native et les protections avant HELD. /coordination/global/release exige transaction, génération, autorité et preuves de reprise ; aucun délai ne libère le gel. Une défaillance commune d'intégrité ferme conservatoirement l'admission pour réconciliation sans réparation ni purge. Une incertitude localisée reste ciblée.
 
-Après gate individuel, désarmement et réconciliation, POST /runs/<runId>/release
-porte version, delivered (booléen) et evidence (références non secrètes des
-preuves). delivered=true exige un gate TERMINÉ, la livraison et le rapport
-prouvés. Une attente ou un effet inconnu ne libère jamais le change.
+/cab pause|stop --run <run_id> est ciblé ; --all est explicitement global. Le démarrage d'un RUN rejoint l'infrastructure sans purge/reconnexion. Fermer ou redémarrer OpenCode exige une demande distincte. Le healthcheck reste diagnostique. La purge refuse réservations, accès actifs, effets incertains, gel non libéré et état invalide.
 
-Sans candidat disponible, distinguer attente de dépendance, conflit de ressources
-et absence de travail restant prouvée. Seul ce dernier constat, sans autre RUN
-actif ni exigence restante, permet une fin globale. Les sous-jobs rendent le
-contrôle au cycle parent et n'arrêtent pas l'infrastructure commune.
+## Compatibilité historique unique
 
-## Statistiques intégrées
+Les anciens usages uniques sans RUN conservent leurs décisions et once. Une trace durable de leurs sessions/racines interdit leur coexistence avec les RUN coordonnés. Pour passer au profil Multi-RUN, clore le job historique éventuel, demander GLOBAL_RECONCILIATION ou SHARED_MAINTENANCE, vérifier les sessions/racines natives et faire examiner les effets, puis /coordination/legacy/reconcile avec transactionId, authorization et evidence sous HELD. Seule cette clôture prouvée efface la trace active ; idle ou un redémarrage seul ne suffit pas. L'historique de clôture est conservé et la purge refuse une trace non réconciliée.
 
-La collecte du contrôleur est automatique pour chaque contexte concurrent ;
-elle consomme transitions CAB et métadonnées SSE déjà reçues, sans RUN d'audit,
-appel LLM ni historique brut supplémentaire. GET /statistics donne les agrégats
-globaux ; GET /runs/<runId>/statistics donne ceux du contexte courant. Ajouter
-contextId pour une génération de change antérieure, y compris après livraison.
-format=markdown fournit le brouillon à six sections, prêt à examiner avant
-mandat de publication. Préparer le brouillon en continu, compléter les bornes
-après archive et les preuves accessibles, puis publier le seul rapport via CAB.
+## Formats et migration
 
-Les corps, commandes, URL et sorties sont exclus de la collecte. Les éléments
-absents restent N/A motivés ; les relevés natifs de quotas et sondes existants
-restent à la charge de l'orchestrateur, sans nouvel agent d'observation. Busy
-ne prouve pas du codage productif. Les catégories reservation/native incluent
-RSMP et inventaires ; changes/nativeChanges les excluent. Les prévols sont
-exclus des quatre catégories. ZERO et INCONNU restent distincts. Les quantiles
-médiane/p95 portent sur les dernières 2048 observations, avec compteur total.
-Les tentatives HTTP, y compris avant admission, ne sont pas des refus distincts
-de permission ; leurs bornes ne constituent pas une durée causale exhaustive.
+Le registre 1.3.0 utilise le schéma 4 ; les schémas 1/2/3 sont lus en mode migration requise sans anciennes acquisitions globales. Les mutations incompatibles reçoivent coordination-upgrade-required. Broker, clients et contrôleur confirment le protocole avant permission. Le broker concurrent notifie /validation/resource-request et /validation/resource-reminder, routes absentes des anciens contrôleurs, sans repli incompatible. Les versions des modules chargés sont vérifiées avant démarrage. Le magasin broker reste au schéma extensible 2 : les nouveaux champs sont persistés et corrélés, sans conversion implicite des anciens enregistrements.
 
-La persistance statistique est regroupée et indépendante des décisions ;
-une erreur est visible dans l'export. Ni l'export ni le brouillon ne valide les
-tests, l'archive ou le rapport, et aucun quota partagé n'est ventilé arbitrairement.
-Le rapport vérifié reste obligatoire avant gate TERMINÉ et /release.
+La migration explicitement autorisée vérifie quiescence et sauvegarde privée avec empreinte. RUN, demandes consommées, jobs, candidates et reçus sont conservés ; les ressources historiques restent conservatrices. /coordination/migrate conserve les RUN en PAUSE et impose maintenancePreflightRequired. Vérifier MCP/SSE/readiness en lecture, lever explicitement le gel pour le prévol ciblé en maintenant les pairs en pause, puis autoriser uniquement /usr/bin/true avec manifeste read. Une once acquittée et exit 0 prouvés avant libération de cet accès autorisent ensuite le métier ; un échec conserve cette obligation. /coordination/rollback restitue la sauvegarde uniquement avant nouvel usage sous maintenance quiescente. Le retour arrière avant nouvel usage restitue la sauvegarde exacte ; après de nouveaux effets, une réconciliation/conversion explicite est obligatoire. Une préparation source ne déploie ni ne migre aucun état actif.
 
-## Récupération, purge et arrêt
+## Statistiques et consultations
 
-Un démarrage rejoint l'infrastructure saine sans purge ni reconnexion globale.
-Une récupération conserve le RUN, le change, les preuves et la candidate après
-prévol divergent refusé sans effet ; utiliser prepare/retry/complete du même job.
-Après transfert, relire GET /runs pour la nouvelle version avant tout mandat.
-Une autre session réservée ne peut servir de candidate. Le prévol /usr/bin/true
-doit être couvert par un manifeste sans effet, par exemple une lecture de la
-capacité concernée ; il reste soumis à la décision CAB et à once.
+La collecte distingue réservations, natif observé, attente/détention/promotion de ressources, réconciliation ciblée et quatre causes exceptionnelles. Les lacunes restent inconnues ; durées et paires recouvrantes ne s'additionnent pas. Busy ne prouve ni codage productif ni gain causal.
 
-/cab stop cible le RUN et ne ferme pas OpenCode. Arrêter les services communs,
-déconnecter le broker, utiliser /instance/dispose ou purger exige la quiescence
-et la réconciliation de tous les RUN affectés. Le script de purge refuse un
-registre RESERVED ou invalide même si ses processus sont arrêtés. Le healthcheck
-ne redémarre aucun service ; une action de cycle de vie reste coordonnée.
+GET /statistics et /runs/<runId>/statistics conservent les agrégats et le brouillon individuel à six sections. /statistics/view et /runs/<runId>/statistics/view acceptent selection=current|last|24h|7d|30d, cible/contextId éventuels et format=markdown. /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 sont ponctuels, sans action de cycle de vie.
 
-La sélection ne dépasse pas les spécifications et autorisations déjà validées.
-Les sondes et compactages restent attribués à chaque RUN ; les quotas partagés
-ne sont jamais présentés comme sa consommation exclusive sans preuve.
-CISM, CAISM et les prompts directs ne participent pas à ce pilotage et ne sont
-pas lancés en concurrence avec les sessions pilotées.
+POST /statistics/import accepte seulement un bundle filtré du projet exact avec provenance/empreinte, sans modifier permissions, décisions ou réservations. L'importeur distribué lit en flux borné les fichiers d'audit explicitement désignés, sans suivre les chemins du contenu ni réactiver le job arrêté. Sources natives/importées restent séparées. Les quotas sont partagés et comparés seulement à compte/fenêtre identiques. Contenu, commandes, chemins d'opérations, URL et secrets sont exclus.
+
+Sans candidat, distinguer dépendance, conflit et absence de travail restant prouvée. CISM, CAISM et prompts directs restent hors concurrence pilotée. La propagation vers les projets consommateurs exige son autorisation propre.

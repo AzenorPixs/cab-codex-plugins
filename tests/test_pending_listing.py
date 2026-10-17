@@ -23,6 +23,7 @@ class PendingListingTest(unittest.TestCase):
             tempfile.TemporaryDirectory(prefix="cab-list-test-", dir=ROOT)
         ))
         self.stack.enter_context(patch.dict(os.environ, {
+            "CGPT_CONTROLLER_URL": "http://127.0.0.1:0",
             "CGPT_APPROVAL_STORE": str(self.directory / "approvals.json"),
             "CGPT_APPROVAL_JOURNAL": str(self.directory / "events.ndjson"),
             "CGPT_JOURNAL_CHECKPOINT_PATH": str(self.directory / "checkpoint.json"),

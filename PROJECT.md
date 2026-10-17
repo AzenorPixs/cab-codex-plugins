@@ -2,7 +2,7 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `1.2.1`.
+Version de référence des briques CAB : `1.3.0`.
 
 Codex Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **Codex**.
 
@@ -16,18 +16,11 @@ CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni u
 
 ## 3. Principes architecturaux
 
-Le profil optimisé prépare les statistiques directement dans le contrôleur à
-partir des transitions CAB et du SSE, sans RUN d'observation supplémentaire.
-La file d'intégration et la phase documentaire réduisent les attentes communes :
-la publication reste exclusive, tandis que le rapport est finalisé ensuite sur
-sa seule ressource. Les décisions unitaires, once et le gate restent obligatoires.
-Le contrat détaillé est dans `ORCHESTRATED_CODING.md` et OpenSpec.
+CAB 1.3.0 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
 
-Le premier lot de réduction de l'exclusion prépare avant le drainage, expose
-les obstacles par RUN et regroupe les observations natives. Une transition
-optionnelle publie, libère et limite atomiquement le RUN à son rapport, avec
-reçu durable idempotent. Les validations de l'état partagé restent requises ;
-les instantanés de validation ne font pas partie de ce profil.
+Validation, synchronisation, archivage, publication et rapport protègent leurs périmètres réels sans demander la stabilité de tous les RUN. Le gel global est réservé à la réconciliation commune, la maintenance partagée, la pause globale ou l'arrêt global explicites. Les décisions unitaires, ask/once, preuves et gates sont conservés. Le contrat détaillé est dans ORCHESTRATED_CODING.md et OpenSpec.
+
+Les statistiques intégrées distinguent réservations, activité native observée, contention et exceptions. Des fenêtres 24 h/7 j/30 j et des imports filtrés permettent de consulter l'audit arrêté sans réactiver son job ni additionner des sources recouvrantes.
 
 ### 3.1 Séparation des responsabilités
 
@@ -94,7 +87,7 @@ Broker CAB unique — corrélation et readiness par RUN
    ▼
 Contrôleur unique ──► contextes A, B, … ──► Codex / Codex App Server
    │
-   └── Registre : réservations exclusives et intégration coordonnée
+   └── Registre : changes exclusifs, accès atomiques et gels exceptionnels
 
 OpenCode ── SSE HTTP commun ──► superviseur unique ──► suivi par RUN
 ```
@@ -103,7 +96,7 @@ Le transport entre OpenCode et le broker est exclusivement **MCP stdio local**. 
 
 ### 4.1 Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.0.0 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.3.0 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -139,13 +132,13 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.0.0 partagée"]
+    subgraph CAB["Infrastructure CAB 1.3.0 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
             T["Routage et contrôle d'identité<br/>session, répertoire, RUN, change, génération"]
-            R[("Registre durable des réservations<br/>changes, intentions, ressources, dépendances<br/>écriture atomique et verrou flock")]
-            I["Barrière d'intégration exclusive<br/>jalons stables et quiescence de tous les RUN<br/>publication puis réconciliation de référence"]
+            R[("Registre durable<br/>changes exclusifs, portées, accès et révisions<br/>écriture atomique et verrou flock")]
+            I["Coordination par ressource<br/>lectures compatibles, écriture exclusive<br/>publication ciblée ; gel global exceptionnel"]
             T1["Contexte RUN A<br/>décisions, mandats, gate, récupération"]
             T2["Contexte RUN B<br/>décisions, mandats, gate, récupération"]
             T <-->|"Réserver, étendre, vérifier, libérer"| R
@@ -173,7 +166,7 @@ flowchart TB
     end
 
     A["Codex App Server — mode automatique<br/>validation isolée et corrélée par RUN"]
-    W[("Répertoire de projet partagé<br/>opérations limitées aux ressources réservées")]
+    W[("Répertoire de projet partagé<br/>opérations couvertes par leurs accès compatibles")]
 
     D -->|"Objectifs, périmètres et validations"| C
     C <-->|"HTTP : registre et pilotage par RUN"| T
@@ -405,16 +398,16 @@ Codex intervient en analyse, en revue de code, et en validateur.
 
 ## 16. Documentation officiel
 
-## Pilotage concurrent 1.0.0
+## Pilotage concurrent 1.3.0
 
 Le profil concurrent partage un OpenCode, un broker MCP stdio et un contexte
 absolu de projet. Plusieurs RUN possèdent chacun leur session, contrat,
-permissions et preuves. Un registre technique réserve atomiquement changes,
-intentions et ressources ; Codex examine les dépendances et conserve l'autorité
+permissions et preuves. Un registre technique réserve atomiquement changes et
+intentions, puis attribue les accès temporaires aux ressources ; Codex examine les dépendances et conserve l'autorité
 de décision. Une réservation ne vaut jamais approbation.
 
 Le même RUN peut enchaîner des changes après libération prouvée, avec une
-nouvelle session et une génération fraîche. L'intégration commune est exclusive.
+nouvelle session et une génération fraîche. La publication protège ses ressources et leurs révisions sans suspendre les pairs indépendants.
 Le cycle parent reste en attente si le travail restant dépend d'un autre RUN.
 Le démarrage d'un RUN rejoint l'infrastructure sans purge. Les procédures de
 purge et d'arrêt communes décrites ailleurs s'appliquent seulement à une
