@@ -162,3 +162,26 @@ test('liens symboliques, liens physiques et échec de persistance restent sans e
   assert.equal(h.stats.summary().persistence.cause, 'statistics-persistence-unavailable');
   assert.equal(h.stats.summary('a', 1).contexts[0].decisions.pending, 1);
 });
+
+test('coordination par ressources et gels exceptionnels restent séparés et sans chemins', async (t) => {
+  const h = fixture(t, true); const a = h.run('a'); const b = h.run('b', 2);
+  const states = { holder: { runId: 'a', contextId: 1, state: 'HELD', protection: 'EXCLUSIVE',
+    resources: [{ key: 'file:SECRET-PATH', mode: 'write' }] }, waiting: { runId: 'b', contextId: 2,
+    state: 'WAITING', protection: 'SHARED', resources: [{ key: 'file:SECRET-PATH', mode: 'read' }] } };
+  h.registry([a,b], { coordinationProtocol: 'resource-scoped-v1', coordination: { accesses: states, global: null } });
+  h.step(1000);
+  h.registry([a,b], { referenceVersion: 3, coordinationProtocol: 'resource-scoped-v1', coordination: { accesses: {},
+    global: { state: 'DRAINING', cause: 'GLOBAL_PAUSE', authorization: 'SECRET-AUTH' } } });
+  h.step(2000);
+  h.stats.observe(a, 'resource-reconciliation-completed', { durationMs: 7 });
+  const contexts = h.stats.summary().contexts;
+  assert.equal(contexts[0].coordination.exclusiveActiveMs, 1000);
+  assert.equal(contexts[1].coordination.resourceWaitMs, 1000);
+  assert.equal(contexts[1].coordination.promotionWaitMs, 1000);
+  assert.equal(contexts[0].coordination.globalMs.GLOBAL_PAUSE, 2000);
+  assert.equal(contexts[0].coordination.reconciliationMs, 7);
+  assert.equal(contexts[0].staleMs, 0);
+  await h.stats.flush();
+  assert.equal(readFileSync(h.stats.path,'utf8').includes('SECRET'), false);
+  assert.equal(JSON.stringify(h.stats.observations.data).includes('SECRET'), false);
+});

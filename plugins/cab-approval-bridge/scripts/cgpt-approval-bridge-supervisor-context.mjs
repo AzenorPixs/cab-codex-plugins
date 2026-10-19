@@ -2,12 +2,14 @@ import { readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 
+export const VERSION = "1.3.0";
+
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
 function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "1.2.1";
+const version = "1.3.0";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -96,6 +98,9 @@ async function fetchJson(url, options = {}) {
 }
 
 function resumeAllowed(status, job) {
+  if (runId && status.coordination?.reason) return status.coordination.reason;
+  if (runId && (status.hasUnresolvedOperation || status.coordination?.accesses?.some((a) =>
+    ['WAITING', 'HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state)))) return 'resource-access-active';
   if (runId && (job?.currentCabMandate || status.unmatchedNativePermissionCount)) return "native-effect-unresolved";
   if (!job || !job.armed) return "job-unarmed";
   if (job.recovery) return "session-recovery-pending";
@@ -245,6 +250,16 @@ async function reconcile() {
       return;
     }
 
+    const latestStatus = await fetchJson(`${controllerUrl}/status`);
+    const latestJob = await fetchJson(`${controllerUrl}/job`);
+    const changed = latestJob?.jobId !== job.jobId || latestJob?.sessionId !== job.sessionId;
+    const latestDenial = resumeAllowed(latestStatus, latestJob);
+    if (changed || latestDenial) {
+      state.resumeInFlight = false;
+      state.lastResumeAttempt.result = 'cancelled';
+      await updateState('WAITING', changed ? 'job-changed-before-resume' : latestDenial);
+      return;
+    }
     await fetchJson(
       `${opencodeUrl}/session/${encodeURIComponent(job.sessionId)}/message${directoryQuery}`,
       {

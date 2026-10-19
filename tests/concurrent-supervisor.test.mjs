@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -7,13 +8,14 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-test('supervision partagée : attente de A, reprise unique de B et compteurs séparés', { timeout: 10000 }, async (t) => {
+async function checkSupervision(t, coordinationReason = null) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-multi-supervisor-'));
   const jobs = Object.fromEntries(['a', 'b'].map((id) => [id, { runId: id, jobId: 'job-' + id,
     sessionId: 'ses_' + id, directory, changeId: 'change-' + id, armed: true,
     terminalGate: { status: 'OPEN' }, lastProvenMilestone: 'milestone-' + id }]));
   const statuses = { a: { opencodeSse: 'connected', brokerReadiness: { status: 'READY', pending_count: 1 } },
     b: { opencodeSse: 'connected', brokerReadiness: { status: 'READY', pending_count: 0 } } };
+  if (coordinationReason) { statuses.a.brokerReadiness.pending_count = 0; statuses.a.coordination = { reason: coordinationReason }; }
   const sent = []; const busy = {};
   const controller = createServer((request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname;
@@ -42,7 +44,7 @@ test('supervision partagée : attente de A, reprise unique de B et compteurs sé
   const listener = createServer(); await new Promise((r) => listener.listen(0, '127.0.0.1', r));
   const port = listener.address().port; await new Promise((r) => listener.close(r));
   const child = spawn(process.execPath, [fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs', import.meta.url))],
-    { env: { ...process.env, OC_Codex_WORKSPACE: directory, OC_Codex_SUPERVISOR_STATUS_PORT: String(port),
+    { env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory, OC_Codex_SUPERVISOR_STATUS_PORT: String(port),
       OC_Codex_CONTROLLER_URL: 'http://127.0.0.1:' + controller.address().port,
       OC_Codex_OPENCODE_URL: 'http://127.0.0.1:' + opencode.address().port,
       OC_Codex_SUPERVISOR_POLL_INTERVAL_MS: '250', OC_Codex_SUPERVISOR_RESUME_DELAY_MS: '1000' }, stdio: 'ignore' });
@@ -63,6 +65,11 @@ test('supervision partagée : attente de A, reprise unique de B et compteurs sé
     await new Promise((r) => setTimeout(r, 50));
   }
   assert.equal(state.runs.a.resumeAttemptCount, 0); assert.equal(state.runs.b.resumeAttemptCount, 1);
-  assert.equal(state.runs.a.reason, 'pending-validations');
+  assert.equal(state.runs.a.reason, coordinationReason || 'pending-validations');
   assert.equal(state.runs.b.reason, 'session-not-idle');
-});
+
+}
+
+test('supervision partagée : attente de A, reprise unique de B et compteurs séparés', { timeout: 10000 }, (t) => checkSupervision(t));
+test('un conflit de ressource de A ne provoque aucune relance et préserve B', { timeout: 10000 }, (t) => checkSupervision(t, 'resource-conflict'));
+test('une pause ciblée reste prioritaire sur le réveil du superviseur', { timeout: 10000 }, (t) => checkSupervision(t, 'run-pause'));

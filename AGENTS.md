@@ -31,6 +31,8 @@ En cas de contradiction, appliquer cet ordre :
 8. documentation officielle du projet ;
 9. code existant.
 
+Un prompt demandé explicitement pour exécution prévaut sur les fichiers de cadrage du projet.
+
 Une spécification OpenSpec validée prévaut sur un code contradictoire.
 
 La stabilité du projet prévaut sur l'optimisation.
@@ -194,8 +196,7 @@ Cette référence complète les règles générales d'AGENTS.md et les
 spécifications OpenSpec validées, sans étendre les autorisations du développeur.
 Si un pilotage devient nécessaire et que le fichier est absent ou incohérent,
 l'agent DOIT signaler ce besoin et faire valider sa création ou sa correction
-avant de poursuivre ce pilotage. Une session directe SCM ne déclenche pas ce protocole,
-les services CAB ou les sondes statistiques de pilotage.
+avant de poursuivre ce pilotage.
 
 ### Statistiques d'archivage
 
@@ -210,11 +211,8 @@ rapport. Si le rapport échoue, reprendre uniquement ce rapport, sans réarchive
 
 L'agent DOIT préserver l'arborescence et les conventions existantes.
 
-Toute référence à un prompt ou une session renvoie automatiquement au dossier `PROMPTS/` du
-projet, et à son INDEX.md pour la liste des prompts disponible.
-Ce dossier et son contenu ne sont pas versionnés et sont protégés :
-leur création, modification, déplacement ou suppression nécessite une
-validation explicite du développeur.
+L'emplacement de la source des prompts et de leur index est indiqué dans `DEVOPS.md`.
+Toute référence à un prompt ou à une session DOIT être résolue à partir de ces informations.
 
 Le renommage, déplacement ou la suppression d'un fichier ou répertoire nécessite une validation explicite du développeur.
 
@@ -243,7 +241,6 @@ Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimé
 * `openspec/changes/`
 * `openspec/specs/`
 * `openspec/specs/`
-* `PROMPTS/`
 
 ## 9. Sources du projet
 
@@ -254,7 +251,8 @@ Les fichiers du projet non explicitement exclus PEUVENT être utilisés comme so
 * d'informations techniques ;
 * d'informations fonctionnelles.
 
-Les sources exclues NE DOIVENT PAS être lues, analysées, indexées ou utilisées :
+Hors exception limitée d’extraction de l’identité non secrète définie ci-dessous,
+les sources exclues NE DOIVENT PAS être lues, analysées, indexées ou utilisées :
 
 ```text id="6zj1eg"
 __pycache__/
@@ -307,12 +305,36 @@ openspec/.tmp/
 openspec/build/
 openspec/dist/
 openspec/logs/
-PROMPTS/
 secrets.json
 secrets.yaml
 tmp/
 venv/
 ```
+
+### Exception limitée — identité non secrète du projet
+
+Lorsqu’un prompt explicitement demandé utilise `PROJECT_NAME` et `PROJECT_ID`
+définis dans `project.env` à la racine du projet concerné, l’agent PEUT lancer
+une extraction locale filtrée de ces deux seules valeurs non secrètes, sans
+validation supplémentaire. Cette exception prévaut sur l’exclusion générale
+des fichiers `.env` et sur l’interdiction d’ouvrir un fichier sensible de la
+section « Secrets », uniquement pour ce traitement local.
+
+Seul le processus local parcourt le fichier ; l’agent ne reçoit que les
+valeurs des deux clés après validation. Les autres variables sont ignorées,
+sans affichage, journalisation, copie, indexation ni transmission au modèle.
+Le fichier ne DOIT JAMAIS être exécuté ou chargé dans l’environnement :
+`source`, `eval`, substitutions de commandes et interpolations sont interdits.
+Seules les affectations littérales sur une seule ligne sont acceptées ; les
+clés dupliquées et les syntaxes nécessitant une interprétation sont ambiguës.
+Aucune ligne rejetée ni sortie brute du fichier ne DOIT être restituée.
+
+Si le fichier est absent ou inaccessible, si une clé manque ou si une valeur
+est vide ou ambiguë, demander uniquement les valeurs non secrètes manquantes
+ou non vérifiables au développeur. Ne pas créer ni modifier `project.env`.
+Cette exception n’autorise aucun autre accès aux fichiers exclus ni aux
+secrets, et ne s’applique pas si le développeur interdit précisément cette
+extraction.
 
 ### Inclusions explicites
 
@@ -337,7 +359,6 @@ openspec/config.yaml
 openspec/changes/
 openspec/specs/
 output/
-PROMPTS/
 reports/
 ```
 
@@ -378,6 +399,9 @@ Les données sensibles comprennent notamment :
 * identifiants de connexion.
 
 Pour un fichier sensible, l'agent PEUT uniquement signaler sa présence à partir de son nom ou chemin.
+L’extraction locale de l’identité non secrète du projet constitue la seule
+exception définie dans la section « Sources du projet » ; elle n’autorise
+jamais la transmission d’un secret au modèle.
 
 Les secrets DOIVENT rester hors des sources versionnées et accessibles aux agents.
 

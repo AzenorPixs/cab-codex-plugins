@@ -1,0 +1,407 @@
+{
+  "session": "cab-1-3-0-resource-scoped-coordination",
+  "postReportStrict": {
+  "cmd": "/home/devops/.local/npm/bin/openspec validate --all --strict --no-interactive",
+  "chunk_id": "780166",
+  "wall_time_seconds": 0.13269894,
+  "exit_code": 0,
+  "original_token_count": 86,
+  "output": "✓ spec/approval-persistence\n✓ spec/approval-workflow\n✓ spec/archive-session-statistics\n✓ spec/codex-integration-distribution\n✓ spec/concurrent-run-coordination\n✓ spec/controller-transport\n✓ spec/native-session-statistics\n✓ spec/persistent-job-supervision\n✓ spec/supervision-remediation\nTotals: 9 passed, 0 failed (9 items)\n"
+},
+  "subsequentChecks": [
+  {
+    "cmd": "/home/devops/.local/npm/bin/openspec validate integrate-observation-statistics --strict --no-interactive",
+    "chunk_id": "ccc6b1",
+    "wall_time_seconds": 0.124641357,
+    "exit_code": 0,
+    "original_token_count": 13,
+    "output": "Change 'integrate-observation-statistics' is valid\n"
+  },
+  {
+    "cmd": "/home/devops/.local/npm/bin/openspec validate add-resource-scoped-coordination-1-3-0 --strict --no-interactive",
+    "chunk_id": "d04b5d",
+    "wall_time_seconds": 0.11519866,
+    "exit_code": 0,
+    "original_token_count": 15,
+    "output": "Change 'add-resource-scoped-coordination-1-3-0' is valid\n"
+  },
+  {
+    "cmd": "/home/devops/.local/npm/bin/openspec archive integrate-observation-statistics --yes --json",
+    "chunk_id": "94a40b",
+    "wall_time_seconds": 0.128573549,
+    "exit_code": 0,
+    "original_token_count": 113,
+    "output": "{\n  \"archive\": {\n    \"change\": \"integrate-observation-statistics\",\n    \"archivedAs\": \"2026-10-17-integrate-observation-statistics\",\n    \"path\": \"/home/devops/datas/cab/openspec/changes/archive/2026-10-17-integrate-observation-statistics\",\n    \"specsUpdated\": true,\n    \"totals\": {\n      \"added\": 8,\n      \"modified\": 0,\n      \"removed\": 0,\n      \"renamed\": 0\n    }\n  },\n  \"root\": {\n    \"path\": \"/home/devops/datas/cab\",\n    \"source\": \"nearest\"\n  }\n}\n"
+  },
+  {
+    "cmd": "/home/devops/.local/npm/bin/openspec archive add-resource-scoped-coordination-1-3-0 --yes --json",
+    "chunk_id": "be23fd",
+    "wall_time_seconds": 0.113879433,
+    "exit_code": 0,
+    "original_token_count": 118,
+    "output": "{\n  \"archive\": {\n    \"change\": \"add-resource-scoped-coordination-1-3-0\",\n    \"archivedAs\": \"2026-10-17-add-resource-scoped-coordination-1-3-0\",\n    \"path\": \"/home/devops/datas/cab/openspec/changes/archive/2026-10-17-add-resource-scoped-coordination-1-3-0\",\n    \"specsUpdated\": true,\n    \"totals\": {\n      \"added\": 31,\n      \"modified\": 23,\n      \"removed\": 0,\n      \"renamed\": 0\n    }\n  },\n  \"root\": {\n    \"path\": \"/home/devops/datas/cab\",\n    \"source\": \"nearest\"\n  }\n}\n"
+  },
+  {
+    "cmd": "/home/devops/.local/npm/bin/openspec validate --all --strict --no-interactive",
+    "chunk_id": "1579a5",
+    "wall_time_seconds": 0.111561892,
+    "exit_code": 0,
+    "original_token_count": 86,
+    "output": "✓ spec/approval-persistence\n✓ spec/approval-workflow\n✓ spec/archive-session-statistics\n✓ spec/codex-integration-distribution\n✓ spec/concurrent-run-coordination\n✓ spec/controller-transport\n✓ spec/native-session-statistics\n✓ spec/persistent-job-supervision\n✓ spec/supervision-remediation\nTotals: 9 passed, 0 failed (9 items)\n"
+  }
+],
+  "recordedChecks": [
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/resource-coordination.test.mjs",
+      "chunk_id": "311be5",
+      "wall_time_seconds": 0.43133634,
+      "exit_code": 0,
+      "original_token_count": 455,
+      "output": "✔ three independent RUNs execute without a cohort or global integration (29.11951ms)\n✔ an entire set waits without partial ownership while independent work advances (23.407133ms)\n✔ readers coexist and later readers do not starve a waiting writer (17.649831ms)\n✔ finished writes make queued preparations stale rather than overwriting a new base (15.604132ms)\n✔ private access promotes safely when a peer declares its parent (15.109664ms)\n✔ no lock extensions or upgrades can wait while holding an access (15.22786ms)\n✔ hardlink aliases are refused and subtree proofs notice new descendants (9.912234ms)\n✔ unknown effects survive restart, fence old permissions and require native proof (59.079532ms)\n✔ OpenSpec read validation does not suspend independent code writes (11.288527ms)\n✔ scoped publication is idempotent, enters REPORT and does not stale independent proofs (53.963548ms)\n✔ pause is targeted, global exceptions drain explicitly and timeout never releases (14.970708ms)\n✔ legacy migration preserves identities and refuses mutations until maintenance (57.834034ms)\n✔ a group retains its complete set but each native operation stays distinct (10.499523ms)\n✔ publication protects all earlier written resources and keeps their revisions after release (11.492089ms)\n✔ migration backup rolls back only before new effects and is reusable for a fresh maintenance (55.590017ms)\n✔ a restored group requires a fresh fence before a new corrective permission (52.629796ms)\n✔ une réponse once tardive conserve la protection inconnue et son acquittement (10.561366ms)\n✔ un état enrichi ou une identité incohérente refuse la restauration sans réécriture (10.197308ms)\nℹ tests 18\nℹ suites 0\nℹ pass 18\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 481.889562\n"
+    },
+    {
+      "cmd": "/home/devops/python/current/bin/python3 -m unittest discover -s tests -p 'test_*.py'",
+      "chunk_id": "dd8aa3",
+      "wall_time_seconds": 3.9093683,
+      "exit_code": 1,
+      "original_token_count": 1320,
+      "output": ".................................F.....................\n======================================================================\nFAIL: test_cycle_selection_is_reserved_and_checkpoint_scoped (test_piloted_prompts.PilotedPromptsTest.test_cycle_selection_is_reserved_and_checkpoint_scoped)\n----------------------------------------------------------------------\nTraceback (most recent call last):\n  File \"/home/devops/datas/cab/tests/test_piloted_prompts.py\", line 22, in test_cycle_selection_is_reserved_and_checkpoint_scoped\n    self.assertIn(\"POST /runs/reserve\", transformed)\n    ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: 'POST /runs/reserve' not found in \"un seul change réservé est traité à la fois par RUN ;\\naucun change n’est créé avant sa réservation atomique et celle de son intention ;\\noutput/cismp/<run_id>/state.json\\n\\n## CAB 1.3.0 — réservations et accès par ressource\\n\\nLire ORCHESTRATED_CODING.md avant pilotage. Un OpenCode et un broker stdio sont partagés ; jobs, mandats, décisions, once, preuves et gates restent isolés par RUN.\\n\\nConsulter GET /runs et OpenSpec, examiner dépendances sémantiques et ressources puis réserver atomiquement change/intention avant préparation. Un RUN traite un change réservé à la fois ; les sous-jobs héritent du parent. Chaque change suivant conserve run_id mais utilise session, jobId et génération neufs. Les checkpoints sont output/<prompt>/<run_id>/state.json ; conserver preuves/propriété lors d'une reprise historique sans écraser un pair.\\n\\nLes périmètres déclarés peuvent se recouvrir. Les fichiers partagés utilisent des accès temporaires : lectures compatibles, écriture exclusive, ensemble acquis atomiquement ou attente sans attribution partielle. La FIFO ne bloque que les demandes incompatibles ; les ressources indépendantes continuent. exclusiveResources est une optimisation vérifiée ; un pair recouvrant attend la promotion sûre du fichier privé.\\n\\nCibler /runs/<run_id>/job/... et /decision/<requestId>. request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, expected_revisions et resources. Préparer le contenu exact ; une base périmée exige relecture et nouvelle demande. Une décision reste explicite, une édition porte un fichier, une commande son manifeste complet, et once est unique. Une réservation ou un verrou n'approuve rien.\\n\\nAprès décision et avant effet, utiliser /locks/acquire ; vérifier HELD, token et fencing. WAITING ou STALE ne donne aucune permission. Un fichier privé prouvé peut utiliser l'admission interne sans verrou partagé séparé. Ne pas attendre une extension de ressources tout en conservant un ensemble. Chaque sous-opération d'un groupe reste soumise à sa propre décision/once ; une correction approuvée peut rester dans l'ensemble détenu via /locks/attach.\\n\\nLa fin native corrélée et l'examen des effets précèdent /locks/release. Un effet inconnu conserve ses protections ; idle, timeout ou silence ne libèrent rien. Prévol divergent : conserver candidate, RUN et preuves ; terminer/libérer son accès avant transfert de récupération, sans purge ni rejeu.\\n\\nProtéger les seules entrées/effets des validations. openspec validate --all --strict protège OpenSpec sans suspendre les éditions de code indépendantes. /publish vérifie les révisions des preuves et toutes les écritures à publier, puis persiste reçu, génération et libération sûre. Les pairs indépendants continuent sans /ready de cohorte ni réconciliation générale de referenceVersion. Synchronisation/archivage restent des mandats distincts autorisés sur leurs ressources. Une ancienne /integration ou /integration-request est refusée dans le profil 1.3.0.\\n\\nREPORT reste limité au STATISTIQUES.md de l'archive du change. Préparer les statistiques via /statistics et format=markdown, finaliser/vérifier les six sections après archive, puis gate, désarmement et /release. Les mesures absentes restent N/A ; l'archive seule ne prouve pas la fin du parent.\\n\\nPause/arrêt ciblés ne suspendent que leur RUN. Les seuls gels globaux sont GLOBAL_RECONCILIATION, SHARED_MAINTENANCE, GLOBAL_PAUSE et GLOBAL_STOP ; ils demandent cause, autorité, drainage et quiescence prouvés. Ajouter/reprendre un RUN ne purge ni ne reconnecte l'infrastructure. Le registre schéma 4 et le protocole nécessitent un jeu compatible ; migration et retour arrière sont une maintenance explicitement autorisée.\\n\\nSans candidat disponible, attendre les dépendances ou conflits ; ne déclarer TERMINÉ qu'après preuve d'absence de travail restant. CISM, CAISM et prompts directs restent exclus du pilotage concurrent. La préparation source ne propage aucun prompt consommateur.\\n<!-- CAB-PROMPT-END -->\\n\"\n\n----------------------------------------------------------------------\nRan 55 tests in 3.887s\n\nFAILED (failures=1)\nSYNTHETIC_BENCHMARK {\"approvals\": 694, \"initial_events\": 16774, \"initial_journal_bytes\": 7521590, \"recovery_journal_reads\": 5, \"recovery_seconds\": 0.686, \"isolated_mcp_process_seconds\": 1.744}\nSYNTHETIC_LIST_BENCHMARK {\"approvals\": 694, \"events\": 16774, \"journal_bytes\": 7706222, \"journal_reads\": 1, \"seconds\": 0.102}\n"
+    },
+    {
+      "cmd": "/home/devops/python/current/bin/python3 -m unittest discover -s tests -p 'test_*.py'",
+      "chunk_id": "752ce6",
+      "wall_time_seconds": 3.423338903,
+      "exit_code": 0,
+      "original_token_count": 119,
+      "output": "........................................................\n----------------------------------------------------------------------\nRan 56 tests in 3.406s\n\nOK\nSYNTHETIC_BENCHMARK {\"approvals\": 694, \"initial_events\": 16774, \"initial_journal_bytes\": 7521590, \"recovery_journal_reads\": 5, \"recovery_seconds\": 0.602, \"isolated_mcp_process_seconds\": 1.622}\nSYNTHETIC_LIST_BENCHMARK {\"approvals\": 694, \"events\": 16774, \"journal_bytes\": 7706222, \"journal_reads\": 1, \"seconds\": 0.095}\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/concurrent-controller.test.mjs",
+      "chunk_id": "65a7cb",
+      "wall_time_seconds": 7.196811169,
+      "exit_code": 0,
+      "original_token_count": 724,
+      "output": "✔ publication ciblée HTTP : reçu après reprise, génération, gate et pair indépendant (353.065955ms)\n✔ le contrôle global exceptionnel regroupe les lectures natives de la cohorte (171.773973ms)\n✔ les attentes de ressources exposent le pair courant sans contenu natif sensible (178.169469ms)\n✔ une cohorte occupée, invalide ou divergente refuse le gel exceptionnel (169.339735ms)\n✔ un événement SSE pendant le contrôle exceptionnel impose une observation neuve (188.146384ms)\n✔ une mutation pendant observation exceptionnelle refuse une cohorte périmée (164.210633ms)\n✔ une progression tardive conserve les effets non résolus pendant le drainage global (162.02655ms)\n✔ deux publications simultanées produisent un seul reçu sans nouvelle permission (177.382028ms)\n✔ une fin native inconnue garde les protections et interdit le gate (205.058842ms)\n✔ sélection simultanée : un seul propriétaire du change et aucun écrasement (153.286619ms)\n✔ trois sessions, permissions once exactes et décisions isolées (222.95734ms)\n✔ une session allow est refusée sans bloquer la permission once d’un autre RUN (194.268876ms)\n✔ un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée (162.240234ms)\n✔ une identité déclarée ne remplace pas le tool part natif de la session ciblée (161.643736ms)\n✔ une publication indépendante ne suspend pas le pair ni sa génération (207.853646ms)\n✔ récupération de A avec B actif : réservation conservée et génération renouvelée (204.203038ms)\n✔ périmètre, génération, identité native et redémarrage refusent les permissions obsolètes (324.78044ms)\n✔ un broker MCP réel transporte trois validations parallèles sans confondre les permissions (1336.144504ms)\n✔ statistiques automatiques : broker relayé, décision, once, SSE filtré et reprise (347.302785ms)\n✔ closing et rapport ciblés : le pair continue et le gate exige la fin native (269.130489ms)\n✔ une réduction quiescente retire project:* sans accepter une génération ancienne (170.594842ms)\n✔ restauration humaine concurrente conserve propriétaire et digest sans nouvelle once (372.927871ms)\n✔ consultations et import statistique HTTP ne changent ni registre ni permissions (311.405052ms)\n✔ pause ciblée et intégrité commune ferment leurs admissions sans approbation implicite (168.522824ms)\n✔ ancien broker ou anciens champs refusés sans permission ni gel ordinaire (158.049679ms)\n✔ un refus explicite reste possible pendant une pause après préparation (161.743837ms)\n✔ migration HTTP conserve les RUN et exige once exact avant leur reprise métier (353.231535ms)\n✔ la fin native accepte un appel commencé avant ask mais refuse un autre callID (196.378567ms)\nℹ tests 28\nℹ suites 0\nℹ pass 28\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 7260.415706\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/concurrent-run-registry.test.mjs",
+      "chunk_id": "70e945",
+      "wall_time_seconds": 0.451795278,
+      "exit_code": 0,
+      "original_token_count": 554,
+      "output": "✔ publication et REPORT sont observés en une seule transition durable (14.61071ms)\n✔ une transaction divergente ou sans garde ne modifie ni barrière ni référence (10.133533ms)\n✔ le reçu survit à la reprise et au change suivant du même RUN (26.899348ms)\n✔ une persistance échouée conserve sur disque la barrière sans publication partielle (20.196047ms)\n✔ un reçu corrompu est refusé à la restauration sans réécriture (15.97704ms)\n✔ un conflit sur le rapport refuse toute publication atomique (25.747258ms)\n✔ une sélection atomique admet un seul propriétaire du change ou de son intention (14.332499ms)\n✔ trois RUN indépendants coexistent et les générations anciennes sont refusées (17.261049ms)\n✔ les exclusions couvrent lectures, écritures, répertoires et effets globaux (20.827651ms)\n✔ l'extension conflictuelle préserve la réservation initiale (15.31154ms)\n✔ une dépendance attend la livraison et les réservations abandonnées ne la satisfont pas (14.560503ms)\n✔ une seule intégration à la fois et aucune libération pendant sa détention (16.7146ms)\n✔ traversal et liens sortants sont refusés, les alias internes se recouvrent (13.475496ms)\n✔ restauration conserve propriétaire, génération et intégration ; une autre autorité est refusée (44.396488ms)\n✔ un document invalide échoue fermé sans remplacer l'état (15.530962ms)\n✔ la restauration relit sous verrou et ne perd pas la dernière réservation (42.013394ms)\n✔ le registre refuse liens et identités de contexte invalides sans exposer de contenu (19.743652ms)\n✔ file FIFO durable, drainage des RUN prêts et ordre conservé après réconciliation (18.158405ms)\n✔ annulation explicite de file et réduction de ressources ne transfèrent aucune permission (26.678016ms)\n✔ réduire toutes les écritures ne contourne pas l’obligation de publication (24.296883ms)\n✔ closing libère les fichiers métier, conserve la publication et isole son propre rapport (26.384523ms)\n✔ file ou phase documentaire corrompue échoue fermée à la restauration (26.439368ms)\nℹ tests 22\nℹ suites 0\nℹ pass 22\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 475.770523\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/resource-coordination.test.mjs",
+      "chunk_id": "9591a0",
+      "wall_time_seconds": 0.559328172,
+      "exit_code": 0,
+      "original_token_count": 455,
+      "output": "✔ three independent RUNs execute without a cohort or global integration (15.014796ms)\n✔ an entire set waits without partial ownership while independent work advances (14.534972ms)\n✔ readers coexist and later readers do not starve a waiting writer (9.441991ms)\n✔ finished writes make queued preparations stale rather than overwriting a new base (9.824196ms)\n✔ private access promotes safely when a peer declares its parent (14.692406ms)\n✔ no lock extensions or upgrades can wait while holding an access (12.354584ms)\n✔ hardlink aliases are refused and subtree proofs notice new descendants (17.490762ms)\n✔ unknown effects survive restart, fence old permissions and require native proof (68.529417ms)\n✔ OpenSpec read validation does not suspend independent code writes (14.183046ms)\n✔ scoped publication is idempotent, enters REPORT and does not stale independent proofs (87.675496ms)\n✔ pause is targeted, global exceptions drain explicitly and timeout never releases (26.817967ms)\n✔ legacy migration preserves identities and refuses mutations until maintenance (67.132915ms)\n✔ a group retains its complete set but each native operation stays distinct (19.116362ms)\n✔ publication protects all earlier written resources and keeps their revisions after release (15.663751ms)\n✔ migration backup rolls back only before new effects and is reusable for a fresh maintenance (66.877611ms)\n✔ a restored group requires a fresh fence before a new corrective permission (69.275818ms)\n✔ une réponse once tardive conserve la protection inconnue et son acquittement (20.648037ms)\n✔ un état enrichi ou une identité incohérente refuse la restauration sans réécriture (16.06487ms)\nℹ tests 18\nℹ suites 0\nℹ pass 18\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 573.131524\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/native-statistics.test.mjs",
+      "chunk_id": "ff032c",
+      "wall_time_seconds": 0.0598311,
+      "exit_code": 0,
+      "original_token_count": 300,
+      "output": "✔ durées MONO/MULTI/ZERO et triple concurrence excluent les prévols et distinguent RSMP (3.146405ms)\n✔ déduplication SSE, données sensibles exclues et états natifs distincts des décisions (4.047191ms)\n✔ une approbation ne devient pas un outil exécuté et les erreurs ne sont pas des refus (0.853409ms)\n✔ coupure SSE et horloge longue restent inconnues sans inventer une activité nulle (0.488655ms)\n✔ une baseline tardive ne remplace pas un état SSE plus récent (0.418633ms)\n✔ les tentatives avant admission sont bornées sans être assimilées à des refus distincts (0.492615ms)\n✔ reprise durable et nouveau contexte conservent leurs populations distinctes (2.811849ms)\n✔ quantiles bornés, brouillon à six sections et N/A explicites (38.235387ms)\n✔ snapshot invalide ou enrichi de contenu interdit reste intact et signale sa limite (2.082292ms)\n✔ liens symboliques, liens physiques et échec de persistance restent sans effet métier (1.104673ms)\n✔ coordination par ressources et gels exceptionnels restent séparés et sans chemins (1.358614ms)\nℹ tests 11\nℹ suites 0\nℹ pass 11\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 58.162636\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/observation-statistics.test.mjs",
+      "chunk_id": "3ad1c3",
+      "wall_time_seconds": 0.000022418,
+      "exit_code": 0,
+      "original_token_count": 281,
+      "output": "✔ window clipping partitions known, unknown, two and three without adding pairs (1.009951ms)\n✔ concurrent identical imports persist once and recover the same provenance (4.732918ms)\n✔ unknown fields, commands, wrong project and malformed quotas never enter the store (0.423409ms)\n✔ scope changes and missing queue evidence stay unknown (0.208377ms)\n✔ REPORT is current and the last selection requires an observed delivery (0.927896ms)\n✔ native hooks record filtered windows without converting historical cumulative counters (1.640473ms)\n✔ persistence failure stays visible and cannot acknowledge an undurable duplicate (0.680322ms)\n✔ enriched or linked snapshots are preserved and marked invalid (1.430386ms)\n✔ streaming audit migration keeps scopes, gaps, delivery bounds and drops raw bodies (2.188934ms)\n✔ audit migration refuses an active source, linked input and unordered samples (0.828465ms)\n✔ retention and resource metadata remain bounded and explicit in windows (0.333423ms)\nℹ tests 11\nℹ suites 0\nℹ pass 11\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 17.461422\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/controller-service-distribution.test.mjs",
+      "chunk_id": "ca6ab7",
+      "wall_time_seconds": 0.006437413,
+      "exit_code": 0,
+      "original_token_count": 462,
+      "output": "✔ les briques distribuées publient la même version de base 1.3.0 (5.06982ms)\n✔ la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué (0.377759ms)\n✔ distribue une unité utilisateur inactive par défaut (0.161366ms)\n✔ la commande CAB installe sans activer, démarre et arrête explicitement (0.224569ms)\n✔ distribue un superviseur utilisateur inactif par défaut (0.136453ms)\n✔ la commande CAB prévole le modèle OpenCode avant la session persistante (0.229739ms)\n✔ les artefacts distribués annoncent la même version de base (0.388977ms)\n✔ la mise à jour déploie le superviseur sans le démarrer (0.210119ms)\n✔ la marketplace CAB distribue les statistiques avec le plugin existant (0.4086ms)\n✔ AGENTS renvoie au protocole local dédié avec ses contrats techniques (4.17019ms)\n✔ le protocole exige un rapport par archive et empêche une clôture sans preuve (2.531416ms)\n✔ le protocole distribué protège la lecture seule et décrit la récupération explicite (0.403653ms)\n✔ le protocole distribue des cadences indépendantes et une attente PLLM persistante (1.970624ms)\n✔ la réactivation sûre est distribuée sans tools true pendant la génération (0.26693ms)\n✔ le prévol divergent conserve la candidate et le job dans le protocole distribué (0.436911ms)\n✔ les sondes statistiques n'arrêtent pas le travail pour attendre le créneau (1.883602ms)\n✔ le refus par polling après timeout est distribué avec une sortie humaine explicite (1.521922ms)\n✔ status route directement la consultation avant toute boucle de pilotage (0.216435ms)\n✔ le contrat status conserve le tableau métier, la fraîcheur et les limites des preuves (0.201098ms)\nℹ tests 19\nℹ suites 0\nℹ pass 19\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 25.875599\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-configuration.test.mjs",
+      "chunk_id": "4e671d",
+      "wall_time_seconds": 5.438635912,
+      "exit_code": 1,
+      "original_token_count": 851,
+      "output": "✔ refuse une interface contrôleur non loopback (44.184867ms)\n✔ refuse un mode de décision inconnu (42.108605ms)\n✔ accepte le workspace absolu /workspace (42.012683ms)\n✔ accepte le workspace absolu /home/devops/datas/cab (40.108378ms)\n✔ accepte le workspace absolu /tmp/cab-controller-workspace (38.345703ms)\n✔ refuse un workspace relatif (43.167224ms)\n✔ propage les trois identifiants à une décision manuelle (163.870964ms)\n✔ CGP05 refuse le gate tant qu'une validation manuelle locale reste indécise (98.975467ms)\n✔ relances manuelles sans tour Codex, puis décision explicite unique (131.497949ms)\n✖ réconcilie une permission native corrélée apparue après la décision (1189.814227ms)\n✖ corrèle les commandes avec strictCommands=false (1139.039436ms)\n✖ corrèle les commandes avec strictCommands=true (1287.437393ms)\n✔ conserve une décision manuelle rejected face à une décision automatique tardive (1184.755339ms)\nℹ tests 13\nℹ suites 0\nℹ pass 10\nℹ fail 3\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 5485.082785\n\n✖ failing tests:\n\ntest at tests/controller-configuration.test.mjs:463:1\n✖ réconcilie une permission native corrélée apparue après la décision (1189.814227ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n  + []\n  - [\n  -   {\n  -     body: {\n  -       response: 'once'\n  -     },\n  -     id: 'permission-123'\n  -   }\n  - ]\n  \n      at TestContext.<anonymous> (file:///home/devops/datas/cab/tests/controller-configuration.test.mjs:588:10)\n      at async Test.run (node:internal/test_runner/test:1409:7)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: [],\n    expected: [Array],\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n\ntest at tests/controller-configuration.test.mjs:775:3\n✖ corrèle les commandes avec strictCommands=false (1139.039436ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n  + []\n  - [\n  -   {\n  -     body: {\n  -       response: 'once'\n  -     },\n  -     id: 'permission-command-123'\n  -   }\n  - ]\n  \n      at testCommandCorrelation (file:///home/devops/datas/cab/tests/controller-configuration.test.mjs:755:10)\n      at async Test.run (node:internal/test_runner/test:1409:7)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: [],\n    expected: [Array],\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n\ntest at tests/controller-configuration.test.mjs:775:3\n✖ corrèle les commandes avec strictCommands=true (1287.437393ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:\n  + actual - expected\n  \n  + []\n  - [\n  -   {\n  -     body: {\n  -       response: 'once'\n  -     },\n  -     id: 'permission-command-exact'\n  -   }\n  - ]\n  \n      at testCommandCorrelation (file:///home/devops/datas/cab/tests/controller-configuration.test.mjs:755:10)\n      at async Test.run (node:internal/test_runner/test:1409:7)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: [],\n    expected: [Array],\n    operator: 'deepStrictEqual',\n    diff: 'simple'\n  }\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-configuration.test.mjs",
+      "chunk_id": "e8c769",
+      "wall_time_seconds": 2.669491447,
+      "exit_code": 0,
+      "original_token_count": 268,
+      "output": "✔ refuse une interface contrôleur non loopback (37.217359ms)\n✔ refuse un mode de décision inconnu (42.319154ms)\n✔ accepte le workspace absolu /workspace (48.970062ms)\n✔ accepte le workspace absolu /home/devops/datas/cab (48.015916ms)\n✔ accepte le workspace absolu /tmp/cab-controller-workspace (51.251294ms)\n✔ refuse un workspace relatif (57.302723ms)\n✔ propage les trois identifiants à une décision manuelle (156.581892ms)\n✔ CGP05 refuse le gate tant qu'une validation manuelle locale reste indécise (134.229479ms)\n✔ relances manuelles sans tour Codex, puis décision explicite unique (135.970913ms)\n✔ réconcilie une permission native corrélée apparue après la décision (217.353547ms)\n✔ corrèle les commandes avec strictCommands=false (143.690251ms)\n✔ corrèle les commandes avec strictCommands=true (465.394445ms)\n✔ conserve une décision manuelle rejected face à une décision automatique tardive (1187.071043ms)\nℹ tests 13\nℹ suites 0\nℹ pass 13\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2746.323166\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-session-recovery.test.mjs",
+      "chunk_id": "0bdf2c",
+      "wall_time_seconds": 6.656469175,
+      "exit_code": 0,
+      "original_token_count": 1025,
+      "output": "✔ refuse les règles natives non prouvées avant admission et prépare seulement sous ask (174.894513ms)\n✔ refuse panne HTTP et contexte divergent avant validation sans enregistrer de décision (107.3731ms)\n✔ la réactivation permissive refuse le prévol puis ask permet une décision et once neufs (136.863597ms)\n✔ contrôle aussi edit et permet le refus après une dérive avant décision manuelle (110.617846ms)\n✔ ne transmet pas once après dérive et conserve la décision approuvée intacte (135.127024ms)\n✔ le mode automatique recontrôle ask avant de conserver approved (123.03327ms)\n✔ le mode automatique sous ask conserve une seule approbation et consomme once (103.246496ms)\n✔ un refus concurrent reste définitif pendant le contrôle ask d’une approbation (108.773754ms)\n✔ une récupération concurrente invalide l’admission suspendue sur le contrôle ask (126.598163ms)\n✔ récupère le même job, invalide les anciens mandats et conserve les preuves après redémarrage (406.795143ms)\n✔ refuse les préconditions divergentes sans changer le job (110.195234ms)\n✔ prévol strict même sans strictCommands et consommation unique (369.591815ms)\n✔ refuse true avec un change divergent sans purger ni valider la récupération (101.825812ms)\n▶ refuse les champs absents avant enregistrement et conserve le job gelé\n  ✔ approval_id (101.809065ms)\n  ✔ files (105.395564ms)\n✔ refuse les champs absents avant enregistrement et conserve le job gelé (207.787745ms)\n✔ un refus explicite pour délai prescrit omis ne consomme aucune permission (109.859918ms)\n✔ refuse les fausses preuves natives et garde le gel (145.096973ms)\n✔ sérialise les transitions et restaure le gel après redémarrage (209.500043ms)\n✔ accepte un polling MCP corrélé après délai sans inventer de preuve (126.167623ms)\n✔ retry accepte le refus par cgpt-validation_poll_approval après timeout et conserve la frontière (140.972428ms)\n✔ retry accepte le refus par cgpt-validation_get_approval après timeout et conserve la frontière (154.678192ms)\n✔ retry refuse chaque identité ou opération de polling divergente sans mutation (165.413927ms)\n✔ retry refuse un refus de polling sans décision locale restaurée (195.593736ms)\n✔ retry conserve la candidate et les refus puis complete vérifie seulement le nouvel essai (264.800544ms)\n✔ retry refuse absence de preuve, timeout, effet natif et identités réutilisées (105.459813ms)\n✔ retry refuse un prévol approuvé ou consommé (127.093974ms)\n✔ retry accepte un rejet MCP avant enregistrement et garde les frontières successives (156.412104ms)\n✔ retry sérialise les mutations et ne reconstruit pas une décision perdue (251.418569ms)\n✔ reconcile conserve le prévol invalide, exige un essai neuf avec once et garde retry strict (233.827197ms)\n✔ reconcile après redémarrage utilise les preuves natives sans recréer la décision locale perdue (227.143163ms)\n✔ reconcile refuse autorisation absente, preuve divergente, autre effet et permission allow (151.380771ms)\n✔ reconcile refuse une ancienne permission déjà consommée (140.349376ms)\n✔ complete accepte un timeout cgpt-validation_poll_approval corrélé suivi de APPROVED et once (136.770811ms)\n✔ complete accepte un timeout cgpt-validation_get_approval corrélé suivi de APPROVED et once (135.009842ms)\n✔ complete refuse les timeouts divergents et les preuves manquantes après timeout (158.459031ms)\n✔ prepare borne les diagnostics déjà présents et garde leur empreinte avant complete (118.367693ms)\n✔ prepare refuse un effet natif préalable au lieu de le masquer (113.488903ms)\n✔ complete humain restaure le même job bloqué après restart sans nouvelle once (335.551714ms)\n✔ restauration humaine refuse empreinte, décision, gate ou preuves divergents sans mutation (239.245515ms)\n✔ complete humain accepte une récupération héritée avec diagnostics pré-prepare intacts (242.601123ms)\nℹ tests 41\nℹ suites 0\nℹ pass 41\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 6713.929211\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-job-restoration.test.mjs",
+      "chunk_id": "03a556",
+      "wall_time_seconds": 1.617745846,
+      "exit_code": 0,
+      "original_token_count": 579,
+      "output": "✔ un contrat absent permet un démarrage sans job (97.162024ms)\n✔ restaure le contrat valide, son gel et ses sessions révoquées sans réécriture (97.590794ms)\n✔ refuse un JSON malformé sans exposer son contenu ni toucher au fichier (55.631925ms)\n✔ refuse une erreur de lecture sans la traiter comme ENOENT (60.17069ms)\n✔ refuse une racine ou un contrat invalide : null (58.964926ms)\n✔ refuse une racine ou un contrat invalide : false (71.46557ms)\n✔ refuse une racine ou un contrat invalide : 42 (67.945582ms)\n✔ refuse une racine ou un contrat invalide : \"synthetic-private-marker\" (56.231032ms)\n✔ refuse une racine ou un contrat invalide : [] (51.982511ms)\n✔ refuse une racine ou un contrat invalide : {} (53.172827ms)\n✔ refuse une racine ou un contrat invalide : {\"jobId\":\"synthetic-private-marker\"} (55.372181ms)\n✔ restaure le format minimal historique sans réécrire ses champs facultatifs (104.027166ms)\n✔ refuse les types persistés invalides : {\"directory\":\"relative\"} (49.076162ms)\n✔ refuse les types persistés invalides : {\"criteria\":[42]} (54.143506ms)\n✔ refuse les types persistés invalides : {\"armed\":\"true\"} (56.092347ms)\n✔ refuse les types persistés invalides : {\"changeId\":42} (57.769997ms)\n✔ refuse les types persistés invalides : {\"strictCommands\":\"false\"} (57.863328ms)\n✔ refuse les types persistés invalides : {\"terminalGate\":[]} (60.404576ms)\n✔ refuse les types persistés invalides : {\"terminalGate\":{\"status\":\"invented\"}} (60.324627ms)\n✔ refuse les types persistés invalides : {\"revokedSessions\":[42]} (60.857042ms)\n✔ refuse les types persistés invalides : {\"recovery\":[]} (59.574504ms)\n✔ refuse les types persistés invalides : {\"recoveryHistory\":[null]} (56.114959ms)\n✔ refuse les types persistés invalides : {\"lastProvenMilestone\":42} (53.882838ms)\n✔ refuse les types persistés invalides : {\"recovery\":{\"sessionId\":42}} (53.803725ms)\n✔ refuse les types persistés invalides : {\"recovery\":{\"attempts\":{}}} (56.865857ms)\n✔ refuse les types persistés invalides : {\"recovery\":{\"attempts\":[{}]}} (55.99989ms)\n✔ refuse les types persistés invalides : {\"recovery\":{\"invalidatedRequestIds\":[42]}} (59.278639ms)\nℹ tests 27\nℹ suites 0\nℹ pass 27\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1686.941317\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/persistent-job-supervisor.test.mjs",
+      "chunk_id": "356fc0",
+      "wall_time_seconds": 9.171661633,
+      "exit_code": 0,
+      "original_token_count": 282,
+      "output": "✔ publie le jalon et le gate observés sans hériter du job précédent (592.1873ms)\n✔ compte les émissions réussies et échouées après persistance (1603.931819ms)\n✔ conserve le compteur au redémarrage et au transfert, puis repart à zéro pour un autre job (685.703793ms)\n✔ garde inconnu le compteur historique même après une nouvelle émission (384.012135ms)\n✔ une préparation abandonnée ou une réconciliation échouée ne compte pas une émission (689.370252ms)\n✔ un échec de persistance interdit l'émission et conserve le compteur (342.926639ms)\n✔ CGP07 distingue l'activité ciblée du trafic SSE étranger et du transport (1632.496639ms)\n✔ relance une seule fois une session armée dont le gate reste ouvert (516.15027ms)\n✔ ne relance pas un job dont le gate est validé (1305.486511ms)\n✔ restaure l'état persistant de supervision après redémarrage (109.746991ms)\n✔ gèle les relances pendant la récupération et suit ensuite la session transférée (1367.549173ms)\nℹ tests 11\nℹ suites 0\nℹ pass 11\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 9235.048068\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/concurrent-supervisor.test.mjs",
+      "chunk_id": "93e564",
+      "wall_time_seconds": 4.043922164,
+      "exit_code": 0,
+      "original_token_count": 99,
+      "output": "✔ supervision partagée : attente de A, reprise unique de B et compteurs séparés (1384.631117ms)\n✔ un conflit de ressource de A ne provoque aucune relance et préserve B (1338.561778ms)\n✔ une pause ciblée reste prioritaire sur le réveil du superviseur (1388.417173ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 4116.377767\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-healthcheck-compatibility.test.mjs",
+      "chunk_id": "f2adae",
+      "wall_time_seconds": 0.695565371,
+      "exit_code": 0,
+      "original_token_count": 150,
+      "output": "✔ CGP06 URL commune OC_Codex_CONTROLLER_URL avec suffixe base (134.136417ms)\n✔ CGP06 URL commune OC_Codex_CONTROLLER_URL avec suffixe /status (128.588225ms)\n✔ CGP06 URL commune OC_Codex_CONTROLLER_URL avec suffixe /status/ (127.184364ms)\n✔ CGP06 URL commune OC_CGPT_CONTROLLER_URL avec suffixe base (126.625506ms)\n✔ CGP06 URL commune OC_CGPT_CONTROLLER_URL avec suffixe /status (128.402105ms)\n✔ CGP06 URL commune OC_CGPT_CONTROLLER_URL avec suffixe /status/ (127.02069ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 775.046637\n"
+    },
+    {
+      "cmd": "env -u CAB_TEST_OPENCODE /home/devops/node/current/bin/node tests/native-opencode.test.mjs",
+      "chunk_id": "2ff826",
+      "wall_time_seconds": 0.000019658,
+      "exit_code": 0,
+      "original_token_count": 56,
+      "output": "﹣ OpenCode natif : trois sessions et un seul broker source 1.3.0 dans un contexte isolé (0.440507ms) # SKIP\nℹ tests 1\nℹ suites 0\nℹ pass 0\nℹ fail 0\nℹ cancelled 0\nℹ skipped 1\nℹ todo 0\nℹ duration_ms 3.29906\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/concurrent-controller.test.mjs",
+      "chunk_id": "275385",
+      "wall_time_seconds": 7.408681977,
+      "exit_code": 0,
+      "original_token_count": 752,
+      "output": "✔ publication ciblée HTTP : reçu après reprise, génération, gate et pair indépendant (358.653313ms)\n✔ le contrôle global exceptionnel regroupe les lectures natives de la cohorte (177.507658ms)\n✔ les attentes de ressources exposent le pair courant sans contenu natif sensible (178.618579ms)\n✔ une cohorte occupée, invalide ou divergente refuse le gel exceptionnel (153.047936ms)\n✔ un événement SSE pendant le contrôle exceptionnel impose une observation neuve (230.330821ms)\n✔ une mutation pendant observation exceptionnelle refuse une cohorte périmée (159.777405ms)\n✔ une progression tardive conserve les effets non résolus pendant le drainage global (166.952219ms)\n✔ deux publications simultanées produisent un seul reçu sans nouvelle permission (191.193753ms)\n✔ une fin native inconnue garde les protections et interdit le gate (195.120712ms)\n✔ sélection simultanée : un seul propriétaire du change et aucun écrasement (155.923481ms)\n✔ trois sessions, permissions once exactes et décisions isolées (248.228631ms)\n✔ une session allow est refusée sans bloquer la permission once d’un autre RUN (184.201744ms)\n✔ un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée (174.577076ms)\n✔ une identité déclarée ne remplace pas le tool part natif de la session ciblée (209.012179ms)\n✔ une publication indépendante ne suspend pas le pair ni sa génération (193.044902ms)\n✔ récupération de A avec B actif : réservation conservée et génération renouvelée (206.942892ms)\n✔ périmètre, génération, identité native et redémarrage refusent les permissions obsolètes (303.559601ms)\n✔ un broker MCP réel transporte trois validations parallèles sans confondre les permissions (1320.425075ms)\n✔ statistiques automatiques : broker relayé, décision, once, SSE filtré et reprise (303.945893ms)\n✔ closing et rapport ciblés : le pair continue et le gate exige la fin native (245.212323ms)\n✔ une réduction quiescente retire project:* sans accepter une génération ancienne (174.809359ms)\n✔ restauration humaine concurrente conserve propriétaire et digest sans nouvelle once (369.448348ms)\n✔ consultations et import statistique HTTP ne changent ni registre ni permissions (298.216072ms)\n✔ pause ciblée et intégrité commune ferment leurs admissions sans approbation implicite (162.248869ms)\n✔ ancien broker ou anciens champs refusés sans permission ni gel ordinaire (163.521462ms)\n✔ un refus explicite reste possible pendant une pause après préparation (164.542768ms)\n✔ migration HTTP conserve les RUN et exige once exact avant leur reprise métier (354.033148ms)\n✔ la fin native accepte un appel commencé avant ask mais refuse un autre callID (193.802148ms)\n✔ l’usage historique unique garde once et exige une clôture réconciliée avant Multi-RUN (225.169089ms)\nℹ tests 29\nℹ suites 0\nℹ pass 29\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 7476.73205\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/resource-coordination.test.mjs",
+      "chunk_id": "9599ba",
+      "wall_time_seconds": 0.685964182,
+      "exit_code": 0,
+      "original_token_count": 480,
+      "output": "✔ three independent RUNs execute without a cohort or global integration (14.392764ms)\n✔ an entire set waits without partial ownership while independent work advances (18.310921ms)\n✔ readers coexist and later readers do not starve a waiting writer (22.408531ms)\n✔ finished writes make queued preparations stale rather than overwriting a new base (28.079236ms)\n✔ private access promotes safely when a peer declares its parent (12.597098ms)\n✔ no lock extensions or upgrades can wait while holding an access (13.007415ms)\n✔ hardlink aliases are refused and subtree proofs notice new descendants (14.456ms)\n✔ unknown effects survive restart, fence old permissions and require native proof (76.429553ms)\n✔ OpenSpec read validation does not suspend independent code writes (18.66485ms)\n✔ scoped publication is idempotent, enters REPORT and does not stale independent proofs (80.191994ms)\n✔ pause is targeted, global exceptions drain explicitly and timeout never releases (12.95486ms)\n✔ legacy migration preserves identities and refuses mutations until maintenance (57.898374ms)\n✔ a group retains its complete set but each native operation stays distinct (16.041953ms)\n✔ publication protects all earlier written resources and keeps their revisions after release (17.32556ms)\n✔ migration backup rolls back only before new effects and is reusable for a fresh maintenance (75.982533ms)\n✔ a restored group requires a fresh fence before a new corrective permission (65.563469ms)\n✔ une réponse once tardive conserve la protection inconnue et son acquittement (23.122908ms)\n✔ un état enrichi ou une identité incohérente refuse la restauration sans réécriture (26.185239ms)\n✔ la compatibilité historique reste isolée jusqu’à une réconciliation explicite (61.398843ms)\nℹ tests 19\nℹ suites 0\nℹ pass 19\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 669.5477\n"
+    },
+    {
+      "cmd": "/home/devops/python/current/bin/python3 -m unittest discover -s tests -p 'test_*.py'",
+      "chunk_id": "4119d1",
+      "wall_time_seconds": 3.472546148,
+      "exit_code": 0,
+      "original_token_count": 119,
+      "output": "........................................................\n----------------------------------------------------------------------\nRan 56 tests in 3.435s\n\nOK\nSYNTHETIC_BENCHMARK {\"approvals\": 694, \"initial_events\": 16774, \"initial_journal_bytes\": 7521590, \"recovery_journal_reads\": 5, \"recovery_seconds\": 0.605, \"isolated_mcp_process_seconds\": 1.619}\nSYNTHETIC_LIST_BENCHMARK {\"approvals\": 694, \"events\": 16774, \"journal_bytes\": 7706222, \"journal_reads\": 1, \"seconds\": 0.098}\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs --samples output/multirun-audit/2026-10-13-night/samples.jsonl --samples output/multirun-audit/2026-10-13-night/continuation/samples.jsonl --config output/multirun-audit/2026-10-13-night/continuation/audit-config.json --monitor output/multirun-audit/2026-10-13-night/continuation/monitor-state.json --quota output/multirun-audit/2026-10-13-night/continuation/rapports/20261016T030000Z/quota-final.json --proof output/multirun-audit/2026-10-13-night/continuation/rapports/20261016T030000Z/RAPPORT-MULTIRUN.md --output output/scm/cab-1-3-0/observations-multirun.json",
+      "chunk_id": "82afe3",
+      "wall_time_seconds": 1.501743738,
+      "exit_code": 0,
+      "original_token_count": 77,
+      "output": "{\"version\":\"1.3.0\",\"datasetId\":\"audit-17178822d83f1240a6acfb0dc315b6d3\",\"sha256\":\"b6027c03c165e26c2d2484275ea9e254b8b6348d3930244404a63ea36860f8b0\",\"rows\":38586,\"inputSha256\":\"ca0039e21d840fa6ce9958a39996f6fde6fa92ddf7aa7fca3a115e0383646a5b\",\"stoppedDeclared\":true,\"stableDuringRead\":true,\"sourceCount\":4}\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/resource-coordination.test.mjs",
+      "chunk_id": "0c743e",
+      "wall_time_seconds": 0.715823519,
+      "exit_code": 0,
+      "original_token_count": 508,
+      "output": "✔ three independent RUNs execute without a cohort or global integration (14.733846ms)\n✔ an entire set waits without partial ownership while independent work advances (17.281662ms)\n✔ readers coexist and later readers do not starve a waiting writer (15.373411ms)\n✔ finished writes make queued preparations stale rather than overwriting a new base (12.09799ms)\n✔ private access promotes safely when a peer declares its parent (13.817258ms)\n✔ no lock extensions or upgrades can wait while holding an access (12.43144ms)\n✔ hardlink aliases are refused and subtree proofs notice new descendants (24.513534ms)\n✔ unknown effects survive restart, fence old permissions and require native proof (94.937494ms)\n✔ OpenSpec read validation does not suspend independent code writes (19.478477ms)\n✔ scoped publication is idempotent, enters REPORT and does not stale independent proofs (79.965477ms)\n✔ pause is targeted, global exceptions drain explicitly and timeout never releases (18.383622ms)\n✔ legacy migration preserves identities and refuses mutations until maintenance (71.882756ms)\n✔ a group retains its complete set but each native operation stays distinct (12.964017ms)\n✔ publication protects all earlier written resources and keeps their revisions after release (21.982159ms)\n✔ migration backup rolls back only before new effects and is reusable for a fresh maintenance (64.624781ms)\n✔ a restored group requires a fresh fence before a new corrective permission (75.263112ms)\n✔ une réponse once tardive conserve la protection inconnue et son acquittement (16.631164ms)\n✔ un état enrichi ou une identité incohérente refuse la restauration sans réécriture (13.828446ms)\n✔ la compatibilité historique reste isolée jusqu’à une réconciliation explicite (73.817552ms)\n✔ reprendre un groupe conservé lève la pause sans libérer ses fichiers ni rejouer once (11.119634ms)\nℹ tests 20\nℹ suites 0\nℹ pass 20\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 692.562468\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/observation-statistics.test.mjs",
+      "chunk_id": "1c0174",
+      "wall_time_seconds": 0.004486367,
+      "exit_code": 0,
+      "original_token_count": 281,
+      "output": "✔ window clipping partitions known, unknown, two and three without adding pairs (0.971929ms)\n✔ concurrent identical imports persist once and recover the same provenance (4.659684ms)\n✔ unknown fields, commands, wrong project and malformed quotas never enter the store (0.431757ms)\n✔ scope changes and missing queue evidence stay unknown (0.210874ms)\n✔ REPORT is current and the last selection requires an observed delivery (0.917836ms)\n✔ native hooks record filtered windows without converting historical cumulative counters (1.559317ms)\n✔ persistence failure stays visible and cannot acknowledge an undurable duplicate (0.672395ms)\n✔ enriched or linked snapshots are preserved and marked invalid (1.509519ms)\n✔ streaming audit migration keeps scopes, gaps, delivery bounds and drops raw bodies (2.550445ms)\n✔ audit migration refuses an active source, linked input and unordered samples (0.852501ms)\n✔ retention and resource metadata remain bounded and explicit in windows (0.399036ms)\nℹ tests 11\nℹ suites 0\nℹ pass 11\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 17.715922\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/concurrent-controller.test.mjs",
+      "chunk_id": "545b6f",
+      "wall_time_seconds": 7.454948614,
+      "exit_code": 1,
+      "original_token_count": 936,
+      "output": "✔ publication ciblée HTTP : reçu après reprise, génération, gate et pair indépendant (370.940649ms)\n✖ le contrôle global exceptionnel regroupe les lectures natives de la cohorte (164.51179ms)\n✔ les attentes de ressources exposent le pair courant sans contenu natif sensible (174.578114ms)\n✔ une cohorte occupée, invalide ou divergente refuse le gel exceptionnel (168.747025ms)\n✔ un événement SSE pendant le contrôle exceptionnel impose une observation neuve (216.499673ms)\n✔ une mutation pendant observation exceptionnelle refuse une cohorte périmée (169.837221ms)\n✔ une progression tardive conserve les effets non résolus pendant le drainage global (171.47726ms)\n✔ deux publications simultanées produisent un seul reçu sans nouvelle permission (194.470379ms)\n✔ une fin native inconnue garde les protections et interdit le gate (177.372407ms)\n✔ sélection simultanée : un seul propriétaire du change et aucun écrasement (160.622157ms)\n✔ trois sessions, permissions once exactes et décisions isolées (238.294003ms)\n✔ une session allow est refusée sans bloquer la permission once d’un autre RUN (191.171443ms)\n✔ un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée (185.339497ms)\n✔ une identité déclarée ne remplace pas le tool part natif de la session ciblée (157.703315ms)\n✔ une publication indépendante ne suspend pas le pair ni sa génération (195.839758ms)\n✔ récupération de A avec B actif : réservation conservée et génération renouvelée (213.558715ms)\n✔ périmètre, génération, identité native et redémarrage refusent les permissions obsolètes (293.46317ms)\n✔ un broker MCP réel transporte trois validations parallèles sans confondre les permissions (1311.321347ms)\n✔ statistiques automatiques : broker relayé, décision, once, SSE filtré et reprise (359.488103ms)\n✔ closing et rapport ciblés : le pair continue et le gate exige la fin native (248.955534ms)\n✔ une réduction quiescente retire project:* sans accepter une génération ancienne (176.634395ms)\n✔ restauration humaine concurrente conserve propriétaire et digest sans nouvelle once (392.707446ms)\n✔ consultations et import statistique HTTP ne changent ni registre ni permissions (331.448523ms)\n✔ pause ciblée et intégrité commune ferment leurs admissions sans approbation implicite (163.300943ms)\n✔ ancien broker ou anciens champs refusés sans permission ni gel ordinaire (156.850567ms)\n✔ un refus explicite reste possible pendant une pause après préparation (146.072382ms)\n✔ migration HTTP conserve les RUN et exige once exact avant leur reprise métier (346.275316ms)\n✔ la fin native accepte un appel commencé avant ask mais refuse un autre callID (194.493053ms)\n✔ l’usage historique unique garde once et exige une clôture réconciliée avant Multi-RUN (222.896951ms)\nℹ tests 29\nℹ suites 0\nℹ pass 28\nℹ fail 1\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 7510.345665\n\n✖ failing tests:\n\ntest at tests/concurrent-controller.test.mjs:163:1\n✖ le contrôle global exceptionnel regroupe les lectures natives de la cohorte (164.51179ms)\n  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:\n  \n  2 !== 1\n  \n      at TestContext.<anonymous> (file:///home/devops/datas/cab/tests/concurrent-controller.test.mjs:171:10)\n      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n      at async Test.run (node:internal/test_runner/test:1409:7)\n      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {\n    generatedMessage: true,\n    code: 'ERR_ASSERTION',\n    actual: 2,\n    expected: 1,\n    operator: 'strictEqual',\n    diff: 'simple'\n  }\n"
+    },
+    {
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/concurrent-controller.test.mjs",
+      "chunk_id": "614836",
+      "wall_time_seconds": 7.451701333,
+      "exit_code": 0,
+      "original_token_count": 752,
+      "output": "✔ publication ciblée HTTP : reçu après reprise, génération, gate et pair indépendant (379.819156ms)\n✔ le contrôle global exceptionnel regroupe les lectures natives de la cohorte (162.66584ms)\n✔ les attentes de ressources exposent le pair courant sans contenu natif sensible (170.237603ms)\n✔ une cohorte occupée, invalide ou divergente refuse le gel exceptionnel (171.807267ms)\n✔ un événement SSE pendant le contrôle exceptionnel impose une observation neuve (211.581361ms)\n✔ une mutation pendant observation exceptionnelle refuse une cohorte périmée (166.225334ms)\n✔ une progression tardive conserve les effets non résolus pendant le drainage global (168.638177ms)\n✔ deux publications simultanées produisent un seul reçu sans nouvelle permission (201.239622ms)\n✔ une fin native inconnue garde les protections et interdit le gate (188.263388ms)\n✔ sélection simultanée : un seul propriétaire du change et aucun écrasement (157.971143ms)\n✔ trois sessions, permissions once exactes et décisions isolées (197.335132ms)\n✔ une session allow est refusée sans bloquer la permission once d’un autre RUN (176.864408ms)\n✔ un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée (174.137543ms)\n✔ une identité déclarée ne remplace pas le tool part natif de la session ciblée (159.961998ms)\n✔ une publication indépendante ne suspend pas le pair ni sa génération (206.737693ms)\n✔ récupération de A avec B actif : réservation conservée et génération renouvelée (212.582358ms)\n✔ périmètre, génération, identité native et redémarrage refusent les permissions obsolètes (318.737473ms)\n✔ un broker MCP réel transporte trois validations parallèles sans confondre les permissions (1324.710583ms)\n✔ statistiques automatiques : broker relayé, décision, once, SSE filtré et reprise (343.182533ms)\n✔ closing et rapport ciblés : le pair continue et le gate exige la fin native (246.948593ms)\n✔ une réduction quiescente retire project:* sans accepter une génération ancienne (165.211327ms)\n✔ restauration humaine concurrente conserve propriétaire et digest sans nouvelle once (407.779193ms)\n✔ consultations et import statistique HTTP ne changent ni registre ni permissions (352.530008ms)\n✔ pause ciblée et intégrité commune ferment leurs admissions sans approbation implicite (162.503745ms)\n✔ ancien broker ou anciens champs refusés sans permission ni gel ordinaire (163.061172ms)\n✔ un refus explicite reste possible pendant une pause après préparation (179.197445ms)\n✔ migration HTTP conserve les RUN et exige once exact avant leur reprise métier (349.748848ms)\n✔ la fin native accepte un appel commencé avant ask mais refuse un autre callID (185.393598ms)\n✔ l’usage historique unique garde once et exige une clôture réconciliée avant Multi-RUN (202.669552ms)\nℹ tests 29\nℹ suites 0\nℹ pass 29\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 7522.836147\n"
+    },
+    {
+      "cmd": "/home/devops/python/current/bin/python3 - <<'PY'\nimport json,py_compile,subprocess\nfrom pathlib import Path\nbase=json.loads(Path('openspec/changes/add-resource-scoped-coordination-1-3-0/PREUVES-SCM.json').read_text())\nfiles=set(base['initialFiles'])\nfiles.update(['plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs','plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs','tests/resource-coordination.test.mjs','tests/observation-statistics.test.mjs','tests/helpers/cab-environment.mjs'])\nchecked=[]\nfor name in sorted(files):\n if name.endswith('.py'):\n  py_compile.compile(name,doraise=True);checked.append(name)\n elif name.endswith('.mjs'):\n  subprocess.run(['/home/devops/node/current/bin/node','--check',name],check=True);checked.append(name)\nprint(json.dumps({'syntax':'passed','files':checked,'count':len(checked)},ensure_ascii=False,indent=2))\nPY",
+      "chunk_id": "e90258",
+      "wall_time_seconds": 0.51356885,
+      "exit_code": 0,
+      "original_token_count": 554,
+      "output": "{\n  \"syntax\": \"passed\",\n  \"files\": [\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs\",\n    \"plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs\",\n    \"src/cgpt_approval_bridge_journal.py\",\n    \"src/cgpt_approval_bridge_router.py\",\n    \"src/cgpt_approval_bridge_server.py\",\n    \"tests/concurrent-controller.test.mjs\",\n    \"tests/concurrent-run-registry.test.mjs\",\n    \"tests/concurrent-supervisor.test.mjs\",\n    \"tests/controller-configuration.test.mjs\",\n    \"tests/controller-healthcheck-compatibility.test.mjs\",\n    \"tests/controller-job-restoration.test.mjs\",\n    \"tests/controller-service-distribution.test.mjs\",\n    \"tests/controller-session-recovery.test.mjs\",\n    \"tests/helpers/cab-environment.mjs\",\n    \"tests/native-opencode.test.mjs\",\n    \"tests/native-statistics.test.mjs\",\n    \"tests/observation-statistics.test.mjs\",\n    \"tests/persistent-job-supervisor.test.mjs\",\n    \"tests/resource-coordination.test.mjs\",\n    \"tests/test_concurrent_broker.py\",\n    \"tests/test_controller_decision_correlation.py\",\n    \"tests/test_crash_recovery.py\",\n    \"tests/test_pending_listing.py\",\n    \"tests/test_piloted_prompts.py\",\n    \"tests/test_session_reset.py\"\n  ],\n  \"count\": 37\n}\n"
+    },
+    {
+      "cmd": "/home/devops/python/current/bin/python3 - <<'PY'\nimport json,hashlib,re\nfrom pathlib import Path\nroot=Path('.')\nbase=json.loads(Path('openspec/changes/add-resource-scoped-coordination-1-3-0/PREUVES-SCM.json').read_text())\nnew=['plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs','plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs','plugins/cab-approval-bridge/skills/coding-session-statistics/references/observations.md','tests/resource-coordination.test.mjs','tests/observation-statistics.test.mjs','tests/helpers/cab-environment.mjs']\nitems=[]\nfor name in sorted(set(base['initialFiles'])|set(new)):\n p=Path(name);raw=p.read_bytes();text=raw.decode('utf-8');assert b'\\r' not in raw,name\n digest=hashlib.sha256(raw).hexdigest();status='created' if name not in base['initialFiles'] else ('unchanged' if digest==base['initialFiles'][name] else 'modified')\n items.append({'path':name,'status':status,'sha256':digest,'bytes':len(raw)})\nfor name in ['AGENTS.md','DEVOPS.md','.agents/plugins/marketplace.json']:\n assert next(v for v in items if v['path']==name)['status']=='unchanged',name\nversionFiles=[]\nfor folder in ['src','plugins/cab-approval-bridge/scripts']:\n for p in sorted(Path(folder).iterdir()):\n  if p.suffix not in ['.py','.mjs']:continue\n  values=re.findall(r'''(?m)^\\s*(?:(?:export\\s+)?const\\s+(?:VERSION|version)|VERSION|SERVER_VERSION)\\s*=\\s*[\"']([^\"']+)[\"']''',p.read_text())\n  assert values and all(v=='1.3.0' for v in values),(str(p),values)\n  versionFiles.append(str(p))\nresult={'baselineFiles':len(base['initialFiles']),'files':items,'versionFiles':versionFiles,'sourceVersion':'1.3.0','scopeLimit':'Comparaison ciblée aux 60 empreintes initiales et six nouveaux fichiers, sans inspection Git ni des répertoires exclus. Ne prouve pas un état exhaustif du disque. Les écritures runtime des anciennes fixtures sont signalées séparément.'}\nPath('openspec/changes/add-resource-scoped-coordination-1-3-0/INVENTAIRE-SCM.json').write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\\n')\nprint(json.dumps({'files':len(items),'modified':sum(i['status']=='modified' for i in items),'created':sum(i['status']=='created' for i in items),'unchanged':sum(i['status']=='unchanged' for i in items),'versionedSources':len(versionFiles),'utf8LF':'passed'},ensure_ascii=False))\nPY",
+      "chunk_id": "2e54da",
+      "wall_time_seconds": 0.000021612,
+      "exit_code": 0,
+      "original_token_count": 27,
+      "output": "{\"files\": 66, \"modified\": 44, \"created\": 6, \"unchanged\": 16, \"versionedSources\": 17, \"utf8LF\": \"passed\"}\n"
+    },
+    {
+      "cmd": "/home/devops/node/current/bin/node tests/controller-service-distribution.test.mjs",
+      "chunk_id": "1cb35d",
+      "wall_time_seconds": 0.010471495,
+      "exit_code": 0,
+      "original_token_count": 463,
+      "output": "✔ les briques distribuées publient la même version de base 1.3.0 (5.360624ms)\n✔ la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué (0.353428ms)\n✔ distribue une unité utilisateur inactive par défaut (0.16341ms)\n✔ la commande CAB installe sans activer, démarre et arrête explicitement (0.21863ms)\n✔ distribue un superviseur utilisateur inactif par défaut (0.137519ms)\n✔ la commande CAB prévole le modèle OpenCode avant la session persistante (0.207989ms)\n✔ les artefacts distribués annoncent la même version de base (0.393243ms)\n✔ la mise à jour déploie le superviseur sans le démarrer (0.27279ms)\n✔ la marketplace CAB distribue les statistiques avec le plugin existant (0.386943ms)\n✔ AGENTS renvoie au protocole local dédié avec ses contrats techniques (0.918902ms)\n✔ le protocole exige un rapport par archive et empêche une clôture sans preuve (2.345058ms)\n✔ le protocole distribué protège la lecture seule et décrit la récupération explicite (0.325594ms)\n✔ le protocole distribue des cadences indépendantes et une attente PLLM persistante (1.636238ms)\n✔ la réactivation sûre est distribuée sans tools true pendant la génération (0.339708ms)\n✔ le prévol divergent conserve la candidate et le job dans le protocole distribué (0.339345ms)\n✔ les sondes statistiques n'arrêtent pas le travail pour attendre le créneau (1.871107ms)\n✔ le refus par polling après timeout est distribué avec une sortie humaine explicite (1.698045ms)\n✔ status route directement la consultation avant toute boucle de pilotage (0.270141ms)\n✔ le contrat status conserve le tableau métier, la fraîcheur et les limites des preuves (0.274868ms)\nℹ tests 19\nℹ suites 0\nℹ pass 19\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 22.411666\n"
+    },
+    {
+      "cmd": "/home/devops/.local/npm/bin/openspec validate --all --strict --no-interactive",
+      "chunk_id": "1d151b",
+      "wall_time_seconds": 0.143813757,
+      "exit_code": 0,
+      "original_token_count": 110,
+      "output": "✓ change/add-resource-scoped-coordination-1-3-0\n✓ spec/approval-persistence\n✓ spec/approval-workflow\n✓ spec/archive-session-statistics\n✓ spec/codex-integration-distribution\n✓ spec/concurrent-run-coordination\n✓ spec/controller-transport\n✓ change/integrate-observation-statistics\n✓ spec/native-session-statistics\n✓ spec/persistent-job-supervision\n✓ spec/supervision-remediation\nTotals: 11 passed, 0 failed (11 items)\n"
+    }
+  ],
+  "latestSuites": [
+    {
+      "suite": "tests/resource-coordination.test.mjs",
+      "pass": 20,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "/home/devops/node/current/bin/node tests/resource-coordination.test.mjs",
+      "chunk_id": "0c743e"
+    },
+    {
+      "suite": "python",
+      "pass": 56,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "/home/devops/python/current/bin/python3 -m unittest discover -s tests -p 'test_*.py'",
+      "chunk_id": "4119d1"
+    },
+    {
+      "suite": "tests/concurrent-controller.test.mjs",
+      "pass": 29,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/concurrent-controller.test.mjs",
+      "chunk_id": "614836"
+    },
+    {
+      "suite": "tests/concurrent-run-registry.test.mjs",
+      "pass": 22,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "/home/devops/node/current/bin/node tests/concurrent-run-registry.test.mjs",
+      "chunk_id": "70e945"
+    },
+    {
+      "suite": "tests/native-statistics.test.mjs",
+      "pass": 11,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "/home/devops/node/current/bin/node tests/native-statistics.test.mjs",
+      "chunk_id": "ff032c"
+    },
+    {
+      "suite": "tests/observation-statistics.test.mjs",
+      "pass": 11,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "/home/devops/node/current/bin/node tests/observation-statistics.test.mjs",
+      "chunk_id": "1c0174"
+    },
+    {
+      "suite": "tests/controller-service-distribution.test.mjs",
+      "pass": 19,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "/home/devops/node/current/bin/node tests/controller-service-distribution.test.mjs",
+      "chunk_id": "1cb35d"
+    },
+    {
+      "suite": "tests/controller-configuration.test.mjs",
+      "pass": 13,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-configuration.test.mjs",
+      "chunk_id": "e8c769"
+    },
+    {
+      "suite": "tests/controller-session-recovery.test.mjs",
+      "pass": 41,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-session-recovery.test.mjs",
+      "chunk_id": "0bdf2c"
+    },
+    {
+      "suite": "tests/controller-job-restoration.test.mjs",
+      "pass": 27,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-job-restoration.test.mjs",
+      "chunk_id": "03a556"
+    },
+    {
+      "suite": "tests/persistent-job-supervisor.test.mjs",
+      "pass": 11,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/persistent-job-supervisor.test.mjs",
+      "chunk_id": "356fc0"
+    },
+    {
+      "suite": "tests/concurrent-supervisor.test.mjs",
+      "pass": 3,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/concurrent-supervisor.test.mjs",
+      "chunk_id": "93e564"
+    },
+    {
+      "suite": "tests/controller-healthcheck-compatibility.test.mjs",
+      "pass": 6,
+      "skip": 0,
+      "exit": 0,
+      "cmd": "env PATH=/home/devops/python/current/bin:/home/devops/node/current/bin:/usr/local/bin:/usr/bin:/bin /home/devops/node/current/bin/node tests/controller-healthcheck-compatibility.test.mjs",
+      "chunk_id": "f2adae"
+    },
+    {
+      "suite": "tests/native-opencode.test.mjs",
+      "pass": 0,
+      "skip": 1,
+      "exit": 0,
+      "cmd": "env -u CAB_TEST_OPENCODE /home/devops/node/current/bin/node tests/native-opencode.test.mjs",
+      "chunk_id": "2ff826"
+    }
+  ],
+  "totals": {
+    "nodePass": 213,
+    "nodeSkipped": 1,
+    "pythonPass": 56
+  },
+  "coverage": "Registre partiel des commandes de qualification, non exhaustif des appels d’outils de la session. Les tentatives sont conservées ; les totaux retiennent la dernière exécution par suite. Les 269 succès sont communs aux deux changes et ne doivent pas être additionnés entre leurs rapports."
+}

@@ -1,0 +1,413 @@
+{
+  "startedAt": "2026-10-16T20:20:24.602793+00:00",
+  "authorization": "Validation explicite du developpeur du 16 octobre 2026 : cycle SCM CAB 1.3.0 jusqu a archive et rapport ; sans Git, deploiement ni RUN actifs.",
+  "initialFiles": {
+    ".agents/plugins/marketplace.json": "aa86efe23e54026b5c82d46323175f18f5bb26c3ac1cc3aaaa7c2b6f9f56887b",
+    ".codex/commands/cab.md": "f9f72bbb8e1c9ddc6b45d4aac189319371b1cbca01aceb8367135bf80551edaf",
+    "AGENTS.md": "22f065241b4347b9c60f3cdb334cc24ba37c3a206bed644a6200359c5856d172",
+    "BUILD.md": "10c4c796de70a0fe019fa6c012bb8c297158a03cbfb0cb515d7bdf0c5757429f",
+    "CHANGELOG.md": "b296cc1938b6f0030a23bebdb529dd07e2cb073cf478cdd6d19531d708fba6a3",
+    "DEVOPS.md": "f6fe52e5c4b989ee8c7ffea07d5768ec609d3290a83dcbe24f8d1eb4c43bceca",
+    "ORCHESTRATED_CODING.md": "e213eeafd041b49078cf4f277b692fb6a295fc6fce25ae71e3a7b16f1c3c5df6",
+    "PROJECT.md": "84df6a67fcd8b4cf9f27721b520d9c445f334f7ed1b0892c28eeb583b77ca754",
+    "README.md": "c228b89d32f0c00e18f4c0a8b3535338561064a673f7663f8339ae98d8b7ae60",
+    "TECHNICAL.md": "d9e3fd69ec025033baae1b512e9fe6bc07c1f87f4912462bf574ff1d7a8a2a25",
+    "openspec/specs/approval-persistence/spec.md": "3ef1c3ba294b73065ebcb277b434e030ed0019d19f6d9ba2e1b83de13bc740f0",
+    "openspec/specs/approval-workflow/spec.md": "8fb5d8dac9ca84efcf13bb9d097946714846159c6d84520bc1c3b3c89eb1db21",
+    "openspec/specs/archive-session-statistics/spec.md": "72892ef331402e8aeb165286357ab2f66c56793356e2c7503b05a6e5be480636",
+    "openspec/specs/codex-integration-distribution/spec.md": "b97b6bf634955a3384c24e2fe1cce2459f13e1f702032b906bf2eae552730fb8",
+    "openspec/specs/concurrent-run-coordination/spec.md": "634ca7640ff9de1d920a4af48f74ef163c1cf99399c82dafd153cb34ce34c5b2",
+    "openspec/specs/controller-transport/spec.md": "9b40c48ec93cabaa06c6942422d0f74846320a968065ea9e323a0ef8aba630de",
+    "openspec/specs/native-session-statistics/spec.md": "0db681d7c2c87abaff4ac4315bdcca68e289ae1deda4970eb6f8ac76fb2088d1",
+    "openspec/specs/persistent-job-supervision/spec.md": "2909dc34bd703ec9324572e79b22a4a9b3a8864aa1e78083f57866eb0186d9e0",
+    "openspec/specs/supervision-remediation/spec.md": "a40a64775015d5db54b50b9ba0494847fac12d5b06c8e5713b77c9549e9f4455",
+    "plugins/cab-approval-bridge/.codex-plugin/plugin.json": "f65fcb7ecb4d152f20b116281387e3a23f724c7df336e863004b77cec0e4bb80",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs": "afd59cc3d7389f9e8188e9a16ee25cdaed07b3ecca7cd9281f078976c283b7cf",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs": "c4bd51841ad9d9352997ec71d723455b4b15c32d6c3dfcc6d8da95644192ccf1",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs": "d2e5124f53359b1ab52e8e2ab38d304e9ace6b5de710c7386599a77e3eb87944",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs": "8ab4bc569e90c6c6121f44d7be102fffeff2fd883c2acb2b9ec1ec5609fa2cc2",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs": "63dc88222127292b017de0a015d4ea72bb57abe84520ce633a6f0781a4c2fa5a",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py": "1f365d317def15d43fcde2a5e7184976375e5c70e6bd9934817ccfb1e4b7aad7",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py": "74ff6d2b0f123db786ce7f7b6dbde38d03015fcddba27f40f8692be616f680c8",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py": "f8949a47578138e0e46b9dfdbeb71710178df2ca26bd77dfbe89bb252d9ed4d8",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs": "50876485fa7fc9d76c533684f21c123fe975101b6a152cd364272cec478507bb",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs": "79119c72cba53224c8504cc0ad8098e26ba9f9d9d16eddc40e01d0ac2fbbf609",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs": "4869edc01bc46f4000f4903a0fe5f3e51f47082bd011318185c6c7f0df85e3b5",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs": "e052121402093fcdb92e7016b7a5f8bbb7e57a047fb3229039c98d2a770cde40",
+    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "cf12e07c2d2d7e099bc393fcc04369ed5c4350b7030402c708314d82d61b301c",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md": "02e7d626bc02c4224a962af22473b292abbd9cc3bcd63d07a45f44690967f020",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/session-reset.md": "acdbedab35e7501543217b60e4836b72858b2c8704bb29155bf28fec589c9f43",
+    "plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md": "04a247e04ea4c888021b9f33c85e260227491a512688be005c0aad537bb3105c",
+    "plugins/cab-approval-bridge/skills/coding-session-statistics/agents/openai.yaml": "f2b6658e2a7b050415545fae9fb78d7f54b047da9cd65053cce5bc47b411b009",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service": "0dcd9d2510c43cd9308512c1c5935017218c5aca55e782f7f8c1020ceeb97bd8",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service": "d8be12bfc867088bd72e4e32fc077fb756a71cc31461ce3edd2a89675e2c5b4d",
+    "pyproject.toml": "5ba969618b81e485e535b9419d13432884a0aa03e864d50bf49e3640c974e7c4",
+    "src/cgpt_approval_bridge_journal.py": "6a86db17f6e651b883a59d452ba3b39e2ae472c3d935dc273624b4a6baf9f4bb",
+    "src/cgpt_approval_bridge_router.py": "5b706b9e06d7e6f42384f9ddc88247a58e1816ca84905706d57bee1d5434219a",
+    "src/cgpt_approval_bridge_server.py": "3b47cca6ade56e1b50395226f46b55db4e7e2ae6391d9d426434163e634c349a",
+    "tests/concurrent-controller.test.mjs": "3c0a685b4e835acd5091be19465702886a50ca1b12e7838e3ed7b2635315710d",
+    "tests/concurrent-run-registry.test.mjs": "255d99fcf1d2aa488d542ad20d018a9fa0692e284d9b95c3fc3c7762a8e6d96e",
+    "tests/concurrent-supervisor.test.mjs": "221f9e92a6fd72edddd8c0169f3819bf3b2c1a39e7beaed8056bfe01fb886fa7",
+    "tests/controller-configuration.test.mjs": "1f7ae9494c250edff441940f717540846ea93941982b664fa7393fc059389ca7",
+    "tests/controller-healthcheck-compatibility.test.mjs": "04aab5a469d44087ef60695400192d79d1a8cf4224bf606b6006776f98492e82",
+    "tests/controller-job-restoration.test.mjs": "3d9a67adb1cfd0fef81877de1e5de1cac42edac3d690eba8b419525cd78eb31e",
+    "tests/controller-service-distribution.test.mjs": "a8560b1fb96e6d2aa84c516f2f2ff046b322a2d3ad1553b9f2dd255fe88c4c7f",
+    "tests/controller-session-recovery.test.mjs": "1074bb8bec747615859ac77c961957291cb9f12e6c9577f6d071fd6c431dab7c",
+    "tests/native-opencode.test.mjs": "104c2fbbe7eaafd9e779db42986c11888e54af6af1fee70b16ceeba440c55caa",
+    "tests/native-statistics.test.mjs": "5409a6d5cee3eb374ee9cecbf83f759332fd0fef693519991997bc1243ae36fb",
+    "tests/persistent-job-supervisor.test.mjs": "f634adfde99d85f58d82d6380a68e04189dec02764d89bc675b755867811ef9b",
+    "tests/test_concurrent_broker.py": "1e31fd763e29a458dbf4d16dc277d7725047ed1ac00026f2cc93ddac3d8fd513",
+    "tests/test_controller_decision_correlation.py": "ef5c9756554e2358128ed64cafc2bd95931720641ba94e688cb79d2c1a96607e",
+    "tests/test_crash_recovery.py": "cad84f3f916b053d90f24ef63afc7813c2c808861829a21a8166abbc75c777e9",
+    "tests/test_pending_listing.py": "2317814bbe8a4a97282801e2a2695481802f4d75458e40c37fe838272531e8b8",
+    "tests/test_piloted_prompts.py": "12d0360950165e0af5272ec7bd0c9e7a9912ff7c53d45945fbf11021f92558d1",
+    "tests/test_session_reset.py": "80c16496f2155e45e42e2f0629d8d7fbefcb369ba7c591a7e02545f84c60da2e"
+  },
+  "checks": [],
+  "qualifiedAt": "2026-10-16T22:54:54.575268+00:00",
+  "qualifiedAtParis": "2026-10-17T00:54:54.575268+02:00",
+  "finalChecksFile": "VALIDATIONS-SCM.json",
+  "sourceScopeFile": "INVENTAIRE-SCM.json",
+  "archivePaths": [
+    "openspec/changes/archive/2026-10-17-add-resource-scoped-coordination-1-3-0",
+    "openspec/changes/archive/2026-10-17-integrate-observation-statistics"
+  ],
+  "sourceVersion": "1.3.0",
+  "pluginVersion": "1.3.0+codex.20261016211108",
+  "runtimeQualification": "Non exécutée : RUN actifs exclus ; transports simulés. Écart des trois anciennes fixtures conservé dans les rapports.",
+  "terminalVerification": {
+    "at": "2026-10-16T22:57:14.745797+00:00",
+    "reports": "six sections UTF-8/LF et totaux vérifiés pour chacune des deux archives",
+    "syncedRequirements": 62,
+    "syncedDeltas": [
+      {
+        "capability": "approval-persistence",
+        "requirement": "Persistance partagée des RUN concurrents",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "approval-persistence",
+        "requirement": "Attribution durable avant réponse",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "approval-persistence",
+        "requirement": "Fin durable et effet incertain",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "approval-persistence",
+        "requirement": "Formats de coordination compatibles",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "approval-workflow",
+        "requirement": "Identité du RUN concurrent",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "approval-workflow",
+        "requirement": "Décision liée au contenu préparé",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "approval-workflow",
+        "requirement": "Acquisition distincte de l'approbation",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "approval-workflow",
+        "requirement": "Éligibilité vérifiée avant permission",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Skill de statistiques embarqué dans CAB",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Distribution concurrente 1.0.0",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Distribution cohérente du correctif 1.0.1",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Distribution du correctif de polling 1.0.2",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Toutes les briques alignées sur 1.3.0",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Capacité de coordination négociée",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Migration sous maintenance explicite",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Commandes et protocoles ciblés",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Ressources et dépendances compatibles",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Propriétaire durable et génération",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Couverture des mandats",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Clôture et exclusion d'intégration",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Infrastructure partagée protégée",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Barrière stable du répertoire partagé",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Prompts pilotés cohérents",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "File équitable d'intégration",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Réduction contrôlée des ressources",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Phase documentaire après publication",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Isolation de la phase documentaire",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Fenêtre critique minimale",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Publication et phase documentaire atomiques",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Drainage observable au prochain jalon stable",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Observation native regroupée et recontrôlée",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Acquisition atomique des accès partagés",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Exclusivité prouvée et promotion sûre",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Identité canonique et ensemble complet",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Révisions et preuves ciblées",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Réacquisition avant publication",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Exclusion globale exceptionnelle",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Gel conservatoire d'intégrité commune",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "concurrent-run-coordination",
+        "requirement": "Refus des effets non cadrés",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "controller-transport",
+        "requirement": "Interfaces de coordination ciblées",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "controller-transport",
+        "requirement": "Recontrôle des protections avant once",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "controller-transport",
+        "requirement": "Fin native corrélée avant libération",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "controller-transport",
+        "requirement": "Gate sans protection non résolue",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "controller-transport",
+        "requirement": "Publication sans cohorte générale",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "controller-transport",
+        "requirement": "Compatibilité historique sans concurrence implicite",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Attentes et protections distinguées",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Traçabilité sans chemins d'opérations",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Comparaison de concurrence étayée",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "persistent-job-supervision",
+        "requirement": "Supervision de plusieurs RUN",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "persistent-job-supervision",
+        "requirement": "Suspension conforme à la cible",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "persistent-job-supervision",
+        "requirement": "Reprise après attente ciblée",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "supervision-remediation",
+        "requirement": "Readiness commune et par RUN",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "supervision-remediation",
+        "requirement": "Cause actuelle de coordination observable",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "supervision-remediation",
+        "requirement": "Diagnostic sans remédiation implicite",
+        "sourceArchive": "2026-10-17-add-resource-scoped-coordination-1-3-0"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Commandes simples de consultation statistique",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      },
+      {
+        "capability": "codex-integration-distribution",
+        "requirement": "Distribution des observations CAB 1.3.0",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Observations complémentaires filtrées et neutres",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Import durable idempotent et provenance séparée",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Fenêtres temporelles natives auditables",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Sélection courante et dernière livraison",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Migration locale du job arrêté",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      },
+      {
+        "capability": "native-session-statistics",
+        "requirement": "Consultation et brouillons compatibles",
+        "sourceArchive": "2026-10-17-integrate-observation-statistics"
+      }
+    ],
+    "sourceManifestHashes": "passed",
+    "tasksCompleted": true,
+    "tests": {
+      "nodePassed": 213,
+      "pythonPassed": 56,
+      "totalPassed": 269,
+      "nativeSkipped": 1,
+      "failedFinal": 0
+    },
+    "openSpecPostArchive": {
+      "passed": 9,
+      "failed": 0,
+      "nativeExit": 0,
+      "warnings": [],
+      "chunkId": "780166",
+      "stage": "Après rédaction et vérification des deux rapports"
+    },
+    "status": "TERMINÉ — sources et archivages, sans déploiement"
+  }
+}

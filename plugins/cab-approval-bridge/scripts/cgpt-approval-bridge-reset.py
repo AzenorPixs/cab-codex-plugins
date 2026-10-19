@@ -14,7 +14,7 @@ from pathlib import Path
 STATE_DIRECTORY = "cgpt-approval-bridge"
 INSTANCE_LOCK = "broker.instance.lock"
 REGISTRY_LOCK = "registry.instance.lock"
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 
 
 def validate_directory(value):
@@ -80,13 +80,36 @@ def reset_directories(values):
                     registry = json.load(source)
                 except (ValueError, UnicodeError) as exc:
                     raise ValueError("Registre illisible ; purge refusée.") from exc
-                if not isinstance(registry, dict) or registry.get("schemaVersion") not in (1, 2, 3) or not isinstance(registry.get("runs"), list):
+                if not isinstance(registry, dict) or registry.get("schemaVersion") not in (1, 2, 3, 4) or not isinstance(registry.get("runs"), list):
                     raise ValueError("Registre invalide ; purge refusée.")
                 if registry.get("integrationQueue", []) != [] or registry.get("integrationOwner") is not None:
                     raise RuntimeError("Une intégration reste réservée ; purge globale refusée.")
                 if any(not isinstance(run, dict) or run.get("state") not in ("DELIVERED", "ABANDONED")
                        for run in registry["runs"]):
                     raise RuntimeError("Des changes restent réservés ; purge globale refusée.")
+                if registry.get("schemaVersion") == 4:
+                    coordination = registry.get("coordination")
+                    if (not isinstance(coordination, dict)
+                            or coordination.get("protocol") != "resource-scoped-v1"
+                            or not isinstance(coordination.get("accesses"), dict)
+                            or not isinstance(coordination.get("operations"), dict)):
+                        raise ValueError("Coordination invalide ; purge refusée.")
+                    if any(not isinstance(access, dict) or access.get("state") not in
+                           ("RELEASED", "CANCELLED", "STALE")
+                           for access in coordination["accesses"].values()):
+                        raise RuntimeError("Des accès restent protégés ; purge globale refusée.")
+                    if any(not isinstance(operation, dict) or operation.get("state") not in
+                           ("PREPARED", "COMPLETED", "CANCELLED")
+                           for operation in coordination["operations"].values()):
+                        raise RuntimeError("Des effets restent à réconcilier ; purge globale refusée.")
+                    if not isinstance(coordination.get("legacySources", []), list):
+                        raise ValueError("Activité historique invalide ; purge refusée.")
+                    if coordination.get("legacySources"):
+                        raise RuntimeError("Une activité historique reste à réconcilier ; purge refusée.")
+                    global_state = coordination.get("global")
+                    if global_state is not None and (not isinstance(global_state, dict)
+                            or global_state.get("state") != "RELEASED"):
+                        raise RuntimeError("Un gel global reste réservé ; purge refusée.")
 
         for directory, handle in locked:
             removed = 0

@@ -1,7 +1,8 @@
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -15,7 +16,7 @@ async function waitFor(check) {
   for (let i = 0; i < 200; i++) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
-async function setup(t) {
+async function setup(t, { reconnectMs = 30 } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
   const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
   const eventStreams = new Set();
@@ -45,7 +46,7 @@ async function setup(t) {
       permission: native.rules[url.pathname.split('/')[2]] || [{ permission: '*', pattern: '*', action: 'ask' }],
       ...native.sessions[url.pathname.split('/')[2]] };
     else { response.writeHead(404).end(); return; }
-    response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload));
+    response.writeHead(200, { 'content-type': 'application/json', connection: 'close' }); response.end(JSON.stringify(payload));
   });
   await new Promise((resolve) => opencode.listen(0, '127.0.0.1', resolve));
   const listener = createServer();
@@ -57,9 +58,9 @@ async function setup(t) {
   let stderr = '';
   async function start() {
     child = spawn(process.execPath, [controllerPath], { stdio: ['ignore', 'ignore', 'pipe'], env: {
-      ...process.env, OC_Codex_WORKSPACE: directory, OC_Codex_OUTSIDE_SANDBOX: '1',
+      ...fixtureEnvironment, OC_Codex_WORKSPACE: directory, OC_Codex_OUTSIDE_SANDBOX: '1',
       OC_Codex_STATUS_PORT: String(port), OC_Codex_OPENCODE_URL: 'http://127.0.0.1:' + opencode.address().port,
-      OC_Codex_DECISION_MODE: 'manual', OC_Codex_RECONNECT_MS: '30',
+      OC_Codex_DECISION_MODE: 'manual', OC_Codex_RECONNECT_MS: String(reconnectMs),
       CODEX_COMMAND: 'cab-test-unused-app-server',
     } });
     child.stderr.on('data', (data) => { stderr += data; });
@@ -77,24 +78,29 @@ async function setup(t) {
     }
     await stop(); opencode.closeAllConnections();
     await new Promise((resolve) => opencode.close(resolve)); rmSync(directory, { recursive: true, force: true }); });
-  const get = async (path) => { const r = await fetch(base + path); return { status: r.status, body: await r.json() }; };
+  const get = async (path) => { const r = await fetch(base + path, { headers: { connection: 'close' } }); return { status: r.status, body: await r.json() }; };
   const post = async (path, data) => { const r = await fetch(base + path, { method: 'POST',
-    headers: { 'content-type': 'application/json' }, body: JSON.stringify(data) });
+    headers: { 'content-type': 'application/json', connection: 'close' }, body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
     const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
   const candidate = (id) => ({ runId: id, ownerId: 'codex-' + id, sessionId: 'ses_' + id, directory,
     changeId: 'change-' + id, selectionKey: 'requirement-' + id, dependsOn: [],
-    resources: [{ key: 'file:src/' + id + '.py', mode: 'write' }] });
+    resources: [{ key: 'file:src/' + id + '.py', mode: 'write' }], exclusiveResources: ['file:src/' + id + '.py'] });
   async function reserve(id, override = {}) {
-    const r = await post('/runs/reserve', { ...candidate(id), ...override }); assert.equal(r.status, 201, JSON.stringify(r));
+    const r = await post('/runs/reserve', { ...candidate(id),
+      ...(override.resources ? { exclusiveResources: [] } : {}), ...override }); assert.equal(r.status, 201, JSON.stringify(r));
     const arm = await post('/runs/' + id + '/job/arm', { jobId: 'job-' + id, sessionId: 'ses_' + id,
       directory, changeId: 'change-' + id, strictCommands: true, criteria: ['delivery', 'statistics'] });
     assert.equal(arm.status, 201, JSON.stringify(arm)); return r.body;
   }
   const approval = (run, requestId) => {
+    const resources = requestId.startsWith('preflight') ? run.resources.map((r) => ({ ...r, mode: 'read' })) : run.resources;
     const value = { run_id: run.runId, reservation_version: run.version,
+    coordination_protocol: 'resource-scoped-v1', operation_id: 'op-' + requestId,
+    operation_digest: createHash('sha256').update(requestId).digest('hex'),
+    expected_revisions: Object.fromEntries(resources.map((r) => [r.key, 0])),
     requestId, approval_id: 'approval-' + requestId, session_id: run.sessionId,
     change_id: run.changeId, directory, files: [], commands: ['/usr/bin/true'],
-    resources: run.resources, title: 'isolated command', summary: 'synthetic fixture' };
+    resources, title: 'isolated command', summary: 'synthetic fixture' };
     native.messages[run.sessionId] ||= [];
     native.messages[run.sessionId].push({ parts: [{ type: 'tool', tool: 'cgpt-validation_request_validation',
       state: { status: 'running', input: structuredClone(value) } }] });
@@ -102,147 +108,155 @@ async function setup(t) {
   };
   await start();
   await post('/broker/readiness', { status: 'READY', pending_count: 0, infrastructure_status: 'READY' });
-  return { native, children, directory, base, get, post, candidate, reserve, approval, start, stop };
+  async function approvedAccess(run, requestId) {
+    const value = approval(run, requestId);
+    assert.equal((await post('/validation/request', { approval: value })).status, 202);
+    assert.equal((await post('/runs/' + run.runId + '/decision/' + value.requestId, { decision: 'approved' })).status, 201);
+    const acquired = await post('/runs/' + run.runId + '/locks/acquire', { version: run.version,
+      operationId: value.operation_id, operationDigest: value.operation_digest,
+      resources: value.resources, expectedRevisions: value.expected_revisions });
+    assert.equal(acquired.status, 200, JSON.stringify(acquired));
+    return { approval: value, access: acquired.body };
+  }
+  async function execute(value) {
+    native.permissions.push({ id: 'perm-' + value.requestId, sessionID: value.session_id,
+      permission: value.commands.length ? 'bash' : 'edit', tool: { callID: 'call-' + value.requestId },
+      metadata: value.commands.length ? { command: value.commands[0] } : { filepath: directory + '/' + value.files[0] } });
+    await waitFor(() => native.replies.some((r) => r.path.endsWith('/perm-' + value.requestId)));
+  }
+  async function completeTool(value) {
+    const op = (await get('/runs')).body.coordination.operations[value.operation_id];
+    const stamp = Math.max(Date.now(), op.native.startedAt) + 1;
+    const part = { type: 'tool', id: 'part-' + value.requestId, callID: 'call-' + value.requestId,
+      sessionID: value.session_id, tool: value.commands.length ? 'bash' : 'edit', state: { status: 'completed',
+        input: value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] },
+        time: { start: stamp, end: stamp + 1 }, metadata: { exit: 0 } } };
+    native.messages[value.session_id].push({ parts: [part] });
+    native.emit({ type: 'message.part.updated', properties: { part } });
+  }
+  async function releaseOperation(run, value, access) {
+    const current = access || (await get('/runs/' + run.runId + '/locks')).body.accesses.find((a) => a.accessId === value.operation_id);
+    return post('/runs/' + run.runId + '/locks/release', { version: run.version, operationId: current.accessId,
+      token: current.token, fencing: current.fencing, outcome: 'COMPLETED', evidence: ['native effects reviewed'] });
+  }
+  return { native, children, directory, base, get, post, candidate, reserve, approval, start, stop,
+    approvedAccess, execute, completeTool, releaseOperation };
 }
 
-test('publication atomique HTTP : reprise idempotente, génération et gate conservés', async (t) => {
+test('publication ciblée HTTP : reçu après reprise, génération, gate et pair indépendant', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
-  for (const run of [a, b]) assert.equal((await h.post('/runs/' + run.runId + '/ready',
-    { version: run.version, evidence: ['local coherent checkpoint'] })).status, 200);
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).status, 200);
-  const request = { version: a.version, referenceVersion: 0, acquire: false, published: true,
-    evidence: ['current base and archive verified'], completion: { transactionId: 'atomic-a',
-      reportFile: 'openspec/changes/archive/2026-10-16-change-a/STATISTIQUES.md' } };
-  const published = await h.post('/runs/a/integration', request);
-  assert.equal(published.status, 200, JSON.stringify(published));
-  assert.equal(published.body.integrationOwner, null);
-  const report = published.body.runs.find((run) => run.runId === 'a');
-  assert.equal(report.phase, 'REPORT'); assert.ok(report.version > a.version);
-  assert.equal((await h.post('/validation/request', { approval: h.approval(a, 'old-version') })).body.error, 'reservation-version-stale');
-  assert.equal((await h.post('/runs/a/release', { version: report.version, delivered: true,
-    evidence: ['report absent'] })).body.error, 'run-not-quiescent');
+  const { approval, access } = await h.approvedAccess(a, 'published-a');
+  await h.execute(approval); await h.completeTool(approval); h.native.busy.ses_b = { type: 'busy' };
+  const payload = { version: a.version, operationId: access.accessId, token: access.token, fencing: access.fencing,
+    transactionId: 'publication-a', outcome: 'COMPLETED', proofRevisions: approval.expected_revisions,
+    reportFile: 'openspec/changes/archive/2026-10-16-change-a/STATISTIQUES.md', evidence: ['validation and archive reviewed'] };
+  const result = await h.post('/runs/a/publish', payload); assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal((await h.get('/runs/b/status')).body.coordination.reason, null);
+  assert.equal((await h.get('/runs')).body.runs.find((r) => r.runId === 'b').version, b.version);
   assert.equal((await h.get('/runs/a/status')).body.terminalGate.status, 'OPEN');
+  assert.equal((await h.post('/validation/request', { approval: h.approval(a, 'old-version') })).body.error, 'reservation-version-stale');
   await h.stop(); await h.start();
-  const repeated = await h.post('/runs/a/integration', request);
-  assert.equal(repeated.status, 200); assert.deepEqual(repeated.body.completion, published.body.completion);
-  assert.equal(repeated.body.referenceVersion, 1);
-  const divergent = await h.post('/runs/a/integration', { ...request, evidence: ['different proof'] });
-  assert.equal(divergent.body.error, 'integration-transaction-divergent');
+  assert.deepEqual((await h.post('/runs/a/publish', payload)).body, result.body);
+  assert.equal((await h.post('/runs/a/publish', { ...payload, evidence: ['different'] })).body.error, 'publication-transaction-divergent');
 });
 
-test('le contrôle de cohorte ne répète pas les lectures globales par RUN', async (t) => {
-  const h = await setup(t); const runs = [];
-  for (const id of ['a', 'b', 'c']) runs.push(await h.reserve(id));
-  for (const run of runs) await h.post('/runs/' + run.runId + '/ready', { version: run.version, evidence: ['stable'] });
-  h.native.requests.length = 0;
-  assert.equal((await h.post('/runs/a/integration', { version: runs[0].version, acquire: true })).status, 200);
-  assert.equal(h.native.requests.filter((path) => path === '/session/status').length, 1);
-  assert.equal(h.native.requests.filter((path) => path === '/permission').length, 1);
-  for (const run of runs) assert.equal(h.native.requests.filter((path) => path === '/session/' + run.sessionId).length, 1);
+test('le contrôle global exceptionnel regroupe les lectures natives de la cohorte', async (t) => {
+  // La mesure vise la requête de cohorte, sans le polling périodique des permissions.
+  const h = await setup(t, { reconnectMs: 10000 });
+  await waitFor(() => h.native.requests.includes('/session/status'));
+  for (const id of ['a', 'b', 'c']) await h.reserve(id);
+  const g = await h.post('/coordination/global/request', { cause: 'SHARED_MAINTENANCE', scope: 'all',
+    transactionId: 'maintenance', authorization: 'explicit developer maintenance', evidence: ['authorized'] });
+  assert.equal(g.status, 202); h.native.requests.length = 0;
+  const confirmed = await h.post('/coordination/global/confirm', { ...g.body, evidence: ['native quiescence'] });
+  assert.equal(confirmed.status, 200, JSON.stringify(confirmed));
+  assert.equal(h.native.requests.filter((p) => p === '/session/status').length, 1);
+  assert.equal(h.native.requests.filter((p) => p === '/permission').length, 1);
 });
 
-test('les obstacles exposent le drainage, les mandats et la quiescence sans contenu', async (t) => {
-  const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
-  await h.post('/runs/a/integration-request', { version: a.version, evidence: ['prepared'] });
-  await h.post('/runs/b/job/progress', { jobId: 'job-b', currentCabMandate: 'opaque-mandate' });
-  h.native.busy.ses_b = { type: 'busy' };
-  h.native.permissions = [{ id: 'perm-b', sessionID: 'ses_b', metadata: { command: 'must never appear' } }];
-  const diagnostic = await h.get('/runs/a/integration-status');
-  assert.equal(diagnostic.status, 200);
-  for (const reason of ['stable-milestone-required', 'current-mandate-not-closed', 'native-session-busy', 'native-permissions-unresolved']) {
-    assert.ok(diagnostic.body.blockers.some((blocker) => blocker.runId === 'b' && blocker.reason === reason));
-  }
-  assert.equal(JSON.stringify(diagnostic.body).includes('must never appear'), false);
-  assert.equal((await h.get('/runs')).body.integrationOwner, null);
+test('les attentes de ressources exposent le pair courant sans contenu natif sensible', async (t) => {
+  const h = await setup(t); const resources = [{ key: 'file:common', mode: 'write' }];
+  const a = await h.reserve('a', { resources, exclusiveResources: [] });
+  const b = await h.reserve('b', { resources, exclusiveResources: [] });
+  await h.approvedAccess(a, 'holder');
+  const approval = h.approval(b, 'waiting');
+  await h.post('/validation/request', { approval }); await h.post('/runs/b/decision/waiting', { decision: 'approved' });
+  const waiting = await h.post('/runs/b/locks/acquire', { version: b.version, operationId: approval.operation_id,
+    operationDigest: approval.operation_digest, resources, expectedRevisions: approval.expected_revisions });
+  assert.equal(waiting.status, 202); assert.equal(waiting.body.token, undefined);
+  const status = (await h.get('/runs/b/status')).body;
+  assert.equal(status.coordination.blockers[0].runId, 'a');
+  assert.equal(status.coordination.reason, 'resource-conflict'); assert.equal(h.native.replies.length, 0);
 });
 
-test('une cohorte occupée, invalide ou divergente conserve la référence', async (t) => {
-  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
-  for (const run of [a, b]) await h.post('/runs/' + run.runId + '/ready', { version: run.version, evidence: ['stable'] });
-  h.native.busy.ses_b = { type: 'busy' };
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'native-session-not-quiescent');
-  h.native.busy = { ses_b: { type: 'invalid' } };
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'native-reconciliation-invalid');
-  h.native.busy = {}; h.native.sessions.ses_b = { directory: '/different-directory' };
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'native-session-divergent');
-  const registry = (await h.get('/runs')).body;
-  assert.equal(registry.integrationOwner, null); assert.equal(registry.referenceVersion, 0);
+test('une cohorte occupée, invalide ou divergente refuse le gel exceptionnel', async (t) => {
+  const h = await setup(t); await h.reserve('a'); await h.reserve('b');
+  const g = (await h.post('/coordination/global/request', { cause: 'GLOBAL_PAUSE', scope: 'all',
+    transactionId: 'pause', authorization: 'explicit pause all', evidence: ['authorized'] })).body;
+  const confirm = () => h.post('/coordination/global/confirm', { ...g, evidence: ['quiescent'] });
+  h.native.busy.ses_b = { type: 'busy' }; assert.equal((await confirm()).body.error, 'native-session-not-quiescent');
+  h.native.busy = { ses_b: { type: 'invalid' } }; assert.equal((await confirm()).body.error, 'native-reconciliation-invalid');
+  h.native.busy = {}; h.native.sessions.ses_b = { directory: '/different' };
+  assert.equal((await confirm()).body.error, 'native-session-divergent');
+  assert.equal((await h.get('/coordination/global')).body.global.state, 'DRAINING');
 });
 
-test('un événement SSE pertinent pendant observation exige une nouvelle réconciliation', async (t) => {
-  const h = await setup(t); const a = await h.reserve('a');
-  await h.post('/runs/a/ready', { version: a.version, evidence: ['stable'] });
-  let fired = false;
-  h.native.onRequest = async (path) => {
-    if (path !== '/session/status' || fired) return;
-    fired = true; h.native.emit({ type: 'session.status', properties: { sessionID: 'ses_a', status: { type: 'idle' } } });
-    await delay(50);
+test('un événement SSE pendant le contrôle exceptionnel impose une observation neuve', async (t) => {
+  const h = await setup(t); await h.reserve('a');
+  const g = (await h.post('/coordination/global/request', { cause: 'GLOBAL_PAUSE', scope: 'all',
+    transactionId: 'pause', authorization: 'explicit pause all', evidence: ['authorized'] })).body;
+  let fired = false; h.native.onRequest = async (path) => {
+    if (path !== '/session/status' || fired) return; fired = true;
+    h.native.emit({ type: 'session.status', properties: { sessionID: 'ses_a', status: { type: 'idle' } } }); await delay(50);
   };
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'native-observation-changed');
-  assert.equal((await h.get('/runs')).body.integrationOwner, null);
+  assert.equal((await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] })).body.error, 'native-observation-changed');
   h.native.onRequest = null;
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).status, 200);
+  assert.equal((await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] })).status, 200);
 });
 
-test('une révision du registre pendant observation refuse une transition sur une cohorte périmée', async (t) => {
-  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
-  for (const run of [a, b]) await h.post('/runs/' + run.runId + '/ready', { version: run.version, evidence: ['stable'] });
-  let fired = false;
-  h.native.onRequest = async (path) => {
-    if (path !== '/session/status' || fired) return;
-    fired = true;
-    assert.equal((await h.post('/runs/b/integration-request', { version: b.version, evidence: ['prepared peer'] })).status, 200);
+test('une mutation pendant observation exceptionnelle refuse une cohorte périmée', async (t) => {
+  const h = await setup(t); await h.reserve('a'); const b = await h.reserve('b');
+  const g = (await h.post('/coordination/global/request', { cause: 'SHARED_MAINTENANCE', scope: 'all',
+    transactionId: 'maintenance', authorization: 'authorized maintenance', evidence: ['authorized'] })).body;
+  let fired = false; h.native.onRequest = async (path) => {
+    if (path !== '/session/status' || fired) return; fired = true;
+    await h.post('/runs/b/suspend', { version: b.version, action: 'PAUSE', evidence: ['targeted pause'] });
   };
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'native-observation-changed');
-  const state = (await h.get('/runs')).body;
-  assert.equal(state.integrationOwner, null); assert.equal(state.referenceVersion, 0);
-  assert.deepEqual(state.integrationQueue.map((entry) => entry.runId), ['b']);
+  assert.equal((await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] })).body.error, 'native-observation-changed');
+  assert.equal((await h.get('/coordination/global')).body.global.state, 'DRAINING');
 });
 
-test('une nouvelle progression pendant observation conserve les effets non résolus', async (t) => {
-  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
-  for (const run of [a, b]) await h.post('/runs/' + run.runId + '/ready', { version: run.version, evidence: ['stable'] });
-  let fired = false;
-  h.native.onRequest = async (path) => {
-    if (path !== '/session/status' || fired) return;
-    fired = true;
+test('une progression tardive conserve les effets non résolus pendant le drainage global', async (t) => {
+  const h = await setup(t); await h.reserve('a'); await h.reserve('b');
+  const g = (await h.post('/coordination/global/request', { cause: 'GLOBAL_STOP', scope: 'all',
+    transactionId: 'stop', authorization: 'explicit global stop', evidence: ['authorized'] })).body;
+  let fired = false; h.native.onRequest = async (path) => {
+    if (path !== '/session/status' || fired) return; fired = true;
     await h.post('/runs/b/job/progress', { jobId: 'job-b', currentCabMandate: 'late-effect' });
   };
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'run-not-quiescent');
-  assert.equal((await h.get('/runs')).body.integrationOwner, null);
+  assert.equal((await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] })).body.error, 'run-not-quiescent');
 });
 
-test('deux fins simultanées ne publient qu’une fois et un reçu ne crée aucune permission', async (t) => {
+test('deux publications simultanées produisent un seul reçu sans nouvelle permission', async (t) => {
   const h = await setup(t); const a = await h.reserve('a');
-  await h.post('/runs/a/ready', { version: a.version, evidence: ['stable'] });
-  await h.post('/runs/a/integration', { version: a.version, acquire: true });
-  const payload = { version: a.version, referenceVersion: 0, acquire: false, published: true,
-    evidence: ['validated publication'], completion: { transactionId: 'simultaneous-a',
-      reportFile: 'openspec/changes/archive/2026-10-16-change-a/STATISTIQUES.md' } };
-  const replies = await Promise.all([h.post('/runs/a/integration', payload), h.post('/runs/a/integration', payload)]);
-  assert.ok(replies.some((reply) => reply.status === 200));
-  assert.ok(replies.every((reply) => [200, 409].includes(reply.status)));
-  const repeated = await h.post('/runs/a/integration', payload);
-  assert.equal(repeated.status, 200); assert.equal(repeated.body.referenceVersion, 1);
-  assert.equal(Object.keys(repeated.body.integrationCompletions).length, 1);
-  assert.equal(h.native.replies.length, 0);
+  const { approval, access } = await h.approvedAccess(a, 'simultaneous'); await h.execute(approval); await h.completeTool(approval);
+  const payload = { version: a.version, operationId: access.accessId, token: access.token, fencing: access.fencing,
+    transactionId: 'once-publish', outcome: 'COMPLETED', proofRevisions: approval.expected_revisions, evidence: ['reviewed'] };
+  const replies = await Promise.all([h.post('/runs/a/publish', payload), h.post('/runs/a/publish', payload)]);
+  assert.ok(replies.some((r) => r.status === 200)); assert.ok(replies.every((r) => [200, 409].includes(r.status)));
+  assert.equal((await h.post('/runs/a/publish', payload)).body.referenceVersion, 1);
+  assert.equal(Object.keys((await h.get('/runs')).body.coordination.publications).length, 1);
+  assert.equal(h.native.replies.length, 1);
 });
 
-test('la libération atomique garde la barrière tant que les effets ou observations restent incertains', async (t) => {
-  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
-  for (const run of [a, b]) await h.post('/runs/' + run.runId + '/ready', { version: run.version, evidence: ['stable'] });
-  await h.post('/runs/a/integration', { version: a.version, acquire: true });
-  const payload = { version: a.version, referenceVersion: 0, acquire: false, published: true,
-    evidence: ['validated publication'], completion: { transactionId: 'guarded-a',
-      reportFile: 'openspec/changes/archive/2026-10-16-change-a/STATISTIQUES.md' } };
-  h.native.busy.ses_b = { type: 'busy' };
-  assert.equal((await h.post('/runs/a/integration', payload)).body.error, 'native-session-not-quiescent');
-  h.native.busy = {};
-  await h.post('/runs/a/job/progress', { jobId: 'job-a', currentCabMandate: 'unreconciled-effect' });
-  assert.equal((await h.post('/runs/a/integration', payload)).body.error, 'run-not-quiescent');
-  const state = (await h.get('/runs')).body;
-  assert.equal(state.integrationOwner, 'a'); assert.equal(state.referenceVersion, 0);
-  assert.equal(state.runs.find((run) => run.runId === 'a').phase, 'WORK');
+test('une fin native inconnue garde les protections et interdit le gate', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a');
+  const { approval, access } = await h.approvedAccess(a, 'unknown'); await h.execute(approval);
+  const refused = await h.releaseOperation(a, approval, access);
+  assert.equal(refused.body.error, 'native-completion-not-proved');
+  assert.equal((await h.post('/runs/a/job/terminal-gate', { state: 'TERMINÉ' })).body.error, 'run-accesses-unresolved');
+  assert.equal((await h.get('/runs/a/locks')).body.accesses[0].state, 'EXECUTING');
+  await h.completeTool(approval); assert.equal((await h.releaseOperation(a, approval, access)).status, 200);
 });
 
 test('sélection simultanée : un seul propriétaire du change et aucun écrasement', async (t) => {
@@ -321,36 +335,22 @@ test('une identité déclarée ne remplace pas le tool part natif de la session 
   assert.equal(h.native.replies.length, 0);
 });
 
-test('intégration stable : suspension des autres RUN et réconciliation obligatoire de la référence', async (t) => {
+test('une publication indépendante ne suspend pas le pair ni sa génération', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).status, 409);
-  for (const run of [a, b]) assert.equal((await h.post('/runs/' + run.runId + '/ready',
-    { version: run.version, evidence: ['local checks passed at a stable fixture milestone'] })).status, 200);
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).status, 200);
-  assert.equal((await h.get('/runs/b/status')).body.coordination.reason, 'integration-suspended');
-  assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'blocked-by-integration') })).status, 409);
-  const globalCheck = { ...h.approval(a, 'global-check'), resources: [{ key: 'project:*', mode: 'read' }] };
-  h.native.messages.ses_a.push({ parts: [{ type: 'tool', tool: 'cgpt-validation_request_validation',
-    state: { status: 'running', input: globalCheck } }] });
-  assert.equal((await h.post('/validation/request', { approval: globalCheck })).status, 202);
-  h.native.permissions.push({ id: 'global-check-permission', sessionID: 'ses_a', permission: 'bash', metadata: { command: '/usr/bin/true' } });
-  assert.equal((await h.post('/runs/a/decision/global-check', { decision: 'approved' })).status, 201);
-  await waitFor(() => h.native.replies.length === 1);
-  const publication = await h.post('/runs/a/integration', { version: a.version, acquire: false,
-    published: true, evidence: ['synthetic combined validation and publication proof'] });
-  assert.equal(publication.status, 200);
-  assert.equal((await h.get('/runs/b/status')).body.coordination.reason, 'reference-reconciliation-required');
-  const refreshed = await h.post('/runs/b/reconcile', { version: b.version,
-    referenceVersion: publication.body.referenceVersion, evidence: ['reviewed base and affected tests for fixture B'] });
-  assert.equal(refreshed.status, 200);
-  assert.ok(refreshed.body.version > b.version);
-  assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'old-reference') })).status, 409);
-  assert.equal((await h.post('/validation/request', { approval: h.approval(refreshed.body, 'new-reference') })).status, 202);
+  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'coordination-upgrade-required');
+  const { approval, access } = await h.approvedAccess(a, 'publish-independent');
+  await h.execute(approval); await h.completeTool(approval);
+  assert.equal((await h.post('/runs/a/publish', { version: a.version, transactionId: 'independent', operationId: access.accessId,
+    token: access.token, fencing: access.fencing, outcome: 'COMPLETED', proofRevisions: approval.expected_revisions,
+    evidence: ['validated'] })).status, 200);
+  assert.equal((await h.get('/runs/b/status')).body.coordination.reason, null);
+  assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'still-current') })).status, 202);
 });
 
 test('récupération de A avec B actif : réservation conservée et génération renouvelée', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
   h.native.permissions = [{ id: 'permission-b', sessionID: 'ses_b', permission: 'bash', metadata: { command: 'unrelated' } }];
+  let stamp;
   const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new', recoveryId: 'recovery-a', preflightRequestId: 'preflight-a' };
   assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
   const approval = h.approval({ ...a, sessionId: 'ses_a_new' }, 'preflight-a');
@@ -358,15 +358,17 @@ test('récupération de A avec B actif : réservation conservée et génération
   assert.equal((await h.post('/runs/a/decision/preflight-a', { decision: 'approved' })).status, 201);
   h.native.permissions.push({ id: 'permission-a', sessionID: 'ses_a_new', permission: 'bash', metadata: { command: '/usr/bin/true' } });
   await waitFor(() => h.native.replies.length === 1);
+  stamp = Date.now() + 1;
   h.native.messages.ses_a_new = [{ parts: [
     { type: 'tool', tool: 'cgpt-validation_request_validation', state: { status: 'completed', input: approval,
-      output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: 1, end: 2 } } },
+      output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: stamp + 1, end: stamp + 2 } } },
     { type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: '/usr/bin/true' },
-      metadata: { exit: 0 }, time: { start: 3, end: 4 } } },
+      metadata: { exit: 0 }, time: { start: stamp + 3, end: stamp + 4 } } },
     { type: 'tool', tool: 'cgpt-validation_broker_readiness', state: { status: 'completed',
-      output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: 5, end: 6 } } },
+      output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: stamp + 5, end: stamp + 6 } } },
   ] }];
   await h.post('/broker/readiness', { status: 'READY', pending_count: 0, by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
+  assert.equal((await h.releaseOperation(a, approval)).status, 200);
   const complete = await h.post('/runs/a/job/recover', { ...recovery, phase: 'complete' });
   assert.equal(complete.status, 200, JSON.stringify(complete));
   const run = (await h.get('/runs')).body.runs.find((r) => r.runId === 'a');
@@ -420,7 +422,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.2.1');
+  assert.equal(initialized.result.serverInfo.version, '1.3.0');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -470,45 +472,25 @@ test('statistiques automatiques : broker relayé, décision, once, SSE filtré e
   assert.ok(restored.restartUnknownMs > 0);
 });
 
-test('file, closing et rapport : les pairs reprennent et les gates restent obligatoires', async (t) => {
-  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
-  for (const run of [a, b]) {
-    assert.equal((await h.post('/runs/' + run.runId + '/integration-request',
-      { version: run.version, evidence: ['integration requested'] })).status, 200);
-    assert.equal((await h.post('/runs/' + run.runId + '/ready',
-      { version: run.version, evidence: ['stable local milestone'] })).status, 200);
-  }
-  assert.equal((await h.post('/runs/b/integration', { version: b.version, acquire: true })).body.error, 'integration-queue-order');
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).status, 200);
-  assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: false,
-    published: true, evidence: ['archive and combined validation'] })).status, 200);
-  const reportFile = 'openspec/changes/archive/2026-10-15-change-a/STATISTIQUES.md';
-  const closing = await h.post('/runs/a/closing', { version: a.version, reportFile, evidence: ['published own archive'] });
-  assert.equal(closing.status, 200, JSON.stringify(closing));
-  assert.equal((await h.post('/runs/a/release', { version: closing.body.version,
-    delivered: true, evidence: ['report'] })).status, 409);
-  const refreshed = await h.post('/runs/b/reconcile', { version: b.version, referenceVersion: 1, evidence: ['base reviewed'] });
-  assert.equal(refreshed.status, 200);
-  assert.equal((await h.post('/runs/b/ready', { version: refreshed.body.version, evidence: ['ready on current reference'] })).status, 200);
-  assert.equal((await h.post('/runs/b/integration', { version: refreshed.body.version, acquire: true })).status, 200);
-  const blocked = h.approval(closing.body, 'report-under-barrier');
-  assert.equal((await h.post('/validation/request', { approval: blocked })).body.error, 'integration-suspended');
-  assert.equal((await h.post('/runs/b/integration', { version: refreshed.body.version, acquire: false,
-    published: true, evidence: ['B published'] })).status, 200);
-  const report = h.approval(closing.body, 'report-after-barrier');
-  report.files = [reportFile]; report.commands = []; report.resources = [];
+test('closing et rapport ciblés : le pair continue et le gate exige la fin native', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
+  const { approval, access } = await h.approvedAccess(a, 'source'); await h.execute(approval); await h.completeTool(approval);
+  const reportFile = 'openspec/changes/archive/2026-10-16-change-a/STATISTIQUES.md';
+  const publication = await h.post('/runs/a/publish', { version: a.version, transactionId: 'published-source', operationId: access.accessId,
+    token: access.token, fencing: access.fencing, outcome: 'COMPLETED', proofRevisions: approval.expected_revisions,
+    reportFile, evidence: ['source and archive validated'] }); assert.equal(publication.status, 200);
+  const run = (await h.get('/runs')).body.runs.find((r) => r.runId === 'a');
+  const report = h.approval(run, 'report'); report.files = [reportFile]; report.commands = [];
   h.native.messages.ses_a.at(-1).parts[0].state.input = structuredClone(report);
   assert.equal((await h.post('/validation/request', { approval: report })).status, 202);
-  h.native.permissions.push({ id: 'report-permission', sessionID: 'ses_a', permission: 'edit',
-    metadata: { filepath: h.directory + '/' + reportFile } });
-  assert.equal((await h.post('/runs/a/decision/report-after-barrier', { decision: 'approved' })).status, 201);
-  await waitFor(() => h.native.replies.length === 1);
-  assert.equal(h.native.replies[0].body.response, 'once');
+  assert.equal((await h.post('/runs/a/decision/report', { decision: 'approved' })).status, 201);
+  await h.execute(report);
+  assert.equal((await h.post('/runs/a/job/terminal-gate', { state: 'TERMINÉ' })).body.error, 'run-accesses-unresolved');
+  await h.completeTool(report); assert.equal((await h.releaseOperation(run, report)).status, 200);
+  assert.equal((await h.get('/runs/b/status')).body.coordination.reason, null);
   assert.equal((await h.post('/runs/a/job/terminal-gate', { state: 'TERMINÉ' })).status, 201);
   assert.equal((await h.post('/runs/a/job/disarm', { jobId: 'job-a' })).status, 202);
-  assert.equal((await h.post('/runs/a/release', { version: closing.body.version,
-    delivered: true, evidence: ['report verified and publication proved'] })).status, 200);
-  assert.equal((await h.get('/runs/a/statistics')).body.contexts[0].state, 'DELIVERED');
+  assert.equal((await h.post('/runs/a/release', { version: run.version, delivered: true, evidence: ['report verified'] })).status, 200);
 });
 
 test('une réduction quiescente retire project:* sans accepter une génération ancienne', async (t) => {
@@ -532,13 +514,14 @@ test('restauration humaine concurrente conserve propriétaire et digest sans nou
     recoveryId: 'recovery-a-restore', preflightRequestId: 'preflight-a-restore' };
   const prepared = await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' });
   assert.equal(prepared.status, 200);
-  const stamp = Date.parse(prepared.body.recovery.preparedAt);
+  let stamp = Date.parse(prepared.body.recovery.preparedAt);
   const approval = h.approval({ ...a, sessionId: 'ses_a_new' }, recovery.preflightRequestId);
   assert.equal((await h.post('/validation/request', { approval })).status, 202);
   assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'approved' })).status, 201);
   h.native.permissions.push({ id: 'permission-restored-a', sessionID: 'ses_a_new', permission: 'bash',
     metadata: { command: '/usr/bin/true' } });
   await waitFor(() => h.native.replies.length === 1);
+  stamp = Date.now() + 1;
   h.native.messages.ses_a_new = [{ parts: [
     { type: 'tool', tool: 'cgpt-validation_request_validation', state: { status: 'completed', input: approval,
       output: JSON.stringify({ ...approval, status: 'APPROVED', reviewer: 'CGPT' }),
@@ -551,6 +534,7 @@ test('restauration humaine concurrente conserve propriétaire et digest sans nou
   await h.post('/broker/readiness', { status: 'READY', pending_count: 0,
     by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
   await delay(10);
+  assert.equal((await h.releaseOperation(a, approval)).status, 200);
   const gate = await h.post('/runs/a/job/terminal-gate', { state: 'BLOQUÉ' });
   assert.equal(gate.status, 201);
   assert.equal((await h.post('/runs/a/job/disarm', { jobId: 'job-a' })).status, 202);
@@ -578,4 +562,123 @@ test('restauration humaine concurrente conserve propriétaire et digest sans nou
   assert.equal(runs.find((run) => run.runId === 'b').sessionId, 'ses_b');
   assert.deepEqual((await h.get('/runs/a/decision/' + approval.requestId)).body, decision);
   assert.equal(h.native.replies.length, 1);
+});
+
+test('consultations et import statistique HTTP ne changent ni registre ni permissions', async (t) => {
+  const h = await setup(t); await h.reserve('a'); const before = (await h.get('/runs')).body;
+  const at = Date.now() - 1000;
+  const bundle = { schemaVersion: 1, sourceId: 'synthetic-audit', datasetId: 'one', project: h.directory,
+    firstAt: at, lastAt: at + 100, pollMs: 5, gapMs: 15, events: [], quota: [], evidence: [],
+    catalog: [{ runId: 'old', contextId: 1, changeId: 'change-old', sessionId: 'ses_old', state: 'DELIVERED',
+      phase: 'REPORT', firstAt: at, lastAt: at + 100, closedAt: at + 100 }],
+    intervals: [{ from: at, to: at + 100, registryKnown: true, nativeAvailable: false, scopeRunIds: ['old'],
+      integrationOwner: null, contexts: [{ runId: 'old', contextId: 1, changeId: 'change-old', sessionId: 'ses_old',
+        nativeType: null, queue: null, stale: null }] }] };
+  assert.equal((await h.post('/statistics/import', { bundle })).body.status, 'imported');
+  assert.equal((await h.post('/statistics/import', { bundle })).body.status, 'already-imported');
+  assert.equal((await h.post('/statistics/import', { bundle: { ...bundle, command: 'SECRET' } })).status, 400);
+  for (const selection of ['current','last','24h','7d','30d']) {
+    const view = await h.get('/statistics/view?selection=' + selection);
+    assert.equal(view.status, 200); assert.equal(view.body.selection, selection);
+    assert.equal(view.body.sources[1].historical, true);
+  }
+  assert.deepEqual((await h.get('/runs')).body, before); assert.equal(h.native.replies.length, 0);
+  await h.stop(); await h.start();
+  assert.equal((await h.post('/statistics/import', { bundle })).body.status, 'already-imported');
+});
+
+test('pause ciblée et intégrité commune ferment leurs admissions sans approbation implicite', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
+  assert.equal((await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause A'] })).status, 200);
+  assert.equal((await h.post('/validation/request', { approval: h.approval(a, 'paused') })).body.error, 'run-pause');
+  assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'independent') })).status, 202);
+  assert.equal((await h.post('/runs/b/decision/independent', { decision: 'rejected' })).status, 201);
+  await h.post('/broker/readiness', { status: 'BLOCKED', infrastructure_status: 'BLOCKED', root_cause: 'JOURNAL_INTEGRITY_FAILURE' });
+  const global = (await h.get('/coordination/global')).body.global;
+  assert.equal(global.cause, 'GLOBAL_RECONCILIATION'); assert.equal(global.state, 'DRAINING');
+  assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'integrity-blocked') })).body.error, 'global-coordination-suspended');
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('ancien broker ou anciens champs refusés sans permission ni gel ordinaire', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a');
+  await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'legacy' });
+  assert.equal((await h.post('/validation/request', { approval: h.approval(a, 'old-broker') })).body.error, 'coordination-upgrade-required');
+  await h.post('/broker/readiness', { status: 'READY' });
+  const old = h.approval(a, 'old-fields'); delete old.operation_id;
+  h.native.messages.ses_a.at(-1).parts[0].state.input = structuredClone(old);
+  assert.equal((await h.post('/validation/request', { approval: old })).body.error, 'coordination-upgrade-required');
+  assert.equal((await h.get('/coordination/global')).body.global, null); assert.equal(h.native.replies.length, 0);
+});
+
+test('un refus explicite reste possible pendant une pause après préparation', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a');
+  const approval = h.approval(a, 'pending-pause');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause'] });
+  assert.equal((await h.post('/runs/a/decision/pending-pause', { decision: 'rejected' })).status, 201);
+  assert.equal((await h.get('/runs/a/decision/pending-pause')).body.decision, 'rejected');
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('migration HTTP conserve les RUN et exige once exact avant leur reprise métier', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
+  const legacy = (await h.get('/runs')).body; legacy.schemaVersion = 3;
+  delete legacy.coordination; delete legacy.coordinationProtocol;
+  await h.stop();
+  const state = join(h.directory,'.opencode','state','cgpt-approval-bridge');
+  writeFileSync(join(state,'controller-runs.json'),JSON.stringify(legacy)+'\n');
+  await h.start(); await h.post('/broker/readiness',{status:'READY',pending_count:0});
+  assert.equal((await h.get('/runs/a/status')).body.coordination.reason,'coordination-upgrade-required');
+  const migrated = await h.post('/coordination/migrate',{cause:'SHARED_MAINTENANCE',authorization:'explicit migration',evidence:['native quiescence and backup']});
+  assert.equal(migrated.status,200,JSON.stringify(migrated));
+  assert.equal(migrated.body.runs.length,2);
+  assert.equal(statSync(join(state,migrated.body.coordination.legacy.backupFile)).mode & 0o777,0o600);
+  await h.post('/runs/a/suspend',{version:a.version,action:'RESUME',evidence:['preflight only']});
+  const g=migrated.body.coordination.global;
+  assert.equal((await h.post('/coordination/global/release',{transactionId:g.transactionId,generation:g.generation,
+    authorization:'preflight only while peers paused',evidence:['transport checks passed']})).status,200);
+  assert.equal((await h.post('/validation/request',{approval:h.approval(a,'business-before-probe')})).body.error,'maintenance-preflight-required');
+  const {approval,access}=await h.approvedAccess(a,'preflight-migration');
+  await h.execute(approval);await h.completeTool(approval);
+  assert.equal((await h.releaseOperation(a,approval,access)).status,200);
+  const runs=(await h.get('/runs')).body.runs;
+  assert.equal(runs.find(r=>r.runId==='a').maintenancePreflightRequired,undefined);
+  assert.equal(runs.find(r=>r.runId==='b').suspension.action,'PAUSE');
+  assert.equal((await h.post('/validation/request',{approval:h.approval(a,'business-after-probe')})).status,202);
+  assert.equal(h.native.replies.length,1);
+});
+
+test('la fin native accepte un appel commencé avant ask mais refuse un autre callID', async (t) => {
+  const h=await setup(t);const a=await h.reserve('a');
+  const {approval,access}=await h.approvedAccess(a,'pending-before-ask');await h.execute(approval);
+  const op=(await h.get('/runs')).body.coordination.operations[approval.operation_id];
+  const part={type:'tool',tool:'bash',callID:'wrong-call',state:{status:'completed',input:{command:'/usr/bin/true'},
+    time:{start:op.native.startedAt-1000,end:Date.now()+1},metadata:{exit:0}}};
+  h.native.messages.ses_a.push({parts:[part]});
+  assert.equal((await h.releaseOperation(a,approval,access)).body.error,'native-completion-not-proved');
+  part.callID='call-'+approval.requestId;
+  assert.equal((await h.releaseOperation(a,approval,access)).status,200);
+  assert.equal((await h.releaseOperation(a,approval,access)).status,200);
+});
+
+test('l’usage historique unique garde once et exige une clôture réconciliée avant Multi-RUN', async (t) => {
+  const h=await setup(t);
+  const approval={requestId:'legacy-request',approval_id:'legacy-approval',change_id:'legacy-change',session_id:'ses_legacy',
+    directory:h.directory,files:[],commands:['/usr/bin/true'],summary:'legacy compatibility'};
+  assert.equal((await h.post('/validation/request',{approval})).status,202);
+  assert.equal((await h.post('/decision/legacy-request',{decision:'approved'})).status,201);
+  h.native.permissions.push({id:'legacy-permission',sessionID:'ses_legacy',permission:'bash',metadata:{command:'/usr/bin/true'}});
+  await waitFor(()=>h.native.replies.length===1);await delay(30);
+  assert.equal((await h.post('/runs/reserve',h.candidate('a'))).body.error,'legacy-coordination-reconciliation-required');
+  const g=(await h.post('/coordination/global/request',{cause:'GLOBAL_RECONCILIATION',scope:'all',transactionId:'legacy-global',
+    authorization:'explicit handoff',evidence:['legacy review']})).body;
+  h.native.busy.ses_legacy={type:'busy'};
+  assert.equal((await h.post('/coordination/global/confirm',{...g,evidence:['not quiescent']})).body.error,'native-session-not-quiescent');
+  h.native.busy.ses_legacy={type:'idle'};
+  assert.equal((await h.post('/coordination/global/confirm',{...g,evidence:['all legacy effects reviewed']})).status,200);
+  assert.equal((await h.post('/coordination/legacy/reconcile',{transactionId:'handoff',authorization:'explicit closure',
+    evidence:['native history and effects reconciled']})).status,200);
+  assert.equal((await h.post('/coordination/global/release',{...g,authorization:'resume concurrent profile',evidence:['handoff proved']})).status,200);
+  assert.equal((await h.reserve('a')).state,'RESERVED');assert.equal(h.native.replies[0].body.response,'once');
 });

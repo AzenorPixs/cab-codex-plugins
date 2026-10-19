@@ -5,7 +5,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.2.1";
+export const VERSION = "1.3.0";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 
@@ -86,6 +86,7 @@ export class RunRegistry {
     this.observe = observe;
     this.restore();
   }
+  acceptsSchema(version) { return [1, 2, 3].includes(version); }
   restore() {
     this.runs.clear();
     this.sequence = 0;
@@ -98,13 +99,14 @@ export class RunRegistry {
     this.schemaVersion = 1;
     const data = readRegistry(this.path);
     if (data !== undefined) {
-      if (!record(data) || ![1, 2, 3].includes(data.schemaVersion) || data.project !== this.directory ||
+      if (!record(data) || !this.acceptsSchema(data.schemaVersion) || data.project !== this.directory ||
           !Array.isArray(data.runs) || !Number.isSafeInteger(data.sequence) || data.sequence < 0 ||
           (data.integrationOwner !== null && !id(data.integrationOwner))) {
         throw new CoordinationError("registry-restoration-invalid");
       }
       this.sequence = data.sequence;
       this.schemaVersion = data.schemaVersion;
+      this.resourceState = data.coordination;
       this.referenceVersion = data.referenceVersion === undefined ? 0 : data.referenceVersion;
       if (!Number.isSafeInteger(this.referenceVersion) || this.referenceVersion < 0) {
         throw new CoordinationError('registry-restoration-invalid');
@@ -151,7 +153,7 @@ export class RunRegistry {
       }
       this.integrationQueue = data.integrationQueue || [];
       if ((data.schemaVersion < 3 && data.integrationCompletions !== undefined) ||
-          (data.schemaVersion === 3 && !record(data.integrationCompletions))) {
+          (data.schemaVersion >= 3 && !record(data.integrationCompletions))) {
         throw new CoordinationError('registry-restoration-invalid');
       }
       this.integrationCompletions = data.integrationCompletions || {};
