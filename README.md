@@ -54,21 +54,9 @@ Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
 les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
 le complète depuis les preuves autorisées et mandate sa publication.
 
-Le profil optimisé ajoute une file FIFO `/integration-request`, une réduction
-quiescente `/resources` et une phase `/closing` après publication, limitée au
-rapport de sa propre archive. Le rapport est préparé en continu puis finalisé
-hors exclusion globale, avec décisions explicites et permission native `once`.
-La livraison exige toujours le rapport vérifié et le gate. Les anciennes
-interfaces restent disponibles. Voir [le protocole](ORCHESTRATED_CODING.md).
-La préparation précède la file et les pairs rejoignent leur prochain jalon
-stable prouvé. `GET /runs/<runId>/integration-status` explique les obstacles
-techniques sans contenu. L'option `completion` de `/integration` réunit
-publication, libération et passage en `REPORT` avec reçu durable idempotent.
-Les lectures natives de cohorte sont regroupées et toute divergence est refusée.
-Le registre schéma 3 de cette option nécessite les nouvelles sources ; aucun
-rapport, relevé final ou gate ne prolonge la fenêtre critique de publication.
-Ces fonctions sont préparées dans les sources ; l'installation active nécessite
-une mise à jour coordonnée distincte.
+CAB 1.3.0 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+
+Les consultations /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
 Le plugin CAB embarque `coding-session-statistics`. Son protocole impose un
 rapport `STATISTIQUES.md` dans chaque dossier d'archive OpenSpec après un
@@ -89,7 +77,7 @@ Broker CAB unique — corrélation et readiness par RUN
    ▼
 Contrôleur unique ──► contextes A, B, … ──► Codex / Codex App Server
    │
-   └── Registre : réservations exclusives et intégration coordonnée
+   └── Registre : changes exclusifs, accès atomiques et gels exceptionnels
 
 OpenCode ── SSE HTTP commun ──► superviseur unique ──► suivi par RUN
 ```
@@ -98,7 +86,7 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.0.0 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.3.0 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -134,13 +122,13 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.0.0 partagée"]
+    subgraph CAB["Infrastructure CAB 1.3.0 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
             T["Routage et contrôle d'identité<br/>session, répertoire, RUN, change, génération"]
-            R[("Registre durable des réservations<br/>changes, intentions, ressources, dépendances<br/>écriture atomique et verrou flock")]
-            I["Barrière d'intégration exclusive<br/>jalons stables et quiescence de tous les RUN<br/>publication puis réconciliation de référence"]
+            R[("Registre durable<br/>changes exclusifs, portées, accès et révisions<br/>écriture atomique et verrou flock")]
+            I["Coordination par ressource<br/>lectures compatibles, écriture exclusive<br/>publication ciblée ; gel global exceptionnel"]
             T1["Contexte RUN A<br/>décisions, mandats, gate, récupération"]
             T2["Contexte RUN B<br/>décisions, mandats, gate, récupération"]
             T <-->|"Réserver, étendre, vérifier, libérer"| R
@@ -168,7 +156,7 @@ flowchart TB
     end
 
     A["Codex App Server — mode automatique<br/>validation isolée et corrélée par RUN"]
-    W[("Répertoire de projet partagé<br/>opérations limitées aux ressources réservées")]
+    W[("Répertoire de projet partagé<br/>opérations couvertes par leurs accès compatibles")]
 
     D -->|"Objectifs, périmètres et validations"| C
     C <-->|"HTTP : registre et pilotage par RUN"| T
@@ -203,19 +191,11 @@ flowchart TB
 - Le broker notifie le contrôleur sur `POST /validation/request` et récupère
   la décision sur `GET /decision/<requestId>`. La readiness est publiée
   séparément ; `READY` ne vaut jamais approbation.
-- Avant de travailler, chaque RUN réserve atomiquement son change, son
-  intention de sélection et ses ressources, après examen des dépendances.
-  Les lectures peuvent coexister ; un recouvrement impliquant une écriture
-  est refusé. Codex examine aussi les dépendances sémantiques.
-- Le contrôleur vérifie la couverture de chaque mandat et sa génération
-  avant de transmettre `once` à la permission native de la bonne session.
-  Les décisions, gates, reprises et checkpoints restent propres au RUN.
-- L'intégration attend des jalons stables et la quiescence de tous les RUN
-  réservés. Un seul RUN contrôle et publie l'état combiné ; les autres
-  suspendent leurs opérations puis réconcilient la nouvelle référence.
-  Une libération exige les contrôles et preuves applicables.
-- Ajouter un RUN ne purge ni ne reconnecte le broker. Les opérations
-  globales de cycle de vie exigent une réconciliation coordonnée.
+- Chaque RUN réserve exclusivement son change et son intention, puis déclare ses ressources et dépendances. Les périmètres peuvent se recouvrir ; les accès actifs sont attribués atomiquement.
+- Le contrôleur vérifie identité, contenu, révisions et protection avant une unique permission native once. Une base périmée impose une nouvelle demande.
+- Validation et publication protègent leurs ressources utiles. Les RUN indépendants continuent ; seules les preuves affectées sont réexaminées.
+- Pause et arrêt sont ciblés par défaut. Réconciliation de l'état commun, maintenance partagée, pause ou arrêt globaux suivent un drainage exceptionnel avec preuves.
+- Ajouter un RUN ne purge ni ne reconnecte le broker. Une issue inconnue conserve ses protections ; rapport, gate et clôture restent propres au RUN.
 
 Les cylindres représentent les états persistants des composants, sans
 imposer un fichier ou un emplacement partagé. Les flèches en pointillés
@@ -506,7 +486,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.2.1`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.3.0`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -520,18 +500,8 @@ installations locales.
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
 
-## Plusieurs sessions CISMP — CAB 1.0.0
+## Plusieurs sessions CISMP — CAB 1.3.0
 
-Un seul OpenCode et un seul broker stdio peuvent servir plusieurs RUN dans
-un même contexte de répertoire. Chaque change est réservé atomiquement par
-son RUN ; les ressources et dépendances sont contrôlées avant mandat. Les
-jobs, décisions, permissions et récupérations restent séparés. La présence
-de plusieurs changes OpenSpec n'est plus une ambiguïté lorsque leur attribution
-est explicite. L'intégration commune reste exclusive et la livraison exige
-les validations, l'archive et son rapport.
+Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
 
-Consulter GET /runs puis utiliser les routes /runs/<runId>/... ; les anciens
-endpoints restent réservés au contexte historique unique. Lire
-ORCHESTRATED_CODING.md et la référence du skill approval-bridge avant activation.
-Le démarrage d'un second RUN ne purge pas le broker. CISM, CAISM et les prompts
-directs restent exclus. Les worktrees nécessitent une qualification distincte.
+Consulter GET /runs puis les routes /runs/<runId>/... ; négocier resource-scoped-v1 avant mandat mutable. Les anciens appels d'intégration globale ordinaire sont refusés sans effet. Lire ORCHESTRATED_CODING.md et la référence du skill avant activation. Les formats historiques exigent une maintenance explicite ; CISM, CAISM et prompts directs restent hors concurrence pilotée. Les worktrees nécessitent une qualification distincte.

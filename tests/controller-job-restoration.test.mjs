@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -68,7 +69,7 @@ async function fixture(context) {
   function start() {
     controller = spawn(process.execPath, [controllerPath], {
       env: {
-        ...process.env,
+        ...fixtureEnvironment,
         CODEX_COMMAND: fakeCodex,
         OC_Codex_WORKSPACE: directory,
         OC_Codex_OUTSIDE_SANDBOX: "1",

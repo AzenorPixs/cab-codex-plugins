@@ -3,7 +3,7 @@ import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 
-export const VERSION = "1.2.2";
+export const VERSION = "1.3.0";
 export const CATEGORIES = ['reservation', 'changes', 'native', 'nativeChanges'];
 const DAY = 86400000;
 const LIMIT = 64 * 1024 * 1024;
@@ -16,6 +16,7 @@ const contextId = v => v === null || (Number.isSafeInteger(v) && v > 0);
 const preflight = c => /^cismp\d*-preflight(?:-|$)/.test(c);
 const business = c => !preflight(c) && !/^(rsmp-|inventory-)/.test(c);
 const contextKey = c => JSON.stringify([c.runId, c.contextId, c.changeId]);
+const eventKey = e => [e.runId, e.contextId, e.changeId, e.kind, e.id].join('\0');
 const fail = code => { const error = new Error(code); error.code = code; error.status = 400; throw error; };
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });
 const canonical = v => JSON.stringify(v, (_, x) => x && typeof x === 'object' && !Array.isArray(x)
@@ -29,17 +30,21 @@ function validContext(c) {
     (c.closedAt === null || (time(c.closedAt) && c.closedAt >= c.firstAt && c.closedAt <= c.lastAt && c.state === 'DELIVERED'));
 }
 function validInterval(s) {
-  return keys(s, ['from', 'to', 'registryKnown', 'nativeAvailable', 'scopeRunIds', 'integrationOwner', 'contexts']) &&
+  return keys(s, ['from', 'to', 'registryKnown', 'nativeAvailable', 'scopeRunIds', 'integrationOwner', 'contexts', 'globalCause']) &&
     time(s.from) && time(s.to) && s.to > s.from && typeof s.registryKnown === 'boolean' &&
     typeof s.nativeAvailable === 'boolean' && Array.isArray(s.scopeRunIds) &&
     s.scopeRunIds.length <= 1000 && s.scopeRunIds.every(id) && new Set(s.scopeRunIds).size === s.scopeRunIds.length &&
-    (s.integrationOwner === null || id(s.integrationOwner)) && Array.isArray(s.contexts) && s.contexts.length <= 1000 &&
+    (s.integrationOwner === null || id(s.integrationOwner)) &&
+    (s.globalCause === undefined || s.globalCause === null || ['GLOBAL_RECONCILIATION','SHARED_MAINTENANCE','GLOBAL_PAUSE','GLOBAL_STOP'].includes(s.globalCause)) &&
+    Array.isArray(s.contexts) && s.contexts.length <= 1000 &&
     new Set(s.contexts.map(contextKey)).size === s.contexts.length &&
     new Set(s.contexts.map(c => c.runId)).size === s.contexts.length &&
-    s.contexts.every(c => keys(c, ['runId', 'contextId', 'changeId', 'sessionId', 'nativeType', 'queue', 'stale']) &&
+    s.contexts.every(c => keys(c, ['runId', 'contextId', 'changeId', 'sessionId', 'nativeType', 'queue', 'stale', 'resource']) &&
       id(c.runId) && s.scopeRunIds.includes(c.runId) && contextId(c.contextId) && id(c.changeId) &&
       (c.sessionId === null || id(c.sessionId)) && [null, 'idle', 'busy', 'retry'].includes(c.nativeType) &&
-      typeof c.queue === 'boolean' && typeof c.stale === 'boolean');
+      (c.queue === null || typeof c.queue === 'boolean') && (c.stale === null || typeof c.stale === 'boolean') &&
+      (c.resource === undefined || c.resource === null || (keys(c.resource, ['waiting','held','exclusive','issued','promotion']) &&
+        ['waiting','held','exclusive','issued','promotion'].every((key) => typeof c.resource[key] === 'boolean'))));
 }
 function validEvent(e) {
   return keys(e, ['id', 'runId', 'contextId', 'changeId', 'at', 'kind', 'status', 'name', 'durationMs']) &&
@@ -107,12 +112,15 @@ export class ObservationStatistics {
     this.now = now; this.persist = persist; this.project = project;
     this.path = join(directory, 'controller-observations.json');
     this.error = null; this.dirty = false; this.saving = null;
-    this.data = { schemaVersion: 1, native: { firstAt: now(), lastAt: now(), intervals: [], events: [], catalog: [] }, datasets: [] };
+    this.importing = Promise.resolve();
+    this.data = { schemaVersion: 2, project, native: { firstAt: now(), lastAt: now(), intervals: [], events: [], catalog: [] }, datasets: [] };
     if (persist) {
       try {
         parentSafe(directory);
         const data = JSON.parse(safeRead(this.path));
-        if (!keys(data, ['schemaVersion', 'native', 'datasets']) || data.schemaVersion !== 1 ||
+        if (!keys(data, ['schemaVersion', 'project', 'native', 'datasets']) || data.schemaVersion !== 2 ||
+            typeof data.project !== 'string' || !data.project.startsWith('/') || data.project !== resolve(data.project) ||
+            (project !== null && data.project !== project) ||
             !keys(data.native, ['firstAt', 'lastAt', 'intervals', 'events', 'catalog']) ||
             !time(data.native.firstAt) || !time(data.native.lastAt) || data.native.lastAt < data.native.firstAt ||
             !Array.isArray(data.datasets) || data.datasets.length > 1000) fail('observation-store-invalid');
@@ -125,17 +133,20 @@ export class ObservationStatistics {
         }
         if (new Set(data.datasets.map(e => e.bundle.sourceId + ':' + e.bundle.datasetId)).size !== data.datasets.length) fail('observation-store-invalid');
         this.data = data;
+        this.project = data.project;
       } catch (error) { if (error.code !== 'ENOENT') this.error = 'observation-restoration-invalid'; }
     }
+    this.eventsById = new Map(this.data.native.events.map((e) => [eventKey(e), e]));
+    this.lastTrimAt = 0;
   }
   bind(project) {
     if (this.project && this.project !== project) fail('observation-project-mismatch');
-    this.project = project;
+    this.project = project; this.data.project = project;
   }
   recordInterval(segment) {
     if (!validInterval(segment)) fail('observation-interval-invalid');
     const native = this.data.native;
-    if (segment.from < native.lastAt) fail('observation-interval-overlap');
+    if (segment.from < (native.intervals.at(-1)?.to ?? native.firstAt)) fail('observation-interval-overlap');
     appendSegment(native.intervals, segment); native.lastAt = segment.to;
     this.trim(); this.dirty = true;
   }
@@ -153,27 +164,38 @@ export class ObservationStatistics {
   event(event) {
     if (!validEvent(event)) return;
     const events = this.data.native.events;
-    const key = e => canonical([e.runId, e.contextId, e.changeId, e.kind, e.id]);
-    const prior = events.find(e => key(e) === key(event));
+    const prior = this.eventsById.get(eventKey(event));
     if (prior) {
       if (['completed', 'error'].includes(prior.status) && event.kind === 'tool') return;
       if (canonical(prior) === canonical(event)) return;
       Object.assign(prior, event);
-    } else events.push(structuredClone(event));
+    } else {
+      const stored = structuredClone(event); events.push(stored); this.eventsById.set(eventKey(stored), stored);
+      if (events.length > 200000) this.eventsById.delete(eventKey(events.shift()));
+    }
     this.data.native.lastAt = Math.max(this.data.native.lastAt, event.at);
     this.trim(); this.dirty = true;
   }
-  trim() {
+  trim(force = false) {
+    if (!force && this.now() - this.lastTrimAt < 60000 && this.data.native.intervals.length <= 200000 &&
+        this.data.native.catalog.length <= 200000) return;
+    this.lastTrimAt = this.now();
     const n = this.data.native, cutoff = this.now() - 30 * DAY;
     n.intervals = n.intervals.filter(s => s.to > cutoff).slice(-200000);
     if (n.intervals[0]?.from < cutoff) n.intervals[0].from = cutoff;
     n.events = n.events.filter(e => e.at >= cutoff).slice(-200000);
+    this.eventsById = new Map(n.events.map((e) => [eventKey(e), e]));
     n.catalog = n.catalog.filter(c => c.lastAt >= cutoff).slice(-200000);
-    n.firstAt = Math.max(n.firstAt, cutoff);
+    n.firstAt = Math.min(Math.max(n.firstAt, cutoff), n.lastAt);
     // Les segments évincés restent absents : les vues les comptent INCONNU.
   }
-  async import(bundle) {
-    if (this.error === 'observation-restoration-invalid') fail('observation-store-unavailable');
+  import(bundle) {
+    const result = this.importing.then(() => this.importBundle(bundle));
+    this.importing = result.catch(() => {});
+    return result;
+  }
+  async importBundle(bundle) {
+    if (this.error) fail('observation-store-unavailable');
     validateBundle(bundle, this.project);
     const hash = digest(bundle);
     const prior = this.data.datasets.find(e => e.bundle.sourceId === bundle.sourceId && e.bundle.datasetId === bundle.datasetId);
@@ -196,20 +218,25 @@ export class ObservationStatistics {
   view(selection = 'current', runId, context) {
     if (!['current', 'last', '24h', '7d', '30d'].includes(selection) || (runId !== undefined && !id(runId)) ||
         (context !== undefined && !contextId(context))) fail('observation-selection-invalid');
-    this.trim();
+    this.trim(true);
     const end = this.now();
     const days = { '24h': 1, '7d': 7, '30d': 30 }[selection];
     const sources = [{ sourceId: 'native', datasetId: 'native', ...this.data.native, quota: [], evidence: [] },
       ...this.data.datasets.map(e => e.bundle)];
+    const latest = selection === 'last' && context === undefined ? sources.flatMap((s) => s.catalog)
+      .filter((c) => c.closedAt !== null && (!runId || c.runId === runId))
+      .sort((a, b) => b.closedAt - a.closedAt)[0] : null;
     return { version: VERSION, observedAt: end, selection, runId: runId ?? null, persistence: this.error || 'READY',
       limitations: ['Sources et jeux se recouvrant non additionnables', 'busy ne prouve pas du codage productif',
+        'Comptes des seuls événements présents ; une famille absente ne prouve pas un total nul',
+        'Import audit : contextes et générations observés ; messages, outils et décisions détaillés non reconstruits',
         'Aucun gain causal sans référence comparable', 'Fenêtres antérieures à la collecte ou hors couverture inconnues',
         'Événements datés à la réception ; rétention native bornée à 30 jours et 200000 éléments par famille',
         'Éviction et indisponibilité ne deviennent jamais ZERO ; compteurs cumulés hérités hors fenêtres'],
       sources: sources.map(source => {
         let catalog = source.catalog.filter(c => (!runId || c.runId === runId) && (context === undefined || c.contextId === context));
         if (!days && context === undefined) catalog = catalog.filter(c => selection === 'current' ? c.state === 'RESERVED' : c.closedAt !== null);
-        if (selection === 'last' && context === undefined) catalog = catalog.sort((a, b) => b.closedAt - a.closedAt).slice(0, 1);
+        if (selection === 'last' && context === undefined) catalog = latest ? catalog.filter((c) => contextKey(c) === contextKey(latest)) : [];
         const start = days ? end - days * DAY : catalog.length ? Math.min(...catalog.map(c => c.firstAt)) : end;
         const finish = days ? end : catalog.length ? Math.max(...catalog.map(c => c.closedAt ?? c.lastAt)) : end;
         const matches = c => catalog.some(x => contextKey(x) === contextKey(c));
@@ -222,9 +249,18 @@ export class ObservationStatistics {
           const key = event.kind + (event.status ? ':' + event.status : '');
           counts[key] = (counts[key] || 0) + 1;
         }
+        const orderedQuota = [...source.quota].sort((a, b) => a.at - b.at);
         return { sourceId: source.sourceId, datasetId: source.datasetId, historical: source.sourceId !== 'native',
           sourceFirstAt: source.firstAt, sourceLastAt: source.lastAt, start, end: finish, contexts: catalog,
-          ...output, eventCounts: counts, events: [...events.values()], quota: source.quota, evidence: source.evidence,
+          ...output, eventCounts: counts, events: [...events.values()], quota: orderedQuota,
+          quotaComparisons: orderedQuota.slice(1).map((after, index) => {
+            const before = orderedQuota[index];
+            const comparable = before.accountFingerprint === after.accountFingerprint && before.resetsAt === after.resetsAt &&
+              before.windowDurationMins === after.windowDurationMins;
+            return { beforeAt: before.at, afterAt: after.at, sharedAccount: true, comparable,
+              deltaPercentagePoints: comparable ? after.usedPercent - before.usedPercent : null,
+              reason: comparable ? null : 'N/A — compte ou fenêtre différents' };
+          }), evidence: source.evidence,
           absentSelection: !days && !catalog.length ? 'N/A — aucune identité ou livraison observée' : null };
       }) };
   }
@@ -248,14 +284,25 @@ export class ObservationStatistics {
       out += '\n| RUN / contexte | Réservé hors prévol s | Seul s | Avec pair s | Busy s | Exclusion propre s | Sous exclusion tierce s | File s | Réconciliation s |\n|---|---:|---:|---:|---:|---:|---:|---:|---:|\n';
       out += s.perContext.map(c => '| ' + c.runId + ' / ' + (c.contextId ?? 'N/A') + ' | ' +
         [c.reservedMs,c.aloneMs,c.withPeerMs,c.busyMs,c.integrationMs,c.foreignIntegrationMs,c.queueMs,c.staleMs].map(sec).join(' | ') + ' |').join('\n') + '\n\n';
+      out += '| RUN / contexte | Attente ressource connue s | Détention partagée s | Activité exclusive s | Promotion s | Ressources inconnues s | File inconnue s | Réconciliation inconnue s | Gels exceptionnels connus |\n|---|---:|---:|---:|---:|---:|---:|---:|---|\n';
+      out += s.perContext.map(c => '| ' + c.runId + ' / ' + (c.contextId ?? 'N/A') + ' | ' +
+        [c.resourceWaitMs,c.resourceHeldMs,c.exclusiveActiveMs,c.promotionWaitMs,c.resourceUnknownMs,c.queueUnknownMs,c.staleUnknownMs].map(sec).join(' | ') +
+        ' | ' + (Object.keys(c.globalExceptionMs).length ? Object.entries(c.globalExceptionMs).map(([cause,ms]) => cause + ' ' + sec(ms) + ' s').join('; ')
+          : c.globalExceptionUnknownMs ? 'N/A — source sans classification' : '0 s observée') + ' |').join('\n') + '\n\n';
+      if (s.quota.length) {
+        out += '| Quota partagé — borne | Utilisé % | Reset |\n|---|---:|---:|\n' +
+          s.quota.map(q => '| ' + iso(q.at) + ' | ' + q.usedPercent + ' | ' + q.resetsAt + ' |').join('\n') + '\n\n';
+        out += s.quotaComparisons.map(q => 'Variation globale ' + iso(q.beforeAt) + ' → ' + iso(q.afterAt) + ' : ' +
+          (q.comparable ? q.deltaPercentagePoints + ' points de pourcentage (compte partagé)' : q.reason)).join('\n') + '\n\n';
+      }
       out += 'Événements filtrés : ' + JSON.stringify(s.eventCounts) + '. Preuves : ' + s.evidence.length +
         '. Relevés quota partagé : ' + s.quota.length + '. Détails numériques et empreintes dans la vue JSON.\n\n';
     }
     return out + view.limitations.join('. ') + '. Conditions d’attente et paires peuvent se recouvrir. Modèles, tokens, coûts et commandes exactes : N/A — non collectés.\n';
   }
   async flush() {
-    if (!this.persist || !this.dirty || this.error === 'observation-restoration-invalid') return;
-    if (this.saving) { await this.saving; if (this.dirty) await this.flush(); return; }
+    if (!this.persist || !this.project || !this.dirty || this.error) return;
+    if (this.saving) { await this.saving; if (this.dirty && !this.error) await this.flush(); return; }
     this.dirty = false;
     this.saving = (async () => {
       let candidate;
@@ -264,11 +311,15 @@ export class ObservationStatistics {
         await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
         const text = canonical(this.data) + '\n';
         if (Buffer.byteLength(text) > LIMIT) fail('observation-store-full');
-        if (existsSync(this.path)) safeRead(this.path);
+        try { safeRead(this.path); }
+        catch (error) { if (error.code !== 'ENOENT') throw error; }
         candidate = this.path + '.candidate-' + randomUUID();
         const fd = await open(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
         try { await fd.writeFile(text, 'utf8'); await fd.sync(); } finally { await fd.close(); }
-        await rename(candidate, this.path); candidate = undefined; this.error = null;
+        await rename(candidate, this.path); candidate = undefined;
+        const parent = await open(dirname(this.path), constants.O_RDONLY);
+        try { await parent.sync(); } finally { await parent.close(); }
+        this.error = null;
       } catch { this.error = 'observation-persistence-unavailable'; this.dirty = true; }
       finally { if (candidate) { try { await unlink(candidate); } catch { this.error = 'observation-persistence-unavailable'; } } }
     })();
@@ -305,13 +356,23 @@ export function summarizeSegments(intervals, start, end, select = () => true, ru
     for (const c of selected) {
       const key = contextKey(c), v = contexts.get(key) || { runId: c.runId, contextId: c.contextId, changeId: c.changeId,
         reservedMs: 0, aloneMs: 0, withPeerMs: 0, busyMs: 0, nativeUnknownMs: 0, integrationMs: 0,
-        foreignIntegrationMs: 0, queueMs: 0, staleMs: 0 };
+        foreignIntegrationMs: 0, queueMs: 0, staleMs: 0, queueUnknownMs: 0, staleUnknownMs: 0,
+        resourceWaitMs: 0, resourceHeldMs: 0, exclusiveActiveMs: 0, issuedEffectMs: 0, promotionWaitMs: 0,
+        resourceUnknownMs: 0, globalExceptionMs: {}, globalExceptionUnknownMs: 0 };
       v.reservedMs += ms; v[live.length > 1 ? 'withPeerMs' : 'aloneMs'] += ms;
       if (s.nativeAvailable && c.nativeType === 'busy') v.busyMs += ms;
       if (!s.nativeAvailable || c.nativeType === null || c.nativeType === 'retry') v.nativeUnknownMs += ms;
       if (s.integrationOwner === c.runId) v.integrationMs += ms;
       else if (s.integrationOwner !== null) v.foreignIntegrationMs += ms;
       if (c.queue) v.queueMs += ms; if (c.stale) v.staleMs += ms;
+      if (c.queue === null) v.queueUnknownMs += ms;
+      if (c.stale === null) v.staleUnknownMs += ms;
+      if (c.resource) {
+        for (const [flag, metric] of [['waiting','resourceWaitMs'],['held','resourceHeldMs'],['exclusive','exclusiveActiveMs'],
+          ['issued','issuedEffectMs'],['promotion','promotionWaitMs']]) if (c.resource[flag]) v[metric] += ms;
+      } else v.resourceUnknownMs += ms;
+      if (s.globalCause) v.globalExceptionMs[s.globalCause] = (v.globalExceptionMs[s.globalCause] || 0) + ms;
+      if (s.globalCause === undefined) v.globalExceptionUnknownMs += ms;
       contexts.set(key, v);
     }
     for (let i = 0; i < live.length; i++) for (let j = i + 1; j < live.length; j++) {

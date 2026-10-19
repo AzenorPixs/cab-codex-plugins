@@ -68,7 +68,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "1.2.1"
+SERVER_VERSION = "1.3.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -2192,7 +2192,7 @@ def notify_controller(
 ):
     endpoint = (
         controller_url()
-        + "/validation/request"
+        + ("/validation/resource-request" if item.get("run_id") else "/validation/request")
     )
 
     attempted_key = controller_event_key(
@@ -2319,7 +2319,7 @@ def notify_controller(
 def remind_controller(item, age_seconds, last_state):
     """Relance le controleur sans modifier l'etat metier du mandat."""
     approval_id = item.get("approval_id", "")
-    endpoint = controller_url() + "/validation/reminder"
+    endpoint = controller_url() + ("/validation/resource-reminder" if item.get("run_id") else "/validation/reminder")
     payload = json.dumps(
         {
             "event": "validation.reminder",
@@ -2801,6 +2801,11 @@ def validate_controller_decision(
 
     if item.get("run_id") and (decision.get("run_id") != item["run_id"] or
             decision.get("reservation_version") != item.get("reservation_version")):
+        return False
+    if item.get("coordination_protocol") and any(
+        decision.get(key) != item.get(key)
+        for key in ("coordination_protocol", "operation_id", "operation_digest", "expected_revisions", "resources", "access_id")
+    ):
         return False
 
     approval_id = item.get(
@@ -3569,7 +3574,28 @@ def do_propose(args):
         if commands and not resources:
             raise ValidationError("ressources explicites requises pour une commande concurrente")
         run_identity = {"run_id": run_id, "reservation_version": version, "resources": resources}
-    elif "reservation_version" in args or "resources" in args:
+        operation_id = args.get("operation_id")
+        operation_digest = args.get("operation_digest")
+        expected_revisions = args.get("expected_revisions")
+        access_id = args.get("access_id")
+        if (args.get("coordination_protocol") != "resource-scoped-v1"
+                or not isinstance(operation_id, str)
+                or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", operation_id)
+                or not isinstance(operation_digest, str)
+                or not re.fullmatch(r"[a-f0-9]{64}", operation_digest)
+                or not isinstance(expected_revisions, dict)
+                or len(expected_revisions) > 256
+                or set(expected_revisions) != {r["key"] for r in resources}
+                or any(type(value) is not int or value < 0 for value in expected_revisions.values())
+                or (access_id is not None and (not isinstance(access_id, str)
+                    or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,99}", access_id)))):
+            raise ValidationError("protocole de coordination ou identite d operation invalide")
+        run_identity.update(coordination_protocol="resource-scoped-v1", operation_id=operation_id,
+                            operation_digest=operation_digest, expected_revisions=expected_revisions)
+        if access_id is not None:
+            run_identity["access_id"] = access_id
+    elif any(key in args for key in ("reservation_version", "resources", "coordination_protocol",
+                                     "operation_id", "operation_digest", "expected_revisions", "access_id")):
         raise ValidationError("run_id requis pour la reservation")
 
     if bool(session_id) != bool(directory):
@@ -7991,6 +8017,8 @@ def do_readiness(args=None):
         "server_version": SERVER_VERSION,
         "instance_id": INSTANCE_ID,
         "root_cause": diagnosis.get("root_cause", "NONE"),
+        "coordination_protocol": "resource-scoped-v1",
+        "coordination_capabilities": ["atomic-resource-sets", "resource-revisions", "exceptional-global-freeze"],
         "recommended_action": {
             "code": action.get("code", "NONE"),
             "class": action.get("class", action.get("mode", "NONE")),
@@ -8329,6 +8357,12 @@ def start_background_reconciliation():
 APPROVAL_REQUEST_PROPERTIES = {
     "run_id": {"type": "string"},
     "reservation_version": {"type": "integer", "minimum": 1},
+    "coordination_protocol": {"const": "resource-scoped-v1"},
+    "operation_id": {"type": "string", "maxLength": 100},
+    "operation_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "expected_revisions": {"type": "object", "maxProperties": 256,
+        "additionalProperties": {"type": "integer", "minimum": 0}},
+    "access_id": {"type": "string", "maxLength": 100},
     "resources": {"type": "array", "items": {"type": "object",
         "properties": {"key": {"type": "string"}, "mode": {"enum": ["read", "write"]}},
         "required": ["key", "mode"], "additionalProperties": False}},

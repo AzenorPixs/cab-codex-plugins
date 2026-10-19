@@ -1,3 +1,4 @@
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -102,7 +103,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
   let controller;
   async function start() {
     controller = spawn(process.execPath, [controllerPath], {
-      env: { ...process.env, CODEX_COMMAND: fakeCodex, OC_Codex_WORKSPACE: directory,
+      env: { ...fixtureEnvironment, CODEX_COMMAND: fakeCodex, OC_Codex_WORKSPACE: directory,
         OC_Codex_OUTSIDE_SANDBOX: "1", OC_Codex_OPENCODE_URL: `http://127.0.0.1:${opencode.address().port}`,
         OC_Codex_STATUS_PORT: String(port), OC_Codex_RECONNECT_MS: "25",
         OC_Codex_DECISION_MODE: automatic ? "automatic" : "manual" },
@@ -137,7 +138,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
     rmSync(directory, { recursive: true, force: true });
   });
   await start();
-  await post("/broker/readiness", { status: "READY", pending_count: 0 });
+  await post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 });
   const contract = { jobId: "job-recovery", sessionId: "ses_old", directory, changeId: "change-recovery",
     criteria: ["preuve"], strictCommands };
   assert.equal((await post("/job/arm", contract)).status, 201);
@@ -165,7 +166,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
       { type: "tool", tool: "bash", state: { status: "completed", input: { command: "/usr/bin/true" },
         metadata: { exit: 0 }, time: { start: 3, end: 4 } } },
       { type: "tool", tool: "cgpt-validation_broker_readiness", state: { status: "completed",
-        output: JSON.stringify({ status: "READY", pending_count: 0 }), time: { start: 5, end: 6 } } },
+        output: JSON.stringify({ status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 }), time: { start: 5, end: 6 } } },
     ] });
   }
   const httpStatus = async (path) => (await fetch(base + path)).status;
@@ -474,7 +475,7 @@ test("refuse les fausses preuves natives et garde le gel", async (context) => {
   for (const mutate of [
     (p) => { p.splice(0, 1); }, (p) => { p[0].state.output = JSON.stringify({ status: "APPROVED", requestId: "wrong" }); },
     (p) => { p[1].state.metadata.exit = 1; }, (p) => { p[1].state.input.command += "; echo invalid"; },
-    (p) => { p[2].state.time.start = 1; }, (p) => { p[2].state.output = JSON.stringify({ status: "READY", pending_count: 1 }); },
+    (p) => { p[2].state.time.start = 1; }, (p) => { p[2].state.output = JSON.stringify({ status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 1 }); },
     (p) => { p.push(structuredClone(p[1])); },
     (p) => { p.push({ type: "tool", tool: "edit", state: { status: "completed" } }); },
   ]) {
@@ -761,7 +762,7 @@ async function executedWithoutOnce(h) {
       { type: "tool", tool: "bash", state: { status: "completed", input: { command: "/usr/bin/true" },
         metadata: { exit: 0 }, time: { start: 3, end: 4 } } },
       { type: "tool", tool: "cgpt-validation_broker_readiness", state: { status: "completed",
-        output: JSON.stringify({ status: "READY", pending_count: 0 }), time: { start: 5, end: 6 } } },
+        output: JSON.stringify({ status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 }), time: { start: 5, end: 6 } } },
     ] },
   ];
   return { ...retryPayload(h), phase: "reconcile", developerAuthorization: "accord humain explicite test" };
@@ -816,7 +817,7 @@ test("reconcile après redémarrage utilise les preuves natives sans recréer la
   const h = await setup(context);
   const payload = await executedWithoutOnce(h);
   await h.stop(); await h.start();
-  await h.post("/broker/readiness", { status: "READY", pending_count: 0 });
+  await h.post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 });
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 409);
   const reconciled = await h.post("/job/recover", payload);
   assert.equal(reconciled.status, 200);
@@ -841,7 +842,7 @@ test("reconcile refuse autorisation absente, preuve divergente, autre effet et p
     (messages) => { messages[1].parts[1].state.input.command += "; echo invalid"; },
     (messages) => { messages[1].parts[1].state.metadata.exit = 1; },
     (messages) => { messages[1].parts[1].state.time.start = 1; },
-    (messages) => { messages[1].parts[2].state.output = JSON.stringify({ status: "READY", pending_count: 1 }); },
+    (messages) => { messages[1].parts[2].state.output = JSON.stringify({ status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 1 }); },
     (messages) => { messages[1].parts.push(structuredClone(messages[1].parts[1])); },
     (messages) => { messages[1].parts.push({ type: "tool", tool: "read", state: { status: "completed" } }); },
   ]) {
@@ -927,7 +928,7 @@ test("complete refuse les timeouts divergents et les preuves manquantes après t
     (p) => { p[2].state.time.end = 10; },
     (p) => { p.push(structuredClone(p[3])); },
     (p) => { p[3].state.metadata.exit = 1; },
-    (p) => { p[4].state.output = JSON.stringify({ status: "READY", pending_count: 1 }); },
+    (p) => { p[4].state.output = JSON.stringify({ status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 1 }); },
   ]) {
     h.native.messages = structuredClone(good);
     mutate(h.native.messages[0].parts);
@@ -1005,7 +1006,7 @@ test("complete humain restaure le même job bloqué après restart sans nouvelle
   const before = await h.get("/job");
   const history = structuredClone(h.native.messages);
   await h.stop(); await h.start();
-  await h.post("/broker/readiness", { status: "READY", pending_count: 0 });
+  await h.post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 });
   assert.equal(await h.httpStatus(`/decision/${h.recovery.preflightRequestId}`), 404);
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).body.error,
     "job-not-recoverable");
@@ -1031,7 +1032,7 @@ test("restauration humaine refuse empreinte, décision, gate ou preuves divergen
   const h = await setup(context);
   const payload = await blockedValidPreflight(h);
   await h.stop(); await h.start();
-  await h.post("/broker/readiness", { status: "READY", pending_count: 0 });
+  await h.post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 });
   const before = await h.get("/job");
   const history = structuredClone(h.native.messages);
   const mutations = [
@@ -1077,7 +1078,7 @@ test("complete humain accepte une récupération héritée avec diagnostics pré
   delete persisted.recovery.preparationHistory;
   writeFileSync(path, JSON.stringify(persisted));
   await h.start();
-  await h.post("/broker/readiness", { status: "READY", pending_count: 0 });
+  await h.post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 });
   const history = structuredClone(h.native.messages);
   for (const mutate of [
     () => { h.native.messages[0].parts[0].state.time = {

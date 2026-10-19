@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Review or apply CAB 1.0.0 protocol updates to explicitly selected projects."""
+"""Review or apply CAB 1.3.0 protocol updates to explicitly selected projects."""
 
 import argparse
 import hashlib
@@ -8,103 +8,44 @@ from pathlib import Path
 import re
 import tempfile
 
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 PILOTED = ("ACSP", "ACSMP", "CISMP", "DOPP", "ISMP", "PPSCP", "RSMP", "SCMP", "SPCMP")
-MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"
-PREVIOUS_BLOCK_SHA256 = ('c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859', '43119dded169df0b84a85af8d8dc4ec5ec9b7787b8044f89aa735b45f3722ce4', 'a4182b778a8d94fcd5be415db51e57ec769502decd96adf57dd8e02e3b0ad5b8', 'b39b23a3dabbc5e1fea41753ef49442ca99425c48f7c30b956bc478b07b02667')
+MARKER = "## CAB 1.3.0 — réservations et accès par ressource"
+LEGACY_MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"
+PREVIOUS_BLOCK_SHA256 = ('c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859', '43119dded169df0b84a85af8d8dc4ec5ec9b7787b8044f89aa735b45f3722ce4', 'a4182b778a8d94fcd5be415db51e57ec769502decd96adf57dd8e02e3b0ad5b8', 'b39b23a3dabbc5e1fea41753ef49442ca99425c48f7c30b956bc478b07b02667', '0769159ecb3d1b391346e0fa9d0c060b2451a2577ce0dc92add298f8423f1b61')
 PROMPT_END = "<!-- CAB-PROMPT-END -->"
 BLOCK = """
-## CAB 1.0.0 — réservations et RUN concurrents
+## CAB 1.3.0 — réservations et accès par ressource
 
-Lire le protocole concurrent de ORCHESTRATED_CODING.md avant pilotage.
-Un OpenCode et un broker MCP stdio sont partagés ; les mandats, décisions,
-permissions, preuves, récupérations et gates sont isolés par RUN.
+Lire ORCHESTRATED_CODING.md avant pilotage. Un OpenCode et un broker stdio sont partagés ; jobs, mandats, décisions, once, preuves et gates restent isolés par RUN.
 
-Avant sélection, consulter GET /runs et OpenSpec. Un change réservé par un
-autre RUN n'est pas sélectionnable. Examiner fichiers, capacités, contrats,
-dépendances et ressources partagées ; des fichiers distincts ne prouvent pas
-l'indépendance. Réserver atomiquement le change et sa clé d'intention par
-POST /runs/reserve avant création ou préparation. Un conflit conduit au
-prochain candidat compatible ou à une attente non terminale.
+Consulter GET /runs et OpenSpec, examiner dépendances sémantiques et ressources puis réserver atomiquement change/intention par POST /runs/reserve avant préparation. Un RUN traite un change réservé à la fois ; les sous-jobs héritent du parent. Chaque change suivant conserve run_id mais utilise session, jobId et génération neufs. Les checkpoints sont output/<prompt>/<run_id>/state.json ; conserver preuves/propriété lors d'une reprise historique sans écraser un pair.
 
-Un RUN traite un seul change à la fois ; plusieurs RUN peuvent traiter des
-changes compatibles. Chaque nouveau change utilise une session OpenCode et
-un jobId inédits. Après libération contrôlée, le cycle parent conserve son
-run_id et réserve le suivant avec une version fraîche. Les sous-jobs héritent
-du RUN et du checkpoint parent sans arrêter CAB à leur retour.
-Si le checkpoint scopé manque à la reprise, l'orchestrateur lit l'ancien
-output/<prompt>-state.json en lecture seule et réconcilie identité, preuves
-natives et propriété avant migration de ce seul RUN. Un ancien job armé
-reste sur les interfaces historiques jusqu'à sa clôture réconciliée ; ne pas
-écraser son état ni transformer ses anciennes permissions en autorisations.
+Les périmètres déclarés peuvent se recouvrir. Les fichiers partagés utilisent des accès temporaires : lectures compatibles, écriture exclusive, ensemble acquis atomiquement ou attente sans attribution partielle. La FIFO ne bloque que les demandes incompatibles ; les ressources indépendantes continuent. exclusiveResources est une optimisation vérifiée ; un pair recouvrant attend la promotion sûre du fichier privé.
 
-Cibler /runs/<run_id>/job/... et /runs/<run_id>/decision/<requestId>.
-Chaque request_validation inclut run_id, reservation_version et, pour une
-commande, resources explicites couvertes par la réservation. Appeler
-broker_readiness avec run_id et vérifier les métadonnées natives. Une
-réservation n'approuve jamais une opération ; un mandat reste un fichier
-ou une commande exacte avec une décision explicite et once unique.
+Cibler /runs/<run_id>/job/... et /decision/<requestId>. request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, expected_revisions et resources. Préparer le contenu exact ; une base périmée exige relecture et nouvelle demande. Une décision reste explicite, une édition porte un fichier, une commande son manifeste complet, et once est unique. Une réservation ou un verrou n'approuve rien.
 
-Avant extension, obtenir POST /runs/<run_id>/extend avec la version courante.
-Préparer une opération complète et vérifiable par fichier avant armement,
-sans reformulation du contenu approuvé ; traiter immédiatement les demandes
-et rapports dans la boucle SSE existante, avec décision et once par opération.
-Préparer les statistiques pendant le travail via GET /runs/<run_id>/statistics
-et format=markdown, sans RUN d'observation ni appel LLM supplémentaire.
-Après quiescence, /resources avec version, resources et evidence peut réduire
-la portée sans l'élargir ; conserver la nouvelle génération retournée.
-Terminer analyses, validations locales, commandes et brouillon avant la file.
-Soumettre /integration-request avec version et evidence : file FIFO durable,
-annulation explicite cancel=true, aucune libération par timeout. Dès une demande,
-terminer l'opération autorisée puis atteindre le prochain jalon cohérent validé
-et /ready, sans attendre toutes les tâches du change ni nouveau mandat stable.
-GET /runs/<run_id>/integration-status expose les obstacles par RUN sans contenu.
-L'intégration dans la référence commune exige l'exclusion /integration,
-les validations combinées et l'archivage autorisé. La clôture exige le rapport
-STATISTIQUES.md vérifié, même lorsque sa rédaction suit la publication.
-Dans le répertoire partagé, chaque RUN atteint d'abord un jalon stable avec
-ses validations locales et le déclare par /ready avec version et evidence.
-L'intégration attend ces jalons et la quiescence native ; les nouvelles
-opérations des autres RUN sont suspendues. Le propriétaire peut déclarer
-project:* en lecture pour ses validations globales sous cette exclusion.
-L'exclusion ne couvre que base, quiescence, validations combinées applicables,
-synchronisation, archive et preuve de publication. Rapport, relevés finaux et
-gate suivent sa libération ; aucun timeout ne libère un effet inconnu.
-La libération /integration avec acquire=false précise published et, en cas
-de publication, ses evidence. Les autres RUN réconcilient referenceVersion
-par /reconcile, avec preuves et nouvelle version de réservation, avant reprise.
-Réexaminer les validations affectées sans rejouer les effets déjà prouvés.
-Le profil optimisé ajoute referenceVersion attendue et completion avec
-transactionId inédit et reportFile pour publier, réduire au rapport et libérer
-en une seule transition durable. Répéter exactement la transaction restitue
-son reçu sans effet ; un contenu divergent est refusé. Conserver la génération
-courante du registre, sans traiter un ancien reçu comme une autorisation.
-Le schéma 3 de ces reçus exige les nouvelles sources, sans migration implicite.
-Après publication prouvée et libération de l'exclusion, /closing avec version,
-evidence et reportFile limite irréversiblement le RUN au STATISTIQUES.md de sa
-propre archive. Les pairs réconcilient et reprennent ; le rapport reste sous
-mandat unitaire et attend toute autre exclusion. Finaliser les bornes après
-archive et publier le brouillon vérifié, avec N/A pour les mesures absentes.
-La libération /release exige gate, désarmement, preuves et réconciliation métier ;
-ni délai, ni silence, ni interruption ne libère automatiquement le change.
-Prévol divergent : conserver la candidate, le RUN et les preuves ; utiliser
-la récupération prepare/retry/complete sans purge ni renouvellement.
+Après décision et avant effet, utiliser /locks/acquire ; vérifier HELD, token et fencing. WAITING ou STALE ne donne aucune permission. Un fichier privé prouvé peut utiliser l'admission interne sans verrou partagé séparé. Ne pas attendre une extension de ressources tout en conservant un ensemble. Chaque sous-opération d'un groupe reste soumise à sa propre décision/once ; une correction approuvée peut rester dans l'ensemble détenu via /locks/attach.
 
-Le démarrage ou l'arrêt d'un RUN ne purge ni ne reconnecte le broker commun.
-Une action globale exige la quiescence de tous les RUN affectés. Sans candidat
-disponible, attendre les dépendances ou ressources ; ne pas déclarer le projet
-terminé tant qu'un autre RUN ou une exigence sans preuve subsiste.
-CISM, CAISM et les prompts directs restent exclus et ne sont pas exécutés
-en concurrence avec ces travaux.
+La fin native corrélée et l'examen des effets précèdent /locks/release. Un effet inconnu conserve ses protections ; idle, timeout ou silence ne libèrent rien. Prévol divergent : conserver candidate, RUN et preuves ; terminer/libérer son accès avant transfert de récupération, sans purge ni rejeu.
+
+Protéger les seules entrées/effets des validations. openspec validate --all --strict protège OpenSpec sans suspendre les éditions de code indépendantes. /publish vérifie les révisions des preuves et toutes les écritures à publier, puis persiste reçu, génération et libération sûre. Les pairs indépendants continuent sans /ready de cohorte ni réconciliation générale de referenceVersion. Synchronisation/archivage restent des mandats distincts autorisés sur leurs ressources. Une ancienne /integration ou /integration-request est refusée dans le profil 1.3.0.
+
+À frontière sûre, /resources réduit la portée sans perdre les obligations. /closing après publication limite REPORT au STATISTIQUES.md de l'archive du change. Préparer les statistiques via /statistics et format=markdown sans RUN d'observation supplémentaire, finaliser/vérifier les six sections après archive, puis gate, désarmement et /release. Les mesures absentes restent N/A ; l'archive seule ne prouve pas la fin du parent.
+
+Pause/arrêt ciblés ne suspendent que leur RUN. Les seuls gels globaux sont GLOBAL_RECONCILIATION, SHARED_MAINTENANCE, GLOBAL_PAUSE et GLOBAL_STOP ; ils demandent cause, autorité, drainage et quiescence prouvés. Ajouter/reprendre un RUN ne purge ni ne reconnecte l'infrastructure. Le registre schéma 4 et le protocole nécessitent un jeu compatible ; migration et retour arrière sont une maintenance explicitement autorisée.
+
+Sans candidat disponible, attendre les dépendances ou conflits ; ne déclarer TERMINÉ qu'après preuve d'absence de travail restant. CISM, CAISM et prompts directs restent exclus du pilotage concurrent. La préparation source ne propage aucun prompt consommateur.
 """
 
 
 def transform(text, name):
     """Change only orchestration clauses; retain each prompt's specific scope."""
     suffix = ""
-    if MARKER in text:
-        prefix, managed = text.split(MARKER, 1)
-        managed = MARKER + managed
+    existing_marker = next((marker for marker in (MARKER, LEGACY_MARKER) if marker in text), None)
+    if existing_marker:
+        prefix, managed = text.split(existing_marker, 1)
+        managed = existing_marker + managed
         if PROMPT_END in managed:
             managed, suffix = managed.split(PROMPT_END, 1)
         digest = hashlib.sha256(managed.strip().encode()).hexdigest()
@@ -130,7 +71,7 @@ def transform(text, name):
         "si plusieurs changes actifs rendent le change ciblé ambigu": "si l’attribution du change ciblé reste ambiguë ou si un autre RUN le réserve",
         "Plusieurs changes actifs, un change incomplet ou une incohérence fait passer l’état à `REPRISE`.": "Une incohérence du change réservé par ce RUN fait passer l’état à `REPRISE`. Les autres changes attribués sont suivis par leurs propriétaires.",
         "S’il n’existe aucun candidat, l’orchestrateur vérifie en lecture seule l’absence de change actif et d’exigence validée sans preuve d’implémentation. Cette preuve complète mène à `TERMINÉ` ; toute incertitude mène à `BLOQUÉ`.": "S’il n’existe aucun candidat disponible, l’orchestrateur consulte les réservations et dépendances. Un travail restant réservé, dépendant ou en conflit maintient une attente non terminale. Seule la preuve d’absence de change actif, de RUN actif et d’exigence sans preuve permet `TERMINÉ` ; une incohérence non résolue suit la procédure de reprise.",
-        "l’orchestrateur mandate l’archivage OpenSpec, vérifie son succès, puis revient immédiatement à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.": "l’orchestrateur obtient l’exclusion d’intégration, revalide la base courante, mandate l’archivage OpenSpec et vérifie sa publication. Il libère l’exclusion avant STATISTIQUES.md et le gate. Après rapport vérifié, gate, désarmement et libération réconciliés, il revient à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.",
+        "l’orchestrateur mandate l’archivage OpenSpec, vérifie son succès, puis revient immédiatement à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.": "l’orchestrateur acquiert les ressources utiles, revalide les preuves ciblées, mandate l’archivage OpenSpec et vérifie sa publication. Il libère les accès métier avant STATISTIQUES.md et le gate. Après rapport vérifié, gate, désarmement et libération réconciliés, il revient à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur.",
     }
     for before, after in replacements.items():
         text = text.replace(before, after)
@@ -184,19 +125,20 @@ def main():
         path = project / "ORCHESTRATED_CODING.md"
         if not path.exists() or path.is_file():
             original = path.read_bytes() if path.is_file() else None
-            text = original.decode("utf-8") if original is not None else cab_protocol.split("\n## Pilotage concurrent CAB 1.0.0", 1)[0]
+            text = original.decode("utf-8") if original is not None else re.split(r"\n## Pilotage concurrent CAB [0-9.]+", cab_protocol, maxsplit=1)[0]
             text = re.sub(r"Projet : `[^`]+`", f"Projet : `{project.name}`", text, count=1)
-            marker = "\n## Pilotage concurrent CAB 1.0.0\n\n"
+            marker = "\n## Pilotage concurrent CAB 1.3.0\n\n"
+            existing_protocol_marker = next((m for m in (marker, "\n## Pilotage concurrent CAB 1.0.0\n\n") if m in text), None)
             end_marker = "\n<!-- CAB-CONCURRENT-END -->\n"
-            if marker in text:
-                prefix, managed = text.split(marker, 1)
+            if existing_protocol_marker:
+                prefix, managed = text.split(existing_protocol_marker, 1)
                 suffix = managed.split(end_marker, 1)[1] if end_marker in managed else ""
                 changed = (prefix + marker + embedded.rstrip() + end_marker + suffix).encode("utf-8")
                 if changed != original:
                     print(f"{'UPDATE' if args.apply else 'REVIEW'} {path}")
                     if args.apply:
                         atomic_update(path, original, changed)
-            if "## Pilotage concurrent CAB 1.0.0" not in text:
+            if not existing_protocol_marker:
                 # Preserve native proofs, cadence, messages and all unrelated safeguards.
                 text = re.sub(r"(?<!<run_id>)/job/(arm|progress|recover|terminal-gate|disarm)", r"/runs/<run_id>/job/\1", text)
                 text = text.replace("`GET /job`", "`GET /runs/<run_id>/job`")

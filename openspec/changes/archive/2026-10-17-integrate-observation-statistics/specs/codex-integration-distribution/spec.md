@@ -11,9 +11,9 @@ La commande distribuée CAB MUST proposer /cab stats pour les changes courants, 
 - **WHEN** /cab stats est demandé sans cible dans un projet concurrent
 - **THEN** chaque change courant est présenté avec son RUN et son contexte sans fusion ni question de sélection obligatoire ; un RUN explicitement ciblé reste isolé
 
-### Requirement: Distribution statistique CAB 1.2.2
-Les modules distribués, broker, contrôleur, superviseur, manifeste, unités et commande MUST annoncer la version de base 1.2.2. Le module de fenêtres et l'importeur MUST être distribués avec leurs contrats et tests, sans nouvelle dépendance tierce ni installation automatique.
+### Requirement: Distribution des observations CAB 1.3.0
+Les modules distribués, broker, contrôleur, superviseur, manifeste, unités et commande MUST annoncer la version de base 1.3.0. Le module de fenêtres et l'importeur MUST être distribués avec leurs contrats et tests, sans nouvelle dépendance tierce ni installation automatique.
 
 #### Scenario: Jeu source complet
-- **WHEN** le jeu CAB 1.2.2 est qualifié
+- **WHEN** le jeu CAB 1.3.0 est qualifié
 - **THEN** ses versions sont cohérentes et les tests couvrent import, fenêtres, commandes et absence d'effet métier sans modifier une installation active

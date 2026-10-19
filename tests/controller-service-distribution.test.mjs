@@ -12,25 +12,25 @@ const supervisorServicePath = new URL(
   import.meta.url
 );
 
-test("les briques distribuées publient la même version de base 1.2.1", () => {
+test("les briques distribuées publient la même version de base 1.3.0", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "1.2.1");
+  assert.equal(version, "1.3.0");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  assert.match(plugin.version, /^1\.2\.1\+codex\.\d{14}$/);
-  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.2\.1$/m);
+  assert.match(plugin.version, /^1\.3\.0\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.3\.0$/m);
   for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
     const root = new URL(directory, import.meta.url);
     for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
       const source = readFileSync(new URL(name, root), "utf8");
-      const versions = [...source.matchAll(/\b(?:VERSION|SERVER_VERSION|version)\s*[:=]\s*"([^"]+)"/g)];
+      const versions = [...source.matchAll(/(?:^\s*(?:export\s+)?const\s+(?:VERSION|version)\s*=|^\s*(?:VERSION|SERVER_VERSION)\s*=|^\s*version\s*:)\s*["']([^"']+)["']/gm)];
       assert.ok(versions.length, name);
       for (const match of versions) assert.equal(match[1], version, name);
     }
   }
   for (const path of [servicePath, supervisorServicePath]) {
-    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.2\.1 /m);
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.3\.0 /m);
   }
 });
 
@@ -39,8 +39,8 @@ test('la collecte native et les transitions optimisées sont distribuées avec l
   const protocol = readFileSync(new URL('../ORCHESTRATED_CODING.md', import.meta.url), 'utf8');
   const embedded = reference.replace(/^(#{1,4}) /gm, (_, level) => '#'.repeat(level.length + 2) + ' ').trim();
   assert.ok(protocol.includes(embedded));
-  for (const route of ['/statistics', '/integration-request', '/resources', '/closing']) assert.ok(reference.includes(route), route);
-  assert.match(reference, /rapport vérifié reste obligatoire/);
+  for (const route of ['/statistics', '/locks/acquire', '/locks/release', '/publish', '/resources', '/closing']) assert.ok(reference.includes(route), route);
+  assert.match(reference, /Rapport à six sections/);
   const controller = readFileSync(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url), 'utf8');
   assert.match(controller, /cgpt-approval-bridge-statistics\.mjs/);
 });
@@ -131,12 +131,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 1\.2\.1$/m);
-  assert.match(manifest, /"version": "1\.2\.1\+codex\./);
-  assert.match(controller, /const version = "1\.2\.1"/);
-  assert.match(supervisor, /const version = "1\.2\.1"/);
-  assert.match(broker, /SERVER_VERSION = "1\.2\.1"/);
-  assert.match(project, /^version = "1\.2\.1"$/m);
+  assert.match(command, /^version: 1\.3\.0$/m);
+  assert.match(manifest, /"version": "1\.3\.0\+codex\./);
+  assert.match(controller, /const version = "1\.3\.0"/);
+  assert.match(supervisor, /const version = "1\.3\.0"/);
+  assert.match(broker, /SERVER_VERSION = "1\.3\.0"/);
+  assert.match(project, /^version = "1\.3\.0"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {

@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
-import { createSupervisorContext } from './cgpt-approval-bridge-supervisor-context.mjs';
+import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
 
-const version = "1.2.1";
+const version = "1.3.0";
+if (CONTEXT_VERSION !== version) throw new Error('CAB supervisor component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspace = envValue('OC_Codex_WORKSPACE');
