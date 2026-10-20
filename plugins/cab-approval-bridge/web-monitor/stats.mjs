@@ -114,10 +114,10 @@ async function refresh() {
   }
 }
 function navigate() {
-  page = location.hash === '#stats' ? 'stats' : 'monitor'; generation++; clearTimeout(timer);
-  $('#monitor-page').hidden = page !== 'monitor'; $('#stats-page').hidden = page !== 'stats';
-  $('#page-label').textContent = page === 'stats' ? 'Statistiques' : 'Supervision';
-  for (const name of ['stats', 'monitor']) {
+  page = ['#stats', '#archives'].includes(location.hash) ? location.hash.slice(1) : 'monitor'; generation++; clearTimeout(timer);
+  for (const name of ['monitor', 'stats', 'archives']) $('#' + name + '-page').hidden = page !== name;
+  $('#page-label').textContent = ({ stats: 'Statistiques', archives: 'Archives', monitor: 'Supervision' })[page];
+  for (const name of ['stats', 'monitor', 'archives']) {
     const link = $('#' + name + '-nav'); link.classList.toggle('active', name === page);
     if (name === page) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
   }

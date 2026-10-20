@@ -17,8 +17,9 @@
     <nav class="rail-nav" aria-label="Pages CAB">
       <a id="monitor-nav" class="rail-link active" href="#monitor" aria-current="page"><span aria-hidden="true">▦</span>MONITOR</a>
       <a id="stats-nav" class="rail-link" href="#stats"><span aria-hidden="true">▥</span>STATS</a>
+      <a id="archives-nav" class="rail-link" href="#archives"><span aria-hidden="true">▣</span>ARCHIVES</a>
     </nav>
-    <div class="rail-bottom">LOCAL<br><span id="version">1.6.4</span></div>
+    <div class="rail-bottom">LOCAL<br><span id="version">1.7.1</span></div>
   </aside>
   <main>
     <header class="topbar">
@@ -27,15 +28,14 @@
     </header>
     <div id="monitor-page">
     <section class="hero" aria-labelledby="page-title">
-      <div><div class="eyebrow">CENTRE D’OBSERVATION</div><h1 id="page-title">Tout le travail.<br><span>Une vue commune.</span></h1>
-        <p>Les briques, les RUN et leurs changes. Suivez les transitions au fil de l’exécution.</p></div>
+      <div><h1 id="page-title" class="observation-title">CENTRE D’OBSERVATION</h1></div>
       <div class="hero-meta"><span class="live-dot"></span> ACTUALISATION CONTINUE<br><time id="updated">En attente des premières observations</time><div id="cadence"></div></div>
     </section>
     <section id="health" class="health-grid" aria-label="État des composants"></section>
     <section id="metrics" class="metrics" aria-label="Indicateurs de supervision"></section>
     <section class="workspace">
       <div class="panel work-panel">
-        <div class="panel-top"><div><span class="eyebrow">ESPACE DE TRAVAIL</span><h2>Exécutions &amp; changes</h2></div><span class="read-only">Lecture seule</span></div>
+        <div class="panel-top"><div><span class="eyebrow">ESPACE DE TRAVAIL</span><h2>Exécutions &amp; changes</h2></div><span class="read-only">Gestion locale</span></div>
         <div class="toolbar">
           <div class="tabs" role="group" aria-label="Vue affichée"><button id="runs-tab" class="active" aria-pressed="true">RUN</button><button id="changes-tab" aria-pressed="false">Changes</button></div>
           <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un RUN, un change…" aria-label="Rechercher un RUN ou un change"></label>
@@ -52,6 +52,12 @@
       <ol id="timeline" class="timeline"></ol>
     </section>
     </div>
+    <p id="management-status" class="management-status" role="status" aria-live="polite"></p>
+    <section id="archives-page" hidden aria-labelledby="archives-title">
+      <div class="hero"><div><div class="eyebrow">HISTORIQUE DU MONITEUR</div><h1 id="archives-title">Archives</h1><p>RUN et changes rangés dans le moniteur. Les sources du projet et les exécutions restent conservées.</p></div></div>
+      <section class="panel"><div class="panel-top"><h2>RUN archivés</h2></div><div id="archives-runs" class="work-content"></div></section>
+      <section class="panel archives-changes"><div class="panel-top"><h2>Changes archivés</h2></div><div id="archives-changes" class="work-content"></div></section>
+    </section>
     <section id="stats-page" hidden aria-labelledby="stats-title">
       <div class="hero"><div><div class="eyebrow">HISTORIQUE CAB</div><h1 id="stats-title">Le travail.<br><span>En chiffres.</span></h1><p>Décisions, activité observée et attentes. Chaque source garde sa provenance et sa couverture.</p></div></div>
       <div class="panel stats-toolbar">
@@ -70,7 +76,8 @@
       </section>
     </section>
     <dialog id="retention-dialog" aria-labelledby="retention-dialog-title"><h2 id="retention-dialog-title">Confirmer la purge</h2><p id="retention-cutoff"></p><div id="retention-counts"></div><p id="retention-protected"></p><p class="warning">Cette suppression est irréversible sans sauvegarde préalable. Les magasins statistiques restent en place.</p><div class="retention-actions"><button id="retention-cancel" type="button" autofocus>Annuler</button><button id="retention-confirm" class="danger-button" type="button">Confirmer la suppression</button></div></dialog>
-    <footer><span><b>CAB</b> Monitor <span id="footer-version">1.6.4</span></span><span>Observation locale · Aucun appel LLM · Horaires Europe/Paris</span></footer>
+    <dialog id="management-dialog" aria-labelledby="management-dialog-title"><h2 id="management-dialog-title">Supprimer du moniteur</h2><p id="management-confirm-text"></p><p>Cette action masque la ligne dans le moniteur. Les sources, le RUN réel et ses preuves restent conservés.</p><div class="retention-actions"><button id="management-cancel" type="button" autofocus>Annuler</button><button id="management-confirm" class="danger-button" type="button">Supprimer</button></div></dialog>
+    <footer><span><b>CAB</b> Monitor <span id="footer-version">1.7.1</span></span><span>Observation locale · Aucun appel LLM · Horaires Europe/Paris</span></footer>
   </main>
 </body>
 </html>

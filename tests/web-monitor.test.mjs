@@ -9,7 +9,7 @@ import { monitorConfiguration, parseTasks, readChanges, MonitorState, fetchJson,
 import { nextLifecycle } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs';
 import { createMonitorServer } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
 
-const config = () => monitorConfiguration({ OC_Codex_WORKSPACE: process.cwd() });
+const config = () => monitorConfiguration({ OC_Codex_WORKSPACE: process.cwd(), OC_Codex_MONITOR_STATE_DIR: join(tmpdir(), 'catalogs') });
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'cab-web-monitor-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -121,7 +121,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     const target = new URL(url); let value;
     if (target.port === '10002') value = { version: '1.4.0' };
     else if (target.pathname === '/global/health') value = { healthy: true, version: '1.19.3' };
-    else if (target.pathname === '/status') value = { version: '1.6.4', mode: 'concurrent', brokerReadiness: { server_version: '1.6.4' },
+    else if (target.pathname === '/status') value = { version: '1.7.1', mode: 'concurrent', brokerReadiness: { server_version: '1.7.1' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -132,7 +132,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '1.6.4', supervisor: '1.4.0', broker: '1.6.4', opencode: '1.19.3', monitor: '1.6.4' });
+  assert.deepEqual(result.componentVersions, { controller: '1.7.1', supervisor: '1.4.0', broker: '1.7.1', opencode: '1.19.3', monitor: '1.7.1' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -146,7 +146,8 @@ test('ETAT suit les faits frais et ne modifie aucune étape', () => {
   assert.equal(operationalState(base), 'RUNNING');
   for (const [fields, expected] of [[{ pending: 1 }, 'WAITING'], [{ cause: 'resource-conflict' }, 'WAITING'],
     [{ cause: 'run-pause' }, 'PAUSED'], [{ cause: 'run-stop' }, 'STOPPED'], [{ readiness: 'HUMAN_REQUIRED' }, 'BLOCKED'],
-    [{ readiness: 'DEGRADED' }, 'DEGRADED'], [{ gate: { status: 'VALIDATED', declaredState: 'TERMINÉ' } }, 'DONE']]) {
+    [{ readiness: 'DEGRADED' }, 'DEGRADED'], [{ state: 'DELIVERED' }, 'DONE'], [{ state: 'ABANDONED' }, 'STOPPED'],
+    [{ gate: { status: 'VALIDATED', declaredState: 'TERMINÉ' } }, 'DONE']]) {
     assert.equal(operationalState({ ...base, ...fields }), expected);
   }
   assert.equal(operationalState({ ...base, pending: 1, cause: 'resource-effects-unknown' }), 'BLOCKED');
@@ -168,7 +169,8 @@ test('collectes non chevauchantes et réponses amont bornées', async () => {
   let resolve; let requests = 0;
   const pending = new Promise((done) => { resolve = done; });
   const state = new MonitorState(config(), { fetcher: async () => { requests++; await pending; return new Response('{}'); } });
-  const first = state.collect(); await state.collect(); assert.equal(requests, 6); resolve(); await first;
+  const first = state.collect(); const second = state.collect();
+  assert.equal(requests, 7); resolve(); await Promise.all([first, second]);
   await assert.rejects(fetchJson('http://127.0.0.1/', 1000, async () => new Response(' '.repeat(2 * 1024 * 1024 + 1))), /source-too-large/);
 });
 

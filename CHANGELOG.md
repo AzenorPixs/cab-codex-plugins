@@ -2,14 +2,40 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
-## 1.6.4 — préparation source
+## 1.7.1 — préparation source
+
+- /cab update déploie broker, contrôleur, superviseur et Web, y compris actifs,
+  avec préparation complète, sauvegardes et gel durable de maintenance.
+- Attente d'une frontière sûre, conservation des RUN, pauses et preuves,
+  restauration des seuls états actifs initiaux, contrôle des versions réelles.
+- Retour arrière des artefacts et récupération après interruption, sans purge,
+  migration, permission métier ou redémarrage d'OpenCode ; attente et repli
+  incomplet signalés explicitement.
+- Outil distribué et broker Python complet synchronisé avec src/ ; jeu aligné
+  sur 1.7.1 avec cachebuster neuf. Qualification sur installations simulées,
+  sans activation runtime, modification de profil réel ou publication Git.
+
+## 1.7.0 — préparation source
+
+- En-tête CENTRE D’OBSERVATION agrandi et gras ; suppression des textes d'accueil.
+- Commandes Démarrer/Arrêter et Redémarrer pour contrôleur, superviseur et broker,
+  avec unités fixes, identité des services et garde temporaire de quiescence.
+  Broker commandé par le MCP natif ; aucun redémarrage d'OpenCode.
+- Carte Web avec état et redémarrage indépendant, confirmé après reconnexion.
+- Archivage et suppression logique des lignes admissibles dans un catalogue
+  privé du moniteur, menu ARCHIVES et désarchivage des RUN sans reprise métier.
+  Aucune modification des sources OpenSpec observées, des RUN réels ou des preuves.
+- Alignement des briques et du plugin sur 1.7.0 avec cachebuster neuf ; préparation
+  source et tests sur fixtures, sans déploiement ou migration du runtime réel.
+
+## 1.7.0 — préparation source
 
 - Reprise d'un RUN après STOP et libération réconciliée : la suspension de la
   génération close reste dans l'historique et ne bloque plus sa nouvelle
   réservation par le même propriétaire, y compris après redémarrage.
 - Conservation des suspensions actives, gels globaux, contrôles de propriétaire,
   génération, dépendances et ressources ; aucune permission native héritée.
-- Régressions registre et HTTP et alignement des briques distribuées sur 1.6.4
+- Régressions registre et HTTP et alignement des briques distribuées sur 1.7.0
   avec cachebuster neuf. Les travaux de monitoring 1.6.3 sont conservés.
 - Aucun changement de schéma, migration, publication Git ou activation runtime
   effectué par cette préparation source SCM.

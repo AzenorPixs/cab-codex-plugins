@@ -1,10 +1,12 @@
 import { constants } from 'node:fs';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
+import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 
-export const VERSION = '1.6.4';
+export const VERSION = '1.7.1';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -39,7 +41,10 @@ export function monitorConfiguration(environment = process.env) {
   if (!workspace || !isAbsolute(workspace)) throw new Error('OC_Codex_WORKSPACE doit être absolu.');
   const host = get('MONITOR_HOST') ?? '127.0.0.1';
   if (!['127.0.0.1', '::1'].includes(host)) throw new Error('OC_Codex_MONITOR_HOST doit être loopback.');
+  const stateRoot = get('MONITOR_STATE_DIR') ?? join(homedir(), '.local', 'state', 'cab-approval-bridge-monitor');
+  if (!isAbsolute(stateRoot)) throw new Error('OC_Codex_MONITOR_STATE_DIR doit être absolu.');
   return { workspace, host, port: number('MONITOR_PORT', 8790, 1024, 65535),
+    stateDirectory: join(stateRoot, createHash('sha256').update(workspace).digest('hex')),
     pollMs: number('MONITOR_POLL_INTERVAL_MS', 1000, 250, 60000),
     staleMs: number('MONITOR_STALE_MS', 10000, 1000, 300000),
     timeoutMs: number('MONITOR_TIMEOUT_MS', 2000, 100, 10000),
@@ -156,6 +161,7 @@ export function normalizeRuns(controller = {}, registry = {}, supervisor = {}, s
     const coordination = record(status.coordination);
     const lifecycle = lifecycleView(job.lifecycle);
     return { runId, changeId: id(job.changeId) || id(reservation.changeId), sessionId: id(job.sessionId) || id(reservation.sessionId),
+      generation: Number.isSafeInteger(reservation.version) ? reservation.version : id(job.jobId),
       state: code(reservation.state), phase: code(coordination.phase || reservation.phase),
       step: lifecycle.current, stepHistory: lifecycle.history, stepSequence: lifecycle.sequence, stepHistoryTruncated: lifecycle.truncated,
       readiness: code(status.brokerReadiness?.status), cause: code(coordination.reason || status.brokerReadiness?.root_cause),
@@ -172,6 +178,8 @@ export function normalizeRuns(controller = {}, registry = {}, supervisor = {}, s
 
 export function operationalState(run, { controllerFresh = true, registryFresh = true } = {}) {
   if (!controllerFresh || (run.runId !== 'legacy' && run.state && !registryFresh)) return 'UNKNOWN';
+  if (run.state === 'DELIVERED') return 'DONE';
+  if (run.state === 'ABANDONED') return 'STOPPED';
   if (run.gate.status === 'VALIDATED') return run.gate.declaredState === 'TERMINÉ' ? 'DONE' : 'BLOCKED';
   if (run.cause === 'run-stop') return 'STOPPED';
   if (['run-pause', 'global-coordination-suspended'].includes(run.cause)) return 'PAUSED';
@@ -228,6 +236,11 @@ export class MonitorState {
     }
   }
   async collect() {
+    if (this.collecting) return this.collecting;
+    this.collecting = this.collectOnce();
+    try { await this.collecting; } finally { this.collecting = null; }
+  }
+  async collectOnce() {
     if (this.running) return;
     this.running = true;
     const c = this.configuration;
@@ -235,6 +248,7 @@ export class MonitorState {
       await Promise.all([this.source('controller', c.controllerUrl + '/status'),
         this.source('registry', c.controllerUrl + '/runs'), this.source('supervisor', c.supervisorUrl + '/status'),
         this.source('opencode', c.opencodeUrl + '/global/health'),
+        this.source('mcp', c.opencodeUrl + '/mcp?directory=' + encodeURIComponent(c.workspace)),
         this.source('sessions', c.opencodeUrl + '/session/status?directory=' + encodeURIComponent(c.workspace)),
         this.source('observations', c.controllerUrl + '/monitor/events')]);
       this.ingest(this.sources.observations?.value);
@@ -262,6 +276,9 @@ export class MonitorState {
         broker: componentVersion(controller.brokerReadiness?.server_version),
         opencode: componentVersion(this.sources.opencode?.value?.version), monitor: VERSION },
       nativeHealth: typeof this.sources.opencode?.value?.healthy === 'boolean' ? this.sources.opencode.value.healthy : null,
+      brokerConnection: code(this.sources.mcp?.value?.['cgpt-validation']?.status),
+      runsTruncated: !Array.isArray(this.sources.registry?.value?.runs) || this.sources.registry.value.runs.length > 200 ||
+        this.sources.registry.value.truncated === true || Object.keys(record(controller.runs)).length > 200,
       configuration: { pollMs: this.configuration.pollMs, staleMs: this.configuration.staleMs,
         maxCommandLength: Number.isSafeInteger(limit) && limit > 0 ? limit : null,
         commandLengthUnit: 'UTF-16', defaultMaxCommandLength: 16384 },

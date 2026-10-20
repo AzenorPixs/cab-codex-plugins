@@ -8,8 +8,9 @@ import { ResourceRunRegistry, COORDINATION_PROTOCOL, VERSION as RESOURCE_VERSION
 import { SessionStatistics, VERSION as STATISTICS_VERSION } from './cgpt-approval-bridge-statistics.mjs';
 import { createObservationJournal, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { StatisticsMaintenance, statisticsDashboard, guardStatisticsPost, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
+import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.mjs';
 
-const version = "1.6.4";
+const version = "1.7.1";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -31,6 +32,8 @@ const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 const statistics = new SessionStatistics(stateDirectory, { project: workspace });
 let registryRevision = 0;
 let nativeGeneration = 0;
+let lifecycleLease = null;
+let lifecycleMutations = 0;
 let observedOperations = new Map();
 function observeStatistics(callback) {
   try { callback(); } catch { statistics.error = 'statistics-observation-unavailable'; }
@@ -336,8 +339,60 @@ const server = createServer(async (request, response) => {
   let transitionRun = null;
   let observedRun = null;
   let attemptedReservation = null;
+  let lifecycleMutation = false;
   try {
     const url = new URL(request.url, 'http://localhost');
+    if (url.pathname.startsWith('/monitor/lifecycle/')) {
+      const origin = new URL(request.url, 'http://' + request.headers.host);
+      if (request.method !== 'POST' || origin.search || Number(origin.port || 80) !== server.address().port) {
+        throw new CoordinationError('monitor-action-invalid', 400);
+      }
+      guardManagementPost(request, origin, false);
+      request.setTimeout(5000, () => request.destroy());
+      const payload = await readJson(request, 4096);
+      if (url.pathname === '/monitor/lifecycle/release') {
+        if (Object.keys(payload).length !== 1 || typeof payload.token !== 'string' || payload.token !== lifecycleLease?.token) {
+          throw new CoordinationError('monitor-lease-invalid');
+        }
+        lifecycleLease = null; json(response, 200, { status: 'released' }); return;
+      }
+      if (url.pathname !== '/monitor/lifecycle/prepare' || Object.keys(payload).length !== 1 || payload.workspace !== workspace) {
+        throw new CoordinationError('monitor-workspace-divergent');
+      }
+      if (lifecycleLease?.expiresAt > Date.now() || lifecycleMutations ||
+          activeContexts().length || legacy.publicJob()?.armed || legacy.unresolved()) {
+        throw new CoordinationError('monitor-runs-active');
+      }
+      const lease = { token: randomUUID(), expiresAt: Date.now() + 30000 };
+      lifecycleLease = lease;
+      try {
+        const revision = registryRevision;
+        const read = async (path) => {
+          const result = await fetch(opencodeUrl + path + '?directory=' + encodeURIComponent(workspace),
+            { redirect: 'error', signal: AbortSignal.timeout(5000) });
+          if (!result.ok) throw new CoordinationError('monitor-native-unavailable');
+          const chunks = []; let bytes = 0;
+          for await (const chunk of result.body) {
+            bytes += chunk.length;
+            if (bytes > 2 * 1024 * 1024) throw new CoordinationError('monitor-native-unavailable');
+            chunks.push(chunk);
+          }
+          return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        };
+        const [sessions, permissions] = await Promise.all([read('/session/status'), read('/permission')]);
+        if (!sessions || typeof sessions !== 'object' || Array.isArray(sessions) ||
+            Object.values(sessions).some((session) => session?.type !== 'idle') ||
+            !Array.isArray(permissions) || permissions.length || revision !== registryRevision ||
+            activeContexts().length || legacy.publicJob()?.armed || legacy.unresolved()) {
+          throw new CoordinationError('monitor-runs-active');
+        }
+        json(response, 200, { ...lease, workspace, pid: process.pid }); return;
+      } catch (error) { if (lifecycleLease === lease) lifecycleLease = null; throw error; }
+    }
+    if (request.method === 'POST') {
+      if (lifecycleLease?.expiresAt > Date.now()) throw new CoordinationError('monitor-maintenance-in-progress');
+      lifecycleMutations++; lifecycleMutation = true;
+    }
     const maintenanceRoute = ['/statistics/retention/preview', '/statistics/retention/purge'].includes(url.pathname);
     if (maintenanceRoute) {
       if (request.method !== 'POST') { response.writeHead(405, { allow: 'POST' }).end(); return; }
@@ -431,8 +486,8 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === 'GET' && url.pathname === '/status' && !url.searchParams.has('runId')) {
       const entries = activeContexts();
-      if (!entries.length) { json(response, 200, legacy.publicStatus()); return; }
-      json(response, 200, { version: VERSION, mode: 'concurrent',
+      if (!entries.length) { json(response, 200, { ...legacy.publicStatus(), workspace, pid: process.pid }); return; }
+      json(response, 200, { version: VERSION, mode: 'concurrent', workspace, pid: process.pid,
         configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' }, coordinationProtocol: registry.snapshot().coordinationProtocol,
         globalCoordination: registry.resourceState.global, opencodeSse: sseState,
         brokerReadiness: broker, brokerReadinessReceivedAt: legacy.publicStatus().brokerReadinessReceivedAt, activeRunCount: entries.length,
@@ -659,7 +714,10 @@ const server = createServer(async (request, response) => {
     if (!response.headersSent) json(response, cause.status || 409,
       cause.code === 'command-too-long' ? cause.diagnostic : { error: cause.code || cause.message });
     else response.destroy();
-  } finally { if (transitionRun) transitions.delete(transitionRun); }
+  } finally {
+    if (transitionRun) transitions.delete(transitionRun);
+    if (lifecycleMutation) lifecycleMutations--;
+  }
 });
 server.listen(port, host, () => { void consumeEvents(); });
 

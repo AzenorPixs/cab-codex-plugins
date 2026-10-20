@@ -16,11 +16,15 @@ CAB Monitor MUST fonctionner sans LLM dans un processus indépendant. Il MUST se
 - **THEN** la page reste disponible et affiche la panne, les dernières observations et leur fraîcheur
 
 ### Requirement: Observation bornée sans effet métier
-Le moniteur MUST collecter seulement les vues GET admises des composants loopback et les documents OpenSpec de son workspace. Il MUST NOT créer de décision, permission, relance, session ou mutation métier. Requêtes et mémoire MUST être bornées ; les collectes MUST NOT se chevaucher. La seule maintenance admise MUST être le relais fixe de purge statistique défini par web-statistics-retention, distinct de l’observation.
+Le moniteur MUST collecter seulement les vues GET admises des composants loopback et les documents OpenSpec de son workspace. Il MUST NOT créer de décision, permission, relance, session ou mutation métier de RUN. Requêtes et mémoire MUST être bornées ; les collectes MUST NOT se chevaucher. Les seules exceptions de gestion MUST être la purge statistique définie par web-statistics-retention et les commandes de briques et rangement privé définis par monitor-management.
 
 #### Scenario: Plusieurs navigateurs
 - **WHEN** plusieurs navigateurs consultent le tableau de bord
 - **THEN** ils partagent la collecte sans multiplier les sondes vers CAB
+
+#### Scenario: Rangement du moniteur
+- **WHEN** une ligne admissible est archivée
+- **THEN** seul le catalogue privé du moniteur change
 
 #### Scenario: Purge confirmée
 - **WHEN** une purge historique est confirmée depuis STATS
@@ -156,3 +160,10 @@ GET /api/snapshot MUST exposer identity.workspace avec le workspace absolu confi
 #### Scenario: Vérification avant réutilisation
 - **WHEN** /cab start interroge une instance déjà active
 - **THEN** il peut comparer son workspace et sa version attendus sans lire de fichier runtime privé
+
+### Requirement: En-tête et navigation de gestion
+MONITOR MUST afficher CENTRE D’OBSERVATION comme titre plus grand et gras, sans Tout le travail., Une vue commune. ni leur paragraphe descriptif. ARCHIVES MUST apparaître après MONITOR et STATS. Les trois pages MUST être accessibles au clavier et responsive sans interrompre le flux SSE ni la navigation statistique.
+
+#### Scenario: Consultation des archives
+- **WHEN** ARCHIVES est sélectionné puis MONITOR
+- **THEN** la page active et son libellé changent et les observations restent actualisées
