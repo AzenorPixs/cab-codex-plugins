@@ -403,6 +403,34 @@ test('trois sessions, permissions once exactes et décisions isolées', async (t
   assert.equal((await h.post('/job/progress', { jobId: 'job-a' })).status, 409);
 });
 
+test('un RUN arrêté puis abandonné reprend après redémarrage sans permission héritée', async (t) => {
+  const h = await setup(t); const a = await h.reserve('resume', {
+    resources: [{ key: 'file:src/resume.py', mode: 'read' }] });
+  assert.equal((await h.post('/runs/resume/job/terminal-gate', { state: 'BLOQUÉ',
+    reason: 'explicit documentary prerequisite' })).status, 201);
+  assert.equal((await h.post('/runs/resume/job/disarm', { jobId: 'job-resume' })).status, 202);
+  assert.equal((await h.post('/runs/resume/suspend', { version: a.version, action: 'STOP',
+    evidence: ['targeted stop after gate'] })).status, 200);
+  const released = await h.post('/runs/resume/release', { version: a.version, delivered: false,
+    evidence: ['no pending effects; prerequisite requires decision'] });
+  assert.equal(released.status, 200); assert.equal(released.body.state, 'ABANDONED');
+  await h.stop(); await h.start();
+  const next = await h.post('/runs/reserve', { ...h.candidate('resume'),
+    resources: a.resources, exclusiveResources: [] });
+  assert.equal(next.status, 201, JSON.stringify(next));
+  assert.ok(next.body.version > released.body.version); assert.notEqual(next.body.contextId, a.contextId);
+  assert.equal(next.body.suspension, undefined);
+  assert.equal((await h.post('/runs/resume/job/arm', { jobId: 'job-resume-new', sessionId: a.sessionId,
+    directory: h.directory, changeId: a.changeId, strictCommands: true, criteria: ['resumed delivery'] })).status, 201);
+  const job = (await h.get('/runs/resume/job')).body;
+  assert.equal(job.jobId, 'job-resume-new'); assert.equal(job.terminalGate.status, 'OPEN');
+  const snapshot = (await h.get('/runs')).body;
+  assert.ok(snapshot.history.some((run) => run.runId === a.runId && run.contextId === a.contextId &&
+    run.state === 'ABANDONED' && run.suspension.action === 'STOP'));
+  assert.deepEqual(h.native.replies, []);
+  assert.equal(Object.keys(snapshot.coordination.operations).length, 0);
+});
+
 test('une session allow est refusée sans bloquer la permission once d’un autre RUN', async (t) => {
   const h = await setup(t);
   const a = await h.reserve('a');
@@ -541,7 +569,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.6.2');
+  assert.equal(initialized.result.serverInfo.version, '1.6.4');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

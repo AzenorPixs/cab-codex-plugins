@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { MonitorState, monitorConfiguration, VERSION as DATA_VERSION } from './cgpt-approval-bridge-monitor-data.mjs';
 import { guardStatisticsPost, statisticsSelection, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
 
-export const VERSION = '1.6.2';
+export const VERSION = '1.6.4';
 if ([DATA_VERSION, MAINTENANCE_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/stats.mjs', ['stats.mjs', 'text/javascript; charset=utf-8']],

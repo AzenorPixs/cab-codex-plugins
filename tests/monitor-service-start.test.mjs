@@ -69,7 +69,7 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '1.6.2');
+  assert.equal(snapshot.version, '1.6.4');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
   assert.equal((await fetch(base)).status, 200);
   for (const route of ['/app.mjs', '/stats.mjs', '/style.css']) assert.equal((await fetch(base + route)).status, 200);
@@ -104,4 +104,45 @@ test('start, stop et reset documentent la réutilisation et les échecs sans cou
   assert.match(reference, /signalé séparément du/);
   assert.match(reference, /systemctl --user daemon-reload/);
   assert.doesNotMatch(reference, /^systemctl --user enable/m);
+});
+
+test('le bootstrap précède les prévols dans chaque point d’entrée distribué', async () => {
+  const command = await readFile(new URL('../.codex/commands/cab.md', import.meta.url), 'utf8');
+  const start = command.split('## `/cab start`')[1].split('\n## ')[0];
+  const routing = command.split('## RUN concurrents')[0];
+  assert.match(routing, /Pour `start`, `run` ou `resume`, commencer par le seul bootstrap du monitoring/);
+  assert.match(routing, /avant toute\s+réservation, PLLM ou vérification OpenCode\/CAB/);
+  assert.match(routing, /aucune purge ni\s+réinitialisation n'en découle/);
+  assert.match(routing, /Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap/);
+  const skill = await readFile(new URL('skills/approval-bridge/SKILL.md', plugin), 'utf8');
+  const protocol = await readFile(new URL('../ORCHESTRATED_CODING.md', import.meta.url), 'utf8');
+  for (const [name, source, boundary] of [
+    ['commande', start, '1. Vérifie qu’OpenCode répond'],
+    ['skill', skill, '## Cadences de pilotage et attente PLLM'],
+    ['protocole', protocol, '## Identité, coordination et autorisations des RUN'],
+  ]) {
+    const end = source.indexOf(boundary);
+    assert.ok(end > 0, name + ' : étapes amont présentes');
+    const bootstrap = source.slice(0, end);
+    assert.match(bootstrap, /Dès la résolution du workspace absolu canonique/, name);
+    assert.match(bootstrap, /references\/monitor-service\.md/, name);
+    assert.match(bootstrap, /systemctl --user start cgpt-approval-bridge-monitor\.service/, name);
+    assert.match(bootstrap, /avant PLLM, santé\s+OpenCode et prévols modèle\/MCP/, name);
+    assert.match(bootstrap, /terminer cette tentative bornée et rapporter son résultat\s+avant les contrôles amont/, name);
+    assert.match(bootstrap, /GET \/api\/snapshot[\s\S]*identity\.workspace[\s\S]*GET \/ ;/, name);
+    assert.match(bootstrap, /Un échec PLLM ou CAB ultérieur\s+n'arrête pas le moniteur/, name);
+  }
+});
+
+test('la reprise avec services CAB actifs exige le bootstrap sans modifier une instance conforme', async () => {
+  const reference = await readFile(new URL('skills/approval-bridge/references/monitor-service.md', plugin), 'utf8');
+  const preamble = reference.split('## 1. Identité')[0];
+  assert.match(preamble, /chaque entrée ou\s+reprise de session de codage pilotée autorisée/);
+  assert.match(preamble, /même si contrôleur et superviseur sont déjà actifs et réutilisés/);
+  assert.match(preamble, /Ne pas se limiter à\s+signaler une unité absente/);
+  assert.match(reference, /Si l'unité est inactive ou absente et appartient au périmètre autorisé/);
+  assert.match(reference, /Réutiliser une instance conforme \*\*sans redémarrage, recopie de fichiers ni\s+modification de configuration\*\*/);
+  assert.match(reference, /identité, version ou unité divergente\s+interdit toute réaffectation ou mise à jour active implicite/);
+  assert.match(reference, /au plus cinq tentatives/);
+  assert.match(reference, /statut CAB, avec cause constatée et URL attendue/);
 });

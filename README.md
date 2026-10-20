@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-## Supervision web locale — CAB Monitor 1.6.2
+## Supervision web locale — CAB Monitor 1.6.4
 
 CAB Monitor fournit une interface moderne et responsive, indépendante du LLM,
 du contrôleur et du superviseur. Elle affiche les briques, les RUN, leurs
@@ -19,9 +19,13 @@ job WAITING est surlignée en jaune ; BLOCKED en rouge.
 Les données arrivent par SSE ; une collecte périodique réconcilie
 l'état et indique les sources indisponibles ou anciennes.
 
-`/cab start` prépare et démarre désormais le service utilisateur du moniteur,
-sans activation au login. Il vérifie le service, la page, la version et le
-workspace, puis affiche son URL réelle. Une instance déjà conforme est
+`/cab start` et toute entrée ou reprise de session de codage pilotée autorisée
+préparent ou vérifient le service utilisateur du moniteur dès la résolution du
+workspace, avant PLLM et les prévols, même avec services CAB déjà actifs.
+La tentative et son bilan précèdent ces contrôles ; leur échec ne provoque
+aucun arrêt du moniteur. Aucune activation au login n’est effectuée. La procédure
+vérifie le service, la page, la version et le workspace, puis affiche son URL
+réelle. Une instance déjà conforme est
 réutilisée. Le moniteur reste disponible après `/cab stop` ou une panne du
 contrôleur ou du superviseur. Ses erreurs sont signalées séparément du statut CAB.
 
@@ -105,7 +109,9 @@ Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
 les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
 le complète depuis les preuves autorisées et mandate sa publication.
 
-CAB 1.6.2 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+CAB 1.6.4 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+
+La préparation source 1.6.4 corrige aussi la reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
 
 Les consultations /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
@@ -139,7 +145,7 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.6.2 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.6.4 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -175,7 +181,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.6.2 partagée"]
+    subgraph CAB["Infrastructure CAB 1.6.4 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -562,7 +568,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.6.2`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.6.4`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -576,7 +582,7 @@ installations locales.
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
 
-## Plusieurs sessions CISMP — CAB 1.6.2
+## Plusieurs sessions CISMP — CAB 1.6.4
 
 Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
 

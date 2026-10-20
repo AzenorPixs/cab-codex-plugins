@@ -49,6 +49,54 @@ async function fixture(t) {
   return { directory, state, reserve, prepare, acquire, start, complete, release, restart, get r() { return registry; } };
 }
 
+test('stopped abandoned RUN can reserve a fresh generation after restart', async (t) => {
+  const h = await fixture(t); const a = h.reserve('a', [file('x', 'read')]);
+  h.r.suspend('a', { version: a.version, action: 'STOP', evidence: ['targeted stop'] });
+  const abandoned = h.r.release('a', a.version, false);
+  const restored = await h.restart();
+  assert.equal(restored.runs.get('a').version, abandoned.version);
+  const next = restored.reserve({ runId: 'a', ownerId: 'owner-a', sessionId: a.sessionId,
+    directory: h.directory, changeId: a.changeId, selectionKey: a.selectionKey,
+    resources: a.resources, dependsOn: [] });
+  assert.equal(next.state, 'RESERVED');
+  assert.ok(next.version > abandoned.version); assert.notEqual(next.contextId, a.contextId);
+  assert.equal(next.suspension, undefined);
+  assert.ok(restored.history.some((run) => run.runId === 'a' && run.contextId === a.contextId &&
+    run.state === 'ABANDONED' && run.suspension.action === 'STOP'));
+  assert.throws(() => restored.suspend('a', { version: a.version, action: 'RESUME',
+    evidence: ['stale generation'] }), /reservation-version-stale/);
+  assert.equal(Object.keys(restored.resourceState.operations).length, 0);
+});
+
+test('stopped delivered RUN can reserve a different change without inheriting STOP', async (t) => {
+  const h = await fixture(t); const a = h.reserve('a', [file('x', 'read')]);
+  h.r.suspend('a', { version: a.version, action: 'STOP', evidence: ['targeted stop'] });
+  const delivered = h.r.release('a', a.version, true);
+  const candidate = { ...a, resources: a.resources, dependsOn: [] };
+  assert.throws(() => h.r.reserve(candidate), /change-already-delivered/);
+  const next = h.r.reserve({ ...candidate, changeId: 'change-next', selectionKey: 'key-next', sessionId: 'ses_next' });
+  assert.ok(next.version > delivered.version); assert.equal(next.suspension, undefined);
+  assert.ok(h.r.history.some((run) => run.state === 'DELIVERED' && run.suspension.action === 'STOP'));
+});
+
+test('fresh reservation preserves owner, active suspension and global freeze guards', async (t) => {
+  const h = await fixture(t); const a = h.reserve('a', [file('x', 'read')]);
+  const candidate = { ...a, resources: a.resources, dependsOn: [] };
+  for (const action of ['PAUSE', 'STOP']) {
+    h.r.suspend('a', { version: a.version, action, evidence: ['active suspension'] });
+    assert.throws(() => h.r.reserve(candidate), new RegExp('run-' + action.toLowerCase()));
+  }
+  const abandoned = h.r.release('a', a.version, false);
+  assert.throws(() => h.r.reserve({ ...candidate, ownerId: 'other-owner' }), /run-id-already-used/);
+  const global = h.r.requestGlobal({ cause: 'GLOBAL_PAUSE', scope: 'all', transactionId: 'freeze-restart',
+    authorization: 'explicit test freeze', evidence: ['global freeze'] });
+  assert.throws(() => h.r.reserve(candidate), /global-coordination-suspended/);
+  assert.equal(h.r.runs.get('a').version, abandoned.version); assert.equal(h.r.history.length, 0);
+  h.r.confirmGlobal({ ...global, evidence: ['no active effects'] });
+  h.r.releaseGlobal({ ...global, authorization: 'explicit resume', evidence: ['reconciliation'] });
+  assert.equal(h.r.reserve(candidate).state, 'RESERVED');
+});
+
 test('three independent RUNs execute without a cohort or global integration', async (t) => {
   const h = await fixture(t);
   const runs = ['a', 'b', 'c'].map((id) => h.reserve(id, [file('src/' + id)]));

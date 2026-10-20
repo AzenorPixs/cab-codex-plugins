@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '1.6.2';
+export const VERSION = '1.6.4';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
 const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -189,7 +189,9 @@ export class ResourceRunRegistry extends RunRegistry {
       run.changeId === dependency && run.state === 'DELIVERED')) throw new CoordinationError('dependency-not-delivered');
   }
   reserve(payload) {
-    this.admission(payload?.runId);
+    const previous = this.runs.get(payload?.runId);
+    // A closed generation keeps its suspension as history, not as a new admission guard.
+    this.admission(previous?.state === 'RESERVED' ? payload.runId : undefined);
     if (this.resourceState.legacySources.length) throw new CoordinationError('legacy-coordination-reconciliation-required');
     this.resources(payload.resources);
     if (payload.exclusiveResources !== undefined && (!Array.isArray(payload.exclusiveResources) ||
