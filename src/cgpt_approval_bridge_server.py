@@ -8234,9 +8234,14 @@ def reconcile_pending_approvals():
                     data,
                 )
 
+            event_index = {
+                (event.get("approval_id", ""), event.get("event_type", ""))
+                for event in journal.read_events()
+            } if approvals else set()
             for item in approvals.values():
                 repair_journal_for_item(
-                    item
+                    item,
+                    event_index=event_index,
                 )
 
                 if item.get(
