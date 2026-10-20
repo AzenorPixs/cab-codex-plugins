@@ -2,6 +2,16 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.6.2 — 20 octobre 2026
+
+- Réconciliation de démarrage : un index local des événements évite les
+  relectures complètes du journal pour chaque approbation historique sous le
+  verrou du magasin, qui pouvaient faire expirer `broker_readiness`.
+- Conservation des contrôles d’intégrité, des expirations persistées avant
+  journalisation, des erreurs signalées et des décisions corrélées existantes.
+- Régressions synthétiques sur les lectures, réparations, expirations et échecs ;
+  alignement des briques distribuées sur 1.6.2 avec un nouveau cachebuster.
+
 ## 1.6.1 — préparation source
 
 - /cab start prépare et démarre explicitement le service systemd indépendant

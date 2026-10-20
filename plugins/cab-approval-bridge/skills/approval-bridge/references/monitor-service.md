@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 1.6.1
+# Service web de monitoring — CAB 1.6.2
 
 Cette procédure est exécutée pendant `/cab start`, après résolution du
 workspace et prévol, avant le démarrage du contrôleur. La préparation des
@@ -30,7 +30,7 @@ attendue dans le profil utilisateur et son appartenance à cette installation.
 
 Si elle est active, interroger uniquement l'URL loopback attendue :
 
-- GET /api/snapshot doit réussir et annoncer version 1.6.1 ainsi que
+- GET /api/snapshot doit réussir et annoncer version 1.6.2 ainsi que
   identity.workspace exactement égal au workspace canonique attendu ;
 - GET / doit servir la page CAB Monitor ;
 - l'unité doit utiliser Restart=on-failure.
@@ -63,7 +63,7 @@ web-monitor/
 ```
 
 Conserver ces deux dossiers frères : les imports et ressources sont résolus
-relativement aux modules. Vérifier la version 1.6.1 et la présence de chaque
+relativement aux modules. Vérifier la version 1.6.2 et la présence de chaque
 fichier avant publication du jeu. Aucune dépendance tierce n'est installée.
 Refuser les destinations symboliques, étrangères ou sans propriété prouvée.
 Remplacer les seuls fichiers nécessaires de façon atomique ; conserver les
