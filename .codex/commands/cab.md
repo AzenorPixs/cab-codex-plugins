@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.6.4
+version: 1.7.1
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -29,7 +29,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 1.6.4
+## RUN concurrents CAB 1.7.1
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -39,7 +39,7 @@ Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_i
 
 Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Installer ensemble les scripts controller, job-context, run-steps, monitor-events, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+Installer ensemble les scripts controller, job-context, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu puis actualise les briques actives sous maintenance partagée selon references/component-update.md ; les autres procédures ne remplacent pas un jeu actif implicitement. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
 
 ## Étapes du cycle et observation web
 
@@ -299,7 +299,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 1.6.4 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 1.7.1 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -464,10 +464,14 @@ le projet piloté ; l’authentification relève de sa procédure dédiée.
 
 ## `/cab update`
 
-Met à jour séparément le plugin CAB, le superviseur local et la copie de la
-commande `/cab` installée dans le profil Codex. Cette sous-commande ne démarre
-ni n'arrête OpenCode, le broker MCP, le contrôleur, le superviseur, le SSE ou
-une session de codage.
+Met à jour le plugin, les quatre briques CAB (broker, contrôleur, superviseur,
+Web) et la commande du profil. L'invocation explicite autorise la maintenance
+partagée et le redémarrage contrôlé des briques précédemment actives, après
+préparation et preuve d'inactivité. Un service initialement inactif reste
+inactif. Les RUN, pauses, décisions, preuves, archives et configurations restent
+conservés ; aucune session de codage n'est créée, aucune permission n'est
+accordée et OpenCode n'est pas redémarré. Le contrat détaillé et la récupération
+figurent dans `references/component-update.md` du plugin installé.
 
 1. Vérifie avec `codex plugin marketplace list` que la marketplace
    `cab_codex_plugins` est configurée depuis
@@ -496,20 +500,54 @@ une session de codage.
    métadonnées installées. Affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si la
    version installée est celle du manifeste distant ; sinon, affiche
    `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
-8. Résout dans le plugin installé le script
-   `cgpt-approval-bridge-supervisor.mjs` et son unité
-   `cgpt-approval-bridge-supervisor.service`. Vérifie que la version du script
-   est présente et cohérente avec le manifeste installé, puis compare le
-   contenu de l'unité. Copie atomiquement le script dans
-   `~/.local/share/cab-approval-bridge/` et l'unité dans
-   `~/.config/systemd/user/` lorsqu'un artefact est absent, que la version du
-   script diffère ou que l'unité diffère. Exécute `systemctl --user
-   daemon-reload` seulement après ces copies. Affiche
-   `CAB_SUPERVISEUR_INSTALLÉ`, `CAB_SUPERVISEUR_MIS_À_JOUR` ou
-   `CAB_SUPERVISEUR_DÉJÀ_À_JOUR` selon le résultat. Cette étape n'écrit pas
-   `controller.env`, n'active aucun service au login et ne démarre ni n'arrête
-   le superviseur. En cas d'échec, elle préserve les ressources déployées et
-   affiche `CAB_SUPERVISEUR_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+8. Résout le jeu complet dans le plugin installé, notamment
+   `scripts/cgpt-approval-bridge-update.mjs`,
+   `scripts/cgpt-approval-bridge-supervisor.mjs`,
+   `systemd/cgpt-approval-bridge-supervisor.service`, le contrôleur, le Web et
+   `broker/` avec ses trois modules Python. Vérifie la version de l'outil et
+   du manifeste installé. Résout le workspace canonique, le home du compte
+   systemd utilisateur, les URLs locales effectives et le répertoire exact du
+   broker réellement lancé par OpenCode, à partir des seules métadonnées de
+   lancement non secrètes accessibles. Ne pas deviner ce dernier, lire un
+   fichier env ou une configuration contenant des secrets ; une valeur
+   inconnue interdit la bascule et reste explicitement à fournir. Le home
+   système n'est pas CODEX_HOME. Refuse une destination dans le workspace ou
+   dans le cache du plugin ; ne modifie pas le lancement MCP ni ses variables.
+   Lance l'outil depuis le paquet installé, avec les chemins absolus protégés
+   comme arguments distincts, le workspace et toutes les URLs effectives :
+
+   ```text
+   node <plugin>/scripts/cgpt-approval-bridge-update.mjs --plugin-root <plugin> --workspace <workspace> --broker-directory <installation-broker> --home <home-utilisateur> --controller-url <url> --supervisor-url <url> --monitor-url <url> --opencode-url <url>
+   ```
+
+   L'outil vérifie le jeu, sauvegarde ses seuls artefacts, journalise une
+   transaction privée et acquiert SHARED_MAINTENANCE si CAB est actif. Il
+   attend HELD avec cohorte native et contextes quiescents avant tout arrêt.
+   Une attente de 120 secondes par défaut conserve gel, transaction et
+   processus, sans forcer ni répondre aux demandes. Une nouvelle invocation
+   reprend cette transaction. `--wait-ms` accepte 0 à 900000 ms.
+   L'outil arrête le superviseur, déconnecte le seul broker natif, arrête le
+   contrôleur et le Web actifs, puis remplace atomiquement les artefacts.
+   Il exécute `systemctl --user daemon-reload`, relance les seuls composants
+   précédemment actifs et vérifie versions réelles et identités des RUN avant
+   levée du gel. Les processus inactifs restent inactifs ; aucun enable.
+   Il prend en charge le retour arrière et la récupération documentée. Ne
+   remplace jamais un module actif à côté de l'outil et ne contourne pas son
+   verrou ou sa maintenance. Interprète le JSON final et le code de sortie :
+   - `completed`, code 0 : `CAB_BRIQUES_MISES_À_JOUR` ;
+   - `up-to-date`, code 0 : `CAB_BRIQUES_DÉJÀ_À_JOUR`, sans redémarrage ;
+   - `waiting`, code 2 : `CAB_MISE_À_JOUR_EN_ATTENTE`, avec transaction
+     conservée ; ne pas annoncer de réussite globale ni lever le gel ;
+   - erreur : `CAB_BRIQUES_MISE_À_JOUR_ÉCHOUÉE`, avec état du repli ;
+     `update-recovery-required` exige de conserver les preuves et le gel.
+   Une récupération utilise le même outil et les mêmes cibles ; `--rollback`
+   permet le retour explicite aux artefacts sauvegardés ou l'annulation sûre
+   d'une attente, sans restaurer un ancien runtime. Un verrou vivant ou un
+   journal invalide n'est jamais supprimé pour forcer une nouvelle transaction.
+   L'outil ne touche ni controller.env ni monitor.env. Les anciens états
+   CAB_SUPERVISEUR_INSTALLÉ et CAB_SUPERVISEUR_MIS_À_JOUR sont remplacés par
+   le bilan des quatre briques ; le bilan indique aussi le superviseur resté
+   inactif lorsqu'il n'était pas démarré.
 9. Utilise exclusivement la référence GitHub suivante pour la commande CAB :
    `https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, chemin
    `.codex/commands/cab.md`. Construit l'URL brute HTTPS correspondante sans
@@ -528,28 +566,29 @@ une session de codage.
     et affiche `CAB_COMMANDE_MISE_À_JOUR` seulement en cas de concordance.
     Tout échec laisse la copie locale inchangée et affiche
     `CAB_COMMANDE_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
-14. Affiche toujours `CAB_RÉSUMÉ_VERSIONS`, y compris après un échec, avec :
-    - GitHub : version du manifeste du plugin, version du contrôleur extraite
-      de `plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs`,
-      version du superviseur extraite de
-      `plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs`,
-      version du broker extraite de `src/cgpt_approval_bridge_server.py` et
-      version du frontmatter de `.codex/commands/cab.md` ;
-    - profil local : version du manifeste et du contrôleur depuis le cache du
-      plugin installé, version du superviseur déployé dans
-      `~/.local/share/cab-approval-bridge/cgpt-approval-bridge-supervisor.mjs`,
-      version du broker réellement actif fournie par
-      `broker_readiness.server_version`, et version du frontmatter de
-      `${CODEX_HOME:-$HOME/.codex}/commands/cab.md`.
-    Toute source inaccessible ou version absente doit être affichée comme
-    `INDISPONIBLE`, sans remplacer cette valeur par une déduction.
+14. Affiche toujours `CAB_RÉSUMÉ_VERSIONS`, y compris après échec ou attente,
+    avec des colonnes distinctes GitHub, plugin installé, fichiers déployés,
+    processus réellement actif et résultat de transaction. Inclure plugin,
+    contrôleur, superviseur, broker, Web et commande :
+    - GitHub : manifeste, scripts controller/supervisor/monitor, broker
+      distribué dans plugins/cab-approval-bridge/broker/ et frontmatter de
+      .codex/commands/cab.md ;
+    - fichiers : versions du cache installé et des artefacts effectivement
+      déployés, dont la version du superviseur extraite du script ;
+    - processus : GET /status du contrôleur et du superviseur, readiness
+      actuelle pour le broker et GET /api/snapshot du Web, avec workspace et
+      fraîcheur ; la version du superviseur déployé n'est pas sa version
+      active si le redémarrage reste non confirmé.
+    Toute source inaccessible reste INDISPONIBLE. Un composant arrêté est
+    INACTIF ; sa version active n'est jamais déduite de son fichier ou du
+    plugin. Une attente, un repli ou un échec partiel interdit le succès global.
 
-N'édite jamais le manifeste du plugin, la configuration Codex ou les fichiers
-du projet piloté. Les seules écritures locales admises sont le déploiement
-atomique du superviseur et de son unité, ainsi que le remplacement atomique de
-la copie `/cab` dans le profil Codex. La migration contrôlée de la source locale
-CAB vers son marketplace Git est l'unique modification de marketplace autorisée
-; elle doit toujours être réversible en cas d'échec.
+N'édite jamais le manifeste du plugin, la configuration Codex, les secrets ou
+les fichiers du projet piloté. Les écritures admises sont les artefacts CAB
+nommés, leurs unités utilisateur, la commande de profil et le journal privé
+avec ses sauvegardes, selon references/component-update.md. La migration
+réversible de marketplace reste la seule exception de configuration. Aucun
+nettoyage ou migration des états métier n'est effectué par update.
 
 ## `/cab stop`
 

@@ -70,7 +70,7 @@ Le broker n'utilise actuellement aucune dépendance Python tierce.
 
 ### 4.3 Statistiques de session
 
-Installer le jeu source complet CAB 1.6.4, notamment resource-coordination.mjs, statistics.mjs, observation-statistics.mjs, statistics-maintenance.mjs et import-observations.mjs avec leurs noms cgpt-approval-bridge-*. Le registre utilise le schéma 4 ; les schémas 1/2/3 restent lisibles en mode migration requise. Les snapshots statistiques cumulatifs lisent 1/2 et les observations ont leur stockage privé distinct schéma 2 lié au projet (les bundles importés restent schéma 1). Le magasin broker extensible 2 et le transport MCP sont conservés ; les capacités du nouveau protocole sont vérifiées avant permission.
+Installer le jeu source complet CAB 1.7.1, notamment resource-coordination.mjs, statistics.mjs, observation-statistics.mjs, statistics-maintenance.mjs et import-observations.mjs avec leurs noms cgpt-approval-bridge-*. Le registre utilise le schéma 4 ; les schémas 1/2/3 restent lisibles en mode migration requise. Les snapshots statistiques cumulatifs lisent 1/2 et les observations ont leur stockage privé distinct schéma 2 lié au projet (les bundles importés restent schéma 1). Le magasin broker extensible 2 et le transport MCP sont conservés ; les capacités du nouveau protocole sont vérifiées avant permission.
 
 Une conversion de runtime exige maintenance explicitement autorisée, quiescence, sauvegarde privée et qualification du jeu complet. Les RUN, jobs, candidates, demandes consommées et reçus sont conservés. Les RUN restent en pause ; le transport est vérifié en lecture, puis le prévol d’un seul RUN est autorisé après levée explicite du gel, en maintenant les pairs suspendus. Le métier reste interdit jusqu’à once, exit 0 et libération prouvés. Avant nouvel usage, /coordination/rollback et la sauvegarde permettent le retour exact ; après de nouveaux effets, une réconciliation/conversion est requise. Les anciennes acquisitions globales ordinaires sont refusées dans le nouveau profil. Une préparation source n'installe rien, ne propage aucun prompt et ne migre aucun RUN actif.
 
@@ -166,10 +166,10 @@ actualise l'instantané Git, puis réinstalle le plugin uniquement lorsque son
 manifeste distant est plus récent. Elle compare aussi le
 frontmatter de la commande installée dans le profil Codex à celui téléchargé
 depuis `AzenorPixs/cab-codex-plugins`, branche `main`, et la remplace atomiquement
-uniquement si GitHub fournit une version plus récente. Elle installe ou
-actualise aussi atomiquement le script et l'unité systemd utilisateur du
-superviseur depuis le plugin installé, puis recharge systemd sans activer ni
-démarrer le service. Cette commande ne modifie ni le manifeste ni la
+uniquement si GitHub fournit une version plus récente. Elle déploie aussi
+le jeu complet des briques et leurs unités depuis le plugin installé. Son outil transactionnel
+recharge systemd et remet en service les seules briques précédemment actives,
+sous maintenance durable ; les composants inactifs restent inactifs. Cette commande ne modifie ni le manifeste ni la
 configuration Codex ; seule la migration réversible de la marketplace CAB est
 admise.
 
@@ -200,13 +200,13 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 La sous-commande `/cab status` est distribuée dans le même fichier de commande
 Codex ; elle utilise les outils de lecture disponibles et les vues GET
 existantes. Elle n’ajoute ni script, ni dépendance, ni migration runtime.
-La préparation 1.6.4 reste une modification source ; l’installation dans un
+La préparation 1.7.1 reste une modification source ; l’installation dans un
 profil et la mise en service des composants sont des opérations distinctes.
 
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `1.6.4` pour le broker,
+artefacts distribués. La version de base actuelle est `1.7.1` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -291,7 +291,7 @@ Une conteneurisation éventuelle devra respecter l'architecture CAB, notamment :
 
 Le projet actuel ne définit aucune image Docker CAB.
 
-## Distribution concurrente 1.6.4
+## Distribution concurrente 1.7.1
 
 Installer le jeu complet des scripts du plugin dans un même répertoire : le
 contrôleur et le superviseur importent les modules job-context, supervisor-context
@@ -299,7 +299,7 @@ et runs, ainsi que resource-coordination, statistics, observation-statistics
 et statistics-maintenance ;
 l'importeur import-observations est également distribué. Le registre lance
 registry-lock.py avec Python 3. Ces fichiers sont
-indissociables et doivent partager la version source courante 1.6.4. Aucune dépendance tierce
+indissociables et doivent partager la version source courante 1.7.1. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.
@@ -314,12 +314,13 @@ les neuf prompts pilotés et leur protocole ; les prompts directs sont contrôl�
 par empreinte. Les sources PROMPTS restent non versionnées dans leurs projets.
 
 
-## Distribution de CAB Monitor 1.6.4
+## Distribution de CAB Monitor 1.7.1
 
 Le moniteur est une brique indépendante, distribuée sans dépendance tierce :
 
 - `scripts/cgpt-approval-bridge-monitor.mjs` ;
 - `scripts/cgpt-approval-bridge-monitor-data.mjs` ;
+- `scripts/cgpt-approval-bridge-monitor-management.mjs` ;
 - `scripts/cgpt-approval-bridge-monitor-events.mjs` ;
 - `scripts/cgpt-approval-bridge-run-steps.mjs` ;
 - `scripts/cgpt-approval-bridge-statistics-maintenance.mjs` et
@@ -328,12 +329,12 @@ Le moniteur est une brique indépendante, distribuée sans dépendance tierce :
   `web-monitor/style.css` ;
 - `systemd/cgpt-approval-bridge-monitor.service`.
 
-Le contrôleur importe également `monitor-events.mjs` ; le contexte de job et
+Le contrôleur importe également `monitor-events.mjs` et `monitor-management.mjs` ; le contexte de job et
 le moniteur utilisent le catalogue `run-steps.mjs`. Ces modules doivent être
 présents avec leurs noms complets à côté des scripts lors d’un déploiement
 autorisé. La référence `skills/approval-bridge/references/run-lifecycle.md`
 est distribuée avec le protocole, sans nouvelle dépendance. Les modules,
-briques existantes, manifeste, unités, commande et supports annoncent 1.6.4.
+briques existantes, manifeste, unités, commande et supports annoncent 1.7.1.
 Les ressources HTML/CSS sont rattachées à cette release sans format de version
 artificiel. Les schémas et le protocole MCP sont conservés.
 
@@ -349,7 +350,7 @@ Le lancement direct de README.md reste possible.
 
 L'unité attend `~/.config/cab-approval-bridge/monitor.env`, non secret et privé,
 et l'arborescence `~/.local/share/cab-approval-bridge-monitor/` avec scripts/
-et web-monitor/ frères. Installer ensemble monitor, monitor-data,
+et web-monitor/ frères. Installer ensemble monitor, monitor-data, monitor-management,
 monitor-events, run-steps, statistics-maintenance et observation-statistics
 avec leurs noms complets cgpt-approval-bridge-*. Les ressources index.html,
 app.mjs, stats.mjs et style.css sont requises. La fermeture de ces imports et
@@ -357,14 +358,46 @@ ressources est qualifiée par lancement d'un paquet isolé.
 
 Le modèle ne déclare aucune dépendance au contrôleur ou au superviseur.
 /cab stop et le reset préservent son service, sa configuration et son jeu
-installé. /cab update n'acquiert aucun nouveau droit de démarrage du moniteur.
+installé. /cab update 1.7.1 peut redémarrer explicitement le moniteur pendant
+sa transaction de maintenance lorsqu'il était déjà actif, sans démarrer une
+instance initialement inactive.
 Un port ou workspace divergent est signalé, sans tuer de processus ni modifier
 un service actif. Cette préparation source ne déploie rien sur le profil réel.
 
-Le jeu 1.6.4 conserve STATS et la maintenance des historiques introduits en 1.6.0. Le module
+Le jeu 1.7.1 conserve STATS et la maintenance des historiques introduits en 1.6.0. Le module
 statistics-maintenance et son import observation-statistics sont requis avec
 le contrôleur et le moniteur, même pour une installation séparée du moniteur.
 Les schémas JSON restent inchangés ; aucun remplacement de magasin, migration,
 purge réelle ou redémarrage de service n'est exécuté par la préparation source.
 La qualification navigateur couvre navigation, filtres, annulation, purge sur
 fixtures et protection des contextes actifs dans Chromium et Firefox headless.
+
+Le jeu 1.7.1 ajoute monitor-management.mjs aux imports du contrôleur et du
+moniteur, avec son nom complet cgpt-approval-bridge-monitor-management.mjs.
+Le catalogue privé est créé seulement lors du premier rangement autorisé ;
+il reste séparé des sources et du runtime CAB. Les droits utilisateur
+existants sur les unités dédiées suffisent aux commandes ; aucune élévation,
+activation au login ou nouvelle dépendance n'est installée. Un Web lancé
+manuellement conserve sa supervision, avec redémarrage systemd indisponible.
+Les tests de commandes utilisent un adaptateur simulé, jamais les services
+réels. Le jeu installé isolé doit contenir onze ressources, dont ce module.
+
+## Distribution de la mise à jour active 1.7.1
+
+Le plugin ajoute scripts/cgpt-approval-bridge-update.mjs, sa référence
+skills/approval-bridge/references/component-update.md et broker/ contenant
+cgpt_approval_bridge_server.py, cgpt_approval_bridge_router.py et
+cgpt_approval_bridge_journal.py. src/ reste l'autorité ; les trois copies
+distribuées sont contrôlées octet pour octet par le test de distribution.
+Le paquet complet permet de mettre à jour le broker sans extraire du code
+d'un autre commit ou réécrire la configuration OpenCode.
+
+Le script est exécuté depuis le plugin installé, hors des destinations qu'il
+remplace. Il installe les fichiers CAB nommés et les unités dédiées ; il ne
+modifie ni caches de plugin, secrets, environnements, drop-ins ni projet piloté.
+L'invocation explicite /cab update permet la maintenance et le redémarrage des
+briques actives. Leurs états actif/inactif sont mémorisés, vérifiés et rétablis.
+Le gel et les schémas doivent être compatibles avant bascule. Les reçus et
+sauvegardes sont conservés pour récupération sans restauration de données métier.
+La qualification SCM utilise exclusivement des services simulés ; installation,
+publication et déploiement réels restent des opérations distinctes.

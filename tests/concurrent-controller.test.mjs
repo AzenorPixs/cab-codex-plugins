@@ -145,6 +145,43 @@ async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
     approvedAccess, execute, completeTool, releaseOperation };
 }
 
+test('garde du moniteur : quiescence, origine et exclusion des mutations concurrentes', async (t) => {
+  const h = await setup(t);
+  const headers = { 'content-type': 'application/json', 'x-cab-monitor': '1' };
+  const post = async (path, body, extra = {}) => {
+    const response = await fetch(h.base + '/monitor/lifecycle/' + path, { method: 'POST',
+      headers: { ...headers, ...extra }, body: JSON.stringify(body) });
+    return { status: response.status, body: await response.json() };
+  };
+  assert.equal((await post('prepare', { workspace: h.directory }, { origin: 'https://foreign.invalid' })).status, 403);
+  h.native.busy = { session: { type: 'busy' } };
+  assert.equal((await post('prepare', { workspace: h.directory })).status, 409);
+  h.native.busy = {};
+  h.native.permissions = [{ id: 'pending', sessionID: 'session' }];
+  assert.equal((await post('prepare', { workspace: h.directory })).status, 409);
+  h.native.permissions = [];
+  const lease = await post('prepare', { workspace: h.directory });
+  assert.equal(lease.status, 200, JSON.stringify(lease));
+  assert.equal(lease.body.workspace, h.directory); assert.ok(lease.body.pid > 0);
+  assert.equal((await h.post('/runs/reserve', h.candidate('blocked'))).status, 409);
+  assert.equal((await post('release', { token: 'wrong' })).status, 409);
+  assert.equal((await post('release', { token: lease.body.token })).status, 200);
+  await h.reserve('active');
+  assert.equal((await post('prepare', { workspace: h.directory })).status, 409);
+});
+
+test('la garde refuse une mutation déjà en vol sans interrompre sa réservation', async (t) => {
+  const h = await setup(t); let resume; let entered;
+  const waiting = new Promise((resolve) => { entered = resolve; });
+  const paused = new Promise((resolve) => { resume = resolve; });
+  h.native.onRequest = async (path) => { if (path === '/session/ses_race') { entered(); await paused; } };
+  const reservation = h.post('/runs/reserve', h.candidate('race')); await waiting;
+  const response = await fetch(h.base + '/monitor/lifecycle/prepare', { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-cab-monitor': '1' }, body: JSON.stringify({ workspace: h.directory }) });
+  assert.equal(response.status, 409); resume();
+  assert.equal((await reservation).status, 201);
+});
+
 test('API STATS et purge : contrat HTTP, origines et préservation du RUN', async (t) => {
   const h = await setup(t);
   await h.reserve('stats');
@@ -569,7 +606,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.6.4');
+  assert.equal(initialized.result.serverInfo.version, '1.7.1');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-## Supervision web locale — CAB Monitor 1.6.4
+## Supervision web locale — CAB Monitor 1.7.1
 
 CAB Monitor fournit une interface moderne et responsive, indépendante du LLM,
 du contrôleur et du superviseur. Elle affiche les briques, les RUN, leurs
@@ -61,6 +61,28 @@ La rétention native reste limitée à 30 jours : choisir 365 jours ne l'étend
 pas. Une erreur partielle présente le résultat par magasin. Aucun nettoyage
 automatique n'est activé.
 
+Depuis 1.7.0, **CENTRE D’OBSERVATION** remplace le grand texte d'accueil.
+Les cartes Contrôleur, Superviseur et Broker proposent **Démarrer/Arrêter**
+et **Redémarrer** ; la carte **Web** affiche son état et **Redémarrer**.
+Les services utilisent leurs unités systemd utilisateur dédiées, avec contrôle
+de PID et workspace. Le broker passe uniquement par connect/disconnect MCP
+dans OpenCode. Les actions perturbatrices exigent CAB disponible, sans RUN
+réservé, demande, effet ou activité native en cours. Un Web lancé manuellement
+doit être redémarré manuellement ; une demande acceptée n'est confirmée qu'après
+reconnexion à une nouvelle instance. Aucun bouton ne redémarre OpenCode.
+
+À droite des lignes admissibles, **Archiver** range une ligne dans le menu
+**ARCHIVES**, sous MONITOR et STATS ; **Supprimer** la masque après confirmation.
+Ces actions concernent seulement le moniteur : les sources OpenSpec, RUN réels,
+décisions et preuves restent conservés. Un RUN arrêté encore réservé reste
+protégé. **Désarchiver** remet le RUN dans MONITOR sans reprendre son exécution.
+Le catalogue privé persiste sous
+`~/.local/state/cab-approval-bridge-monitor/<sha256-workspace>/catalog.json`.
+`OC_Codex_MONITOR_STATE_DIR` change son répertoire parent absolu, en conservant
+la séparation par workspace. Une nouvelle génération de RUN ou une modification
+du document du change reste visible. Une erreur de catalogue bloque le rangement
+et s'affiche ; aucune réinitialisation silencieuse n'est effectuée.
+
 Codex est l’orchestrateur et le validateur de la session : il pilote les
 mandats du démarrage à la clôture et rend une décision explicite pour chaque
 opération nécessitant une permission OpenCode. CAB transmet cette décision,
@@ -109,9 +131,9 @@ Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
 les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
 le complète depuis les preuves autorisées et mandate sa publication.
 
-CAB 1.6.4 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+CAB 1.7.1 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
 
-La préparation source 1.6.4 corrige aussi la reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
+La préparation source 1.7.1 corrige aussi la reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
 
 Les consultations /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
@@ -145,7 +167,7 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.6.4 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.7.1 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -181,7 +203,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.6.4 partagée"]
+    subgraph CAB["Infrastructure CAB 1.7.1 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -373,16 +395,27 @@ ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
 installées mais inactives jusqu'au prochain
 `/cab start`.
 
-`/cab update` compare la version SemVer de base de `cab-approval-bridge` à
-celle publiée par le marketplace Git `cab_codex_plugins`. Elle peut migrer de
-façon réversible une source locale CAB vers `AzenorPixs/cab-codex-plugins`,
-puis compare la commande CAB du profil Codex à celle de la branche `main`.
-Elle installe ou actualise atomiquement le script et l'unité du superviseur
-depuis le plugin installé, sans activer ni démarrer le service. Le remplacement
-de la commande de profil est également atomique ; la configuration et les
-ressources CAB en cours restent inchangées.
-À la fin, elle récapitule les versions GitHub et locales du plugin, du
-contrôleur, du superviseur déployé, du broker actif et de la commande CAB.
+`/cab update` compare le plugin et la commande de profil à leur source
+GitHub validée, puis met à jour **broker, contrôleur, superviseur et Web**,
+y compris lorsqu'ils fonctionnent. Le paquet embarque tous les modules du
+broker. La commande prépare et vérifie le jeu, sauvegarde ses seuls artefacts,
+puis place CAB en maintenance partagée. Les nouvelles admissions sont gelées
+et la bascule attend une frontière sûre, sans répondre aux permissions.
+
+Les briques précédemment actives sont arrêtées et redémarrées sur le jeu
+vérifié ; celles qui étaient inactives restent inactives. RUN, pauses,
+décisions, preuves, archives et configurations sont conservés. OpenCode reste
+ouvert. Le succès exige les versions réellement chargées et les identités des
+RUN avant levée du gel. Une erreur de démarrage ou de version déclenche un
+retour aux artefacts sauvegardés, sans restaurer un ancien runtime métier.
+
+Si l'attente atteint 120 secondes, la transaction reste en attente avec ses
+processus et son gel ; relancer `/cab update` reprend cette transaction.
+Un jeu déjà conforme ne redémarre rien. Le bilan distingue versions du paquet,
+fichiers déployés, processus actifs, inactivité et repli. Une installation
+manuelle non gérée, un répertoire broker inconnu ou situé dans le workspace
+reste un blocage explicite, sans modification de sa configuration. Détails :
+`skills/approval-bridge/references/component-update.md` dans le plugin.
 
 Après un prévol de récupération divergent ou incomplet refusé sans effet,
 conserver la session candidate où le prévol a divergé, le même job et leurs
@@ -568,7 +601,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.6.4`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.7.1`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -582,7 +615,7 @@ installations locales.
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
 
-## Plusieurs sessions CISMP — CAB 1.6.4
+## Plusieurs sessions CISMP — CAB 1.7.1
 
 Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
 

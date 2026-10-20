@@ -18,6 +18,48 @@ let connected = false;
 let tasksOpen = false;
 let cycleOpen = false;
 let historyOpen = false;
+let managing = false;
+let deleting = null;
+let webRestart = null;
+const managementErrors = {
+  'monitor-item-protected': 'Cet élément n’est plus admissible. Son état actuel reste protégé.',
+  'monitor-runs-active': 'Action refusée : un RUN, une demande ou une activité native est encore en cours.',
+  'monitor-component-refused': 'Action refusée : CAB doit être disponible et sans RUN réservé ni activité native.',
+  'monitor-service-unmanaged': 'Service indisponible pour cette commande : unité dédiée, PID ou workspace non confirmé. Un lancement manuel doit être redémarré manuellement.',
+  'monitor-service-command-failed': 'La commande systemd a échoué. Le résultat du service n’est pas confirmé.',
+  'monitor-service-state-unconfirmed': 'L’état attendu du service n’est pas confirmé.',
+  'monitor-catalog-unavailable': 'Catalogue privé indisponible : aucune modification du rangement n’est possible.',
+  'monitor-catalog-full': 'Le catalogue privé a atteint sa limite. Aucune ligne supplémentaire n’a été rangée.',
+  'monitor-management-busy': 'Une autre action de gestion est en cours.',
+  'monitor-web-restart-failed': 'Le redémarrage du Web a échoué.',
+};
+async function manage(route, body) {
+  if (managing) return;
+  managing = true; render();
+  $('#management-status').textContent = 'Action en cours…';
+  try {
+    const response = await fetch('/api/manage/' + route, { method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cab-monitor': '1' },
+      body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    if (result.deferred) {
+      webRestart = { startedAt: result.startedAt, deadline: Date.now() + 30000 };
+      $('#management-status').textContent = 'Redémarrage du Web demandé. Attente de la reconnexion…';
+    } else $('#management-status').textContent = ({ archive: 'Élément archivé dans le moniteur.',
+      delete: 'Ligne supprimée du moniteur.', restore: 'RUN désarchivé ; aucune reprise de son exécution.' })[body.action] || 'Action exécutée et état de la brique confirmé.';
+    if (result.warning) $('#management-status').textContent += ' La libération de la garde reste non confirmée ; elle expire sous 30 secondes.';
+  } catch (error) {
+    $('#management-status').textContent = managementErrors[error.message] || 'Action non confirmée. Vérifiez l’état affiché avant de réessayer.';
+  } finally { managing = false; render(); }
+}
+function actionButton(label, title, callback, disabled = false) {
+  const button = node('button', 'small-action', label);
+  button.type = 'button'; button.title = title; button.setAttribute('aria-label', title);
+  button.disabled = managing || disabled;
+  button.addEventListener('click', callback);
+  return button;
+}
 const stepStatusNames = { IN_PROGRESS: 'En cours', ALREADY_COVERED: 'Déjà couverte', NOT_APPLICABLE: 'Non applicable' };
 const stepLabel = (step) => step ? step.name + ' · ' + step.position + '/' + step.total : 'Non renseignée';
 const labels = { 'validation-received': 'Demande de validation reçue', 'validation-manually-answered': 'Décision explicite reçue',
@@ -43,15 +85,18 @@ function progress(change) {
   box.append(title, bar); return box;
 }
 function changeFor(id) { return model.changes.changes.find((change) => change.changeId === id); }
+const terminalRun = (run) => ['RELEASED', 'DELIVERED', 'ABANDONED'].includes(run.state) || run.gate.status === 'VALIDATED';
 function renderHealth() {
-  const holder = $('#health'); holder.replaceChildren();
+  const holder = $('#health');
+  const focus = holder.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
+  holder.replaceChildren();
   const entries = [['controller', 'Contrôleur', 'Pilotage et décisions', '⌘'], ['supervisor', 'Superviseur', 'Suivi et reprises', '◎'],
-    ['broker', 'Broker MCP', 'Dernière readiness reçue', '⇄'], ['opencode', 'OpenCode', 'Santé HTTP native', '◇']];
+    ['broker', 'Broker MCP', 'Connexion MCP native', '⇄'], ['opencode', 'OpenCode', 'Santé HTTP native', '◇'],
+    ['monitor', 'Web', 'Interface et archives locales', '▦']];
   for (const [key, label, subtitle, icon] of entries) {
-    const stale = key === 'broker' ? model.broker.stale || isStale('controller') ||
-      Date.now() - Date.parse(model.broker.observedAt) > model.configuration.staleMs : isStale(key);
+    const stale = key === 'monitor' ? !connected : key === 'broker' ? isStale('mcp') : isStale(key);
     const source = model.sources[key];
-    const healthy = key === 'broker' ? model.broker.status === 'READY' : key === 'opencode' ? model.nativeHealth === true : true;
+    const healthy = key === 'broker' ? model.brokerConnection === 'connected' : key === 'opencode' ? model.nativeHealth === true : true;
     const status = stale ? (key === 'broker' ? 'Non confirmé' : source?.lastSuccessAt ? 'Indisponible' : 'Non observé') : healthy ? 'Disponible' : 'Dégradé';
     const card = node('div', 'health-card');
     const name = node('div'); name.append(node('div', 'health-name', label), node('div', 'health-sub', subtitle));
@@ -59,12 +104,27 @@ function renderHealth() {
     name.append(node('div', 'health-version', version ? 'v' + version : 'Version indisponible'));
     const pill = node('span', 'health-status ' + (stale ? 'warn' : healthy ? 'good' : 'bad')); pill.append(node('i', 'dot'), document.createTextNode(status));
     card.append(node('span', 'health-icon', icon), name, pill);
+    card.dataset.component = key;
+    if (key !== 'opencode') {
+      const actions = node('div', 'component-actions');
+      const occupied = model.runs.some((run) => run.state === 'RESERVED' || run.armed || run.hasMandate || run.pending > 0);
+      const active = key === 'broker' ? model.brokerConnection === 'connected' : !stale;
+      if (key !== 'monitor') actions.append(actionButton(active ? 'Arrêter' : 'Démarrer',
+        (active ? 'Arrêter ' : 'Démarrer ') + label, () => { void manage('service', { component: key, action: active ? 'stop' : 'start' }); }, active && occupied));
+      actions.append(actionButton('Redémarrer', 'Redémarrer ' + label,
+        () => { void manage('service', { component: key, action: 'restart' }); },
+        key === 'monitor' ? Boolean(webRestart) : occupied || isStale('controller') || isStale('registry')));
+      card.append(actions);
+    }
     card.title = 'Dernier succès : ' + date(key === 'broker' ? model.broker.observedAt : source?.lastSuccessAt, true);
     holder.append(card);
   }
+  if (focus) for (const button of holder.querySelectorAll('button')) {
+    if (button.getAttribute('aria-label') === focus && !button.disabled) button.focus({ preventScroll: true });
+  }
 }
 function renderMetrics() {
-  const current = model.runs.filter((run) => run.state !== 'RELEASED' && run.gate.status !== 'VALIDATED');
+  const current = model.runs.filter((run) => !terminalRun(run));
   const waiting = current.filter((run) => runState(run)[0] === 'WAITING');
   const metrics = [['RUN en cours', isStale('controller') ? null : current.length, 'Exécutions observées dans ce workspace', '↗'],
     ['Changes actifs', model.changes.available ? model.changes.changes.filter((c) => c.location === 'active').length : null, 'Référentiel OpenSpec local', '▤'],
@@ -82,15 +142,15 @@ function renderWork() {
   const filter = $('#filter').value;
   let values = view === 'runs' ? model.runs : model.changes.changes;
   values = values.filter((value) => [value.runId, value.changeId, value.title].filter(Boolean).join(' ').toLocaleLowerCase('fr').includes(query));
-  if (view === 'runs') values = values.filter((run) => filter === 'all' || (filter === 'terminal' ? run.gate.status === 'VALIDATED' || run.state === 'RELEASED'
-    : filter === 'waiting' ? runState(run)[0] === 'WAITING' : run.gate.status !== 'VALIDATED' && run.state !== 'RELEASED'));
+  if (view === 'runs') values = values.filter((run) => filter === 'all' || (filter === 'terminal' ? terminalRun(run)
+    : filter === 'waiting' ? runState(run)[0] === 'WAITING' : !terminalRun(run)));
   $('#result-count').textContent = values.length + (view === 'runs' ? ' RUN affiché(s)' : ' change(s) affiché(s)');
   $('#filter').disabled = view !== 'runs';
   if (!values.length) { container.replaceChildren(node('p', 'empty', query ? 'Aucun résultat pour cette recherche.' :
     view === 'runs' ? 'Aucun RUN observé. Les exécutions apparaîtront dès leur disponibilité.' : 'Aucun change actif disponible.')); return; }
   const table = node('table');
   const header = node('tr');
-  for (const label of view === 'runs' ? ['RUN / CHANGE', 'ETAT', 'ÉTAPE', 'TÂCHES COCHÉES'] : ['CHANGE', 'EMPLACEMENT', 'TÂCHES COCHÉES']) header.append(node('th', '', label));
+  for (const label of view === 'runs' ? ['RUN / CHANGE', 'ETAT', 'ÉTAPE', 'TÂCHES COCHÉES', 'ACTIONS'] : ['CHANGE', 'EMPLACEMENT', 'TÂCHES COCHÉES', 'ACTIONS']) header.append(node('th', '', label));
   table.append(node('thead')); table.firstChild.append(header);
   const body = node('tbody');
   for (const value of values) {
@@ -115,6 +175,18 @@ function renderWork() {
       row.append(step);
     }
     const count = node('td'); count.append(progress(change)); row.append(count);
+    const actions = node('td', 'row-actions');
+    const kind = isRun ? 'runs' : 'changes';
+    const identityLabel = isRun ? value.runId : value.changeId;
+    actions.append(actionButton('▣', 'Archiver ' + identityLabel,
+      () => { void manage('catalog', { kind, key: value.key, action: 'archive' }); }, !value.manageable),
+      actionButton('×', 'Supprimer ' + identityLabel + ' du moniteur', () => {
+        deleting = { kind, key: value.key, action: 'delete', confirm: true };
+        $('#management-confirm-text').textContent = 'Supprimer ' + identityLabel + ' de l’affichage du moniteur ?';
+        $('#management-dialog').showModal();
+      }, !value.manageable));
+    if (!value.manageable) actions.title = 'Disponible après clôture et libération, sans activité en cours, avec des sources fraîches.';
+    row.append(actions);
     body.append(row);
   }
   table.append(body); container.replaceChildren(table);
@@ -204,16 +276,52 @@ function render() {
   if (!model) return;
   const focusedRun = document.activeElement?.dataset.run;
   const focusedChange = document.activeElement?.dataset.change;
+  const focusedAction = document.activeElement?.classList.contains('small-action') ? document.activeElement.getAttribute('aria-label') : null;
   if (!selectedRun && model.runs.length) selectedRun = model.runs[0].runId;
   if (!selectedChange && model.changes.changes.length) selectedChange = model.changes.changes[0].changeId;
   $('#updated').textContent = 'Dernière vue · ' + date(model.generatedAt, true);
   $('#cadence').textContent = 'Collecte ' + model.configuration.pollMs / 1000 + ' s · événements SSE';
   $('#version').textContent = model.version; $('#footer-version').textContent = model.version;
-  renderHealth(); renderMetrics(); renderWork(); renderDetail(); renderTimeline();
+  renderHealth(); renderMetrics(); renderWork(); renderDetail(); renderTimeline(); renderArchives();
+  if (model.management?.catalogError) $('#management-status').textContent = managementErrors[model.management.catalogError] || 'Gestion du catalogue indisponible.';
+  if (model.management?.serviceError) {
+    webRestart = null; $('#management-status').textContent = managementErrors[model.management.serviceError] || 'Action de service non confirmée.';
+  }
+  if (webRestart && model.startedAt !== webRestart.startedAt) {
+    webRestart = null; $('#management-status').textContent = 'Web redémarré et connexion rétablie.';
+  }
   if (focusedRun || focusedChange) for (const button of document.querySelectorAll('[data-run],[data-change]')) {
     if (focusedRun ? button.dataset.run === focusedRun : button.dataset.change === focusedChange) button.focus({ preventScroll: true });
   }
+  if (focusedAction) for (const button of document.querySelectorAll('.small-action')) {
+    if (button.getAttribute('aria-label') === focusedAction && !button.disabled) button.focus({ preventScroll: true });
+  }
 }
+function renderArchives() {
+  for (const kind of ['runs', 'changes']) {
+    const holder = $('#archives-' + kind); holder.replaceChildren();
+    const values = model.archives?.[kind] || [];
+    if (!values.length) { holder.append(node('p', 'empty', 'Aucune archive du moniteur.')); continue; }
+    const table = node('table'); const head = node('thead'); const heading = node('tr');
+    for (const label of ['Identité', 'Change', 'Archivé le', 'Actions']) heading.append(node('th', '', label));
+    head.append(heading); table.append(head); const body = node('tbody');
+    for (const value of values) {
+      const row = node('tr');
+      for (const text of [kind === 'runs' ? value.runId : value.changeId, value.changeId, date(value.archivedAt, true)]) row.append(node('td', '', text));
+      const actions = node('td', 'row-actions');
+      if (kind === 'runs') actions.append(actionButton('↥', 'Désarchiver ' + value.runId,
+        () => { void manage('catalog', { kind, key: value.key, action: 'restore' }); }, Boolean(model.management?.catalogError)));
+      row.append(actions); body.append(row);
+    }
+    table.append(body); holder.append(table);
+  }
+}
+$('#management-cancel').addEventListener('click', () => { deleting = null; $('#management-dialog').close(); });
+$('#management-dialog').addEventListener('cancel', () => { deleting = null; });
+$('#management-confirm').addEventListener('click', () => {
+  if (!deleting) return;
+  const body = deleting; deleting = null; $('#management-dialog').close(); void manage('catalog', body);
+});
 for (const tab of ['runs', 'changes']) $('#' + tab + '-tab').addEventListener('click', () => {
   view = tab;
   for (const name of ['runs', 'changes']) { $('#' + name + '-tab').classList.toggle('active', name === view); $('#' + name + '-tab').setAttribute('aria-pressed', String(name === view)); }
@@ -228,4 +336,9 @@ stream.addEventListener('snapshot', (event) => {
   catch { $('#connection').textContent = 'Observation invalide'; }
 });
 stream.addEventListener('error', () => { connected = false; $('#connection').className = 'connection'; $('#connection').replaceChildren(node('i'), document.createTextNode('Reconnexion…')); render(); });
-setInterval(() => { if (model) { renderHealth(); if (!connected) render(); } }, 1000);
+setInterval(() => {
+  if (webRestart && Date.now() > webRestart.deadline) {
+    webRestart = null; $('#management-status').textContent = 'Redémarrage Web non confirmé dans le délai prévu.';
+  }
+  if (model) { renderHealth(); if (!connected) render(); }
+}, 1000);

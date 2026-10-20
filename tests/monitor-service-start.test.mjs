@@ -36,7 +36,7 @@ async function installedFixture(t) {
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(new URL(relative, plugin), destination); copied.push(relative);
   }
-  assert.equal(copied.length, 10);
+  assert.equal(copied.length, 11);
   const unit = await readFile(new URL('systemd/cgpt-approval-bridge-monitor.service', plugin), 'utf8');
   const entry = unit.match(/^ExecStart=\/usr\/bin\/env node (.+)$/m)[1].replace('%h', home);
   await mkdir(workspace, { recursive: true });
@@ -50,7 +50,7 @@ async function installedFixture(t) {
   function start(port) {
     let stderr = '';
     const child = spawn(process.execPath, [entry], { stdio: ['ignore', 'ignore', 'pipe'], env: {
-      ...fixtureEnvironment, OC_Codex_WORKSPACE: workspace, OC_Codex_MONITOR_PORT: String(port),
+      ...fixtureEnvironment, OC_Codex_WORKSPACE: workspace, OC_Codex_MONITOR_STATE_DIR: join(directory, 'catalogs'), OC_Codex_MONITOR_PORT: String(port),
       OC_Codex_CONTROLLER_URL: 'http://127.0.0.1:1', OC_Codex_SUPERVISOR_URL: 'http://127.0.0.1:1',
       OC_Codex_OPENCODE_URL: 'http://127.0.0.1:1', OC_Codex_MONITOR_POLL_INTERVAL_MS: '250',
     } });
@@ -69,7 +69,7 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '1.6.4');
+  assert.equal(snapshot.version, '1.7.1');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
   assert.equal((await fetch(base)).status, 200);
   for (const route of ['/app.mjs', '/stats.mjs', '/style.css']) assert.equal((await fetch(base + route)).status, 200);

@@ -3,15 +3,25 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { MonitorState, monitorConfiguration, VERSION as DATA_VERSION } from './cgpt-approval-bridge-monitor-data.mjs';
 import { guardStatisticsPost, statisticsSelection, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
+import { MonitorCatalog, MonitorServices, guardManagementPost, managementBody, VERSION as MANAGEMENT_VERSION } from './cgpt-approval-bridge-monitor-management.mjs';
 
-export const VERSION = '1.6.4';
-if ([DATA_VERSION, MAINTENANCE_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
+export const VERSION = '1.7.1';
+if ([DATA_VERSION, MAINTENANCE_VERSION, MANAGEMENT_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/stats.mjs', ['stats.mjs', 'text/javascript; charset=utf-8']],
   ['/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
 
 export async function createMonitorServer(configuration, options = {}) {
   const state = new MonitorState(configuration, options);
+  const catalog = new MonitorCatalog(configuration.stateDirectory, configuration.workspace);
+  await catalog.load();
+  const services = new MonitorServices(configuration, options);
+  let serviceError = null;
+  const snapshot = () => {
+    const value = catalog.project(state.snapshot());
+    value.management.serviceError = serviceError;
+    return value;
+  };
   const files = new Map();
   for (const [route, [name, type]] of assets) files.set(route, { type,
     data: await readFile(new URL('../web-monitor/' + name, import.meta.url)) });
@@ -22,8 +32,10 @@ export async function createMonitorServer(configuration, options = {}) {
   let retryTimer;
   let streamTask;
   let statisticsRequests = 0;
-  function emit(snapshot) {
-    const frame = 'event: snapshot\ndata: ' + JSON.stringify(snapshot) + '\n\n';
+  let managementInFlight = false;
+  let webRestartPending = false;
+  function emit() {
+    const frame = 'event: snapshot\ndata: ' + JSON.stringify(snapshot()) + '\n\n';
     for (const response of clients) if (!response.write(frame)) response.destroy();
   }
   state.listeners.add(emit);
@@ -41,6 +53,38 @@ export async function createMonitorServer(configuration, options = {}) {
         response.writeHead(403).end(); return;
       }
     } catch { response.writeHead(400).end(); return; }
+    if (url.pathname.startsWith('/api/manage/')) {
+      let acquired = false;
+      try {
+        if (!['/api/manage/catalog', '/api/manage/service'].includes(url.pathname) || url.search) {
+          response.writeHead(404).end(); return;
+        }
+        if (request.method !== 'POST') { response.writeHead(405, { allow: 'POST' }).end(); return; }
+        guardManagementPost(request, url);
+        if (managementInFlight || webRestartPending) throw Object.assign(new Error('monitor-management-busy'), { status: 409 });
+        managementInFlight = true; acquired = true;
+        const body = await managementBody(request);
+        await state.collect();
+        const result = url.pathname.endsWith('/catalog') ? await catalog.mutate(body, state.snapshot()) : await services.act(body);
+        response.writeHead(result.deferred ? 202 : 200, { 'content-type': 'application/json' });
+        if (result.deferred) {
+          webRestartPending = true;
+          response.once('finish', () => {
+            void services.restartWeb().catch(() => {
+              webRestartPending = false; serviceError = 'monitor-web-restart-failed'; emit();
+            });
+          });
+        }
+        response.end(JSON.stringify({ ...result, startedAt: state.startedAt }));
+        emit(); refresh();
+      } catch (error) {
+        if (!response.headersSent && !response.destroyed) {
+          response.writeHead(error.status || 503, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ error: error.status ? error.message : 'monitor-management-unavailable' }));
+        }
+      } finally { if (acquired) managementInFlight = false; }
+      return;
+    }
     if (url.pathname === '/api/statistics' || url.pathname.startsWith('/api/statistics/retention/')) {
       if (statisticsRequests >= 20) { response.writeHead(503).end(); return; }
       statisticsRequests++;
@@ -100,13 +144,13 @@ export async function createMonitorServer(configuration, options = {}) {
     }
     if (request.method !== 'GET') { response.writeHead(405, { allow: 'GET' }).end(); return; }
     if (url.pathname === '/api/snapshot') {
-      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(state.snapshot())); return;
+      response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(snapshot())); return;
     }
     if (url.pathname === '/api/events') {
       if (clients.size >= 20) { response.writeHead(503).end(); return; }
       response.writeHead(200, { 'content-type': 'text/event-stream' });
       clients.add(response);
-      response.write('event: snapshot\ndata: ' + JSON.stringify(state.snapshot()) + '\n\n');
+      response.write('event: snapshot\ndata: ' + JSON.stringify(snapshot()) + '\n\n');
       request.on('close', () => clients.delete(response)); return;
     }
     const file = files.get(url.pathname);

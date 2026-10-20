@@ -48,7 +48,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `1.6.4` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.7.1` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -645,11 +645,12 @@ piloté.
   version publiée par le marketplace Git `cab_codex_plugins`, le migre de façon
   réversible depuis une source locale si nécessaire, puis compare la
   commande du profil Codex à `AzenorPixs/cab-codex-plugins` sur `main`. Elle met à
-  niveau chaque élément seulement lorsqu'une version plus récente est disponible
-  et restitue les versions GitHub et locales du plugin, du contrôleur, du broker
-  actif, du superviseur déployé et de la commande. Elle installe ou actualise
-  atomiquement le script et l'unité du superviseur sans l'activer ni le
-  démarrer ;
+  niveau le plugin et la commande lorsqu'une version plus récente est disponible.
+  Elle peut réconcilier les fichiers ou processus divergents depuis le jeu
+  installé validé, et restitue les versions GitHub et locales du plugin, du contrôleur, du broker
+  actif, du Web, du superviseur déployé et de la commande. L'outil update déploie
+  les quatre briques, y compris actives, sous gel durable, après frontière sûre,
+  avec conservation des RUN, contrôle des versions et retour arrière ;
 - `/cab stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.
@@ -676,7 +677,7 @@ et archive prouvées, la phase /closing limite la réservation au rapport et
 libère les ressources métier. Le rapport et le gate restent obligatoires avant
 livraison ; une nouvelle référence ne défait pas cette publication figée.
 
-### Statistiques natives, fenêtres et coordination 1.6.4
+### Statistiques natives, fenêtres et coordination 1.7.1
 
 SessionStatistics conserve ses agrégats et son brouillon individuel à six sections. Son snapshot schéma 2 lit le schéma 1 ; les métriques de ressources portent leur borne availableFrom sans reconstruction rétroactive. ObservationStatistics conserve séparément, dans son magasin schéma 2 lié au projet exact, segments, événements et imports filtrés dans controller-observations.json privé. Les sources se recouvrant ne sont pas additionnées ; busy et issuedEffectMs ne prouvent pas du codage productif.
 
@@ -690,7 +691,7 @@ La référence concurrent-runs.md détaille accès, révisions, publication, sup
 
 Les clés HMAC et autres secrets doivent être injectés par l'environnement et rester hors Git, des journaux, des diagnostics et des sorties utilisateur.
 
-## Contextes concurrents 1.6.4
+## Contextes concurrents 1.7.1
 
 Le registre controller-runs.json schéma 4 persiste sous autorité flock les identités, portées, accès actifs, files incompatibles, opérations, révisions, reçus et exceptions. Les schémas 1/2/3 sont restaurés en mode migration requise, sans nouvelle permission. Le magasin d'approbations broker conserve son schéma extensible 2 ; les champs d'opération nouveaux sont persistés/corrélés et la capacité resource-scoped-v1 empêche un jeu mixte d'autoriser un effet.
 
@@ -698,7 +699,7 @@ POST /runs/reserve attribue change/intention ; resources déclare la portée et 
 
 Lors d'une nouvelle réservation, une suspension propre au RUN ne s'applique que si sa réservation précédente est encore RESERVED. Après libération réconciliée en ABANDONED ou DELIVERED, le même propriétaire peut obtenir une génération et un contexte neufs ; le STOP précédent reste dans l'historique sans être hérité. Les contrôles globaux restent systématiques, ainsi que ceux de propriétaire, de change déjà livré, de dépendances et de ressources. Cette transition ne transmet ni décision consommée ni permission native et ne modifie pas le schéma du registre.
 
-Les notifications concurrentes du broker utilisent /validation/resource-request et /validation/resource-reminder, absentes des anciens contrôleurs. Les routes historiques restent disponibles sur le contrôleur 1.6.4 sous les mêmes gardes ; aucun repli vers leur chemin ancien ne transporte un RUN vers un ancien contrôleur. Les modules chargés vérifient leurs versions cohérentes avant démarrage.
+Les notifications concurrentes du broker utilisent /validation/resource-request et /validation/resource-reminder, absentes des anciens contrôleurs. Les routes historiques restent disponibles sur le contrôleur 1.7.1 sous les mêmes gardes ; aucun repli vers leur chemin ancien ne transporte un RUN vers un ancien contrôleur. Les modules chargés vérifient leurs versions cohérentes avant démarrage.
 
 Chaque request_validation ajoute coordination_protocol, operation_id, operation_digest, expected_revisions et access_id optionnel, en plus de run_id, reservation_version et resources. La décision reprend ces identités et le manifeste. Le contenu est préparé hors détention d'écriture inutile ; avant once, le contrôleur recontrôle les accès, révisions, session et règles natives ask. Un jeton restauré ou libéré ne donne pas une nouvelle permission. /locks/reconcile exige la frontière native prouvée et renouvelle token/fencing sans relâcher les fichiers ; une correction utilise une identité neuve.
 
@@ -713,7 +714,7 @@ POST /runs/<runId>/suspend reçoit PAUSE, STOP ou RESUME avec version/evidence. 
 Les usages historiques uniques sans RUN restent compatibles, mais leurs sessions/racines mutables sont enregistrées dans legacySources. Aucune réservation Multi-RUN ne les dépasse. /coordination/legacy/reconcile n'efface cette trace qu'après clôture historique, quiescence native et preuves examinées sous HELD pour réconciliation/maintenance ; legacyHandoffs conserve le reçu. Cette transition exceptionnelle ne réintroduit pas de barrière ordinaire entre RUN coordonnés.
 
 
-## CAB Monitor — supervision web 1.6.4
+## CAB Monitor — supervision web 1.7.1
 
 Le serveur indépendant `cgpt-approval-bridge-monitor.mjs` utilise uniquement
 Node.js et les ressources locales de `web-monitor/`. Il n'appelle aucun LLM.
@@ -740,7 +741,7 @@ loopback `127.0.0.1`, `::1` et `localhost` sont admises comme sources.
 Le moniteur fournit `GET /`, `/app.mjs`, `/stats.mjs`, `/style.css`, `/api/snapshot` et
 `/api/events`. Ce dernier diffuse un snapshot initial puis les vues actuelles
 par SSE. La reconnexion reçoit une vue complète. Les autres méthodes sont
-refusées sauf les deux POST de maintenance statistique ci-dessous ; aucun proxy générique, bouton d'approbation ou accès au runtime
+refusées sauf les POST fermés de maintenance statistique et de gestion décrits ci-dessous ; aucun proxy générique, bouton d'approbation ou accès au runtime
 privé n'est proposé. Les vues sont servies sans cache, avec CSP locale et
 contrôle de l'origine. Les clients lents sont déconnectés ; au plus vingt
 clients SSE simultanés sont admis par serveur.
@@ -766,7 +767,7 @@ le défaut documenté, jamais une valeur de remplacement pour une source absente
 La dernière date de readiness broker reste distincte de la disponibilité HTTP.
 
 Les sources GET sont `/status`, `/runs`, `/monitor/events` du contrôleur,
-`/status` du superviseur, `/global/health` et `/session/status` d'OpenCode.
+`/status` du superviseur, `/global/health`, `/session/status` et `/mcp` d'OpenCode.
 Les réponses JSON sont bornées à 2 MiB. La page distingue santé HTTP,
 activité native, attentes métier et gate ; aucun heartbeat ne prouve un jalon.
 Les données anciennes portent la date de leur dernier succès.
@@ -789,7 +790,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.6.4. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.7.1. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -846,7 +847,7 @@ dernier succès et signalent les versions connues provenant d'une source
 ancienne. Les fichiers DEVOPS.md et la version du moniteur ne remplacent
 jamais une version d'exécution inconnue.
 
-### STATS et maintenance des historiques — 1.6.4
+### STATS et maintenance des historiques — 1.7.1
 
 Le menu gauche affiche MONITOR et STATS avec sélection accessible et fragments
 `#monitor` / `#stats`. STATS consulte toutes les cinq secondes, uniquement
@@ -904,7 +905,7 @@ son repère bleu. Une cause de blocage ou HUMAN_REQUIRED est prioritaire sur
 une demande en attente ; un passage à UNKNOWN retire la couleur d'état courant.
 
 
-### Démarrage du service web par /cab start — 1.6.4
+### Démarrage du service web par /cab start — 1.7.1
 
 La référence distribuée `skills/approval-bridge/references/monitor-service.md`
 définit l'installation différée et la vérification. Dès la résolution du workspace,
@@ -920,7 +921,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 1.6.4 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 1.7.1 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -932,3 +933,84 @@ le moniteur, ses sources, sa configuration et ses connexions. Les contrôles
 d'identité sont en lecture ; aucune déclaration d'étape, purge statistique,
 permission ou relance n'est déclenchée. Le lancement manuel reste disponible.
 La préparation SCM n'exécute aucun démarrage ou déploiement sur le profil réel.
+
+### Gestion du moniteur — 1.7.1
+
+Le module monitor-management est partagé avec le contrôleur. Les POST
+/api/manage/catalog et /api/manage/service exigent JSON, x-cab-monitor: 1,
+origine identique et champs fermés ; corps limité à 4096 octets et une action
+à la fois. Aucune cible système ou chemin arbitraire ne vient du navigateur.
+
+Le catalogue utilise OC_Codex_MONITOR_STATE_DIR, répertoire parent absolu
+(alias OC_CGPT_), ou ~/.local/state/cab-approval-bridge-monitor par défaut,
+puis un sous-dossier SHA-256 du workspace. catalog.json est limité à 2 Mio et
+2000 lignes, schéma privé 1, fichiers 0600, dossiers créés 0700. Les écritures
+sont verrouillées par création exclusive, synchronisées et remplacées
+atomiquement. Liens, corruption et lecture impossible bloquent les mutations.
+Un verrou abandonné exige une réconciliation explicite ; il n'est pas effacé
+automatiquement. Aucun magasin CAB ni fichier OpenSpec observé n'est modifié.
+
+Un RUN doit être libéré DELIVERED/ABANDONED, sans activité native, mandat ou
+demande ; un job legacy doit être désarmé et son gate validé. Un change doit
+être terminé documentairement ou déjà archivé OpenSpec, sans RUN non terminal
+associé. Les sources contrôleur, registre et sessions doivent être fraîches
+et les listes complètes. La génération du RUN et l'empreinte documentaire
+du change distinguent les reprises. Archive conserve la projection publique ;
+delete masque la ligne après confirmation ; restore rétablit seulement
+l'affichage d'un RUN archivé. Les nouvelles générations restent visibles.
+
+Les seules unités sont cgpt-approval-bridge-controller.service,
+cgpt-approval-bridge-supervisor.service et cgpt-approval-bridge-monitor.service.
+systemctl --user est appelé sans shell, avec un délai de 10 secondes. Un
+service inactif prouvé peut démarrer ; arrêt/redémarrage des briques CAB
+exigent /monitor/lifecycle/prepare sur le contrôleur. La garde temporaire
+exige workspace exact, absence de RUN réservé, job armé, demande ou effet
+non résolu, sessions natives inactives et aucune permission native en attente.
+Elle bloque les POST concurrents, refuse une mutation déjà en vol, expire
+sous 30 secondes et se libère par /monitor/lifecycle/release avec son jeton.
+Les réponses de statut contrôleur/superviseur ajoutent workspace et pid pour
+vérifier le MainPID systemd. Le broker utilise seulement les POST natifs
+/mcp/cgpt-validation/connect et /disconnect avec directory explicite, puis
+vérifie /mcp. Ces actions ne redémarrent pas OpenCode et ne purgent rien.
+
+Le Web exige son propre MainPID systemd. Sa réponse HTTP 202 précède la
+commande restart --no-block ; le navigateur confirme une nouvelle startedAt
+après reconnexion, sinon annonce le résultat non confirmé. Le lancement
+manuel conserve un diagnostic explicite d'unité non gérée. Les erreurs ne
+sont pas présentées comme des succès. Une libération de garde non confirmée
+est signalée avec son expiration ; un contrôleur remplacé perd sa garde
+en mémoire. Aucun appel LLM ni activation au login n'est ajouté.
+
+## Mise à jour des briques actives — 1.7.1
+
+La référence distribuée references/component-update.md définit l'exploitation.
+Le script cgpt-approval-bridge-update.mjs reçoit le plugin installé, les cibles
+non secrètes résolues et les bases HTTP loopback. Il valide la version 1.7.1,
+les imports, la syntaxe et les empreintes du jeu complet, dont broker/. Une
+version supérieure déjà déployée interdit le downgrade. Un jeu conforme et
+des processus conformes donnent up-to-date sans arrêt.
+
+Un verrou flock via registry-lock.py protège le profil. Journal, stage et
+sauvegardes résident sous ~/.local/state/cab-approval-bridge-update/, privés
+et atomiques. L'intention de gel est persistée avant l'appel HTTP ; un arrêt
+interrompu ou une libération ambiguë se réconcilie à partir du même reçu.
+L'outil attend au plus --wait-ms (120000 par défaut, de 0 à 900000) pour
+confirmer SHARED_MAINTENANCE/HELD, sans décider les demandes. Le code 2
+conserve gel et services en attente. Une nouvelle invocation reprend le stage.
+
+Les sources et le runtime du workspace, les env et drop-ins restent hors des
+écritures. Les sauvegardes contiennent seulement les fichiers distribués.
+Les unités actives sont arrêtées avant remplacement et seules celles qui
+fonctionnaient sont relancées. Le broker est déconnecté/reconnecté nativement ;
+OpenCode reste ouvert. Le contrôle final vérifie les versions actives, une
+readiness broker postérieure à la reconnexion, le workspace et les identités/
+générations des RUN avant levée du gel. Les pauses existantes restent en place.
+
+Les étapes PREPARING/PREPARED, FREEZING/WAITING, STOPPING/INSTALLING,
+RESTARTING/VERIFYING, RELEASING/COMPLETED et les phases de repli rendent le
+résultat explicite. Une interruption après libération ne déclenche pas de
+retour arrière sur des RUN repris. Un repli incomplet reste ROLLBACK_FAILED.
+Aucun schéma métier n'est migré ; aucune permission ou session n'est créée.
+La procédure exige le répertoire d'installation broker réellement lancé.
+Un lancement manuel non géré ou une cible dans le workspace est refusé avec
+diagnostic ; la commande ne modifie pas sa configuration pour le déplacer.

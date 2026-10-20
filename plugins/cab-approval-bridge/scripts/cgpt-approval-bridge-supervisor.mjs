@@ -2,7 +2,7 @@ import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
 
-const version = "1.6.4";
+const version = "1.7.1";
 if (CONTEXT_VERSION !== version) throw new Error('CAB supervisor component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -79,7 +79,7 @@ createServer((request, response) => {
   } else value = concurrent ? { version, mode: 'concurrent', error: publicError,
     runs: Object.fromEntries([...contexts].map(([id, c]) => [id, c.snapshot()])) } : legacy.snapshot();
   response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
-  response.end(JSON.stringify(value));
+  response.end(JSON.stringify({ ...value, workspace, pid: process.pid }));
 }).listen(port, host, () => {
   void reconcileAll();
   void consumeEvents();
