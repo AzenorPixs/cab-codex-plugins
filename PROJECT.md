@@ -2,7 +2,7 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `1.6.1`.
+Version de référence des briques CAB : `1.6.2`.
 
 Codex Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **Codex**.
 
@@ -16,7 +16,7 @@ CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni u
 
 ## 3. Principes architecturaux
 
-CAB 1.6.1 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
+CAB 1.6.2 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
 
 Validation, synchronisation, archivage, publication et rapport protègent leurs périmètres réels sans demander la stabilité de tous les RUN. Le gel global est réservé à la réconciliation commune, la maintenance partagée, la pause globale ou l'arrêt global explicites. Les décisions unitaires, ask/once, preuves et gates sont conservés. Le contrat détaillé est dans ORCHESTRATED_CODING.md et OpenSpec.
 
@@ -99,7 +99,7 @@ Le transport entre OpenCode et le broker est exclusivement **MCP stdio local**. 
 
 ### 4.1 Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.6.1 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.6.2 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -135,7 +135,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.6.1 partagée"]
+    subgraph CAB["Infrastructure CAB 1.6.2 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -254,7 +254,7 @@ CAB observe OpenCode par une voie SSE directe indépendante du cycle MCP. Cette 
 
 ### 5.3.1 Moniteur web indépendant
 
-CAB Monitor 1.6.1 fournit une vue locale des briques, des RUN et des changes,
+CAB Monitor 1.6.2 fournit une vue locale des briques, des RUN et des changes,
 sans appel LLM. Son processus indépendant reste accessible pendant une panne
 du contrôleur ou du superviseur. Il agrège des observations filtrées, avec
 fraîcheur explicite, puis actualise les navigateurs par SSE. Le port par
@@ -444,7 +444,7 @@ Codex intervient en analyse, en revue de code, et en validateur.
 
 ## 16. Documentation officiel
 
-## Pilotage concurrent 1.6.1
+## Pilotage concurrent 1.6.2
 
 Le profil concurrent partage un OpenCode, un broker MCP stdio et un contexte
 absolu de projet. Plusieurs RUN possèdent chacun leur session, contrat,

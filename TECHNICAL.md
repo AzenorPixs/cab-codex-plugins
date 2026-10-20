@@ -48,7 +48,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version de projet actuelle est `1.6.1` pour le broker, le contrôleur et le
+La version de projet actuelle est `1.6.2` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -69,6 +69,12 @@ nécessaires conservent leurs contrôles et actualisent l'index après succès.
 Le verrou du magasin, la sauvegarde des expirations avant journalisation,
 le tri, le compte total, le filtre et la limite restent inchangés. Un magasin
 vide n'entraîne aucune lecture du journal ; aucun cache global n'est ajouté.
+
+La réconciliation de démarrage utilise le même index local pour sa première
+boucle de réparation sous verrou du magasin. Elle ne relit plus le journal
+pour chaque approbation historique, ce qui évite de bloquer la readiness sur
+ces recherches répétées. Les décisions récupérées ensuite conservent leur
+réparation distincte, après persistance, sans réutiliser cet index.
 
 ## 4. Persistance
 
@@ -670,7 +676,7 @@ et archive prouvées, la phase /closing limite la réservation au rapport et
 libère les ressources métier. Le rapport et le gate restent obligatoires avant
 livraison ; une nouvelle référence ne défait pas cette publication figée.
 
-### Statistiques natives, fenêtres et coordination 1.6.1
+### Statistiques natives, fenêtres et coordination 1.6.2
 
 SessionStatistics conserve ses agrégats et son brouillon individuel à six sections. Son snapshot schéma 2 lit le schéma 1 ; les métriques de ressources portent leur borne availableFrom sans reconstruction rétroactive. ObservationStatistics conserve séparément, dans son magasin schéma 2 lié au projet exact, segments, événements et imports filtrés dans controller-observations.json privé. Les sources se recouvrant ne sont pas additionnées ; busy et issuedEffectMs ne prouvent pas du codage productif.
 
@@ -684,13 +690,13 @@ La référence concurrent-runs.md détaille accès, révisions, publication, sup
 
 Les clés HMAC et autres secrets doivent être injectés par l'environnement et rester hors Git, des journaux, des diagnostics et des sorties utilisateur.
 
-## Contextes concurrents 1.6.1
+## Contextes concurrents 1.6.2
 
 Le registre controller-runs.json schéma 4 persiste sous autorité flock les identités, portées, accès actifs, files incompatibles, opérations, révisions, reçus et exceptions. Les schémas 1/2/3 sont restaurés en mode migration requise, sans nouvelle permission. Le magasin d'approbations broker conserve son schéma extensible 2 ; les champs d'opération nouveaux sont persistés/corrélés et la capacité resource-scoped-v1 empêche un jeu mixte d'autoriser un effet.
 
 POST /runs/reserve attribue change/intention ; resources déclare la portée et exclusiveResources demande l'optimisation privée vérifiée. /extend et /resources changent la génération à une frontière sûre. GET /runs/<runId>/locks expose révisions et accès du RUN. /locks/acquire attribue un ensemble complet ou WAITING sans verrou partiel. /locks/attach rattache une correction approuvée dans le même ensemble ; aucune extension de ressources n'attend en détention.
 
-Les notifications concurrentes du broker utilisent /validation/resource-request et /validation/resource-reminder, absentes des anciens contrôleurs. Les routes historiques restent disponibles sur le contrôleur 1.6.1 sous les mêmes gardes ; aucun repli vers leur chemin ancien ne transporte un RUN vers un ancien contrôleur. Les modules chargés vérifient leurs versions cohérentes avant démarrage.
+Les notifications concurrentes du broker utilisent /validation/resource-request et /validation/resource-reminder, absentes des anciens contrôleurs. Les routes historiques restent disponibles sur le contrôleur 1.6.2 sous les mêmes gardes ; aucun repli vers leur chemin ancien ne transporte un RUN vers un ancien contrôleur. Les modules chargés vérifient leurs versions cohérentes avant démarrage.
 
 Chaque request_validation ajoute coordination_protocol, operation_id, operation_digest, expected_revisions et access_id optionnel, en plus de run_id, reservation_version et resources. La décision reprend ces identités et le manifeste. Le contenu est préparé hors détention d'écriture inutile ; avant once, le contrôleur recontrôle les accès, révisions, session et règles natives ask. Un jeton restauré ou libéré ne donne pas une nouvelle permission. /locks/reconcile exige la frontière native prouvée et renouvelle token/fencing sans relâcher les fichiers ; une correction utilise une identité neuve.
 
@@ -705,7 +711,7 @@ POST /runs/<runId>/suspend reçoit PAUSE, STOP ou RESUME avec version/evidence. 
 Les usages historiques uniques sans RUN restent compatibles, mais leurs sessions/racines mutables sont enregistrées dans legacySources. Aucune réservation Multi-RUN ne les dépasse. /coordination/legacy/reconcile n'efface cette trace qu'après clôture historique, quiescence native et preuves examinées sous HELD pour réconciliation/maintenance ; legacyHandoffs conserve le reçu. Cette transition exceptionnelle ne réintroduit pas de barrière ordinaire entre RUN coordonnés.
 
 
-## CAB Monitor — supervision web 1.6.1
+## CAB Monitor — supervision web 1.6.2
 
 Le serveur indépendant `cgpt-approval-bridge-monitor.mjs` utilise uniquement
 Node.js et les ressources locales de `web-monitor/`. Il n'appelle aucun LLM.
@@ -781,7 +787,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.6.1. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.6.2. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -838,7 +844,7 @@ dernier succès et signalent les versions connues provenant d'une source
 ancienne. Les fichiers DEVOPS.md et la version du moniteur ne remplacent
 jamais une version d'exécution inconnue.
 
-### STATS et maintenance des historiques — 1.6.1
+### STATS et maintenance des historiques — 1.6.2
 
 Le menu gauche affiche MONITOR et STATS avec sélection accessible et fragments
 `#monitor` / `#stats`. STATS consulte toutes les cinq secondes, uniquement
@@ -896,7 +902,7 @@ son repère bleu. Une cause de blocage ou HUMAN_REQUIRED est prioritaire sur
 une demande en attente ; un passage à UNKNOWN retire la couleur d'état courant.
 
 
-### Démarrage du service web par /cab start — 1.6.1
+### Démarrage du service web par /cab start — 1.6.2
 
 La référence distribuée `skills/approval-bridge/references/monitor-service.md`
 définit l'installation différée et la vérification. Après prévol, /cab start
@@ -909,7 +915,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 1.6.1 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 1.6.2 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.

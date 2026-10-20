@@ -7,7 +7,7 @@ description: Met en place, teste et supervise le dialogue OpenCode–Codex via b
 
 Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par Codex.
 
-## RUN concurrents CAB 1.6.1
+## RUN concurrents CAB 1.6.2
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -151,7 +151,7 @@ ne redémarre les processus des agents.
 
 ## Statistiques obligatoires à chaque archivage
 
-Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.6.1 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
+Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.6.2 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
 
 Charger le skill voisin `../coding-session-statistics/SKILL.md` dès le début
 de chaque change piloté. Préparer ses relevés de quota et ses sondes avant le
@@ -197,7 +197,7 @@ le job et le runtime selon la procédure ci-dessous, sans purge ni renouvellemen
 5. Relever par API, pour l’agent de codage ciblé, le fournisseur, le modèle et le niveau de raisonnement effectivement configurés. Vérifier que le fournisseur et le modèle sont publiés par OpenCode sans lire de secret.
 6. Créer une session de prévol temporaire sans outil ni accès au projet, lui adresser une requête inoffensive en imposant exactement ces paramètres et vérifier la réponse ainsi que ses métadonnées observées. Fermer la session temporaire après le contrôle.
 7. Si la réponse, le fournisseur, le modèle ou le raisonnement est absent ou divergent, publier `CAB_INACTIF` avec la cause et ne créer ni session persistante ni contrôleur. Ne jamais corriger la configuration à la place du développeur.
-8. Avant le contrôleur, appliquer `references/monitor-service.md` : installer le jeu indépendant du moniteur seulement s'il est inactif, ou réutiliser une instance active conforme. Recharger systemd puis exécuter explicitement `systemctl --user start cgpt-approval-bridge-monitor.service` si nécessaire. Vérifier service, page et GET /api/snapshot avec version 1.6.1 et identity.workspace attendus. Afficher l'URL réelle. Préserver la configuration existante et ne pas activer au login. Signaler séparément tout échec sans arrêter ou redémarrer une autre brique. Installer ou actualiser les ressources utilisateur du contrôleur et du superviseur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
+8. Avant le contrôleur, appliquer `references/monitor-service.md` : installer le jeu indépendant du moniteur seulement s'il est inactif, ou réutiliser une instance active conforme. Recharger systemd puis exécuter explicitement `systemctl --user start cgpt-approval-bridge-monitor.service` si nécessaire. Vérifier service, page et GET /api/snapshot avec version 1.6.2 et identity.workspace attendus. Afficher l'URL réelle. Préserver la configuration existante et ne pas activer au login. Signaler séparément tout échec sans arrêter ou redémarrer une autre brique. Installer ou actualiser les ressources utilisateur du contrôleur et du superviseur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
 9. Vérifier le statut local du contrôleur.
 10. Démarrer explicitement `cgpt-approval-bridge-supervisor.service` après le contrôleur, sans activation au login. Vérifier son statut local et `Restart=on-failure` ; il supervise le job sans créer de décision ni de session de remplacement.
 11. Démarrer ou maintenir le SSE direct OpenCode.
