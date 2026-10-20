@@ -2,6 +2,28 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.6.4 — préparation source
+
+- Reprise d'un RUN après STOP et libération réconciliée : la suspension de la
+  génération close reste dans l'historique et ne bloque plus sa nouvelle
+  réservation par le même propriétaire, y compris après redémarrage.
+- Conservation des suspensions actives, gels globaux, contrôles de propriétaire,
+  génération, dépendances et ressources ; aucune permission native héritée.
+- Régressions registre et HTTP et alignement des briques distribuées sur 1.6.4
+  avec cachebuster neuf. Les travaux de monitoring 1.6.3 sont conservés.
+- Aucun changement de schéma, migration, publication Git ou activation runtime
+  effectué par cette préparation source SCM.
+
+## 1.6.3 — préparation source
+
+- Monitoring préparé ou vérifié dès la résolution du workspace, avant PLLM,
+  santé OpenCode et prévols modèle/MCP, y compris en reprise et lors de la
+  réutilisation du contrôleur et du superviseur.
+- Tentative bornée et preuves unité/page/version/workspace rapportées avant
+  les contrôles amont ; une panne amont conserve le service web indépendant.
+- Toutes les briques et leurs supports alignés sur 1.6.3 avec cachebuster neuf.
+  Aucun déploiement réel, changement de schéma ou migration des RUN actifs.
+
 ## 1.6.2 — 20 octobre 2026
 
 - Réconciliation de démarrage : un index local des événements évite les

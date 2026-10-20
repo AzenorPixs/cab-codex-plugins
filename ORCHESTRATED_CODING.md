@@ -33,6 +33,28 @@ de ce fichier ne lance ni agent OpenCode, ni service CAB, ni compétence,
 sonde ou télémétrie de session pilotée. Le rapport d'archivage éventuellement
 requis par le projet reste une obligation distincte.
 
+## Bootstrap prioritaire du monitoring
+
+Dès la résolution du workspace absolu canonique, appliquer intégralement
+`references/monitor-service.md` du skill CAB installé, avant PLLM, santé
+OpenCode et prévols modèle/MCP. Ce passage est obligatoire à chaque entrée
+ou reprise de session de codage pilotée, même si le contrôleur et le superviseur
+sont déjà actifs et réutilisés. Ne pas se limiter au constat d'une unité absente :
+si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
+indépendant, puis exécuter `systemctl --user daemon-reload` et
+`systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
+Réutiliser une instance active conforme sans modification ni redémarrage.
+Vérifier service actif, GET /api/snapshot avec version 1.6.4 et identity.workspace
+attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
+avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
+sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
+et port existants, sans activation au login. Un échec PLLM ou CAB ultérieur
+n'arrête pas le moniteur. Une divergence active ou un échec de monitoring ne
+permet aucun arrêt, redémarrage ou changement de RUN dans les autres briques.
+
+Ce contrôle relève seulement du démarrage ou de la reprise de pilotage autorisé.
+Une session SCM ne l’exécute pas et ne déploie aucun service réel.
+
 ## Identité, coordination et autorisations des RUN
 
 ### Identité et nommage des sessions
@@ -352,8 +374,9 @@ Le contrôleur exige `OC_Codex_WORKSPACE` absolu et
 Les installations et démarrages éventuels sont soumis au périmètre autorisé.
 Les unités utilisateur utilisent `Restart=on-failure` sans activation au
 login.
-Le moniteur est préparé et démarré explicitement par /cab start selon la
-référence distribuée `references/monitor-service.md`, avant le contrôleur.
+Le moniteur est préparé ou vérifié dès la résolution du workspace selon le
+bootstrap prioritaire et la référence distribuée `references/monitor-service.md`,
+avant PLLM et les contrôles amont, y compris en reprise avec services réutilisés.
 Son unité indépendante, sa configuration et ses connexions restent actives
 lors d'un /cab stop ou reset. Une instance conforme est réutilisée ; une
 identité divergente est signalée sans remplacement ou remédiation implicite.
@@ -649,9 +672,9 @@ limites de preuve, les fichiers touchés et le premier jalon restant.
 Une fin de tour, un délai, une réponse textuelle ou une relance technique
 ne remplace jamais un état terminal prouvé.
 
-## Pilotage concurrent CAB 1.6.2
+## Pilotage concurrent CAB 1.6.4
 
-### CAB 1.6.2 — coordination atomique par ressource
+### CAB 1.6.4 — coordination atomique par ressource
 
 Un processus OpenCode, un broker MCP stdio, un contrôleur et un superviseur servent plusieurs RUN dans un répertoire commun. Chaque RUN conserve session, job, décisions, preuves et checkpoint. Le contrat courant est `resource-scoped-v1` ; l'ancienne barrière ordinaire d'intégration n'est plus admise.
 
@@ -664,6 +687,8 @@ Les ressources déclarent la portée autorisée ; leur recouvrement ne bloque pl
 Un fichier est partagé par défaut. exclusiveResources, sous-ensemble explicite de fichiers du manifeste, demande l'optimisation privée. CAB la vérifie avant effet. L'arrivée d'un accès recouvrant ferme cette admission exclusive ; le pair attend les effets concernés avant accès partagé, sans drainer les RUN indépendants.
 
 /extend et /resources contrôlent génération, portée et frontière sûre. Une réduction ne libère aucun effet inconnu ni obligation de publication. Le checkpoint reste output/<prompt>/<run_id>/state.json ; la reprise historique conserve preuves et propriété sans écraser un pair.
+
+Après STOP et libération réconciliée, le même propriétaire peut réserver de nouveau le RUN. La réservation close ABANDONED ou DELIVERED et sa suspension restent dans l'historique ; la nouvelle génération et son contexte n'héritent pas du STOP. Une réservation encore RESERVED en PAUSE ou STOP, un gel global, un propriétaire divergent ou un change déjà livré restent bloquants. Aucune décision consommée ni permission native n'est transférée.
 
 #### Préparation, décision et accès
 
@@ -716,7 +741,7 @@ Les anciens usages uniques sans RUN conservent leurs décisions et once. Une tra
 
 #### Formats et migration
 
-Le registre 1.6.2 utilise le schéma 4 ; les schémas 1/2/3 sont lus en mode migration requise sans anciennes acquisitions globales. Les mutations incompatibles reçoivent coordination-upgrade-required. Broker, clients et contrôleur confirment le protocole avant permission. Le broker concurrent notifie /validation/resource-request et /validation/resource-reminder, routes absentes des anciens contrôleurs, sans repli incompatible. Les versions des modules chargés sont vérifiées avant démarrage. Le magasin broker reste au schéma extensible 2 : les nouveaux champs sont persistés et corrélés, sans conversion implicite des anciens enregistrements.
+Le registre 1.6.4 utilise le schéma 4 ; les schémas 1/2/3 sont lus en mode migration requise sans anciennes acquisitions globales. Les mutations incompatibles reçoivent coordination-upgrade-required. Broker, clients et contrôleur confirment le protocole avant permission. Le broker concurrent notifie /validation/resource-request et /validation/resource-reminder, routes absentes des anciens contrôleurs, sans repli incompatible. Les versions des modules chargés sont vérifiées avant démarrage. Le magasin broker reste au schéma extensible 2 : les nouveaux champs sont persistés et corrélés, sans conversion implicite des anciens enregistrements.
 
 La migration explicitement autorisée vérifie quiescence et sauvegarde privée avec empreinte. RUN, demandes consommées, jobs, candidates et reçus sont conservés ; les ressources historiques restent conservatrices. /coordination/migrate conserve les RUN en PAUSE et impose maintenancePreflightRequired. Vérifier MCP/SSE/readiness en lecture, lever explicitement le gel pour le prévol ciblé en maintenant les pairs en pause, puis autoriser uniquement /usr/bin/true avec manifeste read. Une once acquittée et exit 0 prouvés avant libération de cet accès autorisent ensuite le métier ; un échec conserve cette obligation. /coordination/rollback restitue la sauvegarde uniquement avant nouvel usage sous maintenance quiescente. Le retour arrière avant nouvel usage restitue la sauvegarde exacte ; après de nouveaux effets, une réconciliation/conversion explicite est obligatoire. Une préparation source ne déploie ni ne migre aucun état actif.
 

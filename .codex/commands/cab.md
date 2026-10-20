@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.6.2
+version: 1.6.4
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -11,7 +11,7 @@ Argument reçu : `$ARGUMENTS`
 
 Pour stats, statslast, stats 24, stats7 ou stats30, appliquer directement la section `/cab stats` puis terminer après la consultation. Ne déclencher ni skill, ni boucle de pilotage, ni action de cycle de vie. Une cible optionnelle --run <run_id> filtre ce RUN exact ; une syntaxe ambiguë est refusée sans collecte.
 
-Pour pause, resume ou stop avec --run <run_id> ou --all, appliquer la section de suspension ciblée/globale ; ne pas exécuter les procédures start, prévol ou update.
+Pour pause ou stop avec --run <run_id> ou --all, appliquer la section de suspension ciblée/globale ; ne pas exécuter les procédures start, prévol ou update.
 
 Pour l'argument `status` ou `status --run <run_id>`, appliquer directement la
 section `/cab status` puis terminer la réponse après le rapport. Les sections de
@@ -20,7 +20,16 @@ s'appliquent pas à cette consultation. Ne déclencher ni skill de pilotage ni
 skill de statistiques ; ne transmettre aucun message à un autre chat ou agent.
 Les arguments status invalides affichent seulement la syntaxe, sans collecte.
 
-## RUN concurrents CAB 1.6.2
+Pour `start`, `run` ou `resume`, commencer par le seul bootstrap du monitoring
+décrit au début de `/cab start`, dès résolution du workspace, avant toute
+réservation, PLLM ou vérification OpenCode/CAB. Ce renvoi ne déclenche pas
+le reste de `/cab start` lors d'un `run` ou `resume` : aucune purge ni
+réinitialisation n'en découle. Revenir ensuite à la sous-commande demandée ;
+pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
+les procédures start, prévol ou update.
+Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
+
+## RUN concurrents CAB 1.6.4
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -281,7 +290,24 @@ piloté, ni CAB, ni les processus ; elle n'exécute aucun test du projet suivi.
 
 ## `/cab start`
 
-Avant les étapes ci-dessous, appliquer intégralement
+Dès la résolution du workspace absolu canonique, appliquer intégralement
+`references/monitor-service.md` du skill CAB installé, avant PLLM, santé
+OpenCode et prévols modèle/MCP. Ce passage est obligatoire à chaque entrée
+ou reprise de session de codage pilotée, même si le contrôleur et le superviseur
+sont déjà actifs et réutilisés. Ne pas se limiter au constat d'une unité absente :
+si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
+indépendant, puis exécuter `systemctl --user daemon-reload` et
+`systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
+Réutiliser une instance active conforme sans modification ni redémarrage.
+Vérifier service actif, GET /api/snapshot avec version 1.6.4 et identity.workspace
+attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
+avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
+sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
+et port existants, sans activation au login. Un échec PLLM ou CAB ultérieur
+n'arrête pas le moniteur. Une divergence active ou un échec de monitoring ne
+permet aucun arrêt, redémarrage ou changement de RUN dans les autres briques.
+
+Après ce contrôle du monitoring et avant les étapes ci-dessous, appliquer intégralement
 `references/session-reset.md` depuis le skill `approval-bridge` du plugin
 CAB installé. Toute réinitialisation globale exclusive impose la purge complète du runtime CAB,
 y compris journal, approbations, anciens jobs, checkpoints et conflits
@@ -302,7 +328,6 @@ candidate et le job selon la procédure ci-dessous.
 6. Vérifie via l’API OpenCode que le fournisseur et le modèle relevés sont publiés et disponibles. Crée alors une session de prévol temporaire, sans outil ni accès au projet, et lui adresse une requête inoffensive en imposant exactement ce fournisseur, ce modèle et ce niveau de raisonnement.
 7. Contrôle la réponse et ses métadonnées réellement observées. Elles doivent confirmer le même fournisseur, le même modèle et le même niveau de raisonnement. Ferme la session de prévol après cette preuve. Si une valeur est absente, indisponible, divergente ou si la requête échoue, publie `CAB_INACTIF` avec les valeurs attendues et observées, puis n’installe pas le contrôleur et ne crée ni ne réutilise de session persistante.
 8. Résous les ressources du plugin CAB installé, puis copie son contrôleur, son superviseur et leurs modèles d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Crée ou actualise `~/.config/cab-approval-bridge/controller.env` avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
-   Pour le monitoring, appliquer `references/monitor-service.md` du skill CAB installé : préparer son jeu indépendant sous `~/.local/share/cab-approval-bridge-monitor/` et son unité utilisateur, avec `~/.config/cab-approval-bridge/monitor.env` non secret distinct de controller.env. Réutiliser une instance active conforme sans modification ni redémarrage. Sinon, après installation inactive et `systemctl --user daemon-reload`, exécuter explicitement `systemctl --user start cgpt-approval-bridge-monitor.service`. Vérifier le service actif, GET /api/snapshot avec version 1.6.2 et identity.workspace conformes, puis la page locale et afficher l'URL réelle. Préserver les options existantes, dont le port. Un échec du monitoring est signalé séparément sans arrêter une autre brique et sans annoncer le monitoring disponible. Aucune activation au login.
 9. Démarre ou réutilise le contrôleur Codex persistant hors sandbox par `systemctl --user start cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie qu’il est `active` et que son unité utilise `Restart=on-failure`.
 10. Vérifie le contrôleur Codex sur son interface locale.
 11. Démarre explicitement le superviseur utilisateur par `systemctl --user start cgpt-approval-bridge-supervisor.service`, puis vérifie son statut local. Il utilise `Restart=on-failure`, sans activation au login, et ne prend aucune décision CAB.

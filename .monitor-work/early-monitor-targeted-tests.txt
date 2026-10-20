@@ -1,0 +1,34 @@
+✔ les briques distribuées publient la même version de base 1.6.3 (29.238637ms)
+✔ le moniteur web distribue ses ressources locales et reste indépendant des services CAB (3.8253ms)
+✔ le catalogue des étapes et son producteur sont distribués en 1.6.3 (4.517958ms)
+✔ la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué (2.703608ms)
+✔ distribue une unité utilisateur inactive par défaut (1.122516ms)
+✔ la commande CAB installe sans activer, démarre et arrête explicitement (0.85648ms)
+✔ distribue un superviseur utilisateur inactif par défaut (0.434922ms)
+✔ la commande CAB prévole le modèle OpenCode avant la session persistante (0.736157ms)
+✔ les artefacts distribués annoncent la même version de base (2.013793ms)
+✔ la mise à jour déploie le superviseur sans le démarrer (4.31893ms)
+✔ la marketplace CAB distribue les statistiques avec le plugin existant (2.949587ms)
+✔ AGENTS renvoie au protocole local dédié avec ses contrats techniques (4.951897ms)
+✔ le protocole exige un rapport par archive et empêche une clôture sans preuve (8.355377ms)
+✔ le protocole distribué protège la lecture seule et décrit la récupération explicite (1.747495ms)
+✔ le protocole distribue des cadences indépendantes et une attente PLLM persistante (6.687195ms)
+✔ la réactivation sûre est distribuée sans tools true pendant la génération (1.089992ms)
+✔ le prévol divergent conserve la candidate et le job dans le protocole distribué (2.048028ms)
+✔ les sondes statistiques n'arrêtent pas le travail pour attendre le créneau (10.022514ms)
+✔ le refus par polling après timeout est distribué avec une sortie humaine explicite (6.439338ms)
+✔ status route directement la consultation avant toute boucle de pilotage (1.079152ms)
+✔ le contrat status conserve le tableau métier, la fraîcheur et les limites des preuves (0.868778ms)
+✔ le jeu installé documenté démarre depuis son arborescence isolée sans composants CAB (300.70769ms)
+✔ un port occupé est signalé sans interrompre son propriétaire (146.296264ms)
+✔ start, stop et reset documentent la réutilisation et les échecs sans couplage (5.269972ms)
+✔ le bootstrap précède les prévols dans chaque point d’entrée distribué (2.231021ms)
+✔ la reprise avec services CAB actifs exige le bootstrap sans modifier une instance conforme (1.181872ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 609.086453
