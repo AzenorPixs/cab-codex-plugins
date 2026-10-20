@@ -62,13 +62,14 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from http.client import HTTPException
 from urllib import error, parse, request
 
 import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "1.3.0"
+SERVER_VERSION = "1.6.1"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -2186,6 +2187,29 @@ def journal_controller_event(
     )
 
 
+def controller_length_failure(exc):
+    """Reconstruit uniquement le diagnostic de longueur connu, sans texte distant."""
+    if exc.code != 400:
+        return None
+    try:
+        body = exc.read(1025)
+        if len(body) > 1024:
+            return None
+        payload = json.loads(body.decode("utf-8"))
+    except (OSError, HTTPException, ValueError, UnicodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    maximum = payload.get("maxLength")
+    actual = payload.get("actualLength")
+    if (payload.get("error") != "command-too-long" or payload.get("unit") != "utf16"
+            or type(maximum) is not int or type(actual) is not int
+            or not 0 < maximum < actual <= 9007199254740991):
+        return None
+    return ("command-too-long: longueur %d, limite autorisée %d (utf16)."
+            % (actual, maximum))
+
+
 def notify_controller(
     item,
     lease_id,
@@ -2254,10 +2278,8 @@ def notify_controller(
 
     except error.HTTPError as exc:
         status = exc.code
-        failure = (
-            "HTTPError: %s"
-            % exc.code
-        )
+        with exc:
+            failure = controller_length_failure(exc) or "HTTPError: %s" % status
 
     except error.URLError as exc:
         failure = (

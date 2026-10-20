@@ -2,13 +2,15 @@ import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { isAbsolute, join, relative } from 'node:path';
-import { createJobContext, VERSION as JOB_CONTEXT_VERSION } from './cgpt-approval-bridge-job-context.mjs';
+import { createJobContext, commandLengthLimit, checkCommandLength, VERSION as JOB_CONTEXT_VERSION } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, VERSION } from './cgpt-approval-bridge-runs.mjs';
 import { ResourceRunRegistry, COORDINATION_PROTOCOL, VERSION as RESOURCE_VERSION } from './cgpt-approval-bridge-resource-coordination.mjs';
 import { SessionStatistics, VERSION as STATISTICS_VERSION } from './cgpt-approval-bridge-statistics.mjs';
+import { createObservationJournal, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
+import { StatisticsMaintenance, statisticsDashboard, guardStatisticsPost, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
 
-const version = "1.3.0";
-if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
+const version = "1.6.1";
+if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspaceInput = envValue('OC_Codex_WORKSPACE');
@@ -19,6 +21,8 @@ if (!['automatic', 'manual'].includes(envValue('OC_Codex_DECISION_MODE') || 'man
 }
 const host = envValue('OC_Codex_STATUS_HOST') || '127.0.0.1';
 if (!['127.0.0.1', '::1'].includes(host)) throw new Error('OC_Codex_STATUS_HOST doit être une adresse loopback autorisée.');
+const maxCommandLength = commandLengthLimit();
+const observations = createObservationJournal();
 const workspace = realpathSync(workspaceInput);
 const stateDirectory = join(workspace, '.opencode', 'state', 'cgpt-approval-bridge');
 const port = Number(envValue('OC_Codex_STATUS_PORT') || 8788);
@@ -27,21 +31,37 @@ const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 const statistics = new SessionStatistics(stateDirectory, { project: workspace });
 let registryRevision = 0;
 let nativeGeneration = 0;
+let observedOperations = new Map();
 function observeStatistics(callback) {
   try { callback(); } catch { statistics.error = 'statistics-observation-unavailable'; }
 }
 const registry = new ResourceRunRegistry(workspace, stateDirectory, {
-  observe: (snapshot) => { registryRevision++; observeStatistics(() => statistics.registry(snapshot)); },
+  observe: (snapshot) => {
+    registryRevision++;
+    observeStatistics(() => statistics.registry(snapshot));
+    const current = new Map();
+    for (const operation of Object.values(snapshot.coordination?.operations || {}).slice(-500)) {
+      current.set(operation.operationId, operation.state);
+      if (observedOperations.get(operation.operationId) !== operation.state) {
+        observations.record('operation-state-observed', { runId: operation.runId, sessionId: operation.sessionId,
+          changeId: snapshot.runs?.find((run) => run.runId === operation.runId)?.changeId,
+          operationId: operation.operationId, requestId: operation.requestId, operationState: operation.state });
+      }
+    }
+    observedOperations = current;
+  },
 });
 await registry.acquireAuthority();
 statistics.registry(registry.snapshot());
+const statisticsMaintenance = new StatisticsMaintenance(statistics, { referenced: () => registry.snapshot().runs });
 const contexts = new Map();
 const transitions = new Set();
 let broker = null;
 let sseState = 'connecting';
 let reconnectTimer;
 let sseGeneration = 0;
-const legacy = createJobContext({ workspace, stateDirectory, admitOperation: (operation, requestId, stage) => {
+const legacy = createJobContext({ workspace, stateDirectory, maxCommandLength,
+  observe: (type, details) => observations.record(type, details), admitOperation: (operation, requestId, stage) => {
   try {
     registry.admission();
     if (activeContexts().length) return false;
@@ -67,8 +87,11 @@ function contextFor(run) {
   if (contexts.has(run.runId)) return contexts.get(run.runId);
   let context;
   context = createJobContext({
-    workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run,
-    observe: (type, details) => observeStatistics(() => statistics.observe(run, type, details)),
+    workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run, maxCommandLength,
+    observe: (type, details) => {
+      observations.record(type, { runId: run.runId, changeId: run.changeId, sessionId: run.sessionId, ...details });
+      observeStatistics(() => statistics.observe(run, type, details));
+    },
     ownsSession: (session) => context.sessions().includes(session),
     verifyRestoredPreflight: (approval) => {
       try {
@@ -315,8 +338,19 @@ const server = createServer(async (request, response) => {
   let attemptedReservation = null;
   try {
     const url = new URL(request.url, 'http://localhost');
+    const maintenanceRoute = ['/statistics/retention/preview', '/statistics/retention/purge'].includes(url.pathname);
+    if (maintenanceRoute) {
+      if (request.method !== 'POST') { response.writeHead(405, { allow: 'POST' }).end(); return; }
+      guardStatisticsPost(request, url, server.address().port);
+      request.setTimeout(5000, () => request.destroy());
+    }
+    if (request.method === 'GET' && url.pathname === '/monitor/events') {
+      if (request.headers.accept === 'text/event-stream') observations.stream(request, response);
+      else json(response, 200, observations.snapshot());
+      return;
+    }
     const payload = request.method === 'POST' ? await readJson(request,
-      url.pathname === '/statistics/import' ? 64 * 1024 * 1024 : 256 * 1024) : null;
+      url.pathname === '/statistics/import' ? 64 * 1024 * 1024 : maintenanceRoute ? 4096 : 256 * 1024) : null;
     if (['/validation/resource-request','/validation/resource-reminder'].includes(url.pathname)) {
       if (!payload?.approval?.run_id || payload.approval.coordination_protocol !== COORDINATION_PROTOCOL) {
         throw new CoordinationError('coordination-upgrade-required');
@@ -324,7 +358,17 @@ const server = createServer(async (request, response) => {
       url.pathname = url.pathname === '/validation/resource-request' ? '/validation/request' : '/validation/reminder';
     }
     request.cabPayload = payload;
+    if (request.method === 'POST' && /^(?:\/runs\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99})?\/validation\/(request|reminder)$/.test(url.pathname)) {
+      checkCommandLength(payload?.approval, maxCommandLength);
+    }
     registry.assertHealthy();
+    if (maintenanceRoute) {
+      const result = url.pathname.endsWith('/preview') ? statisticsMaintenance.preview(payload) : await statisticsMaintenance.purge(payload);
+      json(response, 200, result); return;
+    }
+    if (request.method === 'GET' && url.pathname === '/statistics/dashboard') {
+      json(response, 200, statisticsDashboard(statistics, url.searchParams)); return;
+    }
     if (request.method === 'POST' && url.pathname === '/statistics/import') {
       if (!payload || Object.keys(payload).length !== 1 || !payload.bundle) throw new CoordinationError('observation-import-invalid', 400);
       json(response, 200, await statistics.observations.import(payload.bundle)); return;
@@ -388,9 +432,10 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/status' && !url.searchParams.has('runId')) {
       const entries = activeContexts();
       if (!entries.length) { json(response, 200, legacy.publicStatus()); return; }
-      json(response, 200, { version: VERSION, mode: 'concurrent', coordinationProtocol: registry.snapshot().coordinationProtocol,
+      json(response, 200, { version: VERSION, mode: 'concurrent',
+        configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' }, coordinationProtocol: registry.snapshot().coordinationProtocol,
         globalCoordination: registry.resourceState.global, opencodeSse: sseState,
-        brokerReadiness: broker, activeRunCount: entries.length,
+        brokerReadiness: broker, brokerReadinessReceivedAt: legacy.publicStatus().brokerReadinessReceivedAt, activeRunCount: entries.length,
         runs: Object.fromEntries(entries.map(([id, c]) => [id, statusFor(id, c)])),
         activeValidationCount: entries.reduce((n, [, c]) => n + c.publicStatus().activeValidationCount, 0),
         job: entries.length === 1 ? entries[0][1].publicJob() : null });
@@ -611,7 +656,8 @@ const server = createServer(async (request, response) => {
   } catch (cause) {
     observeStatistics(() => statistics.httpFailure(observedRun, cause.code));
     observeStatistics(() => statistics.admissionFailure(attemptedReservation, cause.code));
-    if (!response.headersSent) json(response, cause.status || 409, { error: cause.code || cause.message });
+    if (!response.headersSent) json(response, cause.status || 409,
+      cause.code === 'command-too-long' ? cause.diagnostic : { error: cause.code || cause.message });
     else response.destroy();
   } finally { if (transitionRun) transitions.delete(transitionRun); }
 });

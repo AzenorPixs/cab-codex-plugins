@@ -11,15 +11,16 @@ const supervisorServicePath = new URL(
   "../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service",
   import.meta.url
 );
+const monitorServicePath = new URL('../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service', import.meta.url);
 
-test("les briques distribuées publient la même version de base 1.3.0", () => {
+test("les briques distribuées publient la même version de base 1.6.1", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "1.3.0");
+  assert.equal(version, "1.6.1");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  assert.match(plugin.version, /^1\.3\.0\+codex\.\d{14}$/);
-  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.3\.0$/m);
+  assert.match(plugin.version, /^1\.6\.1\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.6\.1$/m);
   for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
     const root = new URL(directory, import.meta.url);
     for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
@@ -29,9 +30,44 @@ test("les briques distribuées publient la même version de base 1.3.0", () => {
       for (const match of versions) assert.equal(match[1], version, name);
     }
   }
-  for (const path of [servicePath, supervisorServicePath]) {
-    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.3\.0 /m);
+  for (const path of [servicePath, supervisorServicePath, monitorServicePath]) {
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.6\.1 /m);
   }
+});
+
+test('le moniteur web distribue ses ressources locales et reste indépendant des services CAB', () => {
+  const service = readFileSync(monitorServicePath, 'utf8');
+  assert.match(service, /^EnvironmentFile=%h\/\.config\/cab-approval-bridge\/monitor\.env$/m);
+  assert.match(service, /^Restart=on-failure$/m);
+  assert.doesNotMatch(service, /^\[Install\]|^(After|Requires|Wants|BindsTo|PartOf|Requisite|PropagatesStopTo)=/m);
+  for (const file of ['index.html', 'app.mjs', 'stats.mjs', 'style.css']) {
+    assert.ok(readFileSync(new URL('../plugins/cab-approval-bridge/web-monitor/' + file, import.meta.url), 'utf8').length > 0);
+  }
+  const command = readFileSync(commandPath, 'utf8');
+  const start = command.split('## `/cab start`')[1].split('\n## ')[0];
+  const stop = command.split('## `/cab stop`')[1].split('\n## ')[0];
+  assert.match(start, /systemctl --user start cgpt-approval-bridge-monitor\.service/);
+  assert.doesNotMatch(command, /systemctl --user enable cgpt-approval-bridge-monitor/);
+  assert.doesNotMatch(stop, /systemctl --user (?:stop|restart) cgpt-approval-bridge-monitor/);
+  assert.match(stop, /Préserver explicitement `cgpt-approval-bridge-monitor\.service`/);
+  assert.ok(start.indexOf('systemctl --user start cgpt-approval-bridge-monitor.service') <
+    start.indexOf('systemctl --user start cgpt-approval-bridge-controller.service'));
+  assert.match(start, /identity\.workspace/);
+});
+
+test('le catalogue des étapes et son producteur sont distribués en 1.6.1', async () => {
+  const { RUN_STEPS, VERSION } = await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs');
+  assert.equal(VERSION, '1.6.1');
+  const reference = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md', import.meta.url), 'utf8');
+  for (const step of RUN_STEPS) {
+    assert.ok(reference.includes(step.id), step.id); assert.ok(reference.includes(step.name), step.name);
+  }
+  for (const path of ['../ORCHESTRATED_CODING.md', '../.codex/commands/cab.md',
+    '../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md']) {
+    const source = readFileSync(new URL(path, import.meta.url), 'utf8');
+    assert.match(source, /run-lifecycle\.md/); assert.match(source, /expectedStepSequence/);
+  }
+  assert.match(reference, /Revue 8\/11/); assert.match(reference, /Implémentation 6\/11/);
 });
 
 test('la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué', () => {
@@ -131,12 +167,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 1\.3\.0$/m);
-  assert.match(manifest, /"version": "1\.3\.0\+codex\./);
-  assert.match(controller, /const version = "1\.3\.0"/);
-  assert.match(supervisor, /const version = "1\.3\.0"/);
-  assert.match(broker, /SERVER_VERSION = "1\.3\.0"/);
-  assert.match(project, /^version = "1\.3\.0"$/m);
+  assert.match(command, /^version: 1\.6\.1$/m);
+  assert.match(manifest, /"version": "1\.6\.1\+codex\./);
+  assert.match(controller, /const version = "1\.6\.1"/);
+  assert.match(supervisor, /const version = "1\.6\.1"/);
+  assert.match(broker, /SERVER_VERSION = "1\.6\.1"/);
+  assert.match(project, /^version = "1\.6\.1"$/m);
 });
 
 test("la mise à jour déploie le superviseur sans le démarrer", () => {

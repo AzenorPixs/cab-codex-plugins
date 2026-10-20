@@ -28,6 +28,7 @@ CAB/
 │       ├── cgpt-approval-bridge-runs.mjs
 │       ├── cgpt-approval-bridge-import-observations.mjs
 │       ├── cgpt-approval-bridge-observation-statistics.mjs
+│       ├── cgpt-approval-bridge-statistics-maintenance.mjs
 │       ├── cgpt-approval-bridge-resource-coordination.mjs
 │       ├── cgpt-approval-bridge-statistics.mjs
 │       ├── cgpt-approval-bridge-registry-lock.py
@@ -69,7 +70,7 @@ Le broker n'utilise actuellement aucune dépendance Python tierce.
 
 ### 4.3 Statistiques de session
 
-Installer le jeu source complet CAB 1.3.0, notamment resource-coordination.mjs, statistics.mjs, observation-statistics.mjs et import-observations.mjs avec leurs noms cgpt-approval-bridge-*. Le registre utilise le schéma 4 ; les schémas 1/2/3 restent lisibles en mode migration requise. Les snapshots statistiques cumulatifs lisent 1/2 et les observations ont leur stockage privé distinct schéma 2 lié au projet (les bundles importés restent schéma 1). Le magasin broker extensible 2 et le transport MCP sont conservés ; les capacités du nouveau protocole sont vérifiées avant permission.
+Installer le jeu source complet CAB 1.6.1, notamment resource-coordination.mjs, statistics.mjs, observation-statistics.mjs, statistics-maintenance.mjs et import-observations.mjs avec leurs noms cgpt-approval-bridge-*. Le registre utilise le schéma 4 ; les schémas 1/2/3 restent lisibles en mode migration requise. Les snapshots statistiques cumulatifs lisent 1/2 et les observations ont leur stockage privé distinct schéma 2 lié au projet (les bundles importés restent schéma 1). Le magasin broker extensible 2 et le transport MCP sont conservés ; les capacités du nouveau protocole sont vérifiées avant permission.
 
 Une conversion de runtime exige maintenance explicitement autorisée, quiescence, sauvegarde privée et qualification du jeu complet. Les RUN, jobs, candidates, demandes consommées et reçus sont conservés. Les RUN restent en pause ; le transport est vérifié en lecture, puis le prévol d’un seul RUN est autorisé après levée explicite du gel, en maintenant les pairs suspendus. Le métier reste interdit jusqu’à once, exit 0 et libération prouvés. Avant nouvel usage, /coordination/rollback et la sauvegarde permettent le retour exact ; après de nouveaux effets, une réconciliation/conversion est requise. Les anciennes acquisitions globales ordinaires sont refusées dans le nouveau profil. Une préparation source n'installe rien, ne propage aucun prompt et ne migre aucun RUN actif.
 
@@ -199,13 +200,13 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 La sous-commande `/cab status` est distribuée dans le même fichier de commande
 Codex ; elle utilise les outils de lecture disponibles et les vues GET
 existantes. Elle n’ajoute ni script, ni dépendance, ni migration runtime.
-La préparation 1.3.0 reste une modification source ; l’installation dans un
+La préparation 1.6.1 reste une modification source ; l’installation dans un
 profil et la mise en service des composants sont des opérations distinctes.
 
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `1.3.0` pour le broker,
+artefacts distribués. La version de base actuelle est `1.6.1` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -290,14 +291,15 @@ Une conteneurisation éventuelle devra respecter l'architecture CAB, notamment :
 
 Le projet actuel ne définit aucune image Docker CAB.
 
-## Distribution concurrente 1.3.0
+## Distribution concurrente 1.6.1
 
 Installer le jeu complet des scripts du plugin dans un même répertoire : le
 contrôleur et le superviseur importent les modules job-context, supervisor-context
-et runs, ainsi que resource-coordination, statistics et observation-statistics ;
+et runs, ainsi que resource-coordination, statistics, observation-statistics
+et statistics-maintenance ;
 l'importeur import-observations est également distribué. Le registre lance
 registry-lock.py avec Python 3. Ces fichiers sont
-indissociables et doivent partager la version source courante 1.3.0. Aucune dépendance tierce
+indissociables et doivent partager la version source courante 1.6.1. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.
@@ -310,3 +312,57 @@ Le script cgpt-approval-bridge-prompts.py permet une revue sans écriture puis
 une application explicite aux projets passés par --project. Il ne touche que
 les neuf prompts pilotés et leur protocole ; les prompts directs sont contrôlés
 par empreinte. Les sources PROMPTS restent non versionnées dans leurs projets.
+
+
+## Distribution de CAB Monitor 1.6.1
+
+Le moniteur est une brique indépendante, distribuée sans dépendance tierce :
+
+- `scripts/cgpt-approval-bridge-monitor.mjs` ;
+- `scripts/cgpt-approval-bridge-monitor-data.mjs` ;
+- `scripts/cgpt-approval-bridge-monitor-events.mjs` ;
+- `scripts/cgpt-approval-bridge-run-steps.mjs` ;
+- `scripts/cgpt-approval-bridge-statistics-maintenance.mjs` et
+  `scripts/cgpt-approval-bridge-observation-statistics.mjs` ;
+- `web-monitor/index.html`, `web-monitor/app.mjs`, `web-monitor/stats.mjs`,
+  `web-monitor/style.css` ;
+- `systemd/cgpt-approval-bridge-monitor.service`.
+
+Le contrôleur importe également `monitor-events.mjs` ; le contexte de job et
+le moniteur utilisent le catalogue `run-steps.mjs`. Ces modules doivent être
+présents avec leurs noms complets à côté des scripts lors d’un déploiement
+autorisé. La référence `skills/approval-bridge/references/run-lifecycle.md`
+est distribuée avec le protocole, sans nouvelle dépendance. Les modules,
+briques existantes, manifeste, unités, commande et supports annoncent 1.6.1.
+Les ressources HTML/CSS sont rattachées à cette release sans format de version
+artificiel. Les schémas et le protocole MCP sont conservés.
+
+Le modèle systemd et la référence
+`skills/approval-bridge/references/monitor-service.md` sont livrés sans effet
+sur les profils actifs. Leur installation et démarrage sont différés à
+l'invocation explicite de /cab start, après prévol. La commande prépare le
+jeu indépendant, recharge systemd et démarre le moniteur avant le contrôleur,
+sans activation au login. Une instance active conforme est conservée sans
+modification. Le lancement direct de README.md reste possible.
+
+L'unité attend `~/.config/cab-approval-bridge/monitor.env`, non secret et privé,
+et l'arborescence `~/.local/share/cab-approval-bridge-monitor/` avec scripts/
+et web-monitor/ frères. Installer ensemble monitor, monitor-data,
+monitor-events, run-steps, statistics-maintenance et observation-statistics
+avec leurs noms complets cgpt-approval-bridge-*. Les ressources index.html,
+app.mjs, stats.mjs et style.css sont requises. La fermeture de ces imports et
+ressources est qualifiée par lancement d'un paquet isolé.
+
+Le modèle ne déclare aucune dépendance au contrôleur ou au superviseur.
+/cab stop et le reset préservent son service, sa configuration et son jeu
+installé. /cab update n'acquiert aucun nouveau droit de démarrage du moniteur.
+Un port ou workspace divergent est signalé, sans tuer de processus ni modifier
+un service actif. Cette préparation source ne déploie rien sur le profil réel.
+
+Le jeu 1.6.1 conserve STATS et la maintenance des historiques introduits en 1.6.0. Le module
+statistics-maintenance et son import observation-statistics sont requis avec
+le contrôleur et le moniteur, même pour une installation séparée du moniteur.
+Les schémas JSON restent inchangés ; aucun remplacement de magasin, migration,
+purge réelle ou redémarrage de service n'est exécuté par la préparation source.
+La qualification navigateur couvre navigation, filtres, annulation, purge sur
+fixtures et protection des contextes actifs dans Chromium et Firefox headless.

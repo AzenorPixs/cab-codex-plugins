@@ -74,14 +74,14 @@ Les validations et publications MUST protéger leurs entrées, effets et dépend
 - **THEN** le rapport de B continue sans attendre une exclusion d'intégration générale
 
 ### Requirement: Prompts pilotés cohérents
-Les prompts pilotés des projets inventoriés MUST utiliser le protocole 1.3.0 et un checkpoint par RUN lors de leur déploiement autorisé. Les sous-jobs MUST hériter du RUN parent. CISM, CAISM et les prompts directs MUST rester inchangés et hors concurrence pilotée. La préparation source MUST NOT propager ces changements.
+Les prompts pilotés des projets inventoriés MUST utiliser le protocole 1.6.1 et un checkpoint par RUN lors de leur déploiement autorisé. Les sous-jobs MUST hériter du RUN parent. CISM, CAISM et les prompts directs MUST rester inchangés et hors concurrence pilotée. La préparation source MUST NOT propager ces changements.
 
 #### Scenario: Sous-job CISMP
 - **WHEN** CISMP appelle SPCMP ou ISMP avec plusieurs changes présents
 - **THEN** le sous-job traite le change réservé et les accès de son RUN parent
 
 ### Requirement: File équitable d'intégration
-L'attente d'une opération MUST être durable, idempotente et FIFO entre demandes incompatibles. Une demande indépendante MUST pouvoir avancer. Une annulation MUST être explicite sans libérer un effet commencé. La file historique globale MUST NOT suspendre les pairs dans le profil 1.3.0.
+L'attente d'une opération MUST être durable, idempotente et FIFO entre demandes incompatibles. Une demande indépendante MUST pouvoir avancer. Une annulation MUST être explicite sans libérer un effet commencé. La file historique globale MUST NOT suspendre les pairs dans le profil 1.6.1.
 
 #### Scenario: Deux demandes et publication
 - **WHEN** A puis B demandent une même ressource pour publier
@@ -124,7 +124,7 @@ Les protections temporaires MUST couvrir la seule opération ou le groupe cohér
 - **THEN** les protections métier sont libérées avant le rapport sans supprimer rapport ni gate
 
 ### Requirement: Publication et phase documentaire atomiques
-CAB MUST proposer une transition publiée atomique vers REPORT avec génération, révisions attendues, preuves et cible vérifiées. Séquence de publication, reçu, portée documentaire et libération sûre MUST être persistés ensemble. Les anciennes routes incompatibles MUST être refusées sans effet dans le profil 1.3.0.
+CAB MUST proposer une transition publiée atomique vers REPORT avec génération, révisions attendues, preuves et cible vérifiées. Séquence de publication, reçu, portée documentaire et libération sûre MUST être persistés ensemble. Les anciennes routes incompatibles MUST être refusées sans effet dans le profil 1.6.1.
 
 #### Scenario: Publication concurrente suivante
 - **WHEN** A termine la publication atomique et B publie indépendamment
@@ -248,3 +248,10 @@ Une opération courante aux effets indéterminés MUST être refusée jusqu'à c
 #### Scenario: Commande sans manifeste exploitable
 - **WHEN** une commande ne décrit pas ses écritures
 - **THEN** elle est refusée sans suspendre les autres RUN
+
+### Requirement: Opération consommée sans nouvelle admission historique
+Une opération consommée ou invalidée MUST être écartée avant tout contrôle d'admission susceptible de modifier le registre. Le polling d'une ancienne décision MUST NOT réinscrire une session historique après sa réconciliation. Le contrôle MUST NOT modifier la décision ni autoriser une nouvelle permission once.
+
+#### Scenario: Polling après clôture historique
+- **WHEN** une opération historique a consommé sa permission once et que sa session a été réconciliée sous gel global puis libérée
+- **THEN** les sondages suivants conservent la trace historique active vide et permettent une réservation Multi-RUN, sans nouvelle permission

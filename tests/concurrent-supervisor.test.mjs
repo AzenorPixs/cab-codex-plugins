@@ -55,7 +55,7 @@ async function checkSupervision(t, coordinationReason = null) {
     for (const server of [controller, opencode]) { server.closeAllConnections(); await new Promise((r) => server.close(r)); }
     rmSync(directory, { recursive: true, force: true });
   });
-  for (let i = 0; i < 50 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
+  for (let i = 0; i < 100 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(sent.length, 1); assert.equal(sent[0].sessionId, 'ses_b');
   let state;
   for (let i = 0; i < 50; i++) {

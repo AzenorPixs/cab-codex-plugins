@@ -2,6 +2,78 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.6.1 — préparation source
+
+- /cab start prépare et démarre explicitement le service systemd indépendant
+  du monitoring, sans activation au login ; instance conforme réutilisée sans
+  redémarrage et configuration existante préservée.
+- Identité HTTP publique du workspace pour vérifier service, page et version ;
+  URL réelle et erreurs de monitoring affichées séparément du statut CAB.
+- /cab stop et les réinitialisations conservent le moniteur et ses connexions
+  pour afficher les autres composants indisponibles. Aucun couplage systemd,
+  arrêt ou redémarrage implicite des autres briques.
+- Jeu source aligné sur 1.6.1 avec cachebuster neuf, tests de distribution et
+  paquet isolé complet ; fonctionnalités STATS et purge manuelle conservées.
+  Aucun déploiement, service actif, migration ou publication modifié par SCM.
+
+## 1.6.0 — préparation source
+
+- Menu STATS sous MONITOR et page statistique avec sélections courant,
+  dernière livraison, 24 h/7 j/30 j et filtre RUN. Sources native/importées
+  séparées, couverture et fraîcheur visibles ; cumuls hors fenêtre explicites.
+- Purge manuelle des historiques statistiques antérieurs à 1/3/7/30/365 jours,
+  avec prévisualisation, jeton expirant, confirmation, recontrôle et reçu par
+  magasin. Contextes actifs ou référencés, états opérationnels, preuves et
+  agrégats globaux protégés ; fichiers JSON conservés et rétention native
+  inchangée à 30 jours. Suppression irréversible sans sauvegarde préalable.
+- Imports et écritures sérialisés pendant la purge, remplacements atomiques
+  privés et erreurs partielles explicites ; POST locaux protégés contre les
+  requêtes interorigine, sans cible arbitraire ni purge automatique.
+- Briques, supports et plugin alignés sur 1.6.0 avec cachebuster neuf.
+  Préparation source uniquement, sans installation, migration active,
+  publication ou opération Git.
+
+## 1.5.0 — préparation source
+
+- Cycle de onze étapes nommé et persistant par job, avec retours explicites,
+  historique borné et déclarations concurrentes protégées ; anciens jobs
+  sans étape conservés. Le gate terminal et les permissions restent distincts.
+- Tableau web ETAT / ÉTAPE / tâches cochées ; phase technique dans le détail,
+  catalogue et historique consultables, versions réellement observées de chaque
+  brique ; lignes WAITING jaunes et BLOCKED rouges, blocage prioritaire sur
+  une attente. Version 1.5.0 conservée, sans installation sur les services actifs.
+
+- CAB Monitor indépendant, sans LLM, sur loopback et port configurable 8790
+  par défaut : interface responsive, état des briques, RUN et changes,
+  filtres, tâches cochées X/Y, phase observée et chronologie corrélée.
+- Flux SSE filtré du contrôleur et diffusion vers les navigateurs, avec
+  réconciliation périodique, fraîcheur et ruptures de couverture explicites.
+  Journal borné sans commandes, messages ou sorties ; observation sans
+  décision, permission, relance ou mutation métier.
+- Limite effective de commande dans les statuts publics et sur la page,
+  en unités UTF-16 ; défaut 16 384, absence affichée comme indisponible.
+- Sources, tests, supports et briques alignés sur 1.5.0 avec cachebuster neuf.
+  Modèle de service du moniteur distribué séparément ; aucune installation,
+  migration de runtime, publication ou modification des services actifs.
+
+## 1.4.0 — préparation source
+
+- Opérations consommées ou invalidées écartées avant toute nouvelle admission :
+  le polling ne réinscrit plus une session historique après sa réconciliation.
+  Test de régression sur plusieurs sondages, sans nouvelle permission.
+- Limite de commande du contrôleur configurable par
+  `OC_Codex_MAX_COMMAND_LENGTH` (alias `OC_CGPT_MAX_COMMAND_LENGTH`),
+  16 384 unités UTF-16 par défaut ; `2000` rétablit le seuil précédent.
+  Configuration invalide refusée au démarrage et dépassement signalé par
+  HTTP 400 JSON avant enregistrement, sur les demandes et rappels historiques
+  et par RUN. Diagnostic de notification broker filtré, tests aux bornes et
+  règle commande exacte / décision corrélée / permission `once` unique conservée.
+- Incrément de 0.1.0 de toutes les briques CAB : broker, modules, contrôleur,
+  superviseur, scripts, plugin, commande et unités alignés sur 1.4.0.
+  Bloc de concurrence du protocole local synchronisé avec la référence
+  distribuée ; schémas, contrats de permission et historiques conservés.
+  Cette préparation source ne déploie ni ne publie de composant.
+
 ## 1.3.0 — préparation source
 
 - Coordination atomique par ressource : portées déclarées distinctes des accès actifs, lectures compatibles, écritures exclusives, FIFO entre conflits et promotion sûre des fichiers privés. Les RUN indépendants continuent pendant validations, synchronisation, archivage et publication ciblés.
@@ -94,7 +166,7 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 - Retry explicite après refus sans effet, identifiants neufs, preuves natives séparées par une frontière vérifiée et gel jusqu'au prévol exact.
 - Protocole, cadrages et tests alignés ; version 0.87.2 synchronisée. Le remplacement initial CISMP reste inchangé. Aucun déploiement ni publication.
 
-## Unreleased
+## 0.87.1 — 2026-10-10
 
 - Correctif source 1.0.2 : retry accepte un refus REJECTED obtenu par
   poll_approval/get_approval après timeout MCP, corrélé à une décision locale

@@ -1,12 +1,13 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { commandLengthLimit } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs';
 
 const controllerPath = fileURLToPath(
   new URL(
@@ -29,6 +30,31 @@ function startWith(environment) {
       },
     }
   );
+}
+
+test('limite de commande : défaut, alias et priorité du nom principal', () => {
+  assert.equal(commandLengthLimit({}), 16384);
+  assert.equal(commandLengthLimit({ OC_CGPT_MAX_COMMAND_LENGTH: '2000' }), 2000);
+  assert.equal(commandLengthLimit({ OC_Codex_MAX_COMMAND_LENGTH: '1' }), 1);
+  assert.equal(commandLengthLimit({ OC_Codex_MAX_COMMAND_LENGTH: '9007199254740991' }), Number.MAX_SAFE_INTEGER);
+  assert.equal(commandLengthLimit({ OC_Codex_MAX_COMMAND_LENGTH: '4096', OC_CGPT_MAX_COMMAND_LENGTH: '2000' }), 4096);
+  assert.throws(() => commandLengthLimit({ OC_Codex_MAX_COMMAND_LENGTH: '', OC_CGPT_MAX_COMMAND_LENGTH: '2000' }),
+    /OC_Codex_MAX_COMMAND_LENGTH/);
+  assert.throws(() => commandLengthLimit({ OC_CGPT_MAX_COMMAND_LENGTH: 'invalid' }), /OC_CGPT_MAX_COMMAND_LENGTH/);
+});
+
+for (const value of ['', '0', '-1', '+1', '1.5', ' 2000', '2000 ', '1e4', 'NaN', 'Infinity', 'private-fixture',
+  '9007199254740992', '２０００']) {
+  test(`configuration de longueur invalide avant tout état runtime : ${JSON.stringify(value)}`, (t) => {
+    const directory = mkdtempSync(join(tmpdir(), 'cab-length-config-'));
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const result = startWith({ OC_CGPT_WORKSPACE: directory, OC_Codex_MAX_COMMAND_LENGTH: value,
+      OC_CGPT_MAX_COMMAND_LENGTH: '2000' });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /OC_Codex_MAX_COMMAND_LENGTH doit être un entier/);
+    assert.ok(!result.stderr.includes('private-fixture'));
+    assert.equal(existsSync(join(directory, '.opencode')), false);
+  });
 }
 
 function delay(milliseconds) {

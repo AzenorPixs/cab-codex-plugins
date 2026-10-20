@@ -1,0 +1,12 @@
+{
+  "existing_modified": 52,
+  "new": 13,
+  "delivered_paths": 65,
+  "initial_unchanged": 26,
+  "utf8_lf_files": 65,
+  "report_sections": 6,
+  "tests_passed": 332,
+  "tests_skipped": 1,
+  "archive_unique": true,
+  "delta_consistency": true
+}
