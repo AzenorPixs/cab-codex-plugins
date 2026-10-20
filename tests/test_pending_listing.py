@@ -216,6 +216,126 @@ class PendingListingTest(unittest.TestCase):
             "journal_reads": reads.call_count, "seconds": round(elapsed, 3),
         }))
 
+    def test_background_reconciliation_reads_once_before_notifying_pending(self):
+        items = [self.item(i, "PENDING" if i % 2 else "APPROVED")
+                 for i in range(8)]
+        before = self.seed(items)
+        with (patch.object(bridge.journal, "read_events_unlocked",
+                           wraps=bridge.journal.read_events_unlocked) as reads,
+              patch.object(bridge, "controller_decision", return_value=None),
+              patch.object(bridge, "maybe_notify_controller", return_value=False) as notify):
+            bridge.reconcile_pending_approvals()
+            self.assertEqual(reads.call_count, 1)
+        self.assertEqual(notify.call_count, 4)
+        self.assertEqual(bridge.journal.read_events(), before)
+        self.assertEqual(bridge.RECONCILIATION_LAST_ERROR, "")
+        self.assertFalse(bridge.RECONCILIATION_RUNNING)
+
+    def test_background_reconciliation_keeps_repair_index_local_and_durable(self):
+        item = self.item()
+        self.seed([item], missing=((item["approval_id"], "APPROVAL_APPROVED"),))
+        original = bridge.repair_journal_for_item
+        indexes = []
+
+        def repair_twice(item, event_index=None):
+            indexes.append(event_index)
+            original(item, event_index=event_index)
+            original(item, event_index=event_index)
+
+        with patch.object(bridge, "repair_journal_for_item", side_effect=repair_twice):
+            bridge.reconcile_pending_approvals()
+            first = bridge.journal.read_events()
+            bridge.reconcile_pending_approvals()
+        self.assertEqual(len(first), 2)
+        self.assertEqual(bridge.journal.read_events(), first)
+        self.assertIsNotNone(indexes[0])
+        self.assertIsNot(indexes[0], indexes[1])
+        bridge.journal.calculate_chain_tip(first)
+
+    def test_background_reconciliation_saves_expiration_before_repair(self):
+        item = self.item(status="PENDING")
+        item["expires_at"] = "2000-01-01T00:00:00Z"
+        self.seed([item])
+        original = bridge.journal.append_event
+        persisted = []
+
+        def append(*args, **kwargs):
+            stored = bridge.load_store(bridge.store_path())["approvals"]
+            persisted.append(stored[item["approval_id"]]["status"])
+            return original(*args, **kwargs)
+
+        with (patch.object(bridge.journal, "append_event", side_effect=append),
+              patch.object(bridge, "maybe_notify_controller") as notify):
+            bridge.reconcile_pending_approvals()
+        self.assertEqual(persisted, ["EXPIRED"])
+        notify.assert_not_called()
+        self.assertEqual(bridge.RECONCILIATION_LAST_ERROR, "")
+
+    def test_background_reconciliation_failed_append_keeps_index_unchanged(self):
+        item = self.item()
+        self.seed([item], missing=((item["approval_id"], "APPROVAL_APPROVED"),))
+        original = bridge.repair_journal_for_item
+        indexes = []
+
+        def capture(item, event_index=None):
+            indexes.append(event_index)
+            return original(item, event_index=event_index)
+
+        with (patch.object(bridge, "repair_journal_for_item", side_effect=capture),
+              patch.object(bridge.journal, "append_event",
+                           side_effect=bridge.journal.JournalError("synthetic write failure")),
+              patch("builtins.print")):
+            bridge.reconcile_pending_approvals()
+        self.assertEqual(indexes, [{("approval-0", "APPROVAL_CREATED")}])
+        self.assertIn("write failure", bridge.RECONCILIATION_LAST_ERROR)
+        self.assertFalse(bridge.RECONCILIATION_RUNNING)
+
+    def test_background_reconciliation_read_failure_is_reported(self):
+        self.seed([self.item()])
+        with (patch.object(bridge.journal, "read_events",
+                           side_effect=bridge.journal.JournalError("synthetic read failure")),
+              patch.object(bridge, "repair_journal_for_item") as repair,
+              patch("builtins.print")):
+            bridge.reconcile_pending_approvals()
+        repair.assert_not_called()
+        self.assertIn("read failure", bridge.RECONCILIATION_LAST_ERROR)
+        self.assertFalse(bridge.RECONCILIATION_RUNNING)
+
+    def test_background_reconciliation_empty_store_skips_journal(self):
+        bridge.save_store(bridge.store_path(), {"approvals": {}})
+        with (patch.object(bridge.journal, "read_events") as reads,
+              patch.object(bridge, "repair_journal_for_item") as repair):
+            bridge.reconcile_pending_approvals()
+        reads.assert_not_called()
+        repair.assert_not_called()
+
+    def test_background_reconciliation_corrupt_chain_still_blocks_append(self):
+        item = self.item()
+        events = self.seed([item], missing=((item["approval_id"], "APPROVAL_APPROVED"),))
+        events[0]["data"]["status"] = "REJECTED"
+        path = Path(bridge.journal.journal_path())
+        path.write_text("".join(json.dumps(e) + "\n" for e in events), encoding="utf-8")
+        with patch("builtins.print"):
+            bridge.reconcile_pending_approvals()
+        self.assertNotEqual(bridge.RECONCILIATION_LAST_ERROR, "")
+        self.assertFalse(bridge.RECONCILIATION_RUNNING)
+        self.assertEqual(len(bridge.journal.read_events()), 1)
+
+    def test_representative_background_reconciliation_reads_journal_once(self):
+        items = [self.item(i) for i in range(694)]
+        self.seed(items, extra_events=16774 - 2 * len(items))
+        with patch.object(bridge.journal, "read_events_unlocked",
+                          wraps=bridge.journal.read_events_unlocked) as reads:
+            started = time.monotonic()
+            bridge.reconcile_pending_approvals()
+            elapsed = time.monotonic() - started
+        self.assertEqual(bridge.RECONCILIATION_LAST_ERROR, "")
+        self.assertEqual(reads.call_count, 1)
+        print("SYNTHETIC_RECONCILIATION_BENCHMARK " + json.dumps({
+            "approvals": len(items), "events": 16774,
+            "journal_reads": reads.call_count, "seconds": round(elapsed, 3),
+        }))
+
 
 if __name__ == "__main__":
     unittest.main()
