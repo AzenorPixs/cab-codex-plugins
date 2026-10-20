@@ -2,7 +2,7 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `1.3.0`.
+Version de référence des briques CAB : `1.6.1`.
 
 Codex Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **Codex**.
 
@@ -16,7 +16,7 @@ CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni u
 
 ## 3. Principes architecturaux
 
-CAB 1.3.0 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
+CAB 1.6.1 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
 
 Validation, synchronisation, archivage, publication et rapport protègent leurs périmètres réels sans demander la stabilité de tous les RUN. Le gel global est réservé à la réconciliation commune, la maintenance partagée, la pause globale ou l'arrêt global explicites. Les décisions unitaires, ask/once, preuves et gates sont conservés. Le contrat détaillé est dans ORCHESTRATED_CODING.md et OpenSpec.
 
@@ -28,6 +28,7 @@ Les statistiques intégrées distinguent réservations, activité native observ�
 2. **Le broker CAB** transporte, corrèle, persiste et restitue les validations.
 3. **Le contrôleur Codex** sollicite Codex et conserve la décision destinée au broker.
 4. **La supervision CAB** observe l'ensemble et expose un état synthétique.
+5. **CAB Monitor** agrège les observations et fournit leur affichage web indépendant.
 
 ### 3.2 Broker neutre
 
@@ -90,13 +91,15 @@ Contrôleur unique ──► contextes A, B, … ──► Codex / Codex App Ser
    └── Registre : changes exclusifs, accès atomiques et gels exceptionnels
 
 OpenCode ── SSE HTTP commun ──► superviseur unique ──► suivi par RUN
+
+Contrôleur + superviseur + OpenCode ── observations ──► CAB Monitor ──► navigateur local
 ```
 
 Le transport entre OpenCode et le broker est exclusivement **MCP stdio local**. Le broker n'expose pas de serveur MCP réseau.
 
 ### 4.1 Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.3.0 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.6.1 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -132,7 +135,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.3.0 partagée"]
+    subgraph CAB["Infrastructure CAB 1.6.1 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -155,6 +158,7 @@ flowchart TB
         end
         J1[("États persistants RUN A<br/>job, jalons, gate et supervision")]
         J2[("États persistants RUN B<br/>job, jalons, gate et supervision")]
+        WM["CAB Monitor indépendant<br/>observation et statistiques"]
         B <-->|"Persistance"| E
         B <-->|"HTTP : demande et décision corrélées"| T
         T1 <-->|"Persistance"| J1
@@ -167,6 +171,14 @@ flowchart TB
 
     A["Codex App Server — mode automatique<br/>validation isolée et corrélée par RUN"]
     W[("Répertoire de projet partagé<br/>opérations couvertes par leurs accès compatibles")]
+
+    WB["Navigateur local — interface dynamique"]
+    T -->|"HTTP + SSE filtrés"| WM
+    S -->|"Statut public HTTP"| WM
+    OC -->|"Santé et activité HTTP"| WM
+    WM -->|"Page web + SSE"| WB
+    WB -.->|"Purge statistique confirmée"| WM
+    WM -.->|"Maintenance des seuls historiques statistiques"| T
 
     D -->|"Objectifs, périmètres et validations"| C
     C <-->|"HTTP : registre et pilotage par RUN"| T
@@ -239,6 +251,40 @@ commandes en approbation générale.
 ### 5.3 Supervision
 
 CAB observe OpenCode par une voie SSE directe indépendante du cycle MCP. Cette voie sert à confirmer l'activité réelle et à réconcilier l'état après reconnexion ou divergence.
+
+### 5.3.1 Moniteur web indépendant
+
+CAB Monitor 1.6.1 fournit une vue locale des briques, des RUN et des changes,
+sans appel LLM. Son processus indépendant reste accessible pendant une panne
+du contrôleur ou du superviseur. Il agrège des observations filtrées, avec
+fraîcheur explicite, puis actualise les navigateurs par SSE. Le port par
+défaut est 8790, configurable, avec écoute loopback uniquement.
+
+L'avancement X/Y correspond aux tâches cochées dans le change OpenSpec. La
+phase observée, le jalon prouvé et le gate du RUN restent distincts de ce
+compteur. La page expose aussi la limite effective de commande du contrôleur.
+Le moniteur ne décide, ne relance et ne modifie aucun RUN.
+/cab start prépare et démarre explicitement son service systemd indépendant,
+sans activation au login. Une instance active conforme est réutilisée sans
+redémarrage. /cab stop et la réinitialisation CAB le préservent pour afficher
+les composants indisponibles. Son état de démarrage est signalé séparément
+et sa vérification compare version et workspace réels.
+
+
+ETAT présente la situation opérationnelle observée et ÉTAPE le cycle du
+change, par exemple WAITING et Implémentation 6/11. La phase technique reste
+consultable dans le détail. Les onze étapes ont des positions stables et
+acceptent les retours, notamment de Revue vers Implémentation, avec historique
+persistant. Les versions affichées proviennent des composants observés.
+
+Le menu STATS présente les agrégats statistiques JSON filtrés du contrôleur,
+avec sélection courante, dernière livraison, 24 h, 7 jours, 30 jours et filtre
+RUN. Les sources natives et importées restent séparées ; couverture, fraîcheur
+et compteurs cumulatifs sont explicites. La maintenance statistique permet
+une purge manuelle des historiques antérieurs à 1/3/7/30/365 jours, après
+prévisualisation puis confirmation. Elle préserve les contextes actifs ou
+référencés, les états opérationnels et les preuves métier. Cette exception
+de maintenance ne permet aucune décision, permission ou modification de RUN.
 
 ### 5.4 Plugin Codex
 
@@ -398,7 +444,7 @@ Codex intervient en analyse, en revue de code, et en validateur.
 
 ## 16. Documentation officiel
 
-## Pilotage concurrent 1.3.0
+## Pilotage concurrent 1.6.1
 
 Le profil concurrent partage un OpenCode, un broker MCP stdio et un contexte
 absolu de projet. Plusieurs RUN possèdent chacun leur session, contrat,

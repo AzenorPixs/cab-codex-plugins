@@ -5,12 +5,41 @@ import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import readline from "node:readline";
 
-export const VERSION = "1.3.0";
+import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
+
+export const VERSION = "1.6.1";
+if (STEP_VERSION !== VERSION) throw new Error('CAB lifecycle component version mismatch');
+
+export function commandLengthLimit(environment = process.env) {
+  const name = Object.hasOwn(environment, 'OC_Codex_MAX_COMMAND_LENGTH')
+    ? 'OC_Codex_MAX_COMMAND_LENGTH' : 'OC_CGPT_MAX_COMMAND_LENGTH';
+  if (!Object.hasOwn(environment, name)) return 16_384;
+  const value = environment[name];
+  const limit = Number(value);
+  if (typeof value !== 'string' || !/^[0-9]+$/.test(value) || !Number.isSafeInteger(limit) || limit <= 0) {
+    throw new Error(`${name} doit être un entier décimal strictement positif et sûr JavaScript.`);
+  }
+  return limit;
+}
+
+export function checkCommandLength(approval, maxLength) {
+  if (!Array.isArray(approval?.commands)) return;
+  for (const command of approval.commands) {
+    if (typeof command !== 'string' || command.length <= maxLength) continue;
+    const message = `Commande refusée : longueur ${command.length}, limite autorisée ${maxLength}.`;
+    const cause = new Error(message);
+    cause.code = 'command-too-long';
+    cause.status = 400;
+    cause.diagnostic = { error: cause.code, message, maxLength, actualLength: command.length, unit: 'utf16' };
+    throw cause;
+  }
+}
 
 // A context owns its decisions, gates and recovery; OpenCode and MCP stay shared.
 export function createJobContext({ workspace, stateDirectory, run = null,
   admitOperation = () => true, ownsSession = () => true, observe = () => {},
   nativeLifecycle = {},
+  maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
 function envValue(name) {
   const legacyName = name.replace("OC_Codex_", "OC_CGPT_");
@@ -83,6 +112,7 @@ const reminderNotifications = new Map();
 let job = null;
 let jobPersistence = Promise.resolve();
 let recoveryTransitionInFlight = false;
+let lifecycleTransitionInFlight = false;
 let permissionTimer;
 let closed = false;
 
@@ -141,6 +171,7 @@ function publicJob() {
     changeId: job.changeId,
     criteria: job.criteria,
     strictCommands: job.strictCommands === true,
+    lifecycle: publicLifecycle(job.lifecycle),
     lastProvenMilestone: job.lastProvenMilestone,
     currentCabMandate: job.currentCabMandate,
     armed: job.armed,
@@ -154,12 +185,12 @@ function publicJob() {
   };
 }
 
-function persistJob() {
-  if (!job) return Promise.resolve();
+function persistJob(candidate = job) {
+  if (!candidate) return Promise.resolve();
 
-  job.terminalGate = { ...terminalGate };
-  job.updatedAt = new Date().toISOString();
-  const snapshot = JSON.stringify(job, null, 2);
+  candidate.terminalGate = { ...terminalGate };
+  candidate.updatedAt = new Date().toISOString();
+  const snapshot = JSON.stringify(candidate, null, 2);
 
   jobPersistence = jobPersistence.catch(() => {}).then(async () => {
     await mkdir(dirname(jobStatePath), { recursive: true });
@@ -209,12 +240,14 @@ function updateStatus(type, details = {}) {
     type,
     ...details,
   };
-  observe(type, details);
+  observe(type, { ...details, ...(run ? { runId: run.runId } : {}),
+    ...(job ? { changeId: job.changeId, sessionId: job.sessionId, jobId: job.jobId } : {}) });
 }
 
 function publicStatus() {
   return {
-    version: "1.3.0",
+    configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
+    version: "1.6.1",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -293,6 +326,7 @@ function validPersistedJob(payload) {
   for (const key of ["lastProvenMilestone", "currentCabMandate", "armedAt", "updatedAt", "disarmedAt"]) {
     if (payload[key] !== undefined && payload[key] !== null && typeof payload[key] !== "string") return false;
   }
+  if (payload.lifecycle !== undefined && !validLifecycle(payload.lifecycle)) return false;
   if (payload.terminalGate !== undefined) {
     const gate = payload.terminalGate;
     if (!record(gate) || !["OPEN", "VALIDATED"].includes(gate.status) ||
@@ -339,6 +373,7 @@ function validPersistedJob(payload) {
 }
 
 function approvedOperation(approval) {
+  checkCommandLength(approval, maxCommandLength);
   const sessionId = approval?.session_id;
   const directory = approval?.directory;
   const files = approval?.files;
@@ -365,8 +400,7 @@ function approvedOperation(approval) {
     !file.startsWith("../");
   const validCommand = (command) =>
     typeof command === "string" &&
-    command &&
-    command.length <= 2_000;
+    command;
 
   if (!files.every(validFile) || !commands.every(validCommand)) {
     throw new Error("Mandat de validation invalide.");
@@ -1159,9 +1193,9 @@ async function reconcileNativePermissions() {
 async function transmitApprovedOperation(validation) {
   if (
     !validation.operation ||
-    !operationAllowed(validation.operation, validation.requestId) ||
     validation.operationInvalidated ||
     validation.operationConsumed ||
+    !operationAllowed(validation.operation, validation.requestId) ||
     reconcilingPermissions.has(validation.requestId)
   ) {
     return;
@@ -1509,7 +1543,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.3.0",
+      version: "1.6.1",
     },
   });
 
@@ -1902,6 +1936,12 @@ const handle = async (request, response, url) => {
       return;
     }
 
+    if (request.method === 'POST' && lifecycleTransitionInFlight && url.pathname.startsWith('/job/')) {
+      response.writeHead(409, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ error: 'lifecycle-transition-in-flight' }));
+      return;
+    }
+
     if (request.method === "POST" && url.pathname === "/job/recover") {
       if (recoveryTransitionInFlight) {
         response.writeHead(409, { "content-type": "application/json" });
@@ -1967,6 +2007,7 @@ const handle = async (request, response, url) => {
         if (job?.jobId === candidate.jobId) {
           candidate.recoveryHistory = job.recoveryHistory || [];
           candidate.revokedSessions = job.revokedSessions || [];
+          if (job.lifecycle !== undefined) candidate.lifecycle = publicLifecycle(job.lifecycle);
         }
         job = candidate;
         resetTerminalGate("job-armed", false);
@@ -1983,8 +2024,14 @@ const handle = async (request, response, url) => {
     }
 
     if (request.method === "POST" && url.pathname === "/job/progress") {
+      let ownsLifecycleTransition = false;
       try {
         const payload = await readJson(request);
+        if (lifecycleTransitionInFlight) {
+          response.writeHead(409, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ error: 'lifecycle-transition-in-flight' }));
+          return;
+        }
 
         if (
           !job ||
@@ -1998,21 +2045,33 @@ const handle = async (request, response, url) => {
           throw new Error("Progression de job invalide.");
         }
 
-        if (payload.lastProvenMilestone !== undefined) {
-          job.lastProvenMilestone = payload.lastProvenMilestone;
+        const declaresStep = ['stepId', 'stepStatus', 'expectedStepSequence'].some((key) => Object.hasOwn(payload, key));
+        if (declaresStep) {
+          if (terminalGate.status !== 'OPEN') throw new Error('lifecycle-terminal-gate-validated');
+          const lifecycle = nextLifecycle(job.lifecycle, payload.stepId, payload.stepStatus, payload.expectedStepSequence);
+          const changed = lifecycle.sequence !== (job.lifecycle?.sequence || 0);
+          const candidate = { ...job, lifecycle };
+          if (payload.lastProvenMilestone !== undefined) candidate.lastProvenMilestone = payload.lastProvenMilestone;
+          if (payload.currentCabMandate !== undefined) candidate.currentCabMandate = payload.currentCabMandate;
+          ownsLifecycleTransition = true;
+          lifecycleTransitionInFlight = true;
+          await persistJob(candidate);
+          job = candidate;
+          if (changed) updateStatus('lifecycle-step-changed', { stepId: lifecycle.history.at(-1).id,
+            stepStatus: lifecycle.history.at(-1).status, stepSequence: lifecycle.sequence });
+        } else {
+          if (payload.lastProvenMilestone !== undefined) job.lastProvenMilestone = payload.lastProvenMilestone;
+          if (payload.currentCabMandate !== undefined) job.currentCabMandate = payload.currentCabMandate;
+          await persistJob();
         }
-
-        if (payload.currentCabMandate !== undefined) {
-          job.currentCabMandate = payload.currentCabMandate;
-        }
-
-        await persistJob();
         updateStatus("job-progress", { jobId: job.jobId });
         response.writeHead(202, { "content-type": "application/json" });
         response.end(JSON.stringify(publicJob()));
       } catch (cause) {
         response.writeHead(400, { "content-type": "application/json" });
         response.end(JSON.stringify({ error: cause.message }));
+      } finally {
+        if (ownsLifecycleTransition) lifecycleTransitionInFlight = false;
       }
 
       return;
@@ -2266,7 +2325,12 @@ const handle = async (request, response, url) => {
             status: "PENDING",
           })
         );
-      } catch {
+      } catch (cause) {
+        if (cause.code === 'command-too-long') {
+          response.writeHead(400, { 'content-type': 'application/json' });
+          response.end(JSON.stringify(cause.diagnostic));
+          return;
+        }
         response
           .writeHead(400)
           .end();
@@ -2342,7 +2406,12 @@ const handle = async (request, response, url) => {
 
         response.writeHead(202, { "content-type": "application/json" });
         response.end(JSON.stringify({ requestId, status: "PENDING" }));
-      } catch {
+      } catch (cause) {
+        if (cause.code === 'command-too-long') {
+          response.writeHead(400, { 'content-type': 'application/json' });
+          response.end(JSON.stringify(cause.diagnostic));
+          return;
+        }
         response.writeHead(400).end();
       }
 

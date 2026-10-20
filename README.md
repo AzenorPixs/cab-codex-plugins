@@ -6,6 +6,57 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
+## Supervision web locale — CAB Monitor 1.6.1
+
+CAB Monitor fournit une interface moderne et responsive, indépendante du LLM,
+du contrôleur et du superviseur. Elle affiche les briques, les RUN, leurs
+changes, les tâches cochées X/Y, les phases observées et une chronologie
+filtrée. Le tableau distingue ETAT, ÉTAPE et tâches cochées ; la phase
+technique reste dans le détail. Les onze étapes acceptent les retours en
+arrière et conservent leur historique. Les cartes montrent les versions
+réellement observées des briques, sans supposer leur alignement. Une ligne de
+job WAITING est surlignée en jaune ; BLOCKED en rouge.
+Les données arrivent par SSE ; une collecte périodique réconcilie
+l'état et indique les sources indisponibles ou anciennes.
+
+`/cab start` prépare et démarre désormais le service utilisateur du moniteur,
+sans activation au login. Il vérifie le service, la page, la version et le
+workspace, puis affiche son URL réelle. Une instance déjà conforme est
+réutilisée. Le moniteur reste disponible après `/cab stop` ou une panne du
+contrôleur ou du superviseur. Ses erreurs sont signalées séparément du statut CAB.
+
+Le lancement manuel reste possible depuis la racine du projet à observer :
+
+```bash
+OC_Codex_WORKSPACE="$PWD" node /chemin/vers/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs
+```
+
+Ouvrir ensuite [CAB Monitor local](http://127.0.0.1:8790). Le port se configure
+avec `OC_Codex_MONITOR_PORT`. Le moniteur peut démarrer même si CAB est arrêté ;
+la page signale alors les données indisponibles. Ce lancement ne démarre aucun
+autre composant. La limite effective de commande est affichée en unités
+UTF-16, avec 16 384 comme défaut de référence. Une limite inconnue reste
+indisponible. Le compteur de tâches ne mesure ni le temps restant ni une
+validation métier. Configuration et couverture : section « CAB Monitor » de
+`TECHNICAL.md`. La préparation source n'installe aucun service.
+
+Le menu **STATS**, sous **MONITOR**, affiche les statistiques du contexte
+courant, de la dernière livraison ou des dernières 24 h, 7 jours et 30 jours,
+avec filtre par RUN. Les sources natives et importées restent séparées ;
+couverture et date du dernier succès sont visibles. Les cumuls de décisions,
+outils et latences sont distingués des métriques de fenêtre. Une source absente
+reste `N/A` et une panne marque les dernières données comme anciennes.
+
+Dans STATS, **PURGER…** permet de choisir **1, 3, 7, 30 ou 365 jours**, puis
+de prévisualiser et confirmer la suppression des historiques statistiques
+strictement antérieurs à la date affichée. Annuler ne supprime rien. Les
+contextes actifs ou encore référencés, les fichiers opérationnels et les
+preuves métier restent protégés ; les agrégats globaux cumulatifs sont
+conservés. La suppression confirmée est irréversible sans sauvegarde préalable.
+La rétention native reste limitée à 30 jours : choisir 365 jours ne l'étend
+pas. Une erreur partielle présente le résultat par magasin. Aucun nettoyage
+automatique n'est activé.
+
 Codex est l’orchestrateur et le validateur de la session : il pilote les
 mandats du démarrage à la clôture et rend une décision explicite pour chaque
 opération nécessitant une permission OpenCode. CAB transmet cette décision,
@@ -54,7 +105,7 @@ Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
 les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
 le complète depuis les preuves autorisées et mandate sa publication.
 
-CAB 1.3.0 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+CAB 1.6.1 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
 
 Les consultations /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
@@ -80,13 +131,15 @@ Contrôleur unique ──► contextes A, B, … ──► Codex / Codex App Ser
    └── Registre : changes exclusifs, accès atomiques et gels exceptionnels
 
 OpenCode ── SSE HTTP commun ──► superviseur unique ──► suivi par RUN
+
+Contrôleur + superviseur + OpenCode ── observations ──► CAB Monitor ──► navigateur local
 ```
 
 Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.3.0 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.6.1 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -122,7 +175,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.3.0 partagée"]
+    subgraph CAB["Infrastructure CAB 1.6.1 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -145,6 +198,7 @@ flowchart TB
         end
         J1[("États persistants RUN A<br/>job, jalons, gate et supervision")]
         J2[("États persistants RUN B<br/>job, jalons, gate et supervision")]
+        WM["CAB Monitor indépendant<br/>observation et statistiques"]
         B <-->|"Persistance"| E
         B <-->|"HTTP : demande et décision corrélées"| T
         T1 <-->|"Persistance"| J1
@@ -157,6 +211,14 @@ flowchart TB
 
     A["Codex App Server — mode automatique<br/>validation isolée et corrélée par RUN"]
     W[("Répertoire de projet partagé<br/>opérations couvertes par leurs accès compatibles")]
+
+    WB["Navigateur local — interface dynamique"]
+    T -->|"HTTP + SSE filtrés"| WM
+    S -->|"Statut public HTTP"| WM
+    OC -->|"Santé et activité HTTP"| WM
+    WM -->|"Page web + SSE"| WB
+    WB -.->|"Purge statistique confirmée"| WM
+    WM -.->|"Maintenance des seuls historiques statistiques"| T
 
     D -->|"Objectifs, périmètres et validations"| C
     C <-->|"HTTP : registre et pilotage par RUN"| T
@@ -414,6 +476,7 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 | `OC_Codex_STATUS_HOST` | adresse loopback du contrôleur : `127.0.0.1` ou `::1` |
 | `OC_Codex_STATUS_PORT` | port local du contrôleur |
 | `OC_Codex_RECONNECT_MS` | délai de reconnexion SSE |
+| `OC_Codex_MAX_COMMAND_LENGTH` | longueur inclusive maximale d'une commande, 16 384 unités UTF-16 par défaut ; `2000` rétablit le seuil précédent |
 | `OC_Codex_CONTROLLER_URL` | base HTTP du contrôleur ou endpoint `/status`, avec slash final éventuel, communs au healthcheck et au superviseur |
 | `OC_Codex_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readinessterme |
 | `OC_Codex_SUPERVISOR_URL` | endpoint de statut du superviseur utilisé par le healthcheck |
@@ -426,6 +489,19 @@ Le broker Python n'utilise actuellement aucune dépendance Python tierce.
 
 Les noms historiques équivalents préfixés `OC_CGPT_` restent acceptés pour la
 compatibilité avec les installations existantes.
+
+Pour la limite de commande, le nom principal présent prévaut sur l'alias,
+même si sa valeur est invalide. La valeur fournie doit être un entier décimal
+ASCII strictement positif et sûr JavaScript, sans espace, signe ou fraction ;
+une valeur vide ou invalide refuse le démarrage. Le comptage utilise
+`String.length` : un caractère hors BMP compte pour deux unités UTF-16.
+Une commande trop longue reçoit HTTP 400 JSON avec `error: command-too-long`,
+`message`, `maxLength`, `actualLength` et `unit: utf16`, sans son contenu et
+avant enregistrement. Le broker conserve un diagnostic filtré dans sa trace
+d'échec de notification ; ce refus technique ne constitue pas une décision.
+La règle reste une commande exacte, une décision corrélée et une permission
+native `once` unique, selon les règles de corrélation existantes. La limite
+de transport HTTP de 256 KiB reste indépendante. Voir TECHNICAL.md, section 15.
 
 Le mode `OC_Codex_DECISION_MODE=manual`, utilisé par défaut, conserve les
 demandes en attente d'une décision HTTP explicite de l'orchestrateur
@@ -486,7 +562,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.3.0`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.6.1`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -500,7 +576,7 @@ installations locales.
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
 
-## Plusieurs sessions CISMP — CAB 1.3.0
+## Plusieurs sessions CISMP — CAB 1.6.1
 
 Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
 

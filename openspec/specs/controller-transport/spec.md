@@ -533,3 +533,86 @@ L'usage historique unique sans RUN MUST conserver ses décisions et once, sans c
 #### Scenario: Passage depuis un usage historique
 - **WHEN** une permission historique a été consommée puis un RUN concurrent est demandé
 - **THEN** l'admission attend une clôture réconciliée des sessions/racines historiques sans rejouer la permission
+
+### Requirement: Limite configurable de commande unitaire
+
+Le contrôleur MUST résoudre au démarrage `OC_Codex_MAX_COMMAND_LENGTH`, ou son alias `OC_CGPT_MAX_COMMAND_LENGTH` si le nom principal est absent. Il MUST utiliser 16 384 lorsque les deux noms sont absents. La limite MUST être commune à tous les contextes du processus.
+
+#### Scenario: Défaut et bornes
+- **WHEN** aucune variable de limite n'est fournie et une commande contient 16 383, 16 384 ou 16 385 unités UTF-16
+- **THEN** les deux premières passent le contrôle de longueur et la troisième est refusée
+
+#### Scenario: Configuration et alias
+- **WHEN** le nom principal est absent et l'alias vaut 2000
+- **THEN** le seuil est 2 000, avec admission à 1 999 et 2 000 et refus à 2 001
+
+#### Scenario: Priorité explicite
+- **WHEN** les deux noms sont présents
+- **THEN** le nom principal prévaut, y compris lorsque sa valeur est invalide
+
+### Requirement: Validation de la configuration de longueur
+
+Une valeur fournie MUST contenir uniquement des chiffres ASCII et représenter un entier strictement positif et sûr JavaScript. Une valeur invalide MUST faire échouer le démarrage avant ouverture HTTP, modification du registre ou lancement de Codex, sans afficher sa valeur.
+
+#### Scenario: Configuration invalide
+- **WHEN** la valeur fournie est vide, zéro, signée, fractionnaire, espacée, exponentielle, non numérique ou supérieure au maximum entier sûr
+- **THEN** le démarrage échoue avec un diagnostic nommant la variable sans exposer sa valeur
+
+### Requirement: Refus explicite des commandes trop longues
+
+Pour les demandes et rappels, sur les routes historiques, resource et par RUN, le contrôleur MUST comparer la longueur de commande à la limite en unités UTF-16, sans modifier son contenu. Un dépassement MUST retourner HTTP 400 JSON contenant `error=command-too-long`, un message construit depuis les longueurs, `maxLength`, `actualLength` et `unit=utf16`. Le diagnostic MUST NOT exposer le contenu de la commande. Les limites de transport MUST rester indépendantes.
+
+#### Scenario: Dépassement sans effet
+- **WHEN** une demande ou un rappel porte une commande de longueur L+1 pour une limite L
+- **THEN** le contrôleur retourne le refus structuré avec les deux longueurs sans enregistrer d'opération ni de validation
+
+#### Scenario: Unicode
+- **WHEN** une commande contient des caractères BMP et hors BMP
+- **THEN** leur comptage suit String.length, avec deux unités pour un caractère hors BMP
+
+### Requirement: Refus de longueur sans autorisation implicite
+
+Le contrôle de longueur MUST refuser avant enregistrement de l'opération, appropriation du requestId ou création de validation. Ce refus MUST NOT créer de décision, permission native ou tour Codex. Une commande longue admise MUST conserver les règles existantes de corrélation et de consommation unique.
+
+#### Scenario: Refus avant enregistrement
+- **WHEN** la commande dépasse la limite
+- **THEN** aucune opération, identité de requête ou validation n'est enregistrée et aucune décision ou permission n'est créée
+
+#### Scenario: Commande longue et permission unique
+- **WHEN** une commande longue admise reçoit une décision corrélée et une permission native exacte admissible
+- **THEN** le contrôleur peut transmettre une seule réponse once ; une commande divergente et une seconde permission sans nouvelle décision restent refusées selon les règles de corrélation existantes
+
+### Requirement: Configuration publique effective
+GET /status MUST exposer configuration.maxCommandLength et configuration.commandLengthUnit avec la limite résolue au démarrage et UTF-16. Les vues historiques, globales et par RUN MUST porter la même valeur sans exposer d'autres variables d'environnement.
+
+#### Scenario: Configuration commune aux RUN
+- **WHEN** le contrôleur est configuré avec une limite de 4096
+- **THEN** ses statuts historiques, globaux et par RUN annoncent 4096 unités UTF-16
+
+### Requirement: Journal public d'observation
+GET /monitor/events MUST exposer un journal borné en mémoire, son identité de démarrage, son compteur et sa couverture. Les événements MUST se limiter aux types, dates, séquences, identifiants corrélés et enums fermés de décision ou d'état natif. Cette lecture MUST rester sans effet sur décisions, permissions, réservations ou relances.
+
+#### Scenario: Demande puis décision
+- **WHEN** un mandat reçoit une décision explicite
+- **THEN** le journal expose les transitions corrélées sans commande, corps de message ou raison libre et sa lecture ne retransmet aucune permission
+
+### Requirement: Déclaration structurée de l'étape
+POST /job/progress et sa route par RUN MUST accepter stepId du catalogue, stepStatus et expectedStepSequence. Les états MUST être IN_PROGRESS par défaut, ALREADY_COVERED ou NOT_APPLICABLE. Une déclaration partielle, inconnue ou périmée MUST être refusée avant mutation. Les appels historiques sans ces champs MUST rester compatibles.
+
+#### Scenario: Revue suivie d'une correction
+- **WHEN** un job armé au gate OPEN déclare IMPLEMENTATION avec la séquence courante après REVIEW
+- **THEN** le contrôleur persiste le nouveau passage sans fermer le gate ni modifier la phase
+
+### Requirement: Historique d'étape durable et borné
+Le contrôleur MUST persister lifecycle schéma 1, sequence et au plus cent entrées history contenant sequence, id, status et at. La dernière entrée MUST définir l'étape courante. Les dates MUST être attribuées côté contrôleur. Une répétition identique de la dernière déclaration MUST être idempotente et une déclaration concurrente périmée MUST être refusée.
+
+#### Scenario: Réémission après réponse perdue
+- **WHEN** la dernière déclaration identique est répétée avec sa séquence attendue précédente
+- **THEN** le contrôleur conserve la séquence et l'historique sans second passage
+
+### Requirement: Neutralité métier de l'étape
+Une déclaration d'étape MUST NOT créer permission, décision, reprise ou validation terminale. Après validation du gate, le contrôleur MUST refuser une nouvelle déclaration. Les événements publics MUST exposer uniquement les identifiants et états fermés d'étape avec leur séquence.
+
+#### Scenario: Clôture annoncée sans gate
+- **WHEN** un job déclare CLOSURE alors que son gate est OPEN
+- **THEN** il expose Clôture 11/11 mais conserve le gate OPEN

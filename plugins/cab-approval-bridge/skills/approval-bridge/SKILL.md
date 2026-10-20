@@ -7,7 +7,7 @@ description: Met en place, teste et supervise le dialogue OpenCode–Codex via b
 
 Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par Codex.
 
-## RUN concurrents CAB 1.3.0
+## RUN concurrents CAB 1.6.1
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -17,7 +17,19 @@ Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_i
 
 Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Installer ensemble les scripts controller, job-context, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+Installer ensemble les scripts controller, job-context, run-steps, monitor-events, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+
+## Étapes du cycle et observation web
+
+Charger la référence distribuée `references/run-lifecycle.md` du skill
+approval-bridge pour le catalogue des onze étapes. Après armement, lire la
+séquence courante du job puis déclarer chaque étape examinée par
+`POST /runs/<run_id>/job/progress` avec stepId, stepStatus et
+expectedStepSequence. Un retour de Vérifications ou Revue vers Implémentation
+est autorisé et historisé. Les étapes non renseignées ne sont jamais déduites
+du texte libre, du mandat ou de la phase. ETAT, étape, phase technique et
+cases de tâches restent distincts ; aucune déclaration ne vaut permission ou
+gate terminal. Les jobs anciens sans lifecycle restent compatibles.
 
 ## Invariants
 
@@ -139,7 +151,7 @@ ne redémarre les processus des agents.
 
 ## Statistiques obligatoires à chaque archivage
 
-Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.3.0 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
+Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.6.1 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
 
 Charger le skill voisin `../coding-session-statistics/SKILL.md` dès le début
 de chaque change piloté. Préparer ses relevés de quota et ses sondes avant le
@@ -185,7 +197,7 @@ le job et le runtime selon la procédure ci-dessous, sans purge ni renouvellemen
 5. Relever par API, pour l’agent de codage ciblé, le fournisseur, le modèle et le niveau de raisonnement effectivement configurés. Vérifier que le fournisseur et le modèle sont publiés par OpenCode sans lire de secret.
 6. Créer une session de prévol temporaire sans outil ni accès au projet, lui adresser une requête inoffensive en imposant exactement ces paramètres et vérifier la réponse ainsi que ses métadonnées observées. Fermer la session temporaire après le contrôle.
 7. Si la réponse, le fournisseur, le modèle ou le raisonnement est absent ou divergent, publier `CAB_INACTIF` avec la cause et ne créer ni session persistante ni contrôleur. Ne jamais corriger la configuration à la place du développeur.
-8. Installer ou actualiser les ressources utilisateur du contrôleur et du superviseur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
+8. Avant le contrôleur, appliquer `references/monitor-service.md` : installer le jeu indépendant du moniteur seulement s'il est inactif, ou réutiliser une instance active conforme. Recharger systemd puis exécuter explicitement `systemctl --user start cgpt-approval-bridge-monitor.service` si nécessaire. Vérifier service, page et GET /api/snapshot avec version 1.6.1 et identity.workspace attendus. Afficher l'URL réelle. Préserver la configuration existante et ne pas activer au login. Signaler séparément tout échec sans arrêter ou redémarrer une autre brique. Installer ou actualiser les ressources utilisateur du contrôleur et du superviseur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
 9. Vérifier le statut local du contrôleur.
 10. Démarrer explicitement `cgpt-approval-bridge-supervisor.service` après le contrôleur, sans activation au login. Vérifier son statut local et `Restart=on-failure` ; il supervise le job sans créer de décision ni de session de remplacement.
 11. Démarrer ou maintenir le SSE direct OpenCode.
@@ -269,6 +281,7 @@ Avant de modifier le modèle d’un agent OC :
 - Supprimer les heartbeats et healthchecks créés par `/cab`.
 - Fermer les clients SSE créés par `/cab`.
 - Arrêter explicitement le superviseur démarré par `/cab`, puis le contrôleur, avec `systemctl --user stop` sur leurs services respectifs. Conserver les unités installées et inactives, sans les désactiver ni les supprimer.
+- Préserver `cgpt-approval-bridge-monitor.service`, sa configuration et ses connexions propres ; le moniteur reste disponible après `/cab stop`. Son arrêt requiert une demande explicite distincte.
 - Ne pas arrêter directement `cgpt-validation` : il est géré par OpenCode.
 - Ne pas fermer OpenCode ni son conteneur sans instruction explicite.
 

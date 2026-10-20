@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { ObservationStatistics, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.6.1";
 if (OBSERVATION_VERSION !== VERSION) throw new Error('CAB statistics component version mismatch');
 const categories = ['reservation', 'changes', 'native', 'nativeChanges'];
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });
@@ -403,6 +403,7 @@ export class SessionStatistics {
       `Persistance : ${data.persistence.status}${data.persistence.cause ? ' — ' + data.persistence.cause : ''}. Tests, archive, rapport final et gate : à vérifier par l'orchestrateur, jamais déduits par ce service.\n`;
   }
   async flush() {
+    if (this.maintenance) return;
     if (!this.persistEnabled || !this.dirty || this.error === 'statistics-restoration-invalid') return;
     if (this.saving) { await this.saving; return; }
     this.dirty = false;

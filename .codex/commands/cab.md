@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.3.0
+version: 1.6.1
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -20,7 +20,7 @@ s'appliquent pas à cette consultation. Ne déclencher ni skill de pilotage ni
 skill de statistiques ; ne transmettre aucun message à un autre chat ou agent.
 Les arguments status invalides affichent seulement la syntaxe, sans collecte.
 
-## RUN concurrents CAB 1.3.0
+## RUN concurrents CAB 1.6.1
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -30,7 +30,19 @@ Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_i
 
 Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Installer ensemble les scripts controller, job-context, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+Installer ensemble les scripts controller, job-context, run-steps, monitor-events, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+
+## Étapes du cycle et observation web
+
+Charger la référence distribuée `references/run-lifecycle.md` du skill
+approval-bridge pour le catalogue des onze étapes. Après armement, lire la
+séquence courante du job puis déclarer chaque étape examinée par
+`POST /runs/<run_id>/job/progress` avec stepId, stepStatus et
+expectedStepSequence. Un retour de Vérifications ou Revue vers Implémentation
+est autorisé et historisé. Les étapes non renseignées ne sont jamais déduites
+du texte libre, du mandat ou de la phase. ETAT, étape, phase technique et
+cases de tâches restent distincts ; aucune déclaration ne vaut permission ou
+gate terminal. Les jobs anciens sans lifecycle restent compatibles.
 
 ## Continuité du job
 
@@ -290,6 +302,7 @@ candidate et le job selon la procédure ci-dessous.
 6. Vérifie via l’API OpenCode que le fournisseur et le modèle relevés sont publiés et disponibles. Crée alors une session de prévol temporaire, sans outil ni accès au projet, et lui adresse une requête inoffensive en imposant exactement ce fournisseur, ce modèle et ce niveau de raisonnement.
 7. Contrôle la réponse et ses métadonnées réellement observées. Elles doivent confirmer le même fournisseur, le même modèle et le même niveau de raisonnement. Ferme la session de prévol après cette preuve. Si une valeur est absente, indisponible, divergente ou si la requête échoue, publie `CAB_INACTIF` avec les valeurs attendues et observées, puis n’installe pas le contrôleur et ne crée ni ne réutilise de session persistante.
 8. Résous les ressources du plugin CAB installé, puis copie son contrôleur, son superviseur et leurs modèles d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Crée ou actualise `~/.config/cab-approval-bridge/controller.env` avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
+   Pour le monitoring, appliquer `references/monitor-service.md` du skill CAB installé : préparer son jeu indépendant sous `~/.local/share/cab-approval-bridge-monitor/` et son unité utilisateur, avec `~/.config/cab-approval-bridge/monitor.env` non secret distinct de controller.env. Réutiliser une instance active conforme sans modification ni redémarrage. Sinon, après installation inactive et `systemctl --user daemon-reload`, exécuter explicitement `systemctl --user start cgpt-approval-bridge-monitor.service`. Vérifier le service actif, GET /api/snapshot avec version 1.6.1 et identity.workspace conformes, puis la page locale et afficher l'URL réelle. Préserver les options existantes, dont le port. Un échec du monitoring est signalé séparément sans arrêter une autre brique et sans annoncer le monitoring disponible. Aucune activation au login.
 9. Démarre ou réutilise le contrôleur Codex persistant hors sandbox par `systemctl --user start cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie qu’il est `active` et que son unité utilise `Restart=on-failure`.
 10. Vérifie le contrôleur Codex sur son interface locale.
 11. Démarre explicitement le superviseur utilisateur par `systemctl --user start cgpt-approval-bridge-supervisor.service`, puis vérifie son statut local. Il utilise `Restart=on-failure`, sans activation au login, et ne prend aucune décision CAB.
@@ -521,7 +534,8 @@ CAB vers son marketplace Git est l'unique modification de marketplace autorisée
 4. Arrête explicitement le superviseur démarré par `/cab` avec `systemctl --user stop cgpt-approval-bridge-supervisor.service`, puis arrête explicitement et proprement le contrôleur avec `systemctl --user stop cgpt-approval-bridge-controller.service`. Ne désactive ni ne supprime leurs unités : elles restent installées mais inactives jusqu’au prochain `/cab start`.
 5. Ne tente pas d’arrêter directement `cgpt-validation` : son cycle de vie appartient à OpenCode.
 6. Ne ferme jamais OpenCode sauf instruction explicite du contexte initial ou du développeur.
-7. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs.
+   Préserver explicitement `cgpt-approval-bridge-monitor.service`, sa configuration, ses sources et ses connexions propres : le moniteur reste disponible après cet arrêt. Son arrêt nécessite une demande distincte ; aucune erreur de monitoring ne justifie un arrêt ou redémarrage des autres composants.
+7. Affiche le bilan : éléments arrêtés, éléments préservés et éventuelles erreurs. Inclure le statut et l’URL du monitoring conservé, ou son diagnostic d’indisponibilité.
 
 
 ## Récupération contrôlée de session dans le même RUN
