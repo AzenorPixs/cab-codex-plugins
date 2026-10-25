@@ -129,3 +129,11 @@ rapport individuel contient les six sections et distingue les mesures absentes.
 La préparation source ne déploie pas CAB et ne reprend aucun métier. Le broker
 consommateur ancien n'est pas redémarré depuis ce chat. ACTIVATION.md décrit
 la procédure future et les contrôles à faire autoriser séparément.
+
+Contrôle après synchronisation : quatre paragraphes d'exigence dépassaient
+la borne de longueur du mode strict. Ils sont reformulés sans changement de
+contrat, identiquement dans ce delta archivé et son canon, sans réarchivage.
+
+Clôture vérifiée : OpenSpec global strict 13/13 après synchronisation,
+27 exigences correspondantes dans les canons, tâches terminées, rapport
+individuel à six sections et archives L1/L2 inchangées. Aucun réarchivage.
