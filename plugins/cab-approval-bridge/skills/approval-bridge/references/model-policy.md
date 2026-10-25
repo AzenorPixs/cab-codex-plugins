@@ -1,4 +1,4 @@
-# CAB 1.10.0 — modèle de codage et PLLM automatique
+# CAB 1.10.1 — modèle de codage et PLLM automatique
 
 ## Priorité du prompt
 
@@ -21,7 +21,7 @@ La sélection publiée low ne prouve pas la disponibilité ou les performances d
 3. Avant de supprimer la seule session temporaire du prévol, armer le job avec modelSelectionProtocol=pllm-auto-v1, modelSelection={model?,reasoning?} et modelPreflight={sessionId,messageId}, en plus du contrat de job. Le contrôleur relit le catalogue et les capacités ; il corrèle la session au workspace, le message assistant terminé avec finish=stop, son parent utilisateur, le fournisseur, modèle et variant exacts, ainsi qu'une réponse texte sans outil. Une preuve divergente refuse l'armement.
 4. Vérifier GET /runs/<runId>/job : codingModel conserve fournisseur, modèle, raisonnement, provenance, priorité, empreinte de catalogue et référence du prévol. Ensuite seulement effectuer les prévols et mandats CAB ordinaires. Le catalogue ne remplace ni permission once ni gate.
 
-Tout nouveau job piloté par le protocole 1.10.0 négocie pllm-auto-v1, même si modelSelection est {}. Les contrats historiques non négociés et les jobs déjà persistés restent lisibles, sans prétendre qu'ils ont adopté ces nouveaux défauts. Un champ codingModel fourni directement par le client est refusé : il est produit par le serveur après preuve.
+Tout nouveau job piloté par le protocole 1.10.1 négocie pllm-auto-v1, même si modelSelection est {}. Les contrats historiques non négociés et les jobs déjà persistés restent lisibles, sans prétendre qu'ils ont adopté ces nouveaux défauts. Un champ codingModel fourni directement par le client est refusé : il est produit par le serveur après preuve.
 
 ## Reprise et responsabilités
 

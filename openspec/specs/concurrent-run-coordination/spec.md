@@ -74,14 +74,14 @@ Les validations et publications MUST protéger leurs entrées, effets et dépend
 - **THEN** le rapport de B continue sans attendre une exclusion d'intégration générale
 
 ### Requirement: Prompts pilotés cohérents
-Les prompts pilotés des projets inventoriés MUST utiliser le protocole 1.10.0 et un checkpoint par RUN lors de leur déploiement autorisé. Les sous-jobs MUST hériter du RUN parent. CISM, CAISM et les prompts directs MUST rester inchangés et hors concurrence pilotée. La préparation source MUST NOT propager ces changements.
+Les prompts pilotés des projets inventoriés MUST utiliser le protocole 1.10.1 et un checkpoint par RUN lors de leur déploiement autorisé. Les sous-jobs MUST hériter du RUN parent. CISM, CAISM et les prompts directs MUST rester inchangés et hors concurrence pilotée. La préparation source MUST NOT propager ces changements.
 
 #### Scenario: Sous-job CISMP
 - **WHEN** CISMP appelle SPCMP ou ISMP avec plusieurs changes présents
 - **THEN** le sous-job traite le change réservé et les accès de son RUN parent
 
 ### Requirement: File équitable d'intégration
-L'attente d'une opération MUST être durable, idempotente et FIFO entre demandes incompatibles. Une demande indépendante MUST pouvoir avancer. Une annulation MUST être explicite sans libérer un effet commencé. La file historique globale MUST NOT suspendre les pairs dans le profil 1.10.0.
+L'attente d'une opération MUST être durable, idempotente et FIFO entre demandes incompatibles. Une demande indépendante MUST pouvoir avancer. Une annulation MUST être explicite sans libérer un effet commencé. La file historique globale MUST NOT suspendre les pairs dans le profil 1.10.1.
 
 #### Scenario: Deux demandes et publication
 - **WHEN** A puis B demandent une même ressource pour publier
@@ -124,7 +124,7 @@ Les protections temporaires MUST couvrir la seule opération ou le groupe cohér
 - **THEN** les protections métier sont libérées avant le rapport sans supprimer rapport ni gate
 
 ### Requirement: Publication et phase documentaire atomiques
-CAB MUST proposer une transition publiée atomique vers REPORT avec génération, révisions attendues, preuves et cible vérifiées. Séquence de publication, reçu, portée documentaire et libération sûre MUST être persistés ensemble. Les anciennes routes incompatibles MUST être refusées sans effet dans le profil 1.10.0.
+CAB MUST proposer une transition publiée atomique vers REPORT avec génération, révisions attendues, preuves et cible vérifiées. Séquence de publication, reçu, portée documentaire et libération sûre MUST être persistés ensemble. Les anciennes routes incompatibles MUST être refusées sans effet dans le profil 1.10.1.
 
 #### Scenario: Publication concurrente suivante
 - **WHEN** A termine la publication atomique et B publie indépendamment
@@ -352,3 +352,14 @@ Une réinitialisation CAB MUST refuser une réservation de test détenue, en att
 #### Scenario: Réservation de test persistée sans accès de commande
 - **WHEN** une purge rencontre une réservation HELD ou WAITING
 - **THEN** aucun fichier runtime n'est supprimé et la réservation reste conservée
+
+### Requirement: Conservation des identités logiques historiques
+Le lecteur MUST conserver sans réécriture les clés logiques historiques des révisions, opérations et accès. La validation canonique des nouveaux environnements MUST rester appliquée à l'acquisition de test et avant permission native. Une ancienne clé historique MUST NOT donner une réservation ou permission nouvelle. Les protections des fichiers et alias physiques MUST rester conservées.
+
+#### Scenario: Ancienne clé de navigateur terminée
+- **WHEN** le registre contient browser:c14-headless-test-profiles dans des opérations COMPLETED et accès RELEASED
+- **THEN** la restauration conserve les identifiants et preuves exacts, sans créer de réservation ni modifier l'historique
+
+#### Scenario: Nouvelle acquisition non canonique
+- **WHEN** un RUN tente de réserver cette ancienne clé comme environnement de test
+- **THEN** l'acquisition reste refusée et aucune permission native n'est admise sans une réservation canonique détenue

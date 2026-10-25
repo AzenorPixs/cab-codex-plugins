@@ -49,7 +49,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version source actuelle est `1.10.0` pour le broker, le contrôleur et le
+La version source actuelle est `1.10.1` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -311,7 +311,7 @@ correctif source.
 Le change `fix-orphaned-validation-admission` ajoute
 `POST /runs/<runId>/validation/reconcile`. Le statut du contrôleur et du RUN
 expose `notificationReconciliation: rejection-only-v1` lorsque ce code est
-chargé. La base 1.10.0 seule ne prouve pas sa présence dans un processus.
+chargé. La base 1.10.1 seule ne prouve pas sa présence dans un processus.
 
 Le corps comporte exactement `transactionId`, `developerAuthorization`
 (référence non secrète d'un accord spécifique), `jobId`, `recoveryId` et
@@ -749,7 +749,7 @@ et archive prouvées, la phase /closing limite la réservation au rapport et
 libère les ressources métier. Le rapport et le gate restent obligatoires avant
 livraison ; une nouvelle référence ne défait pas cette publication figée.
 
-### Statistiques natives, fenêtres et coordination 1.10.0
+### Statistiques natives, fenêtres et coordination 1.10.1
 
 SessionStatistics conserve ses agrégats et son brouillon individuel à six sections. Son snapshot schéma 2 lit le schéma 1 ; les métriques de ressources portent leur borne availableFrom sans reconstruction rétroactive. ObservationStatistics conserve séparément, dans son magasin schéma 2 lié au projet exact, segments, événements et imports filtrés dans controller-observations.json privé. Les sources se recouvrant ne sont pas additionnées ; busy et issuedEffectMs ne prouvent pas du codage productif.
 
@@ -763,7 +763,7 @@ La référence concurrent-runs.md détaille accès, révisions, publication, sup
 
 Les clés HMAC et autres secrets doivent être injectés par l'environnement et rester hors Git, des journaux, des diagnostics et des sorties utilisateur.
 
-## Contextes concurrents 1.10.0
+## Contextes concurrents 1.10.1
 
 Le registre controller-runs.json schéma 4 persiste sous autorité flock les identités, portées, accès actifs, files incompatibles, opérations, révisions, reçus et exceptions. Les schémas 1/2/3 sont restaurés en mode migration requise, sans nouvelle permission. Le magasin d'approbations broker conserve son schéma extensible 2 ; les champs d'opération nouveaux sont persistés/corrélés et la capacité resource-scoped-v1 empêche un jeu mixte d'autoriser un effet.
 
@@ -771,7 +771,7 @@ POST /runs/reserve attribue change/intention ; resources déclare la portée et 
 
 Lors d'une nouvelle réservation, une suspension propre au RUN ne s'applique que si sa réservation précédente est encore RESERVED. Après libération réconciliée en ABANDONED ou DELIVERED, le même propriétaire peut obtenir une génération et un contexte neufs ; le STOP précédent reste dans l'historique sans être hérité. Les contrôles globaux restent systématiques, ainsi que ceux de propriétaire, de change déjà livré, de dépendances et de ressources. Cette transition ne transmet ni décision consommée ni permission native et ne modifie pas le schéma du registre.
 
-Les notifications concurrentes du broker utilisent /validation/resource-request et /validation/resource-reminder, absentes des anciens contrôleurs. Les routes historiques restent disponibles sur le contrôleur 1.10.0 sous les mêmes gardes ; aucun repli vers leur chemin ancien ne transporte un RUN vers un ancien contrôleur. Les modules chargés vérifient leurs versions cohérentes avant démarrage.
+Les notifications concurrentes du broker utilisent /validation/resource-request et /validation/resource-reminder, absentes des anciens contrôleurs. Les routes historiques restent disponibles sur le contrôleur 1.10.1 sous les mêmes gardes ; aucun repli vers leur chemin ancien ne transporte un RUN vers un ancien contrôleur. Les modules chargés vérifient leurs versions cohérentes avant démarrage.
 
 Chaque request_validation ajoute coordination_protocol, operation_id, operation_digest, expected_revisions et access_id optionnel, en plus de run_id, reservation_version et resources. La décision reprend ces identités et le manifeste. Le contenu est préparé hors détention d'écriture inutile ; avant once, le contrôleur recontrôle les accès, révisions, session et règles natives ask. Un jeton restauré ou libéré ne donne pas une nouvelle permission. /locks/reconcile exige la frontière native prouvée et renouvelle token/fencing sans relâcher les fichiers ; une correction utilise une identité neuve.
 
@@ -801,7 +801,7 @@ POST /runs/<runId>/suspend reçoit PAUSE, STOP ou RESUME avec version/evidence. 
 Les usages historiques uniques sans RUN restent compatibles, mais leurs sessions/racines mutables sont enregistrées dans legacySources. Aucune réservation Multi-RUN ne les dépasse. /coordination/legacy/reconcile n'efface cette trace qu'après clôture historique, quiescence native et preuves examinées sous HELD pour réconciliation/maintenance ; legacyHandoffs conserve le reçu. Cette transition exceptionnelle ne réintroduit pas de barrière ordinaire entre RUN coordonnés.
 
 
-## CAB Monitor — supervision web 1.10.0
+## CAB Monitor — supervision web 1.10.1
 
 Le serveur indépendant `cgpt-approval-bridge-monitor.mjs` utilise uniquement
 Node.js et les ressources locales de `web-monitor/`. Il n'appelle aucun LLM.
@@ -877,7 +877,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.10.0. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.10.1. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -934,7 +934,7 @@ dernier succès et signalent les versions connues provenant d'une source
 ancienne. Les fichiers DEVOPS.md et la version du moniteur ne remplacent
 jamais une version d'exécution inconnue.
 
-### STATS et maintenance des historiques — 1.10.0
+### STATS et maintenance des historiques — 1.10.1
 
 Le menu gauche affiche MONITOR et STATS avec sélection accessible et fragments
 `#monitor` / `#stats`. STATS consulte toutes les cinq secondes, uniquement
@@ -992,7 +992,7 @@ son repère bleu. Une cause de blocage ou HUMAN_REQUIRED est prioritaire sur
 une demande en attente ; un passage à UNKNOWN retire la couleur d'état courant.
 
 
-### Démarrage du service web par /cab start — 1.10.0
+### Démarrage du service web par /cab start — 1.10.1
 
 La référence distribuée `skills/approval-bridge/references/monitor-service.md`
 définit l'installation différée et la vérification. Dès la résolution du workspace,
@@ -1008,7 +1008,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 1.10.0 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 1.10.1 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1021,7 +1021,7 @@ d'identité sont en lecture ; aucune déclaration d'étape, purge statistique,
 permission ou relance n'est déclenchée. Le lancement manuel reste disponible.
 La préparation SCM n'exécute aucun démarrage ou déploiement sur le profil réel.
 
-### Gestion du moniteur — 1.10.0
+### Gestion du moniteur — 1.10.1
 
 Le module monitor-management est partagé avec le contrôleur. Les POST
 /api/manage/catalog et /api/manage/service exigent JSON, x-cab-monitor: 1,
@@ -1068,7 +1068,7 @@ sont pas présentées comme des succès. Une libération de garde non confirmée
 est signalée avec son expiration ; un contrôleur remplacé perd sa garde
 en mémoire. Aucun appel LLM ni activation au login n'est ajouté.
 
-## Maintenance de récupération gelée — 1.10.0
+## Maintenance de récupération gelée — 1.10.1
 
 Le profil explicite `frozen-recovery-controller` de update.mjs prépare la
 fermeture d'imports du contrôleur et la sauvegarde de ses seuls artefacts.
@@ -1109,7 +1109,7 @@ exigés. Un chemin fourni dans le corps HTTP n'est jamais suivi.
 Le profil exige des pairs sous PAUSE explicitement autorisée pendant toute
 la transition mixte. Après complete, aucun nouveau mandat métier n'est
 approuvé avant une maintenance ordinaire distinctement autorisée alignant
-réellement les quatre briques en 1.10.0, puis une reprise explicitement validée.
+réellement les quatre briques en 1.10.1, puis une reprise explicitement validée.
 Cette seconde maintenance peut reconnecter le broker et relancer le Web :
 elle n'est pas incluse dans le profil gelé ou dans la préparation source.
 
@@ -1118,11 +1118,11 @@ et attribuer la seule demande au prévol ciblé. Un écart reste bloquant, sans
 déduire sa cause ni annuler une demande inconnue. Une publication fraîche est
 requise après chargement ; le profil attend la télémétrie du broker conservé.
 
-Le profil qualifie temporairement contrôleur 1.10.0 avec broker, superviseur
+Le profil qualifie temporairement contrôleur 1.10.1 avec broker, superviseur
 et Web 1.7.1 conservés. packageVersion, runtimeVersions, maintenanceBuildDigest
 et frozenRecoveryMaintenance distinguent paquet et processus. La preuve
 isolée va jusqu'au prévol neuf once/exit 0 et complete avec le même broker
-original. Elle ne vaut pas déploiement global 1.10.0 ni test produit Pixs.
+original. Elle ne vaut pas déploiement global 1.10.1 ni test produit Pixs.
 Une version préservée inconnue ou différente est refusée. Le mode ordinaire
 update conserve ses contrôles et ses opérations de cycle de vie propres.
 
@@ -1133,11 +1133,11 @@ réinstallé. --rollback est refusé pour ce profil : il ne doit pas être
 interprété comme une nouvelle maintenance. Toute reprise utilise le même
 journal et refuse une preuve expirée ou altérée.
 
-## Mise à jour des briques actives — 1.10.0
+## Mise à jour des briques actives — 1.10.1
 
 La référence distribuée references/component-update.md définit l'exploitation.
 Le script cgpt-approval-bridge-update.mjs reçoit le plugin installé, les cibles
-non secrètes résolues et les bases HTTP loopback. Il valide la version 1.10.0,
+non secrètes résolues et les bases HTTP loopback. Il valide la version 1.10.1,
 les imports, la syntaxe et les empreintes du jeu complet, dont broker/. Une
 version supérieure déjà déployée interdit le downgrade. Un jeu conforme et
 des processus conformes donnent up-to-date sans arrêt.
@@ -1181,7 +1181,7 @@ sortie filtrée conserve null pour les identités absentes et marque l'observati
 historique. Il n'accède pas au magasin privé et n'effectue aucune attribution,
 annulation ou preuve actuelle d'absence d'effet. Une inconnue reste bloquante.
 
-## Broker externe en lecture seule — 1.10.0
+## Broker externe en lecture seule — 1.10.1
 
 update.mjs ajoute brokerPolicy=reuse-readonly avec layout=managed-release et
 preuve privée brokerProof. broker-artifact-proof.mjs vérifie les trois modules
@@ -1200,7 +1200,7 @@ versions actives cibles, même OpenCode et mêmes identités métier. Les modes
 par défaut et les gardes retry/prévol/ASK/once restent conservés. La référence
 component-update.md précise le JSON et les options CLI.
 
-## Réservations des environnements de test et vue Web — 1.10.0
+## Réservations des environnements de test et vue Web — 1.10.1
 
 Le contrôleur expose `testResourceProtocol: test-resources-v1`. Le registre 4 accepte la collection optionnelle `testReservations`, créée au premier usage avec identités RUN/contexte/génération, ensemble canonique, ordre FIFO, token/fencing et reçus. Une acquisition complète est atomique ; Docker utilise `docker:<identité-moteur>` et LXC `lxc:<identité-hôte>/<identité-instance>`, sans secret. Ces clés représentent des identités physiques résolues explicitement par le propriétaire ; aucun alias inconnu ne doit être déclaré indépendant.
 
@@ -1212,8 +1212,20 @@ La carte Web utilise le dernier snapshot valide appliqué par ce navigateur : Di
 
 Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromium et Firefox, suivent aussi ce cycle avec les clés `browser:<hôte>/<navigateur>`. La réservation reste détenue jusqu'à fermeture des sessions WebDriver/BiDi et processus, libération des ports et profils temporaires du change, nettoyage puis vérification distincts. Les sessions utilisateur préexistantes sont préservées. Les ensembles navigateur/conteneur sont acquis atomiquement ; des mécanismes indépendants peuvent avancer.
 
-## Sélection du modèle de codage — 1.10.0
+## Sélection du modèle de codage — 1.10.1
 
 Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, choisir high, puis xhigh si high est indisponible, puis la politique de priorité inférieure si les deux sont indisponibles. Un modèle imposé incompatible bloque, conformément à la décision du développeur. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.
 
 OC_Codex_PLLM_CATALOG désigne exclusivement le pllm-current.json public du skill actif par chemin absolu, avec alias OC_CGPT_PLLM_CATALOG seulement si le nom principal est absent. Le lecteur refuse symlinks, fichiers non réguliers, liens multiples, taille supérieure à 2 Mio, schéma ou priorités invalides. POST /model-policy/resolve est sans effet fournisseur. POST /job/arm avec modelSelectionProtocol=pllm-auto-v1 vérifie modelSelection et modelPreflight, puis persiste codingModel. Les contrats et limites sont dans la référence model-policy.md. Les reprises transmettent explicitement model et variant à l'API OpenCode. Les nouveaux champs de job restent optionnels pour la lecture des états historiques.
+
+## Borne de lecture du registre de maintenance — 1.10.1
+
+Le client ordinaire de update.mjs accepte 16 Mio seulement pour GET /runs exact et pour la lecture privée de controller-runs.json sous autorité de maintenance. Les autres réponses gardent 2 Mio et les autres fichiers 4 Mio. La borne est contrôlée avant utilisation du JSON ; aucune entrée n'est filtrée ou purgée pour réduire la taille. Les contrôles métier, de propriétaire et de processus restent identiques.
+
+## Compatibilité historique et réparation du candidat — 1.10.1
+
+Le lecteur générique de ressources conserve les clés logiques historiques des révisions, opérations terminées et accès libérés. Le cycle test-resources-v1 vérifie toujours les identités canoniques lors des nouvelles acquisitions et la réservation détenue avant permission. Les contrôles de fichiers, symlinks et hardlinks restent inchangés.
+
+cgpt-approval-bridge-forward-repair.mjs est limité au remplacement qualifié du lecteur runs.mjs dans READONLY_RECOVERY_REQUIRED, avec managed-release à liens de fichiers. Il exige le même HELD SHARED_MAINTENANCE, PAUSE, jobs inchangés, broker déconnecté, quiescence native et processus OpenCode conservé. Le plan privé conserve reçu et stages initiaux, refuse toute autre modification de code et prépare une nouvelle release immuable. Après interruption, le même plan est réutilisé ; aucune restauration de registre n'est effectuée. L'updater ordinaire garde la responsabilité de reconnecter, vérifier les quatre versions et libérer le gel. La procédure et ses arguments sont dans component-update.md.
+
+La preuve de filiation broker parcourt les enfants de tous les threads du processus OpenCode déclaré, déduplique les PID puis conserve les contrôles UID, PPID, lancement Python exact, point d'entrée, identité et unicité. L'identité OpenCode est recontrôlée après découverte ; seule la disparition concurrente d'un thread est tolérée. Aucun environnement ou argv brut n'est exposé.

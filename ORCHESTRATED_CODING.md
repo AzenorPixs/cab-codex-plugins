@@ -44,7 +44,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 1.10.0 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 1.10.1 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -655,9 +655,9 @@ limites de preuve, les fichiers touchés et le premier jalon restant.
 Une fin de tour, un délai, une réponse textuelle ou une relance technique
 ne remplace jamais un état terminal prouvé.
 
-## Pilotage concurrent CAB 1.10.0
+## Pilotage concurrent CAB 1.10.1
 
-### CAB 1.10.0 — coordination atomique par ressource
+### CAB 1.10.1 — coordination atomique par ressource
 
 Un processus OpenCode, un broker MCP stdio, un contrôleur et un superviseur servent plusieurs RUN dans un répertoire commun. Chaque RUN conserve session, job, décisions, preuves et checkpoint. Le contrat courant est `resource-scoped-v1` ; l'ancienne barrière ordinaire d'intégration n'est plus admise.
 
@@ -707,7 +707,7 @@ Avant toute préparation, déclarer les environnements dans le manifeste du chan
 
 `GET /runs/<runId>/test-resources` expose réservations, attentes, propriétaire et besoin de réconciliation. `/test-resources/cancel` avec version, transactionId et evidence annule uniquement une attente. Après crash, PAUSE, STOP ou délai dépassé, conserver les protections. `/test-resources/reconcile` exige l'ancien jeton/fencing, la génération, un `reconciliationId` neuf et les preuves ; après recontrôle natif, il renouvelle jeton/fencing sans libérer l'environnement. Réconcilier séparément les accès de commande restaurés et ne jamais rejouer une once consommée. Publication, réduction de portée, changement de génération et gate normal restent bloqués jusqu'à restitution.
 
-Le registre 4 n'ajoute `testReservations` qu'au premier usage. Les anciens lecteurs stricts refusent cet état enrichi ; revenir à un ancien lecteur après utilisation demande une réconciliation/conversion autorisée, sans effacer les protections. Cette préparation 1.10.0 n'installe ni ne migre aucun runtime et ne propage aucun prompt consommateur.
+Le registre 4 n'ajoute `testReservations` qu'au premier usage. Les anciens lecteurs stricts refusent cet état enrichi ; revenir à un ancien lecteur après utilisation demande une réconciliation/conversion autorisée, sans effacer les protections. Cette préparation 1.10.1 n'installe ni ne migre aucun runtime et ne propage aucun prompt consommateur.
 
 #### Navigateurs externes de test
 
@@ -743,7 +743,7 @@ Les anciens usages uniques sans RUN conservent leurs décisions et once. Une tra
 
 #### Formats et migration
 
-Le registre 1.10.0 utilise le schéma 4 ; les schémas 1/2/3 sont lus en mode migration requise sans anciennes acquisitions globales. Les mutations incompatibles reçoivent coordination-upgrade-required. Broker, clients et contrôleur confirment le protocole avant permission. Le broker concurrent notifie /validation/resource-request et /validation/resource-reminder, routes absentes des anciens contrôleurs, sans repli incompatible. Les versions des modules chargés sont vérifiées avant démarrage. Le magasin broker reste au schéma extensible 2 : les nouveaux champs sont persistés et corrélés, sans conversion implicite des anciens enregistrements.
+Le registre 1.10.1 utilise le schéma 4 ; les schémas 1/2/3 sont lus en mode migration requise sans anciennes acquisitions globales. Les mutations incompatibles reçoivent coordination-upgrade-required. Broker, clients et contrôleur confirment le protocole avant permission. Le broker concurrent notifie /validation/resource-request et /validation/resource-reminder, routes absentes des anciens contrôleurs, sans repli incompatible. Les versions des modules chargés sont vérifiées avant démarrage. Le magasin broker reste au schéma extensible 2 : les nouveaux champs sont persistés et corrélés, sans conversion implicite des anciens enregistrements.
 
 La migration explicitement autorisée vérifie quiescence et sauvegarde privée avec empreinte. RUN, demandes consommées, jobs, candidates et reçus sont conservés ; les ressources historiques restent conservatrices. /coordination/migrate conserve les RUN en PAUSE et impose maintenancePreflightRequired. Vérifier MCP/SSE/readiness en lecture, lever explicitement le gel pour le prévol ciblé en maintenant les pairs en pause, puis autoriser uniquement /usr/bin/true avec manifeste read. Une once acquittée et exit 0 prouvés avant libération de cet accès autorisent ensuite le métier ; un échec conserve cette obligation. /coordination/rollback restitue la sauvegarde uniquement avant nouvel usage sous maintenance quiescente. Le retour arrière avant nouvel usage restitue la sauvegarde exacte ; après de nouveaux effets, une réconciliation/conversion explicite est obligatoire. Une préparation source ne déploie ni ne migre aucun état actif.
 
@@ -769,6 +769,6 @@ Le contrat, les versions mixtes qualifiées et les limites du repli sont
 définis par references/component-update.md ; aucune activation n'est déduite
 du travail source ou de la disponibilité de ce profil.
 
-## Sélection du modèle de codage — 1.10.0
+## Sélection du modèle de codage — 1.10.1
 
 Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, choisir high, puis xhigh si high est indisponible, puis la politique de priorité inférieure si les deux sont indisponibles. Un modèle imposé incompatible bloque, conformément à la décision du développeur. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.
