@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-## Prévol orphelin et maintenance contrôlée — 1.9.0
+## Prévol orphelin et maintenance contrôlée — 1.10.0
 
 Une notification refusée avant admission ne laisse plus de propriétaire de
 demande sans validation locale. Pour un ancien prévol orphelin PENDING,
@@ -21,9 +21,9 @@ ce reçu et confirme le véritable HELD après recontrôle. La maintenance ne
 répare pas elle-même le prévol et n'accorde aucune permission métier.
 
 Cette transition qualifiée conserve OpenCode et le broker, ainsi que le Web.
-Elle peut charger le contrôleur 1.9.0 en conservant ces processus 1.7.1 ; son
-bilan annonce chaque version réellement observée. Le paquet 1.9.0 ne prouve
-pas que tout le runtime est déjà en 1.9.0. Toute autre combinaison est refusée.
+Elle peut charger le contrôleur 1.10.0 en conservant ces processus 1.7.1 ; son
+bilan annonce chaque version réellement observée. Le paquet 1.10.0 ne prouve
+pas que tout le runtime est déjà en 1.10.0. Toute autre combinaison est refusée.
 L'activation exige un accord distinct. Procédure, limites de reprise et
 configuration : `TECHNICAL.md` et la référence distribuée `component-update.md`.
 
@@ -33,7 +33,7 @@ relatifs, avec conservation des anciennes releases. Le diagnostic
 demandes non attribuées. Les procédures et leurs limites figurent dans
 [la référence de maintenance](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
 
-## Supervision web locale — CAB Monitor 1.9.0
+## Supervision web locale — CAB Monitor 1.10.0
 
 CAB Monitor fournit une interface moderne et responsive, indépendante du LLM,
 du contrôleur et du superviseur. Elle affiche les briques, les RUN, leurs
@@ -158,9 +158,9 @@ Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
 les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
 le complète depuis les preuves autorisées et mandate sa publication.
 
-CAB 1.9.0 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+CAB 1.10.0 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
 
-Le jeu source 1.9.0 conserve la correction de reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
+Le jeu source 1.10.0 conserve la correction de reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
 
 Les consultations /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
@@ -194,7 +194,7 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.9.0 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.10.0 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -230,7 +230,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.9.0 partagée"]
+    subgraph CAB["Infrastructure CAB 1.10.0 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -628,7 +628,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.9.0`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.10.0`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -642,13 +642,13 @@ installations locales.
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
 
-## Plusieurs sessions CISMP — CAB 1.9.0
+## Plusieurs sessions CISMP — CAB 1.10.0
 
 Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
 
 Consulter GET /runs puis les routes /runs/<runId>/... ; négocier resource-scoped-v1 avant mandat mutable. Les anciens appels d'intégration globale ordinaire sont refusés sans effet. Lire ORCHESTRATED_CODING.md et la référence du skill avant activation. Les formats historiques exigent une maintenance explicite ; CISM, CAISM et prompts directs restent hors concurrence pilotée. Les worktrees nécessitent une qualification distincte.
 
-## Broker existant sous un autre compte — 1.9.0
+## Broker existant sous un autre compte — 1.10.0
 
 Le mode explicite reuse-readonly réutilise les trois fichiers broker déjà
 cibles sans les installer ni changer leurs droits. Une preuve privée lie
@@ -657,4 +657,18 @@ relancés par leurs autorités respectives, sans fermer OpenCode ou modifier
 son MCP. Après intention de déconnexion, une panne conserve le gel pour
 récupération ; elle ne promet pas un retour au processus ancien. Voir la
 référence component-update.md pour la procédure. Aucune activation réelle
-n'est déclenchée par l'incrément source 1.8.0 vers 1.9.0.
+n'est déclenchée par la préparation source 1.10.0.
+
+## Réservation Docker/LXC et actualisation — 1.10.0
+
+Chaque change peut réserver ses environnements de test Docker/LXC avant leur préparation. La réservation reste détenue entre commandes jusqu'à la fin de tous les tests et à une restitution vérifiée : nettoyage puis contrôle distincts, réussis et corrélés. Une interruption, un échec ou un timeout ne libère rien automatiquement. Les changes utilisant d'autres environnements continuent. Le protocole et les limites entre registres CAB sont détaillés dans la référence [concurrent-runs](plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md).
+
+Dans MONITOR, la liste Actualisation propose **Manuel, 1s, 3s, 7s, 30s, 1m, 5m, 10m et 30m**. Le défaut est 1s et le choix est mémorisé dans le navigateur lorsque possible. **Actualiser** récupère immédiatement une vue. En Manuel, le SSE ne modifie pas les données affichées. La collecte des composants reste partagée et indépendante du choix de chaque navigateur.
+
+Le pavé **Web** indique **Disponible** pendant les 30 minutes suivant le dernier rafraîchissement réussi de la vue, puis **Non observé**, même sans nouvelle récupération. Une perte SSE seule ne change pas ce délai et un rafraîchissement échoué ne le prolonge pas. Les autres composants conservent leur fraîcheur propre. La version source 1.10.0 ne prouve aucune mise à jour de l'installation active.
+
+Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromium et Firefox, suivent aussi ce cycle avec les clés `browser:<hôte>/<navigateur>`. La réservation reste détenue jusqu'à fermeture des sessions WebDriver/BiDi et processus, libération des ports et profils temporaires du change, nettoyage puis vérification distincts. Les sessions utilisateur préexistantes sont préservées. Les ensembles navigateur/conteneur sont acquis atomiquement ; des mécanismes indépendants peuvent avancer.
+
+## Sélection du modèle de codage — 1.10.0
+
+Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, choisir high, puis xhigh si high est indisponible, puis la politique de priorité inférieure si les deux sont indisponibles. Un modèle imposé incompatible bloque, conformément à la décision du développeur. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.

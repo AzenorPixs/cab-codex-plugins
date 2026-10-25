@@ -2,6 +2,19 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+
+## 1.10.0 — préparation source
+
+- Modèle de codage : modèle explicite du prompt prioritaire, sinon PLLM automatique ; raisonnement high par défaut, puis xhigh, puis politique de priorité inférieure. Un modèle explicitement imposé incompatible bloque. Catalogue public configurable, prévol natif exact, choix persisté et transmis lors des reprises ; contrats historiques conservés sans adoption implicite. Aucun benchmark fournisseur ou changement d'agent actif par la préparation source.
+
+- Même verrouillage étendu aux navigateurs externes DEVOPS, notamment Chromium et Firefox : fermeture des sessions/processus de test et restitution vérifiée des profils et ports avant libération, sans toucher aux sessions utilisateur préexistantes.
+
+- Réservations durables Docker/LXC par RUN/change, acquisition atomique et attente FIFO par environnement ; les verrous de commandes restent temporaires. Libération après fins natives, nettoyage puis vérification corrélés et réussis, avec reçus idempotents et reprise sans expiration automatique.
+- Publication, changement de génération et clôture refusés tant qu'un environnement reste réservé ; les pairs indépendants continuent. Le registre 4 enrichi après premier usage est refusé par les anciens lecteurs stricts.
+- Moniteur : liste Manuel, 1s, 3s, 7s, 30s, 1m, 5m, 10m, 30m, choix mémorisé et bouton Actualiser. Le SSE respecte la cadence de la vue et la collecte serveur reste partagée.
+- Carte Web Disponible pendant les 30 minutes suivant un rafraîchissement réussi, puis Non observé. Une perte SSE ou un rafraîchissement échoué ne remet pas ce délai à zéro.
+- Incrément mineur source 1.9.0 vers 1.10.0, sans déploiement, migration runtime ni changement d'infrastructure.
+
 ## 1.9.0 — préparation source
 
 - Politique explicite reuse-readonly : preuve des trois artefacts broker

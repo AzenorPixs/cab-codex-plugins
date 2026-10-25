@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 
-export const VERSION = '1.9.0';
+export const VERSION = '1.10.0';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -184,7 +184,7 @@ export function operationalState(run, { controllerFresh = true, registryFresh = 
   if (run.cause === 'run-stop') return 'STOPPED';
   if (['run-pause', 'global-coordination-suspended'].includes(run.cause)) return 'PAUSED';
   if (run.readiness === 'HUMAN_REQUIRED') return 'BLOCKED';
-  if (run.cause === 'resource-conflict') return 'WAITING';
+  if (['resource-conflict','test-resource-conflict'].includes(run.cause)) return 'WAITING';
   if (run.cause || ['BLOCKED', 'HUMAN_REQUIRED'].includes(run.readiness)) return 'BLOCKED';
   if (run.pending > 0) return 'WAITING';
   if (run.readiness === 'DEGRADED') return 'DEGRADED';

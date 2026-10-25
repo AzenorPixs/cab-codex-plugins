@@ -1,0 +1,23 @@
+✖ broker en lecture seule : chaîne réelle et complete (6384.943745ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6464.812033
+
+✖ failing tests:
+
+test at tests/maintenance-bootstrap.test.mjs:360:84
+✖ broker en lecture seule : chaîne réelle et complete (6384.943745ms)
+  Error: update-broker-artifact-unsafe
+      at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs:9:46)
+      at artifact (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs:42:98)
+      at async inspectBrokerArtifacts (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs:58:19)
+      at async transitionAndRecovery (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:288:24)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'update-broker-artifact-unsafe'
+  }

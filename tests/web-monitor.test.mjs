@@ -121,7 +121,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     const target = new URL(url); let value;
     if (target.port === '10002') value = { version: '1.4.0' };
     else if (target.pathname === '/global/health') value = { healthy: true, version: '1.19.3' };
-    else if (target.pathname === '/status') value = { version: '1.9.0', mode: 'concurrent', brokerReadiness: { server_version: '1.9.0' },
+    else if (target.pathname === '/status') value = { version: '1.10.0', mode: 'concurrent', brokerReadiness: { server_version: '1.10.0' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -132,7 +132,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '1.9.0', supervisor: '1.4.0', broker: '1.9.0', opencode: '1.19.3', monitor: '1.9.0' });
+  assert.deepEqual(result.componentVersions, { controller: '1.10.0', supervisor: '1.4.0', broker: '1.10.0', opencode: '1.19.3', monitor: '1.10.0' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -144,7 +144,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
 test('ETAT suit les faits frais et ne modifie aucune étape', () => {
   const base = { runId: 'a', state: 'RESERVED', armed: true, gate: { status: 'OPEN' }, pending: 0 };
   assert.equal(operationalState(base), 'RUNNING');
-  for (const [fields, expected] of [[{ pending: 1 }, 'WAITING'], [{ cause: 'resource-conflict' }, 'WAITING'],
+  for (const [fields, expected] of [[{ pending: 1 }, 'WAITING'], [{ cause: 'resource-conflict' }, 'WAITING'], [{ cause: 'test-resource-conflict' }, 'WAITING'],
     [{ cause: 'run-pause' }, 'PAUSED'], [{ cause: 'run-stop' }, 'STOPPED'], [{ readiness: 'HUMAN_REQUIRED' }, 'BLOCKED'],
     [{ readiness: 'DEGRADED' }, 'DEGRADED'], [{ state: 'DELIVERED' }, 'DONE'], [{ state: 'ABANDONED' }, 'STOPPED'],
     [{ gate: { status: 'VALIDATED', declaredState: 'TERMINÉ' } }, 'DONE']]) {

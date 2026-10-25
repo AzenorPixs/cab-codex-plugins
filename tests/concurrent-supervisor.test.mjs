@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
-async function checkSupervision(t, coordinationReason = null) {
+async function checkSupervision(t, coordinationReason = null, codingModel = false) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-multi-supervisor-'));
   const jobs = Object.fromEntries(['a', 'b'].map((id) => [id, { runId: id, jobId: 'job-' + id,
     sessionId: 'ses_' + id, directory, changeId: 'change-' + id, armed: true,
@@ -16,6 +16,9 @@ async function checkSupervision(t, coordinationReason = null) {
   const statuses = { a: { opencodeSse: 'connected', brokerReadiness: { status: 'READY', pending_count: 1 } },
     b: { opencodeSse: 'connected', brokerReadiness: { status: 'READY', pending_count: 0 } } };
   if (coordinationReason) { statuses.a.brokerReadiness.pending_count = 0; statuses.a.coordination = { reason: coordinationReason }; }
+  if (codingModel) jobs.b.codingModel={protocol:'pllm-auto-v1',source:'prompt',providerID:'provider1',modelID:'model1',reasoning:'xhigh',
+    mode:null,priority:null,evaluatedAt:null,catalogDigest:null,selectedAt:new Date().toISOString(),
+    preflight:{sessionId:'ses_probe',messageId:'msg_probe',verifiedAt:new Date().toISOString()}};
   const sent = []; const busy = {};
   const controller = createServer((request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname;
@@ -57,6 +60,7 @@ async function checkSupervision(t, coordinationReason = null) {
   });
   for (let i = 0; i < 100 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(sent.length, 1); assert.equal(sent[0].sessionId, 'ses_b');
+  if(codingModel){assert.deepEqual(sent[0].body.model,{providerID:'provider1',modelID:'model1'});assert.equal(sent[0].body.variant,'xhigh');}
   let state;
   for (let i = 0; i < 50; i++) {
     state = await (await fetch('http://127.0.0.1:' + port + '/status')).json();
@@ -73,3 +77,7 @@ async function checkSupervision(t, coordinationReason = null) {
 test('supervision partagée : attente de A, reprise unique de B et compteurs séparés', { timeout: 10000 }, (t) => checkSupervision(t));
 test('un conflit de ressource de A ne provoque aucune relance et préserve B', { timeout: 10000 }, (t) => checkSupervision(t, 'resource-conflict'));
 test('une pause ciblée reste prioritaire sur le réveil du superviseur', { timeout: 10000 }, (t) => checkSupervision(t, 'run-pause'));
+
+test('une attente Docker/LXC ne provoque aucune relance et préserve les pairs', { timeout: 10000 }, (t) => checkSupervision(t, 'test-resource-conflict'));
+
+test('le superviseur réutilise explicitement le modèle et le raisonnement validés', { timeout: 10000 }, (t) => checkSupervision(t, null, true));

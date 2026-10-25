@@ -17,9 +17,19 @@ async function waitFor(check) {
   for (let i = 0; i < 200; i++) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
-async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
+async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
   const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
+  if (codingPolicy) {
+    const stamp=new Date(Date.now()-60000).toISOString();
+    const catalog={schema_version:2,evaluated_at:stamp,published_at:stamp,selection_status:'selected',selected_mode:'mode1',
+      models:Array.from({length:6},(_,i)=>({mode:'mode'+(i+1),priority:i+1,state:'Valide',selected:i===0,provider:'provider'+(i+1),
+        model_id:'model'+(i+1),evaluated_this_run:true,evaluated_at:stamp,reasoning:'low'}))};
+    const path=join(directory,'pllm-current.json');writeFileSync(path,JSON.stringify(catalog));environment={...environment,OC_Codex_PLLM_CATALOG:path};
+    native.providers={connected:catalog.models.map(m=>m.provider),all:catalog.models.map(m=>({id:m.provider,models:{[m.model_id]:{variants:{high:{},xhigh:{},low:{}}}}}))};
+    native.messages.ses_probe=[{info:{id:'msg_user',sessionID:'ses_probe',role:'user',model:{providerID:'provider1',modelID:'model1'},variant:'high'},parts:[]},
+      {info:{id:'msg_response',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_user',providerID:'provider1',modelID:'model1',time:{completed:Date.now()-10}},parts:[{type:'text',text:'probe ok'}]}];
+  }
   const eventStreams = new Set();
   native.emit = (event) => { for (const stream of eventStreams) stream.write('data: ' + JSON.stringify(event) + '\n\n'); };
   const children = [];
@@ -33,7 +43,9 @@ async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
       response.write('data: {"type":"server.connected"}\n\n'); return;
     }
     let payload;
-    if (url.pathname === '/permission') payload = native.permissions;
+    if (url.pathname === '/provider') payload = native.providers || {all:[],connected:[]};
+    else if (/^\/session\/[^/]+\/message\/[^/]+$/.test(url.pathname)) payload=(native.messages[url.pathname.split('/')[2]] || []).find(m=>m.info?.id===url.pathname.split('/')[4]);
+    else if (url.pathname === '/permission') payload = native.permissions;
     else if (url.pathname === '/global/health') payload = { healthy: true };
     else if (url.pathname === '/path') payload = { directory };
     else if (url.pathname === '/mcp') payload = { 'cgpt-validation': { status: 'connected' } };
@@ -95,12 +107,12 @@ async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
       directory, changeId: 'change-' + id, strictCommands: true, criteria: ['delivery', 'statistics'] });
     assert.equal(arm.status, 201, JSON.stringify(arm)); return r.body;
   }
-  const approval = (run, requestId) => {
+  const approval = (run, requestId, expectedRevisions = null) => {
     const resources = requestId.startsWith('preflight') ? run.resources.map((r) => ({ ...r, mode: 'read' })) : run.resources;
     const value = { run_id: run.runId, reservation_version: run.version,
     coordination_protocol: 'resource-scoped-v1', operation_id: 'op-' + requestId,
     operation_digest: createHash('sha256').update(requestId).digest('hex'),
-    expected_revisions: Object.fromEntries(resources.map((r) => [r.key, 0])),
+    expected_revisions: expectedRevisions || Object.fromEntries(resources.map((r) => [r.key, 0])),
     requestId, approval_id: 'approval-' + requestId, session_id: run.sessionId,
     change_id: run.changeId, directory, files: [], commands: ['/usr/bin/true'],
     resources, title: 'isolated command', summary: 'synthetic fixture' };
@@ -111,8 +123,8 @@ async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
   };
   await start();
   await post('/broker/readiness', { status: 'READY', pending_count: 0, infrastructure_status: 'READY' });
-  async function approvedAccess(run, requestId) {
-    const value = approval(run, requestId);
+  async function approvedAccess(run, requestId, expectedRevisions) {
+    const value = approval(run, requestId, expectedRevisions);
     assert.equal((await post('/validation/request', { approval: value })).status, 202);
     assert.equal((await post('/runs/' + run.runId + '/decision/' + value.requestId, { decision: 'approved' })).status, 201);
     const acquired = await post('/runs/' + run.runId + '/locks/acquire', { version: run.version,
@@ -828,7 +840,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.9.0');
+  assert.equal(initialized.result.serverInfo.version, '1.10.0');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1208,4 +1220,127 @@ test('une opération consommée ne réinscrit pas sa session après la réconcil
   assert.deepEqual((await h.get('/runs')).body.coordination.legacySources, []);
   assert.equal((await h.reserve('a')).state, 'RESERVED');
   assert.equal(h.native.replies.length, 1); assert.equal(h.native.replies[0].body.response, 'once');
+});
+
+
+test('environnement Docker HTTP : conservation entre commandes et restitution prouvée avant le pair', async (t) => {
+  const h=await setup(t);const resources=[{key:'docker:engine-a',mode:'write'}];
+  const a=await h.reserve('a',{resources});const b=await h.reserve('b',{resources});
+  assert.equal((await h.get('/status')).body.testResourceProtocol,'test-resources-v1');
+  const acquire={version:a.version,transactionId:'tests-a',resources,evidence:['identité du moteur vérifiée']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquire)).body;
+  assert.equal(lease.state,'HELD');
+  assert.equal((await h.post('/runs/b/test-resources/acquire',{...acquire,version:b.version,transactionId:'tests-b'})).status,202);
+  assert.equal((await h.get('/runs/b/status')).body.coordination.reason,'test-resource-conflict');
+  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['restitution examinée']};
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-cleanup-proof-required');
+  const execute=async(id)=>{
+    const revisions=(await h.get('/runs/a/locks')).body.revisions;
+    const operation=await h.approvedAccess(a,id,revisions);await h.execute(operation.approval);
+    await h.completeTool(operation.approval);
+    assert.equal((await h.releaseOperation(a,operation.approval,operation.access)).status,200);
+    return operation.approval.operation_id;
+  };
+  await execute('container-tests');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+  assert.equal((await h.post('/runs/a/job/terminal-gate',{state:'TERMINÉ'})).body.error,'run-accesses-unresolved');
+  const cleanupOperationId=await execute('cleanup');
+  const verificationOperationId=await execute('verify-clean');
+  const release={...payload,cleanup:[{resourceKey:resources[0].key,cleanupOperationId,verificationOperationId,restored:true}]};
+  assert.equal((await h.post('/runs/a/test-resources/release',release)).status,200);
+  assert.equal((await h.post('/runs/a/test-resources/release',release)).body.state,'RELEASED');
+  assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
+  assert.equal((await h.post('/runs/a/test-resources/release',{...release,evidence:['preuve divergente']})).status,409);
+});
+
+test('réservation LXC HTTP restaurée : nouvelle frontière native et jeton renouvelé', async (t) => {
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lxc-a',resources:a.resources,evidence:['instance canonique']})).body;
+  await h.stop();await h.start();
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].reconciliationRequired,true);
+  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['frontière native sans activité']};
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-reconciliation-required');
+  h.native.busy[a.sessionId]={type:'busy'};
+  assert.equal((await h.post('/runs/a/test-resources/reconcile',{...payload,reconciliationId:'reconcile-a'})).status,409);
+  h.native.busy={};
+  const request={...payload,reconciliationId:'reconcile-a'};
+  const restored=await h.post('/runs/a/test-resources/reconcile',request);
+  assert.equal(restored.status,200,JSON.stringify(restored));assert.notEqual(restored.body.token,lease.token);
+  assert.equal((await h.post('/runs/a/test-resources/reconcile',request)).body.token,restored.body.token);
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-token-invalid');
+});
+
+
+for (const browser of ['chromium','firefox']) test('verrou HTTP du navigateur externe '+browser+' : fin et restitution distinctes', async (t) => {
+  const h=await setup(t);const resources=[{key:'browser:host-a/'+browser,mode:'write'}];
+  const a=await h.reserve('a',{resources});const b=await h.reserve('b',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'browser-a',resources,evidence:['navigateur DEVOPS résolu']})).body;
+  assert.equal(lease.state,'HELD');
+  assert.equal((await h.post('/runs/b/test-resources/acquire',{version:b.version,transactionId:'browser-b',resources,evidence:['même navigateur']})).status,202);
+  const execute=async(id)=>{
+    const revisions=(await h.get('/runs/a/locks')).body.revisions;
+    const op=await h.approvedAccess(a,id,revisions);await h.execute(op.approval);await h.completeTool(op.approval);
+    assert.equal((await h.releaseOperation(a,op.approval,op.access)).status,200);return op.approval.operation_id;
+  };
+  await execute('browser-test');
+  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['sessions et profil temporaires restitués']};
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-cleanup-proof-required');
+  assert.equal((await h.post('/runs/a/job/terminal-gate',{state:'TERMINÉ'})).status,409);
+  const cleanupOperationId=await execute('close-browser');const verificationOperationId=await execute('verify-browser');
+  assert.equal((await h.post('/runs/a/test-resources/release',{...payload,cleanup:[{resourceKey:resources[0].key,cleanupOperationId,verificationOperationId,restored:true}]})).status,200);
+  assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
+});
+
+
+test('PLLM HTTP : défaut high, prévol exact, choix persisté et modèle du job immuable', async(t)=>{
+ const h=await setup(t,{codingPolicy:true});
+ const resolved=await h.post('/model-policy/resolve',{});assert.equal(resolved.status,200,JSON.stringify(resolved));
+ assert.equal(resolved.body.reasoning,'high');assert.equal(resolved.body.preflightRequired,true);
+ const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
+ const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['delivery'],
+   modelSelectionProtocol:'pllm-auto-v1',modelSelection:{},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
+ assert.equal((await h.post('/runs/a/job/arm',{...arm,modelSelection:0})).body.error,'model-selection-input-invalid');
+ h.native.messages.ses_probe[0].info.variant='low';
+ assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-preflight-not-proved');
+ h.native.messages.ses_probe[0].info.variant='high';
+ const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));
+ assert.equal(armed.body.codingModel.modelID,'model1');assert.equal(armed.body.codingModel.reasoning,'high');
+ const selected=armed.body.codingModel;await h.stop();await h.start();
+ assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
+ assert.equal((await h.post('/runs/a/job/arm',{...arm,codingModel:selected})).body.error,'model-selection-server-owned');
+ h.native.messages.ses_probe[0].info.model={providerID:'provider2',modelID:'model2'};
+ h.native.messages.ses_probe[1].info.providerID='provider2';h.native.messages.ses_probe[1].info.modelID='model2';
+ const changed=await h.post('/runs/a/job/arm',{...arm,modelSelection:{model:'provider2/model2'}});
+ assert.equal(changed.status,400);assert.equal(changed.body.error,'job-coding-model-immutable');
+ assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
+});
+
+test('PLLM HTTP : xhigh puis priorité inférieure, modèle explicite incompatible bloqué',async(t)=>{
+ const h=await setup(t,{codingPolicy:true});
+ h.native.providers.all[0].models.model1.variants={xhigh:{}};
+ assert.equal((await h.post('/model-policy/resolve',{})).body.reasoning,'xhigh');
+ h.native.providers.all[0].models.model1.variants={low:{}};
+ assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1'})).body.error,'explicit-model-unavailable');
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',reasoning:'low'})).body.reasoning,'low');
+});
+
+
+test('PLLM HTTP : refus natifs high/xhigh corrélés autorisent le repli mais 429 bloque',async(t)=>{
+ const h=await setup(t,{codingPolicy:true});
+ const reject=(reasoning,status=400)=>{
+  const name=reasoning+'-'+status;const user=structuredClone(h.native.messages.ses_probe[0]);
+  user.info.id='msg_user_'+name;user.info.variant=reasoning;
+  const response=structuredClone(h.native.messages.ses_probe[1]);response.info.id='msg_bad_'+name;response.info.parentID=user.info.id;
+  response.info.error={name:'APIError',data:{statusCode:status,responseBody:JSON.stringify({error:{code:'unsupported_value',param:'reasoning_effort',message:'diagnostic privé fictif'}})}};
+  response.parts=[];h.native.messages.ses_probe.push(user,response);
+  return {sessionId:'ses_probe',messageId:response.info.id};
+ };
+ const high=reject('high');const xhigh=reject('xhigh');
+ assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[high]})).body.reasoning,'xhigh');
+ const next=await h.post('/model-policy/resolve',{unavailablePreflights:[high,xhigh]});
+ assert.equal(next.body.mode,'mode2');assert.equal(next.body.unavailabilityProofs.length,2);
+ assert.equal(JSON.stringify(next.body).includes('diagnostic privé fictif'),false);
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[high,xhigh]})).body.error,'explicit-model-unavailable');
+ assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('high',429)]})).body.error,'model-unavailability-not-proved');
 });

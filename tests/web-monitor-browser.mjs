@@ -158,8 +158,8 @@ try {
       } catch (error) { response.writeHead(error.status || 500, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: error.code })); }
       return;
     }
-    const payload = request.url === '/status' ? { version: '1.9.0', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
-      brokerReadiness: { status: 'READY', server_version: '1.9.0' }, brokerReadinessReceivedAt: new Date().toISOString(),
+    const payload = request.url === '/status' ? { version: '1.10.0', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
+      brokerReadiness: { status: 'READY', server_version: '1.10.0' }, brokerReadinessReceivedAt: new Date().toISOString(),
       runs: Object.fromEntries((managementMode ? [] : runIds).map((runId, i) => [runId, { job: { changeId: changeIds[i], sessionId: 'session-' + i, armed: true,
         lifecycle: i === 0 ? lifecycle : nextLifecycle(undefined, i === 1 ? 'IMPLEMENTATION' : 'STATISTICS', undefined, 0),
         lastProvenMilestone: ['Contrat d’observation validé', 'Reprise préparée', 'Événements corrélés'][i], currentCabMandate: 'mandat-' + i },
@@ -200,13 +200,62 @@ try {
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('3/14')"), true);
     assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content th')].map(x=>x.textContent)) === JSON.stringify(['RUN / CHANGE','ETAT','ÉTAPE','TÂCHES COCHÉES','ACTIONS'])"), true);
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('Revue · 8/11') && document.querySelector('#work-content').textContent.includes('WAITING')"), true);
-    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v1.9.0') && document.querySelector('#health').textContent.includes('v1.19.3')"), true);
+    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v1.10.0') && document.querySelector('#health').textContent.includes('v1.19.3')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(255, 232, 235)');
     await browser.evaluate("document.querySelector('#detail details summary').click(); true");
     assert.equal(await browser.evaluate("document.querySelectorAll('.cycle-list li').length"), 11);
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-desktop.png');
+    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelector('#refresh-interval').options].map(x=>x.textContent)) === JSON.stringify(['Manuel','1s','3s','7s','30s','1m','5m','10m','30m'])"), true);
+    await browser.evaluate("window.__intervals=[]; window.__setInterval=window.setInterval; window.setInterval=(fn,ms,...args)=>{window.__intervals.push(ms);return window.__setInterval(fn,ms,...args)}; true");
+    for (const cadence of ['1000','3000','7000','30000','60000','300000','600000','1800000']) {
+      await browser.evaluate("document.querySelector('#refresh-interval').value='"+cadence+"'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
+      assert.equal(await browser.evaluate('window.__intervals.at(-1)'), Number(cadence));
+    }
+    await browser.evaluate("document.querySelector('#refresh-interval').value='7000'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
+    await browser.navigate(url);
+    await wait(() => browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096')"), browser.name+' préférence après rechargement');
+    assert.equal(await browser.evaluate("document.querySelector('#refresh-interval').value"), '7000');
+    await browser.evaluate("document.querySelector('#refresh-interval').value='0'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
+    completed=5;limit=3000;await tasks();await monitor.state.collect();await delay(1300);
+    assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096') && document.querySelector('#work-content').textContent.includes('3/14')"),true);
+    await browser.evaluate("document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("document.querySelector('#metrics').textContent.includes('3 000') && document.querySelector('#work-content').textContent.includes('5/14')"),browser.name+' clic manuel');
+    await browser.evaluate("window.__dateNow=Date.now; window.__clockOffset=1790000; Date.now=()=>window.__dateNow()+window.__clockOffset; true");
+    await delay(1100);
+    assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Disponible');
+    monitor.server.closeAllConnections();
+    assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Disponible');
+    await browser.evaluate("window.__clockOffset=1800001; true");
+    await wait(() => browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent === 'Non observé'"),browser.name+' expiration Web sans refresh');
+    await browser.evaluate("window.__fetch=window.fetch; window.fetch=(url,options)=>url==='/api/snapshot'?Promise.resolve(new Response('{}',{status:503})):window.__fetch(url,options); document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("document.querySelector('#refresh-status').textContent.includes('impossible')"),browser.name+' échec refresh');
+    assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Non observé');
+    await browser.evaluate("window.fetch=(url,options)=>url==='/api/snapshot'?Promise.resolve(new Response('{}',{status:200})):window.__fetch(url,options); document.querySelector('#monitor-refresh').click(); true");
+    await delay(250);
+    assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Non observé');
+    await browser.evaluate("window.fetch=window.__fetch; Date.now=window.__dateNow; document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent === 'Disponible' && !document.querySelector('#monitor-refresh').disabled"),browser.name+' nouveau succès Web');
+    await browser.evaluate("document.querySelector('#refresh-interval').value='3000'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
+    completed=3;limit=4096;await tasks();await monitor.state.collect();await delay(1100);
+    assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('3 000')"),true);
+    await wait(() => browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096') && document.querySelector('#work-content').textContent.includes('3/14')"),browser.name+' cadence 3s effective');
+    await browser.evaluate("document.querySelector('#refresh-interval').value='1000'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
+    const lateSnapshot=await (await fetch(url+'/api/snapshot')).json();lateSnapshot.configuration.maxCommandLength=9999;
+    await browser.evaluate("document.querySelector('#refresh-interval').value='0'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); window.__fetchLate=window.fetch; window.fetch=(url,options)=>url==='/api/snapshot'?new Promise(resolve=>{window.__lateResolve=resolve}):window.__fetchLate(url,options); true");
+    await monitor.close();
+    await wait(() => browser.evaluate("!document.querySelector('#connection').textContent.includes('connectée')"),browser.name+' transport interrompu pour réponse tardive');
+    await browser.evaluate("document.querySelector('#refresh-interval').value='1000'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
+    await wait(() => browser.evaluate("typeof window.__lateResolve === 'function'"),browser.name+' récupération automatique en vol');
+    await browser.evaluate("document.querySelector('#refresh-interval').value='0'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); window.__lateResolve(new Response("+JSON.stringify(JSON.stringify(lateSnapshot))+",{status:200})); true");
+    await wait(() => browser.evaluate("!document.querySelector('#monitor-refresh').disabled"),browser.name+' réponse automatique terminée');
+    assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096') && !document.querySelector('#metrics').textContent.includes('9 999')"),true);
+    await browser.evaluate("window.fetch=window.__fetchLate; true");
+    monitor=await createMonitorServer({...monitorConfig,port:address.port},options);await monitor.start();
+    await browser.evaluate("document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("!document.querySelector('#monitor-refresh').disabled && document.querySelector('#refresh-status').textContent === ''"),browser.name+' reprise manuelle après réponse écartée');
+    await browser.evaluate("document.querySelector('#refresh-interval').value='1000'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
     recoveryBlocked = true; await monitor.state.collect();
     await wait(() => browser.evaluate("document.querySelectorAll('tr[data-state=BLOCKED]').length === 2"), browser.name + ' WAITING devenu BLOCKED');
     recoveryBlocked = false; await monitor.state.collect();
@@ -301,6 +350,8 @@ try {
       'ETAT et ÉTAPE distincts', 'versions des briques', 'cycle de onze étapes', 'retour Revue 8/11 vers Implémentation 6/11',
       'historique conservé', 'WAITING jaune et BLOCKED rouge sur les lignes des jobs', 'filtres', 'SSE', 'panne UNKNOWN', 'reconnexion', 'mobile sans débordement',
       'navigation STATS/MONITOR', 'fenêtre 7 jours et filtre RUN', 'cumul distinct', 'prévisualisation et annulation', 'purge et protection active', 'statistiques anciennes', 'STATS mobile sans débordement',
+      'réponse automatique tardive écartée après passage Manuel', 'neuf choix de cadence', 'cadence effective 3s', 'préférence mémorisée', 'Manuel sans mise à jour SSE', 'clic Actualiser',
+      'Web disponible malgré perte SSE', 'Web expiré après 30 minutes', 'échecs HTTP et snapshot invalide sans renouvellement',
       'titre simplifié et gras', 'cinq cartes dont Web', 'boutons actifs protégés', 'commandes trois briques',
       'archivage RUN et change', 'navigation ARCHIVES', 'désarchivage sans reprise', 'annulation suppression',
       'suppression logique persistante', 'sources intactes', 'archives mobile', 'redémarrage Web avec reconnexion'] });

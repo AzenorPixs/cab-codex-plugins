@@ -24,7 +24,7 @@ async function artifactFixture(t) {
 
 test('broker externe : trois artefacts cibles vérifiés sans mutation et processus antérieur annoncé séparément',async(t)=>{
   const h=await artifactFixture(t),before=await inspectBrokerArtifacts(h.directory,h.proof);
-  assert.equal(before.version,'1.9.0');assert.equal(h.proof.loadedVersion,'1.7.1');
+  assert.equal(before.version,'1.10.0');assert.equal(h.proof.loadedVersion,'1.7.1');
   assert.equal(Object.keys(before.files).length,3);
   assert.deepEqual(await inspectBrokerArtifacts(h.directory,h.proof),before);
   for(const name of BROKER_ARTIFACT_FILES)assert.equal(createHash('sha256').update(await readFile(join(h.directory,name))).digest('hex'),h.proof.manifest[name]);
@@ -80,7 +80,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     await mkdir(target, { recursive: true }); await cp(source, target, { recursive: true });
     for (const entry of await readdir(target, { withFileTypes: true })) {
       if (entry.isFile()) {
-        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('1.9.0', '1.7.0'));
+        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('1.10.0', '1.7.0'));
       }
     }
   };
@@ -105,7 +105,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     if (path.endsWith('/disconnect')) { state.broker = false; return {}; }
     if (path.endsWith('/connect')) {
       state.broker = true; state.brokerVersion = version(await readFile(join(c.brokerDirectory, 'cgpt_approval_bridge_server.py'), 'utf8'));
-      if (state.wrongBroker && state.brokerVersion === '1.9.0') state.brokerVersion = '1.7.0';
+      if (state.wrongBroker && state.brokerVersion === '1.10.0') state.brokerVersion = '1.7.0';
       return {};
     }
     if (path === '/api/snapshot') {
@@ -154,12 +154,12 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     receipt: async () => JSON.parse(await readFile(join(c.home, '.local/state/cab-approval-bridge-update/current.json'), 'utf8')) };
 }
 
-test('jeu réel : les quatre briques actives passent en 1.9.0, RUN et archives conservés, deuxième invocation sans arrêt', async (t) => {
+test('jeu réel : les quatre briques actives passent en 1.10.0, RUN et archives conservés, deuxième invocation sans arrêt', async (t) => {
   const h = await fixture(t, { realSyntax: true }); const before = await readFile(h.runtime, 'utf8');
   const result = await updateComponents(h.c, h.options);
-  assert.equal(result.status, 'completed'); assert.equal(result.version, '1.9.0');
-  assert.deepEqual(h.state.versions, { controller: '1.9.0', supervisor: '1.9.0', monitor: '1.9.0' });
-  assert.equal(h.state.brokerVersion, '1.9.0'); assert.equal(h.state.global.state, 'RELEASED');
+  assert.equal(result.status, 'completed'); assert.equal(result.version, '1.10.0');
+  assert.deepEqual(h.state.versions, { controller: '1.10.0', supervisor: '1.10.0', monitor: '1.10.0' });
+  assert.equal(h.state.brokerVersion, '1.10.0'); assert.equal(h.state.global.state, 'RELEASED');
   assert.equal(await readFile(h.runtime, 'utf8'), before); assert.equal(await readFile(h.catalog, 'utf8'), 'ARCHIVE-SENTINEL');
   assert.equal(h.state.run.suspension.action, 'PAUSE');
   const stopped = h.state.events.filter((event) => event[1] === 'stop').length;
@@ -172,7 +172,7 @@ test('services initialement inactifs : fichiers actualisés sans les démarrer',
   const h = await fixture(t, { active: ['monitor'], broker: false });
   assert.equal((await updateComponents(h.c, h.options)).status, 'completed');
   assert.deepEqual(h.state.services, { controller: false, supervisor: false, monitor: true });
-  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '1.9.0');
+  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '1.10.0');
   assert.ok(!h.state.events.some((event) => event[1] === 'start' && event[2]?.includes('supervisor')));
 });
 
