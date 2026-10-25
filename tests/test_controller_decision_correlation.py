@@ -1,3 +1,4 @@
+import io
 import json
 import sys
 import unittest
@@ -153,6 +154,54 @@ class ControllerDecisionCorrelationTest(
             "http://controller/validation/reminder",
         )
         self.assertEqual(item["status"], "PENDING")
+
+    def test_command_length_notification_diagnostic_is_filtered_without_decision(self):
+        item = {**self.item, "status": "PENDING", "commands": ["private-command-fixture"]}
+        body = {"error": "command-too-long", "unit": "utf16", "maxLength": 16384, "actualLength": 16385,
+                "message": "private-command-fixture", "extra": "private-command-fixture"}
+        exc = bridge.error.HTTPError("http://controller", 400, "Bad Request", {},
+                                     io.BytesIO(json.dumps(body).encode()))
+        with (patch.object(bridge.request, "urlopen", side_effect=exc),
+              patch.object(bridge, "journal_controller_event") as events,
+              patch.object(bridge, "note_session_activity")):
+            result = bridge.notify_controller(item, "fixture-lease")
+        self.assertFalse(result["delivered"])
+        self.assertEqual(result["http_status"], 400)
+        self.assertEqual(result["error"], "command-too-long: longueur 16385, limite autorisée 16384 (utf16).")
+        self.assertEqual(events.call_args.args[1], "CONTROLLER_NOTIFICATION_FAILED")
+        self.assertEqual(events.call_args.args[3]["error"], result["error"])
+        self.assertNotIn("private-command-fixture", json.dumps(events.call_args.args[3]))
+        self.assertEqual(item["status"], "PENDING")
+        self.assertTrue(exc.fp.closed)
+
+    def test_untrusted_length_diagnostics_keep_generic_http_failure(self):
+        valid = {"error": "command-too-long", "unit": "utf16", "maxLength": 2000, "actualLength": 2001}
+        invalid = [[], None, {**valid, "error": "other"}, {**valid, "unit": "bytes"},
+                   {**valid, "maxLength": True}, {**valid, "actualLength": 2001.0},
+                   {**valid, "maxLength": 0}, {**valid, "actualLength": 2000},
+                   {**valid, "actualLength": 9007199254740992}, {**valid, "maxLength": "2000"}]
+        cases = [(400, json.dumps(payload).encode()) for payload in invalid]
+        cases += [(400, b"private-command-fixture"), (400, b"\xff"), (400, b" " * 1025),
+                  (400, json.dumps({**valid, "extra": "x" * 1024}).encode()),
+                  (409, json.dumps(valid).encode())]
+        for status, body in cases:
+            with self.subTest(status=status, body_size=len(body)):
+                exc = bridge.error.HTTPError("http://controller", status, "Bad Request", {}, io.BytesIO(body))
+                with (patch.object(bridge.request, "urlopen", side_effect=exc),
+                      patch.object(bridge, "journal_controller_event") as events,
+                      patch.object(bridge, "note_session_activity")):
+                    result = bridge.notify_controller(self.item, "fixture-lease")
+                self.assertEqual(result["error"], "HTTPError: %s" % status)
+                self.assertNotIn("private-command-fixture", json.dumps(events.call_args.args[3]))
+
+    def test_unreadable_length_diagnostic_keeps_generic_http_failure(self):
+        exc = bridge.error.HTTPError("http://controller", 400, "Bad Request", {}, io.BytesIO())
+        with (patch.object(exc, "read", side_effect=OSError("private-command-fixture")),
+              patch.object(bridge.request, "urlopen", side_effect=exc),
+              patch.object(bridge, "journal_controller_event"),
+              patch.object(bridge, "note_session_activity")):
+            result = bridge.notify_controller(self.item, "fixture-lease")
+        self.assertEqual(result["error"], "HTTPError: 400")
 
 
 class UnitaryOperationValidationTest(

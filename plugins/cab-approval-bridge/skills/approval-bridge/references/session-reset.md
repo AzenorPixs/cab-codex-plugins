@@ -8,6 +8,12 @@ reconnexion, un nouveau mandat ou change, ni pour `run`, `test`, `update` ou
 `stop`. Un prévol de récupération divergent conserve la candidate, le job
 et le runtime ; il ne déclenche jamais cette purge.
 
+Le service indépendant `cgpt-approval-bridge-monitor.service`, sa configuration,
+son jeu installé et ses connexions propres sont préservés pendant cette
+procédure. Seuls les clients SSE de pilotage appartiennent à l'arrêt ci-dessous.
+La vérification du monitoring suit `references/monitor-service.md` ; elle ne
+crée ni permission ni remédiation des composants observés.
+
 1. Résoudre la racine du projet et le contexte propriétaire du broker par les
    métadonnées OpenCode. Passer leur `directory` explicitement à toutes les
    requêtes de contexte. Vérifier l'absence de RUN actif ainsi que l'absence

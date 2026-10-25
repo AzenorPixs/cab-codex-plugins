@@ -5,9 +5,19 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.9.0";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
+const validReconciliation = (value) => record(value) &&
+  Object.keys(value).length === 14 &&
+  ['transactionId', 'jobId', 'recoveryId', 'operationId', 'approvalId'].every((key) => id(value[key])) &&
+  typeof value.sessionId === 'string' && value.sessionId.startsWith('ses_') &&
+  ['inputDigest', 'nativeToolHash', 'authorizationDigest'].every((key) => sha256(value[key])) &&
+  Number.isSafeInteger(value.contextId) && value.contextId > 0 &&
+  Number.isSafeInteger(value.version) && value.version >= value.contextId &&
+  Number.isSafeInteger(value.nativeToolCount) && value.nativeToolCount > 0 &&
+  value.outcome === 'REJECTION_ONLY' && Number.isFinite(Date.parse(value.at));
 
 export class CoordinationError extends Error {
   constructor(code, status = 409) { super(code); this.code = code; this.status = status; }
@@ -117,6 +127,10 @@ export class RunRegistry {
         throw new CoordinationError("registry-restoration-invalid");
       }
       this.requestOwners = data.requestOwners || {};
+      if (Object.values(this.requestOwners).some((owner) =>
+          owner.reconciliation !== undefined && !validReconciliation(owner.reconciliation))) {
+        throw new CoordinationError('registry-restoration-invalid');
+      }
       if (data.history !== undefined && (!Array.isArray(data.history) || data.history.some((r) =>
           !record(r) || !id(r.runId) || !id(r.changeId) || !['DELIVERED', 'ABANDONED'].includes(r.state)))) {
         throw new CoordinationError("registry-restoration-invalid");
@@ -446,17 +460,37 @@ export class RunRegistry {
     }
     return blockers;
   }
-  claimRequest(runId, requestId, digest, known) {
+  checkRequestOwner(runId, requestId, digest, known) {
     this.assertHealthy();
-    if (!id(requestId)) throw new CoordinationError("request-id-invalid", 400);
+    if (!id(requestId) || !sha256(digest)) throw new CoordinationError("request-id-invalid", 400);
     const prior = this.requestOwners[requestId];
     if (prior) {
       if (prior.runId !== runId || prior.digest !== digest) throw new CoordinationError("request-id-already-owned");
       if (!known) throw new CoordinationError("request-reconciliation-required");
-      return;
+      return prior;
     }
+    return null;
+  }
+  claimRequest(runId, requestId, digest, known) {
+    if (this.checkRequestOwner(runId, requestId, digest, known)) return;
     this.requestOwners[requestId] = { runId, digest };
     this.persist();
+  }
+  checkRequestReconciliation(runId, requestId, digest, receipt) {
+    this.assertHealthy();
+    const owner = this.requestOwners[requestId];
+    if (!id(requestId) || owner?.runId !== runId || owner.digest !== digest || !validReconciliation(receipt)) {
+      throw new CoordinationError('notification-reconciliation-identity-divergent');
+    }
+    const prior = owner.reconciliation;
+    if (prior && (prior.transactionId !== receipt.transactionId || prior.inputDigest !== receipt.inputDigest)) {
+      throw new CoordinationError('notification-reconciliation-transaction-divergent');
+    }
+    if (Object.entries(this.requestOwners).some(([key, entry]) => key !== requestId &&
+        entry.reconciliation?.transactionId === receipt.transactionId)) {
+      throw new CoordinationError('notification-reconciliation-transaction-divergent');
+    }
+    return prior || null;
   }
   transfer(runId, sessionId) {
     const run = this.runs.get(runId);

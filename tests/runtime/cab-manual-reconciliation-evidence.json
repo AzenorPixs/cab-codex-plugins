@@ -1,0 +1,138 @@
+{
+  "decision": {
+    "decision": "approved",
+    "approval_id": "approval-b13182fb-9a46-4374-86cc-493513a88936",
+    "change_id": "add-initial-authentication-and-sessions",
+    "reason": "Installation exacte relue : argon2-cffi25.1.0 et cryptography50.0.2 dans la seule .venv Pixs ; dépendances choisies D11/D15 ; environnement pip minimal sans config privée, caches désactivés et temporaires bornés dans Pixs.",
+    "requestId": "c03-42b7cb69-9f1f-4623-8f40-9507cb472766",
+    "run_id": "cismp1-pixs-d4031c8c16a3409d",
+    "reservation_version": 438,
+    "operation_id": "op-d81c3c73-d423-4217-a3af-bbebf1773852",
+    "operation_digest": "f663b8671b725b08148f8591a51e6dd4b89746678d8d02f35ef6a8b8f8336676",
+    "expected_revisions": {
+      "file:pyproject.toml": 1760,
+      "resource:python-env-c03": 0,
+      "file:tests/runtime/c03-ldap": 0
+    },
+    "coordination_protocol": "resource-scoped-v1",
+    "resources": [
+      {
+        "key": "file:pyproject.toml",
+        "mode": "read"
+      },
+      {
+        "key": "resource:python-env-c03",
+        "mode": "write"
+      },
+      {
+        "key": "file:tests/runtime/c03-ldap",
+        "mode": "write"
+      }
+    ],
+    "access_id": "op-d81c3c73-d423-4217-a3af-bbebf1773852"
+  },
+  "installProof": {
+    "part": "prt_15a78620f001COWgbL2lsCp7EV",
+    "call": "call_01a15a785b9e73a0a2e7f6b0b95bba12",
+    "exit": 0,
+    "release": {
+      "accessId": "op-d81c3c73-d423-4217-a3af-bbebf1773852",
+      "runId": "cismp1-pixs-d4031c8c16a3409d",
+      "contextId": 433,
+      "version": 438,
+      "operationDigest": "f663b8671b725b08148f8591a51e6dd4b89746678d8d02f35ef6a8b8f8336676",
+      "inputDigest": "e29087e0c20b2ce4db45df5f51c4a362ed2c87053134d12f893aa200eaf48938",
+      "resources": [
+        {
+          "key": "file:pyproject.toml",
+          "mode": "read"
+        },
+        {
+          "key": "file:tests/runtime/c03-ldap",
+          "mode": "write"
+        },
+        {
+          "key": "resource:python-env-c03",
+          "mode": "write"
+        }
+      ],
+      "operationIds": [
+        "op-d81c3c73-d423-4217-a3af-bbebf1773852"
+      ],
+      "expectedRevisions": {
+        "file:pyproject.toml": 1760,
+        "resource:python-env-c03": 0,
+        "file:tests/runtime/c03-ldap": 0
+      },
+      "protection": "SHARED",
+      "state": "RELEASED",
+      "order": 1761,
+      "requestedAt": "2026-10-20T17:59:57.296Z",
+      "token": "b7d43f6e-6aaf-4d01-b4ba-1a3bae87d3fc",
+      "fencing": 1762,
+      "grantedAt": "2026-10-20T17:59:57.297Z",
+      "finishedAt": "2026-10-20T18:01:55.135Z",
+      "outcome": "COMPLETED",
+      "releaseDigest": "ea874dedfc3e943ae3851d11875df00fa09268b6faac5166186bbe78816f93be"
+    },
+    "native": {
+      "id": "prt_15a78620f001COWgbL2lsCp7EV",
+      "sessionID": "ses_ea598d5c9ffee1IM7aJ25LQ2Oe",
+      "messageID": "msg_15a7858c1001RdKX9B6xAddHrQ",
+      "type": "tool",
+      "callID": "call_01a15a785b9e73a0a2e7f6b0b95bba12",
+      "tool": "bash",
+      "state": {
+        "status": "completed",
+        "input": {
+          "command": "/home/devops/python/current/bin/python3 -B -c 'import json\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nbase = Path(\"/home/devops/datas/pixs/tests/runtime/c03-ldap\")\nbase.mkdir(parents=True, exist_ok=True)\nwith tempfile.TemporaryDirectory(prefix=\"pip-\", dir=base) as temporary:\n    result = subprocess.run([\"/home/devops/python/current/bin/pip3\", \"--python\", \"/home/devops/datas/pixs/.venv/bin/python3\", \"install\", \"--no-cache-dir\", \"--only-binary=:all:\", \"argon2-cffi==25.1.0\", \"cryptography==50.0.2\"], env={\"PATH\": \"/usr/bin:/bin\", \"TMPDIR\": temporary, \"PIP_CONFIG_FILE\": \"/dev/null\", \"PIP_DISABLE_PIP_VERSION_CHECK\": \"1\"}, capture_output=True, text=True, timeout=180)\n    print(result.stdout)\n    print(result.stderr)\n    raise SystemExit(result.returncode)'"
+        },
+        "output": "Collecting argon2-cffi==25.1.0\n  Downloading argon2_cffi-25.1.0-py3-none-any.whl.metadata (4.1 kB)\nCollecting cryptography==50.0.2\n  Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.4 kB)\nCollecting argon2-cffi-bindings (from argon2-cffi==25.1.0)\n  Downloading argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (7.5 kB)\nCollecting cffi>=2.0.0 (from cryptography==50.0.2)\n  Downloading cffi-2.1.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)\nCollecting pycparser (from cffi>=2.0.0->cryptography==50.0.2)\n  Downloading pycparser-3.11-py3-none-any.whl.metadata (8.2 kB)\nDownloading argon2_cffi-25.1.0-py3-none-any.whl (14 kB)\nDownloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 32.8 MB/s  0:00:00\nDownloading cffi-2.1.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)\nDownloading argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (26 kB)\nDownloading pycparser-3.11-py3-none-any.whl (51 kB)\nInstalling collected packages: pycparser, cffi, cryptography, argon2-cffi-bindings, argon2-cffi\n\nSuccessfully installed argon2-cffi-25.1.0 argon2-cffi-bindings-26.1.0 cffi-2.1.1 cryptography-50.0.2 pycparser-3.11\n\n\n",
+        "title": "/home/devops/python/current/bin/python3 -B -c 'import json\nimport subprocess\nimport tempfile\nfrom pathlib import Path\nbase = Path(\"/home/devops/datas/pixs/tests/runtime/c03-ldap\")\nbase.mkdir(parents=True, exist_ok=True)\nwith tempfile.TemporaryDirectory(prefix=\"pip-\", dir=base) as temporary:\n    result = subprocess.run([\"/home/devops/python/current/bin/pip3\", \"--python\", \"/home/devops/datas/pixs/.venv/bin/python3\", \"install\", \"--no-cache-dir\", \"--only-binary=:all:\", \"argon2-cffi==25.1.0\", \"cryptography==50.0.2\"], env={\"PATH\": \"/usr/bin:/bin\", \"TMPDIR\": temporary, \"PIP_CONFIG_FILE\": \"/dev/null\", \"PIP_DISABLE_PIP_VERSION_CHECK\": \"1\"}, capture_output=True, text=True, timeout=180)\n    print(result.stdout)\n    print(result.stderr)\n    raise SystemExit(result.returncode)'",
+        "metadata": {
+          "output": "Collecting argon2-cffi==25.1.0\n  Downloading argon2_cffi-25.1.0-py3-none-any.whl.metadata (4.1 kB)\nCollecting cryptography==50.0.2\n  Downloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl.metadata (4.4 kB)\nCollecting argon2-cffi-bindings (from argon2-cffi==25.1.0)\n  Downloading argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (7.5 kB)\nCollecting cffi>=2.0.0 (from cryptography==50.0.2)\n  Downloading cffi-2.1.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (2.5 kB)\nCollecting pycparser (from cffi>=2.0.0->cryptography==50.0.2)\n  Downloading pycparser-3.11-py3-none-any.whl.metadata (8.2 kB)\nDownloading argon2_cffi-25.1.0-py3-none-any.whl (14 kB)\nDownloading cryptography-50.0.2-cp311-abi3-manylinux_2_34_x86_64.whl (4.8 MB)\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.8/4.8 MB 32.8 MB/s  0:00:00\nDownloading cffi-2.1.1-cp314-cp314-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (221 kB)\nDownloading argon2_cffi_bindings-26.1.0-cp310-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (26 kB)\nDownloading pycparser-3.11-py3-none-any.whl (51 kB)\nInstalling collected packages: pycparser, cffi, cryptography, argon2-cffi-bindings, argon2-cffi\n\nSuccessfully installed argon2-cffi-25.1.0 argon2-cffi-bindings-26.1.0 cffi-2.1.1 cryptography-50.0.2 pycparser-3.11\n\n\n",
+          "exit": 0,
+          "truncated": false
+        },
+        "time": {
+          "start": 1792519201299,
+          "end": 1792519202859
+        }
+      },
+      "metadata": {
+        "openai": {
+          "itemId": "fc_01a15a785b9e73a0a2e7f6b0b95bba12"
+        }
+      }
+    }
+  },
+  "orphanRequest": {
+    "approval_id": "c2-appr-13c2ca3bb0f6445fbd654193e24c4d47",
+    "change_id": "add-durable-minimized-audit",
+    "commands": [],
+    "coordination_protocol": "resource-scoped-v1",
+    "directory": "/home/devops/datas/pixs",
+    "expected_revisions": {
+      "file:src/pixs/core/models.py": 1277
+    },
+    "files": [
+      "src/pixs/core/models.py"
+    ],
+    "interval_seconds": 1,
+    "operation_digest": "4e78fc85dfb7b7f65ac52d9b7f87f4e409dfc7e2123dd9dddee1c857a93baaee",
+    "operation_id": "c2-edit-op-9c745433dc2a42f787a528f27f531ac4",
+    "requestId": "c2-edit-8e8010b13a5c4f5b94d29169f849cf9b",
+    "reservation_version": 436,
+    "resources": [
+      {
+        "key": "file:src/pixs/core/models.py",
+        "mode": "write"
+      }
+    ],
+    "run_id": "cismp2-pixs-968e38f3e27b4bbf",
+    "session_id": "ses_ea598af07fferBsu2YA9oOfSGT",
+    "summary": "Écrire uniquement le contenu UTF-8/LF exact examiné par CGPT, SHA-256 4e78fc85dfb7b7f65ac52d9b7f87f4e409dfc7e2123dd9dddee1c857a93baaee",
+    "timeout_seconds": 120,
+    "title": "Édition unitaire C05 src/pixs/core/models.py"
+  }
+}

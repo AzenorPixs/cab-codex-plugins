@@ -7,7 +7,26 @@ description: Met en place, teste et supervise le dialogue OpenCode–Codex via b
 
 Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par Codex.
 
-## RUN concurrents CAB 1.3.0
+## Bootstrap prioritaire du monitoring
+
+Dès la résolution du workspace absolu canonique, appliquer intégralement
+`references/monitor-service.md` du skill CAB installé, avant PLLM, santé
+OpenCode et prévols modèle/MCP. Ce passage est obligatoire à chaque entrée
+ou reprise de session de codage pilotée, même si le contrôleur et le superviseur
+sont déjà actifs et réutilisés. Ne pas se limiter au constat d'une unité absente :
+si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
+indépendant, puis exécuter `systemctl --user daemon-reload` et
+`systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
+Réutiliser une instance active conforme sans modification ni redémarrage.
+Vérifier service actif, GET /api/snapshot avec version 1.9.0 et identity.workspace
+attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
+avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
+sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
+et port existants, sans activation au login. Un échec PLLM ou CAB ultérieur
+n'arrête pas le moniteur. Une divergence active ou un échec de monitoring ne
+permet aucun arrêt, redémarrage ou changement de RUN dans les autres briques.
+
+## RUN concurrents CAB 1.9.0
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -17,7 +36,19 @@ Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_i
 
 Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Installer ensemble les scripts controller, job-context, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, import-observations, registry-lock, SSE, healthcheck, reset et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu sans remplacer les modules actifs ni redémarrer les services. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+Installer ensemble les scripts controller, job-context, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu puis actualise les briques actives sous maintenance partagée selon references/component-update.md ; les autres procédures ne remplacent pas un jeu actif implicitement. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+
+## Étapes du cycle et observation web
+
+Charger la référence distribuée `references/run-lifecycle.md` du skill
+approval-bridge pour le catalogue des onze étapes. Après armement, lire la
+séquence courante du job puis déclarer chaque étape examinée par
+`POST /runs/<run_id>/job/progress` avec stepId, stepStatus et
+expectedStepSequence. Un retour de Vérifications ou Revue vers Implémentation
+est autorisé et historisé. Les étapes non renseignées ne sont jamais déduites
+du texte libre, du mandat ou de la phase. ETAT, étape, phase technique et
+cases de tâches restent distincts ; aucune déclaration ne vaut permission ou
+gate terminal. Les jobs anciens sans lifecycle restent compatibles.
 
 ## Invariants
 
@@ -139,7 +170,7 @@ ne redémarre les processus des agents.
 
 ## Statistiques obligatoires à chaque archivage
 
-Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.3.0 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
+Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.9.0 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
 
 Charger le skill voisin `../coding-session-statistics/SKILL.md` dès le début
 de chaque change piloté. Préparer ses relevés de quota et ses sondes avant le
@@ -170,7 +201,7 @@ agents. Cette obligation ne remplace pas l'autorisation d'archivage.
 
 ## Ordre de mise en place
 
-Avant une réinitialisation globale exclusive, appliquer intégralement la
+Après le bootstrap prioritaire du monitoring, avant une réinitialisation globale exclusive, appliquer intégralement la
 [procédure de purge](references/session-reset.md). Elle est obligatoire quel
 que soit l'ancien état, y compris en présence de conflits Syncthing. Le script
 `../../scripts/cgpt-approval-bridge-reset.py` est fourni par ce plugin.
@@ -269,6 +300,7 @@ Avant de modifier le modèle d’un agent OC :
 - Supprimer les heartbeats et healthchecks créés par `/cab`.
 - Fermer les clients SSE créés par `/cab`.
 - Arrêter explicitement le superviseur démarré par `/cab`, puis le contrôleur, avec `systemctl --user stop` sur leurs services respectifs. Conserver les unités installées et inactives, sans les désactiver ni les supprimer.
+- Préserver `cgpt-approval-bridge-monitor.service`, sa configuration et ses connexions propres ; le moniteur reste disponible après `/cab stop`. Son arrêt requiert une demande explicite distincte.
 - Ne pas arrêter directement `cgpt-validation` : il est géré par OpenCode.
 - Ne pas fermer OpenCode ni son conteneur sans instruction explicite.
 

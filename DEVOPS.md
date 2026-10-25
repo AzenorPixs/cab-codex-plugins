@@ -1,9 +1,9 @@
 # DEVOPS.md — cab
 
-Version : 0.5
+Version : 0.7
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-19T18:48:02Z
+Début du relevé (UTC) : 2026-10-24T21:55:18Z
 Environnement d'exécution DIU : PROXMOX
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -20,17 +20,41 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 # Système d'exploitation
 
   * Debian GNU/Linux 13 (trixie)
+  * hvp1.pixs.fr
 
 
-# Docker
+# Matériel
 
-  * 29.9.1
+## TPM
+
+  * Chemin : /dev/tpmrm0
+  * Version : 2.0
+  * Fabricant : INTC
+  * Identifiant fournisseur : 0x494E5443
+  * Révision de spécification : 1.38
+  * Registres PCR : sha1: [] ; sha256: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] ; sha384: [] ; sm3_256: []
+
+
+# Conteneur Docker, pour tests nécessitant des droits root
+
+  * 29.9.2
   * /usr/bin/docker
+  * /var/run/docker.sock
+  * debian:stable-slim
+  * Les agents de codage et les agents orchestrateurs sont autorisés à préparer, exécuter, répéter et nettoyer les tests du projet dans ce conteneur, y compris avec les droits root, sans demander d’approbation supplémentaire. Cette autorisation couvre le conteneur et les ressources dédiées aux tests.
+
+
+# Conteneur LXC, pour tests nécessitant des droits root
+
+  * Variables d'accès disponible dans project.env
+  * Debian 13
+  * Accès TPM OK
+  * Les agents de codage et les agents orchestrateurs sont autorisés à préparer, exécuter, répéter et nettoyer les tests du projet dans ce conteneur, y compris avec les droits root, sans demander d’approbation supplémentaire. Cette autorisation couvre le conteneur et les ressources dédiées aux tests.
 
 
 # Docker-Compose
 
-  * 5.6.0
+  * 5.6.1
   * /usr/local/bin/docker-compose
 
 
@@ -42,13 +66,13 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Go
 
-  * 1.27.2
+  * 1.27.3
   * /home/devops/go/current/bin/go
 
 
 # Node
 
-  * 24.22.0
+  * 24.22.1
   * /home/devops/node/current/bin/node
 
 
@@ -60,7 +84,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # OpenCode
 
-  * 1.19.3
+  * 1.19.4
   * /home/devops/.opencode/bin/opencode
 
 
@@ -79,7 +103,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # OpenSpec
 
-  * 1.14.3
+  * 1.15.0
   * /home/devops/.local/npm/bin/openspec
 
 
@@ -105,7 +129,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Python
 
-  * 3.14.8
+  * 3.14.9
   * /home/devops/python/current/bin/python3
   * venv: disponible
 
@@ -117,8 +141,14 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Python - Gestionnaire de paquets
 
-  * 26.2.1
+  * 26.2.2
   * /home/devops/python/current/bin/pip3
+
+
+# Prompts
+
+  * Dossier des prompts : /home/devops/datas/prompts
+  * Index des prompts : /home/devops/datas/prompts/INDEX.md
 
 
 # Tests navigateurs extérieurs en mode headless
@@ -127,13 +157,13 @@ La détection ne vérifie pas le fonctionnement du mode headless.
 
 ## Chromium
 
-  * 155.0.8059.79
+  * 156.0.8078.47
   * /usr/bin/chromium
   * Mode headless : --headless
 
 
 ## Firefox
 
-  * 153.5.0esr
+  * 153.5.1esr
   * /usr/bin/firefox
   * Mode headless : --headless
