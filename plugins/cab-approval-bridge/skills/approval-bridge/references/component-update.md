@@ -1,4 +1,4 @@
-# Mise à jour des briques actives — CAB 1.9.0
+# Mise à jour des briques actives — CAB 1.10.0
 
 ## Profil de récupération gelée
 
@@ -29,7 +29,7 @@ Web restent ouverts ; aucun connect/disconnect ni instance/dispose n'est permis.
 Les pairs doivent conserver une PAUSE explicitement autorisée. Après complete,
 la récupération ne vaut pas autorisation métier dans l'état mixte : une
 maintenance ordinaire distinctement autorisée doit aligner réellement les
-quatre briques en 1.9.0, puis chaque reprise est validée. Cette seconde étape
+quatre briques en 1.10.0, puis chaque reprise est validée. Cette seconde étape
 peut reconnecter le broker et relancer le Web, sans fermer OpenCode.
 Un autre PENDING ou un écart entre compteurs global/RUN/session bloque le
 profil ; aucune demande inconnue n'est annulée ou attribuée par déduction.
@@ -38,8 +38,8 @@ Le contrôleur nouveau vérifie le journal privé par la route
 POST /coordination/maintenance/adopt avant son véritable HELD. Le recontrôle
 précède la libération commune et conserve job.recovery. Le JSON de résultat
 distingue packageVersion, buildDigest et runtimeVersions : la transition
-qualifiée est contrôleur 1.9.0 avec broker/superviseur/Web 1.7.1 conservés.
-Elle ne constitue pas un déploiement global aligné 1.9.0. Une autre version
+qualifiée est contrôleur 1.10.0 avec broker/superviseur/Web 1.7.1 conservés.
+Elle ne constitue pas un déploiement global aligné 1.10.0. Une autre version
 préservée est refusée. La qualification isolée inclut rejet, polling, retry,
 nouveau prévol once/exit 0 et complete via le broker original conservé.
 
@@ -104,7 +104,7 @@ La politique ordinaire explicite `--broker-policy reuse-readonly` exige
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
-doit être la cible 1.9.0 ; la version chargée est vérifiée indépendamment.
+doit être la cible 1.10.0 ; la version chargée est vérifiée indépendamment.
 Les trois fichiers sont seulement lus et comparés au paquet. Aucun stage,
 backup restaurable, remplacement, nouveau lien ou compilation sur place du
 broker n'est effectué. Les droits et propriétaires restent conservés.

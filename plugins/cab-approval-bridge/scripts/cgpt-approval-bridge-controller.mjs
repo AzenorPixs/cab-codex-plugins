@@ -4,7 +4,8 @@ import { createServer } from 'node:http';
 import { isAbsolute, join, relative } from 'node:path';
 import { createJobContext, commandLengthLimit, checkCommandLength, VERSION as JOB_CONTEXT_VERSION } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, VERSION } from './cgpt-approval-bridge-runs.mjs';
-import { ResourceRunRegistry, COORDINATION_PROTOCOL, VERSION as RESOURCE_VERSION } from './cgpt-approval-bridge-resource-coordination.mjs';
+import { ResourceRunRegistry, COORDINATION_PROTOCOL, TEST_RESOURCE_PROTOCOL, VERSION as RESOURCE_VERSION } from './cgpt-approval-bridge-resource-coordination.mjs';
+import { MODEL_SELECTION_PROTOCOL, readModelCatalog, selectCodingModel, verifyModelPreflight, reasoningUnavailability, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { SessionStatistics, VERSION as STATISTICS_VERSION } from './cgpt-approval-bridge-statistics.mjs';
 import { createObservationJournal, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { StatisticsMaintenance, statisticsDashboard, guardStatisticsPost, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
@@ -12,8 +13,8 @@ import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.m
 import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-const version = "1.9.0";
-if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
+const version = "1.10.0";
+if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspaceInput = envValue('OC_Codex_WORKSPACE');
@@ -137,11 +138,14 @@ function statusFor(runId, context) {
   const status = context.publicStatus();
   const run = registry.runs.get(runId);
   const accesses = registry.accesses(runId);
+  const testReservations = registry.testReservations(runId);
   const global = registry.resourceState.global;
   const reason = registry.migrationRequired || broker?.coordination_protocol !== COORDINATION_PROTOCOL ? 'coordination-upgrade-required'
     : global && global.state !== 'RELEASED' ? 'global-coordination-suspended'
       : run.suspension ? 'run-' + run.suspension.action.toLowerCase()
         : run.maintenancePreflightRequired ? 'maintenance-preflight-required'
+        : testReservations.some((r) => r.reconciliationRequired) ? 'test-reconciliation-required'
+        : testReservations.some((r) => r.state === 'WAITING') ? 'test-resource-conflict'
         : accesses.some((a) => a.state === 'WAITING') ? 'resource-conflict'
           : accesses.some((a) => a.state === 'UNKNOWN') ? 'resource-effects-unknown'
             : accesses.some((a) => ['HELD','EXECUTING'].includes(a.state) && registry.restoredAccesses.has(a.accessId))
@@ -151,7 +155,8 @@ function statusFor(runId, context) {
     notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation(), coordination: { reason, integrationReady: run.integrationReady,
     referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion,
     phase: run.phase, protocol: registry.snapshot().coordinationProtocol, global, suspension: run.suspension || null,
-    accesses, blockers: accesses.flatMap((a) => a.blockers),
+    accesses, testResourceProtocol: TEST_RESOURCE_PROTOCOL, testReservations,
+    blockers: [...accesses.flatMap((a) => a.blockers), ...testReservations.flatMap((r) => r.blockers)],
     integrationQueue: [], integrationBlockers: [] },
     ...(reason ? { brokerReadiness: { ...status.brokerReadiness, status: 'BLOCKED', ready: false, root_cause: reason } } : {}) };
 }
@@ -344,6 +349,56 @@ async function proveNativeCompletions(runId, access) {
     registry.completeNative(runId, op.operationId, proof);
   }
 }
+async function modelObservation(route) {
+  const response = await fetch(opencodeUrl + route + (route.includes('?') ? '&' : '?') + 'directory=' + encodeURIComponent(workspace),
+    { signal: AbortSignal.timeout(10000), redirect: 'error' });
+  if (!response.ok || !response.body) { await response.body?.cancel(); throw new CoordinationError('model-observation-unavailable'); }
+  const chunks = []; let size = 0;
+  for await (const chunk of response.body) {
+    size += chunk.length;
+    if (size > 2 * 1024 * 1024) throw new CoordinationError('model-observation-too-large');
+    chunks.push(chunk);
+  }
+  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
+  catch { throw new CoordinationError('model-observation-invalid'); }
+}
+async function resolveCodingModel(input) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['model','reasoning','unavailablePreflights'].includes(key))) {
+    throw new CoordinationError('model-selection-input-invalid',400);
+  }
+  const catalog = input.model === undefined ? readModelCatalog() : undefined;
+  const providers = await modelObservation('/provider');
+  const refs = input.unavailablePreflights === undefined ? [] : input.unavailablePreflights;
+  if (!Array.isArray(refs) || refs.length > 12) throw new CoordinationError('model-selection-input-invalid',400);
+  const unavailable = [];
+  for (const proof of refs) {
+    const observed = await modelPreflightObservation(proof);
+    const rejected = reasoningUnavailability({ ...observed, workspace });
+    if (input.model === undefined) {
+      if (!Array.isArray(catalog.models)) throw new CoordinationError('pllm-catalog-invalid');
+      const entry = catalog.models.find((entry) => entry.provider === rejected.providerID && (entry.model_id || entry.model) === rejected.modelID &&
+        entry.evaluated_this_run === true && entry.state === 'Valide');
+      if (!entry || !Number.isFinite(Date.parse(entry.evaluated_at)) || Date.parse(rejected.observedAt) < Date.parse(entry.evaluated_at)) {
+        throw new CoordinationError('model-unavailability-not-proved');
+      }
+    } else if (input.model !== rejected.providerID+'/'+rejected.modelID) throw new CoordinationError('model-unavailability-not-proved');
+    unavailable.push(rejected);
+  }
+  return selectCodingModel({ catalog, providers, model: input.model, reasoning: input.reasoning, unavailable });
+}
+async function modelPreflightObservation(proof) {
+  if (!proof || Object.keys(proof).length !== 2 || !['sessionId','messageId'].every((key) =>
+    typeof proof[key] === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(proof[key]))) throw new CoordinationError('model-preflight-not-proved');
+  const session = await modelObservation('/session/'+proof.sessionId);
+  const response = await modelObservation('/session/'+proof.sessionId+'/message/'+proof.messageId);
+  if (!response?.info?.parentID || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(response.info.parentID)) throw new CoordinationError('model-preflight-not-proved');
+  const parent = await modelObservation('/session/'+proof.sessionId+'/message/'+response.info.parentID);
+  return { session, response, parent };
+}
+async function provedCodingModel(input, proof) {
+  const selection = await resolveCodingModel(input);
+  return verifyModelPreflight(selection,{ ...(await modelPreflightObservation(proof)), workspace });
+}
 for (const run of registry.runs.values()) if (run.state === 'RESERVED') contextFor(run);
 if (contexts.size && legacy.publicJob()?.armed) throw new Error('Legacy job must be reconciled before concurrent RUNs.');
 legacy.start();
@@ -431,6 +486,9 @@ const server = createServer(async (request, response) => {
       checkCommandLength(payload?.approval, maxCommandLength);
     }
     registry.assertHealthy();
+    if (request.method === 'POST' && url.pathname === '/model-policy/resolve') {
+      json(response,200,{ ...(await resolveCodingModel(payload)), preflightRequired: true }); return;
+    }
     if (maintenanceRoute) {
       const result = url.pathname.endsWith('/preview') ? statisticsMaintenance.preview(payload) : await statisticsMaintenance.purge(payload);
       json(response, 200, result); return;
@@ -518,10 +576,13 @@ const server = createServer(async (request, response) => {
     if (request.method === 'GET' && url.pathname === '/status' && !url.searchParams.has('runId')) {
       const entries = activeContexts();
       if (!entries.length) { json(response, 200, { ...legacy.publicStatus(), frozenRecoveryMaintenance: FROZEN_CAPABILITY,
-        maintenanceBuildDigest: loadedBuildDigest, notificationReconciliation: 'rejection-only-v1', workspace, pid: process.pid }); return; }
+        maintenanceBuildDigest: loadedBuildDigest, notificationReconciliation: 'rejection-only-v1', testResourceProtocol: TEST_RESOURCE_PROTOCOL,
+        modelSelectionProtocol: MODEL_SELECTION_PROTOCOL, workspace, pid: process.pid }); return; }
       json(response, 200, { version: VERSION, mode: 'concurrent', frozenRecoveryMaintenance: FROZEN_CAPABILITY,
         maintenanceBuildDigest: loadedBuildDigest, notificationReconciliation: 'rejection-only-v1', workspace, pid: process.pid,
         configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' }, coordinationProtocol: registry.snapshot().coordinationProtocol,
+        testResourceProtocol: TEST_RESOURCE_PROTOCOL,
+        modelSelectionProtocol: MODEL_SELECTION_PROTOCOL,
         globalCoordination: registry.resourceState.global, opencodeSse: sseState,
         brokerReadiness: broker, brokerReadinessReceivedAt: legacy.publicStatus().brokerReadinessReceivedAt, activeRunCount: entries.length,
         runs: Object.fromEntries(entries.map(([id, c]) => [id, statusFor(id, c)])),
@@ -569,19 +630,54 @@ const server = createServer(async (request, response) => {
         registry.resourceState.accesses[payload?.operationId]?.state === 'RELEASED') {
       json(response, 200, registry.releaseAccess(runId, payload)); return;
     }
+    if (match?.[2] === '/test-resources/release' && request.method === 'POST' &&
+        registry.resourceState.testReservations?.[payload?.transactionId]?.state === 'RELEASED') {
+      json(response, 200, registry.releaseTests(runId, payload)); return;
+    }
     const context = runId ? contexts.get(runId) : singleContext();
     if (!context) throw new CoordinationError('run-not-found', 404);
     if (match) url.pathname = match[2] || '/status';
+    if (request.method === 'POST' && url.pathname === '/job/arm') {
+      if (payload.codingModel !== undefined) throw new CoordinationError('model-selection-server-owned',400);
+      if (payload.modelSelectionProtocol !== undefined || payload.modelSelection !== undefined) {
+        if (payload.modelSelectionProtocol !== MODEL_SELECTION_PROTOCOL) throw new CoordinationError('model-selection-upgrade-required');
+        request.cabPayload = { ...payload, codingModel: await provedCodingModel(
+          payload.modelSelection === undefined ? {} : payload.modelSelection,payload.modelPreflight) };
+      }
+    }
     if (runId) {
       const run = registry.runs.get(runId);
       if (!run || run.state !== 'RESERVED') throw new CoordinationError('run-not-reserved');
       observedRun = run;
       if (request.method === 'POST' && transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      if (request.method === 'GET' && url.pathname === '/test-resources') {
+        json(response, 200, { runId, protocol: TEST_RESOURCE_PROTOCOL, reservations: registry.testReservations(runId) }); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/test-resources/acquire') {
+        const result = registry.acquireTests(runId, payload);
+        json(response, result.state === 'WAITING' ? 202 : 200, result); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/test-resources/cancel') {
+        json(response, 200, registry.cancelTests(runId, payload)); return;
+      }
+      if (request.method === 'POST' && ['/test-resources/release', '/test-resources/reconcile'].includes(url.pathname)) {
+        if (url.pathname.endsWith('/reconcile') && registry.resourceState.testReservations?.[payload.transactionId]?.reconciliationReceipts?.[payload.reconciliationId]) {
+          json(response, 200, registry.reconcileTests(runId, payload)); return;
+        }
+        const entry = registry.testHeld(runId, payload, url.pathname.endsWith('/reconcile'));
+        if (context.publicJob()?.currentCabMandate || context.publicJob()?.recovery || context.publicStatus().undecidedValidationCount) {
+          throw new CoordinationError('run-not-quiescent');
+        }
+        await proveNativeCompletions(runId, { operationIds: registry.operationTests(entry).map((op) => op.operationId) });
+        await checkNative(context.publicJob()?.sessionId || run.sessionId, true);
+        json(response, 200, url.pathname.endsWith('/release') ? registry.releaseTests(runId, payload) : registry.reconcileTests(runId, payload));
+        return;
+      }
       if (request.method === 'GET' && url.pathname === '/locks') {
         json(response, 200, { runId, protocol: COORDINATION_PROTOCOL, accesses: registry.accesses(runId),
           revisions: registry.revisions(run.resources) }); return;

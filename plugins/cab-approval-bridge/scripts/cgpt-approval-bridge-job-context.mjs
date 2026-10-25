@@ -6,9 +6,10 @@ import { dirname, isAbsolute, join } from "node:path";
 import readline from "node:readline";
 
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
+import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 
-export const VERSION = "1.9.0";
-if (STEP_VERSION !== VERSION) throw new Error('CAB lifecycle component version mismatch');
+export const VERSION = "1.10.0";
+if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
   const name = Object.hasOwn(environment, 'OC_Codex_MAX_COMMAND_LENGTH')
@@ -171,6 +172,7 @@ function publicJob() {
     changeId: job.changeId,
     criteria: job.criteria,
     strictCommands: job.strictCommands === true,
+    ...(job.codingModel ? { codingModel: structuredClone(job.codingModel) } : {}),
     lifecycle: publicLifecycle(job.lifecycle),
     lastProvenMilestone: job.lastProvenMilestone,
     currentCabMandate: job.currentCabMandate,
@@ -247,7 +249,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "1.9.0",
+    version: "1.10.0",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -274,6 +276,7 @@ function publicStatus() {
 }
 
 function validJobContract(payload) {
+  if (payload?.codingModel !== undefined && !validCodingModel(payload.codingModel)) return null;
   if (
     !payload ||
     typeof payload.jobId !== "string" ||
@@ -304,6 +307,7 @@ function validJobContract(payload) {
     changeId: payload.changeId || null,
     criteria: payload.criteria,
     strictCommands: payload.strictCommands === true,
+    ...(payload.codingModel ? { codingModel: structuredClone(payload.codingModel) } : {}),
     lastProvenMilestone: null,
     currentCabMandate: null,
     armed: true,
@@ -313,6 +317,7 @@ function validJobContract(payload) {
 }
 
 function validPersistedJob(payload) {
+  if (payload?.codingModel !== undefined && !validCodingModel(payload.codingModel)) return false;
   const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
   const text = (value) => typeof value === "string" && value.length > 0;
   const strings = (value) => Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -1637,7 +1642,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.9.0",
+      version: "1.10.0",
     },
   });
 
@@ -2099,6 +2104,11 @@ const handle = async (request, response, url) => {
           return;
         }
         if (job?.jobId === candidate.jobId) {
+          if (job.codingModel) {
+            if (candidate.codingModel && ['providerID','modelID','reasoning','source','mode','priority'].some((key) =>
+              job.codingModel[key] !== candidate.codingModel[key])) throw new Error('job-coding-model-immutable');
+            candidate.codingModel = structuredClone(job.codingModel);
+          } else if (candidate.codingModel) throw new Error('job-coding-model-immutable');
           candidate.recoveryHistory = job.recoveryHistory || [];
           candidate.revokedSessions = job.revokedSessions || [];
           if (job.lifecycle !== undefined) candidate.lifecycle = publicLifecycle(job.lifecycle);

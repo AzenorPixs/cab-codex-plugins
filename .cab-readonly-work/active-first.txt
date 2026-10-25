@@ -1,0 +1,64 @@
+✖ broker externe : trois artefacts 1.8 vérifiés sans mutation et processus antérieur annoncé séparément (9.464794ms)
+✖ broker externe : manifeste, propriétaire, liens et alias divergents sont refusés (4.389587ms)
+✔ broker externe : véritable enfant Python, entrée et identité du parent contrôlées sans environnement (39.909607ms)
+✔ broker externe : politique explicite incompatible avec M2 ou preuve absente refusée avant service (58.870611ms)
+✔ profil gelé : autorisation et cible absentes refusées avant toute action de service (52.596729ms)
+✔ jeu réel : les quatre briques actives passent en 1.8.0, RUN et archives conservés, deuxième invocation sans arrêt (2500.680678ms)
+✔ services initialement inactifs : fichiers actualisés sans les démarrer (372.311712ms)
+✔ attente puis reprise : aucun arrêt pendant activité et transaction durable réutilisée (450.328648ms)
+✔ paquet incomplet, import absent, downgrade et syntaxe invalide échouent avant arrêt (396.795344ms)
+✔ échec de démarrage et mauvaise version broker déclenchent le retour aux artefacts précédents (1429.842347ms)
+✔ interruption pendant installation : récupération des artefacts sans restauration du runtime (390.865208ms)
+✔ interruption à la libération : réconciliation sans retour arrière après reprise (590.085296ms)
+✔ cibles projet, liens et journal corrompu sont refusés sans écrasement (101.350848ms)
+✔ une dérive des générations interdit la levée du gel et conserve le diagnostic de récupération (664.137805ms)
+✔ interruption avant le gel : la même intention de maintenance est récupérée (384.993454ms)
+✔ autorité flock concurrente refusée, libération et contrat corrompu préservé (925.05374ms)
+✔ une modification externe pendant attente bloque le déploiement ; annulation conserve cette modification (335.951772ms)
+✔ stage altéré pendant attente refusé avant tout arrêt (316.446605ms)
+✔ gel levé par une intervention externe : la récupération ne coupe pas les RUN repris (314.16876ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 17
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9387.980894
+
+✖ failing tests:
+
+test at tests/active-component-update.test.mjs:25:1
+✖ broker externe : trois artefacts 1.8 vérifiés sans mutation et processus antérieur annoncé séparément (9.464794ms)
+  Error: update-broker-artifact-unsafe
+      at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs:9:46)
+      at inspectBrokerArtifacts (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs:55:119)
+      at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/active-component-update.test.mjs:26:43)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'update-broker-artifact-unsafe'
+  }
+
+test at tests/active-component-update.test.mjs:33:1
+✖ broker externe : manifeste, propriétaire, liens et alias divergents sont refusés (4.389587ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /artifact-divergent/. Input:
+  
+  'Error: update-broker-artifact-unsafe'
+  
+      at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/active-component-update.test.mjs:36:3)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: update-broker-artifact-unsafe
+        at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs:9:46)
+        at inspectBrokerArtifacts (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs:55:119)
+        at async waitForActual (node:assert:646:5)
+        at async strict.rejects (node:assert:769:25)
+        at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/active-component-update.test.mjs:36:3)
+        at async Test.run (node:internal/test_runner/test:1409:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:974:7),
+    expected: /artifact-divergent/,
+    operator: 'rejects',
+    diff: 'simple'
+  }

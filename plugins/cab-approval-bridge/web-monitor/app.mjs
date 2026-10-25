@@ -15,6 +15,14 @@ let selectedRun = null;
 let selectedChange = null;
 let view = 'runs';
 let connected = false;
+let lastWebSuccessAt = null;
+let pendingSnapshot = null;
+let refreshing = false;
+let refreshTimer = null;
+let refreshGeneration = 0;
+const refreshValues = ['0','1000','3000','7000','30000','60000','300000','600000','1800000'];
+const refreshPreference = 'cab-monitor-refresh-ms';
+const webFreshMs = 30 * 60 * 1000;
 let tasksOpen = false;
 let cycleOpen = false;
 let historyOpen = false;
@@ -94,10 +102,11 @@ function renderHealth() {
     ['broker', 'Broker MCP', 'Connexion MCP native', '⇄'], ['opencode', 'OpenCode', 'Santé HTTP native', '◇'],
     ['monitor', 'Web', 'Interface et archives locales', '▦']];
   for (const [key, label, subtitle, icon] of entries) {
-    const stale = key === 'monitor' ? !connected : key === 'broker' ? isStale('mcp') : isStale(key);
+    const stale = key === 'monitor' ? lastWebSuccessAt === null || Date.now() - lastWebSuccessAt >= webFreshMs : key === 'broker' ? isStale('mcp') : isStale(key);
     const source = model.sources[key];
     const healthy = key === 'broker' ? model.brokerConnection === 'connected' : key === 'opencode' ? model.nativeHealth === true : true;
-    const status = stale ? (key === 'broker' ? 'Non confirmé' : source?.lastSuccessAt ? 'Indisponible' : 'Non observé') : healthy ? 'Disponible' : 'Dégradé';
+    const status = key === 'monitor' ? stale ? 'Non observé' : 'Disponible' :
+      stale ? (key === 'broker' ? 'Non confirmé' : source?.lastSuccessAt ? 'Indisponible' : 'Non observé') : healthy ? 'Disponible' : 'Dégradé';
     const card = node('div', 'health-card');
     const name = node('div'); name.append(node('div', 'health-name', label), node('div', 'health-sub', subtitle));
     const version = model.componentVersions?.[key];
@@ -116,7 +125,8 @@ function renderHealth() {
         key === 'monitor' ? Boolean(webRestart) : occupied || isStale('controller') || isStale('registry')));
       card.append(actions);
     }
-    card.title = 'Dernier succès : ' + date(key === 'broker' ? model.broker.observedAt : source?.lastSuccessAt, true);
+    card.title = 'Dernier succès : ' + date(key === 'monitor' ? lastWebSuccessAt === null ? null : new Date(lastWebSuccessAt).toISOString() :
+      key === 'broker' ? model.broker.observedAt : source?.lastSuccessAt, true);
     holder.append(card);
   }
   if (focus) for (const button of holder.querySelectorAll('button')) {
@@ -280,7 +290,7 @@ function render() {
   if (!selectedRun && model.runs.length) selectedRun = model.runs[0].runId;
   if (!selectedChange && model.changes.changes.length) selectedChange = model.changes.changes[0].changeId;
   $('#updated').textContent = 'Dernière vue · ' + date(model.generatedAt, true);
-  $('#cadence').textContent = 'Collecte ' + model.configuration.pollMs / 1000 + ' s · événements SSE';
+  $('#cadence').textContent = 'Collecte ' + model.configuration.pollMs / 1000 + ' s · vue ' + $('#refresh-interval').selectedOptions[0].textContent;
   $('#version').textContent = model.version; $('#footer-version').textContent = model.version;
   renderHealth(); renderMetrics(); renderWork(); renderDetail(); renderTimeline(); renderArchives();
   if (model.management?.catalogError) $('#management-status').textContent = managementErrors[model.management.catalogError] || 'Gestion du catalogue indisponible.';
@@ -332,13 +342,65 @@ $('#timeline-filter').addEventListener('change', renderTimeline);
 const stream = new EventSource('/api/events');
 stream.addEventListener('open', () => { connected = true; $('#connection').className = 'connection connected'; $('#connection').replaceChildren(node('i'), document.createTextNode('Vue connectée')); });
 stream.addEventListener('snapshot', (event) => {
-  try { model = JSON.parse(event.data); render(); }
-  catch { $('#connection').textContent = 'Observation invalide'; }
+  try {
+    const value = JSON.parse(event.data);
+    if (!validSnapshot(value)) throw new Error('invalid snapshot');
+    pendingSnapshot = { value, receivedAt: Date.now() };
+  } catch { $('#connection').textContent = 'Observation invalide'; }
 });
 stream.addEventListener('error', () => { connected = false; $('#connection').className = 'connection'; $('#connection').replaceChildren(node('i'), document.createTextNode('Reconnexion…')); render(); });
-setInterval(() => {
+function validSnapshot(value) {
+  return value && typeof value.version === 'string' && value.configuration && value.sources &&
+    Array.isArray(value.runs) && Array.isArray(value.changes?.changes) && Number.isFinite(Date.parse(value.generatedAt));
+}
+async function refreshView(explicit = true) {
+  if (refreshing) return;
+  const generation = refreshGeneration;
+  const previous = { model, lastWebSuccessAt };
+  refreshing = true; $('#monitor-refresh').disabled = true;
+  try {
+    let snapshot;
+    if (!explicit && pendingSnapshot && connected && Date.now() - pendingSnapshot.receivedAt <= 1000) {
+      snapshot = { value: pendingSnapshot.value, receivedAt: Date.now() }; pendingSnapshot = null;
+    }
+    else {
+      const response = await fetch('/api/snapshot', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error('snapshot unavailable');
+      const value = await response.json();
+      if (!validSnapshot(value)) throw new Error('invalid snapshot');
+      snapshot = { value, receivedAt: Date.now() }; pendingSnapshot = null;
+    }
+    if (!explicit && generation !== refreshGeneration) return;
+    model = snapshot.value; lastWebSuccessAt = snapshot.receivedAt;
+    $('#refresh-status').textContent = ''; render();
+  } catch {
+    model = previous.model; lastWebSuccessAt = previous.lastWebSuccessAt;
+    if (model) render();
+    $('#refresh-status').textContent = 'Actualisation impossible ; dernière vue conservée.';
+  } finally { refreshing = false; $('#monitor-refresh').disabled = false; }
+}
+function scheduleRefresh() {
+  refreshGeneration++;
+  clearInterval(refreshTimer); refreshTimer = null;
+  const value = $('#refresh-interval').value;
+  if (value !== '0') refreshTimer = setInterval(() => { void refreshView(false); }, Number(value));
+  render();
+}
+try {
+  const saved = localStorage.getItem(refreshPreference);
+  if (refreshValues.includes(saved)) $('#refresh-interval').value = saved;
+} catch { /* La vue reste réglable sans stockage local disponible. */ }
+$('#refresh-interval').addEventListener('change', () => {
+  try { localStorage.setItem(refreshPreference, $('#refresh-interval').value); }
+  catch { $('#refresh-status').textContent = 'Choix actif pour cette page ; mémorisation indisponible.'; }
+  scheduleRefresh();
+});
+$('#monitor-refresh').addEventListener('click', () => { void refreshView(); });
+scheduleRefresh(); void refreshView();
+const healthTimer = setInterval(() => {
   if (webRestart && Date.now() > webRestart.deadline) {
     webRestart = null; $('#management-status').textContent = 'Redémarrage Web non confirmé dans le délai prévu.';
   }
   if (model) { renderHealth(); if (!connected) render(); }
 }, 1000);
+window.addEventListener('pagehide', () => { clearInterval(refreshTimer); clearInterval(healthTimer); stream.close(); });

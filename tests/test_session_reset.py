@@ -25,6 +25,9 @@ class SessionResetTest(unittest.TestCase):
                 "integrationOwner": None, "coordination": {"protocol": "resource-scoped-v1",
                 "accesses": {}, "operations": {}, "global": None}}
         for field, value in (("accesses", {"a": {"state": "HELD"}}),
+                             ("testReservations", {"docker": {"state": "HELD"}}),
+                             ("testReservations", {"browser": {"state": "WAITING"}}),
+                             ("testReservations", {"lxc": {"state": "UNKNOWN"}}),
                              ("operations", {"a": {"state": "UNKNOWN"}}),
                              ("legacySources", [{"sessionId": "ses_legacy", "directory": "/fixture"}]),
                              ("global", {"state": "HELD"})):
@@ -34,6 +37,18 @@ class SessionResetTest(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(RuntimeError):
                 reset.reset_directories([str(self.state)])
             self.assertTrue(registry.exists())
+        registry.write_text(json.dumps(base))
+        self.assertGreater(reset.reset_directories([str(self.state)])[0]["removed_entries"], 0)
+
+    def test_reservations_test_invalides_refusees_et_restituees_admises(self):
+        registry = self.state / "controller-runs.json"
+        base = {"schemaVersion": 4, "runs": [], "coordination": {
+            "protocol": "resource-scoped-v1", "accesses": {}, "operations": {}, "testReservations": []}}
+        registry.write_text(json.dumps(base))
+        with self.assertRaisesRegex(ValueError, "test invalides"):
+            reset.reset_directories([str(self.state)])
+        self.assertTrue(registry.exists())
+        base["coordination"]["testReservations"] = {"a": {"state": "RELEASED"}, "b": {"state": "CANCELLED"}}
         registry.write_text(json.dumps(base))
         self.assertGreater(reset.reset_directories([str(self.state)])[0]["removed_entries"], 0)
 
@@ -269,7 +284,7 @@ class SessionResetTest(unittest.TestCase):
                 process.communicate()
                 raise
         self.assertEqual(process.returncode, 0, errors)
-        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "1.9.0")
+        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "1.10.0")
         readiness = json.loads(replies[2]["result"]["content"][0]["text"])
         self.assertEqual(readiness["pending_count"], 0)
         self.assertEqual(readiness["root_cause"], "CONTROLLER_UNREACHABLE")

@@ -1,0 +1,54 @@
+{
+  "qualification": "two-real-uids",
+  "results": [
+    {
+      "scenario": "success",
+      "actualVersions": {
+        "controller": "1.9.0",
+        "supervisor": "1.9.0",
+        "web": "1.9.0",
+        "broker": "1.9.0"
+      },
+      "serviceUids": {
+        "controller": 1000,
+        "supervisor": 1000,
+        "monitor": 1000
+      },
+      "opencodeUid": 1002,
+      "brokerUid": 1002,
+      "sourceUnchanged": true,
+      "kernelWriteDenied": true,
+      "intentChecks": 1,
+      "openCodePreserved": true,
+      "pausesPreserved": true,
+      "artifactDigest": "e05bc4810ff3665383c5506dc9201968288d3aeaf97ebee45b373670f6f6ef98"
+    },
+    {
+      "scenario": "disconnect-reply-lost",
+      "actualVersions": {
+        "controller": "1.9.0",
+        "supervisor": "1.9.0",
+        "web": "1.9.0",
+        "broker": "1.9.0"
+      },
+      "serviceUids": {
+        "controller": 1000,
+        "supervisor": 1000,
+        "monitor": 1000
+      },
+      "opencodeUid": 1002,
+      "brokerUid": 1002,
+      "sourceUnchanged": true,
+      "kernelWriteDenied": true,
+      "intentChecks": 1,
+      "openCodePreserved": true,
+      "pausesPreserved": true,
+      "artifactDigest": "a677c49fe0daec49113fdb7497729dc7c68e483af1bf92d9107e9a84988d02e1"
+    }
+  ],
+  "image": "sha256:a717a33469731894e77e912ea7d714e27c2dc38ee6554fd1a3102e92999cfc66",
+  "inputs": "/home/devops/datas/cab/.cab-readonly-work/two-uid-inputs-299b1a02af704830be2c0e8a7f16dd8f",
+  "source_files_copied": 67,
+  "host_uid": 1000,
+  "host_accounts_and_permissions_changed": false
+}

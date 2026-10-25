@@ -11,7 +11,7 @@ import { FROZEN_PROFILE, FROZEN_CAPABILITY, collectFrozenProof, proofHash, modul
   inspectControllerInstallation, checkInstallationJournal } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
 
-export const VERSION = '1.9.0';
+export const VERSION = '1.10.0';
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
 const error = (code) => Object.assign(new Error(code), { code });
@@ -582,7 +582,7 @@ export async function updateComponents(input, options = {}) {
         for (const name of brokerFiles) await validate(join(c.pluginRoot,'broker',name),transaction());
       }
       const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
-      const required = ['controller.mjs', 'job-context.mjs', 'runs.mjs', 'resource-coordination.mjs',
+      const required = ['controller.mjs', 'job-context.mjs', 'model-policy.mjs', 'runs.mjs', 'resource-coordination.mjs',
         'statistics.mjs', 'observation-statistics.mjs', 'statistics-maintenance.mjs', 'import-observations.mjs',
         'registry-lock.py', 'supervisor.mjs', 'supervisor-context.mjs', 'opencode-sse-client.mjs', 'healthcheck.mjs',
         'reset.py', 'prompts.py', 'monitor.mjs', 'monitor-data.mjs', 'monitor-events.mjs', 'monitor-management.mjs',

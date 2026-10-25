@@ -35,9 +35,9 @@ async function fixture(t) {
       tool: { callID: 'call-' + op.operationId } });
     registry.nativeIssued(op.operationId);
   };
-  const complete = (run, op, status = 'completed') => registry.completeNative(run.runId, op.operationId, {
+  const complete = (run, op, status = 'completed', exit = 0) => registry.completeNative(run.runId, op.operationId, {
     sessionId: run.sessionId, permissionId: 'permission-' + op.operationId, callId: 'call-' + op.operationId,
-    finishedAt: Date.now() + 1, status });
+    finishedAt: Date.now(), status, exit });
   const release = (run, access, outcome = 'COMPLETED') => registry.releaseAccess(run.runId, {
     version: run.version, operationId: access.accessId, token: access.token, fencing: access.fencing,
     outcome, evidence: ['native end and effects reviewed'] });
@@ -375,4 +375,133 @@ test('reprendre un groupe conservé lève la pause sans libérer ses fichiers ni
   assert.equal(h.r.accesses('a')[0].token,access.token);
   assert.throws(()=>h.start(a,one),/operation-access-not-held/);
   h.start(a,two);h.complete(a,two);h.release(a,access);
+});
+
+
+const dockerTest = { key: 'docker:engine-a', mode: 'write' };
+const lxcTest = { key: 'lxc:host-a/101', mode: 'write' };
+const testLease = (h, run, transactionId, resources = run.resources) => h.r.acquireTests(run.runId, {
+  version: run.version, transactionId, resources, evidence: ['canonical environment identity reviewed'] });
+const testPayload = (run, entry, extra = {}) => ({ version: run.version, transactionId: entry.transactionId,
+  token: entry.token, fencing: entry.fencing, evidence: ['native completion and environment restoration reviewed'], ...extra });
+function finishTestCommand(h, run, id, resources = run.resources, exit = 0) {
+  const op = { ...h.prepare(run, id, resources), kind: 'bash', target: '/usr/bin/true' }; const access = h.acquire(run, op);
+  assert.equal(access.state, 'HELD'); h.start(run, op); h.complete(run, op, 'completed', exit);
+  h.release(run, access); return op;
+}
+function cleanupProof(h, run, prefix, resources = run.resources) {
+  const cleanup = finishTestCommand(h, run, prefix + '-cleanup', resources);
+  const check = finishTestCommand(h, run, prefix + '-verify', resources);
+  return resources.map((r) => ({ resourceKey: r.key, cleanupOperationId: cleanup.operationId,
+    verificationOperationId: check.operationId, restored: true }));
+}
+
+test('Les réservations Docker/LXC sont atomiques, FIFO et indépendantes des verrous de commandes', async (t) => {
+  const h = await fixture(t);
+  const a = h.reserve('a', [dockerTest]); const b = h.reserve('b', [dockerTest]);
+  const c = h.reserve('c', [lxcTest]); const d = h.reserve('d', [dockerTest, lxcTest]);
+  const held = testLease(h,a,'lease-a'); assert.equal(held.state,'HELD');
+  assert.equal(testLease(h,b,'lease-b').state,'WAITING');
+  assert.equal(testLease(h,c,'lease-c').state,'HELD');
+  assert.equal(testLease(h,d,'lease-d').state,'WAITING');
+  finishTestCommand(h,a,'failed-test',a.resources,1);
+  assert.equal(h.r.testReservations('a')[0].state,'HELD');
+  assert.equal(h.r.testReservations('b')[0].state,'WAITING');
+  assert.throws(() => h.r.release('a',a.version,true), /run-accesses-unresolved/);
+  assert.throws(() => h.r.reduce('a',{version:a.version,resources:[dockerTest]}), /run-accesses-unresolved/);
+  assert.throws(() => h.r.publish('a',{version:a.version,transactionId:'publish-a',evidence:['test']}), /run-test-resources-unresolved/);
+  const payload = testPayload(a,held,{cleanup:cleanupProof(h,a,'a')});
+  assert.equal(h.r.releaseTests('a',payload).state,'RELEASED');
+  assert.equal(h.r.releaseTests('a',payload).state,'RELEASED');
+  assert.throws(() => h.r.releaseTests('a',{...payload,evidence:['changed']}), /test-token-invalid/);
+  assert.equal(h.r.testReservations('b')[0].state,'HELD');
+  assert.equal(h.r.testReservations('d')[0].state,'WAITING');
+  assert.equal(h.r.resourceState.global,null);
+});
+
+test('Le nettoyage exige des opérations natives réussies et ordonnées du cycle exact', async (t) => {
+  const h = await fixture(t); const a=h.reserve('a',[dockerTest]); const entry=testLease(h,a,'lease-a');
+  const payload=testPayload(a,entry);
+  assert.throws(() => h.r.releaseTests('a',{...payload,cleanup:[{resourceKey:dockerTest.key,restored:true}]}),/test-cleanup-proof-required/);
+  finishTestCommand(h,a,'test');
+  const cleanup=finishTestCommand(h,a,'bad-cleanup',a.resources,1);
+  const check=finishTestCommand(h,a,'verify');
+  const proof=[{resourceKey:dockerTest.key,cleanupOperationId:cleanup.operationId,verificationOperationId:check.operationId,restored:true}];
+  assert.throws(() => h.r.releaseTests('a',{...payload,cleanup:proof}),/test-cleanup-proof-required/);
+  const complete=cleanupProof(h,a,'good');
+  finishTestCommand(h,a,'test-after-cleanup');
+  assert.throws(() => h.r.releaseTests('a',{...payload,cleanup:complete}),/test-cleanup-proof-required/);
+  assert.equal(h.r.releaseTests('a',{...payload,cleanup:cleanupProof(h,a,'final')}).state,'RELEASED');
+});
+
+test('Le redémarrage conserve la réservation de test et la réconciliation renouvelle le jeton', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'lease-a');
+  finishTestCommand(h,a,'test'); await h.restart();
+  assert.equal(h.r.testReservations('a')[0].reconciliationRequired,true);
+  const op=h.prepare(a,'after-crash');
+  assert.throws(() => h.acquire(a,op),/test-reconciliation-required/);
+  assert.throws(() => h.r.releaseTests('a',testPayload(a,entry)),/test-reconciliation-required/);
+  const reconciliation=testPayload(a,entry,{reconciliationId:'reconcile-a'});
+  const restored=h.r.reconcileTests('a',reconciliation);
+  assert.notEqual(restored.token,entry.token);assert.ok(restored.fencing>entry.fencing);
+  assert.equal(h.r.reconcileTests('a',reconciliation).token,restored.token);
+  assert.throws(() => h.r.releaseTests('a',testPayload(a,entry)),/test-token-invalid/);
+  const cleanup=cleanupProof(h,a,'post-restart');
+  const release=testPayload(a,restored,{cleanup});
+  h.r.releaseTests('a',release);await h.restart();
+  assert.equal(h.r.releaseTests('a',release).state,'RELEASED');
+});
+
+test('Les réservations refusent propriétaire divergent, alias invalide et détention préalable de fichiers', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[dockerTest,file('x')]);const b=h.reserve('b',[dockerTest]);
+  assert.throws(() => testLease(h,a,'invalid',[{key:'docker:ENGINE-A',mode:'write'}]), /test-resource-identity-invalid/);
+  const op=h.prepare(a,'no-lease',[dockerTest]);assert.throws(() => h.acquire(a,op),/test-resource-not-held/);
+  const fileOp=h.prepare(a,'file',[file('x')]);const fileAccess=h.acquire(a,fileOp);
+  assert.throws(() => testLease(h,a,'premature',[dockerTest]),/test-acquisition-boundary-required/);
+  h.start(a,fileOp);h.complete(a,fileOp);h.release(a,fileAccess);
+  const entry=testLease(h,a,'lease-a',[dockerTest]);
+  assert.throws(() => h.r.releaseTests('b',testPayload(b,entry)),/test-token-invalid/);
+  assert.throws(() => h.r.cancelTests('a',testPayload(a,entry)),/test-cancel-refused/);
+  assert.throws(() => h.r.acquireTests('a',{version:a.version,transactionId:'second',resources:[dockerTest],evidence:['x']}),/test-acquisition-boundary-required/);
+});
+
+test('Annuler une attente ne libère jamais un environnement détenu', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[dockerTest]);const b=h.reserve('b',[dockerTest]);
+  testLease(h,a,'a');const waiting=testLease(h,b,'b');
+  assert.equal(h.r.cancelTests('b',testPayload(b,waiting)).state,'CANCELLED');
+  assert.equal(h.r.testReservations('a')[0].state,'HELD');
+  assert.throws(() => h.r.cancelTests('b',{...testPayload(b,waiting),version:b.version-1}),/reservation-version-stale/);
+});
+
+test('Un effet natif inconnu et STOP ne libèrent jamais un environnement de test', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[dockerTest]);const entry=testLease(h,a,'a');
+  const op=h.prepare(a,'unknown');h.acquire(a,op);h.start(a,op);h.r.nativeUnknown(op.operationId);
+  h.r.suspend('a',{version:a.version,action:'STOP',evidence:['explicit fixture stop']});
+  assert.throws(() => h.r.releaseTests('a',testPayload(a,entry)),/test-effects-unresolved/);
+  await h.restart();
+  assert.equal(h.r.testReservations('a')[0].state,'HELD');
+  assert.throws(() => h.r.reconcileTests('a',testPayload(a,entry,{reconciliationId:'unknown'})),/test-reconciliation-boundary-required/);
+});
+
+
+test('navigateurs externes : Chromium exclusif, Firefox indépendant et groupe atomique avec Docker', async (t) => {
+  const h=await fixture(t);
+  const chromium={key:'browser:host-a/chromium',mode:'write'};
+  const firefox={key:'browser:host-a/firefox',mode:'write'};
+  const a=h.reserve('chrome-a',[chromium]);const b=h.reserve('chrome-b',[chromium]);
+  const c=h.reserve('firefox',[firefox]);const d=h.reserve('docker',[dockerTest]);
+  const e=h.reserve('browser-container',[chromium,dockerTest]);
+  const entry=testLease(h,a,'chrome-a');
+  assert.equal(testLease(h,b,'chrome-b').state,'WAITING');
+  assert.equal(testLease(h,c,'firefox').state,'HELD');
+  assert.equal(testLease(h,e,'group').state,'WAITING');
+  assert.equal(testLease(h,d,'docker').state,'WAITING','la FIFO protège le groupe antérieur incompatible');
+  assert.throws(()=>h.r.releaseTests(a.runId,testPayload(a,entry)),/test-cleanup-proof-required/);
+  finishTestCommand(h,a,'browser-test');
+  assert.equal(h.r.testReservations(b.runId)[0].state,'WAITING');
+  h.r.releaseTests(a.runId,testPayload(a,entry,{cleanup:cleanupProof(h,a,'browser') }));
+  assert.equal(h.r.testReservations(b.runId)[0].state,'HELD');
+  assert.equal(h.r.testReservations(e.runId)[0].state,'WAITING');
+  assert.equal(h.r.testReservations(c.runId)[0].state,'HELD');
+  assert.throws(()=>h.r.resources([{key:'browser:host-a/Chromium',mode:'write'}]),/test-resource-identity-invalid/);
 });
