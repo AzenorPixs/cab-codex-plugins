@@ -13,7 +13,7 @@ Le plugin MUST distribuer le broker Python complet synchronisé avec src/, les s
 - **THEN** la mise à jour échoue avant arrêt ou remplacement
 
 ### Requirement: Destinations fermées et privées
-L'outil MUST écrire seulement dans des destinations CAB explicites hors workspace et paquet source, avec propriétaire et type vérifiés. Les liens non reconnus MUST être refusés. Un layout managed-release explicitement autorisé MAY résoudre en lecture des liens relatifs internes, installer une nouvelle release immuable puis basculer atomiquement l'entrée du contrôleur arrêté, sans écriture à travers un lien ni altération de l'ancienne release. La politique explicite reuse-readonly MUST traiter les trois artefacts broker comme entrées de lecture séparées, jamais comme destinations, même si leur propriétaire diffère de l'acteur des services.
+L'outil MUST réserver les écritures aux destinations CAB explicites hors workspace et paquet, avec type et propriétaire vérifiés. Les liens non reconnus MUST être refusés. managed-release autorisé MAY lire les liens relatifs internes, installer une release immuable et basculer atomiquement l'entrée du contrôleur arrêté, sans écrire à travers un lien ni modifier l'ancienne release. reuse-readonly MUST exclure les trois artefacts broker de toute destination.
 
 #### Scenario: Lien non géré
 - **WHEN** l'entrée est absolue, sort de la racine, traverse un lien interne ou diverge de l'autorisation
@@ -42,14 +42,14 @@ Le profil ordinaire MUST prendre en charge les quatre briques et restaurer leurs
 - **THEN** le Web actif est relancé sur le nouveau jeu et le superviseur reste inactif
 
 ### Requirement: Vérification avant reprise
-La réussite MUST exiger les versions propres aux processus relancés, leur workspace et les identités/générations des RUN conservées avant levée du gel. Les pauses préexistantes MUST rester inchangées. Une source inconnue MUST être déclarée indisponible, sans déduction depuis le plugin. En politique reuse-readonly, la version chargée avant maintenance MUST être observée indépendamment de la version des fichiers ; après l'intention de déconnexion, une mauvaise version MUST conserver le gel pour récupération sans faux retour au processus disparu.
+La réussite MUST vérifier versions des processus relancés, workspace, identités et générations avant levée du gel. Les PAUSE MUST être conservées. Une source inconnue MUST rester indisponible, sans déduction du plugin. reuse-readonly MUST distinguer versions chargée et sur disque ; après intention de déconnexion, une mauvaise version MUST conserver le gel pour récupération sans faux rollback.
 
 #### Scenario: Broker de mauvaise version après reconnexion
 - **WHEN** la readiness indique une ancienne version du broker
 - **THEN** la réussite est refusée et le repli applicable est engagé, ou la récupération sous gel est exigée après la frontière reuse-readonly
 
 ### Requirement: Journal et retour arrière récupérables
-L'outil MUST conserver un journal atomique privé et les sauvegardes des seuls artefacts remplacés. Un verrou MUST interdire les déploiements concurrents. Une erreur après arrêt MUST déclencher le rétablissement des artefacts et états initiaux lorsque ce repli est possible ; une interruption MUST être récupérable avant une nouvelle transaction. Le repli MUST NOT restaurer un ancien runtime métier. En politique reuse-readonly, l'intention de déconnexion MUST être durable avant l'appel natif ; après cette intention, un échec MUST conserver le gel et permettre seulement une récupération vérifiée vers le jeu autorisé, sans restaurer les artefacts broker ni annoncer le retour du processus antérieur.
+Un verrou exclusif MUST protéger journal privé atomique et sauvegardes des seuls artefacts remplacés. Après arrêt, un échec MUST rétablir si possible artefacts et états initiaux, sans restaurer un runtime métier. Une interruption MUST être récupérable avant une autre transaction. reuse-readonly MUST persister l'intention avant déconnexion ; un échec ultérieur MUST conserver le gel pour récupération vers la cible, sans restaurer le broker ni prétendre rétablir l'ancien processus.
 
 #### Scenario: Démarrage de la nouvelle version échoué
 - **WHEN** une brique refuse le nouveau jeu
@@ -63,7 +63,7 @@ Un jeu déjà conforme MUST être conservé sans redémarrage inutile. Le bilan 
 - **THEN** les briques actives restent en place et le bilan indique déjà à jour
 
 ### Requirement: Alignement ordinaire des releases gérées
-Le mode ordinaire layout=managed-release MUST préparer les briques à installer sous leurs racines autorisées, confirmer HELD, puis charger de nouvelles releases immuables et basculer les seuls pointeurs contrôlés. Il MUST préserver les releases antérieures et refuser les liens non reconnus. En politique reuse-readonly, les trois artefacts broker préexistants MUST être vérifiés sans installation ou changement de pointeur. Le succès MUST vérifier les versions réellement chargées 1.9.0, le broker reconnecté et les identités conservées avant reprise métier explicite.
+managed-release MUST préparer les briques à installer dans leurs racines autorisées, confirmer HELD et basculer atomiquement les pointeurs contrôlés vers des releases immuables, sans altérer les anciennes. Les liens non reconnus MUST être refusés. reuse-readonly MUST vérifier les trois artefacts broker sans installation ou bascule. Le succès MUST prouver les versions chargées 1.9.0, la reconnexion broker et les identités conservées avant reprise métier explicite.
 
 #### Scenario: Après récupération mixte
 - **WHEN** complete a réussi et une seconde maintenance ordinaire est explicitement autorisée
