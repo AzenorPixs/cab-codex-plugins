@@ -13,7 +13,7 @@ import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.m
 import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-const version = "1.10.1";
+const version = "1.10.2";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -349,25 +349,26 @@ async function proveNativeCompletions(runId, access) {
     registry.completeNative(runId, op.operationId, proof);
   }
 }
-async function modelObservation(route) {
+async function modelObservation(route, maxBytes = 2 * 1024 * 1024) {
   const response = await fetch(opencodeUrl + route + (route.includes('?') ? '&' : '?') + 'directory=' + encodeURIComponent(workspace),
     { signal: AbortSignal.timeout(10000), redirect: 'error' });
   if (!response.ok || !response.body) { await response.body?.cancel(); throw new CoordinationError('model-observation-unavailable'); }
   const chunks = []; let size = 0;
   for await (const chunk of response.body) {
     size += chunk.length;
-    if (size > 2 * 1024 * 1024) throw new CoordinationError('model-observation-too-large');
+    if (size > maxBytes) throw new CoordinationError('model-observation-too-large');
     chunks.push(chunk);
   }
   try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
   catch { throw new CoordinationError('model-observation-invalid'); }
 }
 async function resolveCodingModel(input) {
-  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['model','reasoning','unavailablePreflights'].includes(key))) {
+  if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['model','reasoning','unavailablePreflights','providerMaxBytes'].includes(key)) ||
+      (input.providerMaxBytes !== undefined && (!Number.isSafeInteger(input.providerMaxBytes) || input.providerMaxBytes <= 0))) {
     throw new CoordinationError('model-selection-input-invalid',400);
   }
   const catalog = input.model === undefined ? readModelCatalog() : undefined;
-  const providers = await modelObservation('/provider');
+  const providers = await modelObservation('/provider', input.providerMaxBytes);
   const refs = input.unavailablePreflights === undefined ? [] : input.unavailablePreflights;
   if (!Array.isArray(refs) || refs.length > 12) throw new CoordinationError('model-selection-input-invalid',400);
   const unavailable = [];

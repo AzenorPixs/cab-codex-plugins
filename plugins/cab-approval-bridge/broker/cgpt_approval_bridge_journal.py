@@ -80,7 +80,7 @@ import os
 import threading
 import uuid
 
-VERSION = "1.10.1"
+VERSION = "1.10.2"
 
 from contextlib import contextmanager
 from datetime import datetime, timezone

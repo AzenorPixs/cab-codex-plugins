@@ -840,7 +840,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.10.1');
+  assert.equal(initialized.result.serverInfo.version, '1.10.2');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1343,4 +1343,35 @@ test('PLLM HTTP : refus natifs high/xhigh corrélés autorisent le repli mais 42
  assert.equal(JSON.stringify(next.body).includes('diagnostic privé fictif'),false);
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[high,xhigh]})).body.error,'explicit-model-unavailable');
  assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('high',429)]})).body.error,'model-unavailability-not-proved');
+});
+
+
+test('Budget /provider fourni par la session : bornes exactes, portée locale et confidentialité',async(t)=>{
+ const h=await setup(t,{codingPolicy:true});const marker='DONNEE_PRIVEE_SYNTHETIQUE';
+ h.native.providers.privatePadding=marker+'x'.repeat(3*1024*1024);
+ const bytes=Buffer.byteLength(JSON.stringify(h.native.providers));
+ assert.equal((await h.post('/model-policy/resolve',{})).body.error,'model-observation-too-large');
+ for(const value of [0,-1,1.5,'8000000',null,Number.MAX_SAFE_INTEGER+1]){
+  const observations=()=>h.native.requests.filter(p=>p==='/provider'||p.startsWith('/session/ses_probe')).length;
+  const before=observations();
+  const result=await h.post('/model-policy/resolve',{providerMaxBytes:value});
+  assert.equal(result.body.error,'model-selection-input-invalid');assert.equal(observations(),before);
+ }
+ assert.equal((await h.post('/model-policy/resolve',{providerMaxBytes:bytes-1})).body.error,'model-observation-too-large');
+ const exact=await h.post('/model-policy/resolve',{providerMaxBytes:bytes});assert.equal(exact.status,200);assert.equal(exact.body.reasoning,'high');
+ assert.ok(!JSON.stringify(exact).includes(marker));
+ assert.equal((await h.post('/model-policy/resolve',{})).body.error,'model-observation-too-large');
+ const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
+ const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['budget'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{providerMaxBytes:bytes},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
+ h.native.sessions.ses_probe={privatePadding:marker+'x'.repeat(2*1024*1024)};
+ assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-observation-too-large');
+ delete h.native.sessions.ses_probe;
+ h.native.messages.ses_probe[1].parts.push({type:'text',text:marker+'x'.repeat(2*1024*1024)});
+ assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-observation-too-large');
+ h.native.messages.ses_probe[1].parts.pop();
+ const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));
+ assert.ok(!JSON.stringify(armed).includes(marker));assert.ok(!JSON.stringify((await h.get('/runs/a/job')).body).includes(marker));
+ h.native.providers.privatePadding=marker+'x'.repeat(17*1024*1024);
+ const larger=Buffer.byteLength(JSON.stringify(h.native.providers));assert.ok(larger>16*1024*1024);
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',providerMaxBytes:larger})).status,200);
 });

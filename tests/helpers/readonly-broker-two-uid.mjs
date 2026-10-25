@@ -105,7 +105,7 @@ async function scenario(dropReply){
   const pluginRoot='/inputs/plugins/cab-approval-bridge',original='/inputs/original';
   const historicalRecovery=process.env.CAB_TEST_HISTORICAL_RECOVERY==='1';
   const originalVersion=JSON.parse(await readFile(join(original,'.codex-plugin/plugin.json'),'utf8')).version.split('+')[0];
-  assert.ok(['1.7.1','1.9.0'].includes(originalVersion));
+  assert.ok(['1.7.1','1.9.0','1.10.1'].includes(originalVersion));
   const scripts=join(home,'.local/share/cab-approval-bridge'),seed=join(scripts,'releases/seed/scripts');
   const monitorRoot=join(home,'.local/share/cab-approval-bridge-monitor'),monitorScripts=join(monitorRoot,'scripts');
   const processes={},children=[],events=[];let stderr='';
@@ -114,7 +114,7 @@ async function scenario(dropReply){
   async function stop(child){if(child&&child.exitCode===null&&child.signalCode===null){const done=new Promise((resolve)=>child.once('exit',resolve));child.kill('SIGTERM');await done;}}
   try{
     for(const p of [home,workspace,brokerDirectory,brokerState,seed,join(home,'.config/systemd/user'),join(monitorRoot,'releases/seed')])await mkdir(p,{recursive:true,mode:0o700});
-    await cp(join(originalVersion==='1.9.0'?original:pluginRoot,'scripts'),seed,{recursive:true});
+    await cp(join(originalVersion!=='1.7.1'?original:pluginRoot,'scripts'),seed,{recursive:true});
     for(const name of ['cgpt-approval-bridge-supervisor.mjs','cgpt-approval-bridge-supervisor-context.mjs'])await copyFile(join(original,'scripts',name),join(seed,name));
     for(const name of await readdir(seed))await symlink('releases/seed/scripts/'+name,join(scripts,name));
     await cp(join(original,'scripts'),join(monitorRoot,'releases/seed/scripts'),{recursive:true});
