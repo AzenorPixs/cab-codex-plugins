@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { CoordinationError, RunRegistry } from "../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs";
+import { ResourceRunRegistry } from "../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs";
+import { createHash } from 'node:crypto';
 
 async function setup(t) {
   const directory = mkdtempSync(join(tmpdir(), "cab-registry-"));
@@ -28,6 +30,74 @@ async function setup(t) {
 const completion = (run, transactionId = 'publish-a') => ({ version: run.version, referenceVersion: 0,
   acquire: false, published: true, evidence: ['validated current base and own archive'],
   completion: { transactionId, reportFile: `openspec/changes/archive/2026-10-16-${run.changeId}/STATISTIQUES.md` } });
+
+async function notificationRegistry(t) {
+  const directory = mkdtempSync(join(tmpdir(), 'cab-notification-'));
+  const state = join(directory, 'state');
+  const registry = new ResourceRunRegistry(directory, state); await registry.acquireAuthority();
+  t.after(async () => {
+    const ended = new Promise((resolve) => registry.lock.once('exit', resolve)); registry.close(); await ended;
+    rmSync(directory, { recursive: true, force: true });
+  });
+  const a = registry.reserve({ runId: 'a', ownerId: 'codex-a', sessionId: 'ses_a', directory,
+    changeId: 'change-a', selectionKey: 'intent-a', dependsOn: [], resources: [{ key: 'file:src/a.py', mode: 'read' }] });
+  const approval = { run_id: a.runId, reservation_version: a.version, requestId: 'preflight-a', approval_id: 'approval-a',
+    change_id: a.changeId, session_id: a.sessionId, directory, files: [], commands: ['/usr/bin/true'],
+    resources: a.resources, operation_id: 'operation-a', operation_digest: 'a'.repeat(64),
+    expected_revisions: { 'file:src/a.py': 0 }, coordination_protocol: 'resource-scoped-v1' };
+  const digest = createHash('sha256').update('synthetic full notification identity').digest('hex');
+  const receipt = { transactionId: 'repair-a', jobId: 'job-a', recoveryId: 'recovery-a', operationId: approval.operation_id,
+    approvalId: approval.approval_id, sessionId: a.sessionId, inputDigest: 'b'.repeat(64), nativeToolHash: 'c'.repeat(64),
+    authorizationDigest: 'd'.repeat(64), contextId: a.contextId, version: a.version, nativeToolCount: 1,
+    outcome: 'REJECTION_ONLY', at: new Date().toISOString() };
+  return { directory, state, registry, a, approval, digest, receipt };
+}
+
+test('admission de notification : propriétaire et opération dans une seule persistance', async (t) => {
+  const { registry, directory, state, approval, digest } = await notificationRegistry(t);
+  const observed = []; registry.observe = (snapshot) => observed.push(snapshot);
+  registry.admitValidation('a', approval, digest, false);
+  assert.equal(observed.length, 1);
+  assert.equal(observed[0].requestOwners[approval.requestId].digest, digest);
+  assert.equal(observed[0].coordination.operations[approval.operation_id].state, 'PREPARED');
+  assert.deepEqual(new ResourceRunRegistry(directory, state).snapshot(), registry.snapshot());
+  registry.admitValidation('a', approval, digest, true); assert.equal(observed.length, 1);
+  assert.throws(() => registry.admitValidation('a', approval, digest, false), /request-reconciliation-required/);
+  assert.throws(() => registry.admitValidation('a', approval, 'f'.repeat(64), true), /request-id-already-owned/);
+});
+
+test('admission de notification : persistance en échec ferme le registre sans résultat durable partiel', async (t) => {
+  const { registry, directory, state, approval, digest } = await notificationRegistry(t);
+  const originalPath = registry.path; const initial = readFileSync(originalPath, 'utf8');
+  registry.path = join(state, 'absent', 'controller-runs.json');
+  assert.throws(() => registry.admitValidation('a', approval, digest, false), /registry-persistence-failed/);
+  assert.throws(() => registry.assertHealthy(), /registry-unavailable/);
+  assert.equal(readFileSync(originalPath, 'utf8'), initial);
+  const restored = new ResourceRunRegistry(directory, state);
+  assert.equal(restored.requestOwners[approval.requestId], undefined);
+  assert.equal(restored.resourceState.operations[approval.operation_id], undefined);
+});
+
+test('reçu orphelin durable : répétition, divergences et verrou rejet seul après restauration', async (t) => {
+  const { registry, directory, state, approval, digest, receipt } = await notificationRegistry(t);
+  registry.prepareOperation('a', approval); registry.claimRequest('a', approval.requestId, digest, false);
+  assert.deepEqual(registry.reconcileNotification('a', approval, digest, receipt), receipt);
+  const initial = registry.snapshot();
+  assert.deepEqual(registry.reconcileNotification('a', approval, digest, { ...receipt, at: '2026-10-25T00:00:00Z' }), receipt);
+  assert.deepEqual(registry.snapshot(), initial);
+  assert.throws(() => registry.reconcileNotification('a', approval, digest, { ...receipt, inputDigest: 'e'.repeat(64) }), /transaction-divergent/);
+  assert.throws(() => registry.reconcileNotification('a', { ...approval, commands: ['true'] }, digest, receipt), /identity-divergent/);
+  const restored = new ResourceRunRegistry(directory, state);
+  assert.deepEqual(restored.requestOwners[approval.requestId].reconciliation, receipt);
+  assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly, true);
+  assert.throws(() => registry.acquireAccess('a', { version: approval.reservation_version,
+    operationId: approval.operation_id, operationDigest: approval.operation_digest, resources: approval.resources,
+    operationIds: [approval.operation_id], expectedRevisions: approval.expected_revisions }), /access-operation-not-prepared/);
+  const corrupt = JSON.parse(readFileSync(registry.path, 'utf8'));
+  delete corrupt.coordination.operations[approval.operation_id].rejectionOnly;
+  writeFileSync(registry.path, JSON.stringify(corrupt));
+  assert.throws(() => new ResourceRunRegistry(directory, state), /registry-restoration-invalid/);
+});
 
 test('publication et REPORT sont observés en une seule transition durable', async (t) => {
   const { registry, candidate, directory, state } = await setup(t);

@@ -1,0 +1,40 @@
+{
+  "baseline_files": 430,
+  "changed": [
+    "BUILD.md",
+    "TECHNICAL.md",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+    "tests/concurrent-controller.test.mjs",
+    "tests/concurrent-run-registry.test.mjs",
+    "tests/controller-session-recovery.test.mjs"
+  ],
+  "new_change_files": [
+    "openspec/changes/fix-orphaned-validation-admission/ACTIVATION.md",
+    "openspec/changes/fix-orphaned-validation-admission/QUALIFICATION.md",
+    "openspec/changes/fix-orphaned-validation-admission/design.md",
+    "openspec/changes/fix-orphaned-validation-admission/proposal.md",
+    "openspec/changes/fix-orphaned-validation-admission/specs/approval-persistence/spec.md",
+    "openspec/changes/fix-orphaned-validation-admission/specs/approval-workflow/spec.md",
+    "openspec/changes/fix-orphaned-validation-admission/specs/controller-transport/spec.md",
+    "openspec/changes/fix-orphaned-validation-admission/tasks.md"
+  ],
+  "missing": [],
+  "unexpected_changes": [],
+  "expected_changes_present": true,
+  "encoding_errors": [],
+  "installed_cache_matches_initial_modules": true,
+  "source_sha256": {
+    "BUILD.md": "128cb268befba3235fec9ba8bd9f6e2096049f44c57a2f762dbd97522a2304b7",
+    "TECHNICAL.md": "f680c0facf6c69dfb045ef51b1fa9742fbe858440e5068b384aa69a2fc8131a8",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs": "a183546ae9e6ef944f4a15d2167d5c13a88a0655ceb600ba4b82e19f7a6128c3",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs": "9dc81843f892ca40558a84ca22720dbaad1449c4292db732581b8307186c330c",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs": "7f9a2204a21cf38d97dbff564bcd189b5abc80f653349d11a6b51fb34a1c9347",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs": "65a8f2727cdc0f3510d2d6e74333823764c2ef3951ef728782f75af00c08a66a",
+    "tests/concurrent-controller.test.mjs": "572034b89c2e91d99a554cda3581db9d987c32cd3592f33f7af5f5d6a9b19e73",
+    "tests/concurrent-run-registry.test.mjs": "89a4700737ac48ee322cd323c672228d2e797b9030f8433737201b141fe62218",
+    "tests/controller-session-recovery.test.mjs": "e01001a626a82434cde251d5be5aad00bc79ed4cead1abd7eb76581f5ea0d553"
+  }
+}

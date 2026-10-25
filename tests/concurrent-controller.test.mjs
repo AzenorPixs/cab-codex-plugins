@@ -2,13 +2,14 @@ import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import test from 'node:test';
+import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -16,7 +17,7 @@ async function waitFor(check) {
   for (let i = 0; i < 200; i++) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
-async function setup(t, { reconnectMs = 30 } = {}) {
+async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
   const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
   const eventStreams = new Set();
@@ -62,6 +63,7 @@ async function setup(t, { reconnectMs = 30 } = {}) {
       OC_Codex_STATUS_PORT: String(port), OC_Codex_OPENCODE_URL: 'http://127.0.0.1:' + opencode.address().port,
       OC_Codex_DECISION_MODE: 'manual', OC_Codex_RECONNECT_MS: String(reconnectMs),
       CODEX_COMMAND: 'cab-test-unused-app-server',
+      ...environment,
     } });
     child.stderr.on('data', (data) => { stderr += data; });
     await waitFor(async () => { if (child.exitCode !== null) throw new Error(stderr);
@@ -78,7 +80,8 @@ async function setup(t, { reconnectMs = 30 } = {}) {
     }
     await stop(); opencode.closeAllConnections();
     await new Promise((resolve) => opencode.close(resolve)); rmSync(directory, { recursive: true, force: true }); });
-  const get = async (path) => { const r = await fetch(base + path, { headers: { connection: 'close' } }); return { status: r.status, body: await r.json() }; };
+  const get = async (path) => { const r = await fetch(base + path, { headers: { connection: 'close' } });
+    const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
   const post = async (path, data) => { const r = await fetch(base + path, { method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' }, body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
     const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
@@ -143,6 +146,155 @@ async function setup(t, { reconnectMs = 30 } = {}) {
     approvedAccess, execute, completeTool, releaseOperation };
 }
 
+test('garde du moniteur : quiescence, origine et exclusion des mutations concurrentes', async (t) => {
+  const h = await setup(t);
+  const headers = { 'content-type': 'application/json', 'x-cab-monitor': '1' };
+  const post = async (path, body, extra = {}) => {
+    const response = await fetch(h.base + '/monitor/lifecycle/' + path, { method: 'POST',
+      headers: { ...headers, ...extra }, body: JSON.stringify(body) });
+    return { status: response.status, body: await response.json() };
+  };
+  assert.equal((await post('prepare', { workspace: h.directory }, { origin: 'https://foreign.invalid' })).status, 403);
+  h.native.busy = { session: { type: 'busy' } };
+  assert.equal((await post('prepare', { workspace: h.directory })).status, 409);
+  h.native.busy = {};
+  h.native.permissions = [{ id: 'pending', sessionID: 'session' }];
+  assert.equal((await post('prepare', { workspace: h.directory })).status, 409);
+  h.native.permissions = [];
+  const lease = await post('prepare', { workspace: h.directory });
+  assert.equal(lease.status, 200, JSON.stringify(lease));
+  assert.equal(lease.body.workspace, h.directory); assert.ok(lease.body.pid > 0);
+  assert.equal((await h.post('/runs/reserve', h.candidate('blocked'))).status, 409);
+  assert.equal((await post('release', { token: 'wrong' })).status, 409);
+  assert.equal((await post('release', { token: lease.body.token })).status, 200);
+  await h.reserve('active');
+  assert.equal((await post('prepare', { workspace: h.directory })).status, 409);
+});
+
+test('la garde refuse une mutation déjà en vol sans interrompre sa réservation', async (t) => {
+  const h = await setup(t); let resume; let entered;
+  const waiting = new Promise((resolve) => { entered = resolve; });
+  const paused = new Promise((resolve) => { resume = resolve; });
+  h.native.onRequest = async (path) => { if (path === '/session/ses_race') { entered(); await paused; } };
+  const reservation = h.post('/runs/reserve', h.candidate('race')); await waiting;
+  const response = await fetch(h.base + '/monitor/lifecycle/prepare', { method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-cab-monitor': '1' }, body: JSON.stringify({ workspace: h.directory }) });
+  assert.equal(response.status, 409); resume();
+  assert.equal((await reservation).status, 201);
+});
+
+test('API STATS et purge : contrat HTTP, origines et préservation du RUN', async (t) => {
+  const h = await setup(t);
+  await h.reserve('stats');
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.get('/statistics/dashboard?selection=7d&runId=stats')).status, 200);
+  assert.equal((await h.get('/statistics/dashboard?selection=invalid')).status, 400);
+  const route = h.base + '/statistics/retention/preview';
+  const headers = { 'content-type': 'application/json', 'x-cab-statistics': '1' };
+  assert.equal((await fetch(route, { method: 'POST', body: '{"days":7}' })).status, 400);
+  assert.equal((await fetch(route, { method: 'POST', headers: { ...headers, origin: 'http://foreign.invalid' }, body: '{"days":7}' })).status, 403);
+  const response = await fetch(route, { method: 'POST', headers, body: '{"days":7}' });
+  assert.equal(response.status, 200); const preview = await response.json();
+  assert.ok(preview.protectedContexts >= 1);
+  const purge = await fetch(h.base + '/statistics/retention/purge', { method: 'POST', headers,
+    body: JSON.stringify({ token: preview.token, confirm: true }) });
+  assert.equal(purge.status, 200); assert.equal((await purge.json()).status, 'completed');
+  assert.deepEqual((await h.get('/runs')).body, before);
+});
+
+for (const [environment, expected] of [[{}, 16384], [{ OC_Codex_MAX_COMMAND_LENGTH: '4096' }, 4096],
+  [{ OC_CGPT_MAX_COMMAND_LENGTH: '2000' }, 2000]]) {
+  test(`statuts publics et journal de supervision en lecture seule : limite ${expected}`, async (t) => {
+    const h = await setup(t, { environment });
+    assert.deepEqual((await h.get('/status')).body.configuration, { maxCommandLength: expected, commandLengthUnit: 'UTF-16' });
+    const run = await h.reserve('monitor');
+    assert.equal((await h.get('/status')).body.configuration.maxCommandLength, expected);
+    assert.equal((await h.get('/runs/monitor/status')).body.configuration.maxCommandLength, expected);
+    const approval = h.approval(run, 'monitor-request');
+    approval.summary = 'PRIVATE-MONITOR-SENTINEL';
+    h.native.messages[run.sessionId].at(-1).parts[0].state.input.summary = approval.summary;
+    const pending = await h.post('/validation/request', { approval });
+    assert.equal(pending.status, 202, JSON.stringify(pending));
+    const before = (await h.get('/runs')).body;
+    const observed = await h.get('/monitor/events');
+    assert.equal(observed.status, 200);
+    assert.ok(observed.body.events.some((event) => event.requestId === 'monitor-request' && event.runId === 'monitor'));
+    assert.ok(!JSON.stringify(observed.body).includes('PRIVATE-MONITOR-SENTINEL'));
+    assert.deepEqual((await h.get('/runs')).body, before);
+    assert.equal(h.native.replies.length, 0);
+    const abort = new AbortController();
+    const stream = await fetch(h.base + '/monitor/events', { headers: { accept: 'text/event-stream' }, signal: abort.signal });
+    const reader = stream.body.getReader();
+    assert.match(new TextDecoder().decode((await reader.read()).value), /event: snapshot/);
+    abort.abort(); await reader.cancel().catch(() => {});
+  });
+}
+
+test('le chemin historique accepte une étape et la conserve après redémarrage', async (t) => {
+  const h = await setup(t);
+  assert.equal((await h.post('/job/arm', { jobId: 'legacy-step', sessionId: 'ses_legacy_step',
+    directory: h.directory, changeId: 'change-legacy', criteria: [] })).status, 201);
+  const declared = await h.post('/job/progress', { jobId: 'legacy-step', stepId: 'ARCHIVING', expectedStepSequence: 0 });
+  assert.equal(declared.status, 202);
+  assert.equal(declared.body.terminalGate.status, 'OPEN');
+  await h.stop(); await h.start();
+  assert.deepEqual((await h.get('/job')).body.lifecycle, declared.body.lifecycle);
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('cycle par RUN : retour 8→6, idempotence, restauration et nouveau job', async (t) => {
+  const h = await setup(t); await h.reserve('steps'); await h.reserve('peer');
+  const progress = (stepId, expectedStepSequence, extra = {}) => h.post('/runs/steps/job/progress',
+    { jobId: 'job-steps', stepId, expectedStepSequence, ...extra });
+  assert.equal((await h.get('/runs/steps/job')).body.lifecycle, null);
+  assert.equal((await progress('REVIEW', 0)).status, 202);
+  const implementation = await progress('IMPLEMENTATION', 1);
+  assert.equal(implementation.status, 202);
+  const lifecycle = implementation.body.lifecycle;
+  assert.deepEqual(lifecycle.history.map((entry) => entry.id), ['REVIEW', 'IMPLEMENTATION']);
+  assert.deepEqual((await progress('IMPLEMENTATION', 1)).body.lifecycle, lifecycle);
+  assert.equal((await progress('CLOSURE', 1)).status, 400);
+  assert.equal((await progress('UNKNOWN', 2)).status, 400);
+  assert.equal((await progress('CLOSURE', 2, { stepStatus: 'DONE' })).status, 400);
+  const a = (await h.get('/runs/steps/status')).body;
+  assert.equal(a.coordination.phase, 'WORK'); assert.equal(a.terminalGate.status, 'OPEN');
+  assert.equal((await h.get('/runs/peer/job')).body.lifecycle, null);
+  assert.equal(h.native.replies.length, 0);
+  assert.ok((await h.get('/monitor/events')).body.events.some((event) => event.runId === 'steps' && event.stepId === 'IMPLEMENTATION'));
+  await h.stop(); await h.start();
+  assert.deepEqual((await h.get('/runs/steps/job')).body.lifecycle, lifecycle);
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 0 });
+  assert.equal((await h.post('/runs/steps/job/arm', { jobId: 'job-steps', sessionId: 'ses_steps', directory: h.directory,
+    changeId: 'change-steps', criteria: ['delivery', 'statistics'] })).status, 201);
+  assert.deepEqual((await h.get('/runs/steps/job')).body.lifecycle, lifecycle);
+  assert.equal((await progress('CLOSURE', 2)).body.terminalGate.status, 'OPEN');
+  assert.equal((await h.post('/runs/steps/job/terminal-gate', { state: 'TERMINÉ' })).status, 201);
+  assert.equal((await progress('IMPLEMENTATION', 3)).status, 400);
+  assert.equal((await h.post('/runs/steps/job/disarm', { jobId: 'job-steps' })).status, 202);
+  assert.equal((await h.post('/runs/steps/job/arm', { jobId: 'new-job', sessionId: 'ses_steps', directory: h.directory,
+    changeId: 'change-steps', criteria: [] })).body.lifecycle, null);
+});
+
+test('deux déclarations concurrentes ne perdent aucun passage et une persistance échouée ne publie pas l’étape', async (t) => {
+  const h = await setup(t); const run = await h.reserve('steps');
+  const progress = (stepId, expectedStepSequence) => h.post('/runs/steps/job/progress',
+    { jobId: 'job-steps', stepId, expectedStepSequence });
+  const results = await Promise.all([progress('REVIEW', 0), progress('IMPLEMENTATION', 0)]);
+  assert.equal(results.filter((result) => result.status === 202).length, 1);
+  assert.ok(results.some((result) => [400, 409].includes(result.status)));
+  const before = (await h.get('/runs/steps/job')).body.lifecycle;
+  assert.equal(before.sequence, 1);
+  const target = before.history[0].id === 'REVIEW' ? 'IMPLEMENTATION' : 'REVIEW';
+  const temporary = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'steps',
+    String(run.contextId || run.version), 'controller-job.json.tmp');
+  mkdirSync(temporary);
+  assert.equal((await progress(target, 1)).status, 400);
+  assert.deepEqual((await h.get('/runs/steps/job')).body.lifecycle, before);
+  assert.equal((await h.get('/monitor/events')).body.events.filter((event) => event.type === 'lifecycle-step-changed').length, 1);
+  rmSync(temporary, { recursive: true });
+  assert.equal((await progress(target, 1)).body.lifecycle.sequence, 2);
+});
+
 test('publication ciblée HTTP : reçu après reprise, génération, gate et pair indépendant', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
   const { approval, access } = await h.approvedAccess(a, 'published-a');
@@ -151,6 +303,8 @@ test('publication ciblée HTTP : reçu après reprise, génération, gate et pai
     transactionId: 'publication-a', outcome: 'COMPLETED', proofRevisions: approval.expected_revisions,
     reportFile: 'openspec/changes/archive/2026-10-16-change-a/STATISTIQUES.md', evidence: ['validation and archive reviewed'] };
   const result = await h.post('/runs/a/publish', payload); assert.equal(result.status, 200, JSON.stringify(result));
+  assert.ok((await h.get('/monitor/events')).body.events.some((event) =>
+    event.operationId === approval.operation_id && event.operationState === 'COMPLETED'));
   assert.equal((await h.get('/runs/b/status')).body.coordination.reason, null);
   assert.equal((await h.get('/runs')).body.runs.find((r) => r.runId === 'b').version, b.version);
   assert.equal((await h.get('/runs/a/status')).body.terminalGate.status, 'OPEN');
@@ -287,6 +441,34 @@ test('trois sessions, permissions once exactes et décisions isolées', async (t
   assert.equal((await h.post('/job/progress', { jobId: 'job-a' })).status, 409);
 });
 
+test('un RUN arrêté puis abandonné reprend après redémarrage sans permission héritée', async (t) => {
+  const h = await setup(t); const a = await h.reserve('resume', {
+    resources: [{ key: 'file:src/resume.py', mode: 'read' }] });
+  assert.equal((await h.post('/runs/resume/job/terminal-gate', { state: 'BLOQUÉ',
+    reason: 'explicit documentary prerequisite' })).status, 201);
+  assert.equal((await h.post('/runs/resume/job/disarm', { jobId: 'job-resume' })).status, 202);
+  assert.equal((await h.post('/runs/resume/suspend', { version: a.version, action: 'STOP',
+    evidence: ['targeted stop after gate'] })).status, 200);
+  const released = await h.post('/runs/resume/release', { version: a.version, delivered: false,
+    evidence: ['no pending effects; prerequisite requires decision'] });
+  assert.equal(released.status, 200); assert.equal(released.body.state, 'ABANDONED');
+  await h.stop(); await h.start();
+  const next = await h.post('/runs/reserve', { ...h.candidate('resume'),
+    resources: a.resources, exclusiveResources: [] });
+  assert.equal(next.status, 201, JSON.stringify(next));
+  assert.ok(next.body.version > released.body.version); assert.notEqual(next.body.contextId, a.contextId);
+  assert.equal(next.body.suspension, undefined);
+  assert.equal((await h.post('/runs/resume/job/arm', { jobId: 'job-resume-new', sessionId: a.sessionId,
+    directory: h.directory, changeId: a.changeId, strictCommands: true, criteria: ['resumed delivery'] })).status, 201);
+  const job = (await h.get('/runs/resume/job')).body;
+  assert.equal(job.jobId, 'job-resume-new'); assert.equal(job.terminalGate.status, 'OPEN');
+  const snapshot = (await h.get('/runs')).body;
+  assert.ok(snapshot.history.some((run) => run.runId === a.runId && run.contextId === a.contextId &&
+    run.state === 'ABANDONED' && run.suspension.action === 'STOP'));
+  assert.deepEqual(h.native.replies, []);
+  assert.equal(Object.keys(snapshot.coordination.operations).length, 0);
+});
+
 test('une session allow est refusée sans bloquer la permission once d’un autre RUN', async (t) => {
   const h = await setup(t);
   const a = await h.reserve('a');
@@ -302,6 +484,227 @@ test('une session allow est refusée sans bloquer la permission once d’un autr
   assert.equal(h.native.replies[0].path, '/session/ses_b/permissions/safe-b-permission');
   assert.deepEqual(h.native.replies[0].body, { response: 'once' });
   assert.equal((await h.get('/runs/a/job')).body.sessionId, 'ses_a');
+});
+
+test('admission ask refusée puis corrigée : aucun propriétaire ou opération orphelin', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a');
+  const approval = h.approval(a, 'ask-drift');
+  let reads = 0;
+  h.native.onRequest = async (path) => {
+    if (path === '/session/ses_a' && ++reads === 2) {
+      h.native.rules.ses_a = [{ permission: 'bash', pattern: '*', action: 'allow' }];
+    }
+  };
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/validation/resource-request', { approval })).body.error, 'native-permission-ask-required');
+  const refused = (await h.get('/runs')).body;
+  assert.deepEqual(refused.requestOwners, before.requestOwners);
+  assert.deepEqual(refused.coordination.operations, before.coordination.operations);
+  assert.equal((await h.get('/runs/a/status')).body.undecidedValidationCount, 0);
+  h.native.onRequest = null; h.native.rules.ses_a = [{ permission: '*', pattern: '*', action: 'ask' }];
+  assert.equal((await h.post('/validation/resource-request', { approval })).status, 202);
+  assert.equal((await h.post('/runs/a/decision/ask-drift', { decision: 'rejected' })).status, 201);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('adoption maintenance : corps client et transaction inconnue ne produisent pas HELD',async(t)=>{
+  const h=await setup(t);await h.reserve('a');const before=(await h.get('/runs')).body;
+  assert.equal((await h.post('/coordination/maintenance/adopt',{transactionId:'../../outside',sealDigest:'0'.repeat(64)})).status,409);
+  assert.equal((await h.post('/coordination/maintenance/adopt',{transactionId:'maintenance-00000000-0000-0000-0000-000000000000',sealDigest:'0'.repeat(64),path:'/outside'})).status,400);
+  assert.deepEqual((await h.get('/runs')).body,before);assert.deepEqual(h.native.replies,[]);
+});
+
+async function orphanedPreflight(t, mutate = () => {}) {
+  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
+  const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new',
+    recoveryId: 'recovery-orphan', preflightRequestId: 'preflight-orphan' };
+  assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const approval = h.approval({ ...a, sessionId: recovery.sessionId }, recovery.preflightRequestId);
+  h.native.messages.ses_a_new[0].parts[0].state = { status: 'completed', input: structuredClone(approval),
+    output: JSON.stringify({ ...approval, status: 'PENDING', notification_status: 'FAILED' }) };
+  await h.stop();
+  // Reproduire l'état durable produit par l'ancienne admission, uniquement dans la fixture arrêtée.
+  const registry = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  await registry.acquireAuthority();
+  try {
+    registry.prepareOperation(a.runId, approval, { candidateSession: recovery.sessionId });
+    const keys = ['run_id','reservation_version','requestId','approval_id','change_id','session_id','directory',
+      'title','summary','files','commands','resources','coordination_protocol','operation_id','operation_digest','expected_revisions','access_id'];
+    const identity = Object.fromEntries(keys.map((key) => [key, approval[key] ??
+      (['resources','commands'].includes(key) ? [] : key === 'summary' ? '' : null)]));
+    registry.claimRequest('a', approval.requestId, createHash('sha256').update(JSON.stringify(identity)).digest('hex'), false);
+    mutate(registry, approval); registry.persist();
+  } finally {
+    const ended = new Promise((resolve) => registry.lock.once('exit', resolve)); registry.close(); await ended;
+  }
+  await h.start();
+  await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 1 });
+  const payload = { transactionId: 'reconcile-orphan', developerAuthorization: 'accord-humain-fixture-source-runtime-distinct',
+    jobId: recovery.jobId, recoveryId: recovery.recoveryId, approval };
+  return { h, a, b, approval, recovery, payload };
+}
+
+test('prévol orphelin : rejet seul durable, notifications répétées, pair actif puis retry existant', async (t) => {
+  const { h, b, approval, recovery, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/validation/resource-request', { approval })).body.error, 'request-reconciliation-required');
+  h.native.busy.ses_b = { type: 'busy' };
+  const receipt = await h.post('/runs/a/validation/reconcile', payload);
+  assert.equal(receipt.status, 201, JSON.stringify(receipt));
+  assert.equal(receipt.body.outcome, 'REJECTION_ONLY');
+  assert.equal((await h.get('/runs/a/decision/' + approval.requestId)).status, 404);
+  assert.deepEqual((await h.post('/runs/a/validation/reconcile', payload)).body, receipt.body);
+  assert.equal((await h.post('/runs/a/validation/reconcile', { ...payload, developerAuthorization: 'autre-accord' })).status, 409);
+  for (const route of ['/validation/resource-request', '/validation/resource-reminder']) {
+    assert.equal((await h.post(route, { approval })).status, 202);
+  }
+  for (const decision of ['approved', 'needs_clarification']) {
+    assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision })).status, 400);
+  }
+  assert.equal((await h.post('/runs/a/locks/acquire', { version: approval.reservation_version,
+    operationId: approval.operation_id, operationDigest: approval.operation_digest, resources: approval.resources,
+    expectedRevisions: approval.expected_revisions })).status, 409);
+  assert.deepEqual(h.native.replies, []);
+  const after = (await h.get('/runs')).body;
+  assert.deepEqual(after.runs.find((r) => r.runId === 'b'), before.runs.find((r) => r.runId === 'b'));
+  assert.deepEqual(after.coordination.accesses, before.coordination.accesses);
+  const restored = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  assert.deepEqual(restored.requestOwners[approval.requestId].reconciliation, receipt.body);
+  assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly, true);
+  assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
+  const decision = (await h.get('/runs/a/decision/' + approval.requestId)).body;
+  assert.equal(decision.approval_id, approval.approval_id); assert.equal(decision.decision, 'rejected');
+  h.native.messages.ses_a_new.push({ parts: [{ type: 'tool', tool: 'cgpt-validation_poll_approval',
+    state: { status: 'completed', input: { approval_id: approval.approval_id },
+      output: JSON.stringify({ ...approval, status: 'REJECTED' }) } }] });
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 0 });
+  const retry = await h.post('/runs/a/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: approval.requestId, preflightRequestId: 'preflight-orphan-next' });
+  assert.equal(retry.status, 200, JSON.stringify(retry));
+  assert.equal(retry.body.jobId, recovery.jobId);
+  assert.equal(retry.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(retry.body.recovery.recoveryId, recovery.recoveryId);
+  assert.equal(retry.body.recovery.preflightRequestId, 'preflight-orphan-next');
+  assert.deepEqual(h.native.replies, []);
+  assert.equal((await h.get('/runs/b/job')).body.sessionId, b.sessionId);
+});
+
+test('réconciliation orpheline : autorisation, identités et preuves divergentes sont refusées sans mutation', async (t) => {
+  const { h, approval, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  const bad = [
+    { ...payload, developerAuthorization: '' }, { ...payload, jobId: 'job-autre' },
+    { ...payload, recoveryId: 'recovery-autre' },
+    ...[{ requestId: 'preflight-autre' }, { approval_id: 'autre' }, { session_id: 'ses_other' },
+      { reservation_version: approval.reservation_version + 1 }, { operation_digest: '0'.repeat(64) },
+      { commands: ['true'] }, { title: 'autre' }, { summary: 'autre' },
+      { resources: approval.resources.map((r) => ({ ...r, mode: 'write' })) },
+      { expected_revisions: Object.fromEntries(approval.resources.map((r) => [r.key, 1])) }]
+      .map((change) => ({ ...payload, approval: { ...approval, ...change } })),
+  ];
+  for (const candidate of bad) {
+    const response = await h.post('/runs/a/validation/reconcile', candidate);
+    assert.ok(response.status >= 400, JSON.stringify(candidate));
+    assert.deepEqual((await h.get('/runs')).body, before);
+  }
+  for (const status of ['APPROVED', 'REJECTED', 'CANCELLED']) {
+    h.native.messages.ses_a_new[0].parts[0].state.output = JSON.stringify({ ...approval, status });
+    assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  }
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : effet natif, permission et candidate allow maintiennent le gel', async (t) => {
+  const { h, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  h.native.permissions = [{ id: 'pending', sessionID: 'ses_a_new', permission: 'bash' }];
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  h.native.permissions = []; h.native.rules.ses_a_new = [{ permission: 'bash', pattern: '*', action: 'allow' }];
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  h.native.rules.ses_a_new = [{ permission: '*', pattern: '*', action: 'ask' }];
+  h.native.messages.ses_a_new.push({ parts: [{ type: 'tool', tool: 'bash',
+    state: { status: 'completed', input: { command: '/usr/bin/true' }, metadata: { exit: 0 } } }] });
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : opération durable commencée ou incertaine refusée', async (t) => {
+  for (const state of ['ISSUING', 'EXECUTING', 'UNKNOWN', 'COMPLETED']) await t.test(state, async (subtest) => {
+    const { h, payload } = await orphanedPreflight(subtest, (registry, approval) => {
+      registry.resourceState.operations[approval.operation_id].state = state;
+    });
+    const before = (await h.get('/runs')).body;
+    assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+    assert.deepEqual((await h.get('/runs')).body, before);
+    assert.deepEqual(h.native.replies, []);
+  });
+});
+
+test('réconciliation orpheline : propriétaire ou opération absent/divergent ne se reconstruit pas', async (t) => {
+  for (const kind of ['owner-absent', 'owner-digest', 'operation-absent', 'operation-digest']) await t.test(kind, async (subtest) => {
+    const { h, payload } = await orphanedPreflight(subtest, (registry, approval) => {
+      if (kind === 'owner-absent') delete registry.requestOwners[approval.requestId];
+      if (kind === 'owner-digest') registry.requestOwners[approval.requestId].digest = '0'.repeat(64);
+      if (kind === 'operation-absent') delete registry.resourceState.operations[approval.operation_id];
+      if (kind === 'operation-digest') registry.resourceState.operations[approval.operation_id].identityDigest = '0'.repeat(64);
+    });
+    const before = (await h.get('/runs')).body;
+    assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+    assert.deepEqual((await h.get('/runs')).body, before);
+  });
+});
+
+test('réconciliation orpheline : un reçu après perte du contexte ne restaure aucune décision', async (t) => {
+  const { h, payload, approval } = await orphanedPreflight(t);
+  assert.equal((await h.get('/status')).body.notificationReconciliation, 'rejection-only-v1');
+  const result = await h.post('/runs/a/validation/reconcile', payload); assert.equal(result.status, 201);
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 1 });
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).body.error, 'notification-reconciliation-context-lost');
+  assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'approved' })).status, 400);
+  assert.equal((await h.get('/runs/a/decision/' + approval.requestId)).status, 404);
+  assert.deepEqual((await h.get('/runs')).body.requestOwners[approval.requestId].reconciliation, result.body);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : historique modifié pendant les contrôles reste refusé', async (t) => {
+  const { h, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  let reads = 0;
+  h.native.onRequest = async (path) => {
+    if (path === '/session/ses_a_new/message' && ++reads === 2) {
+      h.native.messages.ses_a_new.push({ parts: [{ type: 'tool', tool: 'bash',
+        state: { status: 'completed', input: { command: '/usr/bin/true' }, metadata: { exit: 0 } } }] });
+    }
+  };
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : un accès déjà attribué interdit la réparation', async (t) => {
+  const { h, payload } = await orphanedPreflight(t, (registry, approval) => {
+    registry.acquireAccess('a', { version: approval.reservation_version, operationId: approval.operation_id,
+      operationDigest: approval.operation_digest, resources: approval.resources,
+      operationIds: [approval.operation_id], expectedRevisions: approval.expected_revisions });
+  });
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : une candidate détenue par un pair est refusée', async (t) => {
+  const { h, payload } = await orphanedPreflight(t, (registry, approval) => {
+    registry.reserve({ runId: 'c', ownerId: 'codex-c', sessionId: approval.session_id, directory: registry.directory,
+      changeId: 'change-c', selectionKey: 'intent-c', dependsOn: [], resources: [{ key: 'file:src/c.py', mode: 'read' }] });
+  });
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).body.error,
+    'notification-reconciliation-session-already-owned');
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
 });
 
 test('un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée', async (t) => {
@@ -349,6 +752,8 @@ test('une publication indépendante ne suspend pas le pair ni sa génération', 
 
 test('récupération de A avec B actif : réservation conservée et génération renouvelée', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
+  const step = await h.post('/runs/a/job/progress', { jobId: 'job-a', stepId: 'ANALYSIS', expectedStepSequence: 0 });
+  assert.equal(step.status, 202);
   h.native.permissions = [{ id: 'permission-b', sessionID: 'ses_b', permission: 'bash', metadata: { command: 'unrelated' } }];
   let stamp;
   const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new', recoveryId: 'recovery-a', preflightRequestId: 'preflight-a' };
@@ -371,6 +776,7 @@ test('récupération de A avec B actif : réservation conservée et génération
   assert.equal((await h.releaseOperation(a, approval)).status, 200);
   const complete = await h.post('/runs/a/job/recover', { ...recovery, phase: 'complete' });
   assert.equal(complete.status, 200, JSON.stringify(complete));
+  assert.deepEqual(complete.body.lifecycle, step.body.lifecycle);
   const run = (await h.get('/runs')).body.runs.find((r) => r.runId === 'a');
   assert.equal(run.sessionId, 'ses_a_new'); assert.ok(run.version > a.version);
   assert.equal(h.native.permissions[0].sessionID, 'ses_b');
@@ -422,7 +828,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.3.0');
+  assert.equal(initialized.result.serverInfo.version, '1.9.0');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -681,4 +1087,125 @@ test('l’usage historique unique garde once et exige une clôture réconciliée
     evidence:['native history and effects reconciled']})).status,200);
   assert.equal((await h.post('/coordination/global/release',{...g,authorization:'resume concurrent profile',evidence:['handoff proved']})).status,200);
   assert.equal((await h.reserve('a')).state,'RESERVED');assert.equal(h.native.replies[0].body.response,'once');
+});
+
+
+for (const [label, environment, limit] of [
+  ['défaut', {}, 16384],
+  ['alias historique', { OC_CGPT_MAX_COMMAND_LENGTH: '2000' }, 2000],
+  ['priorité principale', { OC_Codex_MAX_COMMAND_LENGTH: '4096', OC_CGPT_MAX_COMMAND_LENGTH: '2000' }, 4096],
+]) {
+  test(`bornes de commande HTTP : ${label}`, async (t) => {
+    const h = await setup(t, { environment });
+    for (const length of [limit - 1, limit, limit + 1]) {
+      const approval = { requestId: 'length-' + length, approval_id: 'approval-' + length, change_id: 'length-change',
+        session_id: 'ses_length', directory: h.directory, files: [], commands: ['x'.repeat(length)] };
+      const result = await h.post('/validation/request', { approval });
+      if (length <= limit) {
+        assert.equal(result.status, 202, JSON.stringify(result));
+        assert.equal((await h.post('/validation/reminder', { approval })).status, 202);
+      } else {
+        assert.equal(result.status, 400);
+        assert.deepEqual(result.body, { error: 'command-too-long',
+          message: `Commande refusée : longueur ${length}, limite autorisée ${limit}.`,
+          maxLength: limit, actualLength: length, unit: 'utf16' });
+        assert.equal((await h.get('/decision/' + approval.requestId)).status, 404);
+      }
+    }
+    assert.equal(h.native.replies.length, 0);
+  });
+}
+
+test('comptage UTF-16 : accents BMP et caractères hors BMP aux bornes', async (t) => {
+  const h = await setup(t, { environment: { OC_Codex_MAX_COMMAND_LENGTH: '4' } });
+  for (const [index, command] of ['ééé', 'éééé', '😀😀', 'ééééé', '😀😀x'].entries()) {
+    const approval = { requestId: 'unicode-' + index, approval_id: 'unicode-approval-' + index,
+      change_id: 'unicode-change', session_id: 'ses_unicode', directory: h.directory, files: [], commands: [command] };
+    const result = await h.post('/validation/request', { approval });
+    assert.equal(result.status, command.length <= 4 ? 202 : 400);
+    if (result.status === 400) assert.equal(result.body.actualLength, 5);
+  }
+});
+
+test('refus de longueur sur demandes et rappels : routes historiques, resource et RUN sans enregistrement', async (t) => {
+  const h = await setup(t);
+  const legacy = { requestId: 'legacy-too-long', approval_id: 'legacy-approval', change_id: 'legacy-change',
+    session_id: 'ses_legacy', directory: h.directory, files: [], commands: ['x'.repeat(16385)] };
+  for (const action of ['request', 'reminder']) {
+    const result = await h.post('/validation/' + action, { approval: legacy });
+    assert.equal(result.status, 400); assert.equal(result.body.error, 'command-too-long');
+  }
+  assert.equal((await h.get('/status')).body.undecidedValidationCount, 0);
+  const run = await h.reserve('a');
+  const approval = h.approval(run, 'too-long'); approval.commands = ['x'.repeat(16385)];
+  const before = (await h.get('/runs')).body;
+  for (const route of ['/validation/request', '/validation/reminder', '/validation/resource-request',
+    '/validation/resource-reminder', '/runs/a/validation/request', '/runs/a/validation/reminder']) {
+    const result = await h.post(route, { approval });
+    assert.equal(result.status, 400, route); assert.equal(result.body.maxLength, 16384);
+    assert.equal(result.body.actualLength, 16385); assert.ok(!JSON.stringify(result.body).includes(approval.commands[0]));
+  }
+  const after = (await h.get('/runs')).body;
+  assert.deepEqual(after.coordination.operations, before.coordination.operations);
+  assert.deepEqual(after.requestOwners, before.requestOwners);
+  assert.equal((await h.get('/runs/a/status')).body.undecidedValidationCount, 0);
+  assert.equal((await h.get('/runs/a/decision/too-long')).status, 404);
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('commande longue stricte : décision corrélée, commande exacte et once consommé une seule fois', async (t) => {
+  const h = await setup(t); const run = await h.reserve('a');
+  const approval = h.approval(run, 'long-once'); approval.commands = ['x'.repeat(16384)];
+  h.native.messages.ses_a.at(-1).parts[0].state.input = structuredClone(approval);
+  assert.equal((await h.post('/validation/resource-request', { approval })).status, 202);
+  assert.equal((await h.post('/validation/resource-reminder', { approval })).status, 202);
+  const permission = { id: 'long-native', sessionID: 'ses_a', permission: 'bash', tool: { callID: 'long-call' },
+    metadata: { command: approval.commands[0] } };
+  const observePoll = async () => {
+    const count = h.native.requests.filter((p) => p === '/permission').length;
+    await waitFor(() => h.native.requests.filter((p) => p === '/permission').length >= count + 3);
+  };
+  h.native.permissions.push(permission); await observePoll(); assert.equal(h.native.replies.length, 0);
+  permission.metadata.command = approval.commands[0].slice(0, -1) + 'y';
+  assert.equal((await h.post('/runs/a/decision/long-once', { decision: 'approved' })).status, 201);
+  const decision = (await h.get('/runs/a/decision/long-once')).body;
+  for (const key of ['requestId', 'approval_id', 'change_id', 'run_id', 'reservation_version']) {
+    assert.equal(decision[key], approval[key]);
+  }
+  const acquired = await h.post('/runs/a/locks/acquire', { version: run.version, operationId: approval.operation_id,
+    operationDigest: approval.operation_digest, resources: approval.resources, expectedRevisions: approval.expected_revisions });
+  assert.equal(acquired.status, 200);
+  await observePoll(); assert.equal(h.native.replies.length, 0);
+  permission.metadata.command = approval.commands[0];
+  await waitFor(() => h.native.replies.length === 1);
+  assert.equal(h.native.replies[0].body.response, 'once');
+  h.native.permissions.push({ ...permission, id: 'long-native-second' });
+  await observePoll(); assert.equal(h.native.replies.length, 1);
+  assert.equal((await h.post('/runs/a/decision/long-once', { decision: 'approved' })).status, 400);
+  assert.deepEqual((await h.get('/runs/a/decision/long-once')).body, decision);
+});
+
+
+test('une opération consommée ne réinscrit pas sa session après la réconciliation historique', async (t) => {
+  const h = await setup(t);
+  const approval = { requestId: 'consumed-legacy', approval_id: 'consumed-approval', change_id: 'legacy-change',
+    session_id: 'ses_legacy', directory: h.directory, files: [], commands: ['/usr/bin/true'] };
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  assert.equal((await h.post('/decision/consumed-legacy', { decision: 'approved' })).status, 201);
+  h.native.permissions.push({ id: 'consumed-permission', sessionID: 'ses_legacy', permission: 'bash',
+    metadata: { command: '/usr/bin/true' } });
+  await waitFor(() => h.native.replies.length === 1);
+  const global = await h.post('/coordination/global/request', { cause: 'GLOBAL_RECONCILIATION', scope: 'all',
+    transactionId: 'consumed-global', authorization: 'explicit closure', evidence: ['effects reviewed'] });
+  assert.equal(global.status, 202);
+  assert.equal((await h.post('/coordination/global/confirm', { ...global.body, evidence: ['quiescence proved'] })).status, 200);
+  assert.equal((await h.post('/coordination/legacy/reconcile', { transactionId: 'consumed-handoff',
+    authorization: 'explicit closure', evidence: ['effects reviewed'] })).status, 200);
+  assert.equal((await h.post('/coordination/global/release', { ...global.body,
+    authorization: 'explicit resume', evidence: ['closure proved'] })).status, 200);
+  const count = h.native.requests.filter((p) => p === '/permission').length;
+  await waitFor(() => h.native.requests.filter((p) => p === '/permission').length >= count + 3);
+  assert.deepEqual((await h.get('/runs')).body.coordination.legacySources, []);
+  assert.equal((await h.reserve('a')).state, 'RESERVED');
+  assert.equal(h.native.replies.length, 1); assert.equal(h.native.replies[0].body.response, 'once');
 });

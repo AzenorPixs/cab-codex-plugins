@@ -111,15 +111,15 @@ superviseur SHALL annoncer la même version de base.
   l'active pas pour le login
 
 ### Requirement: Skill de statistiques embarqué dans CAB
-Le plugin cab-approval-bridge SHALL distribuer coding-session-statistics et ses métadonnées sans plugin Tools Codex ni skill cgpt externe. Le protocole et la commande SHALL imposer les statistiques après chaque archive réussie selon archive-session-statistics. Les composants versionnés SHALL partager la base 1.3.0 ; le plugin MAY ajouter un cachebuster Codex.
+Le plugin cab-approval-bridge SHALL distribuer coding-session-statistics et ses métadonnées sans plugin Tools Codex ni skill cgpt externe. Le protocole et la commande SHALL imposer les statistiques après chaque archive réussie selon archive-session-statistics. Les composants versionnés SHALL partager la base 1.9.0 ; le plugin MAY ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
 - **WHEN** le plugin CAB est installé depuis sa marketplace
 - **THEN** les skills approval-bridge et coding-session-statistics sont présents et résolus depuis le manifeste
 
 #### Scenario: Release cohérente
-- **WHEN** la version 1.3.0 est préparée
-- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugin et commande annoncent la même base 1.3.0
+- **WHEN** la version 1.9.0 est préparée
+- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugin et commande annoncent la même base 1.9.0
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 
@@ -325,55 +325,46 @@ GitHub valide.
 - **THEN** la copie est remplacée atomiquement après validation de sa source et de son frontmatter
 
 ### Requirement: Préservation des ressources pendant la mise à jour CAB
-
-Un échec réseau, une redirection d'hôte, une version invalide ou une version distante
-égale ou antérieure SHALL préserver la copie locale. `/cab update` SHALL ne démarrer,
-arrêter ni modifier aucune ressource CAB ou configuration Codex, à l'exception du
-déploiement atomique du superviseur et de son unité systemd utilisateur ainsi que de la
-migration réversible de sa marketplace locale vers la source Git spécifiée.
+Un échec de préparation réseau, source ou version MUST préserver les installations et processus. /cab update MUST prendre en charge les quatre briques selon active-component-update, avec gel durable, sauvegarde et repli contrôlé. Configurations et sources du projet piloté MUST rester inchangées ; les seules exceptions de configuration MUST rester la migration réversible de marketplace et les unités dédiées.
 
 #### Scenario: Préservation des ressources pendant la mise à jour CAB
 - **WHEN** le téléchargement échoue ou la version distante n'est pas plus récente
-- **THEN** la commande locale et les ressources CAB sont conservées hors des seules exceptions documentées
+- **THEN** la commande locale est conservée ; un jeu déjà conforme ne redémarre rien, et un jeu déployé ou actif divergent peut être réconcilié depuis le plugin installé validé
 
 ### Requirement: Déploiement du superviseur sans démarrage
-
-`/cab update` SHALL installer ou actualiser le superviseur depuis le plugin installé
-lorsqu'il est absent ou divergent, puis recharger systemd sans l'activer ni le démarrer.
+/cab update MUST installer le jeu complet des quatre briques et recharger systemd lorsque nécessaire. Un superviseur initialement inactif MUST rester inactif ; une brique initialement active MUST être arrêtée puis redémarrée dans la transaction de maintenance. La commande MUST NOT activer les unités au login.
 
 #### Scenario: Déploiement du superviseur sans démarrage
-- **WHEN** le superviseur installé est absent ou divergent
+- **WHEN** le superviseur initialement inactif est absent ou divergent
 - **THEN** la commande le déploie depuis le plugin et recharge systemd sans activation ni démarrage
 
-### Requirement: Résumé des versions réellement observées
+#### Scenario: Superviseur actif actualisé
+- **WHEN** le superviseur fonctionne avec un ancien jeu
+- **THEN** la transaction le redémarre sur le jeu vérifié et préserve les RUN
 
-À la fin, `/cab update` SHALL afficher un résumé séparant les versions GitHub et locales
-du manifeste du plugin, du contrôleur, du superviseur, du broker et de la commande
-`/cab`. La version locale du superviseur SHALL provenir du script déployé dans le profil
-Codex. La version locale du broker SHALL provenir de `broker_readiness.server_version`.
-Toute version indisponible SHALL être signalée comme telle sans être déduite d'une autre
-source.
+### Requirement: Résumé des versions réellement observées
+/cab update MUST afficher séparément les versions GitHub, du plugin installé, des fichiers déployés et des processus actifs pour broker, contrôleur, superviseur, Web et commande. Il MUST distinguer inactivité, attente de maintenance et retour arrière. Toute version inconnue MUST rester indisponible ; celle du broker actif MUST provenir de sa readiness réelle.
 
 #### Scenario: Résumé des versions réellement observées
 - **WHEN** une mise à jour CAB termine avec une version du broker actif inaccessible
 - **THEN** le résumé distingue GitHub et local et indique la valeur indisponible sans la déduire du paquet
 
 ### Requirement: Distribution concurrente 1.0.0
-Les garanties d'identité et d'isolation introduites en 1.0.0 MUST être conservées dans les briques 1.3.0 ; les exclusions MUST suivre le nouveau contrat de ressources. Les prompts pilotés des huit projets MUST rester cohérents lors de leur déploiement autorisé. CISM, CAISM et prompts directs MUST rester inchangés. La préparation source MUST NOT modifier consommateurs ou services actifs.
+Les garanties d'identité et d'isolation introduites en 1.0.0 MUST être conservées dans les briques 1.9.0 ; les exclusions MUST suivre le nouveau contrat de ressources. Les prompts pilotés des huit projets MUST rester cohérents lors de leur déploiement autorisé. CISM, CAISM et prompts directs MUST rester inchangés. La préparation source MUST NOT modifier consommateurs ou services actifs.
 
 #### Scenario: Isolation concurrente
 - **WHEN** la distribution source est contrôlée
 - **THEN** versions et contrats sont cohérents sans activation ni déploiement des services
 
 ### Requirement: Distribution cohérente du correctif 1.0.1
-La garde native introduite en 1.0.1 MUST être conservée par les briques 1.3.0. Le plugin MUST porter un cachebuster neuf. Le transport MCP MUST rester compatible ; les formats persistés MUST suivre leurs contrats de migration explicites. La préparation source MUST NOT modifier services actifs, caches installés ou RUN.
+La garde native introduite en 1.0.1 MUST être conservée par les briques 1.9.0. Le plugin MUST porter un cachebuster neuf. Le transport MCP MUST rester compatible ; les formats persistés MUST suivre leurs contrats de migration explicites. La préparation source MUST NOT modifier services actifs, caches installés ou RUN.
 
 #### Scenario: Jeu source vérifié
 - **WHEN** les contrôles de distribution réussissent
 - **THEN** les versions exécutables sont cohérentes sans annoncer un déploiement actif
 
 ### Requirement: Distribution du correctif de polling 1.0.2
-Les briques CAB MUST annoncer 1.3.0 et conserver le correctif de polling 1.0.2. Le plugin MUST porter un cachebuster neuf. Skill, commande et protocoles pilotés MUST distinguer timeout et refus terminal corrélé. Les formats MUST suivre leurs contrats de migration et la préparation source MUST NOT modifier services, caches ou RUN actifs.
+Les briques CAB MUST annoncer 1.9.0 et conserver le correctif de polling 1.0.2. Le plugin MUST porter un cachebuster neuf. Skill, commande et protocoles pilotés MUST distinguer timeout et refus terminal corrélé. Les formats MUST suivre leurs contrats de migration et la préparation source MUST NOT modifier services, caches ou RUN actifs.
 
 #### Scenario: Correctif source cohérent
 - **WHEN** la distribution et les protocoles sources sont vérifiés
@@ -455,18 +446,18 @@ La commande distribuée CAB MUST proposer /cab stats pour les changes courants, 
 - **WHEN** /cab stats est demandé sans cible dans un projet concurrent
 - **THEN** chaque change courant est présenté avec son RUN et son contexte sans fusion ni question de sélection obligatoire ; un RUN explicitement ciblé reste isolé
 
-### Requirement: Distribution des observations CAB 1.3.0
-Les modules distribués, broker, contrôleur, superviseur, manifeste, unités et commande MUST annoncer la version de base 1.3.0. Le module de fenêtres et l'importeur MUST être distribués avec leurs contrats et tests, sans nouvelle dépendance tierce ni installation automatique.
+### Requirement: Distribution des observations CAB
+Les modules distribués, broker, contrôleur, superviseur, manifeste, unités et commande MUST annoncer la version de base 1.9.0. Le module de fenêtres et l'importeur MUST être distribués avec leurs contrats et tests, sans nouvelle dépendance tierce ni installation automatique.
 
 #### Scenario: Jeu source complet
-- **WHEN** le jeu CAB 1.3.0 est qualifié
+- **WHEN** le jeu CAB 1.9.0 est qualifié
 - **THEN** ses versions sont cohérentes et les tests couvrent import, fenêtres, commandes et absence d'effet métier sans modifier une installation active
 
-### Requirement: Toutes les briques alignées sur 1.3.0
-La release MUST aligner à 1.3.0 broker, routeur, journal, contrôleur, contextes, registre, superviseur, SSE, healthcheck, collecteurs, outils de purge/prompts, commande et manifeste. Les supports sans version propre MUST être rattachés à cette release sans format artificiel. Les capacités statistiques livrées avant elle MUST être préservées.
+### Requirement: Alignement des briques distribuées
+La release MUST aligner à 1.9.0 broker, routeur, journal, contrôleur, contextes, registre, superviseur, SSE, healthcheck, collecteurs, outils de purge/prompts, commande et manifeste. Les supports sans version propre MUST être rattachés à cette release sans format artificiel. Les capacités statistiques livrées avant elle MUST être préservées.
 
 #### Scenario: Contrôle du paquet complet
-- **WHEN** la release 1.3.0 est qualifiée
+- **WHEN** la release 1.9.0 est qualifiée
 - **THEN** l'inventaire des composants, imports, références et versions ne présente aucun mélange de jeux exécutables
 
 ### Requirement: Capacité de coordination négociée
@@ -477,18 +468,18 @@ Avant mandat mutable, les composants et clients MUST confirmer resource-scoped-v
 - **THEN** le contrôleur refuse toute nouvelle permission mutable
 
 #### Scenario: Ancien contrôleur
-- **WHEN** un broker 1.3.0 notifie un RUN à un ancien contrôleur
+- **WHEN** un broker 1.9.0 notifie un RUN à un ancien contrôleur
 - **THEN** la route dédiée est indisponible, la demande reste non approuvée et l'ancien chemin de notification n'est pas utilisé pour ce RUN
 
 #### Scenario: Ancienne intégration globale
-- **WHEN** un client demande l'ancienne barrière ordinaire dans le profil 1.3.0
+- **WHEN** un client demande l'ancienne barrière ordinaire dans le profil 1.9.0
 - **THEN** CAB refuse sans geler les pairs et indique le contrat de remplacement
 
 ### Requirement: Migration sous maintenance explicite
 Le déploiement et la conversion des formats MUST exiger une maintenance autorisée, quiescence réelle, sauvegarde privée et contrôle du jeu complet. RUN, jobs, preuves, candidates, réservations et permissions consommées MUST être préservés. Le retour arrière MUST refuser toute perte d'effets récents ou lecture d'un format inconnu.
 
 #### Scenario: Maintenance avec RUN conservés
-- **WHEN** le jeu 1.3.0 est déployé après drainage et sauvegarde
+- **WHEN** le jeu 1.9.0 est déployé après drainage et sauvegarde
 - **THEN** les RUN restent identifiables et reprennent seulement après réconciliation et prévol vérifiés sans rejeu des écritures
 
 #### Scenario: Prévol avant reprise métier
@@ -503,5 +494,70 @@ Commande, skills, références et générateur MUST appliquer les protections ci
 - **THEN** le protocole ne transforme pas cette demande en arrêt global de B
 
 #### Scenario: Préparation source
-- **WHEN** les protocoles 1.3.0 sont préparés dans CAB
+- **WHEN** les protocoles 1.9.0 sont préparés dans CAB
 - **THEN** aucun prompt consommateur ni cache installé n'est modifié sans autorisation de déploiement
+
+### Requirement: Distribution indépendante du moniteur web
+Le plugin MUST distribuer CAB Monitor, ses ressources locales, son unité utilisateur et sa référence de service. /cab start MUST installer et démarrer explicitement cette unité, sans activation au login. La préparation source MUST NOT modifier un service actif. Le moniteur MUST rester indépendant du cycle de vie du contrôleur et du superviseur ; le lancement manuel MUST rester documenté.
+
+#### Scenario: Installation différée
+- **WHEN** les sources sont préparées sans invocation de /cab start
+- **THEN** aucun service ou profil actif n'est modifié
+
+#### Scenario: Démarrage demandé
+- **WHEN** /cab start a résolu le workspace, avant PLLM et tout contrôle OpenCode ou prévol modèle/MCP
+- **THEN** il prépare le moniteur, recharge systemd et appelle explicitement systemctl --user start cgpt-approval-bridge-monitor.service avant toute dépendance amont, même si les services CAB sont réutilisés
+
+### Requirement: Distribution du catalogue de cycle
+Le plugin MUST distribuer le catalogue partagé avec contexte de job et moniteur. Le protocole et le skill MUST documenter les déclarations explicites, retours et états non applicables. Toutes les briques MUST partager la version 1.9.0 ; cette livraison MUST NOT modifier les services ou profils actifs.
+
+#### Scenario: Jeu source complet
+- **WHEN** la préparation source est qualifiée
+- **THEN** le catalogue importé, les références distribuées et les tests sont présents avec la même version de base 1.9.0
+
+### Requirement: Réutilisation et vérification du monitoring
+/cab start et toute entrée ou reprise de session pilotée MUST vérifier unité active, page HTTP locale, version et identity.workspace conformes, puis afficher l'URL réelle. Une instance conforme MUST être réutilisée sans redémarrage ni modification de configuration. Une instance active divergente MUST être signalée sans remplacement ni réaffectation implicite. Un port occupé MUST NOT conduire à tuer son propriétaire.
+
+#### Scenario: Service déjà conforme
+- **WHEN** l'instance active annonce le workspace attendu et la version 1.9.0
+- **THEN** /cab start la réutilise et affiche son URL sans redémarrage
+
+### Requirement: Conservation du moniteur indépendant
+L'unité du moniteur MUST NOT dépendre des unités CAB de contrôle ou de supervision. /cab stop et la réinitialisation CAB MUST préserver le moniteur, sa configuration, ses sources et ses connexions propres. Une panne de monitoring MUST être signalée séparément et MUST NOT déclencher un arrêt ou redémarrage d'une autre brique.
+
+#### Scenario: Arrêt du contrôleur
+- **WHEN** /cab stop arrête le contrôleur et le superviseur
+- **THEN** le moniteur reste disponible pour afficher leur indisponibilité
+
+### Requirement: Jeu installé du moniteur complet
+Le déploiement du moniteur MUST conserver scripts/ et web-monitor/ comme dossiers frères, avec la fermeture de ses imports et ressources statiques. Les fichiers de configuration MUST rester non secrets et privés. Une configuration existante MUST être préservée sauf actualisation explicitement validée ; aucun fichier env brut MUST être exposé.
+
+#### Scenario: Paquet isolé
+- **WHEN** le moniteur est lancé depuis son seul jeu installé sans composants amont
+- **THEN** la page et l'identité HTTP restent accessibles sans import depuis le dépôt source
+
+### Requirement: Bootstrap du monitoring avant les dépendances amont
+Après résolution du workspace canonique, /cab start, le skill et le protocole de session pilotée MUST appliquer monitor-service avant PLLM, santé OpenCode et prévols modèle/MCP. Ce contrôle MUST couvrir nouvelle entrée, reprise et réutilisation des services. Il MUST terminer une tentative bornée et rapporter son résultat avant de poursuivre. La préparation source MUST NOT exécuter ce bootstrap sur un profil réel.
+
+#### Scenario: Prévol indisponible
+- **WHEN** PLLM ou un prévol amont échoue après la résolution du workspace
+- **THEN** la tentative de démarrage ou de vérification du moniteur a déjà eu lieu et son service reste indépendant
+
+#### Scenario: Services CAB réutilisés
+- **WHEN** une session pilotée entre ou reprend avec contrôleur et superviseur déjà actifs mais sans moniteur
+- **THEN** elle applique la procédure de déploiement et démarrage du moniteur dans le périmètre autorisé avant les prévols, sans redémarrer les autres services
+
+#### Scenario: Instance conforme en reprise
+- **WHEN** le moniteur actif annonce version et workspace attendus
+- **THEN** la procédure vérifie page et unité, réutilise l'instance intacte et rapporte son URL réelle
+
+#### Scenario: Échec du monitoring
+- **WHEN** l'installation, le démarrage ou les preuves HTTP échouent
+- **THEN** la procédure rapporte la cause et l'URL attendue séparément du statut CAB, sans annoncer le moniteur disponible ni agir sur les autres briques ou RUN
+
+### Requirement: Distribution cohérente de la récupération 1.9.0
+Le jeu CAB MUST annoncer 1.9.0 avec cachebuster neuf, fermeture d'imports et preuves de qualification. Il MUST distribuer maintenance-proof et le profil frozen-recovery-controller, préserver le rejet seul de notification et distinguer source, code chargé et runtime vivant. Cette préparation MUST NOT installer ou activer les correctifs sur les RUN réels.
+
+#### Scenario: Ancien contrôleur conservé
+- **WHEN** la préparation source 1.9.0 est terminée
+- **THEN** l'ancien contrôleur peut rester chargé et la réparation de la récupération ciblée demeure soumise à sa maintenance explicitement autorisée

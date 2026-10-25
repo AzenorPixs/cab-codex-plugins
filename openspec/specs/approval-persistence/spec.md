@@ -171,3 +171,14 @@ Les lecteurs MUST vérifier versions de schéma et capacités avant mutation. Un
 #### Scenario: Ancien composant après migration
 - **WHEN** un composant ne comprend pas le format de coordination courant
 - **THEN** il refuse la mutation sans supprimer l'état ni transmettre une permission
+
+### Requirement: Reçu durable de notification réconciliée
+CAB MUST conserver propriétaire, identité intégrale de l'opération et reçu de réconciliation filtré. Le reçu MUST lier transaction, RUN, génération, job, recovery, candidate, demande et empreintes d'autorisation et de preuves. Une répétition identique MUST restituer le reçu sans nouvel effet ; une divergence MUST être refusée. Le verrou rejet seul MUST survivre au redémarrage.
+
+#### Scenario: Réponse perdue
+- **WHEN** une transaction de réconciliation est répétée avec le même contenu
+- **THEN** son reçu durable reste identique sans suppression de propriétaire ni nouvelle permission
+
+#### Scenario: Panne de persistance
+- **WHEN** l'enregistrement durable échoue
+- **THEN** aucune validation exploitable ni permission n'est créée et le registre refuse les mutations suivantes

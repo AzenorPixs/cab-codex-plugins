@@ -3,7 +3,7 @@ import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 
-export const VERSION = "1.3.0";
+export const VERSION = "1.9.0";
 export const CATEGORIES = ['reservation', 'changes', 'native', 'nativeChanges'];
 const DAY = 86400000;
 const LIMIT = 64 * 1024 * 1024;
@@ -190,6 +190,8 @@ export class ObservationStatistics {
     // Les segments évincés restent absents : les vues les comptent INCONNU.
   }
   import(bundle) {
+    if (this.maintenanceRequested) return Promise.reject(Object.assign(new Error('statistics-maintenance-busy'),
+      { code: 'statistics-maintenance-busy', status: 409 }));
     const result = this.importing.then(() => this.importBundle(bundle));
     this.importing = result.catch(() => {});
     return result;
@@ -301,6 +303,7 @@ export class ObservationStatistics {
     return out + view.limitations.join('. ') + '. Conditions d’attente et paires peuvent se recouvrir. Modèles, tokens, coûts et commandes exactes : N/A — non collectés.\n';
   }
   async flush() {
+    if (this.maintenance) return;
     if (!this.persist || !this.project || !this.dirty || this.error) return;
     if (this.saving) { await this.saving; if (this.dirty && !this.error) await this.flush(); return; }
     this.dirty = false;

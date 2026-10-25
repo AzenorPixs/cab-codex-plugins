@@ -200,6 +200,7 @@ test("restaure le format minimal historique sans réécrire ses champs facultati
   assert.equal(restored.jobId, contract.jobId);
   assert.equal(restored.armed, false);
   assert.equal(restored.strictCommands, false);
+  assert.equal(restored.lifecycle, null);
   assert.equal(restored.terminalGate.status, "OPEN");
   assert.equal(readFileSync(h.jobPath, "utf8"), content);
 });
@@ -211,6 +212,7 @@ for (const invalidFields of [
   { recovery: [] }, { recoveryHistory: [null] }, { lastProvenMilestone: 42 },
   { recovery: { sessionId: 42 } }, { recovery: { attempts: {} } },
   { recovery: { attempts: [{}] } }, { recovery: { invalidatedRequestIds: [42] } },
+  { lifecycle: null }, { lifecycle: { schemaVersion: 1, sequence: 1, history: [] } },
 ]) {
   test(`refuse les types persistés invalides : ${JSON.stringify(invalidFields)}`, async (context) => {
     const h = await fixture(context);

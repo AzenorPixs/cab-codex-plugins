@@ -62,13 +62,14 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from http.client import HTTPException
 from urllib import error, parse, request
 
 import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "1.3.0"
+SERVER_VERSION = "1.9.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -2186,6 +2187,29 @@ def journal_controller_event(
     )
 
 
+def controller_length_failure(exc):
+    """Reconstruit uniquement le diagnostic de longueur connu, sans texte distant."""
+    if exc.code != 400:
+        return None
+    try:
+        body = exc.read(1025)
+        if len(body) > 1024:
+            return None
+        payload = json.loads(body.decode("utf-8"))
+    except (OSError, HTTPException, ValueError, UnicodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    maximum = payload.get("maxLength")
+    actual = payload.get("actualLength")
+    if (payload.get("error") != "command-too-long" or payload.get("unit") != "utf16"
+            or type(maximum) is not int or type(actual) is not int
+            or not 0 < maximum < actual <= 9007199254740991):
+        return None
+    return ("command-too-long: longueur %d, limite autorisée %d (utf16)."
+            % (actual, maximum))
+
+
 def notify_controller(
     item,
     lease_id,
@@ -2254,10 +2278,8 @@ def notify_controller(
 
     except error.HTTPError as exc:
         status = exc.code
-        failure = (
-            "HTTPError: %s"
-            % exc.code
-        )
+        with exc:
+            failure = controller_length_failure(exc) or "HTTPError: %s" % status
 
     except error.URLError as exc:
         failure = (
@@ -4675,8 +4697,9 @@ def store_journal_consistency_snapshot():
                 approval_id: dict(item)
                 for approval_id, item in data["approvals"].items()
             }
-
-        events = journal.read_events()
+            # Même frontière que les transitions : magasin puis journal.
+            # Libérer ici le magasin ferait comparer deux instants différents.
+            events = journal.read_events()
 
     except (StoreError, journal.JournalError, journal.JournalValidationError) as exc:
         return {
@@ -8046,27 +8069,38 @@ def do_readiness(args=None):
               "STORE_JOURNAL_DIVERGENCE", "WORKER_POOL_SATURATED", "CONTROLLER_UNREACHABLE"}
     scoped_causes = {"NONE", "NOTIFICATION_LEASE_STUCK", "CONTROLLER_DECISION_PATH_STALLED",
                      "DECISION_WAIT_WITHOUT_PROGRESS", "SESSION_STALLED", "SESSION_PROGRESS_DEGRADED"}
-    infrastructure_status = status if snapshot["root_cause"] not in scoped_causes else "READY"
+    shared_root_cause = snapshot["root_cause"]
+    infrastructure_status = status if (
+        human_required or shared_root_cause in common or shared_root_cause not in scoped_causes
+    ) else "READY"
     by_run = {}
     by_session = {}
     path = store_path()
     try:
         with locked_store(path):
             stored = load_store(path)["approvals"]
+            current_pending = 0
+            current_stalled = 0
             for approval_id, item in stored.items():
+                pending = item.get("status") == "PENDING"
+                stalled = pending and str(approvals.get(approval_id, {}).get("state", "")).startswith("STALLED_")
+                current_pending += int(pending)
+                current_stalled += int(stalled)
                 run_id = item.get("run_id")
                 session_id = item.get("session_id")
                 for key, groups in ((run_id, by_run), (session_id, by_session)):
                     if not key:
                         continue
                     group = groups.setdefault(key, {"pending_count": 0, "stalled_count": 0})
-                    if item.get("status") == "PENDING":
+                    if pending:
                         group["pending_count"] += 1
-                        if str(approvals.get(approval_id, {}).get("state", "")).startswith("STALLED_"):
+                        if stalled:
                             group["stalled_count"] += 1
+            snapshot.update(pending_count=current_pending, stalled_count=current_stalled)
     except (StoreError, ValidationError, OSError):
         infrastructure_status = "HUMAN_REQUIRED" if human_required else "BLOCKED"
         status = infrastructure_status
+        shared_root_cause = "STORE_UNHEALTHY"
         snapshot.update(status=status, ready=False, root_cause="STORE_UNHEALTHY")
     for group in list(by_run.values()) + list(by_session.values()):
         group["status"] = "BLOCKED" if group["stalled_count"] else "READY"
@@ -8078,7 +8112,7 @@ def do_readiness(args=None):
                                    "status": "READY", "root_cause": "NONE"})
         snapshot.update(group)
         if infrastructure_status != "READY":
-            snapshot.update(status=status, root_cause=snapshot["root_cause"])
+            snapshot.update(status=status, root_cause=shared_root_cause)
         snapshot.update(run_id=run_id, ready=snapshot["status"] == "READY")
     return snapshot
 
@@ -8212,9 +8246,14 @@ def reconcile_pending_approvals():
                     data,
                 )
 
+            event_index = {
+                (event.get("approval_id", ""), event.get("event_type", ""))
+                for event in journal.read_events()
+            } if approvals else set()
             for item in approvals.values():
                 repair_journal_for_item(
-                    item
+                    item,
+                    event_index=event_index,
                 )
 
                 if item.get(

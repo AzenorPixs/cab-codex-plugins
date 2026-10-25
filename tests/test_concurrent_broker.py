@@ -4,8 +4,9 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import threading
 import unittest
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from contextlib import ExitStack
 from unittest.mock import patch
 
@@ -106,6 +107,84 @@ class ConcurrentBrokerTest(unittest.TestCase):
         health["diagnosis"]["root_cause"] = "STORE_UNHEALTHY"
         with patch.object(bridge, "do_health", return_value=health):
             self.assertEqual(bridge.do_readiness({"run_id": "b"})["status"], "BLOCKED")
+
+    def check_consistency_during_transition(self, transition):
+        entered = threading.Event()
+        release = threading.Event()
+        snapshot_thread = []
+        original_read = bridge.journal.read_events
+
+        def read_events(*args, **kwargs):
+            if threading.get_ident() == snapshot_thread[0]:
+                entered.set()
+                if not release.wait(5):
+                    raise AssertionError("Le contrôle de cohérence n'a pas été libéré.")
+            return original_read(*args, **kwargs)
+
+        def snapshot():
+            snapshot_thread.append(threading.get_ident())
+            return bridge.store_journal_consistency_snapshot()
+
+        with patch.object(bridge.journal, "read_events", side_effect=read_events):
+            with ThreadPoolExecutor(max_workers=2) as executor:
+                observation = executor.submit(snapshot)
+                try:
+                    self.assertTrue(entered.wait(5))
+                    writer = executor.submit(transition)
+                    try:
+                        writer.result(timeout=0.2)
+                    except TimeoutError:
+                        # La transition peut attendre la fin de la lecture cohérente.
+                        pass
+                finally:
+                    release.set()
+                result = observation.result(timeout=5)
+                writer.result(timeout=5)
+        self.assertTrue(result["ok"], result)
+        self.assertTrue(bridge.store_journal_consistency_snapshot()["ok"])
+
+    def test_concurrent_creation_never_looks_like_orphan_journal_approval(self):
+        self.check_consistency_during_transition(lambda: bridge.do_propose(self.args()))
+
+    def test_concurrent_cancellation_never_looks_like_conflicting_terminal_event(self):
+        item = bridge.do_propose(self.args())
+        self.check_consistency_during_transition(
+            lambda: bridge.do_cancel({"approval_id": item["approval_id"]})
+        )
+
+    def test_genuine_orphan_remains_ambiguous_without_creating_an_approval(self):
+        bridge.journal.append_event(
+            "APPROVAL_CREATED", approval_id="orphan", request_id="request-orphan",
+            change_id="change-orphan", actor="OC",
+        )
+        result = bridge.store_journal_consistency_snapshot()
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["orphan_journal_approvals"], ["orphan"])
+        self.assertEqual(bridge.load_store(bridge.store_path())["approvals"], {})
+
+    def test_scoped_readiness_preserves_shared_failure_cause(self):
+        health = {"status": "DEGRADED", "diagnosis": {"root_cause": "STORE_JOURNAL_DIVERGENCE"},
+                  "controller": {"tcp_reachable": True}, "pending_watchdog": {"pending_count": 0},
+                  "consistency": {"ok": False, "orphan_journal_approvals": ["orphan"]}}
+        with patch.object(bridge, "do_health", return_value=health):
+            result = bridge.do_readiness({"run_id": "a"})
+        self.assertEqual(result["status"], "HUMAN_REQUIRED")
+        self.assertEqual(result["infrastructure_status"], "HUMAN_REQUIRED")
+        self.assertEqual(result["root_cause"], "STORE_JOURNAL_DIVERGENCE")
+        self.assertEqual(result["by_run"], {})
+
+    def test_readiness_counts_current_store_instead_of_stale_watchdog(self):
+        item = bridge.do_propose(self.args())
+        bridge.do_cancel({"approval_id": item["approval_id"]})
+        health = {"status": "OK", "diagnosis": {"root_cause": "NONE"},
+                  "controller": {"tcp_reachable": True},
+                  "pending_watchdog": {"pending_count": 1, "stalled_count": 1,
+                                       "approvals": {item["approval_id"]: {"state": "STALLED_DECISION"}}}}
+        with patch.object(bridge, "do_health", return_value=health):
+            result = bridge.do_readiness()
+        self.assertEqual(result["pending_count"], 0)
+        self.assertEqual(result["stalled_count"], 0)
+        self.assertEqual(result["by_run"]["a"]["pending_count"], 0)
 
 
 if __name__ == "__main__":

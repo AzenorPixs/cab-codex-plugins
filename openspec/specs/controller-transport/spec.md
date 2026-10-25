@@ -533,3 +533,143 @@ L'usage historique unique sans RUN MUST conserver ses décisions et once, sans c
 #### Scenario: Passage depuis un usage historique
 - **WHEN** une permission historique a été consommée puis un RUN concurrent est demandé
 - **THEN** l'admission attend une clôture réconciliée des sessions/racines historiques sans rejouer la permission
+
+### Requirement: Limite configurable de commande unitaire
+
+Le contrôleur MUST résoudre au démarrage `OC_Codex_MAX_COMMAND_LENGTH`, ou son alias `OC_CGPT_MAX_COMMAND_LENGTH` si le nom principal est absent. Il MUST utiliser 16 384 lorsque les deux noms sont absents. La limite MUST être commune à tous les contextes du processus.
+
+#### Scenario: Défaut et bornes
+- **WHEN** aucune variable de limite n'est fournie et une commande contient 16 383, 16 384 ou 16 385 unités UTF-16
+- **THEN** les deux premières passent le contrôle de longueur et la troisième est refusée
+
+#### Scenario: Configuration et alias
+- **WHEN** le nom principal est absent et l'alias vaut 2000
+- **THEN** le seuil est 2 000, avec admission à 1 999 et 2 000 et refus à 2 001
+
+#### Scenario: Priorité explicite
+- **WHEN** les deux noms sont présents
+- **THEN** le nom principal prévaut, y compris lorsque sa valeur est invalide
+
+### Requirement: Validation de la configuration de longueur
+
+Une valeur fournie MUST contenir uniquement des chiffres ASCII et représenter un entier strictement positif et sûr JavaScript. Une valeur invalide MUST faire échouer le démarrage avant ouverture HTTP, modification du registre ou lancement de Codex, sans afficher sa valeur.
+
+#### Scenario: Configuration invalide
+- **WHEN** la valeur fournie est vide, zéro, signée, fractionnaire, espacée, exponentielle, non numérique ou supérieure au maximum entier sûr
+- **THEN** le démarrage échoue avec un diagnostic nommant la variable sans exposer sa valeur
+
+### Requirement: Refus explicite des commandes trop longues
+
+Pour les demandes et rappels, sur les routes historiques, resource et par RUN, le contrôleur MUST comparer la longueur de commande à la limite en unités UTF-16, sans modifier son contenu. Un dépassement MUST retourner HTTP 400 JSON contenant `error=command-too-long`, un message construit depuis les longueurs, `maxLength`, `actualLength` et `unit=utf16`. Le diagnostic MUST NOT exposer le contenu de la commande. Les limites de transport MUST rester indépendantes.
+
+#### Scenario: Dépassement sans effet
+- **WHEN** une demande ou un rappel porte une commande de longueur L+1 pour une limite L
+- **THEN** le contrôleur retourne le refus structuré avec les deux longueurs sans enregistrer d'opération ni de validation
+
+#### Scenario: Unicode
+- **WHEN** une commande contient des caractères BMP et hors BMP
+- **THEN** leur comptage suit String.length, avec deux unités pour un caractère hors BMP
+
+### Requirement: Refus de longueur sans autorisation implicite
+
+Le contrôle de longueur MUST refuser avant enregistrement de l'opération, appropriation du requestId ou création de validation. Ce refus MUST NOT créer de décision, permission native ou tour Codex. Une commande longue admise MUST conserver les règles existantes de corrélation et de consommation unique.
+
+#### Scenario: Refus avant enregistrement
+- **WHEN** la commande dépasse la limite
+- **THEN** aucune opération, identité de requête ou validation n'est enregistrée et aucune décision ou permission n'est créée
+
+#### Scenario: Commande longue et permission unique
+- **WHEN** une commande longue admise reçoit une décision corrélée et une permission native exacte admissible
+- **THEN** le contrôleur peut transmettre une seule réponse once ; une commande divergente et une seconde permission sans nouvelle décision restent refusées selon les règles de corrélation existantes
+
+### Requirement: Configuration publique effective
+GET /status MUST exposer configuration.maxCommandLength et configuration.commandLengthUnit avec la limite résolue au démarrage et UTF-16. Les vues historiques, globales et par RUN MUST porter la même valeur sans exposer d'autres variables d'environnement.
+
+#### Scenario: Configuration commune aux RUN
+- **WHEN** le contrôleur est configuré avec une limite de 4096
+- **THEN** ses statuts historiques, globaux et par RUN annoncent 4096 unités UTF-16
+
+### Requirement: Journal public d'observation
+GET /monitor/events MUST exposer un journal borné en mémoire, son identité de démarrage, son compteur et sa couverture. Les événements MUST se limiter aux types, dates, séquences, identifiants corrélés et enums fermés de décision ou d'état natif. Cette lecture MUST rester sans effet sur décisions, permissions, réservations ou relances.
+
+#### Scenario: Demande puis décision
+- **WHEN** un mandat reçoit une décision explicite
+- **THEN** le journal expose les transitions corrélées sans commande, corps de message ou raison libre et sa lecture ne retransmet aucune permission
+
+### Requirement: Déclaration structurée de l'étape
+POST /job/progress et sa route par RUN MUST accepter stepId du catalogue, stepStatus et expectedStepSequence. Les états MUST être IN_PROGRESS par défaut, ALREADY_COVERED ou NOT_APPLICABLE. Une déclaration partielle, inconnue ou périmée MUST être refusée avant mutation. Les appels historiques sans ces champs MUST rester compatibles.
+
+#### Scenario: Revue suivie d'une correction
+- **WHEN** un job armé au gate OPEN déclare IMPLEMENTATION avec la séquence courante après REVIEW
+- **THEN** le contrôleur persiste le nouveau passage sans fermer le gate ni modifier la phase
+
+### Requirement: Historique d'étape durable et borné
+Le contrôleur MUST persister lifecycle schéma 1, sequence et au plus cent entrées history contenant sequence, id, status et at. La dernière entrée MUST définir l'étape courante. Les dates MUST être attribuées côté contrôleur. Une répétition identique de la dernière déclaration MUST être idempotente et une déclaration concurrente périmée MUST être refusée.
+
+#### Scenario: Réémission après réponse perdue
+- **WHEN** la dernière déclaration identique est répétée avec sa séquence attendue précédente
+- **THEN** le contrôleur conserve la séquence et l'historique sans second passage
+
+### Requirement: Neutralité métier de l'étape
+Une déclaration d'étape MUST NOT créer permission, décision, reprise ou validation terminale. Après validation du gate, le contrôleur MUST refuser une nouvelle déclaration. Les événements publics MUST exposer uniquement les identifiants et états fermés d'étape avec leur séquence.
+
+#### Scenario: Clôture annoncée sans gate
+- **WHEN** un job déclare CLOSURE alors que son gate est OPEN
+- **THEN** il expose Clôture 11/11 mais conserve le gate OPEN
+
+### Requirement: Admission native avant appropriation durable
+Le contrôleur MUST vérifier identité, admission locale et ask avant de persister propriétaire et opération ensemble. Après tout contrôle asynchrone, il MUST recontrôler le contexte. Aucun traitement de décision MUST commencer avant succès durable. Une panne de persistance MUST fermer l'admission sans permission.
+
+#### Scenario: Refus ask sans enregistrement partiel
+- **WHEN** une notification vise une session devenue allow
+- **THEN** aucun propriétaire, opération ou validation n'est créé et aucune permission n'est transmise
+
+### Requirement: Réconciliation explicite du prévol orphelin
+POST /runs/<runId>/validation/reconcile MUST exiger transactionId, developerAuthorization, jobId, recoveryId et approval exact. Seul le prévol courant gelé, armé, gate OPEN, sans décision, permission ni effet MUST être admis. Les identités, ask, propriétaire, opération PREPARED et preuves natives PENDING MUST être vérifiés sans reconstruction d'intention.
+
+#### Scenario: Demande orpheline sans effet
+- **WHEN** les preuves corrélées et l'autorisation spécifique sont vérifiées
+- **THEN** le contrôleur conserve la candidate et crée uniquement une validation apte au rejet explicite, sans décision automatique
+
+#### Scenario: Capacité effectivement chargée
+- **WHEN** les statuts du contrôleur et du RUN sont consultés
+- **THEN** notificationReconciliation vaut rejection-only-v1 pour identifier cette API indépendamment de la version source de base
+
+#### Scenario: Preuve divergente ou effet incertain
+- **WHEN** un champ, préfixe natif, propriétaire ou opération diverge, ou qu'un effet ou accès existe
+- **THEN** la réconciliation est refusée sans modifier le job, les pairs ou une décision
+
+### Requirement: Retry préservé après réconciliation de notification
+La réconciliation MUST NOT assouplir retry ou complete. Un rejet local explicite et un résultat MCP REJECTED du même approval_id MUST précéder retry. Une perte de contexte local MUST NOT autoriser une restauration automatique depuis le seul reçu.
+
+#### Scenario: Polling et nouvel essai
+- **WHEN** le même prévol réconcilié est rejeté et son polling confirme REJECTED
+- **THEN** retry existant peut réserver une nouvelle identité dans la même candidate en conservant ses autres gardes
+
+### Requirement: Diagnostic public de métadonnées sans mutation
+L'outil approval-metadata MUST projeter uniquement les métadonnées d'une approbation demandée depuis une sortie native broker_health déjà disponible dans une session technique existante. Il MUST utiliser seulement GET et MUST NOT lire le magasin privé, lancer un outil, créer une session, exposer titre/résumé/commande/fichiers/secrets ou annuler une demande. Les identités absentes MUST rester non vérifiables.
+
+#### Scenario: Demande non attribuée
+- **WHEN** le diagnostic trouve l'identifiant demandé dans le watchdog natif mais ne trouve pas son RUN
+- **THEN** il restitue l'observation, sa provenance et les champs inconnus sans attribuer ou décider la demande
+
+### Requirement: Adoption contrôlée de l'amorçage
+POST /coordination/maintenance/adopt MUST lire la transaction dans un journal privé fermé, vérifier autorité, empreintes, expiration, identités des processus et preuve native fraîche. Il MUST lier le reçu à la génération DRAINING existante avant de confirmer HELD. Un reçu client seul MUST NOT suffire.
+
+#### Scenario: Reçu divergent
+- **WHEN** le journal, l'autorité, le code chargé ou la génération diverge
+- **THEN** l'adoption est refusée sans modification du job, du registre ou d'une permission
+
+### Requirement: Maintenance de récupération préparée sans effet
+Seule la récupération préparée nommée et prouvée sans outil natif dans la candidate MAY être admise pour confirmation ou libération SHARED_MAINTENANCE. RUN/job/candidate/recovery, propriétaire, opération, préfixes et critères MUST rester identiques. retry, complete et ask/once MUST rester inchangés.
+
+#### Scenario: Prévol commencé
+- **WHEN** une commande, un accès, une décision approved ou une preuve incertaine existe
+- **THEN** la maintenance spéciale est refusée et la récupération reste gelée
+
+### Requirement: Magasin privé d'amorçage explicite
+OC_Codex_MAINTENANCE_STATE_DIR MAY désigner un répertoire absolu privé hors workspace, sans liens. Par défaut le contrôleur MUST utiliser frozen-controller dans son magasin privé update. Le lecteur MUST vérifier propriétaire, mode et régularité et MUST NOT suivre un chemin fourni par le corps HTTP.
+
+#### Scenario: Chemin client arbitraire
+- **WHEN** un client tente de choisir un autre fichier ou un journal non privé
+- **THEN** l'adoption est refusée sans lire ce chemin
