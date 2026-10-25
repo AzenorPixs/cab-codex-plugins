@@ -454,7 +454,7 @@ test('Le redémarrage conserve la réservation de test et la réconciliation ren
 
 test('Les réservations refusent propriétaire divergent, alias invalide et détention préalable de fichiers', async (t) => {
   const h=await fixture(t);const a=h.reserve('a',[dockerTest,file('x')]);const b=h.reserve('b',[dockerTest]);
-  assert.throws(() => testLease(h,a,'invalid',[{key:'docker:ENGINE-A',mode:'write'}]), /test-resource-identity-invalid/);
+  assert.throws(() => testLease(h,a,'invalid',[{key:'docker:ENGINE-A',mode:'write'}]), /test-resources-invalid/);
   const op=h.prepare(a,'no-lease',[dockerTest]);assert.throws(() => h.acquire(a,op),/test-resource-not-held/);
   const fileOp=h.prepare(a,'file',[file('x')]);const fileAccess=h.acquire(a,fileOp);
   assert.throws(() => testLease(h,a,'premature',[dockerTest]),/test-acquisition-boundary-required/);
@@ -503,5 +503,20 @@ test('navigateurs externes : Chromium exclusif, Firefox indépendant et groupe a
   assert.equal(h.r.testReservations(b.runId)[0].state,'HELD');
   assert.equal(h.r.testReservations(e.runId)[0].state,'WAITING');
   assert.equal(h.r.testReservations(c.runId)[0].state,'HELD');
-  assert.throws(()=>h.r.resources([{key:'browser:host-a/Chromium',mode:'write'}]),/test-resource-identity-invalid/);
+  assert.throws(()=>h.r.testResources([{key:'browser:host-a/Chromium',mode:'write'}]),/test-resources-invalid/);
+});
+
+
+test('identifiants logiques historiques conservés sans donner de nouvelle réservation',async(t)=>{
+  const h=await fixture(t);const a=h.reserve('a',[file('x')]);const op=h.prepare(a,'old');const access=h.acquire(a,op);
+  h.start(a,op);h.complete(a,op);h.release(a,access);
+  const key='browser:c14-headless-test-profiles';const legacy=[{key,mode:'write'}];
+  const storedOp=h.r.resourceState.operations[op.operationId];storedOp.resources=structuredClone(legacy);storedOp.expectedRevisions={[key]:0};
+  const storedAccess=h.r.resourceState.accesses[access.accessId];storedAccess.resources=structuredClone(legacy);storedAccess.expectedRevisions={[key]:0};
+  h.r.resourceState.revisions[key]=h.r.resourceState.revisions['file:x'];h.r.persist();
+  const expected=JSON.parse(JSON.stringify(h.r.resourceState));await h.restart();
+  assert.deepEqual(h.r.resourceState,expected);
+  assert.throws(()=>h.r.acquireTests(a.runId,{version:a.version,transactionId:'new-old-key',resources:legacy,evidence:['new attempt']}),/test-resources-invalid/);
+  const alias=[{key:'browser:host-a/Chromium',mode:'write'}];
+  assert.throws(()=>h.r.testResources(alias),/test-resources-invalid/);
 });

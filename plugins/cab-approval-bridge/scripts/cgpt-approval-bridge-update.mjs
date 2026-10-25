@@ -11,7 +11,8 @@ import { FROZEN_PROFILE, FROZEN_CAPABILITY, collectFrozenProof, proofHash, modul
   inspectControllerInstallation, checkInstallationJournal } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
 
-export const VERSION = '1.10.0';
+export const VERSION = '1.10.1';
+const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
 const error = (code) => Object.assign(new Error(code), { code });
@@ -71,9 +72,10 @@ async function http(base, path, body) {
     response = await fetch(base + path, { method: body === undefined ? 'GET' : 'POST',
       redirect: 'error', signal: AbortSignal.timeout(5000), headers: { 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const limit = path === '/runs' && body === undefined ? REGISTRY_MAX_BYTES : 2 * 1024 * 1024;
     const chunks = []; let bytes = 0;
     for await (const chunk of response.body) {
-      bytes += chunk.length; if (bytes > 2 * 1024 * 1024) throw error('update-response-too-large'); chunks.push(chunk);
+      bytes += chunk.length; if (bytes > limit) throw error('update-response-too-large'); chunks.push(chunk);
     }
     const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
     if (!response.ok) throw Object.assign(error('update-source-refused'), { status: response.status });
@@ -208,7 +210,7 @@ export async function updateComponents(input, options = {}) {
     return actual;
   }
   async function requireStoredHeld() {
-    const file = await regular(join(c.workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json'));
+    const file = await regular(join(c.workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json'), REGISTRY_MAX_BYTES);
     if (file.uid !== process.getuid() || (file.mode & 0o077)) throw error('update-broker-registry-untrusted');
     const snapshot = JSON.parse(file.data), global=snapshot.coordination?.global;
     if (snapshot.schemaVersion !== 4 || snapshot.coordinationProtocol !== 'resource-scoped-v1' || snapshot.project !== c.workspace ||

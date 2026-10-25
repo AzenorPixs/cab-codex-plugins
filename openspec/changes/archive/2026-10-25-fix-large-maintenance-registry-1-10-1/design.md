@@ -1,0 +1,9 @@
+# Conception et preuves
+
+Le client HTTP de l'updater choisit 16*1024*1024 octets seulement pour le chemin exact /runs en GET. Toutes les autres routes, y compris une variante avec query ou une mutation, conservent 2*1024*1024. Le compteur porte sur les octets réellement reçus, sans confiance dans Content-Length, avant JSON.parse. Un dépassement garde le diagnostic update-response-too-large.
+
+requireStoredHeld appelle le lecteur régulier existant avec la seule borne 16 Mio pour controller-runs.json. Type, propriétaire, liens, permissions, schéma, génération, autorité, PAUSE et empreinte des identités restent contrôlés. Les autres fichiers gardent 4 Mio. La lecture ne filtre ni ne tronque l'historique. Aucune sauvegarde métier n'est restaurée et aucune entrée n'est purgée.
+
+Le banc existant à deux UID est étendu par un mode grand registre : des réservations canoniques nombreuses produisent un snapshot HTTP >2 Mio et un fichier privé >4 Mio. L'acteur 1000 ne peut toujours pas écrire au broker 1002 ; succès, réponse de déconnexion perdue, PAUSE, identités, fichiers sources et idempotence sont vérifiés. Les tests HTTP contrôlés vérifient aussi /runs au-delà de 16 Mio et les autres réponses au-delà de 2 Mio sans arrêt de service.
+
+La base devient 1.10.1 et le cachebuster du plugin est renouvelé. La liste fermée de versions chargées conserve 1.7.1, 1.8.0, 1.9.0 et 1.10.0 en plus de la cible. Les artefacts sur disque doivent toujours correspondre à la cible. Le déploiement réel est une transaction distincte ; les effets externes sont explicitement autorisés par le développeur. L'installation locale du plugin et de la commande passe par les mécanismes pris en charge, sans édition manuelle du cache. La provenance et les éventuelles différences avec GitHub sont rapportées. Les origines et sauvegardes sont conservées pour un retour réconcilié, sans downgrade implicite.

@@ -3,7 +3,19 @@
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
 
+## 1.10.1 — préparation source
+
+- Preuve du broker : reconnaître un enfant créé depuis tout thread du même OpenCode, avec déduplication, contrôle d’identité parent après découverte et gardes UID/commande/parent/unicité conservées. Une disparition de thread concurrente est tolérée ; les autres erreurs restent bloquantes.
+
+- Conserver les clés logiques historiques à la restauration sans donner de nouvelle réservation de test non canonique. Réparation ciblée du candidat sous le même HELD après échec de restauration : reçu et stages initiaux préservés, reprise idempotente, nouvelle release immuable et aucune réécriture du registre métier.
+
+- Maintenance ordinaire : porter à 16 Mio les seules lectures du registre GET /runs et controller-runs.json, sans troncature ni purge ; conserver 2 Mio sur les autres réponses et 4 Mio sur les autres fichiers.
+- Tester les refus des bornes et qualifier succès/récupération avec un grand registre et deux UID réels, sans assouplir PAUSE, HELD, propriétés ou identités.
+- Aligner les briques, commande, plugin et supports courants sur 1.10.1 ; conserver 1.10.0 parmi les versions broker chargées qualifiées. Installation locale et reprise CISMP restent distinctes de la préparation source, sans action Git implicite.
+
 ## 1.10.0 — préparation source
+
+- Correctif de maintenance : admettre la version broker chargée 1.9.0 dans reuse-readonly vers 1.10.0, en conservant la liste fermée et tous les contrôles de preuve ; qualifier succès et récupération avec deux UID réels.
 
 - Modèle de codage : modèle explicite du prompt prioritaire, sinon PLLM automatique ; raisonnement high par défaut, puis xhigh, puis politique de priorité inférieure. Un modèle explicitement imposé incompatible bloque. Catalogue public configurable, prévol natif exact, choix persisté et transmis lors des reprises ; contrats historiques conservés sans adoption implicite. Aucun benchmark fournisseur ou changement d'agent actif par la préparation source.
 

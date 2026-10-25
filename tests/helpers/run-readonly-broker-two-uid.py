@@ -31,7 +31,13 @@ def main() -> None:
     parser.add_argument("--node", type=Path, default=Path("/home/devops/node/current/bin/node"))
     parser.add_argument("--python", type=Path, default=Path("/home/devops/python/current/bin/python3"))
     parser.add_argument("--image", default="debian:stable-slim")
+    parser.add_argument("--large-registry", action="store_true")
+    parser.add_argument("--historical-key-recovery", action="store_true")
+    parser.add_argument("--failing-plugin", type=Path)
+    parser.add_argument("--worker-broker", action="store_true")
     args = parser.parse_args()
+    if args.historical_key_recovery and not args.failing_plugin:
+        parser.error("--failing-plugin requis pour la récupération historique")
     root = Path(__file__).resolve().parents[2]
     work = root / ".cab-readonly-work"
     work.mkdir(exist_ok=True, mode=0o700)
@@ -40,6 +46,8 @@ def main() -> None:
     inputs.mkdir(mode=0o755)
     copied = copy_plugin(root / "plugins/cab-approval-bridge", inputs / "plugins/cab-approval-bridge")
     copied += copy_plugin(args.original_plugin.resolve(), inputs / "original")
+    if args.failing_plugin:
+        copied += copy_plugin(args.failing_plugin.resolve(), inputs / "failing")
     destination = inputs / "tests/helpers"
     destination.mkdir(parents=True, mode=0o755)
     shutil.copy2(root / "tests/helpers/readonly-broker-two-uid.mjs", destination)
@@ -60,6 +68,12 @@ def main() -> None:
     command.extend(["--env", "PATH=" + str(node.parent) + ":" + str(python.parent) + ":/usr/bin:/bin",
                     "--env", "CAB_TEST_ISOLATED_TWO_UID=1", "--entrypoint", str(node), image,
                     "/inputs/tests/helpers/readonly-broker-two-uid.mjs"])
+    if args.large_registry:
+        command[command.index("--entrypoint"):command.index("--entrypoint")] = ["--env", "CAB_TEST_LARGE_REGISTRY=1"]
+    if args.historical_key_recovery:
+        command[command.index("--entrypoint"):command.index("--entrypoint")] = ["--env", "CAB_TEST_HISTORICAL_RECOVERY=1"]
+    if args.worker_broker:
+        command[command.index("--entrypoint"):command.index("--entrypoint")] = ["--env", "CAB_TEST_WORKER_BROKER=1"]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=240)
         (work / ("two-uid-" + key + ".stdout")).write_text(result.stdout)

@@ -1,0 +1,58 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: {"type":"result","uid":1000,"writeDenied":true,"error":"forward-file-unsafe"} file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:58
+    const fail = () => { throw new CoordinationError('registry-restoration-invalid'); };
+                               ^
+
+CoordinationError: registry-restoration-invalid
+    at fail (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:58:32)
+    at ResourceRunRegistry.validateResourceState (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:83:64)
+    at ResourceRunRegistry.restore (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:49:40)
+    at new RunRegistry (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-runs.mjs:101:10)
+    at new ResourceRunRegistry (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:42:8)
+    at file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-controller.mjs:46:18 {
+  code: 'registry-restoration-invalid',
+  status: 409
+}
+
+Node.js v24.22.1
+Error: service exited controller file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:58
+    const fail = () => { throw new CoordinationError('registry-restoration-invalid'); };
+                               ^
+
+CoordinationError: registry-restoration-invalid
+    at fail (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:58:32)
+    at ResourceRunRegistry.validateResourceState (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:83:64)
+    at ResourceRunRegistry.restore (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:49:40)
+    at new RunRegistry (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-runs.mjs:101:10)
+    at new ResourceRunRegistry (file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-resource-coordination.mjs:42:8)
+    at file:///work/cab-readonly-uid-YOpnaW/profile/.local/share/cab-approval-bridge/releases/1.10.1+update.d7ad7f4f-f108-48a3-99b1-43a6c4232f8f/scripts/cgpt-approval-bridge-controller.mjs:46:18 {
+  code: 'registry-restoration-invalid',
+  status: 409
+}
+
+Node.js v24.22.1
+
+    at file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:137:60
+    at until (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:23:69)
+    at async start (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:137:7)
+    at async Server.<anonymous> (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:182:87)
++ actual - expected
+
++ 'forward-file-unsafe'
+- 'isolated-prepared-interruption'
+
+    at scenario (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:207:88)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:251:119 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'forward-file-unsafe',
+  expected: 'isolated-prepared-interruption',
+  operator: 'strictEqual',
+  diff: 'simple'
+}
+
+Node.js v24.22.1

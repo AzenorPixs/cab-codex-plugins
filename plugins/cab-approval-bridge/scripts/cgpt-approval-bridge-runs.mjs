@@ -5,7 +5,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.10.0";
+export const VERSION = "1.10.1";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -40,10 +40,6 @@ export function canonicalResource(resource, directory) {
       typeof resource.key !== "string" || !resource.key || resource.key.length > 500 ||
       /[\x00-\x1f\\]/.test(resource.key)) throw new CoordinationError("resource-invalid", 400);
   let key = resource.key;
-  if (/^(docker|lxc|browser):/.test(key) &&
-      !/^(docker:[a-z0-9][a-z0-9_.-]{0,99}|(?:lxc|browser):[a-z0-9][a-z0-9_.-]{0,99}\/[a-z0-9][a-z0-9_.-]{0,99})$/.test(key)) {
-    throw new CoordinationError('test-resource-identity-invalid', 400);
-  }
   if (key.startsWith("file:")) {
     const path = key.slice(5).replace(/\/$/, "");
     if (!path || isAbsolute(path) || path.split("/").some((part) => !part || [".", ".."].includes(part))) {
