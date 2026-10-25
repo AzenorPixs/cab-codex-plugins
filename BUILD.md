@@ -71,7 +71,7 @@ Le broker n'utilise actuellement aucune dépendance Python tierce.
 
 ### 4.3 Statistiques de session
 
-Installer le jeu source complet CAB 1.10.1, notamment resource-coordination.mjs, statistics.mjs, observation-statistics.mjs, statistics-maintenance.mjs et import-observations.mjs avec leurs noms cgpt-approval-bridge-*. Le registre utilise le schéma 4 ; les schémas 1/2/3 restent lisibles en mode migration requise. Les snapshots statistiques cumulatifs lisent 1/2 et les observations ont leur stockage privé distinct schéma 2 lié au projet (les bundles importés restent schéma 1). Le magasin broker extensible 2 et le transport MCP sont conservés ; les capacités du nouveau protocole sont vérifiées avant permission.
+Installer le jeu source complet CAB 1.10.2, notamment resource-coordination.mjs, statistics.mjs, observation-statistics.mjs, statistics-maintenance.mjs et import-observations.mjs avec leurs noms cgpt-approval-bridge-*. Le registre utilise le schéma 4 ; les schémas 1/2/3 restent lisibles en mode migration requise. Les snapshots statistiques cumulatifs lisent 1/2 et les observations ont leur stockage privé distinct schéma 2 lié au projet (les bundles importés restent schéma 1). Le magasin broker extensible 2 et le transport MCP sont conservés ; les capacités du nouveau protocole sont vérifiées avant permission.
 
 Une conversion de runtime exige maintenance explicitement autorisée, quiescence, sauvegarde privée et qualification du jeu complet. Les RUN, jobs, candidates, demandes consommées et reçus sont conservés. Les RUN restent en pause ; le transport est vérifié en lecture, puis le prévol d’un seul RUN est autorisé après levée explicite du gel, en maintenant les pairs suspendus. Le métier reste interdit jusqu’à once, exit 0 et libération prouvés. Avant nouvel usage, /coordination/rollback et la sauvegarde permettent le retour exact ; après de nouveaux effets, une réconciliation/conversion est requise. Les anciennes acquisitions globales ordinaires sont refusées dans le nouveau profil. Une préparation source n'installe rien, ne propage aucun prompt et ne migre aucun RUN actif.
 
@@ -201,13 +201,13 @@ Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation C
 La sous-commande `/cab status` est distribuée dans le même fichier de commande
 Codex ; elle utilise les outils de lecture disponibles et les vues GET
 existantes. Elle n’ajoute ni script, ni dépendance, ni migration runtime.
-La préparation 1.10.1 reste une modification source ; l’installation dans un
+La préparation 1.10.2 reste une modification source ; l’installation dans un
 profil et la mise en service des composants sont des opérations distinctes.
 
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `1.10.1` pour le broker,
+artefacts distribués. La version de base actuelle est `1.10.2` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -292,7 +292,7 @@ Une conteneurisation éventuelle devra respecter l'architecture CAB, notamment :
 
 Le projet actuel ne définit aucune image Docker CAB.
 
-## Distribution concurrente 1.10.1
+## Distribution concurrente 1.10.2
 
 Installer le jeu complet des scripts du plugin dans un même répertoire : le
 contrôleur et le superviseur importent les modules job-context, supervisor-context
@@ -300,7 +300,7 @@ et runs, ainsi que resource-coordination, statistics, observation-statistics
 et statistics-maintenance ;
 l'importeur import-observations est également distribué. Le registre lance
 registry-lock.py avec Python 3. Ces fichiers sont
-indissociables et doivent partager la version source courante 1.10.1. Aucune dépendance tierce
+indissociables et doivent partager la version source courante 1.10.2. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.
@@ -315,7 +315,7 @@ les neuf prompts pilotés et leur protocole ; les prompts directs sont contrôl�
 par empreinte. Les sources PROMPTS restent non versionnées dans leurs projets.
 
 
-## Distribution de CAB Monitor 1.10.1
+## Distribution de CAB Monitor 1.10.2
 
 Le moniteur est une brique indépendante, distribuée sans dépendance tierce :
 
@@ -335,7 +335,7 @@ le moniteur utilisent le catalogue `run-steps.mjs`. Ces modules doivent être
 présents avec leurs noms complets à côté des scripts lors d’un déploiement
 autorisé. La référence `skills/approval-bridge/references/run-lifecycle.md`
 est distribuée avec le protocole, sans nouvelle dépendance. Les modules,
-briques existantes, manifeste, unités, commande et supports annoncent 1.10.1.
+briques existantes, manifeste, unités, commande et supports annoncent 1.10.2.
 Les ressources HTML/CSS sont rattachées à cette release sans format de version
 artificiel. Les schémas et le protocole MCP sont conservés.
 
@@ -359,13 +359,13 @@ ressources est qualifiée par lancement d'un paquet isolé.
 
 Le modèle ne déclare aucune dépendance au contrôleur ou au superviseur.
 /cab stop et le reset préservent son service, sa configuration et son jeu
-installé. /cab update 1.10.1 peut redémarrer explicitement le moniteur pendant
+installé. /cab update 1.10.2 peut redémarrer explicitement le moniteur pendant
 sa transaction de maintenance lorsqu'il était déjà actif, sans démarrer une
 instance initialement inactive.
 Un port ou workspace divergent est signalé, sans tuer de processus ni modifier
 un service actif. Cette préparation source ne déploie rien sur le profil réel.
 
-Le jeu 1.10.1 conserve STATS et la maintenance des historiques introduits en 1.6.0. Le module
+Le jeu 1.10.2 conserve STATS et la maintenance des historiques introduits en 1.6.0. Le module
 statistics-maintenance et son import observation-statistics sont requis avec
 le contrôleur et le moniteur, même pour une installation séparée du moniteur.
 Les schémas JSON restent inchangés ; aucun remplacement de magasin, migration,
@@ -373,7 +373,7 @@ purge réelle ou redémarrage de service n'est exécuté par la préparation sou
 La qualification navigateur couvre navigation, filtres, annulation, purge sur
 fixtures et protection des contextes actifs dans Chromium et Firefox headless.
 
-Le jeu 1.10.1 ajoute monitor-management.mjs aux imports du contrôleur et du
+Le jeu 1.10.2 ajoute monitor-management.mjs aux imports du contrôleur et du
 moniteur, avec son nom complet cgpt-approval-bridge-monitor-management.mjs.
 Le catalogue privé est créé seulement lors du premier rangement autorisé ;
 il reste séparé des sources et du runtime CAB. Les droits utilisateur
@@ -383,7 +383,7 @@ manuellement conserve sa supervision, avec redémarrage systemd indisponible.
 Les tests de commandes utilisent un adaptateur simulé, jamais les services
 réels. Le jeu installé isolé doit contenir onze ressources, dont ce module.
 
-## Distribution de la mise à jour active 1.10.1
+## Distribution de la mise à jour active 1.10.2
 
 Le plugin ajoute scripts/cgpt-approval-bridge-update.mjs, sa référence
 skills/approval-bridge/references/component-update.md et broker/ contenant
@@ -407,7 +407,7 @@ publication et déploiement réels restent des opérations distinctes.
 ### Correctif source de notification orpheline
 
 `fix-orphaned-validation-admission` modifie seulement controller, job-context,
-runs et resource-coordination, leurs contrats et tests. La base reste 1.10.1 ;
+runs et resource-coordination, leurs contrats et tests. La base reste 1.10.2 ;
 ce lot n'est pas une publication ou une installation. Le chargement doit être
 prouvé par empreintes du jeu effectivement déployé et par la capacité publique
 `notificationReconciliation: rejection-only-v1`, jamais par la seule version.
@@ -420,7 +420,7 @@ refuse une récupération ouverte. Le profil explicite frozen-recovery-controlle
 ajoute l'autorité BOOTSTRAP_HELD qualifiée, suivie d'adoption et du vrai HELD,
 sans installation implicite par la préparation SCM. Le paquet distribue
 maintenance-proof avec la fermeture d'imports du contrôleur. Les sources sont
-1.10.1 ; broker, superviseur et Web 1.7.1 peuvent être conservés uniquement dans
+1.10.2 ; broker, superviseur et Web 1.7.1 peuvent être conservés uniquement dans
 la transition bornée qualifiée et explicitement annoncée. Leur mise à niveau
 globale et toute reconnexion MCP restent hors de cette préparation.
 
@@ -432,7 +432,7 @@ prépare les quatre briques et leurs pointeurs. Aucun ancien fichier de release
 n'est réécrit. Une installation liée ne doit pas être transformée en installation
 plate ou réparée par une écriture à travers un lien.
 
-### Distribution du complément 1.10.1
+### Distribution du complément 1.10.2
 
 Le paquet distribue broker-artifact-proof.mjs avec update.mjs. La politique
 reuse-readonly conserve les trois sources broker existantes et ne les traite
@@ -444,7 +444,7 @@ espace éphémère. Comptes, droits et services hôte ne changent pas. Ce banc
 ne constitue aucune activation du projet consommateur. Les archives L1/L2
 restent les preuves historiques de leur version source 1.8.0.
 
-## Distribution 1.10.1 — tests conteneurisés et rafraîchissement
+## Distribution 1.10.2 — tests conteneurisés et rafraîchissement
 
 La préparation conserve les modules existants et ajoute model-policy à la fermeture d'imports du contrôleur et du superviseur. Les réservations Docker/LXC sont intégrées à resource-coordination, runs et controller ; les ressources app.mjs, index.html et style.css portent le sélecteur de cadence et la disponibilité Web. Les copies broker restent identiques aux trois sources Python. Aucun paquet tiers ni nouveau service n'est requis.
 
@@ -452,14 +452,18 @@ Un registre 4 sans `testReservations` conserve ses clés logiques historiques, y
 
 Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromium et Firefox, suivent aussi ce cycle avec les clés `browser:<hôte>/<navigateur>`. La réservation reste détenue jusqu'à fermeture des sessions WebDriver/BiDi et processus, libération des ports et profils temporaires du change, nettoyage puis vérification distincts. Les sessions utilisateur préexistantes sont préservées. Les ensembles navigateur/conteneur sont acquis atomiquement ; des mécanismes indépendants peuvent avancer.
 
-## Distribution de la politique de modèle — 1.10.1
+## Distribution de la politique de modèle — 1.10.2
 
 Distribuer cgpt-approval-bridge-model-policy.mjs avec controller, job-context et supervisor-context. L'updater exige ce module et contrôle sa version et ses imports. Installer aussi skills/approval-bridge/references/model-policy.md. Aucun paquet tiers n'est ajouté. Le chemin public OC_Codex_PLLM_CATALOG (alias OC_CGPT_PLLM_CATALOG) doit être configuré lors d'une installation autorisée ; l'updater conserve les environnements existants et cette préparation ne les modifie pas. Le nouveau protocole négocie pllm-auto-v1 pour les nouveaux jobs ; les anciens contrats et jobs restent lisibles.
 
-## Qualification et installation locale — 1.10.1
+## Qualification et installation locale — 1.10.2
 
 Le jeu conserve ses modules et formats, avec le correctif de lecture bornée du registre. Le banc deux UID dispose de --large-registry pour qualifier un snapshot HTTP dépassant 2 Mio et un fichier privé dépassant 4 Mio, sans dépasser 16 Mio. Les installations locales explicitement demandées doivent préserver caches et anciennes releases, documenter la provenance et distinguer la version locale de la publication distante. Les sauvegardes et journaux de l'updater restent l'autorité de récupération ; aucun état métier n'est restauré.
 
 La réparation ciblée du lecteur après échec de restauration est décrite dans `plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md`. Elle garde le journal et les stages initiaux, le même HELD et des releases immuables. Elle ne restaure aucune donnée métier ni ancien processus broker.
 
 Pour un broker externe reuse-readonly, la qualification couvre aussi un enfant créé depuis un thread secondaire OpenCode. Le module de preuve est distribué avec le jeu complet ; UID, parent, commande, identité et unicité restent obligatoires avant libération de maintenance.
+
+## Correctif 1.10.2 et installation locale
+
+Les quatre briques, modules, plugin et commande sont alignés en 1.10.2. Le correctif providerMaxBytes reste dans le contrôleur ; aucun fichier d'environnement ou fournisseur n'est modifié. La maintenance qualifiée admet un broker encore chargé en 1.10.1 avec artefacts cibles 1.10.2 identiques au paquet, conserve le processus OpenCode, jobs et pauses, puis vérifie les quatre versions réellement chargées. Les anciennes releases et archives sont préservées.

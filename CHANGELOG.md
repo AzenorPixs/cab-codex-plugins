@@ -3,6 +3,11 @@
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
 
+## 1.10.2 — préparation source
+
+- La session de pilotage peut fournir providerMaxBytes à /model-policy/resolve et dans modelSelection à l'armement : budget entier positif en octets appliqué au seul /provider de l'appel, sans plafond fixe ajouté. Omission compatible à 2 Mio, autres observations et catalogue PLLM inchangés.
+- Dépassements et valeurs invalides refusés sans corps privé ; budget local, sans changement des modèles ou jobs existants. Incrément commun des briques et compatibilité de maintenance depuis 1.10.1 conservée.
+
 ## 1.10.1 — préparation source
 
 - Preuve du broker : reconnaître un enfant créé depuis tout thread du même OpenCode, avec déduplication, contrôle d’identité parent après découverte et gardes UID/commande/parent/unicité conservées. Une disparition de thread concurrente est tolérée ; les autres erreurs restent bloquantes.

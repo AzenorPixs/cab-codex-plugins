@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.10.1
+version: 1.10.2
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -9,11 +9,11 @@ Le développeur accorde une autorisation permanente pour le cycle de vie et les 
 
 Argument reçu : `$ARGUMENTS`
 
-Le profil source 1.10.1 `frozen-recovery-controller` n'est pas déclenché par
+Le profil source 1.10.2 `frozen-recovery-controller` n'est pas déclenché par
 une mise à jour ordinaire. Il exige un accord de maintenance spécifique et
 un fichier de preuves privé, selon `references/component-update.md` du skill.
 Il peut conserver broker, superviseur et Web 1.7.1 pendant le chargement du
-contrôleur 1.10.1 ; annoncer séparément ces versions et le manifeste chargé.
+contrôleur 1.10.2 ; annoncer séparément ces versions et le manifeste chargé.
 Une préparation SCM ou un incrément de version n'autorise aucune activation.
 
 Pour stats, statslast, stats 24, stats7 ou stats30, appliquer directement la section `/cab stats` puis terminer après la consultation. Ne déclencher ni skill, ni boucle de pilotage, ni action de cycle de vie. Une cible optionnelle --run <run_id> filtre ce RUN exact ; une syntaxe ambiguë est refusée sans collecte.
@@ -36,7 +36,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 1.10.1
+## RUN concurrents CAB 1.10.2
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -306,7 +306,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 1.10.1 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 1.10.2 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -764,7 +764,7 @@ Ces contrôles ne modifient aucune permission ; les règles doivent rester
 stables pendant le mandat. Une modification externe après contrôle n'est
 pas atomique avec l'exécution native et reste hors garantie du contrôleur.
 
-## Environnements de test et rafraîchissement — 1.10.1
+## Environnements de test et rafraîchissement — 1.10.2
 
 Pour les RUN coordonnés, consulter le protocole `test-resources-v1` et la référence concurrent-runs avant tout usage Docker/LXC. Acquérir l'environnement avant préparation et le conserver entre commandes jusqu'aux preuves de fin, nettoyage et restitution. Le moniteur affiche les attentes de test et propose une cadence locale Manuel/1s/3s/7s/30s/1m/5m/10m/30m avec Actualiser ; sa carte Web conserve Disponible pendant 30 minutes après un rafraîchissement réussi. Ces fonctions ne déclenchent aucune mise à jour de service par leur présence dans les sources.
 
@@ -772,4 +772,6 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 1.10.1, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, high puis xhigh puis politique de priorité inférieure. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni low implicite. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 1.10.2, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, high puis xhigh puis politique de priorité inférieure. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni low implicite. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+
+La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.

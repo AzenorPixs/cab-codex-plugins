@@ -1,4 +1,4 @@
-# Mise à jour des briques actives — CAB 1.10.1
+# Mise à jour des briques actives — CAB 1.10.2
 
 ## Profil de récupération gelée
 
@@ -29,7 +29,7 @@ Web restent ouverts ; aucun connect/disconnect ni instance/dispose n'est permis.
 Les pairs doivent conserver une PAUSE explicitement autorisée. Après complete,
 la récupération ne vaut pas autorisation métier dans l'état mixte : une
 maintenance ordinaire distinctement autorisée doit aligner réellement les
-quatre briques en 1.10.1, puis chaque reprise est validée. Cette seconde étape
+quatre briques en 1.10.2, puis chaque reprise est validée. Cette seconde étape
 peut reconnecter le broker et relancer le Web, sans fermer OpenCode.
 Un autre PENDING ou un écart entre compteurs global/RUN/session bloque le
 profil ; aucune demande inconnue n'est annulée ou attribuée par déduction.
@@ -38,8 +38,8 @@ Le contrôleur nouveau vérifie le journal privé par la route
 POST /coordination/maintenance/adopt avant son véritable HELD. Le recontrôle
 précède la libération commune et conserve job.recovery. Le JSON de résultat
 distingue packageVersion, buildDigest et runtimeVersions : la transition
-qualifiée est contrôleur 1.10.1 avec broker/superviseur/Web 1.7.1 conservés.
-Elle ne constitue pas un déploiement global aligné 1.10.1. Une autre version
+qualifiée est contrôleur 1.10.2 avec broker/superviseur/Web 1.7.1 conservés.
+Elle ne constitue pas un déploiement global aligné 1.10.2. Une autre version
 préservée est refusée. La qualification isolée inclut rejet, polling, retry,
 nouveau prévol once/exit 0 et complete via le broker original conservé.
 
@@ -104,7 +104,7 @@ La politique ordinaire explicite `--broker-policy reuse-readonly` exige
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
-doit être la cible 1.10.1 ; la version chargée est vérifiée indépendamment.
+doit être la cible 1.10.2 ; la version chargée est vérifiée indépendamment.
 Les trois fichiers sont seulement lus et comparés au paquet. Aucun stage,
 backup restaurable, remplacement, nouveau lien ou compilation sur place du
 broker n'est effectué. Les droits et propriétaires restent conservés.
@@ -198,17 +198,17 @@ Le bilan sépare fichiers déployés, versions actives, inactivité, attente,
 retour arrière confirmé et récupération nécessaire. Un service réel n'est pas
 présenté comme vérifié sur la seule base d'un test simulé.
 
-## Transition ordinaire depuis 1.9.0 vers 1.10.1
+## Transition ordinaire depuis 1.9.0 vers 1.10.2
 
-Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0 et la cible 1.10.1. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 1.10.1, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc à deux UID qualifie le cycle ordinaire complet depuis les quatre briques originales 1.9.0, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés.
+Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0 et la cible 1.10.2. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 1.10.2, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc à deux UID qualifie le cycle ordinaire complet depuis les quatre briques originales 1.9.0, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés.
 
-## Registre de maintenance volumineux — 1.10.1
+## Registre de maintenance volumineux — 1.10.2
 
 Dans le profil ordinaire, seul GET /runs sans suffixe et le lecteur privé de controller-runs.json acceptent jusqu'à 16 Mio. Les autres réponses HTTP gardent 2 Mio et les autres fichiers 4 Mio. La lecture reste intégrale et bornée ; un dépassement est refusé, sans troncature ni purge. Identités, schéma, permissions, génération, PAUSE, HELD et preuves restent recontrôlés. Le banc grand registre vérifie les deux UID réels, les deux issues et le refus d'écriture au broker.
 
 Une mise à jour locale explicitement demandée utilise le jeu local qualifié et conserve sa provenance et ses sauvegardes. Le plugin est installé par le mécanisme pris en charge ; son cache n'est pas édité manuellement. Une publication distante antérieure ne doit pas remplacer implicitement le jeu local plus récent. Le bilan distingue cet état de la publication GitHub et conserve les informations nécessaires pour rétablir l'origine distante après sa publication autorisée. Aucun commit ou push n'est déduit d'une installation locale.
 
-## Réparation ciblée du lecteur 1.10.1
+## Réparation ciblée du lecteur 1.10.2
 
 Ce cas exige une autorisation explicite et un journal READONLY_RECOVERY_REQUIRED après déconnexion native, avec contrôleur et superviseur arrêtés. Il est limité au layout managed-release à liens de fichiers et à la correction exacte du lecteur générique runs.mjs conservant les anciennes clés logiques. Tout autre changement de code est refusé.
 
