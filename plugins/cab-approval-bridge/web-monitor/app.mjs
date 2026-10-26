@@ -43,6 +43,12 @@ const managementErrors = {
 };
 async function manage(route, body) {
   if (managing) return;
+  if (model && ((route === 'service' && body.component !== 'monitor') ||
+      (route === 'catalog' && body.action !== 'restore')) &&
+      (isStale('controller', Date.now()) || isStale('registry', Date.now()))) {
+    $('#management-status').textContent = 'Actualisez la vue avant une commande de gestion : les observations courantes sont anciennes.';
+    return;
+  }
   managing = true; render();
   $('#management-status').textContent = 'Action en cours…';
   try {
@@ -74,9 +80,9 @@ const labels = { 'validation-received': 'Demande de validation reçue', 'validat
   'validation-answered': 'Décision transmise', 'job-progress': 'Progression du job', 'job-armed': 'Job armé',
   'job-disarmed': 'Job désarmé', 'opencode-permission-answered': 'Permission native transmise',
   'opencode-permission-approved': 'Permission native transmise', 'operation-state-observed': 'État d’opération observé' };
-function isStale(name) {
+function isStale(name, at = Date.parse(model.generatedAt)) {
   const source = model?.sources[name];
-  return !source?.available || !source.lastSuccessAt || Date.now() - Date.parse(source.lastSuccessAt) > model.configuration.staleMs;
+  return !source?.available || !source.lastSuccessAt || at - Date.parse(source.lastSuccessAt) > model.configuration.staleMs;
 }
 function runState(run) {
   const state = isStale('controller') || (run.runId !== 'legacy' && run.state && isStale('registry')) ? 'UNKNOWN' : run.operationalState || 'UNKNOWN';
@@ -117,12 +123,13 @@ function renderHealth() {
     if (key !== 'opencode') {
       const actions = node('div', 'component-actions');
       const occupied = model.runs.some((run) => run.state === 'RESERVED' || run.armed || run.hasMandate || run.pending > 0);
+      const currentStale = isStale('controller', Date.now()) || isStale('registry', Date.now());
       const active = key === 'broker' ? model.brokerConnection === 'connected' : !stale;
       if (key !== 'monitor') actions.append(actionButton(active ? 'Arrêter' : 'Démarrer',
-        (active ? 'Arrêter ' : 'Démarrer ') + label, () => { void manage('service', { component: key, action: active ? 'stop' : 'start' }); }, active && occupied));
+        (active ? 'Arrêter ' : 'Démarrer ') + label, () => { void manage('service', { component: key, action: active ? 'stop' : 'start' }); }, currentStale || active && occupied));
       actions.append(actionButton('Redémarrer', 'Redémarrer ' + label,
         () => { void manage('service', { component: key, action: 'restart' }); },
-        key === 'monitor' ? Boolean(webRestart) : occupied || isStale('controller') || isStale('registry')));
+        key === 'monitor' ? Boolean(webRestart) : occupied || currentStale));
       card.append(actions);
     }
     card.title = 'Dernier succès : ' + date(key === 'monitor' ? lastWebSuccessAt === null ? null : new Date(lastWebSuccessAt).toISOString() :
@@ -154,6 +161,13 @@ function renderWork() {
   values = values.filter((value) => [value.runId, value.changeId, value.title].filter(Boolean).join(' ').toLocaleLowerCase('fr').includes(query));
   if (view === 'runs') values = values.filter((run) => filter === 'all' || (filter === 'terminal' ? terminalRun(run)
     : filter === 'waiting' ? runState(run)[0] === 'WAITING' : !terminalRun(run)));
+  const completed = (value) => {
+    const progress = (view === 'runs' ? changeFor(value.changeId) : value)?.progress;
+    return progress?.available ? progress.completed : -1;
+  };
+  values.sort((left, right) => completed(right) - completed(left) ||
+    (left.changeId || '').localeCompare(right.changeId || '', 'fr') ||
+    (left.runId || '').localeCompare(right.runId || '', 'fr'));
   $('#result-count').textContent = values.length + (view === 'runs' ? ' RUN affiché(s)' : ' change(s) affiché(s)');
   $('#filter').disabled = view !== 'runs';
   if (!values.length) { container.replaceChildren(node('p', 'empty', query ? 'Aucun résultat pour cette recherche.' :

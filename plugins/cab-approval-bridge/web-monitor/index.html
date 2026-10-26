@@ -19,17 +19,20 @@
       <a id="stats-nav" class="rail-link" href="#stats"><span aria-hidden="true">▥</span>STATS</a>
       <a id="archives-nav" class="rail-link" href="#archives"><span aria-hidden="true">▣</span>ARCHIVES</a>
     </nav>
-    <div class="rail-bottom">LOCAL<br><span id="version">1.10.1</span></div>
+    <div class="rail-bottom">LOCAL<br><span id="version">1.10.4</span></div>
   </aside>
   <main>
     <header class="topbar">
-      <div class="breadcrumb">CAB <span>/</span> <span id="page-label">Supervision</span> <span class="environment">WORKSPACE LOCAL</span></div>
+      <div class="topbar-context" tabindex="0" aria-label="Workspace et dernière vue">
+        <div class="breadcrumb">CAB <span>/</span> <span id="page-label">Supervision</span> <span class="environment">WORKSPACE LOCAL</span></div>
+        <div class="view-meta"><time id="updated">En attente des premières observations</time><span id="cadence"></span></div>
+      </div>
       <div id="connection" class="connection" role="status" aria-live="polite"><i></i>Connexion…</div>
     </header>
     <div id="monitor-page">
     <section class="hero" aria-labelledby="page-title">
       <div><h1 id="page-title" class="observation-title">CENTRE D’OBSERVATION</h1></div>
-      <div class="hero-meta"><time id="updated">En attente des premières observations</time><div id="cadence"></div>
+      <div class="hero-meta">
         <div class="refresh-controls"><label for="refresh-interval">Actualisation</label><select id="refresh-interval">
           <option value="0">Manuel</option><option value="1000" selected>1s</option><option value="3000">3s</option><option value="7000">7s</option><option value="30000">30s</option><option value="60000">1m</option><option value="300000">5m</option><option value="600000">10m</option><option value="1800000">30m</option>
         </select><button id="monitor-refresh" class="small-action" type="button">Actualiser</button></div>
@@ -82,7 +85,7 @@
     </section>
     <dialog id="retention-dialog" aria-labelledby="retention-dialog-title"><h2 id="retention-dialog-title">Confirmer la purge</h2><p id="retention-cutoff"></p><div id="retention-counts"></div><p id="retention-protected"></p><p class="warning">Cette suppression est irréversible sans sauvegarde préalable. Les magasins statistiques restent en place.</p><div class="retention-actions"><button id="retention-cancel" type="button" autofocus>Annuler</button><button id="retention-confirm" class="danger-button" type="button">Confirmer la suppression</button></div></dialog>
     <dialog id="management-dialog" aria-labelledby="management-dialog-title"><h2 id="management-dialog-title">Supprimer du moniteur</h2><p id="management-confirm-text"></p><p>Cette action masque la ligne dans le moniteur. Les sources, le RUN réel et ses preuves restent conservés.</p><div class="retention-actions"><button id="management-cancel" type="button" autofocus>Annuler</button><button id="management-confirm" class="danger-button" type="button">Supprimer</button></div></dialog>
-    <footer><span><b>CAB</b> Monitor <span id="footer-version">1.10.1</span></span><span>Observation locale · Aucun appel LLM · Horaires Europe/Paris</span></footer>
+    <footer><span><b>CAB</b> Monitor <span id="footer-version">1.10.4</span></span><span>Observation locale · Aucun appel LLM · Horaires Europe/Paris</span></footer>
   </main>
 </body>
 </html>

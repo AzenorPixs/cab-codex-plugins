@@ -28,6 +28,13 @@ let monitor;
 let upstream;
 let browserClose;
 const results = [];
+const unit = process.env.CAB_MONITOR_BROWSER_UNIT;
+if (unit && !['header', 'manual', 'order'].includes(unit)) throw new Error('Unité navigateur inconnue');
+async function finishUnit(browser, passed) {
+  results.push({ browser: browser.name, version: browser.version, passed });
+  await browser.close(); browserClose = null;
+  console.log(browser.name + ' : unité ' + unit + ' réussie');
+}
 const journal = createObservationJournal();
 let completed = 3;
 let limit = 4096;
@@ -158,8 +165,8 @@ try {
       } catch (error) { response.writeHead(error.status || 500, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: error.code })); }
       return;
     }
-    const payload = request.url === '/status' ? { version: '1.10.3', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
-      brokerReadiness: { status: 'READY', server_version: '1.10.3' }, brokerReadinessReceivedAt: new Date().toISOString(),
+    const payload = request.url === '/status' ? { version: '1.10.4', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
+      brokerReadiness: { status: 'READY', server_version: '1.10.4' }, brokerReadinessReceivedAt: new Date().toISOString(),
       runs: Object.fromEntries((managementMode ? [] : runIds).map((runId, i) => [runId, { job: { changeId: changeIds[i], sessionId: 'session-' + i, armed: true,
         lifecycle: i === 0 ? lifecycle : nextLifecycle(undefined, i === 1 ? 'IMPLEMENTATION' : 'STATISTICS', undefined, 0),
         lastProvenMilestone: ['Contrat d’observation validé', 'Reprise préparée', 'Événements corrélés'][i], currentCabMandate: 'mandat-' + i },
@@ -200,13 +207,40 @@ try {
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('3/14')"), true);
     assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content th')].map(x=>x.textContent)) === JSON.stringify(['RUN / CHANGE','ETAT','ÉTAPE','TÂCHES COCHÉES','ACTIONS'])"), true);
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('Revue · 8/11') && document.querySelector('#work-content').textContent.includes('WAITING')"), true);
-    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v1.10.3') && document.querySelector('#health').textContent.includes('v1.19.3')"), true);
+    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v1.10.4') && document.querySelector('#health').textContent.includes('v1.19.3')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(255, 232, 235)');
     await browser.evaluate("document.querySelector('#detail details summary').click(); true");
     assert.equal(await browser.evaluate("document.querySelectorAll('.cycle-list li').length"), 11);
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-desktop.png');
+    assert.equal(await browser.evaluate("!!document.querySelector('.topbar #updated') && !!document.querySelector('.topbar #cadence') && !document.querySelector('.hero #updated')"), true);
+    assert.equal(await browser.evaluate("Math.abs(document.querySelector('#updated').getBoundingClientRect().top-document.querySelector('#cadence').getBoundingClientRect().top)<2 && document.querySelector('#updated').getBoundingClientRect().left>document.querySelector('.environment').getBoundingClientRect().right && document.querySelector('#cadence').getBoundingClientRect().left>document.querySelector('#updated').getBoundingClientRect().right"), true);
+    await browser.viewport(390, 844);
+    assert.equal(await browser.evaluate("document.documentElement.scrollWidth<=window.innerWidth && getComputedStyle(document.querySelector('.environment')).display!=='none' && document.querySelector('.topbar-context').scrollWidth>document.querySelector('.topbar-context').clientWidth"), true);
+    await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-header-mobile.png');
+    await browser.viewport(1440, 1100);
+    if (unit === 'header') { await finishUnit(browser, ['métadonnées alignées après workspace', 'ligne mobile défilable sans débordement']); continue; }
+    const orderedSnapshot = await (await fetch(url + '/api/snapshot')).json();
+    const changeTemplate = orderedSnapshot.changes.changes[0];
+    orderedSnapshot.changes.changes = [['zeta',3,10], ['unknown',null,null], ['zero',0,2], ['high',5,100], ['alpha',3,3]].map(([changeId, completed, total]) => ({
+      ...changeTemplate, changeId, title: changeId, progress: { available: completed !== null, completed, total, tasks: [] } }));
+    const runTemplate = orderedSnapshot.runs[0];
+    orderedSnapshot.runs = [['RUN-A-ZETA','zeta'], ['RUN-UNKNOWN','unknown'], ['RUN-Z-ALPHA','alpha'], ['RUN-ZERO','zero'], ['RUN-Z-HIGH','high'], ['RUN-A-ALPHA','alpha']].map(([runId,changeId]) => ({ ...runTemplate, runId, changeId }));
+    await browser.evaluate("document.querySelector('#refresh-interval').value='0'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); window.__orderFetch=window.fetch; window.__orderSnapshot=" + JSON.stringify(JSON.stringify(orderedSnapshot)) + "; window.__orderApplied=JSON.parse(window.__orderSnapshot); Object.freeze(window.__orderApplied.runs); Object.freeze(window.__orderApplied.changes.changes); window.fetch=(url,options)=>url==='/api/snapshot'?Promise.resolve({ok:true,json:async()=>window.__orderApplied}):window.__orderFetch(url,options); document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("document.querySelectorAll('#work-content tbody tr').length===6"),browser.name+' données de tri appliquées');
+    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content [data-run]')].map(x=>x.dataset.run))"), JSON.stringify(['RUN-Z-HIGH','RUN-A-ALPHA','RUN-Z-ALPHA','RUN-A-ZETA','RUN-ZERO','RUN-UNKNOWN']));
+    await browser.evaluate("document.querySelector('[data-run=RUN-A-ZETA]').click(); document.querySelector('#changes-tab').click(); true");
+    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content [data-change]')].map(x=>x.dataset.change))"), JSON.stringify(['high','alpha','zeta','zero','unknown']));
+    await browser.evaluate("document.querySelector('[data-change=alpha]').click(); document.querySelector('#search').value='a'; document.querySelector('#search').dispatchEvent(new Event('input')); true");
+    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content [data-change]')].map(x=>x.dataset.change))"), JSON.stringify(['alpha','zeta']));
+    await browser.evaluate("document.querySelector('#search').value=''; document.querySelector('#runs-tab').click(); true");
+    assert.equal(await browser.evaluate("document.querySelector('#work-content tr.selected [data-run]').dataset.run==='RUN-A-ZETA' && JSON.stringify(window.__orderApplied)===window.__orderSnapshot"), true);
+    await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-task-order.png');
+    await browser.evaluate("window.fetch=window.__orderFetch; document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("document.querySelectorAll('#work-content tbody tr').length===3 && !document.querySelector('#monitor-refresh').disabled"),browser.name+' restauration après tri');
+    await browser.evaluate("document.querySelector('#changes-tab').click(); document.querySelector('[data-change=add-local-web-monitor]').click(); document.querySelector('#runs-tab').click(); document.querySelector('[data-run=RUN-WEB]').click(); document.querySelector('#detail details summary').click(); true");
+    if (unit === 'order') { await finishUnit(browser, ['nombre absolu avant pourcentage', 'égalités change puis RUN', 'inconnu après zéro', 'recherche et sélection conservées', 'snapshot non muté']); continue; }
     assert.equal(await browser.evaluate("JSON.stringify([...document.querySelector('#refresh-interval').options].map(x=>x.textContent)) === JSON.stringify(['Manuel','1s','3s','7s','30s','1m','5m','10m','30m'])"), true);
     await browser.evaluate("window.__intervals=[]; window.__setInterval=window.setInterval; window.setInterval=(fn,ms,...args)=>{window.__intervals.push(ms);return window.__setInterval(fn,ms,...args)}; true");
     for (const cadence of ['1000','3000','7000','30000','60000','300000','600000','1800000']) {
@@ -222,21 +256,47 @@ try {
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096') && document.querySelector('#work-content').textContent.includes('3/14')"),true);
     await browser.evaluate("document.querySelector('#monitor-refresh').click(); true");
     await wait(() => browser.evaluate("document.querySelector('#metrics').textContent.includes('3 000') && document.querySelector('#work-content').textContent.includes('5/14')"),browser.name+' clic manuel');
-    await browser.evaluate("window.__dateNow=Date.now; window.__clockOffset=1790000; Date.now=()=>window.__dateNow()+window.__clockOffset; true");
+    await browser.evaluate("document.querySelector('#detail details summary').click(); true");
+    await delay(100);
+    await browser.evaluate("window.__frozenView=JSON.stringify(['#metrics','#work-content','#detail'].map(s=>document.querySelector(s).textContent)); window.__frozenSelection=document.querySelector('#work-content tr.selected button').dataset.run; window.__dateNow=Date.now; window.__clockOffset=20000; Date.now=()=>window.__dateNow()+window.__clockOffset; true");
+    await delay(1200);
+    assert.equal(await browser.evaluate("[...document.querySelectorAll('.health-card:not([data-component=monitor]) .health-status')].every(x=>x.textContent==='Disponible')"), true);
+    await browser.evaluate("document.querySelector('#runs-tab').click(); true");
+    assert.equal(await browser.evaluate("window.__frozenView===JSON.stringify(['#metrics','#work-content','#detail'].map(s=>document.querySelector(s).textContent)) && document.querySelector('#work-content tr.selected button').dataset.run===window.__frozenSelection && document.querySelector('#detail details').open"), true);
+    await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-manual-stable.png');
+    await browser.evaluate("window.__clockOffset=1790000; true");
     await delay(1100);
     assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Disponible');
     monitor.server.closeAllConnections();
     assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Disponible');
+    await delay(1100);
+    assert.equal(await browser.evaluate("window.__frozenView===JSON.stringify(['#metrics','#work-content','#detail'].map(s=>document.querySelector(s).textContent))"), true);
     await browser.evaluate("window.__clockOffset=1800001; true");
     await wait(() => browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent === 'Non observé'"),browser.name+' expiration Web sans refresh');
     await browser.evaluate("window.__fetch=window.fetch; window.fetch=(url,options)=>url==='/api/snapshot'?Promise.resolve(new Response('{}',{status:503})):window.__fetch(url,options); document.querySelector('#monitor-refresh').click(); true");
     await wait(() => browser.evaluate("document.querySelector('#refresh-status').textContent.includes('impossible')"),browser.name+' échec refresh');
     assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Non observé');
+    assert.equal(await browser.evaluate("window.__frozenView===JSON.stringify(['#metrics','#work-content','#detail'].map(s=>document.querySelector(s).textContent)) && document.querySelector('[data-component=controller] .health-status').textContent==='Disponible'"), true);
     await browser.evaluate("window.fetch=(url,options)=>url==='/api/snapshot'?Promise.resolve(new Response('{}',{status:200})):window.__fetch(url,options); document.querySelector('#monitor-refresh').click(); true");
     await delay(250);
     assert.equal(await browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent"),'Non observé');
     await browser.evaluate("window.fetch=window.__fetch; Date.now=window.__dateNow; document.querySelector('#monitor-refresh').click(); true");
     await wait(() => browser.evaluate("document.querySelector('[data-component=monitor] .health-status').textContent === 'Disponible' && !document.querySelector('#monitor-refresh').disabled"),browser.name+' nouveau succès Web');
+    const guardedSnapshot = await (await fetch(url + '/api/snapshot')).json();
+    for (const run of guardedSnapshot.runs) Object.assign(run, { state: 'DELIVERED', armed: false, hasMandate: false, pending: 0, manageable: true });
+    await browser.evaluate("window.__guardSnapshot=" + JSON.stringify(JSON.stringify(guardedSnapshot)) + "; window.__manageCalls=0; window.fetch=(url,options)=>url==='/api/snapshot'?Promise.resolve(new Response(window.__guardSnapshot,{status:200})):url.startsWith('/api/manage/')?(window.__manageCalls++,Promise.resolve(new Response('{}',{status:200}))):window.__fetch(url,options); document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("!document.querySelector('#monitor-refresh').disabled && !document.querySelector('[data-component=controller] button[aria-label^=Redémarrer]').disabled"),browser.name+' gardes sur snapshot frais');
+    await browser.evaluate("Date.now=()=>window.__dateNow()+20000; true");
+    await delay(1200);
+    assert.equal(await browser.evaluate("document.querySelector('[data-component=controller] .health-status').textContent==='Disponible' && document.querySelector('[data-component=controller] button[aria-label^=Redémarrer]').disabled"), true);
+    await browser.evaluate("document.querySelector('#work-content .row-actions button').click(); true");
+    assert.equal(await browser.evaluate("window.__manageCalls===0 && document.querySelector('#management-status').textContent.includes('Actualisez la vue')"), true);
+    guardedSnapshot.sources.controller.available = false;
+    await browser.evaluate("Date.now=window.__dateNow; window.__guardSnapshot=" + JSON.stringify(JSON.stringify(guardedSnapshot)) + "; document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("document.querySelector('[data-component=controller] .health-status').textContent==='Indisponible' && document.querySelector('#work-content').textContent.includes('UNKNOWN')"),browser.name+' source indisponible au prochain snapshot');
+    await browser.evaluate("window.fetch=window.__fetch; document.querySelector('#monitor-refresh').click(); true");
+    await wait(() => browser.evaluate("!document.querySelector('#monitor-refresh').disabled && document.querySelector('[data-component=controller] .health-status').textContent==='Disponible'"),browser.name+' restauration après gardes');
+    if (unit === 'manual') { await finishUnit(browser, ['vue stable après vingt secondes', 'états et sélection conservés après interaction et perte SSE', 'HTTP échoué et JSON invalide sans effacement', 'Web expiré après trente minutes', 'gardes courantes sans POST', 'nouveau snapshot indisponible rendu']); continue; }
     await browser.evaluate("document.querySelector('#refresh-interval').value='3000'; document.querySelector('#refresh-interval').dispatchEvent(new Event('change')); true");
     completed=3;limit=4096;await tasks();await monitor.state.collect();await delay(1100);
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('3 000')"),true);
@@ -355,9 +415,10 @@ try {
       'titre simplifié et gras', 'cinq cartes dont Web', 'boutons actifs protégés', 'commandes trois briques',
       'archivage RUN et change', 'navigation ARCHIVES', 'désarchivage sans reprise', 'annulation suppression',
       'suppression logique persistante', 'sources intactes', 'archives mobile', 'redémarrage Web avec reconnexion'] });
+    results.at(-1).passed.push('métadonnées alignées et responsive', 'vue manuelle stable au-delà du délai de fraîcheur', 'gardes de gestion à l’horloge courante', 'tri des deux tableaux avec égalités et inconnus');
     await browser.close(); browserClose = null; console.log(browser.name + ' : qualification réussie');
   }
-  await writeFile(join(artifactDirectory, 'web-monitor-browser-results.json'), JSON.stringify(results, null, 2) + '\n');
+  await writeFile(join(artifactDirectory, 'web-monitor-browser' + (unit ? '-' + unit : '') + '-results.json'), JSON.stringify(results, null, 2) + '\n');
 } finally {
   await browserClose?.().catch(() => {});
   for (const process of children.reverse()) {

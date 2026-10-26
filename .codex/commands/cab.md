@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.10.3
+version: 1.10.4
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -9,11 +9,11 @@ Le développeur accorde une autorisation permanente pour le cycle de vie et les 
 
 Argument reçu : `$ARGUMENTS`
 
-Le profil source 1.10.3 `frozen-recovery-controller` n'est pas déclenché par
+Le profil source 1.10.4 `frozen-recovery-controller` n'est pas déclenché par
 une mise à jour ordinaire. Il exige un accord de maintenance spécifique et
 un fichier de preuves privé, selon `references/component-update.md` du skill.
 Il peut conserver broker, superviseur et Web 1.7.1 pendant le chargement du
-contrôleur 1.10.3 ; annoncer séparément ces versions et le manifeste chargé.
+contrôleur 1.10.4 ; annoncer séparément ces versions et le manifeste chargé.
 Une préparation SCM ou un incrément de version n'autorise aucune activation.
 
 Pour stats, statslast, stats 24, stats7 ou stats30, appliquer directement la section `/cab stats` puis terminer après la consultation. Ne déclencher ni skill, ni boucle de pilotage, ni action de cycle de vie. Une cible optionnelle --run <run_id> filtre ce RUN exact ; une syntaxe ambiguë est refusée sans collecte.
@@ -36,7 +36,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 1.10.3
+## RUN concurrents CAB 1.10.4
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -83,29 +83,71 @@ ni le SSE ni le contrôle CAB toutes les 3 secondes. Les temporisations
 techniques du superviseur, des heartbeats et des rappels du broker restent
 distinctes.
 
-Après un échec du benchmark PLLM, conserve le même RUN en attente non terminale
-et retente le benchmark toutes les 30 minutes (1 800 secondes), indéfiniment,
-sans limite de tentatives, jusqu'à reprise sûre du RUN ou arrêt explicite du
-développeur. Calcule la prochaine échéance depuis l'échec observé de la dernière
-tentative. Conserve dans le checkpoint non secret le RUN, les horodatages,
-causes, résultats et la prochaine échéance. Après interruption, conserve cette
-échéance et réconcilie toute tentative en cours ou d'effet inconnu avant de
-retenter. Ne lance jamais de tentatives simultanées ni ne duplique un essai
-non réconcilié. Maintiens la supervision sans attente bloquante de trente
-minutes ; ce seul échec ne clôture pas le RUN et ne ferme ni ne redémarre les
-processus.
-
-Après une réussite observée, réconcilie les contextes, la santé OpenCode, MCP,
-la readiness CAB réelle et les permissions avant reprise. Si la reprise n'est
-pas sûre, applique la récupération CAB et conserve sa cause observable.
-La réussite du benchmark ne vaut jamais approbation, ne rejoue aucun mandat
-consommé et ne contourne aucun blocage CAB distinct.
+Les conditions de disponibilité des services externes et les suites à donner
+à leur indisponibilité relèvent du prompt invoqué et du contrat CAB applicable.
+Leurs éventuels réessais suivent ces seules règles. Consigner les résultats et
+les causes observées dans le checkpoint non secret ; toute reprise exige la
+réconciliation des effets, de la santé OpenCode, de MCP, de la readiness CAB et
+des permissions. Une reprise ne vaut jamais approbation et ne rejoue aucun
+mandat consommé.
 
 Prévois les sondes statistiques toutes les 30 minutes, en complément des
 sondes initiale et finale. Poursuis le travail entre les échéances, sans
 arrêter le travail pour attendre un créneau. Signale les relèves manquées
-sans reconstruction rétroactive. Une sonde statistique échouée reste distincte
-d'un échec du benchmark PLLM et ne suspend pas, à elle seule, le RUN.
+sans reconstruction rétroactive. Une sonde statistique échouée reste distincte d'un échec du benchmark PLLM
+et ne suspend pas, à elle seule, le RUN.
+
+## PLLM Automatique — fraîcheur initiale et conservation du choix
+
+Pour les prompts imposant PLLM Automatique, le contrôle de fraîcheur de huit
+heures s'applique exclusivement au démarrage initial de la session de codage
+pilotée, portée par le RUN parent. À ce démarrage seulement, l'orchestrateur
+lit le catalogue public `data/pllm-current.json` du skill actif et son rapport.
+Il réutilise sans benchmark une sélection `Valide`, évaluée dans cette
+publication, si la publication et l'évaluation ont strictement moins de huit
+heures (28 800 secondes). Calculer les âges depuis les horodatages ISO 8601
+avec leurs fuseaux, jamais depuis la date du fichier ; ne renouveler aucune
+date à la lecture. Un rapport absent, inexploitable, sans horodatage vérifiable,
+futur ou atteignant le seuil à ce démarrage impose une évaluation automatique
+du skill actif, puis la relecture de sa publication achevée. Une évaluation
+interrompue ne vaut pas publication réussie. Un rapport récent sans politique
+valide impose l'attente définie ci-dessous, sans nouvel essai automatique.
+
+Pendant cette même session, le dépassement de huit heures ne déclenche aucune
+réévaluation, interruption ni nouveau prévol. Les tâches, changements de change
+dans le cycle, sous-jobs, pauses, reprises et compactages conservent le choix
+vérifié du RUN parent ; ils ne constituent pas un nouveau démarrage initial.
+Une publication ultérieure ne remplace pas spontanément ce choix. Conserver
+ses références et preuves dans le checkpoint non secret déjà autorisé,
+lorsqu'il existe. L'agent de codage ne modifie pas ce choix de sa propre initiative.
+
+Seuls un dysfonctionnement réel du modèle appliqué ou une instruction explicite
+du développeur peuvent déclencher une réévaluation ou un basculement vers une
+politique PLLM de priorité inférieure dans l'ordre de repli du skill actif.
+Seul l'orchestrateur parent conduit cette opération, sans concurrence entre
+sous-jobs. Une panne réelle suspend le mandat concerné et impose une
+réévaluation immédiate, quel que soit l'âge du rapport. Après réconciliation
+des effets et permissions, appliquer la première politique disponible de
+priorité inférieure au choix défaillant, issue de cette évaluation et qualifiée
+par prévol natif. Écarter les candidates défaillantes sans boucle de réessais.
+Un échec de test métier ou un défaut CAB seul ne prouve pas une panne du modèle.
+
+Qualifier le fournisseur, le modèle et la variante natifs par une génération
+bornée sans outil ni accès au projet avant transmission métier, au démarrage
+initial et avant tout nouveau choix. Les prévols requis après maintenance
+du raccord restent applicables ; le seul âge du rapport ne les renouvelle pas.
+Respecter les priorités du skill, y compris ses modes gratuits, sans inventer
+de quota disponible ni de variante. Conserver les identités, sessions, jobs et
+preuves ; utiliser la frontière CAB de bascule sans réarmement implicite ni
+rejeu d'une permission consommée.
+
+Si aucune PLLM admissible n'est disponible, ne démarrer ni poursuivre aucun
+travail, mandat, écriture métier, test, maintenance ou sonde. Avertir le
+développeur avec le constat daté et attendre son instruction, sans évaluation
+ni benchmark relancé automatiquement. Conserver l'état et les preuves ;
+ne pas déclarer de clôture réussie ni arrêter ou redémarrer les processus
+partagés. Les validations CAB, permissions natives et accords du prompt
+restent requis. Cette section ne déclenche aucun RUN ni évaluation par sa lecture.
 
 ## Compactage coordonné toutes les 1 h 30
 
@@ -306,7 +348,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 1.10.3 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 1.10.4 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -764,7 +806,7 @@ Ces contrôles ne modifient aucune permission ; les règles doivent rester
 stables pendant le mandat. Une modification externe après contrôle n'est
 pas atomique avec l'exécution native et reste hors garantie du contrôleur.
 
-## Environnements de test et rafraîchissement — 1.10.3
+## Environnements de test et rafraîchissement — 1.10.4
 
 Pour les RUN coordonnés, consulter le protocole `test-resources-v1` et la référence concurrent-runs avant tout usage Docker/LXC. Acquérir l'environnement avant préparation et le conserver entre commandes jusqu'aux preuves de fin, nettoyage et restitution. Le moniteur affiche les attentes de test et propose une cadence locale Manuel/1s/3s/7s/30s/1m/5m/10m/30m avec Actualiser ; sa carte Web conserve Disponible pendant 30 minutes après un rafraîchissement réussi. Ces fonctions ne déclenchent aucune mise à jour de service par leur présence dans les sources.
 
@@ -772,7 +814,7 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 1.10.3, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, high puis xhigh puis politique de priorité inférieure. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni low implicite. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 1.10.4, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, high puis xhigh puis politique de priorité inférieure. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni low implicite. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
@@ -786,4 +828,4 @@ Le script valide le fichier public régulier et borné ainsi que la publication,
 
 Après démarrage ou rechargement coordonné, appeler /model-policy/resolve avec les exigences du prompt et providerMaxBytes choisi par la session. Exiger une résolution réussie du contrôleur avant prévol et nouvel armement ; la simple réussite du CLI ne prouve pas la transmission au service. pllm-catalog-unconfigured indique un raccord absent dans le processus chargé ; les autres diagnostics de catalogue, fournisseur ou prévol restent distincts. Ne pas contourner par un modèle manuel. Une erreur conserve le job non armé et exige la récupération autorisée.
 
-Pour le raccord 1.10.3, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+Pour le raccord 1.10.4, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
