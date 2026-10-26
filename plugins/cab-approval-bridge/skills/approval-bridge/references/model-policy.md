@@ -1,4 +1,4 @@
-# CAB 1.10.2 — modèle de codage et PLLM automatique
+# CAB 1.10.3 — modèle de codage et PLLM automatique
 
 ## Priorité du prompt
 
@@ -21,7 +21,7 @@ La sélection publiée low ne prouve pas la disponibilité ou les performances d
 3. Avant de supprimer la seule session temporaire du prévol, armer le job avec modelSelectionProtocol=pllm-auto-v1, modelSelection={model?,reasoning?} et modelPreflight={sessionId,messageId}, en plus du contrat de job. Le contrôleur relit le catalogue et les capacités ; il corrèle la session au workspace, le message assistant terminé avec finish=stop, son parent utilisateur, le fournisseur, modèle et variant exacts, ainsi qu'une réponse texte sans outil. Une preuve divergente refuse l'armement.
 4. Vérifier GET /runs/<runId>/job : codingModel conserve fournisseur, modèle, raisonnement, provenance, priorité, empreinte de catalogue et référence du prévol. Ensuite seulement effectuer les prévols et mandats CAB ordinaires. Le catalogue ne remplace ni permission once ni gate.
 
-Tout nouveau job piloté par le protocole 1.10.2 négocie pllm-auto-v1, même si modelSelection est {}. Les contrats historiques non négociés et les jobs déjà persistés restent lisibles, sans prétendre qu'ils ont adopté ces nouveaux défauts. Un champ codingModel fourni directement par le client est refusé : il est produit par le serveur après preuve.
+Tout nouveau job piloté par le protocole 1.10.3 négocie pllm-auto-v1, même si modelSelection est {}. Les contrats historiques non négociés et les jobs déjà persistés restent lisibles, sans prétendre qu'ils ont adopté ces nouveaux défauts. Un champ codingModel fourni directement par le client est refusé : il est produit par le serveur après preuve.
 
 ## Reprise et responsabilités
 
@@ -41,8 +41,20 @@ Un rejet prouvé de high permet d'essayer xhigh ; un rejet prouvé des deux perm
 
 Un retour à un ancien contrôleur ou superviseur après un armement négocié n'est pas qualifié : conserver les états récents et un lecteur compatible jusqu'à réconciliation. Les versions identiques du jeu chargé ne dispensent pas de vérifier la capacité pllm-auto-v1.
 
-## Budget de lecture défini par la session — 1.10.2
+## Budget de lecture défini par la session — 1.10.3
 
 La session de pilotage fixe explicitement `providerMaxBytes` en octets dans le corps de `POST /model-policy/resolve`, puis répète ce champ dans `modelSelection` lors de l'armement négocié. Exemple de structure : `{ "model": "<fournisseur>/<modèle>", "reasoning": "high", "providerMaxBytes": <budget_entier_en_octets> }`. La valeur appartient à la session ; CAB l'applique exactement au seul `/provider` de cet appel et n'ajoute pas de plafond fixe. Elle doit être un entier sûr strictement positif ; null, chaîne, fraction et dépassement d'entier sûr sont refusés avant observation.
 
 En omission, le défaut compatible reste 2 Mio. Les observations de sessions/messages et le fichier public PLLM gardent leurs bornes distinctes de 2 Mio. Le budget n'est pas global, ne se transmet pas implicitement à un autre appel et ne change aucun modèle ou job déjà armé. Les flux trop grands sont interrompus avant parsing et refusés avec `model-observation-too-large`. Aucun corps /provider, paramètre privé ou erreur brute ne doit être copié dans une sortie, un rapport ou un job. Le prévol exact, les permissions et les gardes de modèle restent inchangés.
+
+## Préparation et identités natives — 1.10.3
+
+Pour la sélection automatique, avant le démarrage autorisé, résoudre la racine du skill PLLM actif puis appeler `node <plugin>/scripts/cgpt-approval-bridge-prepare-model-policy.mjs --pllm-skill-root <racine-absolue>`. Un chemin explicite peut être fourni avec `--catalog-path <chemin-public>`. La préparation privilégie la variable principale, son alias historique en absence du principal, puis le fichier data/pllm-current.json sous la racine fournie ; aucune recherche de configuration privée n'est effectuée. Un chemin explicite vide ou invalide bloque sans repli silencieux. Le lecteur conserve les gardes de fichier et de publication.
+
+L'outil restitue uniquement catalogPath, source et environment={OC_Codex_PLLM_CATALOG:...}. Il ne modifie aucun fichier ou service. Le démarrage autorisé fusionne ce patch dans la configuration du contrôleur en préservant ses autres options. Contrôler ensuite /model-policy/resolve avec providerMaxBytes fixé par le pilotage : la réussite du CLI seule ne prouve pas que le processus a reçu la variable. Sans catalogue valide ou résolution réussie, ne pas armer de nouveau job. La lecture ne relance aucune évaluation PLLM et ne modifie pas les dates publiées.
+
+Le sélecteur privilégie toujours l'identifiant natif exact publié. Si le catalogue porte opencodego et que cette identité est absente, le seul rapprochement connu est opencode-go, unique, connecté et publiant le modèle exact. Aucun retrait arbitraire de ponctuation ni autre fournisseur ne sert de substitut. Une identité exacte présente mais déconnectée bloque. La sélection automatique conserve logicalProviderID, providerID natif, mode, priorité et digest du catalogue original ; les prévols et messages utilisent le natif. Le modèle explicitement imposé conserve son identité exacte. Les preuves de repli sont corrélées à cette même correspondance sans changer l'ordre PLLM.
+
+Le prévol et l'indisponibilité lisent parent.info.model.variant (schéma natif observé) et parent.info.variant (historique). Au moins un de ces champs parent doit être valide ; tous ceux présents, ainsi que assistant.info.variant s'il est présent, doivent être identiques. Les formes historiques sans champ assistant restent lisibles. Une contradiction, valeur invalide ou absence de variante parent refuse la preuve. Les gardes de session, répertoire, parent, modèle, fournisseur, date, finish stop et absence d'outil restent applicables. Les erreurs auth/quota/réseau ne deviennent jamais des preuves de raisonnement indisponible.
+
+Les anciens jobs sans logicalProviderID restent valides. Après armement d'un nouveau job portant ce champ, un lecteur strict 1.10.2 n'est pas qualifié pour ce contrat : conserver le lecteur compatible et les preuves plutôt que restaurer une sauvegarde métier. La préparation et le paquet source n'activent aucune configuration ou reprise.

@@ -2,13 +2,14 @@ import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import test from 'node:test';
+import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
@@ -17,7 +18,7 @@ async function waitFor(check) {
   for (let i = 0; i < 200; i++) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
-async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false } = {}) {
+async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
   const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
   if (codingPolicy) {
@@ -25,7 +26,11 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     const catalog={schema_version:2,evaluated_at:stamp,published_at:stamp,selection_status:'selected',selected_mode:'mode1',
       models:Array.from({length:6},(_,i)=>({mode:'mode'+(i+1),priority:i+1,state:'Valide',selected:i===0,provider:'provider'+(i+1),
         model_id:'model'+(i+1),evaluated_this_run:true,evaluated_at:stamp,reasoning:'low'}))};
-    const path=join(directory,'pllm-current.json');writeFileSync(path,JSON.stringify(catalog));environment={...environment,OC_Codex_PLLM_CATALOG:path};
+    const activeRoot=join(directory,'active-skill');if(prepareCatalog)mkdirSync(join(activeRoot,'data'),{recursive:true});
+    const path=prepareCatalog?join(activeRoot,'data/pllm-current.json'):join(directory,'pllm-current.json');writeFileSync(path,JSON.stringify(catalog));
+    native.catalogPath=path;
+    if(prepareCatalog){native.preparation=prepareControllerModelPolicy({environment,activeSkillRoot:activeRoot});environment={...environment,...native.preparation.environment};}
+    else environment={...environment,OC_Codex_PLLM_CATALOG:path};
     native.providers={connected:catalog.models.map(m=>m.provider),all:catalog.models.map(m=>({id:m.provider,models:{[m.model_id]:{variants:{high:{},xhigh:{},low:{}}}}}))};
     native.messages.ses_probe=[{info:{id:'msg_user',sessionID:'ses_probe',role:'user',model:{providerID:'provider1',modelID:'model1'},variant:'high'},parts:[]},
       {info:{id:'msg_response',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_user',providerID:'provider1',modelID:'model1',time:{completed:Date.now()-10}},parts:[{type:'text',text:'probe ok'}]}];
@@ -840,7 +845,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.10.2');
+  assert.equal(initialized.result.serverInfo.version, '1.10.3');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1374,4 +1379,40 @@ test('Budget /provider fourni par la session : bornes exactes, portée locale et
  h.native.providers.privatePadding=marker+'x'.repeat(17*1024*1024);
  const larger=Buffer.byteLength(JSON.stringify(h.native.providers));assert.ok(larger>16*1024*1024);
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',providerMaxBytes:larger})).status,200);
+});
+
+
+test('Raccord HTTP préparé : catalogue transmis, alias natif, variante imbriquée et job conservé',async(t)=>{
+ const h=await setup(t,{codingPolicy:true,prepareCatalog:true,environment:{CAB_TEST_PRIVATE_OPTION:'NE_PAS_RESTITUER'}});
+ const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.models[0].provider='opencodego';writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
+ h.native.providers.all[0].id='opencode-go';h.native.providers.connected[0]='opencode-go';
+ const parent=h.native.messages.ses_probe[0].info;parent.model={providerID:'opencode-go',modelID:'model1',variant:'high'};delete parent.variant;
+ h.native.messages.ses_probe[1].info.providerID='opencode-go';h.native.messages.ses_probe[1].info.variant='high';
+ const resolved=await h.post('/model-policy/resolve',{});assert.equal(resolved.status,200,JSON.stringify(resolved));
+ assert.equal(h.native.preparation.source,'active-skill');assert.equal(resolved.body.source,'pllm-automatic');assert.equal(resolved.body.providerID,'opencode-go');assert.equal(resolved.body.logicalProviderID,'opencodego');
+ assert.ok(!JSON.stringify(resolved).includes('NE_PAS_RESTITUER'));
+ const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
+ const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['raccord'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
+ const bad=structuredClone(arm);parent.variant='low';assert.equal((await h.post('/runs/a/job/arm',bad)).body.error,'model-preflight-not-proved');delete parent.variant;
+ const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));assert.equal(armed.body.codingModel.providerID,'opencode-go');assert.equal(armed.body.codingModel.logicalProviderID,'opencodego');
+ const selected=armed.body.codingModel;await h.stop();await h.start();assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
+});
+
+test('Raccord HTTP : indisponibilités imbriquées rattachées au catalogue logique, auth et contradictions refusées',async(t)=>{
+ const h=await setup(t,{codingPolicy:true,prepareCatalog:true});
+ const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.models[0].provider='opencodego';
+ const skipped=catalog.models.pop();skipped.provider=null;skipped.state='Invalide';skipped.evaluated_this_run=false;catalog.models.unshift(skipped);
+ writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
+ h.native.providers.all[0].id='opencode-go';h.native.providers.connected[0]='opencode-go';
+ const reject=(reasoning,status=400,contradiction=false)=>{
+  const name=reasoning+'-'+status+'-'+contradiction;const user=structuredClone(h.native.messages.ses_probe[0]);user.info.id='msg_user_'+name;
+  user.info.model={providerID:'opencode-go',modelID:'model1',variant:reasoning};delete user.info.variant;
+  const response=structuredClone(h.native.messages.ses_probe[1]);Object.assign(response.info,{id:'msg_bad_'+name,parentID:user.info.id,providerID:'opencode-go',variant:contradiction?'low':reasoning});
+  response.info.error={name:'APIError',data:{statusCode:status,responseBody:JSON.stringify({error:{code:'unsupported_value',param:'reasoning_effort',message:'PRIVE_SYNTHETIQUE'}})}};
+  response.parts=[];h.native.messages.ses_probe.push(user,response);return {sessionId:'ses_probe',messageId:response.info.id};
+ };
+ const high=reject('high');const xhigh=reject('xhigh');
+ const first=await h.post('/model-policy/resolve',{unavailablePreflights:[high]});assert.equal(first.status,200,JSON.stringify(first));assert.equal(first.body.reasoning,'xhigh');assert.equal(first.body.providerID,'opencode-go');
+ const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[high,xhigh]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode2');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
+ for(const reference of [reject('high',429),reject('high',401),reject('high',400,true)])assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reference]})).body.error,'model-unavailability-not-proved');
 });

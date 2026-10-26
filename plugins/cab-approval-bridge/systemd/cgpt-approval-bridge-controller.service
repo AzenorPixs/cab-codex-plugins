@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 1.10.2 — Contrôleur local Codex Approval Bridge
+Description=CAB 1.10.3 — Contrôleur local Codex Approval Bridge
 
 [Service]
 Type=simple
