@@ -1,0 +1,700 @@
+# Codex Approval Bridge — CAB - 100% IA
+
+**CAB - Codex-Approval-Bridge** relie OpenCode et Codex pour fournir un cycle de validation explicite, persistant, observable et résilient.
+
+Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve leur état, récupère la décision correspondante et restitue une réponse MCP corrélée à OpenCode.
+
+Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
+
+## Prévol orphelin et maintenance contrôlée — 1.10.4
+
+Une notification refusée avant admission ne laisse plus de propriétaire de
+demande sans validation locale. Pour un ancien prévol orphelin PENDING,
+la réconciliation explicite vérifie les preuves et crée seulement une
+validation apte au rejet. Le polling du même approval_id doit confirmer
+REJECTED avant le retry existant dans la même candidate.
+
+Le profil `frozen-recovery-controller` prépare et sauvegarde le jeu, vérifie
+la récupération gelée et les pairs, puis emploie un reçu privé BOOTSTRAP_HELD
+distinct du HELD refusé par l'ancien contrôleur. Le nouveau contrôleur adopte
+ce reçu et confirme le véritable HELD après recontrôle. La maintenance ne
+répare pas elle-même le prévol et n'accorde aucune permission métier.
+
+Cette transition qualifiée conserve OpenCode et le broker, ainsi que le Web.
+Elle peut charger le contrôleur 1.10.4 en conservant ces processus 1.7.1 ; son
+bilan annonce chaque version réellement observée. Le paquet 1.10.4 ne prouve
+pas que tout le runtime est déjà en 1.10.4. Toute autre combinaison est refusée.
+L'activation exige un accord distinct. Procédure, limites de reprise et
+configuration : `TECHNICAL.md` et la référence distribuée `component-update.md`.
+
+Le mode explicite `managed-release` prend en charge les installations par liens
+relatifs, avec conservation des anciennes releases. Le diagnostic
+`approval-metadata` filtre une observation native existante sans décider les
+demandes non attribuées. Les procédures et leurs limites figurent dans
+[la référence de maintenance](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
+
+## Supervision web locale — CAB Monitor 1.10.4
+
+CAB Monitor fournit une interface moderne et responsive, indépendante du LLM,
+du contrôleur et du superviseur. Elle affiche les briques, les RUN, leurs
+changes, les tâches cochées X/Y, les phases observées et une chronologie
+filtrée. Le tableau distingue ETAT, ÉTAPE et tâches cochées ; la phase
+technique reste dans le détail. Les onze étapes acceptent les retours en
+arrière et conservent leur historique. Les cartes montrent les versions
+réellement observées des briques, sans supposer leur alignement. Une ligne de
+job WAITING est surlignée en jaune ; BLOCKED en rouge.
+Les données arrivent par SSE ; une collecte périodique réconcilie
+l'état et indique les sources indisponibles ou anciennes.
+
+`/cab start` et toute entrée ou reprise de session de codage pilotée autorisée
+préparent ou vérifient le service utilisateur du moniteur dès la résolution du
+workspace, avant PLLM et les prévols, même avec services CAB déjà actifs.
+La tentative et son bilan précèdent ces contrôles ; leur échec ne provoque
+aucun arrêt du moniteur. Aucune activation au login n’est effectuée. La procédure
+vérifie le service, la page, la version et le workspace, puis affiche son URL
+réelle. Une instance déjà conforme est
+réutilisée. Le moniteur reste disponible après `/cab stop` ou une panne du
+contrôleur ou du superviseur. Ses erreurs sont signalées séparément du statut CAB.
+
+Le lancement manuel reste possible depuis la racine du projet à observer :
+
+```bash
+OC_Codex_WORKSPACE="$PWD" node /chemin/vers/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs
+```
+
+Ouvrir ensuite [CAB Monitor local](http://127.0.0.1:8790). Le port se configure
+avec `OC_Codex_MONITOR_PORT`. Le moniteur peut démarrer même si CAB est arrêté ;
+la page signale alors les données indisponibles. Ce lancement ne démarre aucun
+autre composant. La limite effective de commande est affichée en unités
+UTF-16, avec 16 384 comme défaut de référence. Une limite inconnue reste
+indisponible. Le compteur de tâches ne mesure ni le temps restant ni une
+validation métier. Configuration et couverture : section « CAB Monitor » de
+`TECHNICAL.md`. La préparation source n'installe aucun service.
+
+Le menu **STATS**, sous **MONITOR**, affiche les statistiques du contexte
+courant, de la dernière livraison ou des dernières 24 h, 7 jours et 30 jours,
+avec filtre par RUN. Les sources natives et importées restent séparées ;
+couverture et date du dernier succès sont visibles. Les cumuls de décisions,
+outils et latences sont distingués des métriques de fenêtre. Une source absente
+reste `N/A` et une panne marque les dernières données comme anciennes.
+
+Dans STATS, **PURGER…** permet de choisir **1, 3, 7, 30 ou 365 jours**, puis
+de prévisualiser et confirmer la suppression des historiques statistiques
+strictement antérieurs à la date affichée. Annuler ne supprime rien. Les
+contextes actifs ou encore référencés, les fichiers opérationnels et les
+preuves métier restent protégés ; les agrégats globaux cumulatifs sont
+conservés. La suppression confirmée est irréversible sans sauvegarde préalable.
+La rétention native reste limitée à 30 jours : choisir 365 jours ne l'étend
+pas. Une erreur partielle présente le résultat par magasin. Aucun nettoyage
+automatique n'est activé.
+
+Depuis 1.7.0, **CENTRE D’OBSERVATION** remplace le grand texte d'accueil.
+Les cartes Contrôleur, Superviseur et Broker proposent **Démarrer/Arrêter**
+et **Redémarrer** ; la carte **Web** affiche son état et **Redémarrer**.
+Les services utilisent leurs unités systemd utilisateur dédiées, avec contrôle
+de PID et workspace. Le broker passe uniquement par connect/disconnect MCP
+dans OpenCode. Les actions perturbatrices exigent CAB disponible, sans RUN
+réservé, demande, effet ou activité native en cours. Un Web lancé manuellement
+doit être redémarré manuellement ; une demande acceptée n'est confirmée qu'après
+reconnexion à une nouvelle instance. Aucun bouton ne redémarre OpenCode.
+
+À droite des lignes admissibles, **Archiver** range une ligne dans le menu
+**ARCHIVES**, sous MONITOR et STATS ; **Supprimer** la masque après confirmation.
+Ces actions concernent seulement le moniteur : les sources OpenSpec, RUN réels,
+décisions et preuves restent conservés. Un RUN arrêté encore réservé reste
+protégé. **Désarchiver** remet le RUN dans MONITOR sans reprendre son exécution.
+Le catalogue privé persiste sous
+`~/.local/state/cab-approval-bridge-monitor/<sha256-workspace>/catalog.json`.
+`OC_Codex_MONITOR_STATE_DIR` change son répertoire parent absolu, en conservant
+la séparation par workspace. Une nouvelle génération de RUN ou une modification
+du document du change reste visible. Une erreur de catalogue bloque le rangement
+et s'affiche ; aucune réinitialisation silencieuse n'est effectuée.
+
+Codex est l’orchestrateur et le validateur de la session : il pilote les
+mandats du démarrage à la clôture et rend une décision explicite pour chaque
+opération nécessitant une permission OpenCode. CAB transmet cette décision,
+mais ne l’invente jamais. L’archivage OpenSpec est un mandat séparé, décidé
+après contrôle de la cohérence et des validations.
+
+```text
+                    Développeur
+                        │
+            interaction / validation
+                        │
+             ┌──────────┴──────────┐
+             ▼                     ▼
+         OpenCode               Codex
+      Agent de codage        Orchestrateur
+             ▲                     │
+             └──── Bridge MCP ─────┘
+                                   │
+                                   ▼
+                                  GPT
+                     Analyse / Revue / Validation
+```
+
+## Cadences de pilotage
+
+Le protocole CAB prévoit les événements SSE en temps réel et le contrôle des
+demandes et rapports toutes les **3 secondes**. Pendant l'analyse ou la
+rédaction de l'agent de codage, les vérifications de progression sont espacées
+de **7 secondes** fixes, indépendamment du contrôle CAB.
+
+La fraîcheur PLLM de **huit heures** est contrôlée au démarrage initial ; le
+choix du RUN est conservé pendant la session, ses tâches, pauses et reprises.
+Une panne réelle ou une instruction explicite peut déclencher une réévaluation.
+Sans modèle admissible, conserver les preuves et attendre l'instruction du
+développeur, sans benchmark ni réessai automatique. La reprise conserve les
+contrôles CAB et les mandats unitaires. Les sondes statistiques sont prévues
+toutes les **30 minutes**, sans arrêter le travail pour attendre le créneau.
+Ces obligations du protocole distribué ne constituent pas un nouvel automate
+de benchmark dans les composants CAB.
+
+## Statistiques après archivage
+
+CAB prépare désormais des statistiques dans son contrôleur, sans RUN
+d'observation supplémentaire : `GET /statistics` et
+`GET /runs/<runId>/statistics?format=markdown` donnent les agrégats et un
+brouillon à six sections. `contextId` sélectionne un ancien change du RUN.
+Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
+les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
+le complète depuis les preuves autorisées et mandate sa publication.
+
+CAB 1.10.4 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+
+Le jeu source 1.10.4 conserve la correction de reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
+
+Les consultations /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
+
+Le plugin CAB embarque `coding-session-statistics`. Son protocole impose un
+rapport `STATISTIQUES.md` dans chaque dossier d'archive OpenSpec après un
+archivage autorisé et réussi, avant la clôture normale du travail. La collecte
+est préparée dès le début du change ; les données absentes sont signalées
+`N/A` sans estimation. Le suivi des quotas utilise l'outil natif Codex, sans
+installation de `cgpt` ou de Tools Codex. Une erreur de publication doit être
+résolue ou déclarée comme blocage, sans réarchiver le change.
+
+## Architecture
+
+```text
+OpenCode unique : sessions A, B, … — un RUN par session
+   │ MCP stdio commun
+   ▼
+Broker CAB unique — corrélation et readiness par RUN
+   │ HTTP local
+   ▼
+Contrôleur unique ──► contextes A, B, … ──► Codex / Codex App Server
+   │
+   └── Registre : changes exclusifs, accès atomiques et gels exceptionnels
+
+OpenCode ── SSE HTTP commun ──► superviseur unique ──► suivi par RUN
+
+Contrôleur + superviseur + OpenCode ── observations ──► CAB Monitor ──► navigateur local
+```
+
+Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
+
+## Architecture technique détaillée
+
+Cette vue détaille le profil concurrent CAB 1.10.4 : un processus OpenCode,
+un broker MCP stdio, un contrôleur et un superviseur communs, avec des
+contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
+s'applique aux autres RUN admis. Les contextes et la barrière sont des
+éléments internes, pas des services supplémentaires.
+
+```mermaid
+flowchart TB
+    D["Développeur"]
+    C["Codex — orchestrateur / validateur<br/>Pilotage et décisions corrélés par RUN"]
+
+    subgraph OC["Un processus OpenCode — répertoire commun"]
+        subgraph RUN1["Session A — RUN A — change réservé A"]
+            O1["Agent de codage A"]
+            P1["Permission native A<br/>une opération : once"]
+            X1["Exécution A<br/>rapport et preuves"]
+            O1 -->|"Demande de permission"| P1
+            P1 -->|"Autorisation unique"| X1
+            X1 -->|"Résultat"| O1
+        end
+        subgraph RUN2["Session B — RUN B — change réservé B"]
+            O2["Agent de codage B"]
+            P2["Permission native B<br/>une opération : once"]
+            X2["Exécution B<br/>rapport et preuves"]
+            O2 -->|"Demande de permission"| P2
+            P2 -->|"Autorisation unique"| X2
+            X2 -->|"Résultat"| O2
+        end
+        M["Connexion MCP stdio commune<br/>demandes identifiées par RUN et session"]
+        F["Flux SSE commun<br/>événements natifs par session"]
+        O1 <--> M
+        O2 <--> M
+        O1 -.-> F
+        O2 -.-> F
+    end
+
+    subgraph CAB["Infrastructure CAB 1.10.4 partagée"]
+        B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
+        E[("Approbations persistantes<br/>journal et intégrité")]
+        subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
+            T["Routage et contrôle d'identité<br/>session, répertoire, RUN, change, génération"]
+            R[("Registre durable<br/>changes exclusifs, portées, accès et révisions<br/>écriture atomique et verrou flock")]
+            I["Coordination par ressource<br/>lectures compatibles, écriture exclusive<br/>publication ciblée ; gel global exceptionnel"]
+            T1["Contexte RUN A<br/>décisions, mandats, gate, récupération"]
+            T2["Contexte RUN B<br/>décisions, mandats, gate, récupération"]
+            T <-->|"Réserver, étendre, vérifier, libérer"| R
+            R <-->|"Propriétaire et version de référence"| I
+            T <-->|"Routes /runs/A/..."| T1
+            T <-->|"Routes /runs/B/..."| T2
+        end
+        subgraph SUP["Un superviseur durable"]
+            S["Répartition des événements SSE"]
+            S1["Suivi et reprise RUN A"]
+            S2["Suivi et reprise RUN B"]
+            S --> S1
+            S --> S2
+        end
+        J1[("États persistants RUN A<br/>job, jalons, gate et supervision")]
+        J2[("États persistants RUN B<br/>job, jalons, gate et supervision")]
+        WM["CAB Monitor indépendant<br/>observation et statistiques"]
+        B <-->|"Persistance"| E
+        B <-->|"HTTP : demande et décision corrélées"| T
+        T1 <-->|"Persistance"| J1
+        T2 <-->|"Persistance"| J2
+        S1 <-->|"Persistance"| J1
+        S2 <-->|"Persistance"| J2
+        S1 <-->|"HTTP : statut, progression, gate"| T
+        S2 <-->|"HTTP : statut, progression, gate"| T
+    end
+
+    A["Codex App Server — mode automatique<br/>validation isolée et corrélée par RUN"]
+    W[("Répertoire de projet partagé<br/>opérations couvertes par leurs accès compatibles")]
+
+    WB["Navigateur local — interface dynamique"]
+    T -->|"HTTP + SSE filtrés"| WM
+    S -->|"Statut public HTTP"| WM
+    OC -->|"Santé et activité HTTP"| WM
+    WM -->|"Page web + SSE"| WB
+    WB -.->|"Purge statistique confirmée"| WM
+    WM -.->|"Maintenance des seuls historiques statistiques"| T
+
+    D -->|"Objectifs, périmètres et validations"| C
+    C <-->|"HTTP : registre et pilotage par RUN"| T
+    C -->|"Mode manuel par défaut : décision explicite"| T
+    M <-->|"MCP stdio local"| B
+    F -.->|"SSE HTTP direct"| T
+    F -.->|"SSE HTTP direct"| S
+    S1 -.->|"Reprise de la session A si admissible"| O1
+    S2 -.->|"Reprise de la session B si admissible"| O2
+    T1 -->|"approved corrélé : once pour A"| P1
+    T2 -->|"approved corrélé : once pour B"| P2
+    T1 -.->|"Demande de validation automatique"| A
+    T2 -.->|"Demande de validation automatique"| A
+    A -.->|"Décision structurée corrélée"| T
+    X1 -->|"Ressources couvertes par A"| W
+    X2 -->|"Ressources couvertes par B"| W
+```
+
+- **Un mandat = une opération** : un fichier ou une commande, avec
+  corrélation de `requestId`, `approval_id`, `change_id`, `run_id`,
+  `reservation_version`, de la session et du répertoire.
+- Le broker transporte et persiste ; **Codex décide**. Le contrôleur transmet
+  l'approbation à la permission native correspondante avec une réponse
+  `once`, consommable une seule fois.
+- Les événements SSE et les relances techniques ne donnent aucune
+  autorisation. Une décision absente ne vaut jamais approbation.
+- Le gate terminal contrôle la clôture du job ; il reste distinct des
+  décisions unitaires et ne remplace pas une permission OpenCode.
+- Le mode manuel, utilisé par défaut, attend une décision HTTP explicite de
+  l'orchestrateur sur `POST /decision/<requestId>`. Le mode automatique
+  sollicite une session Codex de validation via Codex App Server.
+- Le broker notifie le contrôleur sur `POST /validation/request` et récupère
+  la décision sur `GET /decision/<requestId>`. La readiness est publiée
+  séparément ; `READY` ne vaut jamais approbation.
+- Chaque RUN réserve exclusivement son change et son intention, puis déclare ses ressources et dépendances. Les périmètres peuvent se recouvrir ; les accès actifs sont attribués atomiquement.
+- Le contrôleur vérifie identité, contenu, révisions et protection avant une unique permission native once. Une base périmée impose une nouvelle demande.
+- Validation et publication protègent leurs ressources utiles. Les RUN indépendants continuent ; seules les preuves affectées sont réexaminées.
+- Pause et arrêt sont ciblés par défaut. Réconciliation de l'état commun, maintenance partagée, pause ou arrêt globaux suivent un drainage exceptionnel avec preuves.
+- Ajouter un RUN ne purge ni ne reconnecte le broker. Une issue inconnue conserve ses protections ; rapport, gate et clôture restent propres au RUN.
+
+Les cylindres représentent les états persistants des composants, sans
+imposer un fichier ou un emplacement partagé. Les flèches en pointillés
+identifient les voies SSE, les reprises techniques et le chemin de décision
+du mode automatique. La publication désigne l'intégration dans la référence
+commune du projet ; elle n'autorise pas un commit ou un déploiement.
+
+## Ce que fournit CAB
+
+- broker MCP persistant ;
+- corrélation par `requestId` ;
+- journal append-only et contrôle d'intégrité ;
+- reprise après interruption ;
+- watchdogs de validation et de session, avec relance corrélée du contrôleur
+  toutes les trente secondes pour une décision PENDING ;
+- readiness `READY / DEGRADED / BLOCKED / HUMAN_REQUIRED` ;
+- diagnostic avec cause racine ;
+- remédiations techniques contrôlées ;
+- circuit breaker d'auto-remédiation ;
+- contrôleur Codex local ;
+- supervision SSE OpenCode ;
+- superviseur durable de job et relance de la même session tant que le gate
+  terminal reste ouvert ;
+- plugin et skill Codex ;
+- commande `/cab`.
+
+## Commande `/cab`
+
+`/cab` est une commande de l'agent Codex versionnée avec CAB. Elle orchestre
+la communication entre le broker MCP et l'agent Codex ; elle ne prend jamais
+de décision d'approbation.
+
+```text
+/cab start
+/cab test
+/cab run
+/cab update
+/cab status
+/cab status --run <run_id>
+/cab stop
+```
+
+`/cab status` produit ponctuellement le tableau **RUN / Nom du change — Actions
+réalisées — Actions en cours — Actions restant à réaliser**. Chaque ligne
+affiche **ACTIF**, **EN ATTENTE DE RUN** avec le pair et sa cause, ou l’état
+interne/terminal/indéterminé prouvé. La collecte recoupe CAB, les états natifs
+accessibles et les checkpoints/tâches ; une ancienne attente déjà levée est
+écartée. Aucune activité, dépendance ou réussite de test n’est inventée. Le
+filtre `--run` vise un identifiant exact. Cette consultation ne démarre aucun
+service, n’envoie aucun message et ne modifie aucun projet.
+
+Chaque nouvelle session `/cab start` purge entièrement l'ancien état technique
+CAB, y compris ses conflits Syncthing, sans le restaurer. Elle vérifie d'abord
+l'inactivité du contexte, arrête les ressources CAB et déconnecte le broker
+par OpenCode ; sources, secrets, rapports et historiques natifs restent hors
+purge. Le plugin fournit l'outil de purge et son protocole. Une reprise
+conserve son état, y compris après prévol de récupération divergent dans la
+candidate, selon la procédure ci-dessous.
+
+`/cab start` reconnecte et vérifie le MCP actif par `/mcp`, installe de façon différée les
+services utilisateur du contrôleur et du superviseur sans les activer au
+login, les démarre explicitement, initialise la supervision CAB, puis crée
+une nouvelle session maîtresse persistante visible dans OpenCode.
+
+`/cab test` réalise, dans cette même session, un test non destructif du chemin
+complet OpenCode → MCP → CAB → Codex → CAB → OpenCode.
+
+`/cab run` arme un contrat durable et maintient le job dans cette session. Tant
+que son gate terminal reste ouvert, le superviseur réexamine la même session
+après 60 secondes par défaut ; il ne crée ni session de remplacement ni
+décision CAB. Chaque édition, commande Bash,
+commande système, commande OpenSpec ou opération d’archivage est soumise par
+OpenCode comme mandat unitaire, puis exécutée seulement après une décision
+Codex corrélée. Une décision consommée ne déverrouille aucune autre action.
+
+Le statut du superviseur publie le dernier jalon et le gate observés ainsi
+qu'un compteur persistant des tentatives de reprise, distinct de leur succès.
+Un ancien compteur absent reste inconnu ; un nouveau job commence à zéro.
+Le contrôleur refuse au démarrage un contrat persistant invalide, même si sa
+syntaxe JSON est correcte, sans réécrire le fichier ni perdre silencieusement
+le job. Les diagnostics distinguent lecture, syntaxe et contrat invalide.
+
+En cas de récupération sans effet non maîtrisé, l'orchestrateur peut remplacer
+la session par `POST /job/recover` (`prepare`, puis `complete`) après contrôles
+techniques et prévol CAB réservé. Le RUN reste ouvert ; le job, le périmètre et
+le dernier jalon sont conservés. Le superviseur suspend les relances pendant
+le gel et suit ensuite la nouvelle session. Les anciennes autorisations
+exécutables ne sont jamais réutilisées. Un échec ou une preuve locale perdue
+après redémarrage conserve le gel sans fabriquer de réussite. Voir
+`TECHNICAL.md` et le protocole de la skill pour le contrat détaillé.
+
+Les mandats lecture seule désactivent explicitement les outils natifs et
+d'écriture dans le message OpenCode. Les opérations suivantes gardent leurs
+permissions natives et décisions CAB unitaires.
+
+Depuis 1.0.1, les jobs armés vérifient les règles natives avant admission,
+approbation et transmission de `once`. Une règle finale globale `ask` est
+requise pour le type `bash` ou `edit` concerné ; une preuve absente ou
+permissive est refusée. Pour réactiver les outils, utiliser `noReply`, rétablir
+`ask` par PATCH et le vérifier, puis générer sans nouveau champ `tools`.
+Ce garde ne modifie pas les permissions et exige leur stabilité pendant
+l'exécution. Le détail et les diagnostics sont dans `TECHNICAL.md`.
+
+`/cab stop` exige un gate terminal validé, arrête explicitement le superviseur
+puis le contrôleur et les ressources CAB qu'elle a créées, sans fermer OpenCode
+ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
+installées mais inactives jusqu'au prochain
+`/cab start`.
+
+`/cab update` compare le plugin et la commande de profil à leur source
+GitHub validée, puis met à jour **broker, contrôleur, superviseur et Web**,
+y compris lorsqu'ils fonctionnent. Le paquet embarque tous les modules du
+broker. La commande prépare et vérifie le jeu, sauvegarde ses seuls artefacts,
+puis place CAB en maintenance partagée. Les nouvelles admissions sont gelées
+et la bascule attend une frontière sûre, sans répondre aux permissions.
+
+Les briques précédemment actives sont arrêtées et redémarrées sur le jeu
+vérifié ; celles qui étaient inactives restent inactives. RUN, pauses,
+décisions, preuves, archives et configurations sont conservés. OpenCode reste
+ouvert. Le succès exige les versions réellement chargées et les identités des
+RUN avant levée du gel. Une erreur de démarrage ou de version déclenche un
+retour aux artefacts sauvegardés, sans restaurer un ancien runtime métier.
+
+Si l'attente atteint 120 secondes, la transaction reste en attente avec ses
+processus et son gel ; relancer `/cab update` reprend cette transaction.
+Un jeu déjà conforme ne redémarre rien. Le bilan distingue versions du paquet,
+fichiers déployés, processus actifs, inactivité et repli. Une installation
+manuelle non gérée, un répertoire broker inconnu ou situé dans le workspace
+reste un blocage explicite, sans modification de sa configuration. Détails :
+`skills/approval-bridge/references/component-update.md` dans le plugin.
+
+Après un prévol de récupération divergent ou incomplet refusé sans effet,
+conserver la session candidate où le prévol a divergé, le même job et leurs
+preuves, sans purge ni renouvellement. L'orchestrateur réconcilie puis demande
+retry explicite à /job/recover avec requête et approbation neuves. Le contrôleur
+vérifie le refus et l'absence d'effet, préserve l'historique et impose un nouveau
+prévol exact avant complete. Un timeout MCP seul conserve le polling de la même
+approbation. Effet inconnu ou preuve absente suspend la reprise. Le superviseur
+reste gelé jusqu'à complete ; OpenCode reste ouvert. Le remplacement initial
+prévu par CISMP et la purge avant un nouveau RUN restent inchangés.
+
+Depuis CAB 1.0.2, retry accepte aussi le REJECTED obtenu par poll_approval ou
+get_approval après timeout de request_validation, pour la même approbation,
+avec décision locale rejected non consommée et identités/opération exactes.
+Un timeout seul ou PENDING seul reste insuffisant ; chaque demande enregistrée
+doit avoir un refus terminal. Un arrêt ciblé explicitement demandé par le
+développeur reste distinct de retry : gate BLOQUÉ et réconciliation avant
+désarmement et libération, sans purge ni interruption des autres RUN.
+
+## Organisation du dépôt
+terme
+```text
+CAB/
+├── src/                       # bridge Python initié par OpenCode
+├── .codex/commands/cab.md     # commande /cab pour Codex
+├── .agents/plugins/marketplace.json # marketplace Codex
+├── plugins/cab-approval-bridge/     # plugin Codex
+│   ├── .codex-plugin/plugin.json
+│   ├── skills/approval-bridge/SKILL.md
+│   └── scripts/
+├── PROJECT.md                 # architecture générale
+├── TECHNICAL.md               # fonctionnement technique
+├── BUILD.md                   # construction et distribution
+└── CHANGELOG.md               # Suivi de versions
+```
+
+## Prérequis
+
+Le fonctionnement actuel repose sur :
+
+- Python 3 ;
+- OpenCode avec MCP local `stdio` ;
+- Node.js ;
+- Codex App Server ;
+- accès local à OpenCode ;
+- environnement Unix pour les mécanismes de persistance/verrouillage ;
+- `systemctl --user` pour le mécanisme actuel de redémarrage automatique du contrôleur.
+
+Le broker Python n'utilise actuellement aucune dépendance Python tierce.
+
+## Configuration principale
+
+### Broker
+
+| Variable | Rôle |
+|---|---|
+| `CGPT_CONTROLLER_URL` | URL locale du contrôleur |
+| `CGPT_APPROVAL_STORE` | magasin persistant des approbations |
+| `CGPT_APPROVAL_JOURNAL` | journal append-only |
+| `CGPT_BROKER_INSTANCE_LOCK` | verrou d'instance |
+| `CGPT_JOURNAL_HMAC_KEY` | clé optionnelle du checkpoint HMAC |
+| `CGPT_JOURNAL_HMAC_KEY_ID` | identifiant de la clé HMAC |
+| `CGPT_JOURNAL_HMAC_PREVIOUS_KEYS` | anciennes clés autorisées en vérification |
+| `CGPT_JOURNAL_CHECKPOINT_PATH` | chemin du checkpoint |
+
+### Watchdogs
+
+| Variable | Rôle |
+|---|---|
+| `CGPT_PENDING_WATCHDOG_INTERVAL` | fréquence du watchdog PENDING |
+| `CGPT_PENDING_WATCHDOG_WARNING` | seuil de dégradation PENDING |
+| `CGPT_PENDING_WATCHDOG_STALLED` | seuil de blocage PENDING |
+| `CGPT_SESSION_WATCHDOG_INTERVAL` | fréquence du watchdog session |
+| `CGPT_SESSION_WATCHDOG_WARNING` | seuil de dégradation session |
+| `CGPT_SESSION_WATCHDOG_STALLED` | seuil de blocage session |
+
+### Auto-remédiation
+
+| Variable | Rôle |
+|---|---|
+| `CGPT_AUTO_REMEDIATION_ENABLE` | activation globale, désactivée par défaut |
+| `CGPT_AUTO_REMEDIATION_ACTIONS` | allowlist des actions |
+| `CGPT_AUTO_REMEDIATION_INTERVAL` | fréquence de l'ordonnanceur |
+| `CGPT_AUTO_REMEDIATION_CB_FAILURE_THRESHOLD` | seuil d'ouverture du circuit breaker |
+| `CGPT_AUTO_REMEDIATION_CB_FAILURE_WINDOW` | fenêtre des échecs |
+| `CGPT_AUTO_REMEDIATION_CB_OPEN_SECONDS` | durée OPEN |
+| `CGPT_AUTO_REMEDIATION_CB_STATE_PATH` | état persistant du circuit breaker |
+| `CGPT_REMEDIATION_ORPHAN_TIMEOUT` | délai des tentatives orphelines |
+
+### Contrôleur et supervision
+
+| Variable | Rôle |
+|---|---|
+| `OC_Codex_WORKSPACE` | racine absolue du projet à piloter, sans liste de projets codée dans CAB |
+| `OC_Codex_OUTSIDE_SANDBOX` | impose l'exécution hors sandbox |
+| `OC_Codex_OPENCODE_URL` | URL locale OpenCode |
+| `OC_Codex_STATUS_HOST` | adresse loopback du contrôleur : `127.0.0.1` ou `::1` |
+| `OC_Codex_STATUS_PORT` | port local du contrôleur |
+| `OC_Codex_RECONNECT_MS` | délai de reconnexion SSE |
+| `OC_Codex_MAX_COMMAND_LENGTH` | longueur inclusive maximale d'une commande, 16 384 unités UTF-16 par défaut ; `2000` rétablit le seuil précédent |
+| `OC_Codex_CONTROLLER_URL` | base HTTP du contrôleur ou endpoint `/status`, avec slash final éventuel, communs au healthcheck et au superviseur |
+| `OC_Codex_READINESS_MAX_AGE_MS` | fraîcheur maximale de la readinessterme |
+| `OC_Codex_SUPERVISOR_URL` | endpoint de statut du superviseur utilisé par le healthcheck |
+| `OC_Codex_SUPERVISOR_STATUS_HOST` | adresse loopback du superviseur |
+| `OC_Codex_SUPERVISOR_STATUS_PORT` | port local du superviseur, `8789` par défaut |
+| `OC_Codex_SUPERVISOR_RESUME_DELAY_MS` | délai de reprise, 60 secondes par défaut |
+| `OC_Codex_SUPERVISOR_POLL_INTERVAL_MS` | fréquence de réconciliation du superviseur |
+| `OC_Codex_SUPERVISOR_STATE_PATH` | état runtime non versionné du superviseur |
+| `CODEX_COMMAND` | commande utilisée pour Codex App Server |
+
+Les noms historiques équivalents préfixés `OC_CGPT_` restent acceptés pour la
+compatibilité avec les installations existantes.
+
+Pour la limite de commande, le nom principal présent prévaut sur l'alias,
+même si sa valeur est invalide. La valeur fournie doit être un entier décimal
+ASCII strictement positif et sûr JavaScript, sans espace, signe ou fraction ;
+une valeur vide ou invalide refuse le démarrage. Le comptage utilise
+`String.length` : un caractère hors BMP compte pour deux unités UTF-16.
+Une commande trop longue reçoit HTTP 400 JSON avec `error: command-too-long`,
+`message`, `maxLength`, `actualLength` et `unit: utf16`, sans son contenu et
+avant enregistrement. Le broker conserve un diagnostic filtré dans sa trace
+d'échec de notification ; ce refus technique ne constitue pas une décision.
+La règle reste une commande exacte, une décision corrélée et une permission
+native `once` unique, selon les règles de corrélation existantes. La limite
+de transport HTTP de 256 KiB reste indépendante. Voir TECHNICAL.md, section 15.
+
+Le mode `OC_Codex_DECISION_MODE=manual`, utilisé par défaut, conserve les
+demandes en attente d'une décision HTTP explicite de l'orchestrateur
+principal. Les rappels corrélés restent observables sans créer de thread ni
+de tour Codex auxiliaire. Le mode `automatic` conserve son fonctionnement.
+
+Une demande locale indécise bloque le gate terminal même si le dernier
+compteur broker était nul. Pour la supervision, seule l'activité SSE de la
+session du job, sans répertoire divergent, repousse la reprise ; le trafic
+étranger et les heartbeats ne constituent pas une activité de cette session.
+Un changement de contexte invalide l'ancienne horloge d'activité.
+
+Les secrets doivent rester hors du dépôt Git et des journaux.
+
+## Persistance
+
+Par défaut, le broker utilise le home du processus OpenCode qui le lance :
+
+```text
+$HOME/.opencode/state/cgpt-approval-bridge/
+```
+
+Le contrôleur et le superviseur utilisent par défaut l'espace situé dans le
+workspace du projet piloté :
+
+```text
+<workspace>/.opencode/state/cgpt-approval-bridge/
+```
+
+Les variables de configuration peuvent personnaliser les chemins du broker
+et celui de l'état du superviseur. Les espaces runtime doivent être résolus
+depuis la configuration effective ; `/workspace` est seulement un exemple de
+racine de projet. Ces espaces ne sont pas des sources du projet et ne doivent
+pas être publiés avec une release.
+
+Le contrôleur démarre sans job uniquement si son fichier de contrat est
+absent. Un JSON malformé ou une autre erreur de lecture interrompt son
+démarrage avec un diagnostic sans contenu persistant. Le fichier est conservé
+pour une intervention autorisée ; aucun état n'est réparé automatiquement.
+
+## Readiness
+
+CAB expose quatre états :
+
+- **READY** — fonctionnement nominal ;
+- **DEGRADED** — fonctionnement possible mais dégradé ;
+- **BLOCKED** — progression bloquée ;
+- **HUMAN_REQUIRED** — intervention humaine nécessaire.
+
+## Distribution
+
+Le dépôt contient directement les sources du bridge et du plugin Codex. La
+marketplace est définie dans `.agents/plugins/marketplace.json` et référence
+le plugin situé dans `plugins/cab-approval-bridge/`.
+
+Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
+racine, puis importez et synchronisez-le depuis l'administration de votre
+espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
+
+La version de base actuelle du broker, du contrôleur, du superviseur et du
+plugin est `1.10.4`. Le plugin ajoute un cachebuster Codex pour les
+installations locales.
+
+## Documentation
+
+- **ORCHESTRATED_CODING.md** — document facultatif, réservé aux projets
+  nécessitant des sessions pilotées ; AGENTS.md impose alors sa lecture aux
+  deux agents concernés pour le protocole et ses contrats techniques.
+- **PROJECT.md** — but, architecture et périmètre ;
+- **TECHNICAL.md** — protocoles, persistance, supervision et configuration ;
+- **BUILD.md** — installation, packaging et distribution ;
+- **CHANGELOG.md** — historique des versions.
+- **openspec/specs/** — contrats normatifs des capacités CAB.
+
+## Plusieurs sessions CISMP — CAB 1.10.4
+
+Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
+
+Consulter GET /runs puis les routes /runs/<runId>/... ; négocier resource-scoped-v1 avant mandat mutable. Les anciens appels d'intégration globale ordinaire sont refusés sans effet. Lire ORCHESTRATED_CODING.md et la référence du skill avant activation. Les formats historiques exigent une maintenance explicite ; CISM, CAISM et prompts directs restent hors concurrence pilotée. Les worktrees nécessitent une qualification distincte.
+
+## Broker existant sous un autre compte — 1.10.4
+
+Le mode explicite reuse-readonly réutilise les trois fichiers broker déjà
+cibles sans les installer ni changer leurs droits. Une preuve privée lie
+empreintes, propriétaires et processus. Les services et le broker sont
+relancés par leurs autorités respectives, sans fermer OpenCode ou modifier
+son MCP. Après intention de déconnexion, une panne conserve le gel pour
+récupération ; elle ne promet pas un retour au processus ancien. Voir la
+référence component-update.md pour la procédure. Aucune activation réelle
+n'est déclenchée par la préparation source 1.10.4.
+
+## Réservation Docker/LXC et actualisation — 1.10.4
+
+Chaque change peut réserver ses environnements de test Docker/LXC avant leur préparation. La réservation reste détenue entre commandes jusqu'à la fin de tous les tests et à une restitution vérifiée : nettoyage puis contrôle distincts, réussis et corrélés. Une interruption, un échec ou un timeout ne libère rien automatiquement. Les changes utilisant d'autres environnements continuent. Le protocole et les limites entre registres CAB sont détaillés dans la référence [concurrent-runs](plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md).
+
+Dans MONITOR, la liste Actualisation propose **Manuel, 1s, 3s, 7s, 30s, 1m, 5m, 10m et 30m**. Le défaut est 1s et le choix est mémorisé dans le navigateur lorsque possible. **Actualiser** récupère immédiatement une vue. En Manuel, le SSE ne modifie pas les données affichées. La collecte des composants reste partagée et indépendante du choix de chaque navigateur.
+
+La dernière vue et la cadence figurent sur une seule ligne après l'identité du workspace dans l'en-tête. Sur petit écran, cette ligne peut défiler horizontalement sans élargir la page.
+
+RUN et Changes sont classés par nombre absolu de tâches cochées décroissant, puis par identifiant du change alphabétique et identifiant RUN. Un avancement indisponible vient après les valeurs connues, y compris zéro ; la sélection et les filtres sont conservés.
+
+Les états des composants et RUN, les compteurs et les détails représentent le snapshot daté affiché. Ils restent stables jusqu'à la prochaine vue appliquée, notamment en Manuel ou après erreur de rafraîchissement. Une source déjà ancienne lors du relevé reste indiquée comme telle. Les commandes de gestion vérifient séparément la fraîcheur à l'heure courante et peuvent demander une actualisation avant exécution.
+
+Le pavé **Web** indique **Disponible** pendant les 30 minutes suivant le dernier rafraîchissement réussi de la vue, puis **Non observé**, même sans nouvelle récupération. Une perte SSE seule ne change pas ce délai et un rafraîchissement échoué ne le prolonge pas. Les autres composants conservent l'état observé à la date du snapshot affiché. La version source 1.10.4 ne prouve aucune mise à jour de l'installation active.
+
+Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromium et Firefox, suivent aussi ce cycle avec les clés `browser:<hôte>/<navigateur>`. La réservation reste détenue jusqu'à fermeture des sessions WebDriver/BiDi et processus, libération des ports et profils temporaires du change, nettoyage puis vérification distincts. Les sessions utilisateur préexistantes sont préservées. Les ensembles navigateur/conteneur sont acquis atomiquement ; des mécanismes indépendants peuvent avancer.
+
+## Sélection du modèle de codage — 1.10.4
+
+Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, choisir high, puis xhigh si high est indisponible, puis la politique de priorité inférieure si les deux sont indisponibles. Un modèle imposé incompatible bloque, conformément à la décision du développeur. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.
+
+## Maintenance des registres volumineux — 1.10.4
+
+La mise à jour des briques accepte un registre complet jusqu'à 16 Mio, en HTTP et pour son contrôle privé sous maintenance. Cette exception reste limitée au registre ; les autres bornes et toutes les gardes sont conservées. Le déploiement local distingue sources qualifiées, plugin installé, publication distante et versions réellement chargées. Les CISMP en pause ne reprennent qu'après preuve de mise à jour et réconciliation.
+
+### Compatibilité et reprise de maintenance 1.10.4
+
+Les clés logiques historiques Docker/LXC/navigateur sont conservées à la lecture. Les nouvelles réservations de test et les permissions gardent leurs contrôles canoniques. Si le contrôleur cible échoue à lire cette histoire après déconnexion du broker, la réparation ciblée conserve le même gel, le journal initial et les données métier, puis prépare une nouvelle release immuable. Consulter [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md) ; la réussite exige les quatre versions réellement chargées et le même processus OpenCode avant reprise explicite des RUN.
+
+Le contrôle du broker 1.10.4 reconnaît aussi un enfant lancé par un thread secondaire du même OpenCode. Les vérifications de parent, UID, commande et unicité restent strictes ; une preuve absente ou divergente conserve le gel de maintenance.
+
+### Budget /provider — 1.10.4
+
+La session de pilotage peut imposer providerMaxBytes dans /model-policy/resolve et dans modelSelection lors de l'armement. Ce budget entier positif en octets s'applique à ce seul appel /provider. Sans valeur, le défaut reste 2 Mio ; sessions/messages et catalogue PLLM conservent leurs limites. Voir la référence [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md). Aucun corps fournisseur privé n'est enregistré dans les preuves.
+
+### Raccord PLLM/OpenCode — 1.10.4
+
+Le paquet prépare un patch de catalogue public à transmettre au contrôleur, rapproche l'alias logique Go avec l'identité native vérifiée et accepte les variantes de prévol imbriquées ou historiques cohérentes. Les cas ambigus, déconnectés ou contradictoires restent refusés. La référence [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) précise préparation, transmission et compatibilité ; les sources ne déploient aucun service.

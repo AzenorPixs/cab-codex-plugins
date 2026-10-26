@@ -1,0 +1,18 @@
+{
+  "archive": {
+    "change": "support-frozen-recovery-controller-maintenance",
+    "archivedAs": "2026-10-25-support-frozen-recovery-controller-maintenance",
+    "path": "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-support-frozen-recovery-controller-maintenance",
+    "specsUpdated": true,
+    "totals": {
+      "added": 13,
+      "modified": 18,
+      "removed": 0,
+      "renamed": 0
+    }
+  },
+  "root": {
+    "path": "/home/devops/datas/cab",
+    "source": "nearest"
+  }
+}

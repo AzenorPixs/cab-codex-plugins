@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-09-18
+goal: Rappeler toutes les 30 secondes les décisions CAB PENDING sans approbation
+  implicite.
