@@ -5,7 +5,7 @@ import { isAbsolute, join, relative } from 'node:path';
 import { createJobContext, commandLengthLimit, checkCommandLength, VERSION as JOB_CONTEXT_VERSION } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, VERSION } from './cgpt-approval-bridge-runs.mjs';
 import { ResourceRunRegistry, COORDINATION_PROTOCOL, TEST_RESOURCE_PROTOCOL, VERSION as RESOURCE_VERSION } from './cgpt-approval-bridge-resource-coordination.mjs';
-import { MODEL_SELECTION_PROTOCOL, readModelCatalog, selectCodingModel, verifyModelPreflight, reasoningUnavailability, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
+import { MODEL_SELECTION_PROTOCOL, readModelCatalog, catalogProviderID, selectCodingModel, verifyModelPreflight, reasoningUnavailability, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { SessionStatistics, VERSION as STATISTICS_VERSION } from './cgpt-approval-bridge-statistics.mjs';
 import { createObservationJournal, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { StatisticsMaintenance, statisticsDashboard, guardStatisticsPost, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
@@ -13,7 +13,7 @@ import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.m
 import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-const version = "1.10.2";
+const version = "1.10.3";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -377,8 +377,8 @@ async function resolveCodingModel(input) {
     const rejected = reasoningUnavailability({ ...observed, workspace });
     if (input.model === undefined) {
       if (!Array.isArray(catalog.models)) throw new CoordinationError('pllm-catalog-invalid');
-      const entry = catalog.models.find((entry) => entry.provider === rejected.providerID && (entry.model_id || entry.model) === rejected.modelID &&
-        entry.evaluated_this_run === true && entry.state === 'Valide');
+      const entry = catalog.models.find((entry) => entry.evaluated_this_run === true && entry.state === 'Valide' &&
+        (entry.model_id || entry.model) === rejected.modelID && catalogProviderID(entry.provider,providers) === rejected.providerID);
       if (!entry || !Number.isFinite(Date.parse(entry.evaluated_at)) || Date.parse(rejected.observedAt) < Date.parse(entry.evaluated_at)) {
         throw new CoordinationError('model-unavailability-not-proved');
       }

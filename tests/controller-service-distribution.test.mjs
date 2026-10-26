@@ -13,14 +13,14 @@ const supervisorServicePath = new URL(
 );
 const monitorServicePath = new URL('../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service', import.meta.url);
 
-test("les briques distribuées publient la même version de base 1.10.2", () => {
+test("les briques distribuées publient la même version de base 1.10.3", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "1.10.2");
+  assert.equal(version, "1.10.3");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  assert.match(plugin.version, /^1\.10\.2\+codex\.\d{14}$/);
-  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.10\.2$/m);
+  assert.match(plugin.version, /^1\.10\.3\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.10\.3$/m);
   for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
     const root = new URL(directory, import.meta.url);
     for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
@@ -31,7 +31,7 @@ test("les briques distribuées publient la même version de base 1.10.2", () => 
     }
   }
   for (const path of [servicePath, supervisorServicePath, monitorServicePath]) {
-    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.10\.2 /m);
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.10\.3 /m);
   }
 });
 
@@ -55,9 +55,9 @@ test('le moniteur web distribue ses ressources locales et reste indépendant des
   assert.match(start, /identity\.workspace/);
 });
 
-test('le catalogue des étapes et son producteur sont distribués en 1.10.2', async () => {
+test('le catalogue des étapes et son producteur sont distribués en 1.10.3', async () => {
   const { RUN_STEPS, VERSION } = await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs');
-  assert.equal(VERSION, '1.10.2');
+  assert.equal(VERSION, '1.10.3');
   const reference = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md', import.meta.url), 'utf8');
   for (const step of RUN_STEPS) {
     assert.ok(reference.includes(step.id), step.id); assert.ok(reference.includes(step.name), step.name);
@@ -167,12 +167,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 1\.10\.2$/m);
-  assert.match(manifest, /"version": "1\.10\.2\+codex\./);
-  assert.match(controller, /const version = "1\.10\.2"/);
-  assert.match(supervisor, /const version = "1\.10\.2"/);
-  assert.match(broker, /SERVER_VERSION = "1\.10\.2"/);
-  assert.match(project, /^version = "1\.10\.2"$/m);
+  assert.match(command, /^version: 1\.10\.3$/m);
+  assert.match(manifest, /"version": "1\.10\.3\+codex\./);
+  assert.match(controller, /const version = "1\.10\.3"/);
+  assert.match(supervisor, /const version = "1\.10\.3"/);
+  assert.match(broker, /SERVER_VERSION = "1\.10\.3"/);
+  assert.match(project, /^version = "1\.10\.3"$/m);
 });
 
 test("la mise à jour confie les quatre briques au moteur transactionnel et conserve les états initiaux", () => {
@@ -430,4 +430,12 @@ test("le contrat status conserve le tableau métier, la fraîcheur et les limite
   assert.match(section, /Ne pas transformer tous les obstacles d'intégration/);
   assert.match(section, /Une coche seule reste une réalisation déclarée/);
   assert.match(section, /distinguer gate individuel d'un change et état du parent/);
+});
+
+
+test('raccord catalogue distribué : préparation sans effet et transmission explicite avant armement',()=>{
+ const root=new URL('../plugins/cab-approval-bridge/',import.meta.url);
+ const helper=readFileSync(new URL('scripts/cgpt-approval-bridge-prepare-model-policy.mjs',root),'utf8');
+ assert.match(helper,/prepareControllerModelPolicy/);assert.doesNotMatch(helper,/writeFile|systemctl|fetch\(/);
+ const command=readFileSync(commandPath,'utf8');assert.match(command,/prepare-model-policy\.mjs --pllm-skill-root/);assert.match(command,/Fusionne son patch validé `OC_Codex_PLLM_CATALOG`/);assert.match(command,/résolution réussie du contrôleur avant prévol/);
 });

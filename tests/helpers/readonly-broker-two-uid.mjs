@@ -105,7 +105,7 @@ async function scenario(dropReply){
   const pluginRoot='/inputs/plugins/cab-approval-bridge',original='/inputs/original';
   const historicalRecovery=process.env.CAB_TEST_HISTORICAL_RECOVERY==='1';
   const originalVersion=JSON.parse(await readFile(join(original,'.codex-plugin/plugin.json'),'utf8')).version.split('+')[0];
-  assert.ok(['1.7.1','1.9.0','1.10.1'].includes(originalVersion));
+  assert.ok(['1.7.1','1.9.0','1.10.1','1.10.2'].includes(originalVersion));
   const scripts=join(home,'.local/share/cab-approval-bridge'),seed=join(scripts,'releases/seed/scripts');
   const monitorRoot=join(home,'.local/share/cab-approval-bridge-monitor'),monitorScripts=join(monitorRoot,'scripts');
   const processes={},children=[],events=[];let stderr='';

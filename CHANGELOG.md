@@ -3,6 +3,13 @@
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
 
+## 1.10.3 — préparation source
+
+- Préparation vérifiée du catalogue public du skill actif et patch non secret à transmettre au contrôleur lors du démarrage autorisé ; configuration explicite et options existantes conservées, sans benchmark ni écriture automatique.
+- Rapprochement contrôlé opencodego vers opencode-go : identité exacte prioritaire, unicité, connexion et modèle inchangé ; provenance logique conservée avec l'identité native, y compris pour les preuves d'indisponibilité.
+- Prévol et indisponibilité compatibles avec parent.info.model.variant et parent.info.variant ; refus des contradictions entre champs parent et assistant, des preuves manquantes et des réponses incomplètes.
+- Incrément commun des briques et paquet reproductible ; transition depuis 1.10.2 qualifiée séparément en banc isolé. Publication et activation restent distinctes. Les anciens contrats restent lisibles ; un ancien lecteur strict ne prend pas en charge le nouveau champ logicalProviderID après nouvel armement.
+
 ## 1.10.2 — préparation source
 
 - La session de pilotage peut fournir providerMaxBytes à /model-policy/resolve et dans modelSelection à l'armement : budget entier positif en octets appliqué au seul /provider de l'appel, sans plafond fixe ajouté. Omission compatible à 2 Mio, autres observations et catalogue PLLM inchangés.

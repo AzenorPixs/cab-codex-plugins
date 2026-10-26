@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 1.10.2
+version: 1.10.3
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -9,11 +9,11 @@ Le développeur accorde une autorisation permanente pour le cycle de vie et les 
 
 Argument reçu : `$ARGUMENTS`
 
-Le profil source 1.10.2 `frozen-recovery-controller` n'est pas déclenché par
+Le profil source 1.10.3 `frozen-recovery-controller` n'est pas déclenché par
 une mise à jour ordinaire. Il exige un accord de maintenance spécifique et
 un fichier de preuves privé, selon `references/component-update.md` du skill.
 Il peut conserver broker, superviseur et Web 1.7.1 pendant le chargement du
-contrôleur 1.10.2 ; annoncer séparément ces versions et le manifeste chargé.
+contrôleur 1.10.3 ; annoncer séparément ces versions et le manifeste chargé.
 Une préparation SCM ou un incrément de version n'autorise aucune activation.
 
 Pour stats, statslast, stats 24, stats7 ou stats30, appliquer directement la section `/cab stats` puis terminer après la consultation. Ne déclencher ni skill, ni boucle de pilotage, ni action de cycle de vie. Une cible optionnelle --run <run_id> filtre ce RUN exact ; une syntaxe ambiguë est refusée sans collecte.
@@ -36,7 +36,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 1.10.2
+## RUN concurrents CAB 1.10.3
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -46,7 +46,7 @@ Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_i
 
 Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Installer ensemble les scripts controller, job-context, model-policy, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu puis actualise les briques actives sous maintenance partagée selon references/component-update.md ; les autres procédures ne remplacent pas un jeu actif implicitement. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+Installer ensemble les scripts controller, job-context, model-policy, prepare-model-policy, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu puis actualise les briques actives sous maintenance partagée selon references/component-update.md ; les autres procédures ne remplacent pas un jeu actif implicitement. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
 
 ## Étapes du cycle et observation web
 
@@ -306,7 +306,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 1.10.2 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 1.10.3 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -334,7 +334,7 @@ candidate et le job selon la procédure ci-dessous.
 5. Identifie dans la configuration API OpenCode l’agent de codage qui recevra le premier prompt et relève son fournisseur, son modèle et son niveau de raisonnement effectivement configurés. Ne modifie jamais cette configuration et ne lis aucune donnée secrète.
 6. Vérifie via l’API OpenCode que le fournisseur et le modèle relevés sont publiés et disponibles. Crée alors une session de prévol temporaire, sans outil ni accès au projet, et lui adresse une requête inoffensive en imposant exactement ce fournisseur, ce modèle et ce niveau de raisonnement.
 7. Contrôle la réponse et ses métadonnées réellement observées. Elles doivent confirmer le même fournisseur, le même modèle et le même niveau de raisonnement. Ferme la session de prévol après cette preuve. Si une valeur est absente, indisponible, divergente ou si la requête échoue, publie `CAB_INACTIF` avec les valeurs attendues et observées, puis n’installe pas le contrôleur et ne crée ni ne réutilise de session persistante.
-8. Résous les ressources du plugin CAB installé, puis copie son contrôleur, son superviseur et leurs modèles d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Crée ou actualise `~/.config/cab-approval-bridge/controller.env` avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
+8. Résous les ressources du plugin CAB installé, puis copie son contrôleur, son superviseur et leurs modèles d’unité dans les répertoires stables du profil : `~/.local/share/cab-approval-bridge/` et `~/.config/systemd/user/`. Pour la sélection automatique, applique la préparation du catalogue décrite ci-dessous. Fusionne son patch validé `OC_Codex_PLLM_CATALOG` dans `~/.config/cab-approval-bridge/controller.env`, avec le workspace absolu du job et `OC_Codex_OUTSIDE_SANDBOX=1`, en préservant les autres options et sans y écrire de secret. Exécute `systemctl --user daemon-reload`. Cette installation différée ne doit jamais appeler `systemctl --user enable` et ne doit pas démarrer le service avant cette commande `/cab start` explicite.
 9. Démarre ou réutilise le contrôleur Codex persistant hors sandbox par `systemctl --user start cgpt-approval-bridge-controller.service`, avec `OC_Codex_OUTSIDE_SANDBOX=1` ; l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1` reste accepté. Vérifie qu’il est `active` et que son unité utilise `Restart=on-failure`.
 10. Vérifie le contrôleur Codex sur son interface locale.
 11. Démarre explicitement le superviseur utilisateur par `systemctl --user start cgpt-approval-bridge-supervisor.service`, puis vérifie son statut local. Il utilise `Restart=on-failure`, sans activation au login, et ne prend aucune décision CAB.
@@ -764,7 +764,7 @@ Ces contrôles ne modifient aucune permission ; les règles doivent rester
 stables pendant le mandat. Une modification externe après contrôle n'est
 pas atomique avec l'exécution native et reste hors garantie du contrôleur.
 
-## Environnements de test et rafraîchissement — 1.10.2
+## Environnements de test et rafraîchissement — 1.10.3
 
 Pour les RUN coordonnés, consulter le protocole `test-resources-v1` et la référence concurrent-runs avant tout usage Docker/LXC. Acquérir l'environnement avant préparation et le conserver entre commandes jusqu'aux preuves de fin, nettoyage et restitution. Le moniteur affiche les attentes de test et propose une cadence locale Manuel/1s/3s/7s/30s/1m/5m/10m/30m avec Actualiser ; sa carte Web conserve Disponible pendant 30 minutes après un rafraîchissement réussi. Ces fonctions ne déclenchent aucune mise à jour de service par leur présence dans les sources.
 
@@ -772,6 +772,18 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 1.10.2, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, high puis xhigh puis politique de priorité inférieure. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni low implicite. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 1.10.3, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, high puis xhigh puis politique de priorité inférieure. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni low implicite. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
+
+## Préparation du catalogue avant démarrage et nouvel armement
+
+Cette préparation est requise pour PLLM automatique. Un modèle concrètement imposé conserve la voie explicite existante du contrôleur ; ne pas lui imposer une nouvelle dépendance de publication PLLM.
+
+Résoudre la racine du skill PLLM effectivement actif depuis le catalogue de skills de cette session ; ne pas rechercher dans des configurations privées. Exécuter le script du paquet installé `scripts/cgpt-approval-bridge-prepare-model-policy.mjs --pllm-skill-root <racine-absolue-active>`. Si un chemin de catalogue explicite est déjà fourni, le transmettre avec `--catalog-path <chemin-public>` ; les options de configuration explicites et leur alias historique restent prioritaires sur la découverte du skill.
+
+Le script valide le fichier public régulier et borné ainsi que la publication, sans benchmark ni écriture. Sa sortie contient uniquement catalogPath, source et environment={OC_Codex_PLLM_CATALOG:...}. Pendant le démarrage ou la maintenance expressément autorisés, fusionner ce seul patch dans la configuration du contrôleur en conservant toutes les autres options. Préserver l'échappement littéral EnvironmentFile ; ne jamais utiliser source ou eval ni afficher un environnement complet. La préparation seule ne configure ni ne redémarre le service.
+
+Après démarrage ou rechargement coordonné, appeler /model-policy/resolve avec les exigences du prompt et providerMaxBytes choisi par la session. Exiger une résolution réussie du contrôleur avant prévol et nouvel armement ; la simple réussite du CLI ne prouve pas la transmission au service. pllm-catalog-unconfigured indique un raccord absent dans le processus chargé ; les autres diagnostics de catalogue, fournisseur ou prévol restent distincts. Ne pas contourner par un modèle manuel. Une erreur conserve le job non armé et exige la récupération autorisée.
+
+Pour le raccord 1.10.3, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
