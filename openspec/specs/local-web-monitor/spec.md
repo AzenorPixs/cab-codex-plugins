@@ -45,11 +45,23 @@ Le moniteur MUST accepter OC_Codex_CONTROLLER_URL, OC_Codex_SUPERVISOR_URL et OC
 - **THEN** le moniteur refuse le démarrage sans contacter cette adresse
 
 ### Requirement: Disponibilité et fraîcheur explicites
-Chaque source MUST publier la dernière tentative, le dernier succès et son état courant. Une observation périmée ou une source inaccessible MUST NOT être présentée comme preuve de santé actuelle. Les états de transport, d'activité et de progression MUST rester distincts.
+Chaque source MUST publier tentative, succès et état. Hors carte Web, fraîcheur et états affichés MUST rester ceux du snapshot daté appliqué jusqu'au suivant. Une source alors inaccessible ou périmée MUST NOT paraître saine. Les commandes MUST contrôler séparément la fraîcheur courante. Transport, activité et progression MUST rester distincts. La carte Web MUST conserver son expiration de trente minutes.
+
+#### Scenario: Vue manuelle au-delà du délai de fraîcheur
+- **WHEN** une vue valide est appliquée en Manuel et le délai de fraîcheur des sources s'écoule sans nouveau snapshot appliqué
+- **THEN** états observés des briques et RUN, métriques, sélection et détails restent consultables sans bascule automatique vers indisponible ou UNKNOWN ; la dernière vue reste datée et les commandes conservent leurs gardes courantes
+
+#### Scenario: Source déjà ancienne au rafraîchissement
+- **WHEN** Actualiser applique un snapshot contenant une source périmée ou inaccessible
+- **THEN** la vue indique son indisponibilité ou son ancienneté sans la présenter comme saine
 
 #### Scenario: Ancien statut nominal
 - **WHEN** une source devient inaccessible après un statut READY
-- **THEN** son observation reste consultable comme ancienne et sa disponibilité actuelle n'est pas READY
+- **THEN** le prochain snapshot appliqué conserve l'observation comme ancienne et sa disponibilité n'est pas READY
+
+#### Scenario: Transport perdu et récupération échouée
+- **WHEN** le SSE est interrompu puis un rafraîchissement échoue ou reçoit un snapshot invalide
+- **THEN** la connexion ou l'échec est signalé et les dernières observations affichées restent conservées
 
 ### Requirement: RUN et changes corrélés
 La page MUST présenter les RUN et leurs changes, session, phase observée, mandat, jalon, attentes et gate selon les données disponibles. Les identités MUST rester corrélées au RUN et au change. Les causes inconnues MUST rester inconnues.
@@ -162,11 +174,15 @@ GET /api/snapshot MUST exposer identity.workspace avec le workspace absolu confi
 - **THEN** il peut comparer son workspace et sa version attendus sans lire de fichier runtime privé
 
 ### Requirement: En-tête et navigation de gestion
-MONITOR MUST afficher CENTRE D’OBSERVATION comme titre plus grand et gras, sans Tout le travail., Une vue commune. ni leur paragraphe descriptif. ARCHIVES MUST apparaître après MONITOR et STATS. Les trois pages MUST être accessibles au clavier et responsive sans interrompre le flux SSE ni la navigation statistique.
+MONITOR MUST afficher CENTRE D’OBSERVATION en grand et gras. Dernière vue et Collecte/vue MUST suivre CAB / Supervision et WORKSPACE LOCAL sur une ligne sans élargir le document. Actualisation MUST rester disponible. ARCHIVES MUST suivre MONITOR et STATS. Navigation MUST rester accessible au clavier et responsive sans interrompre SSE ni statistiques. Tout le travail., Une vue commune. et leur paragraphe MUST être absents.
+
+#### Scenario: Métadonnées de supervision compactes
+- **WHEN** MONITOR affiche un snapshot
+- **THEN** dernière vue et cadence suivent l'identité du workspace sur la même ligne et ne sont plus affichées sur deux lignes dans le hero
 
 #### Scenario: Consultation des archives
 - **WHEN** ARCHIVES est sélectionné puis MONITOR
-- **THEN** la page active et son libellé changent et les observations restent actualisées
+- **THEN** la page active et son libellé changent et les observations restent disponibles selon la cadence choisie
 
 ### Requirement: Cadence de la vue réglable sur la page
 La page MUST proposer une liste déroulante contenant exactement Manuel, 1s, 3s, 7s, 30s, 1m, 5m, 10m et 30m, avec 1s par défaut et conservation locale du choix lorsque disponible. Elle MUST proposer Actualiser. Manuel MUST permettre seulement le chargement initial et les rafraîchissements explicites ; les snapshots SSE MUST NOT contourner cette sélection. Les autres valeurs MUST fixer la cadence de récupération de la vue sans requêtes simultanées ni modification de la collecte partagée.
@@ -193,3 +209,14 @@ La carte Web MUST afficher Disponible après un snapshot valide appliqué avec s
 #### Scenario: Nouveau relevé valide
 - **WHEN** Actualiser réussit après expiration
 - **THEN** la carte Web affiche Disponible et repart pour 30 minutes
+
+### Requirement: Classement par nombre de tâches cochées
+Les tableaux RUN et Changes MUST être classés par tâches cochées décroissantes, puis changeId alphabétique (collation française), puis runId. Un RUN MUST utiliser l'avancement du change lié. L'avancement inconnu MUST rester inconnu et suivre les valeurs connues, même zéro. Le tri MUST préserver filtres, sélection et snapshot source.
+
+#### Scenario: Nombre absolu et égalités
+- **WHEN** plusieurs changes ont des nombres de tâches cochées différents ou identiques
+- **THEN** le plus grand nombre apparaît d'abord, indépendamment du pourcentage, et les égalités suivent l'ordre alphabétique du change dans les deux tableaux
+
+#### Scenario: Avancement inconnu
+- **WHEN** une ligne n'a pas d'avancement disponible et une autre indique zéro tâche cochée
+- **THEN** la ligne connue à zéro précède la ligne inconnue sans remplacer cette dernière par zéro

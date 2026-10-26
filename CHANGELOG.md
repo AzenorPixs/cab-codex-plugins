@@ -2,6 +2,13 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.10.4 — préparation source
+
+- Monitor : dernière vue et cadence sur une seule ligne après l'identité du workspace, avec défilement local sur petit écran.
+- Vue manuelle persistante : états observés, compteurs, sélection et détails conservés entre rafraîchissements, même après perte SSE ou erreur. Les commandes vérifient séparément la fraîcheur courante ; la carte Web garde son expiration de trente minutes.
+- RUN et Changes triés par nombre de tâches cochées décroissant, puis identifiant du change alphabétique et identifiant RUN ; avancement inconnu placé après zéro, sans modifier les données sources.
+- Toutes les briques, modules, copies broker, plugin, commande et supports courants alignés sur 1.10.4 avec cachebuster neuf. Origine de maintenance 1.10.3 conservée et transition qualifiée à deux UID en environnement isolé, sans installation ni activation des services utilisateur.
+- Protocole corrigé dans son référentiel template puis synchronisé vers CAB : bootstrap du Monitor, catalogue des étapes et coordination par ressource réconciliés. Commande et skill conservent le choix PLLM de session et attendent une instruction sans modèle admissible ; les anciennes consignes de benchmark automatique périodique sont retirées.
 
 ## 1.10.3 — préparation source
 

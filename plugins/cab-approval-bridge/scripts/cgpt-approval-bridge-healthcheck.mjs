@@ -6,7 +6,7 @@ const controllerBaseUrl = (
   envValue("OC_Codex_CONTROLLER_URL") || "http://127.0.0.1:8788"
 ).replace(/\/+$/, "").replace(/\/status$/, "");
 const controllerUrl = `${controllerBaseUrl}/status`;
-const version = "1.10.3";
+const version = "1.10.4";
 
 const supervisorUrl =
   envValue("OC_Codex_SUPERVISOR_URL") ||

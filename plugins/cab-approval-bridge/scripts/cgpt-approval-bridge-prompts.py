@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Review or apply CAB 1.10.3 protocol updates to explicitly selected projects."""
+"""Review or apply CAB 1.10.4 protocol updates to explicitly selected projects."""
 
 import argparse
 import hashlib
@@ -8,14 +8,14 @@ from pathlib import Path
 import re
 import tempfile
 
-VERSION = "1.10.3"
+VERSION = "1.10.4"
 PILOTED = ("ACSP", "ACSMP", "CISMP", "DOPP", "ISMP", "PPSCP", "RSMP", "SCMP", "SPCMP")
-MARKER = "## CAB 1.10.3 — réservations et accès par ressource"
+MARKER = "## CAB 1.10.4 — réservations et accès par ressource"
 LEGACY_MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"
 PREVIOUS_BLOCK_SHA256 = ('c039e5ffbca375c41481eb80913b96a765adaca22c8d47944c4bb2a6c6c0a859', '43119dded169df0b84a85af8d8dc4ec5ec9b7787b8044f89aa735b45f3722ce4', 'a4182b778a8d94fcd5be415db51e57ec769502decd96adf57dd8e02e3b0ad5b8', 'b39b23a3dabbc5e1fea41753ef49442ca99425c48f7c30b956bc478b07b02667', '0769159ecb3d1b391346e0fa9d0c060b2451a2577ce0dc92add298f8423f1b61')
 PROMPT_END = "<!-- CAB-PROMPT-END -->"
 BLOCK = """
-## CAB 1.10.3 — réservations et accès par ressource
+## CAB 1.10.4 — réservations et accès par ressource
 
 Lire ORCHESTRATED_CODING.md avant pilotage. Un OpenCode et un broker stdio sont partagés ; jobs, mandats, décisions, once, preuves et gates restent isolés par RUN.
 
@@ -29,7 +29,7 @@ Après décision et avant effet, utiliser /locks/acquire ; vérifier HELD, token
 
 La fin native corrélée et l'examen des effets précèdent /locks/release. Un effet inconnu conserve ses protections ; idle, timeout ou silence ne libèrent rien. Prévol divergent : conserver candidate, RUN et preuves ; terminer/libérer son accès avant transfert de récupération, sans purge ni rejeu.
 
-Protéger les seules entrées/effets des validations. openspec validate --all --strict protège OpenSpec sans suspendre les éditions de code indépendantes. /publish vérifie les révisions des preuves et toutes les écritures à publier, puis persiste reçu, génération et libération sûre. Les pairs indépendants continuent sans /ready de cohorte ni réconciliation générale de referenceVersion. Synchronisation/archivage restent des mandats distincts autorisés sur leurs ressources. Une ancienne /integration ou /integration-request est refusée dans le profil 1.10.3.
+Protéger les seules entrées/effets des validations. openspec validate --all --strict protège OpenSpec sans suspendre les éditions de code indépendantes. /publish vérifie les révisions des preuves et toutes les écritures à publier, puis persiste reçu, génération et libération sûre. Les pairs indépendants continuent sans /ready de cohorte ni réconciliation générale de referenceVersion. Synchronisation/archivage restent des mandats distincts autorisés sur leurs ressources. Une ancienne /integration ou /integration-request est refusée dans le profil 1.10.4.
 
 À frontière sûre, /resources réduit la portée sans perdre les obligations. /closing après publication limite REPORT au STATISTIQUES.md de l'archive du change. Préparer les statistiques via /statistics et format=markdown sans RUN d'observation supplémentaire, finaliser/vérifier les six sections après archive, puis gate, désarmement et /release. Les mesures absentes restent N/A ; l'archive seule ne prouve pas la fin du parent.
 
@@ -127,7 +127,7 @@ def main():
             original = path.read_bytes() if path.is_file() else None
             text = original.decode("utf-8") if original is not None else re.split(r"\n## Pilotage concurrent CAB [0-9.]+", cab_protocol, maxsplit=1)[0]
             text = re.sub(r"Projet : `[^`]+`", f"Projet : `{project.name}`", text, count=1)
-            marker = "\n## Pilotage concurrent CAB 1.10.3\n\n"
+            marker = "\n## Pilotage concurrent CAB 1.10.4\n\n"
             existing_protocol_marker = next((m for m in (marker, "\n## Pilotage concurrent CAB 1.0.0\n\n") if m in text), None)
             end_marker = "\n<!-- CAB-CONCURRENT-END -->\n"
             if existing_protocol_marker:

@@ -13,14 +13,14 @@ const supervisorServicePath = new URL(
 );
 const monitorServicePath = new URL('../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service', import.meta.url);
 
-test("les briques distribuées publient la même version de base 1.10.3", () => {
+test("les briques distribuées publient la même version de base 1.10.4", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "1.10.3");
+  assert.equal(version, "1.10.4");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  assert.match(plugin.version, /^1\.10\.3\+codex\.\d{14}$/);
-  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.10\.3$/m);
+  assert.match(plugin.version, /^1\.10\.4\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.10\.4$/m);
   for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
     const root = new URL(directory, import.meta.url);
     for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
@@ -31,7 +31,7 @@ test("les briques distribuées publient la même version de base 1.10.3", () => 
     }
   }
   for (const path of [servicePath, supervisorServicePath, monitorServicePath]) {
-    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.10\.3 /m);
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.10\.4 /m);
   }
 });
 
@@ -55,9 +55,9 @@ test('le moniteur web distribue ses ressources locales et reste indépendant des
   assert.match(start, /identity\.workspace/);
 });
 
-test('le catalogue des étapes et son producteur sont distribués en 1.10.3', async () => {
+test('le catalogue des étapes et son producteur sont distribués en 1.10.4', async () => {
   const { RUN_STEPS, VERSION } = await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs');
-  assert.equal(VERSION, '1.10.3');
+  assert.equal(VERSION, '1.10.4');
   const reference = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md', import.meta.url), 'utf8');
   for (const step of RUN_STEPS) {
     assert.ok(reference.includes(step.id), step.id); assert.ok(reference.includes(step.name), step.name);
@@ -167,12 +167,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 1\.10\.3$/m);
-  assert.match(manifest, /"version": "1\.10\.3\+codex\./);
-  assert.match(controller, /const version = "1\.10\.3"/);
-  assert.match(supervisor, /const version = "1\.10\.3"/);
-  assert.match(broker, /SERVER_VERSION = "1\.10\.3"/);
-  assert.match(project, /^version = "1\.10\.3"$/m);
+  assert.match(command, /^version: 1\.10\.4$/m);
+  assert.match(manifest, /"version": "1\.10\.4\+codex\./);
+  assert.match(controller, /const version = "1\.10\.4"/);
+  assert.match(supervisor, /const version = "1\.10\.4"/);
+  assert.match(broker, /SERVER_VERSION = "1\.10\.4"/);
+  assert.match(project, /^version = "1\.10\.4"$/m);
 });
 
 test("la mise à jour confie les quatre briques au moteur transactionnel et conserve les états initiaux", () => {
@@ -289,7 +289,8 @@ test("le protocole distribué protège la lecture seule et décrit la récupéra
   }
 });
 
-test("le protocole distribue des cadences indépendantes et une attente PLLM persistante", () => {
+test("le protocole distribue des cadences indépendantes et conserve le choix PLLM sans réessai implicite", () => {
+  const selections = [];
   for (const path of [
     "../ORCHESTRATED_CODING.md",
     "../.codex/commands/cab.md",
@@ -302,17 +303,31 @@ test("le protocole distribue des cadences indépendantes et une attente PLLM per
     assert.match(protocol, /pauses fixes de 7 secondes/, path);
     assert.match(protocol, /vérifications de progression/, path);
     assert.match(protocol, /temporisations techniques du superviseur/, path);
-    assert.match(protocol, /même RUN en attente non terminale/, path);
-    assert.match(protocol, /benchmark toutes les 30 minutes \(1 800 secondes\), indéfiniment, sans limite de tentatives/, path);
-    assert.match(protocol, /jusqu'à reprise sûre du RUN ou arrêt explicite du développeur/, path);
-    assert.match(protocol, /échéance.*depuis l'échec observé de la dernière tentative/, path);
     assert.match(protocol, /checkpoint non secret/, path);
-    assert.match(protocol, /tentative en cours ou d'effet inconnu avant de retenter/, path);
-    assert.match(protocol, /tentatives simultanées/, path);
-    assert.match(protocol, /sans attente bloquante de trente minutes/, path);
-    assert.match(protocol, /readiness CAB réelle et les permissions avant reprise/, path);
-    assert.match(protocol, /ne vaut jamais approbation, ne rejoue aucun mandat consommé/, path);
-    assert.match(protocol, /ne contourne aucun blocage CAB distinct/, path);
+    assert.match(protocol, /réconciliation des effets, de la santé OpenCode, de MCP, de la readiness CAB et des permissions/, path);
+    assert.match(protocol, /Une reprise ne vaut jamais approbation et ne rejoue aucun mandat consommé/, path);
+    assert.doesNotMatch(protocol, /retente[r]? le benchmark toutes les 30 minutes|indéfiniment, sans limite de tentatives/, path);
+    const heading = '## PLLM Automatique — fraîcheur initiale et conservation du choix';
+    const start = protocol.indexOf(heading);
+    assert.ok(start >= 0, path);
+    const end = protocol.indexOf(' ## ', start + heading.length);
+    const selection = protocol.slice(start, end < 0 ? undefined : end);
+    for (const clause of ['28 800 secondes', 'ne renouveler aucune date à la lecture',
+      'ne déclenche aucune réévaluation', "Seul l'orchestrateur parent",
+      'Un échec de test métier ou un défaut CAB seul', 'prévol natif',
+      'sans évaluation ni benchmark relancé automatiquement', 'sans réarmement implicite']) {
+      assert.ok(selection.includes(clause), `${path}: ${clause}`);
+    }
+    selections.push(selection);
+  }
+  assert.equal(selections[0], selections[1]);
+  assert.equal(selections[1], selections[2]);
+  for (const path of ['../PROJECT.md', '../README.md', '../TECHNICAL.md',
+    '../plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md']) {
+    const source = readFileSync(new URL(path, import.meta.url), 'utf8').replace(/\s+/g, ' ');
+    assert.match(source, /huit heures/, path);
+    assert.match(source, /sans benchmark ni réessai automatique/, path);
+    assert.doesNotMatch(source, /sans limite de tentatives|retenté toutes les 30 minutes/, path);
   }
 });
 
