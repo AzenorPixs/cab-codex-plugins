@@ -1,4 +1,4 @@
-# Cycle du RUN — CAB 1.10.5
+# Cycle du RUN — CAB 1.10.6
 
 Le catalogue partagé est distribué dans `cgpt-approval-bridge-run-steps.mjs`.
 L'étape représente le cycle du change. La phase technique WORK/REPORT reste

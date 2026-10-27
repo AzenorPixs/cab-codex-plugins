@@ -2,6 +2,14 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.10.6 — medium par défaut
+
+- Le contrôleur demande medium par défaut pour les nouveaux jobs automatiques.
+  Un niveau explicitement fourni par le prompt reste prioritaire ; les
+  prévols et reprises conservent exactement le niveau retenu.
+- Incrément commun des briques et supports source de 1.10.5 à 1.10.6. Les
+  sessions existantes et services actifs ne sont pas modifiés.
+
 ## 1.10.5 — préparation source
 
 - Commande canonique `/CAB` en majuscules, avec `/cab` comme alias de compatibilité.

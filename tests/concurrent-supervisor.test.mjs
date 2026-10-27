@@ -16,7 +16,7 @@ async function checkSupervision(t, coordinationReason = null, codingModel = fals
   const statuses = { a: { opencodeSse: 'connected', brokerReadiness: { status: 'READY', pending_count: 1 } },
     b: { opencodeSse: 'connected', brokerReadiness: { status: 'READY', pending_count: 0 } } };
   if (coordinationReason) { statuses.a.brokerReadiness.pending_count = 0; statuses.a.coordination = { reason: coordinationReason }; }
-  if (codingModel) jobs.b.codingModel={protocol:'pllm-auto-v1',source:'prompt',providerID:'provider1',modelID:'model1',reasoning:'xhigh',
+  if (codingModel) jobs.b.codingModel={protocol:'pllm-auto-v1',source:'prompt',providerID:'provider1',modelID:'model1',reasoning:'medium',
     mode:null,priority:null,evaluatedAt:null,catalogDigest:null,selectedAt:new Date().toISOString(),
     preflight:{sessionId:'ses_probe',messageId:'msg_probe',verifiedAt:new Date().toISOString()}};
   const sent = []; const busy = {};
@@ -60,7 +60,7 @@ async function checkSupervision(t, coordinationReason = null, codingModel = fals
   });
   for (let i = 0; i < 100 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(sent.length, 1); assert.equal(sent[0].sessionId, 'ses_b');
-  if(codingModel){assert.deepEqual(sent[0].body.model,{providerID:'provider1',modelID:'model1'});assert.equal(sent[0].body.variant,'xhigh');}
+  if(codingModel){assert.deepEqual(sent[0].body.model,{providerID:'provider1',modelID:'model1'});assert.equal(sent[0].body.variant,'medium');}
   let state;
   for (let i = 0; i < 50; i++) {
     state = await (await fetch('http://127.0.0.1:' + port + '/status')).json();
@@ -80,4 +80,4 @@ test('une pause ciblée reste prioritaire sur le réveil du superviseur', { time
 
 test('une attente Docker/LXC ne provoque aucune relance et préserve les pairs', { timeout: 10000 }, (t) => checkSupervision(t, 'test-resource-conflict'));
 
-test('le superviseur réutilise explicitement le modèle et le raisonnement validés', { timeout: 10000 }, (t) => checkSupervision(t, null, true));
+test('le superviseur réutilise explicitement le modèle et le raisonnement medium validés', { timeout: 10000 }, (t) => checkSupervision(t, null, true));

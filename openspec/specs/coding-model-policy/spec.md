@@ -1,7 +1,7 @@
 # coding-model-policy Specification
 
 ## Purpose
-Définir le choix du modèle de codage CAB depuis le prompt ou la PLLM automatique, contrôler high/xhigh et les replis prouvés, puis conserver le choix validé pendant les reprises sans sélection implicite du broker ou du moniteur.
+Définir le choix du modèle de codage CAB depuis le prompt ou la PLLM automatique, demander medium par défaut, contrôler les replis prouvés vers une candidate PLLM suivante, puis conserver le choix validé pendant les reprises sans sélection implicite du broker ou du moniteur.
 
 ## Requirements
 
@@ -16,26 +16,16 @@ Le protocole CAB MUST conserver le modèle explicitement fixé par le prompt. Sa
 - **WHEN** une politique inférieure n'a pas été évaluée dans la publication active
 - **THEN** CAB demande son évaluation actuelle sans utiliser sa réussite historique
 
-### Requirement: Raisonnement high puis xhigh puis politique inférieure
-Un raisonnement explicitement donné par le prompt MUST prévaloir. Sinon CAB MUST choisir high si disponible, puis xhigh si high est indisponible, puis la politique de priorité inférieure si les deux sont indisponibles. CAB MUST vérifier les variantes du modèle réel sans déduction depuis son nom. Un échec d'authentification, quota ou réseau MUST NOT être assimilé à une incompatibilité de raisonnement.
-
-#### Scenario: Repli de raisonnement
-- **WHEN** une candidate ne déclare que xhigh parmi ces deux variantes
-- **THEN** CAB retient xhigh sans imposer low
-
-#### Scenario: Repli de politique
-- **WHEN** une candidate automatique ne prend en charge ni high ni xhigh
-- **THEN** CAB examine la politique de priorité suivante sans utiliser une entrée historique
-
-#### Scenario: Modèle imposé incompatible
-- **WHEN** un modèle explicite ne prend en charge ni high ni xhigh
-- **THEN** CAB refuse la sélection sans remplacer silencieusement ce modèle
-
 ### Requirement: Prévol exact et reprise du choix conservé
-L'armement négocié MUST vérifier un prévol natif réussi sans outils pour le fournisseur, modèle et raisonnement exacts. Il MUST persister la sélection et sa preuve. Le superviseur MUST réutiliser explicitement ces valeurs lors des reprises. Un armement répété MUST NOT modifier le choix d'un job existant. Le broker et le moniteur MUST rester sans sélection LLM ; le validateur Codex MUST conserver son rôle distinct.
+L'armement négocié MUST vérifier un prévol natif réussi sans outils pour le
+fournisseur, modèle et raisonnement exacts. Il MUST persister la sélection et
+sa preuve. Le superviseur MUST réutiliser explicitement ces valeurs lors des
+reprises. Un armement répété MUST NOT modifier le choix d'un job existant. Le
+broker et le moniteur MUST rester sans sélection LLM ; le validateur Codex
+MUST conserver son rôle distinct.
 
 #### Scenario: Réponse sur une autre variante
-- **WHEN** le prévol correspond au même modèle mais porte low au lieu de high
+- **WHEN** le prévol correspond au même modèle mais porte un niveau différent de celui retenu
 - **THEN** l'armement refuse cette preuve sans adopter le modèle
 
 #### Scenario: Reprise après redémarrage
@@ -52,8 +42,8 @@ CAB MUST accepter OC_Codex_PLLM_CATALOG absolu, avec l'alias OC_CGPT_PLLM_CATALO
 ### Requirement: Repli après incompatibilité native prouvée
 CAB MAY écarter une variante exposée mais rejetée uniquement après preuve native corrélée d'une erreur de paramètre de raisonnement reconnu. La preuve MUST correspondre au modèle, à la variante et à l'évaluation courante. Les erreurs 401, 403, 429, réseau ou paramètres étrangers MUST NOT autoriser ce repli. CAB MUST conserver seulement les références filtrées, sans corps d'erreur brut.
 
-#### Scenario: high puis xhigh refusés par le fournisseur
-- **WHEN** deux prévols natifs prouvent successivement le rejet de high et xhigh pour la candidate automatique
+#### Scenario: medium refusé par le fournisseur
+- **WHEN** un prévol natif prouve le rejet de medium pour la candidate automatique
 - **THEN** CAB examine la politique de priorité inférieure et exige son prévol réussi
 
 #### Scenario: Quota épuisé pendant un prévol
@@ -118,6 +108,40 @@ Le prévol et l'indisponibilité MUST lire parent.info.model.variant ou parent.i
 - **WHEN** les variantes divergent, manquent ou la réponse est tronquée, en erreur ou contient un outil
 - **THEN** CAB refuse la preuve sans permission implicite ni repli spéculatif
 
-#### Scenario: Rejet natif de high puis xhigh
-- **WHEN** des erreurs de paramètre reconnues et corrélées prouvent l'indisponibilité des deux variantes
-- **THEN** le repli conserve la correspondance fournisseur vérifiée et les gardes de dates, sans considérer auth, quota ou réseau comme preuve
+#### Scenario: Rejet natif de medium
+- **WHEN** une erreur de paramètre reconnue et corrélée prouve l'indisponibilité de medium pour la candidate automatique
+- **THEN** CAB examine la politique de priorité suivante et exige son prévol réussi, sans considérer auth, quota ou réseau comme preuve
+
+### Requirement: Raisonnement medium par défaut et niveau explicite prioritaire
+Un niveau de raisonnement explicitement donné par le prompt MUST prévaloir.
+Sans niveau explicite, CAB MUST choisir medium si disponible. Si medium est
+indisponible ou rejeté par preuve native, une candidate automatique suivante
+MUST être examinée selon la priorité PLLM. CAB MUST vérifier les variantes
+réellement publiées. Une erreur d'authentification, quota ou réseau MUST NOT
+être assimilée à une incompatibilité de raisonnement.
+
+#### Scenario: Défaut medium
+- **WHEN** une candidate automatique expose medium et aucun niveau n'est fixé par le prompt
+- **THEN** CAB choisit medium, même lorsque d'autres variantes sont exposées
+
+#### Scenario: Niveau explicite conservé
+- **WHEN** le prompt fixe explicitement un niveau pris en charge
+- **THEN** CAB prévole exactement ce niveau sans le remplacer par medium
+
+#### Scenario: Medium indisponible
+- **WHEN** une candidate automatique ne prend pas en charge medium
+- **THEN** CAB examine la candidate suivante selon la priorité PLLM sans sélectionner une autre variante sur la candidate courante
+
+#### Scenario: Modèle imposé incompatible
+- **WHEN** un modèle explicite ne prend pas en charge le niveau de raisonnement requis
+- **THEN** CAB refuse la sélection sans remplacer silencieusement le modèle
+
+### Requirement: Négociation du protocole 1.10.6
+Tout nouveau job piloté par CAB 1.10.6 MUST négocier pllm-auto-v1 avant
+l'armement. La préparation source MUST NOT modifier les agents, fournisseurs
+ou services actifs. Les jobs déjà armés MUST conserver leur sélection
+persistée.
+
+#### Scenario: Défaut appliqué à un nouveau job
+- **WHEN** un nouveau job 1.10.6 est résolu sans niveau explicite
+- **THEN** il reçoit medium et exige un prévol exact avant armement
