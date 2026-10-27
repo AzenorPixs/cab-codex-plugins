@@ -2,6 +2,12 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.10.7 — maintenance et demande en pause
+
+- Preuve broker avec propriétaires de fichiers et de répertoire explicitement distincts de l'UID d'exécution ; ancienne preuve compatible, aucun changement de droits ou d'artefact par la maintenance.
+- Réconciliation d'une demande du job courant sous PAUSE, même sans admission préalable, limitée au rejet après preuve native PENDING sans effet ; timeout suivi du même polling, persistance atomique et refus des approbations ou acquisitions.
+- Distribution commune 1.10.7 ; migration et reprise CISMP autorisées séparément par le développeur, avec vérification des versions réellement actives.
+
 ## 1.10.6 — medium par défaut
 
 - Le contrôleur demande medium par défaut pour les nouveaux jobs automatiques.

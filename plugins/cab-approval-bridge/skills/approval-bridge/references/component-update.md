@@ -1,4 +1,4 @@
-# Mise à jour des briques actives — CAB 1.10.6
+# Mise à jour des briques actives — CAB 1.10.7
 
 ## Profil de récupération gelée
 
@@ -29,7 +29,7 @@ Web restent ouverts ; aucun connect/disconnect ni instance/dispose n'est permis.
 Les pairs doivent conserver une PAUSE explicitement autorisée. Après complete,
 la récupération ne vaut pas autorisation métier dans l'état mixte : une
 maintenance ordinaire distinctement autorisée doit aligner réellement les
-quatre briques en 1.10.6, puis chaque reprise est validée. Cette seconde étape
+quatre briques en 1.10.7, puis chaque reprise est validée. Cette seconde étape
 peut reconnecter le broker et relancer le Web, sans fermer OpenCode.
 Un autre PENDING ou un écart entre compteurs global/RUN/session bloque le
 profil ; aucune demande inconnue n'est annulée ou attribuée par déduction.
@@ -99,12 +99,16 @@ CAB ; l'exécution d'une session SCM ne déclenche pas cette procédure réelle.
 
 ## Cibles et prérequis
 
+En 1.10.7, `expectedUid` désigne les processus OpenCode/broker. Les champs privés optionnels `artifactOwnerUid` et `directoryOwnerUid` lient les propriétaires des modules et du répertoire. Ils doivent être l'acteur de maintenance ou expectedUid ; leur omission conserve le contrat ancien. La maintenance conserve ces propriétaires et les recontrôle avec groupe, modes et empreintes. Un broker exécuté sous devops peut ainsi charger des modules détenus par l'acteur ADE, sans changement de droits.
+
+Une demande orpheline du job courant en PAUSE utilise `recoveryId: null` dans `/runs/<run_id>/validation/reconcile`. Seule la décision rejected devient possible après preuve native de non-exécution ; la même approbation doit confirmer REJECTED avant clôture du mandat. Si l'ancien contrôleur ne connaît pas le propriétaire, l'orchestrateur peut transmettre sa décision explicite par l'outil manuel reject du broker existant, puis observer REJECTED sans réémettre la demande ou exécuter le métier.
+
 La politique ordinaire explicite `--broker-policy reuse-readonly` exige
 `--layout managed-release` et `--broker-proof-file` privé 0600, propriétaire
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
-doit être la cible 1.10.6 ; la version chargée est vérifiée indépendamment.
+doit être la cible 1.10.7 ; la version chargée est vérifiée indépendamment.
 Les trois fichiers sont seulement lus et comparés au paquet. Aucun stage,
 backup restaurable, remplacement, nouveau lien ou compilation sur place du
 broker n'est effectué. Les droits et propriétaires restent conservés.
@@ -200,9 +204,9 @@ présenté comme vérifié sur la seule base d'un test simulé.
 
 ## Transition ordinaire depuis 1.9.0 vers 1.10.5
 
-Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5 et la cible 1.10.6. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 1.10.6, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
+Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5 et la cible 1.10.7. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 1.10.7, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
 
-## Registre de maintenance volumineux — 1.10.6
+## Registre de maintenance volumineux — 1.10.7
 
 Dans le profil ordinaire, seul GET /runs sans suffixe et le lecteur privé de controller-runs.json acceptent jusqu'à 16 Mio. Les autres réponses HTTP gardent 2 Mio et les autres fichiers 4 Mio. La lecture reste intégrale et bornée ; un dépassement est refusé, sans troncature ni purge. Identités, schéma, permissions, génération, PAUSE, HELD et preuves restent recontrôlés. Le banc grand registre vérifie les deux UID réels, les deux issues et le refus d'écriture au broker.
 

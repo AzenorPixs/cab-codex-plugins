@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { processIdentity, proofHash } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-export const VERSION = '1.10.6';
+export const VERSION = '1.10.7';
 export const BROKER_ARTIFACT_FILES = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -15,14 +15,18 @@ const version = (data) => data.toString('utf8').match(/^(?:SERVER_VERSION|VERSIO
 
 export function validateBrokerProof(proof, directory) {
   const keys = ['authorization','entry','expectedUid','expectedGid','manifest','loadedVersion','instanceId','opencodeProcess','brokerProcess'];
-  if (!object(proof) || Object.keys(proof).sort().join(',') !== keys.sort().join(',') ||
+  const owners = ['artifactOwnerUid','directoryOwnerUid'];
+  if (!object(proof) || keys.some((key) => !Object.hasOwn(proof,key)) ||
+      Object.keys(proof).some((key) => !keys.includes(key) && !owners.includes(key)) ||
+      owners.some((key) => Object.hasOwn(proof,key) && (!Number.isSafeInteger(proof[key]) ||
+        ![process.getuid(),proof.expectedUid].includes(proof[key]))) ||
       typeof proof.authorization !== 'string' || !proof.authorization.trim() || proof.authorization.length > 500 ||
       !isAbsolute(directory) || resolve(directory) === '/' || proof.entry !== join(resolve(directory), BROKER_ARTIFACT_FILES[0]) ||
       !Number.isSafeInteger(proof.expectedUid) || proof.expectedUid < 0 ||
       !Number.isSafeInteger(proof.expectedGid) || proof.expectedGid < 0 ||
       !object(proof.manifest) || Object.keys(proof.manifest).sort().join(',') !== [...BROKER_ARTIFACT_FILES].sort().join(',') ||
       Object.values(proof.manifest).some((value) => !/^[a-f0-9]{64}$/.test(value)) ||
-      !['1.7.1', '1.8.0', '1.9.0', '1.10.0', '1.10.1', '1.10.2', '1.10.3', '1.10.4', '1.10.5', VERSION].includes(proof.loadedVersion) ||
+      !['1.7.1', '1.8.0', '1.9.0', '1.10.0', '1.10.1', '1.10.2', '1.10.3', '1.10.4', '1.10.5', '1.10.6', VERSION].includes(proof.loadedVersion) ||
       typeof proof.instanceId !== 'string' || !/^inst-[A-Za-z0-9-]{1,100}$/.test(proof.instanceId) ||
       !identity(proof.opencodeProcess) || !identity(proof.brokerProcess) ||
       proof.brokerProcess.uid !== proof.expectedUid || proof.opencodeProcess.uid !== proof.expectedUid ||
@@ -39,7 +43,7 @@ async function artifact(path, proof) {
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > 4 * 1024 * 1024 ||
-        stat.uid !== proof.expectedUid || stat.gid !== proof.expectedGid || (stat.mode & 0o002)) fail('update-broker-artifact-unsafe');
+        stat.uid !== (proof.artifactOwnerUid ?? proof.expectedUid) || stat.gid !== proof.expectedGid || (stat.mode & 0o002)) fail('update-broker-artifact-unsafe');
     const data = await file.readFile();
     const digest = createHash('sha256').update(data).digest('hex');
     if (digest !== proof.manifest[basename(path)] || version(data) !== VERSION) fail('update-broker-artifact-divergent');
@@ -52,7 +56,7 @@ export async function inspectBrokerArtifacts(directory, proof, packageDirectory)
   validateBrokerProof(proof, directory);
   if (await realpath(directory) !== resolve(directory)) fail('update-broker-artifact-unsafe');
   const stat = await lstat(directory);
-  if (!stat.isDirectory() || stat.uid !== proof.expectedUid || (stat.mode & 0o002) ||
+  if (!stat.isDirectory() || stat.uid !== (proof.directoryOwnerUid ?? proof.expectedUid) || (stat.mode & 0o002) ||
       ((stat.mode & 0o020) && stat.gid !== proof.expectedGid)) fail('update-broker-artifact-unsafe');
   const files = {};
   for (const name of BROKER_ARTIFACT_FILES) {

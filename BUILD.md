@@ -4,6 +4,10 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
+### Distribution courante 1.10.7
+
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 1.10.7. Les qualifications des sections historiques ci-dessous restent liées à leurs versions. Le banc deux UID accepte `--actor-artifacts` : processus broker sous UID 1002, fichiers sous UID 1000 et répertoire sous UID 1002, avec empreintes et métadonnées conservées. Les deux issues (succès et réponse de déconnexion perdue) restent qualifiées. Les tests de réconciliation du job courant en PAUSE vérifient rejet seul, timeout/polling corrélé, refus des effets et persistance atomique.
+
 ## 2. État actuel de la distribution
 
 CAB est actuellement un dépôt source autonome comprenant le broker Python, le

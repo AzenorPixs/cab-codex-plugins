@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { realpath } from 'node:fs/promises';
 import { maintenanceHttp } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-export const VERSION = '1.10.6';
+export const VERSION = '1.10.7';
 const fail = (code) => { throw Object.assign(new Error(code),{code}); };
 const identity = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value) ? value : null;
 const diagnostic = (value) => typeof value === 'string' && /^[A-Z0-9_:-]{1,80}$/.test(value) ? value : null;
