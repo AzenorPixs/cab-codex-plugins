@@ -1,0 +1,13 @@
+[Unit]
+Description=CAB 1.10.4 — Supervision web locale indépendante
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cab-approval-bridge/monitor.env
+ExecStart=/usr/bin/env node %h/.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-monitor.mjs
+Restart=on-failure
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+
+# Installation et démarrage explicites par /cab start ; aucune activation au login.

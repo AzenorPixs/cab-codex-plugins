@@ -2,6 +2,26 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.10.6 — medium par défaut
+
+- Le contrôleur demande medium par défaut pour les nouveaux jobs automatiques.
+  Un niveau explicitement fourni par le prompt reste prioritaire ; les
+  prévols et reprises conservent exactement le niveau retenu.
+- Incrément commun des briques et supports source de 1.10.5 à 1.10.6. Les
+  sessions existantes et services actifs ne sont pas modifiés.
+
+## 1.10.5 — préparation source
+
+- Commande canonique `/CAB` en majuscules, avec `/cab` comme alias de compatibilité.
+- Ajout de `/CABU` sans argument, équivalent exact de `/CAB update` ; procédure unique,
+  dépendance locale de même version et refus des arguments supplémentaires avant effet.
+- Distribution du jeu CAB.md, CABU.md et cab.md : préparation complète, vérification
+  des versions et contenus, préservation des copies locales divergentes ou plus récentes,
+  restauration des seules commandes remplacées en cas d'échec.
+- Briques, copies broker, modules, unités, commandes et manifeste alignés sur 1.10.5
+  avec cachebuster neuf. Origine 1.10.4 conservée pour la maintenance ; formats et
+  marqueurs de protocoles existants inchangés. Aucune activation des services utilisateur.
+
 ## 1.10.4 — préparation source
 
 - Monitor : dernière vue et cadence sur une seule ligne après l'identité du workspace, avec défilement local sur petit écran.
@@ -9,6 +29,7 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
 - RUN et Changes triés par nombre de tâches cochées décroissant, puis identifiant du change alphabétique et identifiant RUN ; avancement inconnu placé après zéro, sans modifier les données sources.
 - Toutes les briques, modules, copies broker, plugin, commande et supports courants alignés sur 1.10.4 avec cachebuster neuf. Origine de maintenance 1.10.3 conservée et transition qualifiée à deux UID en environnement isolé, sans installation ni activation des services utilisateur.
 - Protocole corrigé dans son référentiel template puis synchronisé vers CAB : bootstrap du Monitor, catalogue des étapes et coordination par ressource réconciliés. Commande et skill conservent le choix PLLM de session et attendent une instruction sans modèle admissible ; les anciennes consignes de benchmark automatique périodique sont retirées.
+- Références OpenSpec PLLM réconciliées avec cette attente humaine : anciennes échéances conservées sans réactivation automatique et sondes statistiques indépendantes. Le contrôle documentaire compare désormais les trois références courantes aux supports CAB ; archives et composants actifs inchangés.
 
 ## 1.10.3 — préparation source
 

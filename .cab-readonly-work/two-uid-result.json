@@ -3,15 +3,15 @@
   "results": [
     {
       "scenario": "success",
-      "originalVersion": "1.10.3",
+      "originalVersion": "1.10.4",
       "largeRegistry": true,
       "publicRegistryBytes": 5218616,
       "privateRegistryBytes": 5657060,
       "actualVersions": {
-        "controller": "1.10.4",
-        "supervisor": "1.10.4",
-        "web": "1.10.4",
-        "broker": "1.10.4"
+        "controller": "1.10.5",
+        "supervisor": "1.10.5",
+        "web": "1.10.5",
+        "broker": "1.10.5"
       },
       "serviceUids": {
         "controller": 1000,
@@ -25,20 +25,20 @@
       "intentChecks": 1,
       "openCodePreserved": true,
       "pausesPreserved": true,
-      "workerBroker": false,
-      "artifactDigest": "71242c61406b82be83315c56327dec2976bc5f6d81085246b047a16c09751c86"
+      "workerBroker": true,
+      "artifactDigest": "cace722de248ebe4b6feba40d6cd2c744cde3896e4c9d192fbd8be51958c2ea7"
     },
     {
       "scenario": "disconnect-reply-lost",
-      "originalVersion": "1.10.3",
+      "originalVersion": "1.10.4",
       "largeRegistry": true,
       "publicRegistryBytes": 5218616,
       "privateRegistryBytes": 5657060,
       "actualVersions": {
-        "controller": "1.10.4",
-        "supervisor": "1.10.4",
-        "web": "1.10.4",
-        "broker": "1.10.4"
+        "controller": "1.10.5",
+        "supervisor": "1.10.5",
+        "web": "1.10.5",
+        "broker": "1.10.5"
       },
       "serviceUids": {
         "controller": 1000,
@@ -52,12 +52,12 @@
       "intentChecks": 1,
       "openCodePreserved": true,
       "pausesPreserved": true,
-      "workerBroker": false,
-      "artifactDigest": "6ee090b66a4954c96f59dc2f36392c6e35dee0f258160132690618280e2f96c8"
+      "workerBroker": true,
+      "artifactDigest": "f5c95be9d78adb99137355551fd365197219090b4cb53fcd584a239140c43636"
     }
   ],
   "image": "sha256:a717a33469731894e77e912ea7d714e27c2dc38ee6554fd1a3102e92999cfc66",
-  "inputs": "/home/devops/datas/cab/.cab-readonly-work/two-uid-inputs-d4a19415b8ba4b3da69a278b177507e0",
+  "inputs": "/home/devops/datas/cab/.cab-readonly-work/two-uid-inputs-ffeabbadf5b14f1db5ccfacdaa21842b",
   "source_files_copied": 76,
   "host_uid": 1000,
   "host_accounts_and_permissions_changed": false

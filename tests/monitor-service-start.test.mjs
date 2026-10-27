@@ -69,7 +69,7 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '1.10.4');
+  assert.equal(snapshot.version, '1.10.6');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
   assert.equal((await fetch(base)).status, 200);
   for (const route of ['/app.mjs', '/stats.mjs', '/style.css']) assert.equal((await fetch(base + route)).status, 200);
@@ -107,8 +107,8 @@ test('start, stop et reset documentent la réutilisation et les échecs sans cou
 });
 
 test('le bootstrap précède les prévols dans chaque point d’entrée distribué', async () => {
-  const command = await readFile(new URL('../.codex/commands/cab.md', import.meta.url), 'utf8');
-  const start = command.split('## `/cab start`')[1].split('\n## ')[0];
+  const command = await readFile(new URL('../.codex/commands/CAB.md', import.meta.url), 'utf8');
+  const start = command.split('## `/CAB start`')[1].split('\n## ')[0];
   const routing = command.split('## RUN concurrents')[0];
   assert.match(routing, /Pour `start`, `run` ou `resume`, commencer par le seul bootstrap du monitoring/);
   assert.match(routing, /avant toute\s+réservation, PLLM ou vérification OpenCode\/CAB/);
