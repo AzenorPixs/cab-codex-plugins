@@ -2,7 +2,7 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `1.10.7`.
+Version de référence des briques CAB : `1.10.9`.
 
 La maintenance conserve les propriétaires réels des artefacts et des processus, qui peuvent être distincts lorsqu'ils sont explicitement prouvés. Une demande orpheline du job courant en pause ne peut être reconstruite que pour son rejet après exclusion native de tout effet ; cette réconciliation n'autorise aucune exécution.
 
@@ -334,10 +334,12 @@ décision d'approbation.
 - `/CAB test` : vérifie le chemin complet de validation dans cette session ;
 - `/CAB run` : maintient le job piloté et ses mandats unitaires dans cette
   même session, sauf récupération explicite contrôlée conservant le RUN ;
-- `/CAB update` : actualise le plugin et la commande de profil depuis leur
-  source validée, puis déploie broker, contrôleur, superviseur et Web. Les
-  briques actives sont mises à jour sous maintenance partagée, avec sauvegarde,
-  contrôle des RUN et repli ; les briques inactives restent inactives ;
+- `/CAB update` (`/CABU` sans argument) : valide le jeu, arrête systématiquement
+  les trois unités systemd CAB, remplace les fichiers du broker, contrôleur,
+  superviseur et Web, puis redémarre les unités sans activation au login. Il ne
+  consulte pas les états RUN ou de coordination en précondition. Si OpenCode est
+  absent, les fichiers broker sont quand même installés et sa version runtime
+  est rapportée `INDISPONIBLE` ; le bilan sépare fichiers et processus ;
 - `/CAB stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
   arrêter OpenCode ni le broker MCP géré par OpenCode.
 
