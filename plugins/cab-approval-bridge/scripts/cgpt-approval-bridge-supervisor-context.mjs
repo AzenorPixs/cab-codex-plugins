@@ -1,15 +1,17 @@
 import { readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
+import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 
-export const VERSION = "1.7.1";
+export const VERSION = "1.10.5";
+if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
 function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "1.7.1";
+const version = "1.10.5";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -98,6 +100,7 @@ async function fetchJson(url, options = {}) {
 }
 
 function resumeAllowed(status, job) {
+  if (job?.codingModel !== undefined && !validCodingModel(job.codingModel)) return 'model-selection-invalid';
   if (runId && status.coordination?.reason) return status.coordination.reason;
   if (runId && (status.hasUnresolvedOperation || status.coordination?.accesses?.some((a) =>
     ['WAITING', 'HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state)))) return 'resource-access-active';
@@ -252,7 +255,8 @@ async function reconcile() {
 
     const latestStatus = await fetchJson(`${controllerUrl}/status`);
     const latestJob = await fetchJson(`${controllerUrl}/job`);
-    const changed = latestJob?.jobId !== job.jobId || latestJob?.sessionId !== job.sessionId;
+    const changed = latestJob?.jobId !== job.jobId || latestJob?.sessionId !== job.sessionId ||
+      JSON.stringify(latestJob?.codingModel) !== JSON.stringify(job.codingModel);
     const latestDenial = resumeAllowed(latestStatus, latestJob);
     if (changed || latestDenial) {
       state.resumeInFlight = false;
@@ -266,6 +270,8 @@ async function reconcile() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
+          ...(job.codingModel ? { model: { providerID: job.codingModel.providerID, modelID: job.codingModel.modelID },
+            variant: job.codingModel.reasoning } : {}),
           parts: [{ type: "text", text: resumeMessage(job) }],
         }),
       }

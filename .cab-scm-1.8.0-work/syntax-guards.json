@@ -1,0 +1,178 @@
+{
+  "syntax": [
+    {
+      "file": "src/cgpt_approval_bridge_router.py",
+      "exit": 0
+    },
+    {
+      "file": "src/cgpt_approval_bridge_server.py",
+      "exit": 0
+    },
+    {
+      "file": "src/cgpt_approval_bridge_journal.py",
+      "exit": 0
+    },
+    {
+      "file": "tests/concurrent-controller.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/test_session_reset.py",
+      "exit": 0
+    },
+    {
+      "file": "tests/test_crash_recovery.py",
+      "exit": 0
+    },
+    {
+      "file": "tests/monitor-service-start.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/web-monitor.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/native-opencode.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/web-monitor-browser.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/controller-service-distribution.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/active-component-update.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/maintenance-bootstrap.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py",
+      "exit": 0
+    }
+  ],
+  "guards": {
+    "checkRecoveryRetry": {
+      "identical_to_original": true,
+      "sha256": "6dcbb0ac71745215e04fb000fa5a8534433ee591ca4c882bb903719fc3bc335a"
+    },
+    "checkRecoveryPreflight": {
+      "identical_to_original": true,
+      "sha256": "c2623d40fdf314a47eb610b3d37303fe70acaefd69a8411b547426b22f352de9"
+    },
+    "checkNativeAsk": {
+      "identical_to_original": true,
+      "sha256": "c98852fcbbbabe1b0c71a927ef9ca930147326d81b0ab56a6301445063f8adeb"
+    },
+    "nativeAskGuard": {
+      "identical_to_original": true,
+      "sha256": "1556e7287bf23f87624e4f73df17b67c306582b07f505c82dcbccb6e7a5b553b"
+    },
+    "transmitApprovedOperation": {
+      "identical_to_original": true,
+      "sha256": "e5e9701586c4b9159e5b596a7bd7a99a177db662737da31621346233841045f1"
+    }
+  }
+}

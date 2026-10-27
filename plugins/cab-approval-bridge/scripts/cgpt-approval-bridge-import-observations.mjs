@@ -7,7 +7,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
 import { appendSegment, digest, safeRead, validateBundle } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = '1.7.1';
+export const VERSION = '1.10.5';
 const validId = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(value) &&
   !['constructor', 'prototype', '__proto__'].includes(value);
 const timestamp = (value) => typeof value === 'number' ? Math.round(value * 1000) : Date.parse(value);

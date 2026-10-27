@@ -1,0 +1,35 @@
+{
+  "version": "1.8.0",
+  "mode": "SCM direct explicitement demandé",
+  "changes": [
+    "fix-orphaned-validation-admission",
+    "support-frozen-recovery-controller-maintenance"
+  ],
+  "archives_done": true,
+  "runtime_untouched": true,
+  "latest_user_extension": [
+    "support générique managed-release à liens relatifs",
+    "diagnostic métadonnées PENDING filtré sans annulation"
+  ],
+  "last_proofs": [
+    "node-release.txt:363 pass/0 fail/1 skip",
+    "python-release.txt:72 pass",
+    "source-final.json:40 syntax/5 guards/3 copies",
+    "closure-final.json:archives/reports/canonical sync/encoding",
+    "openspec-release-after-archive.json:13/13"
+  ],
+  "activation_blockers": [
+    "ancienne demande legacy non routee a traiter par decision explicite applicable",
+    "PAUSE/frontiere sure des pairs a prouver",
+    "M2/reparation/M3 a autoriser distinctement",
+    "broker lance depuis CAB/src uid1002 face aux services uid1000 : reuse readonly intercomptes non implemente"
+  ],
+  "forbidden": [
+    "Git",
+    "installation réelle",
+    "mutation Pixs/runtime",
+    "arrêt/restart réel"
+  ],
+  "source_cycle_complete": true,
+  "source_launch_overlap": "broker vivant charge1.7.1; fichier de lancement CAB/src modifie en source1.8.0; aucune relance/configuration"
+}

@@ -1,0 +1,11 @@
+✔ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (6271.235571ms)
+✔ transition mixte : un pair inactif sans PAUSE explicite reste bloquant (3829.274979ms)
+✔ maintenance gelée : un autre PENDING global interdit le chargement (4865.716229ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15032.730808

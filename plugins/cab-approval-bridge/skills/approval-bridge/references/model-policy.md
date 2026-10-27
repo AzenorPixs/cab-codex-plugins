@@ -1,0 +1,62 @@
+# CAB 1.10.5 — modèle de codage et PLLM automatique
+
+## Priorité du prompt
+
+Un modèle concret spécifié dans le prompt conserve sa priorité. Sinon utiliser la PLLM en mode automatique, dans les priorités publiées de 1 à 6, sans figer un fournisseur ou un nom de modèle. Distinguer l'identifiant API model_id du nom commercial model. Le raisonnement explicitement spécifié reste prioritaire. Sans niveau explicite, appliquer high, puis xhigh si high n'est pas disponible, puis la politique PLLM de priorité inférieure si les deux sont indisponibles. Ne pas revenir à low par défaut.
+
+Le développeur a confirmé le 25 octobre 2026 qu'un modèle explicitement imposé sans high ni xhigh reste conservé et bloque. Aucun repli automatique vers un autre modèle n'est autorisé dans ce cas. Un niveau explicitement imposé indisponible bloque aussi pour ce modèle. Dans la sélection automatique, examiner les politiques suivantes qui satisfont ce niveau exact.
+
+## Catalogue public du skill actif
+
+Résoudre le skill PLLM effectivement actif, puis son data/pllm-current.json public. Configurer le contrôleur autorisé avec OC_Codex_PLLM_CATALOG absolu ; OC_CGPT_PLLM_CATALOG reste un alias seulement en absence du nom principal. Ne jamais pointer un fichier de secrets ou de configuration privée. Un catalogue absent, invalide, lié ou ambigu est refusé sans autre recherche. Cette préparation source n'installe pas cette configuration dans un service actif.
+
+Le catalogue schéma 2 et les priorités sont contrôlés. N'utiliser que les entrées Valide évaluées dans cette publication, evaluated_this_run=true, avec dates cohérentes. Une publication active peut conserver des lignes historiques des politiques non visitées : elles ne sont pas des candidates actuelles. En cas de besoin, faire évaluer les politiques nécessaires par le skill actif selon les accords applicables ; ne pas modifier son évaluateur ni présenter sa mémoire comme preuve actuelle. Une simple lecture du catalogue ne lance aucun benchmark.
+
+La sélection publiée low ne prouve pas la disponibilité ou les performances de high/xhigh. Vérifier GET /provider de l'OpenCode ciblé : fournisseur connecté, identifiant exact et variantes réellement exposées. Une variante absente ou désactivée est indisponible. Une métadonnée manquante, une erreur d'authentification, de quota ou de réseau n'est pas une preuve d'incompatibilité du raisonnement ; arrêter avec la cause, sans bascule spéculative.
+
+## Résolution, prévol puis armement
+
+1. Après bootstrap du monitoring, résoudre les exigences du prompt. POST /model-policy/resolve reçoit un objet contenant model et reasoning seulement si explicitement fixés ; model est providerID/modelID. Avec {}, le défaut est PLLM automatique et high/xhigh/repli de priorité. La réponse est un choix proposé avec preflightRequired=true, jamais une autorisation ni une preuve de génération.
+2. Selon les accords de transmission applicables, préparer le fournisseur par la voie standard permise, sans exposer de secret, puis exécuter un prévol borné sans outil sur le fournisseur, modèle et variante exacts. Préserver OpenCode et les pairs ; toute maintenance commune demeure distinctement autorisée. Une réponse tronquée, une erreur ou une autre variante ne réussit pas ce contrôle. Ne pas assimiler le benchmark low à ce prévol. Aucune nouvelle évaluation fournisseur n'est déclenchée par le serveur CAB lui-même.
+3. Avant de supprimer la seule session temporaire du prévol, armer le job avec modelSelectionProtocol=pllm-auto-v1, modelSelection={model?,reasoning?} et modelPreflight={sessionId,messageId}, en plus du contrat de job. Le contrôleur relit le catalogue et les capacités ; il corrèle la session au workspace, le message assistant terminé avec finish=stop, son parent utilisateur, le fournisseur, modèle et variant exacts, ainsi qu'une réponse texte sans outil. Une preuve divergente refuse l'armement.
+4. Vérifier GET /runs/<runId>/job : codingModel conserve fournisseur, modèle, raisonnement, provenance, priorité, empreinte de catalogue et référence du prévol. Ensuite seulement effectuer les prévols et mandats CAB ordinaires. Le catalogue ne remplace ni permission once ni gate.
+
+Tout nouveau job piloté par le protocole 1.10.5 négocie pllm-auto-v1, même si modelSelection est {}. Les contrats historiques non négociés et les jobs déjà persistés restent lisibles, sans prétendre qu'ils ont adopté ces nouveaux défauts. Un champ codingModel fourni directement par le client est refusé : il est produit par le serveur après preuve.
+
+## Reprise et responsabilités
+
+Appliquer la section « PLLM Automatique — fraîcheur initiale et conservation du choix » du protocole commun : fraîcheur de huit heures au seul démarrage initial, conservation du choix du RUN pendant la session et réévaluation sur panne réelle ou instruction explicite. Sans politique admissible, conserver état et preuves et attendre l'instruction du développeur, sans benchmark ni réessai automatique. Les sondes statistiques ne renouvellent jamais ce choix.
+
+Un job conserve son choix après redémarrage. Son réarmement ne peut changer fournisseur, modèle, raisonnement ou politique ; une répétition identique conserve la preuve initiale. Le superviseur transmet explicitement model={providerID,modelID} et variant=reasoning dans ses messages de reprise, et recontrôle que le choix n'a pas changé pendant ses lectures. Il ne sélectionne pas un nouveau modèle en attente d'une décision, d'une ressource ou d'un effet inconnu.
+
+Un changement de choix exige une nouvelle frontière autorisée et un contrat cohérent, sans rejouer une permission. Le broker transporte les décisions sans choisir de LLM. Le moniteur reste sans LLM. Le validateur Codex conserve son moteur et son rôle distincts du modèle de codage OpenCode. Aucune propagation aux prompts consommateurs, configuration de fournisseur ou activation runtime n'est déduite du travail source.
+
+## Contrats de référence et qualification
+
+Les API publiques sont décrites dans [OpenCode Server](https://docs.opencode.ai/docs/server/) et les variantes dans [OpenCode Models](https://docs.opencode.ai/docs/models/). La qualification SCM utilise catalogues et services natifs simulés, plus les suites de distribution et de reprise. Elle ne prouve aucune génération high/xhigh auprès d'un fournisseur réel et ne modifie pas les agents actifs.
+
+## Variante exposée mais explicitement rejetée
+
+Si un prévol échoue pour un paramètre de raisonnement reconnu, transmettre dans modelSelection.unavailablePreflights les références {sessionId,messageId} de ces échecs, au maximum douze. Le contrôleur relit les messages natifs et leur parent, vérifie workspace, fournisseur, modèle, variante et date postérieure à l'évaluation actuelle. Il n'admet que APIError HTTP 400 avec un code reconnu d'incompatibilité et un paramètre de raisonnement connu. Les refus 401/403/429, erreurs réseau et paramètres étrangers ne justifient aucune exclusion de variante.
+
+Un rejet prouvé de high permet d'essayer xhigh ; un rejet prouvé des deux permet la politique automatique suivante. Le modèle explicite reste bloquant. Le choix final exige toujours son propre prévol réussi. codingModel conserve seulement les identités et références filtrées des échecs, jamais leurs corps bruts ou messages libres.
+
+Un retour à un ancien contrôleur ou superviseur après un armement négocié n'est pas qualifié : conserver les états récents et un lecteur compatible jusqu'à réconciliation. Les versions identiques du jeu chargé ne dispensent pas de vérifier la capacité pllm-auto-v1.
+
+## Budget de lecture défini par la session — 1.10.5
+
+La session de pilotage fixe explicitement `providerMaxBytes` en octets dans le corps de `POST /model-policy/resolve`, puis répète ce champ dans `modelSelection` lors de l'armement négocié. Exemple de structure : `{ "model": "<fournisseur>/<modèle>", "reasoning": "high", "providerMaxBytes": <budget_entier_en_octets> }`. La valeur appartient à la session ; CAB l'applique exactement au seul `/provider` de cet appel et n'ajoute pas de plafond fixe. Elle doit être un entier sûr strictement positif ; null, chaîne, fraction et dépassement d'entier sûr sont refusés avant observation.
+
+En omission, le défaut compatible reste 2 Mio. Les observations de sessions/messages et le fichier public PLLM gardent leurs bornes distinctes de 2 Mio. Le budget n'est pas global, ne se transmet pas implicitement à un autre appel et ne change aucun modèle ou job déjà armé. Les flux trop grands sont interrompus avant parsing et refusés avec `model-observation-too-large`. Aucun corps /provider, paramètre privé ou erreur brute ne doit être copié dans une sortie, un rapport ou un job. Le prévol exact, les permissions et les gardes de modèle restent inchangés.
+
+## Préparation et identités natives — 1.10.5
+
+Pour la sélection automatique, avant le démarrage autorisé, résoudre la racine du skill PLLM actif puis appeler `node <plugin>/scripts/cgpt-approval-bridge-prepare-model-policy.mjs --pllm-skill-root <racine-absolue>`. Un chemin explicite peut être fourni avec `--catalog-path <chemin-public>`. La préparation privilégie la variable principale, son alias historique en absence du principal, puis le fichier data/pllm-current.json sous la racine fournie ; aucune recherche de configuration privée n'est effectuée. Un chemin explicite vide ou invalide bloque sans repli silencieux. Le lecteur conserve les gardes de fichier et de publication.
+
+L'outil restitue uniquement catalogPath, source et environment={OC_Codex_PLLM_CATALOG:...}. Il ne modifie aucun fichier ou service. Le démarrage autorisé fusionne ce patch dans la configuration du contrôleur en préservant ses autres options. Contrôler ensuite /model-policy/resolve avec providerMaxBytes fixé par le pilotage : la réussite du CLI seule ne prouve pas que le processus a reçu la variable. Sans catalogue valide ou résolution réussie, ne pas armer de nouveau job. La lecture ne relance aucune évaluation PLLM et ne modifie pas les dates publiées.
+
+Le sélecteur privilégie toujours l'identifiant natif exact publié. Si le catalogue porte opencodego et que cette identité est absente, le seul rapprochement connu est opencode-go, unique, connecté et publiant le modèle exact. Aucun retrait arbitraire de ponctuation ni autre fournisseur ne sert de substitut. Une identité exacte présente mais déconnectée bloque. La sélection automatique conserve logicalProviderID, providerID natif, mode, priorité et digest du catalogue original ; les prévols et messages utilisent le natif. Le modèle explicitement imposé conserve son identité exacte. Les preuves de repli sont corrélées à cette même correspondance sans changer l'ordre PLLM.
+
+Le prévol et l'indisponibilité lisent parent.info.model.variant (schéma natif observé) et parent.info.variant (historique). Au moins un de ces champs parent doit être valide ; tous ceux présents, ainsi que assistant.info.variant s'il est présent, doivent être identiques. Les formes historiques sans champ assistant restent lisibles. Une contradiction, valeur invalide ou absence de variante parent refuse la preuve. Les gardes de session, répertoire, parent, modèle, fournisseur, date, finish stop et absence d'outil restent applicables. Les erreurs auth/quota/réseau ne deviennent jamais des preuves de raisonnement indisponible.
+
+Les anciens jobs sans logicalProviderID restent valides. Après armement d'un nouveau job portant ce champ, un lecteur strict 1.10.2 n'est pas qualifié pour ce contrat : conserver le lecteur compatible et les preuves plutôt que restaurer une sauvegarde métier. La préparation et le paquet source n'activent aucune configuration ou reprise.

@@ -2,13 +2,15 @@ import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import test from 'node:test';
+import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
+import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -16,9 +18,23 @@ async function waitFor(check) {
   for (let i = 0; i < 200; i++) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
-async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
+async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
   const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
+  if (codingPolicy) {
+    const stamp=new Date(Date.now()-60000).toISOString();
+    const catalog={schema_version:2,evaluated_at:stamp,published_at:stamp,selection_status:'selected',selected_mode:'mode1',
+      models:Array.from({length:6},(_,i)=>({mode:'mode'+(i+1),priority:i+1,state:'Valide',selected:i===0,provider:'provider'+(i+1),
+        model_id:'model'+(i+1),evaluated_this_run:true,evaluated_at:stamp,reasoning:'low'}))};
+    const activeRoot=join(directory,'active-skill');if(prepareCatalog)mkdirSync(join(activeRoot,'data'),{recursive:true});
+    const path=prepareCatalog?join(activeRoot,'data/pllm-current.json'):join(directory,'pllm-current.json');writeFileSync(path,JSON.stringify(catalog));
+    native.catalogPath=path;
+    if(prepareCatalog){native.preparation=prepareControllerModelPolicy({environment,activeSkillRoot:activeRoot});environment={...environment,...native.preparation.environment};}
+    else environment={...environment,OC_Codex_PLLM_CATALOG:path};
+    native.providers={connected:catalog.models.map(m=>m.provider),all:catalog.models.map(m=>({id:m.provider,models:{[m.model_id]:{variants:{high:{},xhigh:{},low:{}}}}}))};
+    native.messages.ses_probe=[{info:{id:'msg_user',sessionID:'ses_probe',role:'user',model:{providerID:'provider1',modelID:'model1'},variant:'high'},parts:[]},
+      {info:{id:'msg_response',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_user',providerID:'provider1',modelID:'model1',time:{completed:Date.now()-10}},parts:[{type:'text',text:'probe ok'}]}];
+  }
   const eventStreams = new Set();
   native.emit = (event) => { for (const stream of eventStreams) stream.write('data: ' + JSON.stringify(event) + '\n\n'); };
   const children = [];
@@ -32,7 +48,9 @@ async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
       response.write('data: {"type":"server.connected"}\n\n'); return;
     }
     let payload;
-    if (url.pathname === '/permission') payload = native.permissions;
+    if (url.pathname === '/provider') payload = native.providers || {all:[],connected:[]};
+    else if (/^\/session\/[^/]+\/message\/[^/]+$/.test(url.pathname)) payload=(native.messages[url.pathname.split('/')[2]] || []).find(m=>m.info?.id===url.pathname.split('/')[4]);
+    else if (url.pathname === '/permission') payload = native.permissions;
     else if (url.pathname === '/global/health') payload = { healthy: true };
     else if (url.pathname === '/path') payload = { directory };
     else if (url.pathname === '/mcp') payload = { 'cgpt-validation': { status: 'connected' } };
@@ -94,12 +112,12 @@ async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
       directory, changeId: 'change-' + id, strictCommands: true, criteria: ['delivery', 'statistics'] });
     assert.equal(arm.status, 201, JSON.stringify(arm)); return r.body;
   }
-  const approval = (run, requestId) => {
+  const approval = (run, requestId, expectedRevisions = null) => {
     const resources = requestId.startsWith('preflight') ? run.resources.map((r) => ({ ...r, mode: 'read' })) : run.resources;
     const value = { run_id: run.runId, reservation_version: run.version,
     coordination_protocol: 'resource-scoped-v1', operation_id: 'op-' + requestId,
     operation_digest: createHash('sha256').update(requestId).digest('hex'),
-    expected_revisions: Object.fromEntries(resources.map((r) => [r.key, 0])),
+    expected_revisions: expectedRevisions || Object.fromEntries(resources.map((r) => [r.key, 0])),
     requestId, approval_id: 'approval-' + requestId, session_id: run.sessionId,
     change_id: run.changeId, directory, files: [], commands: ['/usr/bin/true'],
     resources, title: 'isolated command', summary: 'synthetic fixture' };
@@ -110,8 +128,8 @@ async function setup(t, { reconnectMs = 30, environment = {} } = {}) {
   };
   await start();
   await post('/broker/readiness', { status: 'READY', pending_count: 0, infrastructure_status: 'READY' });
-  async function approvedAccess(run, requestId) {
-    const value = approval(run, requestId);
+  async function approvedAccess(run, requestId, expectedRevisions) {
+    const value = approval(run, requestId, expectedRevisions);
     assert.equal((await post('/validation/request', { approval: value })).status, 202);
     assert.equal((await post('/runs/' + run.runId + '/decision/' + value.requestId, { decision: 'approved' })).status, 201);
     const acquired = await post('/runs/' + run.runId + '/locks/acquire', { version: run.version,
@@ -485,6 +503,227 @@ test('une session allow est refusée sans bloquer la permission once d’un autr
   assert.equal((await h.get('/runs/a/job')).body.sessionId, 'ses_a');
 });
 
+test('admission ask refusée puis corrigée : aucun propriétaire ou opération orphelin', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a');
+  const approval = h.approval(a, 'ask-drift');
+  let reads = 0;
+  h.native.onRequest = async (path) => {
+    if (path === '/session/ses_a' && ++reads === 2) {
+      h.native.rules.ses_a = [{ permission: 'bash', pattern: '*', action: 'allow' }];
+    }
+  };
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/validation/resource-request', { approval })).body.error, 'native-permission-ask-required');
+  const refused = (await h.get('/runs')).body;
+  assert.deepEqual(refused.requestOwners, before.requestOwners);
+  assert.deepEqual(refused.coordination.operations, before.coordination.operations);
+  assert.equal((await h.get('/runs/a/status')).body.undecidedValidationCount, 0);
+  h.native.onRequest = null; h.native.rules.ses_a = [{ permission: '*', pattern: '*', action: 'ask' }];
+  assert.equal((await h.post('/validation/resource-request', { approval })).status, 202);
+  assert.equal((await h.post('/runs/a/decision/ask-drift', { decision: 'rejected' })).status, 201);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('adoption maintenance : corps client et transaction inconnue ne produisent pas HELD',async(t)=>{
+  const h=await setup(t);await h.reserve('a');const before=(await h.get('/runs')).body;
+  assert.equal((await h.post('/coordination/maintenance/adopt',{transactionId:'../../outside',sealDigest:'0'.repeat(64)})).status,409);
+  assert.equal((await h.post('/coordination/maintenance/adopt',{transactionId:'maintenance-00000000-0000-0000-0000-000000000000',sealDigest:'0'.repeat(64),path:'/outside'})).status,400);
+  assert.deepEqual((await h.get('/runs')).body,before);assert.deepEqual(h.native.replies,[]);
+});
+
+async function orphanedPreflight(t, mutate = () => {}) {
+  const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
+  const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new',
+    recoveryId: 'recovery-orphan', preflightRequestId: 'preflight-orphan' };
+  assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const approval = h.approval({ ...a, sessionId: recovery.sessionId }, recovery.preflightRequestId);
+  h.native.messages.ses_a_new[0].parts[0].state = { status: 'completed', input: structuredClone(approval),
+    output: JSON.stringify({ ...approval, status: 'PENDING', notification_status: 'FAILED' }) };
+  await h.stop();
+  // Reproduire l'état durable produit par l'ancienne admission, uniquement dans la fixture arrêtée.
+  const registry = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  await registry.acquireAuthority();
+  try {
+    registry.prepareOperation(a.runId, approval, { candidateSession: recovery.sessionId });
+    const keys = ['run_id','reservation_version','requestId','approval_id','change_id','session_id','directory',
+      'title','summary','files','commands','resources','coordination_protocol','operation_id','operation_digest','expected_revisions','access_id'];
+    const identity = Object.fromEntries(keys.map((key) => [key, approval[key] ??
+      (['resources','commands'].includes(key) ? [] : key === 'summary' ? '' : null)]));
+    registry.claimRequest('a', approval.requestId, createHash('sha256').update(JSON.stringify(identity)).digest('hex'), false);
+    mutate(registry, approval); registry.persist();
+  } finally {
+    const ended = new Promise((resolve) => registry.lock.once('exit', resolve)); registry.close(); await ended;
+  }
+  await h.start();
+  await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 1 });
+  const payload = { transactionId: 'reconcile-orphan', developerAuthorization: 'accord-humain-fixture-source-runtime-distinct',
+    jobId: recovery.jobId, recoveryId: recovery.recoveryId, approval };
+  return { h, a, b, approval, recovery, payload };
+}
+
+test('prévol orphelin : rejet seul durable, notifications répétées, pair actif puis retry existant', async (t) => {
+  const { h, b, approval, recovery, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/validation/resource-request', { approval })).body.error, 'request-reconciliation-required');
+  h.native.busy.ses_b = { type: 'busy' };
+  const receipt = await h.post('/runs/a/validation/reconcile', payload);
+  assert.equal(receipt.status, 201, JSON.stringify(receipt));
+  assert.equal(receipt.body.outcome, 'REJECTION_ONLY');
+  assert.equal((await h.get('/runs/a/decision/' + approval.requestId)).status, 404);
+  assert.deepEqual((await h.post('/runs/a/validation/reconcile', payload)).body, receipt.body);
+  assert.equal((await h.post('/runs/a/validation/reconcile', { ...payload, developerAuthorization: 'autre-accord' })).status, 409);
+  for (const route of ['/validation/resource-request', '/validation/resource-reminder']) {
+    assert.equal((await h.post(route, { approval })).status, 202);
+  }
+  for (const decision of ['approved', 'needs_clarification']) {
+    assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision })).status, 400);
+  }
+  assert.equal((await h.post('/runs/a/locks/acquire', { version: approval.reservation_version,
+    operationId: approval.operation_id, operationDigest: approval.operation_digest, resources: approval.resources,
+    expectedRevisions: approval.expected_revisions })).status, 409);
+  assert.deepEqual(h.native.replies, []);
+  const after = (await h.get('/runs')).body;
+  assert.deepEqual(after.runs.find((r) => r.runId === 'b'), before.runs.find((r) => r.runId === 'b'));
+  assert.deepEqual(after.coordination.accesses, before.coordination.accesses);
+  const restored = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  assert.deepEqual(restored.requestOwners[approval.requestId].reconciliation, receipt.body);
+  assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly, true);
+  assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
+  const decision = (await h.get('/runs/a/decision/' + approval.requestId)).body;
+  assert.equal(decision.approval_id, approval.approval_id); assert.equal(decision.decision, 'rejected');
+  h.native.messages.ses_a_new.push({ parts: [{ type: 'tool', tool: 'cgpt-validation_poll_approval',
+    state: { status: 'completed', input: { approval_id: approval.approval_id },
+      output: JSON.stringify({ ...approval, status: 'REJECTED' }) } }] });
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 0 });
+  const retry = await h.post('/runs/a/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: approval.requestId, preflightRequestId: 'preflight-orphan-next' });
+  assert.equal(retry.status, 200, JSON.stringify(retry));
+  assert.equal(retry.body.jobId, recovery.jobId);
+  assert.equal(retry.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(retry.body.recovery.recoveryId, recovery.recoveryId);
+  assert.equal(retry.body.recovery.preflightRequestId, 'preflight-orphan-next');
+  assert.deepEqual(h.native.replies, []);
+  assert.equal((await h.get('/runs/b/job')).body.sessionId, b.sessionId);
+});
+
+test('réconciliation orpheline : autorisation, identités et preuves divergentes sont refusées sans mutation', async (t) => {
+  const { h, approval, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  const bad = [
+    { ...payload, developerAuthorization: '' }, { ...payload, jobId: 'job-autre' },
+    { ...payload, recoveryId: 'recovery-autre' },
+    ...[{ requestId: 'preflight-autre' }, { approval_id: 'autre' }, { session_id: 'ses_other' },
+      { reservation_version: approval.reservation_version + 1 }, { operation_digest: '0'.repeat(64) },
+      { commands: ['true'] }, { title: 'autre' }, { summary: 'autre' },
+      { resources: approval.resources.map((r) => ({ ...r, mode: 'write' })) },
+      { expected_revisions: Object.fromEntries(approval.resources.map((r) => [r.key, 1])) }]
+      .map((change) => ({ ...payload, approval: { ...approval, ...change } })),
+  ];
+  for (const candidate of bad) {
+    const response = await h.post('/runs/a/validation/reconcile', candidate);
+    assert.ok(response.status >= 400, JSON.stringify(candidate));
+    assert.deepEqual((await h.get('/runs')).body, before);
+  }
+  for (const status of ['APPROVED', 'REJECTED', 'CANCELLED']) {
+    h.native.messages.ses_a_new[0].parts[0].state.output = JSON.stringify({ ...approval, status });
+    assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  }
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : effet natif, permission et candidate allow maintiennent le gel', async (t) => {
+  const { h, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  h.native.permissions = [{ id: 'pending', sessionID: 'ses_a_new', permission: 'bash' }];
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  h.native.permissions = []; h.native.rules.ses_a_new = [{ permission: 'bash', pattern: '*', action: 'allow' }];
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  h.native.rules.ses_a_new = [{ permission: '*', pattern: '*', action: 'ask' }];
+  h.native.messages.ses_a_new.push({ parts: [{ type: 'tool', tool: 'bash',
+    state: { status: 'completed', input: { command: '/usr/bin/true' }, metadata: { exit: 0 } } }] });
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : opération durable commencée ou incertaine refusée', async (t) => {
+  for (const state of ['ISSUING', 'EXECUTING', 'UNKNOWN', 'COMPLETED']) await t.test(state, async (subtest) => {
+    const { h, payload } = await orphanedPreflight(subtest, (registry, approval) => {
+      registry.resourceState.operations[approval.operation_id].state = state;
+    });
+    const before = (await h.get('/runs')).body;
+    assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+    assert.deepEqual((await h.get('/runs')).body, before);
+    assert.deepEqual(h.native.replies, []);
+  });
+});
+
+test('réconciliation orpheline : propriétaire ou opération absent/divergent ne se reconstruit pas', async (t) => {
+  for (const kind of ['owner-absent', 'owner-digest', 'operation-absent', 'operation-digest']) await t.test(kind, async (subtest) => {
+    const { h, payload } = await orphanedPreflight(subtest, (registry, approval) => {
+      if (kind === 'owner-absent') delete registry.requestOwners[approval.requestId];
+      if (kind === 'owner-digest') registry.requestOwners[approval.requestId].digest = '0'.repeat(64);
+      if (kind === 'operation-absent') delete registry.resourceState.operations[approval.operation_id];
+      if (kind === 'operation-digest') registry.resourceState.operations[approval.operation_id].identityDigest = '0'.repeat(64);
+    });
+    const before = (await h.get('/runs')).body;
+    assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+    assert.deepEqual((await h.get('/runs')).body, before);
+  });
+});
+
+test('réconciliation orpheline : un reçu après perte du contexte ne restaure aucune décision', async (t) => {
+  const { h, payload, approval } = await orphanedPreflight(t);
+  assert.equal((await h.get('/status')).body.notificationReconciliation, 'rejection-only-v1');
+  const result = await h.post('/runs/a/validation/reconcile', payload); assert.equal(result.status, 201);
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 1 });
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).body.error, 'notification-reconciliation-context-lost');
+  assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'approved' })).status, 400);
+  assert.equal((await h.get('/runs/a/decision/' + approval.requestId)).status, 404);
+  assert.deepEqual((await h.get('/runs')).body.requestOwners[approval.requestId].reconciliation, result.body);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : historique modifié pendant les contrôles reste refusé', async (t) => {
+  const { h, payload } = await orphanedPreflight(t);
+  const before = (await h.get('/runs')).body;
+  let reads = 0;
+  h.native.onRequest = async (path) => {
+    if (path === '/session/ses_a_new/message' && ++reads === 2) {
+      h.native.messages.ses_a_new.push({ parts: [{ type: 'tool', tool: 'bash',
+        state: { status: 'completed', input: { command: '/usr/bin/true' }, metadata: { exit: 0 } } }] });
+    }
+  };
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : un accès déjà attribué interdit la réparation', async (t) => {
+  const { h, payload } = await orphanedPreflight(t, (registry, approval) => {
+    registry.acquireAccess('a', { version: approval.reservation_version, operationId: approval.operation_id,
+      operationDigest: approval.operation_digest, resources: approval.resources,
+      operationIds: [approval.operation_id], expectedRevisions: approval.expected_revisions });
+  });
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('réconciliation orpheline : une candidate détenue par un pair est refusée', async (t) => {
+  const { h, payload } = await orphanedPreflight(t, (registry, approval) => {
+    registry.reserve({ runId: 'c', ownerId: 'codex-c', sessionId: approval.session_id, directory: registry.directory,
+      changeId: 'change-c', selectionKey: 'intent-c', dependsOn: [], resources: [{ key: 'file:src/c.py', mode: 'read' }] });
+  });
+  const before = (await h.get('/runs')).body;
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).body.error,
+    'notification-reconciliation-session-already-owned');
+  assert.deepEqual((await h.get('/runs')).body, before);
+  assert.deepEqual(h.native.replies, []);
+});
+
 test('un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b', {
     resources: [{ key: 'file:src/b.py', mode: 'read' }] });
@@ -606,7 +845,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.7.1');
+  assert.equal(initialized.result.serverInfo.version, '1.10.5');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -986,4 +1225,194 @@ test('une opération consommée ne réinscrit pas sa session après la réconcil
   assert.deepEqual((await h.get('/runs')).body.coordination.legacySources, []);
   assert.equal((await h.reserve('a')).state, 'RESERVED');
   assert.equal(h.native.replies.length, 1); assert.equal(h.native.replies[0].body.response, 'once');
+});
+
+
+test('environnement Docker HTTP : conservation entre commandes et restitution prouvée avant le pair', async (t) => {
+  const h=await setup(t);const resources=[{key:'docker:engine-a',mode:'write'}];
+  const a=await h.reserve('a',{resources});const b=await h.reserve('b',{resources});
+  assert.equal((await h.get('/status')).body.testResourceProtocol,'test-resources-v1');
+  const acquire={version:a.version,transactionId:'tests-a',resources,evidence:['identité du moteur vérifiée']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquire)).body;
+  assert.equal(lease.state,'HELD');
+  assert.equal((await h.post('/runs/b/test-resources/acquire',{...acquire,version:b.version,transactionId:'tests-b'})).status,202);
+  assert.equal((await h.get('/runs/b/status')).body.coordination.reason,'test-resource-conflict');
+  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['restitution examinée']};
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-cleanup-proof-required');
+  const execute=async(id)=>{
+    const revisions=(await h.get('/runs/a/locks')).body.revisions;
+    const operation=await h.approvedAccess(a,id,revisions);await h.execute(operation.approval);
+    await h.completeTool(operation.approval);
+    assert.equal((await h.releaseOperation(a,operation.approval,operation.access)).status,200);
+    return operation.approval.operation_id;
+  };
+  await execute('container-tests');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+  assert.equal((await h.post('/runs/a/job/terminal-gate',{state:'TERMINÉ'})).body.error,'run-accesses-unresolved');
+  const cleanupOperationId=await execute('cleanup');
+  const verificationOperationId=await execute('verify-clean');
+  const release={...payload,cleanup:[{resourceKey:resources[0].key,cleanupOperationId,verificationOperationId,restored:true}]};
+  assert.equal((await h.post('/runs/a/test-resources/release',release)).status,200);
+  assert.equal((await h.post('/runs/a/test-resources/release',release)).body.state,'RELEASED');
+  assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
+  assert.equal((await h.post('/runs/a/test-resources/release',{...release,evidence:['preuve divergente']})).status,409);
+});
+
+test('réservation LXC HTTP restaurée : nouvelle frontière native et jeton renouvelé', async (t) => {
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lxc-a',resources:a.resources,evidence:['instance canonique']})).body;
+  await h.stop();await h.start();
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].reconciliationRequired,true);
+  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['frontière native sans activité']};
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-reconciliation-required');
+  h.native.busy[a.sessionId]={type:'busy'};
+  assert.equal((await h.post('/runs/a/test-resources/reconcile',{...payload,reconciliationId:'reconcile-a'})).status,409);
+  h.native.busy={};
+  const request={...payload,reconciliationId:'reconcile-a'};
+  const restored=await h.post('/runs/a/test-resources/reconcile',request);
+  assert.equal(restored.status,200,JSON.stringify(restored));assert.notEqual(restored.body.token,lease.token);
+  assert.equal((await h.post('/runs/a/test-resources/reconcile',request)).body.token,restored.body.token);
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-token-invalid');
+});
+
+
+for (const browser of ['chromium','firefox']) test('verrou HTTP du navigateur externe '+browser+' : fin et restitution distinctes', async (t) => {
+  const h=await setup(t);const resources=[{key:'browser:host-a/'+browser,mode:'write'}];
+  const a=await h.reserve('a',{resources});const b=await h.reserve('b',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'browser-a',resources,evidence:['navigateur DEVOPS résolu']})).body;
+  assert.equal(lease.state,'HELD');
+  assert.equal((await h.post('/runs/b/test-resources/acquire',{version:b.version,transactionId:'browser-b',resources,evidence:['même navigateur']})).status,202);
+  const execute=async(id)=>{
+    const revisions=(await h.get('/runs/a/locks')).body.revisions;
+    const op=await h.approvedAccess(a,id,revisions);await h.execute(op.approval);await h.completeTool(op.approval);
+    assert.equal((await h.releaseOperation(a,op.approval,op.access)).status,200);return op.approval.operation_id;
+  };
+  await execute('browser-test');
+  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['sessions et profil temporaires restitués']};
+  assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-cleanup-proof-required');
+  assert.equal((await h.post('/runs/a/job/terminal-gate',{state:'TERMINÉ'})).status,409);
+  const cleanupOperationId=await execute('close-browser');const verificationOperationId=await execute('verify-browser');
+  assert.equal((await h.post('/runs/a/test-resources/release',{...payload,cleanup:[{resourceKey:resources[0].key,cleanupOperationId,verificationOperationId,restored:true}]})).status,200);
+  assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
+});
+
+
+test('PLLM HTTP : défaut high, prévol exact, choix persisté et modèle du job immuable', async(t)=>{
+ const h=await setup(t,{codingPolicy:true});
+ const resolved=await h.post('/model-policy/resolve',{});assert.equal(resolved.status,200,JSON.stringify(resolved));
+ assert.equal(resolved.body.reasoning,'high');assert.equal(resolved.body.preflightRequired,true);
+ const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
+ const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['delivery'],
+   modelSelectionProtocol:'pllm-auto-v1',modelSelection:{},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
+ assert.equal((await h.post('/runs/a/job/arm',{...arm,modelSelection:0})).body.error,'model-selection-input-invalid');
+ h.native.messages.ses_probe[0].info.variant='low';
+ assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-preflight-not-proved');
+ h.native.messages.ses_probe[0].info.variant='high';
+ const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));
+ assert.equal(armed.body.codingModel.modelID,'model1');assert.equal(armed.body.codingModel.reasoning,'high');
+ const selected=armed.body.codingModel;await h.stop();await h.start();
+ assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
+ assert.equal((await h.post('/runs/a/job/arm',{...arm,codingModel:selected})).body.error,'model-selection-server-owned');
+ h.native.messages.ses_probe[0].info.model={providerID:'provider2',modelID:'model2'};
+ h.native.messages.ses_probe[1].info.providerID='provider2';h.native.messages.ses_probe[1].info.modelID='model2';
+ const changed=await h.post('/runs/a/job/arm',{...arm,modelSelection:{model:'provider2/model2'}});
+ assert.equal(changed.status,400);assert.equal(changed.body.error,'job-coding-model-immutable');
+ assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
+});
+
+test('PLLM HTTP : xhigh puis priorité inférieure, modèle explicite incompatible bloqué',async(t)=>{
+ const h=await setup(t,{codingPolicy:true});
+ h.native.providers.all[0].models.model1.variants={xhigh:{}};
+ assert.equal((await h.post('/model-policy/resolve',{})).body.reasoning,'xhigh');
+ h.native.providers.all[0].models.model1.variants={low:{}};
+ assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1'})).body.error,'explicit-model-unavailable');
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',reasoning:'low'})).body.reasoning,'low');
+});
+
+
+test('PLLM HTTP : refus natifs high/xhigh corrélés autorisent le repli mais 429 bloque',async(t)=>{
+ const h=await setup(t,{codingPolicy:true});
+ const reject=(reasoning,status=400)=>{
+  const name=reasoning+'-'+status;const user=structuredClone(h.native.messages.ses_probe[0]);
+  user.info.id='msg_user_'+name;user.info.variant=reasoning;
+  const response=structuredClone(h.native.messages.ses_probe[1]);response.info.id='msg_bad_'+name;response.info.parentID=user.info.id;
+  response.info.error={name:'APIError',data:{statusCode:status,responseBody:JSON.stringify({error:{code:'unsupported_value',param:'reasoning_effort',message:'diagnostic privé fictif'}})}};
+  response.parts=[];h.native.messages.ses_probe.push(user,response);
+  return {sessionId:'ses_probe',messageId:response.info.id};
+ };
+ const high=reject('high');const xhigh=reject('xhigh');
+ assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[high]})).body.reasoning,'xhigh');
+ const next=await h.post('/model-policy/resolve',{unavailablePreflights:[high,xhigh]});
+ assert.equal(next.body.mode,'mode2');assert.equal(next.body.unavailabilityProofs.length,2);
+ assert.equal(JSON.stringify(next.body).includes('diagnostic privé fictif'),false);
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[high,xhigh]})).body.error,'explicit-model-unavailable');
+ assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('high',429)]})).body.error,'model-unavailability-not-proved');
+});
+
+
+test('Budget /provider fourni par la session : bornes exactes, portée locale et confidentialité',async(t)=>{
+ const h=await setup(t,{codingPolicy:true});const marker='DONNEE_PRIVEE_SYNTHETIQUE';
+ h.native.providers.privatePadding=marker+'x'.repeat(3*1024*1024);
+ const bytes=Buffer.byteLength(JSON.stringify(h.native.providers));
+ assert.equal((await h.post('/model-policy/resolve',{})).body.error,'model-observation-too-large');
+ for(const value of [0,-1,1.5,'8000000',null,Number.MAX_SAFE_INTEGER+1]){
+  const observations=()=>h.native.requests.filter(p=>p==='/provider'||p.startsWith('/session/ses_probe')).length;
+  const before=observations();
+  const result=await h.post('/model-policy/resolve',{providerMaxBytes:value});
+  assert.equal(result.body.error,'model-selection-input-invalid');assert.equal(observations(),before);
+ }
+ assert.equal((await h.post('/model-policy/resolve',{providerMaxBytes:bytes-1})).body.error,'model-observation-too-large');
+ const exact=await h.post('/model-policy/resolve',{providerMaxBytes:bytes});assert.equal(exact.status,200);assert.equal(exact.body.reasoning,'high');
+ assert.ok(!JSON.stringify(exact).includes(marker));
+ assert.equal((await h.post('/model-policy/resolve',{})).body.error,'model-observation-too-large');
+ const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
+ const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['budget'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{providerMaxBytes:bytes},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
+ h.native.sessions.ses_probe={privatePadding:marker+'x'.repeat(2*1024*1024)};
+ assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-observation-too-large');
+ delete h.native.sessions.ses_probe;
+ h.native.messages.ses_probe[1].parts.push({type:'text',text:marker+'x'.repeat(2*1024*1024)});
+ assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-observation-too-large');
+ h.native.messages.ses_probe[1].parts.pop();
+ const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));
+ assert.ok(!JSON.stringify(armed).includes(marker));assert.ok(!JSON.stringify((await h.get('/runs/a/job')).body).includes(marker));
+ h.native.providers.privatePadding=marker+'x'.repeat(17*1024*1024);
+ const larger=Buffer.byteLength(JSON.stringify(h.native.providers));assert.ok(larger>16*1024*1024);
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',providerMaxBytes:larger})).status,200);
+});
+
+
+test('Raccord HTTP préparé : catalogue transmis, alias natif, variante imbriquée et job conservé',async(t)=>{
+ const h=await setup(t,{codingPolicy:true,prepareCatalog:true,environment:{CAB_TEST_PRIVATE_OPTION:'NE_PAS_RESTITUER'}});
+ const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.models[0].provider='opencodego';writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
+ h.native.providers.all[0].id='opencode-go';h.native.providers.connected[0]='opencode-go';
+ const parent=h.native.messages.ses_probe[0].info;parent.model={providerID:'opencode-go',modelID:'model1',variant:'high'};delete parent.variant;
+ h.native.messages.ses_probe[1].info.providerID='opencode-go';h.native.messages.ses_probe[1].info.variant='high';
+ const resolved=await h.post('/model-policy/resolve',{});assert.equal(resolved.status,200,JSON.stringify(resolved));
+ assert.equal(h.native.preparation.source,'active-skill');assert.equal(resolved.body.source,'pllm-automatic');assert.equal(resolved.body.providerID,'opencode-go');assert.equal(resolved.body.logicalProviderID,'opencodego');
+ assert.ok(!JSON.stringify(resolved).includes('NE_PAS_RESTITUER'));
+ const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
+ const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['raccord'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
+ const bad=structuredClone(arm);parent.variant='low';assert.equal((await h.post('/runs/a/job/arm',bad)).body.error,'model-preflight-not-proved');delete parent.variant;
+ const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));assert.equal(armed.body.codingModel.providerID,'opencode-go');assert.equal(armed.body.codingModel.logicalProviderID,'opencodego');
+ const selected=armed.body.codingModel;await h.stop();await h.start();assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
+});
+
+test('Raccord HTTP : indisponibilités imbriquées rattachées au catalogue logique, auth et contradictions refusées',async(t)=>{
+ const h=await setup(t,{codingPolicy:true,prepareCatalog:true});
+ const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.models[0].provider='opencodego';
+ const skipped=catalog.models.pop();skipped.provider=null;skipped.state='Invalide';skipped.evaluated_this_run=false;catalog.models.unshift(skipped);
+ writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
+ h.native.providers.all[0].id='opencode-go';h.native.providers.connected[0]='opencode-go';
+ const reject=(reasoning,status=400,contradiction=false)=>{
+  const name=reasoning+'-'+status+'-'+contradiction;const user=structuredClone(h.native.messages.ses_probe[0]);user.info.id='msg_user_'+name;
+  user.info.model={providerID:'opencode-go',modelID:'model1',variant:reasoning};delete user.info.variant;
+  const response=structuredClone(h.native.messages.ses_probe[1]);Object.assign(response.info,{id:'msg_bad_'+name,parentID:user.info.id,providerID:'opencode-go',variant:contradiction?'low':reasoning});
+  response.info.error={name:'APIError',data:{statusCode:status,responseBody:JSON.stringify({error:{code:'unsupported_value',param:'reasoning_effort',message:'PRIVE_SYNTHETIQUE'}})}};
+  response.parts=[];h.native.messages.ses_probe.push(user,response);return {sessionId:'ses_probe',messageId:response.info.id};
+ };
+ const high=reject('high');const xhigh=reject('xhigh');
+ const first=await h.post('/model-policy/resolve',{unavailablePreflights:[high]});assert.equal(first.status,200,JSON.stringify(first));assert.equal(first.body.reasoning,'xhigh');assert.equal(first.body.providerID,'opencode-go');
+ const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[high,xhigh]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode2');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
+ for(const reference of [reject('high',429),reject('high',401),reject('high',400,true)])assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reference]})).body.error,'model-unavailability-not-proved');
 });

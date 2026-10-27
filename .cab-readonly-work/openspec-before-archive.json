@@ -1,0 +1,132 @@
+{
+  "items": [
+    {
+      "id": "active-component-update",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 8
+    },
+    {
+      "id": "approval-persistence",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 4
+    },
+    {
+      "id": "approval-workflow",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 3
+    },
+    {
+      "id": "archive-session-statistics",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 3
+    },
+    {
+      "id": "codex-integration-distribution",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 3
+    },
+    {
+      "id": "concurrent-run-coordination",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 4
+    },
+    {
+      "id": "controller-transport",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 3
+    },
+    {
+      "id": "local-web-monitor",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 1
+    },
+    {
+      "id": "monitor-management",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    },
+    {
+      "id": "native-session-statistics",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    },
+    {
+      "id": "persistent-job-supervision",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 1
+    },
+    {
+      "id": "supervision-remediation",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    },
+    {
+      "id": "support-readonly-broker-reuse",
+      "type": "change",
+      "valid": true,
+      "issues": [
+        {
+          "level": "INFO",
+          "path": "codex-integration-distribution/spec.md",
+          "message": "Archive would refuse this delta: codex-integration-distribution MODIFIED failed for header \"### Requirement: Distribution cohérente de la récupération 1.9.0\" - not found"
+        }
+      ],
+      "durationMs": 32
+    },
+    {
+      "id": "web-statistics-retention",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    }
+  ],
+  "summary": {
+    "totals": {
+      "items": 14,
+      "passed": 14,
+      "failed": 0
+    },
+    "byType": {
+      "change": {
+        "items": 1,
+        "passed": 1,
+        "failed": 0
+      },
+      "spec": {
+        "items": 13,
+        "passed": 13,
+        "failed": 0
+      }
+    }
+  },
+  "version": "1.0",
+  "root": {
+    "path": "/home/devops/datas/cab",
+    "source": "nearest"
+  }
+}

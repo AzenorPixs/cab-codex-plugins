@@ -1,0 +1,11 @@
+✔ release gérée : processus original lié → nouvelle release → once/complete sans toucher à l’ancienne (6267.219346ms)
+✔ release gérée : lien absolu hors namespace refusé avant arrêt (3346.432888ms)
+✔ release gérée : rollback du seul pointeur, ancienne release conservée (4177.328521ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13846.145331

@@ -1,0 +1,133 @@
+{
+  "items": [
+    {
+      "id": "active-component-update",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 5
+    },
+    {
+      "id": "approval-persistence",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 1
+    },
+    {
+      "id": "approval-workflow",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    },
+    {
+      "id": "archive-session-statistics",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    },
+    {
+      "id": "codex-integration-distribution",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 5
+    },
+    {
+      "id": "concurrent-run-coordination",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 2
+    },
+    {
+      "id": "controller-transport",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 2
+    },
+    {
+      "id": "fix-orphaned-validation-admission",
+      "type": "change",
+      "valid": true,
+      "issues": [],
+      "durationMs": 30
+    },
+    {
+      "id": "local-web-monitor",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    },
+    {
+      "id": "monitor-management",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 2
+    },
+    {
+      "id": "native-session-statistics",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 1
+    },
+    {
+      "id": "persistent-job-supervision",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 1
+    },
+    {
+      "id": "supervision-remediation",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    },
+    {
+      "id": "support-frozen-recovery-controller-maintenance",
+      "type": "change",
+      "valid": true,
+      "issues": [],
+      "durationMs": 37
+    },
+    {
+      "id": "web-statistics-retention",
+      "type": "spec",
+      "valid": true,
+      "issues": [],
+      "durationMs": 0
+    }
+  ],
+  "summary": {
+    "totals": {
+      "items": 15,
+      "passed": 15,
+      "failed": 0
+    },
+    "byType": {
+      "change": {
+        "items": 2,
+        "passed": 2,
+        "failed": 0
+      },
+      "spec": {
+        "items": 13,
+        "passed": 13,
+        "failed": 0
+      }
+    }
+  },
+  "version": "1.0",
+  "root": {
+    "path": "/home/devops/datas/cab",
+    "source": "nearest"
+  }
+}

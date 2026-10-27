@@ -11,7 +11,7 @@ const statePath =
   process.env.OPENCODE_SSE_STATE_PATH ||
   "/tmp/opencode-sse-client-status.json";
 
-const version = "1.7.1";
+const version = "1.10.5";
 let connections = 0;
 
 async function publish(state) {

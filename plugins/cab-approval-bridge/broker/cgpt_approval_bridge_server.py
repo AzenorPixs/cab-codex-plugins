@@ -69,7 +69,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "1.7.1"
+SERVER_VERSION = "1.10.5"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -4697,8 +4697,9 @@ def store_journal_consistency_snapshot():
                 approval_id: dict(item)
                 for approval_id, item in data["approvals"].items()
             }
-
-        events = journal.read_events()
+            # Même frontière que les transitions : magasin puis journal.
+            # Libérer ici le magasin ferait comparer deux instants différents.
+            events = journal.read_events()
 
     except (StoreError, journal.JournalError, journal.JournalValidationError) as exc:
         return {
@@ -8068,27 +8069,38 @@ def do_readiness(args=None):
               "STORE_JOURNAL_DIVERGENCE", "WORKER_POOL_SATURATED", "CONTROLLER_UNREACHABLE"}
     scoped_causes = {"NONE", "NOTIFICATION_LEASE_STUCK", "CONTROLLER_DECISION_PATH_STALLED",
                      "DECISION_WAIT_WITHOUT_PROGRESS", "SESSION_STALLED", "SESSION_PROGRESS_DEGRADED"}
-    infrastructure_status = status if snapshot["root_cause"] not in scoped_causes else "READY"
+    shared_root_cause = snapshot["root_cause"]
+    infrastructure_status = status if (
+        human_required or shared_root_cause in common or shared_root_cause not in scoped_causes
+    ) else "READY"
     by_run = {}
     by_session = {}
     path = store_path()
     try:
         with locked_store(path):
             stored = load_store(path)["approvals"]
+            current_pending = 0
+            current_stalled = 0
             for approval_id, item in stored.items():
+                pending = item.get("status") == "PENDING"
+                stalled = pending and str(approvals.get(approval_id, {}).get("state", "")).startswith("STALLED_")
+                current_pending += int(pending)
+                current_stalled += int(stalled)
                 run_id = item.get("run_id")
                 session_id = item.get("session_id")
                 for key, groups in ((run_id, by_run), (session_id, by_session)):
                     if not key:
                         continue
                     group = groups.setdefault(key, {"pending_count": 0, "stalled_count": 0})
-                    if item.get("status") == "PENDING":
+                    if pending:
                         group["pending_count"] += 1
-                        if str(approvals.get(approval_id, {}).get("state", "")).startswith("STALLED_"):
+                        if stalled:
                             group["stalled_count"] += 1
+            snapshot.update(pending_count=current_pending, stalled_count=current_stalled)
     except (StoreError, ValidationError, OSError):
         infrastructure_status = "HUMAN_REQUIRED" if human_required else "BLOCKED"
         status = infrastructure_status
+        shared_root_cause = "STORE_UNHEALTHY"
         snapshot.update(status=status, ready=False, root_cause="STORE_UNHEALTHY")
     for group in list(by_run.values()) + list(by_session.values()):
         group["status"] = "BLOCKED" if group["stalled_count"] else "READY"
@@ -8100,7 +8112,7 @@ def do_readiness(args=None):
                                    "status": "READY", "root_cause": "NONE"})
         snapshot.update(group)
         if infrastructure_status != "READY":
-            snapshot.update(status=status, root_cause=snapshot["root_cause"])
+            snapshot.update(status=status, root_cause=shared_root_cause)
         snapshot.update(run_id=run_id, ready=snapshot["status"] == "READY")
     return snapshot
 

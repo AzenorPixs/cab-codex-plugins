@@ -105,3 +105,10 @@ Le broker MUST borner sa lecture du corps d'erreur et MUST NOT recopier le messa
 #### Scenario: Diagnostic non fiable
 - **WHEN** le corps contient un message arbitraire, des longueurs invalides, un autre code, une autre unité, un contenu excessif ou une erreur de lecture
 - **THEN** le broker conserve le diagnostic HTTP générique sans journaliser ce contenu
+
+### Requirement: Notification réconciliée limitée au rejet
+Une validation créée par réconciliation de notification MUST accepter uniquement rejected explicite. approved et needs_clarification MUST être refusés. Son opération MUST rester inexécutable, sans acquisition ni once, y compris après répétition ou restauration du registre. Aucun agent automatique MUST décider cette validation.
+
+#### Scenario: Tentative d'approbation
+- **WHEN** une décision approved ou une acquisition vise l'opération réconciliée
+- **THEN** elle est refusée sans modifier la décision, les accès ou les permissions

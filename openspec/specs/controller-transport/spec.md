@@ -616,3 +616,60 @@ Une déclaration d'étape MUST NOT créer permission, décision, reprise ou vali
 #### Scenario: Clôture annoncée sans gate
 - **WHEN** un job déclare CLOSURE alors que son gate est OPEN
 - **THEN** il expose Clôture 11/11 mais conserve le gate OPEN
+
+### Requirement: Admission native avant appropriation durable
+Le contrôleur MUST vérifier identité, admission locale et ask avant de persister propriétaire et opération ensemble. Après tout contrôle asynchrone, il MUST recontrôler le contexte. Aucun traitement de décision MUST commencer avant succès durable. Une panne de persistance MUST fermer l'admission sans permission.
+
+#### Scenario: Refus ask sans enregistrement partiel
+- **WHEN** une notification vise une session devenue allow
+- **THEN** aucun propriétaire, opération ou validation n'est créé et aucune permission n'est transmise
+
+### Requirement: Réconciliation explicite du prévol orphelin
+POST /runs/<runId>/validation/reconcile MUST exiger transactionId, developerAuthorization, jobId, recoveryId et approval exact. Seul le prévol courant gelé, armé, gate OPEN, sans décision, permission ni effet MUST être admis. Les identités, ask, propriétaire, opération PREPARED et preuves natives PENDING MUST être vérifiés sans reconstruction d'intention.
+
+#### Scenario: Demande orpheline sans effet
+- **WHEN** les preuves corrélées et l'autorisation spécifique sont vérifiées
+- **THEN** le contrôleur conserve la candidate et crée uniquement une validation apte au rejet explicite, sans décision automatique
+
+#### Scenario: Capacité effectivement chargée
+- **WHEN** les statuts du contrôleur et du RUN sont consultés
+- **THEN** notificationReconciliation vaut rejection-only-v1 pour identifier cette API indépendamment de la version source de base
+
+#### Scenario: Preuve divergente ou effet incertain
+- **WHEN** un champ, préfixe natif, propriétaire ou opération diverge, ou qu'un effet ou accès existe
+- **THEN** la réconciliation est refusée sans modifier le job, les pairs ou une décision
+
+### Requirement: Retry préservé après réconciliation de notification
+La réconciliation MUST NOT assouplir retry ou complete. Un rejet local explicite et un résultat MCP REJECTED du même approval_id MUST précéder retry. Une perte de contexte local MUST NOT autoriser une restauration automatique depuis le seul reçu.
+
+#### Scenario: Polling et nouvel essai
+- **WHEN** le même prévol réconcilié est rejeté et son polling confirme REJECTED
+- **THEN** retry existant peut réserver une nouvelle identité dans la même candidate en conservant ses autres gardes
+
+### Requirement: Diagnostic public de métadonnées sans mutation
+L'outil approval-metadata MUST projeter uniquement les métadonnées d'une approbation demandée depuis une sortie native broker_health déjà disponible dans une session technique existante. Il MUST utiliser seulement GET et MUST NOT lire le magasin privé, lancer un outil, créer une session, exposer titre/résumé/commande/fichiers/secrets ou annuler une demande. Les identités absentes MUST rester non vérifiables.
+
+#### Scenario: Demande non attribuée
+- **WHEN** le diagnostic trouve l'identifiant demandé dans le watchdog natif mais ne trouve pas son RUN
+- **THEN** il restitue l'observation, sa provenance et les champs inconnus sans attribuer ou décider la demande
+
+### Requirement: Adoption contrôlée de l'amorçage
+POST /coordination/maintenance/adopt MUST lire la transaction dans un journal privé fermé, vérifier autorité, empreintes, expiration, identités des processus et preuve native fraîche. Il MUST lier le reçu à la génération DRAINING existante avant de confirmer HELD. Un reçu client seul MUST NOT suffire.
+
+#### Scenario: Reçu divergent
+- **WHEN** le journal, l'autorité, le code chargé ou la génération diverge
+- **THEN** l'adoption est refusée sans modification du job, du registre ou d'une permission
+
+### Requirement: Maintenance de récupération préparée sans effet
+Seule la récupération préparée nommée et prouvée sans outil natif dans la candidate MAY être admise pour confirmation ou libération SHARED_MAINTENANCE. RUN/job/candidate/recovery, propriétaire, opération, préfixes et critères MUST rester identiques. retry, complete et ask/once MUST rester inchangés.
+
+#### Scenario: Prévol commencé
+- **WHEN** une commande, un accès, une décision approved ou une preuve incertaine existe
+- **THEN** la maintenance spéciale est refusée et la récupération reste gelée
+
+### Requirement: Magasin privé d'amorçage explicite
+OC_Codex_MAINTENANCE_STATE_DIR MAY désigner un répertoire absolu privé hors workspace, sans liens. Par défaut le contrôleur MUST utiliser frozen-controller dans son magasin privé update. Le lecteur MUST vérifier propriétaire, mode et régularité et MUST NOT suivre un chemin fourni par le corps HTTP.
+
+#### Scenario: Chemin client arbitraire
+- **WHEN** un client tente de choisir un autre fichier ou un journal non privé
+- **THEN** l'adoption est refusée sans lire ce chemin

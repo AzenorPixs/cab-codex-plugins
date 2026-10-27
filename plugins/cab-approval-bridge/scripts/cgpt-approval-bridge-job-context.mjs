@@ -6,9 +6,10 @@ import { dirname, isAbsolute, join } from "node:path";
 import readline from "node:readline";
 
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
+import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 
-export const VERSION = "1.7.1";
-if (STEP_VERSION !== VERSION) throw new Error('CAB lifecycle component version mismatch');
+export const VERSION = "1.10.5";
+if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
   const name = Object.hasOwn(environment, 'OC_Codex_MAX_COMMAND_LENGTH')
@@ -171,6 +172,7 @@ function publicJob() {
     changeId: job.changeId,
     criteria: job.criteria,
     strictCommands: job.strictCommands === true,
+    ...(job.codingModel ? { codingModel: structuredClone(job.codingModel) } : {}),
     lifecycle: publicLifecycle(job.lifecycle),
     lastProvenMilestone: job.lastProvenMilestone,
     currentCabMandate: job.currentCabMandate,
@@ -247,7 +249,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "1.7.1",
+    version: "1.10.5",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -274,6 +276,7 @@ function publicStatus() {
 }
 
 function validJobContract(payload) {
+  if (payload?.codingModel !== undefined && !validCodingModel(payload.codingModel)) return null;
   if (
     !payload ||
     typeof payload.jobId !== "string" ||
@@ -304,6 +307,7 @@ function validJobContract(payload) {
     changeId: payload.changeId || null,
     criteria: payload.criteria,
     strictCommands: payload.strictCommands === true,
+    ...(payload.codingModel ? { codingModel: structuredClone(payload.codingModel) } : {}),
     lastProvenMilestone: null,
     currentCabMandate: null,
     armed: true,
@@ -313,6 +317,7 @@ function validJobContract(payload) {
 }
 
 function validPersistedJob(payload) {
+  if (payload?.codingModel !== undefined && !validCodingModel(payload.codingModel)) return false;
   const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
   const text = (value) => typeof value === "string" && value.length > 0;
   const strings = (value) => Array.isArray(value) && value.every((item) => typeof item === "string");
@@ -428,8 +433,11 @@ function approvedOperation(approval) {
 }
 
 function operationAllowed(operation, requestId, stage = 'prepare') {
+  return operationContextAllowed(operation, requestId) && admitOperation(operation, requestId, stage);
+}
+
+function operationContextAllowed(operation, requestId) {
   if (closed) return false;
-  if (!admitOperation(operation, requestId, stage)) return false;
   if (recoveryTransitionInFlight) return false;
   if (job?.revokedSessions?.includes(operation?.sessionId)) return false;
   if (!job?.armed) return true;
@@ -667,6 +675,97 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
   return { preflightRequestId: recovery.preflightRequestId, requestIds: [...requestIds],
     approvalIds: [...approvalIds], nativeToolCount: parts.length,
     nativeToolHash: recoveryToolsHash(parts), refusedAt: new Date().toISOString() };
+}
+
+async function inspectNotificationReconciliation(payload, matchesApproval) {
+  const approval = payload?.approval;
+  const recovery = job?.recovery;
+  const operation = approvedOperation(approval);
+  if (!run || !job?.armed || terminalGate.status !== 'OPEN' || !recovery ||
+      payload.jobId !== job.jobId || payload.recoveryId !== recovery.recoveryId ||
+      approval?.requestId !== recovery.preflightRequestId || approval.change_id !== job.changeId ||
+      approval.run_id !== run.runId || operation?.sessionId !== recovery.sessionId ||
+      JSON.stringify(approval.files) !== '[]' || JSON.stringify(approval.commands) !== '["/usr/bin/true"]' ||
+      !Array.isArray(approval.resources) || !approval.resources.length ||
+      approval.resources.some((resource) => resource.mode !== 'read') ||
+      !operationContextAllowed(operation, approval.requestId) || !recoveryApprovalAllowed(approval)) {
+    recoveryFailure('notification-reconciliation-context-divergent');
+  }
+  if (validations.has(approval.requestId) || httpDecisions.has(approval.requestId) ||
+      job.currentCabMandate || reconcilingPermissions.size || unmatchedNativePermissions.size ||
+      active.size || reminderNotifications.size || [...validations.values()].some((v) => !httpDecisions.has(v.requestId))) {
+    recoveryFailure('notification-reconciliation-validation-exists');
+  }
+  const health = await recoveryJson('/global/health');
+  const path = await recoveryJson('/path');
+  const mcp = await recoveryJson('/mcp');
+  if (health.healthy !== true || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') {
+    recoveryFailure('opencode-context-divergent');
+  }
+  await checkNativeAsk(operation);
+  const messages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  const parts = recoveryTools(messages);
+  const current = currentRecoveryTools(recovery, parts, messages);
+  let submitted = false;
+  for (const part of current) {
+    const state = part.state;
+    if (part.tool === 'cgpt-validation_broker_readiness' && state?.status === 'completed') continue;
+    if (part.tool === 'cgpt-validation_request_validation') {
+      if (submitted || !matchesApproval(state?.input)) recoveryFailure('notification-reconciliation-proof-divergent');
+      submitted = true;
+    } else if (!['cgpt-validation_poll_approval', 'cgpt-validation_get_approval'].includes(part.tool) ||
+        !submitted || state?.input?.approval_id !== approval.approval_id) {
+      recoveryFailure('notification-reconciliation-effect-not-excluded');
+    }
+    let output;
+    try { output = JSON.parse(state?.output); } catch { recoveryFailure('notification-reconciliation-proof-divergent'); }
+    if (state?.status !== 'completed' || output?.status !== 'PENDING' ||
+        ['requestId', 'approval_id', 'session_id', 'directory', 'change_id', 'files', 'commands'].some(
+          (key) => JSON.stringify(output[key]) !== JSON.stringify(approval[key]))) {
+      recoveryFailure('notification-reconciliation-proof-divergent');
+    }
+  }
+  if (!submitted) recoveryFailure('notification-reconciliation-proof-divergent');
+  const busy = await recoveryJson('/session/status');
+  const permissions = await recoveryJson('/permission');
+  if (!busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
+      permissions.some((permission) => ownsSession(permission.sessionID))) {
+    recoveryFailure('notification-reconciliation-native-not-quiescent');
+  }
+  for (const sessionId of [job.sessionId, recovery.sessionId]) {
+    const session = await recoveryJson(`/session/${encodeURIComponent(sessionId)}`);
+    if (session.id !== sessionId || session.directory !== job.directory ||
+        (busy[sessionId] && busy[sessionId].type !== 'idle') ||
+        (sessionId === recovery.sessionId && !hasNativeAsk(session, 'bash'))) {
+      recoveryFailure('notification-reconciliation-native-not-quiescent');
+    }
+  }
+  const finalMessages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  if (recoveryToolsHash(recoveryTools(finalMessages)) !== recoveryToolsHash(parts)) {
+    recoveryFailure('notification-reconciliation-proof-divergent');
+  }
+  if (!operationContextAllowed(operation, approval.requestId) || validations.has(approval.requestId) ||
+      httpDecisions.has(approval.requestId)) recoveryFailure('notification-reconciliation-context-divergent');
+  return { validation: { requestId: approval.requestId, approvalId: approval.approval_id,
+    changeId: approval.change_id, summary: typeof approval.summary === 'string' ? approval.summary : 'Prévol réconcilié',
+    operation, rejectionOnly: true }, nativeToolCount: parts.length, nativeToolHash: recoveryToolsHash(parts) };
+}
+
+function checkReconciledValidation(inspection) {
+  const validation = inspection.validation;
+  if (!operationContextAllowed(validation.operation, validation.requestId) ||
+      validations.has(validation.requestId) || httpDecisions.has(validation.requestId) ||
+      job.currentCabMandate || reconcilingPermissions.size || unmatchedNativePermissions.size ||
+      active.size || reminderNotifications.size) {
+    recoveryFailure('notification-reconciliation-context-divergent');
+  }
+}
+
+function installReconciledValidation(inspection) {
+  checkReconciledValidation(inspection);
+  const validation = inspection.validation;
+  validations.set(validation.requestId, validation);
+  updateStatus('notification-reconciled-rejection-only', { requestId: validation.requestId });
 }
 
 // Remédiation humaine bornée : l'ancien prévol reste invalide et n'est jamais rejoué.
@@ -1543,7 +1642,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.7.1",
+      version: "1.10.5",
     },
   });
 
@@ -2005,6 +2104,11 @@ const handle = async (request, response, url) => {
           return;
         }
         if (job?.jobId === candidate.jobId) {
+          if (job.codingModel) {
+            if (candidate.codingModel && ['providerID','modelID','reasoning','source','mode','priority'].some((key) =>
+              job.codingModel[key] !== candidate.codingModel[key])) throw new Error('job-coding-model-immutable');
+            candidate.codingModel = structuredClone(job.codingModel);
+          } else if (candidate.codingModel) throw new Error('job-coding-model-immutable');
           candidate.recoveryHistory = job.recoveryHistory || [];
           candidate.revokedSessions = job.revokedSessions || [];
           if (job.lifecycle !== undefined) candidate.lifecycle = publicLifecycle(job.lifecycle);
@@ -2245,13 +2349,15 @@ const handle = async (request, response, url) => {
         }
 
         const operation = approvedOperation(approval);
-        if (!operationAllowed(operation, requestId) || !recoveryApprovalAllowed(approval)) {
+        const admissionAllowed = () => request.cabCommitAdmission
+          ? operationContextAllowed(operation, requestId) : operationAllowed(operation, requestId);
+        if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
         }
         if (!(await nativeAskGuard(operation, response))) return;
-        if (!operationAllowed(operation, requestId) || !recoveryApprovalAllowed(approval)) {
+        if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
@@ -2268,6 +2374,13 @@ const handle = async (request, response, url) => {
           throw new Error(
             "requestId déjà associé à une autre validation."
           );
+        }
+
+        if (previous?.rejectionOnly) {
+          request.cabCommitAdmission?.();
+          response.writeHead(202, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ requestId, status: 'PENDING' }));
+          return;
         }
 
         if (
@@ -2299,6 +2412,8 @@ const handle = async (request, response, url) => {
             receivedAt: request.cabReceivedAt,
           };
 
+          request.cabCommitAdmission?.();
+
           validations.set(
             requestId,
             validation
@@ -2309,6 +2424,8 @@ const handle = async (request, response, url) => {
           throw new Error(
             "Validation existante sans identité corrélée."
           );
+        } else {
+          request.cabCommitAdmission?.();
         }
 
         response.writeHead(
@@ -2331,6 +2448,11 @@ const handle = async (request, response, url) => {
           response.end(JSON.stringify(cause.diagnostic));
           return;
         }
+        if (cause.code) {
+          response.writeHead(cause.status || 409, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ error: cause.code }));
+          return;
+        }
         response
           .writeHead(400)
           .end();
@@ -2350,13 +2472,15 @@ const handle = async (request, response, url) => {
         const approvalId = approval?.approval_id;
         const changeId = approval?.change_id;
         const operation = approvedOperation(approval);
-        if (!operationAllowed(operation, requestId) || !recoveryApprovalAllowed(approval)) {
+        const admissionAllowed = () => request.cabCommitAdmission
+          ? operationContextAllowed(operation, requestId) : operationAllowed(operation, requestId);
+        if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
         }
         if (!(await nativeAskGuard(operation, response))) return;
-        if (!operationAllowed(operation, requestId) || !recoveryApprovalAllowed(approval)) {
+        if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
@@ -2371,7 +2495,6 @@ const handle = async (request, response, url) => {
             summary: typeof approval.summary === "string" ? approval.summary : "Validation OpenCode",
             operation: approvedOperation(approval),
           };
-          validations.set(requestId, validation);
         }
 
         if (
@@ -2382,6 +2505,15 @@ const handle = async (request, response, url) => {
           answered.has(requestId)
         ) {
           throw new Error("Relance de validation invalide ou terminale.");
+        }
+
+        request.cabCommitAdmission?.();
+        validations.set(requestId, validation);
+
+        if (validation.rejectionOnly) {
+          response.writeHead(202, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ requestId, status: 'PENDING' }));
+          return;
         }
 
         const reminder = {
@@ -2410,6 +2542,11 @@ const handle = async (request, response, url) => {
         if (cause.code === 'command-too-long') {
           response.writeHead(400, { 'content-type': 'application/json' });
           response.end(JSON.stringify(cause.diagnostic));
+          return;
+        }
+        if (cause.code) {
+          response.writeHead(cause.status || 409, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ error: cause.code }));
           return;
         }
         response.writeHead(400).end();
@@ -2500,6 +2637,9 @@ const handle = async (request, response, url) => {
             throw new Error(
               "Validation inconnue."
             );
+          }
+          if (validation.rejectionOnly && decision.decision !== 'rejected') {
+            throw new Error('notification-reconciliation-rejection-only');
           }
           if (decision.decision === 'approved' && (validation.operationInvalidated ||
               !operationAllowed(validation.operation, requestId))) {
@@ -2605,7 +2745,7 @@ const handle = async (request, response, url) => {
 };
 
 return {
-  handle, publicStatus, publicJob,
+  handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
   close: () => { closed = true; clearInterval(permissionTimer); codex?.kill(); },
   hasUnresolvedValidation: () => [...validations.values()].some((v) => !httpDecisions.has(v.requestId) ||
     (httpDecisions.get(v.requestId)?.decision === "approved" && !v.operationConsumed && !v.operationInvalidated)),
@@ -2625,6 +2765,7 @@ return {
     if (validation && !validation.operationConsumed) validation.operationInvalidated = true;
   },
   hasRequest: (requestId) => validations.has(requestId),
+  isRejectionOnly: (requestId) => validations.get(requestId)?.rejectionOnly === true,
   start: () => { startCodex(); startPermissionReconciliation(); },
   onConnect: () => { status.opencodeSse = "connected"; },
   onEvent: (event) => {

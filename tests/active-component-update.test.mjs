@@ -1,11 +1,103 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile, symlink } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile, symlink, link, unlink, lstat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { Worker } from 'node:worker_threads';
+import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { updateComponents } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs';
+import { BROKER_ARTIFACT_FILES, validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs';
+import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 
 const version = (source) => source.match(/^(?:export )?(?:const )?(?:VERSION|SERVER_VERSION|version)\s*=\s*["']([^"']+)["']/m)?.[1];
+
+async function artifactFixture(t) {
+  const root=await mkdtemp(join(tmpdir(),'cab-readonly-proof-'));
+  t.after(()=>rm(root,{recursive:true,force:true}));
+  const directory=join(root,'broker');await cp(new URL('../plugins/cab-approval-bridge/broker/',import.meta.url),directory,{recursive:true});
+  const parent=await processIdentity(process.pid),manifest={};
+  for(const name of BROKER_ARTIFACT_FILES)manifest[name]=createHash('sha256').update(await readFile(join(directory,name))).digest('hex');
+  const proof={authorization:'isolated source proof',entry:join(directory,BROKER_ARTIFACT_FILES[0]),expectedUid:process.getuid(),expectedGid:(await lstat(join(directory,BROKER_ARTIFACT_FILES[0]))).gid,
+    manifest,loadedVersion:'1.7.1',instanceId:'inst-isolated-proof',opencodeProcess:parent,brokerProcess:{...parent,pid:parent.pid+1}};
+  return {root,directory,proof};
+}
+
+test('broker externe : trois artefacts cibles vérifiés sans mutation et processus antérieur annoncé séparément',async(t)=>{
+  const h=await artifactFixture(t),before=await inspectBrokerArtifacts(h.directory,h.proof);
+  assert.equal(before.version,'1.10.5');assert.equal(h.proof.loadedVersion,'1.7.1');
+  assert.equal(Object.keys(before.files).length,3);
+  assert.deepEqual(await inspectBrokerArtifacts(h.directory,h.proof),before);
+  for(const name of BROKER_ARTIFACT_FILES)assert.equal(createHash('sha256').update(await readFile(join(h.directory,name))).digest('hex'),h.proof.manifest[name]);
+});
+
+test('broker externe : manifeste, propriétaire, liens et alias divergents sont refusés',async(t)=>{
+  const h=await artifactFixture(t);
+  assert.throws(()=>validateBrokerProof({...h.proof,unrecognized:'not an authorization'},h.directory),/proof-invalid/);
+  await assert.rejects(inspectBrokerArtifacts(h.directory,{...h.proof,manifest:{...h.proof.manifest,[BROKER_ARTIFACT_FILES[0]]:'0'.repeat(64)}}),/artifact-divergent/);
+  const uid=h.proof.expectedUid+1;
+  await assert.rejects(inspectBrokerArtifacts(h.directory,{...h.proof,expectedUid:uid,opencodeProcess:{...h.proof.opencodeProcess,uid},brokerProcess:{...h.proof.brokerProcess,uid}}),/artifact-unsafe/);
+  const path=join(h.directory,BROKER_ARTIFACT_FILES[0]),saved=await readFile(path);
+  await link(path,join(h.root,'alias.py'));await assert.rejects(inspectBrokerArtifacts(h.directory,h.proof),/artifact-unsafe/);
+  await unlink(join(h.root,'alias.py'));await unlink(path);await writeFile(join(h.root,'linked.py'),saved);
+  await symlink(join(h.root,'linked.py'),path);await assert.rejects(inspectBrokerArtifacts(h.directory,h.proof),/artifact-unsafe/);
+});
+
+test('broker externe : véritable enfant Python, entrée et identité du parent contrôlées sans environnement',async(t)=>{
+  const h=await artifactFixture(t);await writeFile(h.proof.entry,'import time\ntime.sleep(30)\n');
+  const child=spawn('python3',[h.proof.entry],{stdio:'ignore'});
+  t.after(async()=>{if(child.exitCode===null&&child.signalCode===null){const done=new Promise((resolve)=>child.once('exit',resolve));child.kill('SIGTERM');await done;}});
+  await new Promise((resolve)=>setTimeout(resolve,30));
+  h.proof.brokerProcess=await processIdentity(child.pid);
+  assert.deepEqual(await inspectBrokerProcess(h.proof,h.proof.brokerProcess),h.proof.brokerProcess);
+  assert.deepEqual(await inspectBrokerProcess(h.proof),h.proof.brokerProcess);
+  await assert.rejects(inspectBrokerProcess({...h.proof,entry:join(h.root,'another.py')},h.proof.brokerProcess),/process-changed/);
+  await assert.rejects(inspectBrokerProcess({...h.proof,opencodeProcess:{...h.proof.opencodeProcess,startTime:'0'}},h.proof.brokerProcess),/parent-changed/);
+});
+
+test('broker externe : politique explicite incompatible avec M2 ou preuve absente refusée avant service',async(t)=>{
+  const h=await fixture(t);
+  await assert.rejects(updateComponents({...h.c,brokerPolicy:'reuse-readonly',layout:'managed-release'},h.options),/broker-proof-invalid/);
+  await assert.rejects(updateComponents({...h.c,profile:'frozen-recovery-controller',brokerPolicy:'reuse-readonly'},h.options),/broker-policy-profile-invalid/);
+  assert.ok(!h.state.events.some((event)=>event[0]==='systemd'));
+});
+
+test('broker externe : enfant Python créé par un thread secondaire, unicité et gardes conservées',async(t)=>{
+  const h=await artifactFixture(t);await writeFile(h.proof.entry,'import time\ntime.sleep(60)\n');
+  const worker=new Worker(`
+    const {parentPort,workerData}=require('node:worker_threads');
+    const {spawn}=require('node:child_process');
+    const children=[];
+    function launch(){const child=spawn('python3',[workerData.entry],{stdio:'ignore'});children.push(child);child.once('spawn',()=>parentPort.postMessage(child.pid));child.once('error',error=>{throw error;});}
+    parentPort.on('message',async action=>{
+      if(action==='second')launch();
+      else if(action==='stop'){await Promise.all(children.map(child=>child.exitCode!==null||child.signalCode!==null?Promise.resolve():new Promise(done=>{child.once('exit',done);child.kill('SIGTERM');})));parentPort.close();}
+    });
+    launch();
+  `,{eval:true,workerData:{entry:h.proof.entry}});
+  const next=()=>new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject);});
+  const stopped=new Promise(resolve=>worker.once('exit',resolve));let closed=false;
+  t.after(async()=>{if(!closed){worker.postMessage('stop');await stopped;}});
+  const pid=await next();h.proof.brokerProcess=await processIdentity(pid);
+  const mainChildren=(await readFile('/proc/'+process.pid+'/task/'+process.pid+'/children','utf8')).trim().split(/\s+/);
+  assert.ok(!mainChildren.includes(String(pid)),'le cas exige un enfant absent du thread principal');
+  assert.deepEqual(await inspectBrokerProcess(h.proof),h.proof.brokerProcess);
+  assert.deepEqual(await inspectBrokerProcess(h.proof,h.proof.brokerProcess),h.proof.brokerProcess);
+  await assert.rejects(inspectBrokerProcess({...h.proof,entry:join(h.root,'wrong.py')}),/process-not-unique/);
+  await assert.rejects(inspectBrokerProcess({...h.proof,expectedUid:process.getuid()+1}),/process-not-unique/);
+  await assert.rejects(inspectBrokerProcess({...h.proof,opencodeProcess:{...h.proof.opencodeProcess,startTime:'0'}}),/parent-changed/);
+  const second=next();worker.postMessage('second');await second;
+  await assert.rejects(inspectBrokerProcess(h.proof),/process-not-unique/);
+  worker.postMessage('stop');await stopped;closed=true;
+  await assert.rejects(inspectBrokerProcess(h.proof),/process-not-unique/);
+});
+
+test('profil gelé : autorisation et cible absentes refusées avant toute action de service', async(t)=>{
+  const h=await fixture(t);
+  await assert.rejects(updateComponents({...h.c,profile:'frozen-recovery-controller'},h.options),/update-frozen-contract-invalid/);
+  assert.ok(!h.state.events.some((event)=>event[0]==='systemd'&&event[1]==='stop'));
+});
 async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], broker = true, realSyntax = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'cab-update-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -20,7 +112,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     await mkdir(target, { recursive: true }); await cp(source, target, { recursive: true });
     for (const entry of await readdir(target, { withFileTypes: true })) {
       if (entry.isFile()) {
-        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('1.7.1', '1.7.0'));
+        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('1.10.5', '1.7.0'));
       }
     }
   };
@@ -45,7 +137,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     if (path.endsWith('/disconnect')) { state.broker = false; return {}; }
     if (path.endsWith('/connect')) {
       state.broker = true; state.brokerVersion = version(await readFile(join(c.brokerDirectory, 'cgpt_approval_bridge_server.py'), 'utf8'));
-      if (state.wrongBroker && state.brokerVersion === '1.7.1') state.brokerVersion = '1.7.0';
+      if (state.wrongBroker && state.brokerVersion === '1.10.5') state.brokerVersion = '1.7.0';
       return {};
     }
     if (path === '/api/snapshot') {
@@ -94,12 +186,12 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     receipt: async () => JSON.parse(await readFile(join(c.home, '.local/state/cab-approval-bridge-update/current.json'), 'utf8')) };
 }
 
-test('jeu réel : les quatre briques actives passent en 1.7.1, RUN et archives conservés, deuxième invocation sans arrêt', async (t) => {
+test('jeu réel : les quatre briques actives passent en 1.10.5, RUN et archives conservés, deuxième invocation sans arrêt', async (t) => {
   const h = await fixture(t, { realSyntax: true }); const before = await readFile(h.runtime, 'utf8');
   const result = await updateComponents(h.c, h.options);
-  assert.equal(result.status, 'completed'); assert.equal(result.version, '1.7.1');
-  assert.deepEqual(h.state.versions, { controller: '1.7.1', supervisor: '1.7.1', monitor: '1.7.1' });
-  assert.equal(h.state.brokerVersion, '1.7.1'); assert.equal(h.state.global.state, 'RELEASED');
+  assert.equal(result.status, 'completed'); assert.equal(result.version, '1.10.5');
+  assert.deepEqual(h.state.versions, { controller: '1.10.5', supervisor: '1.10.5', monitor: '1.10.5' });
+  assert.equal(h.state.brokerVersion, '1.10.5'); assert.equal(h.state.global.state, 'RELEASED');
   assert.equal(await readFile(h.runtime, 'utf8'), before); assert.equal(await readFile(h.catalog, 'utf8'), 'ARCHIVE-SENTINEL');
   assert.equal(h.state.run.suspension.action, 'PAUSE');
   const stopped = h.state.events.filter((event) => event[1] === 'stop').length;
@@ -112,7 +204,7 @@ test('services initialement inactifs : fichiers actualisés sans les démarrer',
   const h = await fixture(t, { active: ['monitor'], broker: false });
   assert.equal((await updateComponents(h.c, h.options)).status, 'completed');
   assert.deepEqual(h.state.services, { controller: false, supervisor: false, monitor: true });
-  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '1.7.1');
+  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '1.10.5');
   assert.ok(!h.state.events.some((event) => event[1] === 'start' && event[2]?.includes('supervisor')));
 });
 
@@ -254,4 +346,61 @@ test('gel levé par une intervention externe : la récupération ne coupe pas le
   await assert.rejects(updateComponents(h.c, h.options), /update-recovery-required/);
   assert.equal(h.state.events.filter((event) => event[1] === 'stop').length, stops);
   assert.equal((await h.receipt()).phase, 'ROLLBACK_FAILED');
+});
+
+
+test('broker 1.9.0 chargé vers artefacts 1.10.5 : admission fermée sans mutation',async(t)=>{
+  const h=await artifactFixture(t);h.proof.loadedVersion='1.9.0';
+  assert.equal(validateBrokerProof(h.proof,h.directory),h.proof);
+  const before=await inspectBrokerArtifacts(h.directory,h.proof);
+  assert.equal(before.version,'1.10.5');assert.equal(h.proof.loadedVersion,'1.9.0');
+  for(const loadedVersion of ['1.7.1','1.8.0','1.9.0','1.10.0','1.10.1','1.10.2','1.10.3','1.10.4','1.10.5'])assert.equal(validateBrokerProof({...h.proof,loadedVersion},h.directory).loadedVersion,loadedVersion);
+  for(const loadedVersion of ['1.9.1','1.9.0+codex.20261025101020','1.10.6','2.0.0',null])assert.throws(()=>validateBrokerProof({...h.proof,loadedVersion},h.directory),/proof-invalid/);
+  assert.throws(()=>validateBrokerProof({...h.proof,expectedUid:h.proof.expectedUid+1},h.directory),/proof-invalid/);
+  assert.deepEqual(await inspectBrokerArtifacts(h.directory,h.proof),before);
+});
+
+
+async function networkFixture(t, { registryPadding = 0, statusPadding = 0 } = {}) {
+  const h=await fixture(t);const bases={controller:'http://127.0.0.1:8788',supervisor:'http://127.0.0.1:8789',monitor:'http://127.0.0.1:8790',opencode:'http://127.0.0.1:4096'};
+  const c={...h.c};const servers=[];let registrySize=0;
+  for(const name of Object.keys(bases)){
+    const server=createServer(async(req,res)=>{
+      try {
+        let text='';for await(const part of req)text+=part;
+        const route=new URL(req.url,'http://localhost').pathname;
+        const value=await h.options.http(bases[name],req.url,text?JSON.parse(text):undefined);
+        if(name==='controller'&&route==='/runs'&&registryPadding)value.transportFixtureHistory='x'.repeat(registryPadding);
+        if(name==='controller'&&route==='/status'&&statusPadding)value.transportFixtureHistory='x'.repeat(statusPadding);
+        const data=JSON.stringify(value);if(name==='controller'&&route==='/runs')registrySize=Buffer.byteLength(data);
+        res.writeHead(200,{'content-type':'application/json'});res.end(data);
+      } catch {res.writeHead(503,{'content-type':'application/json'}).end('{"error":"fixture unavailable"}');}
+    });
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));servers.push(server);c[name+'Url']='http://127.0.0.1:'+server.address().port;
+  }
+  t.after(async()=>{for(const server of servers){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}});
+  const {http,...options}=h.options;
+  return {...h,c,options,registrySize:()=>registrySize};
+}
+
+test('registre HTTP supérieur à 2 Mio : lecture intégrale et maintenance contrôlée',async(t)=>{
+  const h=await networkFixture(t,{registryPadding:3*1024*1024});const initial=await readFile(h.runtime);
+  const result=await updateComponents(h.c,h.options);
+  assert.equal(result.status,'completed');assert.ok(h.registrySize()>2*1024*1024);
+  assert.deepEqual(await readFile(h.runtime),initial);assert.equal(h.state.run.suspension.action,'PAUSE');
+});
+
+test('registre HTTP supérieur à 16 Mio refusé avant effet',async(t)=>{
+  const h=await networkFixture(t,{registryPadding:16*1024*1024+1});
+  await assert.rejects(updateComponents(h.c,h.options),/update-response-too-large/);
+  assert.ok(!h.state.events.some(e=>e[0]==='systemd'&&e[1]==='stop'));
+  assert.equal(h.state.global,null);assert.equal(h.state.broker,true);
+});
+
+test('les autres réponses HTTP restent limitées à 2 Mio',async(t)=>{
+  const h=await networkFixture(t,{statusPadding:2*1024*1024+1});
+  const result=await updateComponents(h.c,h.options);
+  assert.equal(result.status,'waiting');
+  assert.ok(!h.state.events.some(e=>e[0]==='systemd'&&e[1]==='stop'));
+  assert.equal(h.state.global.state,'DRAINING');assert.equal(h.state.broker,true);
 });

@@ -14,7 +14,7 @@ from pathlib import Path
 STATE_DIRECTORY = "cgpt-approval-bridge"
 INSTANCE_LOCK = "broker.instance.lock"
 REGISTRY_LOCK = "registry.instance.lock"
-VERSION = "1.7.1"
+VERSION = "1.10.5"
 
 
 def validate_directory(value):
@@ -98,6 +98,12 @@ def reset_directories(values):
                            ("RELEASED", "CANCELLED", "STALE")
                            for access in coordination["accesses"].values()):
                         raise RuntimeError("Des accès restent protégés ; purge globale refusée.")
+                    test_reservations = coordination.get("testReservations", {})
+                    if not isinstance(test_reservations, dict):
+                        raise ValueError("Réservations de test invalides ; purge refusée.")
+                    if any(not isinstance(reservation, dict) or reservation.get("state") not in
+                           ("RELEASED", "CANCELLED") for reservation in test_reservations.values()):
+                        raise RuntimeError("Des ressources de test restent protégées ; purge globale refusée.")
                     if any(not isinstance(operation, dict) or operation.get("state") not in
                            ("PREPARED", "COMPLETED", "CANCELLED")
                            for operation in coordination["operations"].values()):

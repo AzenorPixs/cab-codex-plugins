@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>CAB Monitor · Supervision locale</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.mjs"></script>
+</head>
+<body>
+  <aside class="rail" aria-label="Identité de l’application">
+    <a class="brand" href="/" aria-label="CAB Monitor accueil">C<span>A</span>B<i></i></a>
+    <div class="rail-caption">APPROVAL<br>BRIDGE</div>
+    <div class="rail-line"></div>
+    <nav class="rail-nav" aria-label="Pages CAB">
+      <a id="monitor-nav" class="rail-link active" href="#monitor" aria-current="page"><span aria-hidden="true">▦</span>MONITOR</a>
+      <a id="stats-nav" class="rail-link" href="#stats"><span aria-hidden="true">▥</span>STATS</a>
+      <a id="archives-nav" class="rail-link" href="#archives"><span aria-hidden="true">▣</span>ARCHIVES</a>
+    </nav>
+    <div class="rail-bottom">LOCAL<br><span id="version">1.10.0</span></div>
+  </aside>
+  <main>
+    <header class="topbar">
+      <div class="breadcrumb">CAB <span>/</span> <span id="page-label">Supervision</span> <span class="environment">WORKSPACE LOCAL</span></div>
+      <div id="connection" class="connection" role="status" aria-live="polite"><i></i>Connexion…</div>
+    </header>
+    <div id="monitor-page">
+    <section class="hero" aria-labelledby="page-title">
+      <div><h1 id="page-title" class="observation-title">CENTRE D’OBSERVATION</h1></div>
+      <div class="hero-meta"><time id="updated">En attente des premières observations</time><div id="cadence"></div>
+        <div class="refresh-controls"><label for="refresh-interval">Actualisation</label><select id="refresh-interval">
+          <option value="0">Manuel</option><option value="1000" selected>1s</option><option value="3000">3s</option><option value="7000">7s</option><option value="30000">30s</option><option value="60000">1m</option><option value="300000">5m</option><option value="600000">10m</option><option value="1800000">30m</option>
+        </select><button id="monitor-refresh" class="small-action" type="button">Actualiser</button></div>
+        <div id="refresh-status" role="status" aria-live="polite"></div>
+      </div>
+    </section>
+    <section id="health" class="health-grid" aria-label="État des composants"></section>
+    <section id="metrics" class="metrics" aria-label="Indicateurs de supervision"></section>
+    <section class="workspace">
+      <div class="panel work-panel">
+        <div class="panel-top"><div><span class="eyebrow">ESPACE DE TRAVAIL</span><h2>Exécutions &amp; changes</h2></div><span class="read-only">Gestion locale</span></div>
+        <div class="toolbar">
+          <div class="tabs" role="group" aria-label="Vue affichée"><button id="runs-tab" class="active" aria-pressed="true">RUN</button><button id="changes-tab" aria-pressed="false">Changes</button></div>
+          <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Rechercher un RUN, un change…" aria-label="Rechercher un RUN ou un change"></label>
+          <select id="filter" aria-label="Filtrer l’état"><option value="all">Tous les états</option><option value="active">En cours</option><option value="waiting">En attente</option><option value="terminal">Clôturés</option></select>
+        </div>
+        <div id="work-content" class="work-content"><p class="empty">Chargement des observations…</p></div>
+        <div class="panel-foot"><span id="result-count">—</span><span>Les tâches cochées décrivent le change ; le gate confirme la clôture.</span></div>
+      </div>
+      <aside class="panel detail-panel" aria-label="Détail sélectionné"><div class="panel-top"><div><span class="eyebrow">À LA LOUPE</span><h2 id="detail-title">Détail du RUN</h2></div><span class="detail-mark" aria-hidden="true">↗</span></div><div id="detail"><p class="empty">Sélectionnez un RUN ou un change pour examiner son état.</p></div></aside>
+    </section>
+    <section class="panel timeline-panel" aria-labelledby="timeline-title">
+      <div class="panel-top"><div><span class="eyebrow">FIL D’OBSERVATION</span><h2 id="timeline-title">Les dernières transitions</h2></div><select id="timeline-filter" aria-label="Filtrer la chronologie"><option value="all">Tous les RUN</option></select></div>
+      <p id="coverage" class="coverage">La chronologie commence avec les observations disponibles.</p>
+      <ol id="timeline" class="timeline"></ol>
+    </section>
+    </div>
+    <p id="management-status" class="management-status" role="status" aria-live="polite"></p>
+    <section id="archives-page" hidden aria-labelledby="archives-title">
+      <div class="hero"><div><div class="eyebrow">HISTORIQUE DU MONITEUR</div><h1 id="archives-title">Archives</h1><p>RUN et changes rangés dans le moniteur. Les sources du projet et les exécutions restent conservées.</p></div></div>
+      <section class="panel"><div class="panel-top"><h2>RUN archivés</h2></div><div id="archives-runs" class="work-content"></div></section>
+      <section class="panel archives-changes"><div class="panel-top"><h2>Changes archivés</h2></div><div id="archives-changes" class="work-content"></div></section>
+    </section>
+    <section id="stats-page" hidden aria-labelledby="stats-title">
+      <div class="hero"><div><div class="eyebrow">HISTORIQUE CAB</div><h1 id="stats-title">Le travail.<br><span>En chiffres.</span></h1><p>Décisions, activité observée et attentes. Chaque source garde sa provenance et sa couverture.</p></div></div>
+      <div class="panel stats-toolbar">
+        <label>Période<select id="stats-selection"><option value="current">Contextes courants</option><option value="last">Dernière livraison</option><option value="24h">Dernières 24 heures</option><option value="7d">7 derniers jours</option><option value="30d">30 derniers jours</option></select></label>
+        <label>RUN<select id="stats-run"><option value="">Tous les RUN</option></select></label>
+        <button id="stats-refresh" type="button">Actualiser</button>
+        <p id="stats-status" role="status" aria-live="polite">En attente des statistiques.</p>
+      </div>
+      <div id="stats-content"></div>
+      <section class="panel retention-panel" aria-labelledby="retention-title">
+        <div class="panel-top"><div><span class="eyebrow">ENTRETIEN DES HISTORIQUES</span><h2 id="retention-title">Purger les statistiques anciennes</h2></div></div>
+        <p>Supprimer les historiques statistiques antérieurs au délai choisi. Les contextes actifs ou référencés et les fichiers opérationnels restent protégés. Les agrégats globaux cumulatifs sont conservés.</p>
+        <p>La rétention native reste limitée à 30 jours. Le choix 365 jours ne prolonge pas l’historique disponible. Aucune purge automatique.</p>
+        <div class="retention-actions"><label>Conserver au moins<select id="retention-days"><option value="1">1 jour</option><option value="3">3 jours</option><option value="7">7 jours</option><option value="30" selected>30 jours</option><option value="365">365 jours</option></select></label><button id="retention-preview" type="button">PURGER…</button></div>
+        <p id="retention-status" role="status" aria-live="polite"></p>
+      </section>
+    </section>
+    <dialog id="retention-dialog" aria-labelledby="retention-dialog-title"><h2 id="retention-dialog-title">Confirmer la purge</h2><p id="retention-cutoff"></p><div id="retention-counts"></div><p id="retention-protected"></p><p class="warning">Cette suppression est irréversible sans sauvegarde préalable. Les magasins statistiques restent en place.</p><div class="retention-actions"><button id="retention-cancel" type="button" autofocus>Annuler</button><button id="retention-confirm" class="danger-button" type="button">Confirmer la suppression</button></div></dialog>
+    <dialog id="management-dialog" aria-labelledby="management-dialog-title"><h2 id="management-dialog-title">Supprimer du moniteur</h2><p id="management-confirm-text"></p><p>Cette action masque la ligne dans le moniteur. Les sources, le RUN réel et ses preuves restent conservés.</p><div class="retention-actions"><button id="management-cancel" type="button" autofocus>Annuler</button><button id="management-confirm" class="danger-button" type="button">Supprimer</button></div></dialog>
+    <footer><span><b>CAB</b> Monitor <span id="footer-version">1.10.0</span></span><span>Observation locale · Aucun appel LLM · Horaires Europe/Paris</span></footer>
+  </main>
+</body>
+</html>
