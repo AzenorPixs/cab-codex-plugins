@@ -2,7 +2,7 @@
 
 Exécuter cette procédure avant chaque nouvelle session CAB, même si son ancien
 état semble sain, vide ou indispensable à un ancien codage. L'invocation de
-`/cab start` autorise cette purge technique sans nouvelle confirmation. Ne pas
+`/CAB start` autorise cette purge technique sans nouvelle confirmation. Ne pas
 la déclencher pour une reprise ordinaire du même RUN, un compactage, une
 reconnexion, un nouveau mandat ou change, ni pour `run`, `test`, `update` ou
 `stop`. Un prévol de récupération divergent conserve la candidate, le job
@@ -64,7 +64,7 @@ crée ni permission ni remédiation des composants observés.
    ensuite les ressources CAB conformément au skill, puis créer une nouvelle
    session maîtresse. Ne pas réadopter l'ancien job ou sa session.
 8. Appeler réellement `broker_readiness` dans cette session et exiger `READY`,
-   zéro demande en attente et aucune permission parasite. Refaire `/cab test`
+   zéro demande en attente et aucune permission parasite. Refaire `/CAB test`
    avec un `requestId` inédit, une décision explicite, une réponse MCP corrélée
    et l'exécution unique de `true` avant tout mandat de travail.
 

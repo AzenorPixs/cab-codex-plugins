@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import test from "node:test";
 
-const commandPath = new URL("../.codex/commands/cab.md", import.meta.url);
+const commandPath = new URL("../.codex/commands/CAB.md", import.meta.url);
 const servicePath = new URL(
   "../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service",
   import.meta.url
@@ -13,14 +13,14 @@ const supervisorServicePath = new URL(
 );
 const monitorServicePath = new URL('../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service', import.meta.url);
 
-test("les briques distribuées publient la même version de base 1.10.4", () => {
+test("les briques distribuées publient la même version de base 1.10.6", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "1.10.4");
+  assert.equal(version, "1.10.6");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  assert.match(plugin.version, /^1\.10\.4\+codex\.\d{14}$/);
-  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.10\.4$/m);
+  assert.match(plugin.version, /^1\.10\.6\+codex\.\d{14}$/);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 1\.10\.6$/m);
   for (const directory of ["../src/", "../plugins/cab-approval-bridge/scripts/"]) {
     const root = new URL(directory, import.meta.url);
     for (const name of readdirSync(root).filter((name) => /\.(py|mjs)$/.test(name))) {
@@ -31,7 +31,7 @@ test("les briques distribuées publient la même version de base 1.10.4", () => 
     }
   }
   for (const path of [servicePath, supervisorServicePath, monitorServicePath]) {
-    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.10\.4 /m);
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 1\.10\.6 /m);
   }
 });
 
@@ -44,8 +44,8 @@ test('le moniteur web distribue ses ressources locales et reste indépendant des
     assert.ok(readFileSync(new URL('../plugins/cab-approval-bridge/web-monitor/' + file, import.meta.url), 'utf8').length > 0);
   }
   const command = readFileSync(commandPath, 'utf8');
-  const start = command.split('## `/cab start`')[1].split('\n## ')[0];
-  const stop = command.split('## `/cab stop`')[1].split('\n## ')[0];
+  const start = command.split('## `/CAB start`')[1].split('\n## ')[0];
+  const stop = command.split('## `/CAB stop`')[1].split('\n## ')[0];
   assert.match(start, /systemctl --user start cgpt-approval-bridge-monitor\.service/);
   assert.doesNotMatch(command, /systemctl --user enable cgpt-approval-bridge-monitor/);
   assert.doesNotMatch(stop, /systemctl --user (?:stop|restart) cgpt-approval-bridge-monitor/);
@@ -55,14 +55,14 @@ test('le moniteur web distribue ses ressources locales et reste indépendant des
   assert.match(start, /identity\.workspace/);
 });
 
-test('le catalogue des étapes et son producteur sont distribués en 1.10.4', async () => {
+test('le catalogue des étapes et son producteur sont distribués en 1.10.6', async () => {
   const { RUN_STEPS, VERSION } = await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs');
-  assert.equal(VERSION, '1.10.4');
+  assert.equal(VERSION, '1.10.6');
   const reference = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md', import.meta.url), 'utf8');
   for (const step of RUN_STEPS) {
     assert.ok(reference.includes(step.id), step.id); assert.ok(reference.includes(step.name), step.name);
   }
-  for (const path of ['../ORCHESTRATED_CODING.md', '../.codex/commands/cab.md',
+  for (const path of ['../ORCHESTRATED_CODING.md', '../.codex/commands/CAB.md',
     '../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md']) {
     const source = readFileSync(new URL(path, import.meta.url), 'utf8');
     assert.match(source, /run-lifecycle\.md/); assert.match(source, /expectedStepSequence/);
@@ -167,18 +167,18 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 1\.10\.4$/m);
-  assert.match(manifest, /"version": "1\.10\.4\+codex\./);
-  assert.match(controller, /const version = "1\.10\.4"/);
-  assert.match(supervisor, /const version = "1\.10\.4"/);
-  assert.match(broker, /SERVER_VERSION = "1\.10\.4"/);
-  assert.match(project, /^version = "1\.10\.4"$/m);
+  assert.match(command, /^version: 1\.10\.6$/m);
+  assert.match(manifest, /"version": "1\.10\.6\+codex\./);
+  assert.match(controller, /const version = "1\.10\.6"/);
+  assert.match(supervisor, /const version = "1\.10\.6"/);
+  assert.match(broker, /SERVER_VERSION = "1\.10\.6"/);
+  assert.match(project, /^version = "1\.10\.6"$/m);
 });
 
 test("la mise à jour confie les quatre briques au moteur transactionnel et conserve les états initiaux", () => {
   const command = readFileSync(commandPath, "utf8");
-  const updateStart = command.indexOf("## `/cab update`");
-  const updateEnd = command.indexOf("## `/cab stop`");
+  const updateStart = command.indexOf("## `/CAB update`");
+  const updateEnd = command.indexOf("## `/CAB stop`");
   const update = command.slice(updateStart, updateEnd);
 
   assert.match(update, /cgpt-approval-bridge-supervisor\.mjs/);
@@ -251,7 +251,7 @@ test("AGENTS renvoie au protocole local dédié avec ses contrats techniques", (
 test("le protocole exige un rapport par archive et empêche une clôture sans preuve", () => {
   const protocolPaths = [
     "../ORCHESTRATED_CODING.md",
-    "../.codex/commands/cab.md",
+    "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
     "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
   ];
@@ -266,7 +266,7 @@ test("le protocole exige un rapport par archive et empêche une clôture sans pr
     assert.match(protocol, /TERMINÉ/, path);
   }
   const command = readFileSync(commandPath, "utf8");
-  const run = command.slice(command.indexOf("## `/cab run`"), command.indexOf("## `/cab test`"));
+  const run = command.slice(command.indexOf("## `/CAB run`"), command.indexOf("## `/CAB test`"));
   assert.match(run, /critères de fin la preuve du rapport/);
   assert.match(run, /Ne demande pas la clôture normale `TERMINÉ` sans preuve du rapport/);
   assert.match(run, /Si l'archivage échoue/);
@@ -275,7 +275,7 @@ test("le protocole exige un rapport par archive et empêche une clôture sans pr
 
 test("le protocole distribué protège la lecture seule et décrit la récupération explicite", () => {
   for (const path of [
-    new URL("../.codex/commands/cab.md", import.meta.url),
+    new URL("../.codex/commands/CAB.md", import.meta.url),
     new URL("../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md", import.meta.url),
   ]) {
     const protocol = readFileSync(path, "utf8");
@@ -293,7 +293,7 @@ test("le protocole distribue des cadences indépendantes et conserve le choix PL
   const selections = [];
   for (const path of [
     "../ORCHESTRATED_CODING.md",
-    "../.codex/commands/cab.md",
+    "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
   ]) {
     const protocol = readFileSync(new URL(path, import.meta.url), "utf8")
@@ -331,6 +331,57 @@ test("le protocole distribue des cadences indépendantes et conserve le choix PL
   }
 });
 
+test('les références OpenSpec PLLM conservent une attente humaine sans réessai automatique', () => {
+  const specifications = {};
+  for (const name of ['persistent-job-supervision', 'codex-integration-distribution',
+    'archive-session-statistics']) {
+    const path = `../openspec/specs/${name}/spec.md`;
+    const source = readFileSync(new URL(path, import.meta.url), 'utf8');
+    specifications[name] = source;
+    assert.doesNotMatch(source.replace(/\s+/g, ' '),
+      /retenter toutes les 30 minutes|sans limite de tentatives|nouvelles tentatives illimitées|chaque échec programme une nouvelle tentative|restaure l'échéance conservée/i,
+      path);
+  }
+  const requirement = (name, title) => {
+    const source = specifications[name];
+    const marker = `### Requirement: ${title}\n`;
+    const start = source.indexOf(marker);
+    assert.ok(start >= 0, `${name}: ${title}`);
+    const end = source.indexOf('\n### Requirement:', start + marker.length);
+    return source.slice(start, end < 0 ? undefined : end).replace(/\s+/g, ' ');
+  };
+  const waiting = requirement('persistent-job-supervision', 'Attente humaine sans réessai PLLM automatique');
+  assert.match(waiting, /attendre son instruction sans benchmark ni réessai automatique/);
+  assert.match(waiting, /MUST NOT poursuivre de mandat, test, maintenance ou sonde/);
+  assert.match(waiting, /une évaluation requise échoue ou ne fournit aucune politique admissible/);
+  const checkpoint = requirement('persistent-job-supervision', 'Checkpoint des tentatives PLLM');
+  assert.match(checkpoint, /choix PLLM vérifié éventuel et sa provenance/);
+  assert.match(checkpoint, /prochaine action MUST être l'attente d'une instruction humaine, sans programmer de nouvelle échéance automatique/);
+  assert.match(checkpoint, /MUST NOT dupliquer une tentative d'effet inconnu/);
+  const historical = requirement('persistent-job-supervision', 'Échéance PLLM historique sans effet automatique');
+  assert.match(historical, /présence, son dépassement ou sa restauration MUST NOT déclencher une évaluation, un benchmark ou un prévol automatique/);
+  assert.match(historical, /ancienne échéance dépassée à la reprise/i);
+  const supervision = requirement('persistent-job-supervision', "Supervision pendant l'attente PLLM");
+  assert.match(supervision, /états de supervision et les preuves MUST être conservés/);
+  assert.match(supervision, /MUST NOT déclencher de nouveau mandat, sonde ou benchmark automatique/);
+  const recovery = requirement('persistent-job-supervision', 'Réconciliation avant reprise après benchmark');
+  assert.match(recovery, /Après une évaluation autorisée réussie/);
+  assert.match(recovery, /Tout nouveau choix MUST être qualifié par son prévol natif/);
+  assert.match(recovery, /MUST NOT constituer une décision CAB, rejouer un mandat consommé/);
+  const policy = requirement('codex-integration-distribution', 'Politique PLLM documentaire sans réessai implicite');
+  assert.match(policy, /fraîcheur initiale de huit heures, choix conservé pendant la session/);
+  assert.match(policy, /réévaluation sur panne réelle ou instruction explicite/);
+  assert.match(policy, /attend l'instruction humaine sans réessai automatique périodique/);
+  assert.match(policy, /son âge seul ne provoque ni nouveau benchmark ni bascule du choix du RUN/);
+  const statistics = requirement('archive-session-statistics', "Échec statistique distinct d'un échec PLLM");
+  assert.match(statistics, /MUST rester distinct de l'indisponibilité PLLM et de son attente d'instruction humaine/);
+  assert.match(statistics, /MUST NOT suspendre le RUN au seul motif de cet échec/);
+  assert.match(statistics, /Une échéance ou un échec statistique MUST NOT déclencher d'évaluation ou de benchmark PLLM/);
+  const control = requirement('codex-integration-distribution', 'Contrôle documentaire croisé des règles PLLM');
+  for (const name of Object.keys(specifications)) assert.ok(control.includes(name), name);
+  assert.match(control, /Les archives historiques MUST rester hors de ce contrôle courant/);
+});
+
 test("la réactivation sûre est distribuée sans tools true pendant la génération", () => {
   for (const path of [commandPath,
     new URL("../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md", import.meta.url)]) {
@@ -348,7 +399,7 @@ test("le prévol divergent conserve la candidate et le job dans le protocole dis
   const sections = [];
   for (const path of [
     "../ORCHESTRATED_CODING.md",
-    "../.codex/commands/cab.md",
+    "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
   ]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8");
@@ -379,7 +430,7 @@ test("le prévol divergent conserve la candidate et le job dans le protocole dis
 test("les sondes statistiques n'arrêtent pas le travail pour attendre le créneau", () => {
   for (const path of [
     "../ORCHESTRATED_CODING.md",
-    "../.codex/commands/cab.md",
+    "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
     "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
   ]) {
@@ -400,7 +451,7 @@ test("les sondes statistiques n'arrêtent pas le travail pour attendre le créne
 
 
 test("le refus par polling après timeout est distribué avec une sortie humaine explicite", () => {
-  for (const path of ["../ORCHESTRATED_CODING.md", "../.codex/commands/cab.md",
+  for (const path of ["../ORCHESTRATED_CODING.md", "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
     for (const clause of ["Depuis CAB 1.0.2", "`poll_approval` ou `get_approval`",
@@ -419,7 +470,7 @@ test("status route directement la consultation avant toute boucle de pilotage", 
   const direct = command.indexOf("Pour l'argument `status` ou `status --run <run_id>`");
   assert.ok(direct >= 0 && direct < command.indexOf("## RUN concurrents"));
   assert.match(command.slice(direct, command.indexOf("## RUN concurrents")), /terminer la réponse après le rapport/);
-  const section = command.split("## `/cab status`")[1]?.split("## `/cab start`")[0];
+  const section = command.split("## `/CAB status`")[1]?.split("## `/CAB start`")[0];
   assert.ok(section, "La section status doit être distribuée avant start");
   assert.match(section, /Accepter exactement `status` ou `status --run <run_id>`/);
   assert.match(section, /Refuser argument manquant, dupliqué, option inconnue ou suffixe/);
@@ -431,7 +482,7 @@ test("status route directement la consultation avant toute boucle de pilotage", 
 
 test("le contrat status conserve le tableau métier, la fraîcheur et les limites des preuves", () => {
   const command = readFileSync(commandPath, "utf8");
-  const section = command.split("## `/cab status`")[1].split("## `/cab start`")[0];
+  const section = command.split("## `/CAB status`")[1].split("## `/CAB start`")[0];
   assert.ok(section.includes("| RUN / Nom du change | Actions réalisées | Actions en cours | Actions restant à réaliser |"));
   for (const source of ["GET /runs", "GET /status", "GET /runs/<run_id>/status", "GET /runs/<run_id>/integration-status", "wait_threads avec timeoutMs:0", "GET /session/status", "output/cismp/<run_id>/state.json", "tasks.md"]) {
     assert.ok(section.includes(source), source);
@@ -453,4 +504,52 @@ test('raccord catalogue distribué : préparation sans effet et transmission exp
  const helper=readFileSync(new URL('scripts/cgpt-approval-bridge-prepare-model-policy.mjs',root),'utf8');
  assert.match(helper,/prepareControllerModelPolicy/);assert.doesNotMatch(helper,/writeFile|systemctl|fetch\(/);
  const command=readFileSync(commandPath,'utf8');assert.match(command,/prepare-model-policy\.mjs --pllm-skill-root/);assert.match(command,/Fusionne son patch validé `OC_Codex_PLLM_CATALOG`/);assert.match(command,/résolution réussie du contrôleur avant prévol/);
+});
+
+
+test("les trois noms de commandes sont explicites et leurs versions concordent", () => {
+  const root = new URL('../.codex/commands/', import.meta.url);
+  const names = readdirSync(root);
+  for (const name of ['CAB.md', 'CABU.md', 'cab.md']) {
+    assert.ok(names.includes(name), name);
+    const source = readFileSync(new URL(name, root), 'utf8');
+    assert.match(source, /^version: 1\.10\.6$/m);
+  }
+  const canonical = readFileSync(commandPath, 'utf8');
+  assert.match(canonical, /Commande canonique : `\/CAB`/);
+  assert.match(canonical, /^## `\/CAB update`$/m);
+  assert.doesNotMatch(canonical, /^## `\/cab(?: |`)/m);
+});
+
+test("CABU impose update sans argument et cab transmet ses arguments", () => {
+  const root = new URL('../.codex/commands/', import.meta.url);
+  for (const name of ['CABU.md', 'cab.md']) {
+    const alias = readFileSync(new URL(name, root), 'utf8');
+    assert.match(alias, /Charge intégralement le fichier frère `CAB\.md`/);
+    assert.match(alias, /version: 1\.10\.6/);
+    assert.match(alias, /absent, illisible ou d'une version différente/);
+    assert.match(alias, /CAB_COMMANDE_ALIAS_INDISPONIBLE/);
+    assert.match(alias, /sans recherche\nglobale ni téléchargement/);
+    assert.match(alias, /dans ce même tour/);
+    assert.doesNotMatch(alias, /codex plugin|systemctl|curl|^## .*update/m);
+  }
+  const shortcut = readFileSync(new URL('CABU.md', root), 'utf8');
+  assert.match(shortcut, /fixant l'argument de\nla commande canonique à `update`/);
+  assert.ok(shortcut.indexOf('Syntaxe : /CABU') < shortcut.indexOf('Charge intégralement'));
+  assert.match(shortcut, /termine immédiatement, avant toute lecture réseau ou effet de maintenance/);
+  assert.match(shortcut, /Ne déclenche ni start, ni run, ni test, ni bootstrap/);
+  const legacy = readFileSync(new URL('cab.md', root), 'utf8');
+  assert.match(legacy, /transmettant `\$ARGUMENTS` inchangé/);
+});
+
+test("update prépare les trois commandes et protège les copies locales et le repli", () => {
+  const source = readFileSync(commandPath, 'utf8');
+  const update = source.split('## `/CAB update`')[1].split('## `/CAB stop`')[0];
+  for (const name of ['CAB.md', 'CABU.md', 'cab.md']) assert.ok(update.includes('.codex/commands/' + name), name);
+  for (const clause of ['trois téléchargements', 'version SemVer valide identique',
+    'sans écrire les cibles', 'divergent est préservé', 'les fichiers absents',
+    'Revérifie leurs empreintes', 'restaure les seules copies',
+    'retire les seuls nouveaux fichiers', 'Un échec de restauration',
+    'les trois versions, contenus et références locales']) assert.ok(update.includes(clause), clause);
+  assert.ok(update.indexOf('10. Prépare') < update.indexOf('13. Pour'));
 });

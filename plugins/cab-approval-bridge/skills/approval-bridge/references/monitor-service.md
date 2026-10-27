@@ -1,6 +1,6 @@
-# Service web de monitoring — CAB 1.10.4
+# Service web de monitoring — CAB 1.10.6
 
-Cette procédure est obligatoire pendant `/cab start` et à chaque entrée ou
+Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace
 canonique, avant PLLM, santé OpenCode et prévols modèle/MCP. Elle s'applique
 même si contrôleur et superviseur sont déjà actifs et réutilisés : leur présence
@@ -37,7 +37,7 @@ attendue dans le profil utilisateur et son appartenance à cette installation.
 
 Si elle est active, interroger uniquement l'URL loopback attendue :
 
-- GET /api/snapshot doit réussir et annoncer version 1.10.4 ainsi que
+- GET /api/snapshot doit réussir et annoncer version 1.10.6 ainsi que
   identity.workspace exactement égal au workspace canonique attendu ;
 - GET / doit servir la page CAB Monitor ;
 - l'unité doit utiliser Restart=on-failure.
@@ -71,7 +71,7 @@ web-monitor/
 ```
 
 Conserver ces deux dossiers frères : les imports et ressources sont résolus
-relativement aux modules. Vérifier la version 1.10.4 et la présence de chaque
+relativement aux modules. Vérifier la version 1.10.6 et la présence de chaque
 fichier avant publication du jeu. Aucune dépendance tierce n'est installée.
 Refuser les destinations symboliques, étrangères ou sans propriété prouvée.
 Remplacer les seuls fichiers nécessaires de façon atomique ; conserver les
@@ -118,12 +118,12 @@ service, de la page, de la version et du workspace.
 
 L'installation du jeu source dans SCM n'exécute aucune de ces commandes sur
 le profil réel. Ces opérations appartiennent au démarrage ou à la reprise de pilotage autorisés,
-y compris par /cab start ; les tests emploient uniquement des répertoires et
+y compris par /CAB start ; les tests emploient uniquement des répertoires et
 services isolés.
 
 ## 5. Arrêt, erreurs et indépendance
 
-`/cab stop` et `references/session-reset.md` préservent le service, sa
+`/CAB stop` et `references/session-reset.md` préservent le service, sa
 configuration, son jeu installé et ses connexions propres. Ils arrêtent les
 seuls clients SSE et services CAB de pilotage concernés. Le moniteur reste
 disponible pour afficher contrôleur, superviseur et broker indisponibles.
@@ -143,7 +143,7 @@ ce bootstrap ne déclenche aucun arrêt du moniteur. Il continue à présenter l
 observations disponibles et les sources indisponibles ; son démarrage ne prouve
 pas à lui seul un diagnostic PLLM ou un prévol réussi.
 
-## 6. Gestion depuis le Web 1.10.4
+## 6. Gestion depuis le Web 1.10.6
 
 La page propose des commandes explicites des briques. Les unités fixes
 contrôleur/superviseur et leur PID/workspace sont contrôlés ; le broker passe
@@ -156,4 +156,4 @@ ARCHIVES et Supprimer concernent uniquement le catalogue privé du moniteur.
 OC_Codex_MONITOR_STATE_DIR permet un parent absolu personnalisé ; le catalogue
 reste séparé par empreinte de workspace. Sources OpenSpec, RUN et preuves
 restent conservés. Désarchiver un RUN ne reprend aucune exécution. Les
-procédures /cab stop et reset continuent de préserver le service Web.
+procédures /CAB stop et reset continuent de préserver le service Web.

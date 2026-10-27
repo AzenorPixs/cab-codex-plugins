@@ -11,7 +11,7 @@ import { FROZEN_PROFILE, FROZEN_CAPABILITY, collectFrozenProof, proofHash, modul
   inspectControllerInstallation, checkInstallationJournal } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
 
-export const VERSION = '1.10.4';
+export const VERSION = '1.10.6';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
