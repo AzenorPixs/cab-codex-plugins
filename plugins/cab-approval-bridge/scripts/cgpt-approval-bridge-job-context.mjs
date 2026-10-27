@@ -8,7 +8,7 @@ import readline from "node:readline";
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 
-export const VERSION = "1.10.6";
+export const VERSION = "1.10.7";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -38,6 +38,7 @@ export function checkCommandLength(approval, maxLength) {
 
 // A context owns its decisions, gates and recovery; OpenCode and MCP stay shared.
 export function createJobContext({ workspace, stateDirectory, run = null,
+  currentRun = () => run,
   admitOperation = () => true, ownsSession = () => true, observe = () => {},
   nativeLifecycle = {},
   maxCommandLength = commandLengthLimit(),
@@ -249,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "1.10.6",
+    version: "1.10.7",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -460,7 +461,7 @@ function nativePermissionFailure(reason) {
   throw error;
 }
 
-function hasNativeAsk(session, kind) {
+function hasNativeAsk(session, kind, actions = ['ask']) {
   if (!Array.isArray(session.permission) || session.permission.some((rule) =>
       !rule || typeof rule.permission !== "string" || !rule.permission ||
       typeof rule.pattern !== "string" || !["ask", "allow", "deny"].includes(rule.action))) {
@@ -471,7 +472,7 @@ function hasNativeAsk(session, kind) {
       character.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("")}$`).test(kind);
   const last = session.permission.findLast((rule) => matches(rule.permission));
   // Une règle finale globale ask couvre aussi les cibles spécifiques antérieures.
-  return last?.pattern === "*" && last.action === "ask";
+  return last?.pattern === "*" && actions.includes(last.action);
 }
 
 async function checkNativeAsk(operation) {
@@ -678,6 +679,7 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
 }
 
 async function inspectNotificationReconciliation(payload, matchesApproval) {
+  if (payload?.recoveryId === null) return inspectPausedOrphan(payload, matchesApproval);
   const approval = payload?.approval;
   const recovery = job?.recovery;
   const operation = approvedOperation(approval);
@@ -751,11 +753,52 @@ async function inspectNotificationReconciliation(payload, matchesApproval) {
     operation, rejectionOnly: true }, nativeToolCount: parts.length, nativeToolHash: recoveryToolsHash(parts) };
 }
 
+async function inspectPausedOrphan(payload, matchesApproval) {
+  const approval = payload.approval, operation = approvedOperation(approval);
+  const fail = (code) => recoveryFailure('notification-reconciliation-' + code);
+  if (!run || currentRun()?.suspension?.action !== 'PAUSE' || !job?.armed || job.recovery || terminalGate.status !== 'OPEN' ||
+      payload.jobId !== job.jobId || approval?.run_id !== run.runId || approval.change_id !== job.changeId ||
+      operation?.sessionId !== job.sessionId || !operationContextAllowed(operation,approval.requestId) ||
+      (job.currentCabMandate && job.currentCabMandate !== approval.requestId)) fail('context-divergent');
+  if (validations.has(approval.requestId) || httpDecisions.has(approval.requestId) || active.size ||
+      reconcilingPermissions.size || unmatchedNativePermissions.size || reminderNotifications.size ||
+      [...validations.values()].some((v) => !httpDecisions.has(v.requestId))) fail('validation-exists');
+  const health = await recoveryJson('/global/health'), path = await recoveryJson('/path'), mcp = await recoveryJson('/mcp');
+  if (health.healthy !== true || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') fail('context-divergent');
+  const endpoint = `/session/${encodeURIComponent(job.sessionId)}`;
+  const parts = recoveryTools(await recoveryJson(endpoint + '/message'));
+  const submissions = parts.filter((p) => p.tool === 'cgpt-validation_request_validation' && p.state?.input?.requestId === approval.requestId);
+  if (submissions.length !== 1 || !matchesApproval(submissions[0].state?.input)) fail('proof-divergent');
+  const first = parts.indexOf(submissions[0]); let pending = false;
+  for (const part of parts.slice(first)) {
+    const state = part.state;
+    if (part.tool === 'cgpt-validation_broker_readiness' && state?.status === 'completed') continue;
+    if (part === submissions[0] && state?.status === 'error' && /-32001/.test(state.error || '')) continue;
+    if (part !== submissions[0] && (!['cgpt-validation_poll_approval','cgpt-validation_get_approval'].includes(part.tool) ||
+        state?.input?.approval_id !== approval.approval_id)) fail('effect-not-excluded');
+    let output; try { output = JSON.parse(state?.output); } catch { fail('proof-divergent'); }
+    if (state?.status !== 'completed' || output?.status !== 'PENDING' ||
+        ['requestId','approval_id','session_id','directory','change_id','files','commands'].some((key) =>
+          JSON.stringify(output[key]) !== JSON.stringify(approval[key]))) fail('proof-divergent');
+    pending = true;
+  }
+  if (!pending) fail('proof-divergent');
+  const busy = await recoveryJson('/session/status'), permissions = await recoveryJson('/permission'), session = await recoveryJson(endpoint);
+  if (!busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
+      permissions.some((p) => ownsSession(p.sessionID)) || session.id !== job.sessionId || session.directory !== job.directory ||
+      (busy[job.sessionId] && busy[job.sessionId].type !== 'idle') || !hasNativeAsk(session,operation.kind,['ask','deny'])) fail('native-not-quiescent');
+  if (recoveryToolsHash(recoveryTools(await recoveryJson(endpoint + '/message'))) !== recoveryToolsHash(parts)) fail('proof-divergent');
+  return { validation: { requestId:approval.requestId,approvalId:approval.approval_id,changeId:approval.change_id,
+    summary:typeof approval.summary === 'string' ? approval.summary : 'Demande en pause réconciliée',operation,rejectionOnly:true,pausedOrphan:true },
+    nativeToolCount:parts.length,nativeToolHash:recoveryToolsHash(parts) };
+}
+
 function checkReconciledValidation(inspection) {
   const validation = inspection.validation;
   if (!operationContextAllowed(validation.operation, validation.requestId) ||
       validations.has(validation.requestId) || httpDecisions.has(validation.requestId) ||
-      job.currentCabMandate || reconcilingPermissions.size || unmatchedNativePermissions.size ||
+      (job.currentCabMandate && !(validation.pausedOrphan && currentRun()?.suspension?.action === 'PAUSE' &&
+        job.currentCabMandate === validation.requestId)) || reconcilingPermissions.size || unmatchedNativePermissions.size ||
       active.size || reminderNotifications.size) {
     recoveryFailure('notification-reconciliation-context-divergent');
   }
@@ -1642,7 +1685,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.10.6",
+      version: "1.10.7",
     },
   });
 

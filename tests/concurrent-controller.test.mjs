@@ -561,6 +561,63 @@ async function orphanedPreflight(t, mutate = () => {}) {
   return { h, a, b, approval, recovery, payload };
 }
 
+async function pausedOrphan(t, timeout = false) {
+  const h=await setup(t),a=await h.reserve('a');
+  const approval=h.approval(a,'paused-write');approval.commands=['printf operation-non-executee'];
+  const part=h.native.messages.ses_a.at(-1).parts[0];
+  part.state={status:timeout?'error':'completed',input:structuredClone(approval),
+    ...(timeout?{error:'MCP error -32001: request timed out'}:{output:JSON.stringify({...approval,status:'PENDING'})})};
+  if(timeout)h.native.messages.ses_a.push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'PENDING'})}}]});
+  await h.post('/runs/a/suspend',{version:a.version,action:'PAUSE',evidence:['human maintenance pause']});
+  await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:approval.requestId});
+  return {h,a,approval,payload:{transactionId:'paused-repair',developerAuthorization:'human maintenance authorization',jobId:'job-a',recoveryId:null,approval}};
+}
+
+for(const timeout of [false,true])test(`demande orpheline en pause : admission absente et rejet seul, timeout=${timeout}`,async(t)=>{
+  const {h,approval,payload}=await pausedOrphan(t,timeout);
+  if(timeout)h.native.rules.ses_a=[{permission:'*',pattern:'*',action:'deny'}];
+  const before=(await h.get('/runs')).body;
+  assert.equal(before.requestOwners[approval.requestId],undefined);
+  const receipt=await h.post('/runs/a/validation/reconcile',payload);
+  assert.equal(receipt.status,201,JSON.stringify(receipt));assert.equal(receipt.body.recoveryId,null);
+  assert.deepEqual((await h.post('/runs/a/validation/reconcile',payload)).body,receipt.body);
+  for(const decision of ['approved','needs_clarification'])assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision})).status,400);
+  const after=(await h.get('/runs')).body;
+  assert.equal(after.requestOwners[approval.requestId].reconciliation.outcome,'REJECTION_ONLY');
+  const restored=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode/state/cgpt-approval-bridge'));
+  assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly,true);
+  assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,201);
+  assert.deepEqual(h.native.replies,[]);
+});
+
+for(const variant of ['no-pause','busy','permission','allow','effect','poll-identity','timeout-no-poll','duplicate','history-drift','job','mandate','approval-divergent','stale-version','poll-status'])test(`demande orpheline en pause : refuse ${variant} sans admission partielle`,async(t)=>{
+  const {h,a,approval,payload}=await pausedOrphan(t,true);
+  if(variant==='no-pause')await h.post('/runs/a/suspend',{version:a.version,action:'RESUME',evidence:['isolated test']});
+  if(variant==='busy')h.native.busy.ses_a={type:'busy'};
+  if(variant==='permission')h.native.permissions=[{id:'permission-a',sessionID:'ses_a',permission:'bash',patterns:['*']}];
+  if(variant==='allow')h.native.rules.ses_a=[{permission:'*',pattern:'*',action:'allow'}];
+  if(variant==='effect')h.native.messages.ses_a.push({parts:[{type:'tool',tool:'bash',state:{status:'completed',input:{command:'printf danger'},output:''}}]});
+  if(variant==='poll-identity')h.native.messages.ses_a.at(-1).parts[0].state.input.approval_id='approval-other';
+  if(variant==='timeout-no-poll')h.native.messages.ses_a.pop();
+  if(variant==='duplicate')h.native.messages.ses_a.push(structuredClone(h.native.messages.ses_a[0]));
+  if(variant==='job')payload.jobId='other-job';
+  if(variant==='mandate')await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:'other-request'});
+  if(variant==='approval-divergent')payload.approval={...approval,commands:['other command']};
+  if(variant==='stale-version'){
+    approval.reservation_version++;
+    h.native.messages.ses_a[0].parts[0].state.input=structuredClone(approval);
+    h.native.messages.ses_a.at(-1).parts[0].state.output=JSON.stringify({...approval,status:'PENDING'});
+  }
+  if(variant==='poll-status')h.native.messages.ses_a.at(-1).parts[0].state.output=JSON.stringify({...approval,status:'APPROVED'});
+  if(variant==='history-drift'){
+    let reads=0;h.native.onRequest=(path)=>{if(path==='/session/ses_a/message'&&++reads===2)h.native.messages.ses_a.push({parts:[{type:'tool',tool:'bash',state:{status:'completed'}}]});};
+  }
+  const before=(await h.get('/runs')).body;
+  const rejected=await h.post('/runs/a/validation/reconcile',payload);
+  assert.ok(rejected.status>=400,JSON.stringify(rejected));
+  assert.deepEqual((await h.get('/runs')).body,before);assert.deepEqual(h.native.replies,[]);
+});
+
 test('prévol orphelin : rejet seul durable, notifications répétées, pair actif puis retry existant', async (t) => {
   const { h, b, approval, recovery, payload } = await orphanedPreflight(t);
   const before = (await h.get('/runs')).body;
@@ -845,7 +902,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.10.6');
+  assert.equal(initialized.result.serverInfo.version, '1.10.7');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

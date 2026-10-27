@@ -27,7 +27,7 @@ async function artifactFixture(t) {
 
 test('broker externe : trois artefacts cibles vérifiés sans mutation et processus antérieur annoncé séparément',async(t)=>{
   const h=await artifactFixture(t),before=await inspectBrokerArtifacts(h.directory,h.proof);
-  assert.equal(before.version,'1.10.6');assert.equal(h.proof.loadedVersion,'1.7.1');
+  assert.equal(before.version,'1.10.7');assert.equal(h.proof.loadedVersion,'1.7.1');
   assert.equal(Object.keys(before.files).length,3);
   assert.deepEqual(await inspectBrokerArtifacts(h.directory,h.proof),before);
   for(const name of BROKER_ARTIFACT_FILES)assert.equal(createHash('sha256').update(await readFile(join(h.directory,name))).digest('hex'),h.proof.manifest[name]);
@@ -43,6 +43,21 @@ test('broker externe : manifeste, propriétaire, liens et alias divergents sont 
   await link(path,join(h.root,'alias.py'));await assert.rejects(inspectBrokerArtifacts(h.directory,h.proof),/artifact-unsafe/);
   await unlink(join(h.root,'alias.py'));await unlink(path);await writeFile(join(h.root,'linked.py'),saved);
   await symlink(join(h.root,'linked.py'),path);await assert.rejects(inspectBrokerArtifacts(h.directory,h.proof),/artifact-unsafe/);
+});
+
+test('broker externe : propriétaires explicitement liés, ancienne preuve et tiers refusés',async(t)=>{
+  const h=await artifactFixture(t),before=await inspectBrokerArtifacts(h.directory,h.proof);
+  const explicit={...h.proof,artifactOwnerUid:process.getuid(),directoryOwnerUid:process.getuid()};
+  assert.deepEqual(await inspectBrokerArtifacts(h.directory,explicit),before);
+  for(const value of [-1,1.5,'1000',process.getuid()+99]) {
+    assert.throws(()=>validateBrokerProof({...explicit,artifactOwnerUid:value},h.directory),/proof-invalid/);
+    assert.throws(()=>validateBrokerProof({...explicit,directoryOwnerUid:value},h.directory),/proof-invalid/);
+  }
+  const other=process.getuid()+1;
+  const brokerElsewhere={...explicit,expectedUid:other,opencodeProcess:{...explicit.opencodeProcess,uid:other},brokerProcess:{...explicit.brokerProcess,uid:other}};
+  assert.deepEqual(await inspectBrokerArtifacts(h.directory,brokerElsewhere),before);
+  await assert.rejects(inspectBrokerArtifacts(h.directory,{...brokerElsewhere,artifactOwnerUid:other}),/artifact-unsafe/);
+  await assert.rejects(inspectBrokerArtifacts(h.directory,{...brokerElsewhere,directoryOwnerUid:other}),/artifact-unsafe/);
 });
 
 test('broker externe : véritable enfant Python, entrée et identité du parent contrôlées sans environnement',async(t)=>{
@@ -113,7 +128,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     await mkdir(target, { recursive: true }); await cp(source, target, { recursive: true });
     for (const entry of await readdir(target, { withFileTypes: true })) {
       if (entry.isFile()) {
-        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('1.10.6', '1.7.0'));
+        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('1.10.7', '1.7.0'));
       }
     }
   };
@@ -138,7 +153,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     if (path.endsWith('/disconnect')) { state.broker = false; return {}; }
     if (path.endsWith('/connect')) {
       state.broker = true; state.brokerVersion = version(await readFile(join(c.brokerDirectory, 'cgpt_approval_bridge_server.py'), 'utf8'));
-      if (state.wrongBroker && state.brokerVersion === '1.10.6') state.brokerVersion = '1.7.0';
+      if (state.wrongBroker && state.brokerVersion === '1.10.7') state.brokerVersion = '1.7.0';
       return {};
     }
     if (path === '/api/snapshot') {
@@ -187,12 +202,12 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     receipt: async () => JSON.parse(await readFile(join(c.home, '.local/state/cab-approval-bridge-update/current.json'), 'utf8')) };
 }
 
-test('jeu réel : les quatre briques actives passent en 1.10.6, RUN et archives conservés, deuxième invocation sans arrêt', async (t) => {
+test('jeu réel : les quatre briques actives passent en 1.10.7, RUN et archives conservés, deuxième invocation sans arrêt', async (t) => {
   const h = await fixture(t, { realSyntax: true }); const before = await readFile(h.runtime, 'utf8');
   const result = await updateComponents(h.c, h.options);
-  assert.equal(result.status, 'completed'); assert.equal(result.version, '1.10.6');
-  assert.deepEqual(h.state.versions, { controller: '1.10.6', supervisor: '1.10.6', monitor: '1.10.6' });
-  assert.equal(h.state.brokerVersion, '1.10.6'); assert.equal(h.state.global.state, 'RELEASED');
+  assert.equal(result.status, 'completed'); assert.equal(result.version, '1.10.7');
+  assert.deepEqual(h.state.versions, { controller: '1.10.7', supervisor: '1.10.7', monitor: '1.10.7' });
+  assert.equal(h.state.brokerVersion, '1.10.7'); assert.equal(h.state.global.state, 'RELEASED');
   assert.equal(await readFile(h.runtime, 'utf8'), before); assert.equal(await readFile(h.catalog, 'utf8'), 'ARCHIVE-SENTINEL');
   assert.equal(h.state.run.suspension.action, 'PAUSE');
   const stopped = h.state.events.filter((event) => event[1] === 'stop').length;
@@ -205,7 +220,7 @@ test('services initialement inactifs : fichiers actualisés sans les démarrer',
   const h = await fixture(t, { active: ['monitor'], broker: false });
   assert.equal((await updateComponents(h.c, h.options)).status, 'completed');
   assert.deepEqual(h.state.services, { controller: false, supervisor: false, monitor: true });
-  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '1.10.6');
+  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '1.10.7');
   assert.ok(!h.state.events.some((event) => event[1] === 'start' && event[2]?.includes('supervisor')));
 });
 
@@ -350,13 +365,13 @@ test('gel levé par une intervention externe : la récupération ne coupe pas le
 });
 
 
-test('broker 1.9.0 chargé vers artefacts 1.10.6 : admission fermée sans mutation',async(t)=>{
+test('broker 1.9.0 chargé vers artefacts 1.10.7 : admission fermée sans mutation',async(t)=>{
   const h=await artifactFixture(t);h.proof.loadedVersion='1.9.0';
   assert.equal(validateBrokerProof(h.proof,h.directory),h.proof);
   const before=await inspectBrokerArtifacts(h.directory,h.proof);
-  assert.equal(before.version,'1.10.6');assert.equal(h.proof.loadedVersion,'1.9.0');
-  for(const loadedVersion of ['1.7.1','1.8.0','1.9.0','1.10.0','1.10.1','1.10.2','1.10.3','1.10.4','1.10.5','1.10.6'])assert.equal(validateBrokerProof({...h.proof,loadedVersion},h.directory).loadedVersion,loadedVersion);
-  for(const loadedVersion of ['1.9.1','1.9.0+codex.20261025101020','1.10.7','2.0.0',null])assert.throws(()=>validateBrokerProof({...h.proof,loadedVersion},h.directory),/proof-invalid/);
+  assert.equal(before.version,'1.10.7');assert.equal(h.proof.loadedVersion,'1.9.0');
+  for(const loadedVersion of ['1.7.1','1.8.0','1.9.0','1.10.0','1.10.1','1.10.2','1.10.3','1.10.4','1.10.5','1.10.6','1.10.7'])assert.equal(validateBrokerProof({...h.proof,loadedVersion},h.directory).loadedVersion,loadedVersion);
+  for(const loadedVersion of ['1.9.1','1.9.0+codex.20261025101020','1.10.8','2.0.0',null])assert.throws(()=>validateBrokerProof({...h.proof,loadedVersion},h.directory),/proof-invalid/);
   assert.throws(()=>validateBrokerProof({...h.proof,expectedUid:h.proof.expectedUid+1},h.directory),/proof-invalid/);
   assert.deepEqual(await inspectBrokerArtifacts(h.directory,h.proof),before);
 });

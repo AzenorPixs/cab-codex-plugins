@@ -66,6 +66,25 @@ test('admission de notification : propriétaire et opération dans une seule per
   assert.throws(() => registry.admitValidation('a', approval, 'f'.repeat(64), true), /request-id-already-owned/);
 });
 
+test('orphelin en pause sans admission : persistance unique et échec sans état durable partiel',async(t)=>{
+  const {registry,directory,state,a,approval,digest,receipt}=await notificationRegistry(t);
+  registry.suspend('a',{version:a.version,action:'PAUSE',evidence:['explicit maintenance']});
+  const generic={...receipt,recoveryId:null};
+  const observations=[];registry.observe=(value)=>observations.push(value);
+  registry.reconcileNotification('a',approval,digest,generic);
+  assert.equal(observations.length,1);
+  const snapshot=new ResourceRunRegistry(directory,state).snapshot();
+  assert.equal(snapshot.requestOwners[approval.requestId].reconciliation.recoveryId,null);
+  assert.equal(snapshot.coordination.operations[approval.operation_id].rejectionOnly,true);
+  const other={...approval,requestId:'second-request',approval_id:'second-approval',operation_id:'second-operation'};
+  const failed={...generic,transactionId:'second-transaction',operationId:other.operation_id,approvalId:other.approval_id};
+  registry.path=join(state,'missing','registry.json');
+  assert.throws(()=>registry.reconcileNotification('a',other,'f'.repeat(64),failed),/registry-persistence-failed/);
+  const restored=new ResourceRunRegistry(directory,state);
+  assert.equal(restored.requestOwners[other.requestId],undefined);
+  assert.equal(restored.resourceState.operations[other.operation_id],undefined);
+});
+
 test('admission de notification : persistance en échec ferme le registre sans résultat durable partiel', async (t) => {
   const { registry, directory, state, approval, digest } = await notificationRegistry(t);
   const originalPath = registry.path; const initial = readFileSync(originalPath, 'utf8');

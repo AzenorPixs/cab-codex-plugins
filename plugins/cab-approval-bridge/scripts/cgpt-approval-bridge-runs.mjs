@@ -5,13 +5,14 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.10.6";
+export const VERSION = "1.10.7";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const validReconciliation = (value) => record(value) &&
   Object.keys(value).length === 14 &&
-  ['transactionId', 'jobId', 'recoveryId', 'operationId', 'approvalId'].every((key) => id(value[key])) &&
+  ['transactionId', 'jobId', 'operationId', 'approvalId'].every((key) => id(value[key])) &&
+  (value.recoveryId === null || id(value.recoveryId)) &&
   typeof value.sessionId === 'string' && value.sessionId.startsWith('ses_') &&
   ['inputDigest', 'nativeToolHash', 'authorizationDigest'].every((key) => sha256(value[key])) &&
   Number.isSafeInteger(value.contextId) && value.contextId > 0 &&
@@ -476,13 +477,13 @@ export class RunRegistry {
     this.requestOwners[requestId] = { runId, digest };
     this.persist();
   }
-  checkRequestReconciliation(runId, requestId, digest, receipt) {
+  checkRequestReconciliation(runId, requestId, digest, receipt, { allowMissing = false } = {}) {
     this.assertHealthy();
     const owner = this.requestOwners[requestId];
-    if (!id(requestId) || owner?.runId !== runId || owner.digest !== digest || !validReconciliation(receipt)) {
+    if (!id(requestId) || (owner ? owner.runId !== runId || owner.digest !== digest : !allowMissing) || !validReconciliation(receipt)) {
       throw new CoordinationError('notification-reconciliation-identity-divergent');
     }
-    const prior = owner.reconciliation;
+    const prior = owner?.reconciliation;
     if (prior && (prior.transactionId !== receipt.transactionId || prior.inputDigest !== receipt.inputDigest)) {
       throw new CoordinationError('notification-reconciliation-transaction-divergent');
     }

@@ -10,7 +10,7 @@ import { validateBrokerProof, inspectBrokerArtifacts } from './cgpt-approval-bri
 import { ResourceRunRegistry } from './cgpt-approval-bridge-resource-coordination.mjs';
 import { publicLifecycle } from './cgpt-approval-bridge-run-steps.mjs';
 
-export const VERSION = '1.10.6';
+export const VERSION = '1.10.7';
 const exec = promisify(execFile);
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
