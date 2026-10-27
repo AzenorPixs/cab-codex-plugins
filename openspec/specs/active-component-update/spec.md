@@ -27,51 +27,107 @@ L'outil MUST réserver les écritures aux destinations CAB explicites hors works
 - **WHEN** le contrôleur est chargé depuis la nouvelle release sous autorité d'amorçage
 - **THEN** la release originale reste identique et les processus broker/Web ainsi que les liens non concernés sont préservés
 
-### Requirement: Maintenance durable et frontière sûre
-Le profil ordinaire MUST acquérir SHARED_MAINTENANCE et confirmer HELD après quiescence avant arrêt. Seul frozen-recovery-controller MAY suivre l'autorité BOOTSTRAP_HELD spécifiée, sans falsifier le HELD original. Aucun profil MUST décider, rejouer une permission ou purger le runtime. Une attente bornée MUST conserver processus et gel.
+### Requirement: Mise à jour forcée des services CAB
+Le profil ordinaire MUST valider et sauvegarder le paquet, arrêter controller,
+supervisor et monitor, remplacer les quatre briques, recharger systemd puis
+démarrer les trois unités. Il MUST NOT consulter les RUN, permissions,
+coordinations globales ou états de service comme précondition. OpenCode absent
+MUST NOT bloquer l'installation des fichiers broker. Le profil gelé reste
+distinct ; aucun profil ne décide ni ne rejoue une permission métier.
 
-#### Scenario: RUN encore occupé
-- **WHEN** la cohorte reste occupée à l'échéance
-- **THEN** la transaction reste en attente, aucun artefact actif n'est remplacé et aucun processus n'est arrêté
+#### Scenario: RUN ou coordination active
+- **WHEN** des RUN, permissions ou une coordination globale sont actifs au
+  début de `/CAB update`
+- **THEN** l'update ne les consulte pas pour décider de poursuivre, arrête les
+  trois unités systemd CAB, remplace les artefacts et les redémarre.
 
-### Requirement: Déploiement des quatre briques et états conservés
-Le profil ordinaire MUST prendre en charge les quatre briques et restaurer leurs états actif/inactif initiaux. Le profil frozen-recovery-controller MUST conserver broker, OpenCode et Web et ne remplacer que la fermeture d'imports du contrôleur, avec suspension contrôlée du superviseur. Aucune activation au login MUST être ajoutée.
+#### Scenario: OpenCode absent
+- **WHEN** l'API ou le processus OpenCode est absent
+- **THEN** l'update remplace tout de même les trois fichiers broker et les
+  autres artefacts, démarre les trois unités, puis rapporte le broker runtime
+  `INDISPONIBLE` sans bloquer la réussite des autres briques.
+
+#### Scenario: États CAB actifs
+- **WHEN** des RUN ou une coordination globale sont actifs avant l'update
+- **THEN** l'update les laisse intacts pendant son déroulement et ne les utilise
+  pas comme précondition d'arrêt, remplacement ou redémarrage
+
+### Requirement: Déploiement des quatre briques
+Le profil ordinaire MUST installer broker, contrôleur, superviseur et Web, puis
+démarrer les trois unités systemd après chaque update, même si elles étaient
+inactives avant. Il MUST NOT activer les unités au login. Le profil gelé garde
+ses contrôles spécifiques.
 
 #### Scenario: Web actif et superviseur inactif
 - **WHEN** le profil ordinaire met à jour ces composants
-- **THEN** le Web actif est relancé sur le nouveau jeu et le superviseur reste inactif
+- **THEN** le Web, le contrôleur et le superviseur sont tous actifs sur le
+  nouveau jeu sans activation au login
 
-### Requirement: Vérification avant reprise
-La réussite MUST vérifier versions des processus relancés, workspace, identités et générations avant levée du gel. Les PAUSE MUST être conservées. Une source inconnue MUST rester indisponible, sans déduction du plugin. reuse-readonly MUST distinguer versions chargée et sur disque ; après intention de déconnexion, une mauvaise version MUST conserver le gel pour récupération sans faux rollback.
+#### Scenario: Redémarrage de toutes les unités CAB
+- **WHEN** une mise à jour effective atteint la phase de redémarrage
+- **THEN** les trois unités systemd CAB sont démarrées sur le jeu vérifié sans
+  appel à `systemctl enable`, quels que soient leurs états avant l'update
+
+#### Scenario: Broker non vérifiable après redémarrage
+- **WHEN** OpenCode n'est pas joignable après le redémarrage
+- **THEN** les fichiers broker restent mis à jour, leur version sur disque est
+  rapportée et la version chargée est `INDISPONIBLE`.
+
+### Requirement: Rapport des versions après redémarrage
+Le rapport post-redémarrage MUST séparer source publiée, plugin, fichiers et
+processus controller/supervisor/monitor. Il MUST afficher le broker fichier ;
+si OpenCode est absent, son runtime MUST être `INDISPONIBLE`, sans bloquer les
+autres briques. Une version non observée MUST NOT être déduite des fichiers.
 
 #### Scenario: Broker de mauvaise version après reconnexion
 - **WHEN** la readiness indique une ancienne version du broker
-- **THEN** la réussite est refusée et le repli applicable est engagé, ou la récupération sous gel est exigée après la frontière reuse-readonly
+- **THEN** le rapport conserve la version active comme non vérifiée et confirme
+  séparément que les fichiers broker ciblés ont été installés
+
+#### Scenario: Redémarrage natif du broker OpenCode
+- **WHEN** OpenCode est accessible et le broker CAB est connecté avant l'update
+- **THEN** CAB tente `disconnect`, remplace les fichiers, puis tente `connect`
+  et rapporte la readiness obtenue sans tuer OpenCode
 
 ### Requirement: Journal et retour arrière récupérables
-Un verrou exclusif MUST protéger journal privé atomique et sauvegardes des seuls artefacts remplacés. Après arrêt, un échec MUST rétablir si possible artefacts et états initiaux, sans restaurer un runtime métier. Une interruption MUST être récupérable avant une autre transaction. reuse-readonly MUST persister l'intention avant déconnexion ; un échec ultérieur MUST conserver le gel pour récupération vers la cible, sans restaurer le broker ni prétendre rétablir l'ancien processus.
+Un verrou exclusif MUST protéger un journal privé atomique et les sauvegardes
+des seuls artefacts remplacés. Après arrêt, un échec MUST restaurer si possible
+les fichiers précédents, recharger systemd et redémarrer les trois unités CAB,
+sans restaurer un runtime métier ni un état de service antérieur. Une
+interruption MUST être récupérable avant une autre transaction.
 
 #### Scenario: Démarrage de la nouvelle version échoué
 - **WHEN** une brique refuse le nouveau jeu
 - **THEN** les artefacts précédents et états initiaux sont rétablis lorsque le repli reste possible ; un repli incomplet ou une frontière reuse-readonly franchie conserve le gel et signale la récupération nécessaire
 
-### Requirement: Idempotence et bilan explicite
-Un jeu déjà conforme MUST être conservé sans redémarrage inutile. Le bilan MUST distinguer paquet disponible, fichiers déployés, versions réellement actives, états inactifs, attente et repli. Une opération sur des schémas incompatibles MUST être refusée sans migration implicite.
+### Requirement: Redémarrage systématique et bilan explicite
+Chaque invocation ordinaire de `/CAB update` MUST arrêter puis redémarrer les
+trois unités CAB, y compris lorsque les versions de fichiers sont déjà
+conformes. Le bilan MUST distinguer le paquet, les fichiers déployés, les
+versions réellement actives, le broker non vérifiable, ainsi que tout échec de
+remplacement ou de démarrage. Une opération MUST conserver ses sauvegardes et
+son repli atomique.
 
 #### Scenario: Deuxième invocation inchangée
 - **WHEN** les empreintes et versions sont conformes
-- **THEN** les briques actives restent en place et le bilan indique déjà à jour
+- **THEN** les trois unités systemd sont arrêtées puis redémarrées et le bilan
+  indique les versions observées après redémarrage
 
 ### Requirement: Alignement ordinaire des releases gérées
-managed-release MUST préparer les briques à installer dans leurs racines autorisées, confirmer HELD et basculer atomiquement les pointeurs contrôlés vers des releases immuables, sans altérer les anciennes. Les liens non reconnus MUST être refusés. reuse-readonly MUST vérifier les trois artefacts broker sans installation ou bascule. Le succès MUST prouver les versions chargées 1.10.5, la reconnexion broker et les identités conservées avant reprise métier explicite.
+managed-release MUST préparer les artefacts dans les racines autorisées et
+basculer atomiquement les pointeurs après l'arrêt des services, sans altérer les
+anciennes releases. Les liens inconnus MUST être refusés. reuse-readonly reste
+un profil distinct et conserve sa preuve stricte.
 
 #### Scenario: Après récupération mixte
 - **WHEN** complete a réussi et une seconde maintenance ordinaire est explicitement autorisée
 - **THEN** le contrôleur, le superviseur, le broker et le Web sont alignés sans fermeture OpenCode ni effacement de son historique
 
 #### Scenario: Échec après bascule ordinaire
-- **WHEN** le chargement échoue sous HELD après installation des nouvelles releases
-- **THEN** les pointeurs et versions actives précédents sont restaurés lorsque le repli reste possible, ou la récupération sous gel est exigée après l'intention reuse-readonly, sans modifier les anciennes releases ni rejouer une permission
+- **WHEN** un processus ne démarre pas après installation des nouvelles releases
+- **THEN** les pointeurs et fichiers précédents sont restaurés lorsque le repli
+  reste possible, puis les trois unités sont redémarrées ; la cause et le
+  résultat du repli sont rapportés sans modifier les anciennes releases
 
 ### Requirement: Transition mixte bornée au rétablissement
 Le profil gelé MAY charger le contrôleur 1.10.5 avec broker, superviseur et Web 1.7.1 conservés, uniquement pour maintenance et récupération resource-scoped-v1 qualifiées. Il MUST publier séparément version du paquet, empreinte du contrôleur chargé et versions des processus préservés. Une autre version ou une capacité inconnue MUST refuser cette transition ; elle MUST NOT annoncer tout le runtime aligné en 1.10.5.

@@ -55,7 +55,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version source actuelle est `1.10.7` pour le broker, le contrôleur et le
+La version source actuelle est `1.10.9` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -317,7 +317,7 @@ correctif source.
 Le change `fix-orphaned-validation-admission` ajoute
 `POST /runs/<runId>/validation/reconcile`. Le statut du contrôleur et du RUN
 expose `notificationReconciliation: rejection-only-v1` lorsque ce code est
-chargé. La base 1.10.7 seule ne prouve pas sa présence dans un processus.
+chargé. Le manifeste de paquet seul ne prouve pas sa présence dans un processus.
 
 Le corps comporte exactement `transactionId`, `developerAuthorization`
 (référence non secrète d'un accord spécifique), `jobId`, `recoveryId` et
@@ -353,9 +353,10 @@ Le reçu et rejectionOnly sont des extensions conservatrices du registre 4 :
 un ancien lecteur strict peut les refuser. Après première utilisation, aucun
 retour aux anciens modules ni restauration d'une sauvegarde runtime antérieure
 ne doit effacer ces preuves. L'installation et le chargement restent distincts
-de ce lot source. L'activation doit aussi traiter le refus existant de
-checkCohort quand une récupération est ouverte ; ne pas forcer /CAB update.
-La proposition bornée et ses préconditions sont dans le dossier du change.
+de ce lot source. L'update forcé 1.10.9 ne consulte pas l'état de récupération
+pour décider de remplacer les fichiers ou redémarrer systemd ; le profil
+frozen-recovery-controller conserve ses contrôles spécifiques lorsqu'il est
+explicitement sélectionné.
 
 #### Retry ordinaire préservé
 
@@ -724,16 +725,13 @@ piloté.
   le gate terminal reste ouvert ;
 - `/CAB test` réalise un test non destructif du chemin de validation complet
   dans cette même session ;
-- `/CAB update` compare la version installée de `cab-approval-bridge` à la
-  version publiée par le marketplace Git `cab_codex_plugins`, le migre de façon
-  réversible depuis une source locale si nécessaire, puis compare la
-  commande du profil Codex à `AzenorPixs/cab-codex-plugins` sur `main`. Elle met à
-  niveau le plugin et la commande lorsqu'une version plus récente est disponible.
-  Elle peut réconcilier les fichiers ou processus divergents depuis le jeu
-  installé validé, et restitue les versions GitHub et locales du plugin, du contrôleur, du broker
-  actif, du Web, du superviseur déployé et de la commande. L'outil update déploie
-  les quatre briques, y compris actives, sous gel durable, après frontière sûre,
-  avec conservation des RUN, contrôle des versions et retour arrière ;
+- `/CAB update` compare plugin, skill et commandes de profil à leurs sources
+  validées, puis arrête systématiquement controller, supervisor et monitor,
+  remplace les fichiers des quatre briques et redémarre les unités sans
+  consulter les états RUN ou de coordination en précondition. Si l'API OpenCode
+  répond, elle recharge le broker ; sinon les fichiers broker sont installés et
+  son runtime est rapporté `INDISPONIBLE`. Le bilan distingue versions GitHub,
+  plugin, fichiers et processus actifs ;
 - `/CAB stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.
@@ -888,7 +886,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.10.7. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.10.9. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -1019,7 +1017,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 1.10.7 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 1.10.9 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1079,7 +1077,7 @@ sont pas présentées comme des succès. Une libération de garde non confirmée
 est signalée avec son expiration ; un contrôleur remplacé perd sa garde
 en mémoire. Aucun appel LLM ni activation au login n'est ajouté.
 
-## Maintenance de récupération gelée — 1.10.7
+## Maintenance de récupération gelée — 1.10.9
 
 Le profil explicite `frozen-recovery-controller` de update.mjs prépare la
 fermeture d'imports du contrôleur et la sauvegarde de ses seuls artefacts.
@@ -1120,7 +1118,7 @@ exigés. Un chemin fourni dans le corps HTTP n'est jamais suivi.
 Le profil exige des pairs sous PAUSE explicitement autorisée pendant toute
 la transition mixte. Après complete, aucun nouveau mandat métier n'est
 approuvé avant une maintenance ordinaire distinctement autorisée alignant
-réellement les quatre briques en 1.10.7, puis une reprise explicitement validée.
+réellement les quatre briques en 1.10.9, puis une reprise explicitement validée.
 Cette seconde maintenance peut reconnecter le broker et relancer le Web :
 elle n'est pas incluse dans le profil gelé ou dans la préparation source.
 
@@ -1129,11 +1127,11 @@ et attribuer la seule demande au prévol ciblé. Un écart reste bloquant, sans
 déduire sa cause ni annuler une demande inconnue. Une publication fraîche est
 requise après chargement ; le profil attend la télémétrie du broker conservé.
 
-Le profil qualifie temporairement contrôleur 1.10.7 avec broker, superviseur
+Le profil qualifie temporairement contrôleur 1.10.9 avec broker, superviseur
 et Web 1.7.1 conservés. packageVersion, runtimeVersions, maintenanceBuildDigest
 et frozenRecoveryMaintenance distinguent paquet et processus. La preuve
 isolée va jusqu'au prévol neuf once/exit 0 et complete avec le même broker
-original. Elle ne vaut pas déploiement global 1.10.7 ni test produit Pixs.
+original. Elle ne vaut pas déploiement global 1.10.9 ni test produit Pixs.
 Une version préservée inconnue ou différente est refusée. Le mode ordinaire
 update conserve ses contrôles et ses opérations de cycle de vie propres.
 
@@ -1144,47 +1142,37 @@ réinstallé. --rollback est refusé pour ce profil : il ne doit pas être
 interprété comme une nouvelle maintenance. Toute reprise utilise le même
 journal et refuse une preuve expirée ou altérée.
 
-## Mise à jour des briques actives — 1.10.7
+## Mise à jour forcée des briques CAB — 1.10.9
 
-La référence distribuée references/component-update.md définit l'exploitation.
-Le script cgpt-approval-bridge-update.mjs reçoit le plugin installé, les cibles
-non secrètes résolues et les bases HTTP loopback. Il valide la version 1.10.7,
-les imports, la syntaxe et les empreintes du jeu complet, dont broker/. Une
-version supérieure déjà déployée interdit le downgrade. Un jeu conforme et
-des processus conformes donnent up-to-date sans arrêt.
+`/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
+jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
+syntaxe, destinations et empreintes, puis prépare un journal privé et des
+sauvegardes atomiques. La version courante est 1.10.9 ; tout downgrade reste
+refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
+piloté ne sont jamais modifiés.
 
-Un verrou flock via registry-lock.py protège le profil. Journal, stage et
-sauvegardes résident sous ~/.local/state/cab-approval-bridge-update/, privés
-et atomiques. L'intention de gel est persistée avant l'appel HTTP ; un arrêt
-interrompu ou une libération ambiguë se réconcilie à partir du même reçu.
-L'outil attend au plus --wait-ms (120000 par défaut, de 0 à 900000) pour
-confirmer SHARED_MAINTENANCE/HELD, sans décider les demandes. Le code 2
-conserve gel et services en attente. Une nouvelle invocation reprend le stage.
+Le flux ordinaire ne lit pas les RUN, les permissions, le verrou global ou les
+états systemd avant de décider de poursuivre. Après validation du paquet, il
+arrête systématiquement controller, supervisor et monitor par systemd
+utilisateur, remplace atomiquement les fichiers du broker, du contrôleur, du
+superviseur et du Web, exécute `daemon-reload`, puis démarre les trois unités.
+Chaque invocation redémarre les services, même si les versions installées sont
+déjà conformes. Aucune unité n'est activée au login.
 
-Les sources et le runtime du workspace, les env et drop-ins restent hors des
-écritures. Les sauvegardes contiennent seulement les fichiers distribués.
-Les unités actives sont arrêtées avant remplacement et seules celles qui
-fonctionnaient sont relancées. Le broker est déconnecté/reconnecté nativement ;
-OpenCode reste ouvert. Le contrôle final vérifie les versions actives, une
-readiness broker postérieure à la reconnexion, le workspace et les identités/
-générations des RUN avant levée du gel. Les pauses existantes restent en place.
+OpenCode reste ouvert. Après remplacement, l'updater tente les routes natives
+du broker si l'API répond. Si OpenCode ou son API sont absents, les fichiers
+broker sont quand même installés et le processus broker est rapporté
+`INDISPONIBLE` ; cela ne bloque pas les autres briques. Le bilan distingue la
+version du paquet, les versions des fichiers déployés et les versions des
+processus réellement observés. Il rapporte le résultat du redémarrage et de
+tout retour arrière. Si un service ne démarre pas, l'updater restaure les
+fichiers sauvegardés, recharge systemd, redémarre les trois unités et conserve
+le journal si le repli échoue.
 
-Les étapes PREPARING/PREPARED, FREEZING/WAITING, STOPPING/INSTALLING,
-RESTARTING/VERIFYING, RELEASING/COMPLETED et les phases de repli rendent le
-résultat explicite. Une interruption après libération ne déclenche pas de
-retour arrière sur des RUN repris. Un repli incomplet reste ROLLBACK_FAILED.
-Aucun schéma métier n'est migré ; aucune permission ou session n'est créée.
-La procédure exige le répertoire d'installation broker réellement lancé.
-Un lancement manuel non géré ou une cible dans le workspace est refusé avec
-diagnostic ; la commande ne modifie pas sa configuration pour le déplacer.
-
-Le mode explicite managed-release autorise seulement les liens relatifs
-internes vers releases/<identifiant>/{scripts,broker,web-monitor}. Les racines,
-propriétaires, types et pointeurs sont vérifiés. Le profil gelé bascule le seul
-lien du contrôleur ; la maintenance ordinaire prépare les quatre briques puis
-bascule les pointeurs sous HELD. Les anciennes releases ne sont pas modifiées.
-Le repli ordinaire restaure les anciens pointeurs et versions actives. Le
-moniteur et les CLI reconnaissent leur entrée résolue derrière un lien relatif.
+Le mode managed-release conserve les liens relatifs internes et les anciennes
+releases, avec bascule atomique après l'arrêt des unités. Le profil
+frozen-recovery-controller et la politique explicite reuse-readonly restent des
+procédures distinctes avec leurs preuves et restrictions propres.
 
 Le module approval-metadata effectue seulement des GET sur la session technique
 et ses messages pour projeter une sortie broker_health déjà disponible. Sa
@@ -1192,7 +1180,7 @@ sortie filtrée conserve null pour les identités absentes et marque l'observati
 historique. Il n'accède pas au magasin privé et n'effectue aucune attribution,
 annulation ou preuve actuelle d'absence d'effet. Une inconnue reste bloquante.
 
-## Broker externe en lecture seule — 1.10.7
+## Broker externe en lecture seule — 1.10.9
 
 update.mjs ajoute brokerPolicy=reuse-readonly avec layout=managed-release et
 preuve privée brokerProof. broker-artifact-proof.mjs vérifie les trois modules
