@@ -31,8 +31,8 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     native.catalogPath=path;
     if(prepareCatalog){native.preparation=prepareControllerModelPolicy({environment,activeSkillRoot:activeRoot});environment={...environment,...native.preparation.environment};}
     else environment={...environment,OC_Codex_PLLM_CATALOG:path};
-    native.providers={connected:catalog.models.map(m=>m.provider),all:catalog.models.map(m=>({id:m.provider,models:{[m.model_id]:{variants:{high:{},xhigh:{},low:{}}}}}))};
-    native.messages.ses_probe=[{info:{id:'msg_user',sessionID:'ses_probe',role:'user',model:{providerID:'provider1',modelID:'model1'},variant:'high'},parts:[]},
+    native.providers={connected:catalog.models.map(m=>m.provider),all:catalog.models.map(m=>({id:m.provider,models:{[m.model_id]:{variants:{medium:{},high:{},xhigh:{},low:{}}}}}))};
+    native.messages.ses_probe=[{info:{id:'msg_user',sessionID:'ses_probe',role:'user',model:{providerID:'provider1',modelID:'model1'},variant:'medium'},parts:[]},
       {info:{id:'msg_response',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_user',providerID:'provider1',modelID:'model1',time:{completed:Date.now()-10}},parts:[{type:'text',text:'probe ok'}]}];
   }
   const eventStreams = new Set();
@@ -845,7 +845,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.10.5');
+  assert.equal(initialized.result.serverInfo.version, '1.10.6');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1297,19 +1297,19 @@ for (const browser of ['chromium','firefox']) test('verrou HTTP du navigateur ex
 });
 
 
-test('PLLM HTTP : défaut high, prévol exact, choix persisté et modèle du job immuable', async(t)=>{
+test('PLLM HTTP : défaut medium, prévol exact, choix persisté et modèle du job immuable', async(t)=>{
  const h=await setup(t,{codingPolicy:true});
  const resolved=await h.post('/model-policy/resolve',{});assert.equal(resolved.status,200,JSON.stringify(resolved));
- assert.equal(resolved.body.reasoning,'high');assert.equal(resolved.body.preflightRequired,true);
+ assert.equal(resolved.body.reasoning,'medium');assert.equal(resolved.body.preflightRequired,true);
  const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
  const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['delivery'],
    modelSelectionProtocol:'pllm-auto-v1',modelSelection:{},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
  assert.equal((await h.post('/runs/a/job/arm',{...arm,modelSelection:0})).body.error,'model-selection-input-invalid');
  h.native.messages.ses_probe[0].info.variant='low';
  assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-preflight-not-proved');
- h.native.messages.ses_probe[0].info.variant='high';
+ h.native.messages.ses_probe[0].info.variant='medium';
  const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));
- assert.equal(armed.body.codingModel.modelID,'model1');assert.equal(armed.body.codingModel.reasoning,'high');
+ assert.equal(armed.body.codingModel.modelID,'model1');assert.equal(armed.body.codingModel.reasoning,'medium');
  const selected=armed.body.codingModel;await h.stop();await h.start();
  assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
  assert.equal((await h.post('/runs/a/job/arm',{...arm,codingModel:selected})).body.error,'model-selection-server-owned');
@@ -1320,10 +1320,10 @@ test('PLLM HTTP : défaut high, prévol exact, choix persisté et modèle du job
  assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
 });
 
-test('PLLM HTTP : xhigh puis priorité inférieure, modèle explicite incompatible bloqué',async(t)=>{
+test('PLLM HTTP : absence de medium examine la politique inférieure, modèle explicite incompatible bloqué',async(t)=>{
  const h=await setup(t,{codingPolicy:true});
- h.native.providers.all[0].models.model1.variants={xhigh:{}};
- assert.equal((await h.post('/model-policy/resolve',{})).body.reasoning,'xhigh');
+ h.native.providers.all[0].models.model1.variants={high:{},xhigh:{}};
+ assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
  h.native.providers.all[0].models.model1.variants={low:{}};
  assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1'})).body.error,'explicit-model-unavailable');
@@ -1331,7 +1331,7 @@ test('PLLM HTTP : xhigh puis priorité inférieure, modèle explicite incompatib
 });
 
 
-test('PLLM HTTP : refus natifs high/xhigh corrélés autorisent le repli mais 429 bloque',async(t)=>{
+test('PLLM HTTP : refus natif corrélé de medium autorise la politique suivante mais 429 bloque',async(t)=>{
  const h=await setup(t,{codingPolicy:true});
  const reject=(reasoning,status=400)=>{
   const name=reasoning+'-'+status;const user=structuredClone(h.native.messages.ses_probe[0]);
@@ -1341,13 +1341,12 @@ test('PLLM HTTP : refus natifs high/xhigh corrélés autorisent le repli mais 42
   response.parts=[];h.native.messages.ses_probe.push(user,response);
   return {sessionId:'ses_probe',messageId:response.info.id};
  };
- const high=reject('high');const xhigh=reject('xhigh');
- assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[high]})).body.reasoning,'xhigh');
- const next=await h.post('/model-policy/resolve',{unavailablePreflights:[high,xhigh]});
- assert.equal(next.body.mode,'mode2');assert.equal(next.body.unavailabilityProofs.length,2);
+ const medium=reject('medium');
+ const next=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});
+ assert.equal(next.body.mode,'mode2');assert.equal(next.body.unavailabilityProofs.length,1);
  assert.equal(JSON.stringify(next.body).includes('diagnostic privé fictif'),false);
- assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[high,xhigh]})).body.error,'explicit-model-unavailable');
- assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('high',429)]})).body.error,'model-unavailability-not-proved');
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[medium]})).body.error,'explicit-model-unavailable');
+ assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('medium',429)]})).body.error,'model-unavailability-not-proved');
 });
 
 
@@ -1363,7 +1362,7 @@ test('Budget /provider fourni par la session : bornes exactes, portée locale et
   assert.equal(result.body.error,'model-selection-input-invalid');assert.equal(observations(),before);
  }
  assert.equal((await h.post('/model-policy/resolve',{providerMaxBytes:bytes-1})).body.error,'model-observation-too-large');
- const exact=await h.post('/model-policy/resolve',{providerMaxBytes:bytes});assert.equal(exact.status,200);assert.equal(exact.body.reasoning,'high');
+ const exact=await h.post('/model-policy/resolve',{providerMaxBytes:bytes});assert.equal(exact.status,200);assert.equal(exact.body.reasoning,'medium');
  assert.ok(!JSON.stringify(exact).includes(marker));
  assert.equal((await h.post('/model-policy/resolve',{})).body.error,'model-observation-too-large');
  const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
@@ -1386,8 +1385,8 @@ test('Raccord HTTP préparé : catalogue transmis, alias natif, variante imbriqu
  const h=await setup(t,{codingPolicy:true,prepareCatalog:true,environment:{CAB_TEST_PRIVATE_OPTION:'NE_PAS_RESTITUER'}});
  const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.models[0].provider='opencodego';writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
  h.native.providers.all[0].id='opencode-go';h.native.providers.connected[0]='opencode-go';
- const parent=h.native.messages.ses_probe[0].info;parent.model={providerID:'opencode-go',modelID:'model1',variant:'high'};delete parent.variant;
- h.native.messages.ses_probe[1].info.providerID='opencode-go';h.native.messages.ses_probe[1].info.variant='high';
+ const parent=h.native.messages.ses_probe[0].info;parent.model={providerID:'opencode-go',modelID:'model1',variant:'medium'};delete parent.variant;
+ h.native.messages.ses_probe[1].info.providerID='opencode-go';h.native.messages.ses_probe[1].info.variant='medium';
  const resolved=await h.post('/model-policy/resolve',{});assert.equal(resolved.status,200,JSON.stringify(resolved));
  assert.equal(h.native.preparation.source,'active-skill');assert.equal(resolved.body.source,'pllm-automatic');assert.equal(resolved.body.providerID,'opencode-go');assert.equal(resolved.body.logicalProviderID,'opencodego');
  assert.ok(!JSON.stringify(resolved).includes('NE_PAS_RESTITUER'));
@@ -1411,8 +1410,7 @@ test('Raccord HTTP : indisponibilités imbriquées rattachées au catalogue logi
   response.info.error={name:'APIError',data:{statusCode:status,responseBody:JSON.stringify({error:{code:'unsupported_value',param:'reasoning_effort',message:'PRIVE_SYNTHETIQUE'}})}};
   response.parts=[];h.native.messages.ses_probe.push(user,response);return {sessionId:'ses_probe',messageId:response.info.id};
  };
- const high=reject('high');const xhigh=reject('xhigh');
- const first=await h.post('/model-policy/resolve',{unavailablePreflights:[high]});assert.equal(first.status,200,JSON.stringify(first));assert.equal(first.body.reasoning,'xhigh');assert.equal(first.body.providerID,'opencode-go');
- const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[high,xhigh]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode2');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
- for(const reference of [reject('high',429),reject('high',401),reject('high',400,true)])assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reference]})).body.error,'model-unavailability-not-proved');
+ const medium=reject('medium');
+ const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode2');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
+ for(const reference of [reject('medium',429),reject('medium',401),reject('medium',400,true)])assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reference]})).body.error,'model-unavailability-not-proved');
 });

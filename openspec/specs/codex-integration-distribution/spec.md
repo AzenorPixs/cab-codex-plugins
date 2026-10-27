@@ -660,3 +660,14 @@ Les alias absents MAY être complétés à version égale si les copies présent
 #### Scenario: Échec pendant publication
 - **WHEN** la publication d'une des commandes échoue
 - **THEN** les seules commandes remplacées sont restaurées, les seuls nouveaux fichiers de cette tentative sont retirés et l'échec est signalé sans succès global
+
+### Requirement: Distribution source CAB 1.10.6
+La préparation source MUST aligner le jeu CAB distribué sur la version 1.10.6
+dans les métadonnées, modules, broker, scripts, services, commande, skill et
+supports décrivant le profil courant. Elle MUST NOT modifier les installations,
+services, caches ou RUN actifs. Les références qualifiées antérieures MUST
+rester exactes.
+
+#### Scenario: Jeu source aligné
+- **WHEN** le jeu 1.10.6 est qualifié
+- **THEN** chaque composant versionné annonce 1.10.6 et les références à 1.10.5 ne désignent que des historiques ou versions chargées compatibles

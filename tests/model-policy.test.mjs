@@ -10,24 +10,24 @@ const now=Date.now(); const date=new Date(now-1000).toISOString();
 const catalog=()=>({schema_version:2,evaluated_at:date,published_at:date,selection_status:'selected',selected_mode:'mode1',
  models:Array.from({length:6},(_,i)=>({mode:'mode'+(i+1),priority:i+1,state:'Valide',selected:i===0,
  provider:'provider'+(i+1),model:'Nom commercial '+i,model_id:'model'+(i+1),evaluated_this_run:true,evaluated_at:new Date(now-2000-i).toISOString(),reasoning:'low'}))});
-const providers=()=>({connected:Array.from({length:6},(_,i)=>'provider'+(i+1)),all:Array.from({length:6},(_,i)=>({id:'provider'+(i+1),models:{['model'+(i+1)]:{variants:{high:{},xhigh:{},low:{}}}}}))});
+const providers=()=>({connected:Array.from({length:6},(_,i)=>'provider'+(i+1)),all:Array.from({length:6},(_,i)=>({id:'provider'+(i+1),models:{['model'+(i+1)]:{variants:{medium:{},high:{},xhigh:{},low:{}}}}}))});
 const choose=(options={})=>selectCodingModel({catalog:catalog(),providers:providers(),now,...options});
 
-test('PLLM automatique utilise les identifiants API et high au lieu du low du benchmark',()=>{
+test('PLLM automatique choisit medium même lorsque le modèle expose high et xhigh',()=>{
  const selected=choose(); assert.equal(selected.providerID,'provider1');assert.equal(selected.modelID,'model1');
- assert.equal(selected.reasoning,'high');assert.equal(selected.mode,'mode1');assert.equal(selected.source,'pllm-automatic');
+ assert.equal(selected.reasoning,'medium');assert.equal(selected.mode,'mode1');assert.equal(selected.source,'pllm-automatic');
 });
-test('high absent ou désactivé replie vers xhigh sans changer de politique',()=>{
- const p=providers();p.all[0].models.model1.variants.high.disabled=true;
- assert.equal(choose({providers:p}).reasoning,'xhigh');
- delete p.all[0].models.model1.variants.high;assert.equal(choose({providers:p}).reasoning,'xhigh');
+test('medium absent ou désactivé examine la politique PLLM suivante',()=>{
+ const p=providers();p.all[0].models.model1.variants.medium.disabled=true;
+ assert.equal(choose({providers:p}).mode,'mode2');
+ delete p.all[0].models.model1.variants.medium;assert.equal(choose({providers:p}).mode,'mode2');
 });
-test('high et xhigh absents imposent la priorité PLLM suivante',()=>{
+test('medium absent impose la priorité PLLM suivante',()=>{
  const p=providers();p.all[0].models.model1.variants={low:{}};
  assert.equal(choose({providers:p}).mode,'mode2');
  p.all[1].models.model2.variants={};assert.equal(choose({providers:p}).mode,'mode3');
 });
-test('un modèle explicite reste prioritaire et bloque sans high ni xhigh',()=>{
+test('un modèle explicite reste prioritaire et bloque sans medium',()=>{
  assert.equal(choose({model:'provider4/model4'}).providerID,'provider4');
  const p=providers();p.all[3].models.model4.variants={low:{}};
  assert.throws(()=>choose({model:'provider4/model4',providers:p}),/explicit-model-unavailable/);
@@ -35,7 +35,7 @@ test('un modèle explicite reste prioritaire et bloque sans high ni xhigh',()=>{
 });
 test('le raisonnement explicitement demandé reste prioritaire',()=>{
  assert.equal(choose({reasoning:'low'}).reasoning,'low');
- const p=providers();p.all[0].models.model1.variants={high:{}};
+ const p=providers();p.all[0].models.model1.variants={medium:{}};
  assert.equal(choose({reasoning:'low',providers:p}).mode,'mode2');
 });
 test('les politiques inférieures seulement historiques ne sont jamais réutilisées',()=>{
@@ -62,7 +62,7 @@ test('le catalogue public est borné, régulier, sans symlink, et respecte l’a
 test('le prévol exact exige réponse native, variante correspondante et absence d’outil',()=>{
  const selected=choose();const proof={workspace:'/workspace',now,
  session:{id:'ses_probe',directory:'/workspace'},
- parent:{info:{role:'user',id:'msg_user',sessionID:'ses_probe',model:{providerID:selected.providerID,modelID:selected.modelID},variant:'high'}},
+  parent:{info:{role:'user',id:'msg_user',sessionID:'ses_probe',model:{providerID:selected.providerID,modelID:selected.modelID},variant:'medium'}},
  response:{info:{role:'assistant',finish:'stop',id:'msg_response',parentID:'msg_user',sessionID:'ses_probe',providerID:selected.providerID,modelID:selected.modelID,time:{completed:now-10}},parts:[{type:'text',text:'ok'}]}};
  const verified=verifyModelPreflight(selected,proof);assert.equal(validCodingModel(verified),true);
  const low=structuredClone(proof);low.parent.info.variant='low';assert.throws(()=>verifyModelPreflight(selected,low),/model-preflight-not-proved/);
@@ -72,23 +72,21 @@ test('le prévol exact exige réponse native, variante correspondante et absence
 });
 
 
-function unavailableProof(reasoning='high',statusCode=400,param='reasoning_effort') {
+function unavailableProof(reasoning='medium',statusCode=400,param='reasoning_effort') {
  return {workspace:'/workspace',now,notBefore:date,session:{id:'ses_probe',directory:'/workspace'},
  parent:{info:{role:'user',id:'msg_user',sessionID:'ses_probe',model:{providerID:'provider1',modelID:'model1'},variant:reasoning}},
  response:{info:{role:'assistant',id:'msg_error',sessionID:'ses_probe',parentID:'msg_user',providerID:'provider1',modelID:'model1',
  time:{completed:now-10},error:{name:'APIError',data:{statusCode,responseBody:JSON.stringify({error:{code:'unsupported_value',param,message:'diagnostic privé fictif'}})}}},parts:[]}};
 }
-test('une incompatibilité native prouvée permet xhigh puis la politique suivante sans corps brut',()=>{
- const high=reasoningUnavailability(unavailableProof());
- assert.equal(choose({unavailable:[high]}).reasoning,'xhigh');
- const xhigh=reasoningUnavailability(unavailableProof('xhigh'));
- const next=choose({unavailable:[high,xhigh]});assert.equal(next.mode,'mode2');
+test('une incompatibilité native prouvée de medium permet la politique suivante sans corps brut',()=>{
+ const medium=reasoningUnavailability(unavailableProof());
+ const next=choose({unavailable:[medium]});assert.equal(next.mode,'mode2');
  assert.equal(JSON.stringify(next).includes('diagnostic privé fictif'),false);
- assert.throws(()=>choose({model:'provider1/model1',unavailable:[high,xhigh]}),/explicit-model-unavailable/);
+ assert.throws(()=>choose({model:'provider1/model1',unavailable:[medium]}),/explicit-model-unavailable/);
 });
 test('authentification, quotas, paramètre étranger et ancien échec ne prouvent pas une incompatibilité',()=>{
- for(const status of [401,403,429,500])assert.throws(()=>reasoningUnavailability(unavailableProof('high',status)),/model-unavailability-not-proved/);
- assert.throws(()=>reasoningUnavailability(unavailableProof('high',400,'temperature')),/model-unavailability-not-proved/);
+ for(const status of [401,403,429,500])assert.throws(()=>reasoningUnavailability(unavailableProof('medium',status)),/model-unavailability-not-proved/);
+ assert.throws(()=>reasoningUnavailability(unavailableProof('medium',400,'temperature')),/model-unavailability-not-proved/);
  const old=unavailableProof();old.response.info.time.completed=now-10000;
  assert.throws(()=>reasoningUnavailability(old),/model-unavailability-not-proved/);
 });
@@ -137,7 +135,7 @@ test('alias ambigu, inconnu, déconnecté ou modèle absent : aucun compte ou mo
  const {c,p}=goFixtures();const duplicate=structuredClone(p);duplicate.all.push(structuredClone(p.all[0]));assert.throws(()=>choose({catalog:c,providers:duplicate}),/model-provider-ambiguous/);
  const disconnected=structuredClone(p);disconnected.connected=disconnected.connected.slice(1);assert.throws(()=>choose({catalog:c,providers:disconnected}),/model-provider-unavailable/);
  const exact=structuredClone(p);exact.all.push({id:'opencodego',models:p.all[0].models});assert.throws(()=>choose({catalog:c,providers:exact}),/model-provider-unavailable/);
- const missing=structuredClone(p);missing.all[0].models={another:{variants:{high:{}}}};assert.throws(()=>choose({catalog:c,providers:missing}),/model-capabilities-unavailable/);
+ const missing=structuredClone(p);missing.all[0].models={another:{variants:{medium:{}}}};assert.throws(()=>choose({catalog:c,providers:missing}),/model-capabilities-unavailable/);
  const unknown=structuredClone(c);unknown.models[0].provider='opencode_go';assert.throws(()=>choose({catalog:unknown,providers:p}),/model-provider-unavailable/);
 });
 
@@ -147,9 +145,9 @@ function nativeProof(selected){return {workspace:'/workspace',now,session:{id:'s
 test('prévol natif imbriqué et historique : lecture cohérente et anciens contrats préservés',()=>{
  const {c,p}=goFixtures();const selected=choose({catalog:c,providers:p});const native=nativeProof(selected);
  const verified=verifyModelPreflight(selected,native);assert.ok(validCodingModel(verified));assert.equal(verified.logicalProviderID,'opencodego');
- const legacy=structuredClone(native);legacy.parent.info.variant='high';delete legacy.parent.info.model.variant;delete legacy.response.info.variant;
+ const legacy=structuredClone(native);legacy.parent.info.variant='medium';delete legacy.parent.info.model.variant;delete legacy.response.info.variant;
  const prior={...selected};delete prior.logicalProviderID;assert.ok(validCodingModel(verifyModelPreflight(prior,legacy)));
- const both=structuredClone(native);both.parent.info.variant='high';assert.ok(validCodingModel(verifyModelPreflight(selected,both)));
+ const both=structuredClone(native);both.parent.info.variant='medium';assert.ok(validCodingModel(verifyModelPreflight(selected,both)));
 });
 test('prévol natif : contradictions, champs invalides, absence parent, troncature et preuves non corrélées refusés',()=>{
  const selected=choose();const mutations=[
@@ -161,12 +159,10 @@ test('prévol natif : contradictions, champs invalides, absence parent, troncatu
  ];
  for(const change of mutations){const p=nativeProof(selected);change(p);assert.throws(()=>verifyModelPreflight(selected,p),/model-preflight-not-proved/);}
 });
-test('indisponibilité native imbriquée : high puis xhigh et refus des variantes contradictoires',()=>{
- const {c,p}=goFixtures();const input=unavailableProof();input.parent.info.model={providerID:'opencode-go',modelID:'model1',variant:'high'};delete input.parent.info.variant;
- input.response.info.providerID='opencode-go';input.response.info.variant='high';const high=reasoningUnavailability(input);
- assert.equal(choose({catalog:c,providers:p,unavailable:[high]}).reasoning,'xhigh');
- const next=structuredClone(input);next.parent.info.model.variant='xhigh';next.response.info.variant='xhigh';const xhigh=reasoningUnavailability(next);
- assert.equal(choose({catalog:c,providers:p,unavailable:[high,xhigh]}).mode,'mode2');
+test('indisponibilité native imbriquée de medium et refus des variantes contradictoires',()=>{
+ const {c,p}=goFixtures();const input=unavailableProof();input.parent.info.model={providerID:'opencode-go',modelID:'model1',variant:'medium'};delete input.parent.info.variant;
+ input.response.info.providerID='opencode-go';input.response.info.variant='medium';const medium=reasoningUnavailability(input);
+ assert.equal(choose({catalog:c,providers:p,unavailable:[medium]}).mode,'mode2');
  for(const change of [q=>q.parent.info.variant='low',q=>q.response.info.variant='low',q=>delete q.parent.info.model.variant]){
   const q=structuredClone(input);change(q);assert.throws(()=>reasoningUnavailability(q),/model-unavailability-not-proved/);
  }
