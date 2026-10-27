@@ -6,6 +6,12 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
+La version source courante est CAB 1.10.9. `/CABU` délègue à `/CAB update`,
+qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
+des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas
+le remplacement des fichiers broker ; sa version chargée est alors rapportée
+`INDISPONIBLE`.
+
 La version 1.10.7 prend en charge les propriétaires explicitement distincts des modules, du répertoire et des processus broker dans la preuve privée de maintenance. Une demande orpheline du job courant sous PAUSE peut être réconciliée uniquement pour rejet, avec preuve native exacte d'absence d'effet. L'installation de sources et la migration des processus restent vérifiées séparément.
 
 ## Prévol orphelin et maintenance contrôlée — 1.10.7
@@ -345,9 +351,9 @@ commune du projet ; elle n'autorise pas un commit ou un déploiement.
 
 ## Commande `/CAB`
 
-La commande canonique utilise les majuscules : `/CAB`. Le raccourci `/CABU`
-sans argument exécute exactement `/CAB update`, avec les mêmes contrôles et
-la même reprise. L'ancienne entrée `/cab` reste compatible et transmet ses
+La commande canonique utilise les majuscules : `/CAB`. `/CABU` sans argument
+exécute exactement `/CAB update` jusqu'au rapport complet. L'ancienne entrée
+`/cab` reste compatible et transmet ses
 arguments inchangés. Les fichiers `CAB.md`, `CABU.md` et `cab.md` sont livrés
 ensemble ; les alias exigent leur fichier frère canonique de même version.
 Leur installation dans le profil reste une opération distincte de cette
@@ -436,26 +442,19 @@ ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
 installées mais inactives jusqu'au prochain
 `/CAB start`.
 
-`/CAB update` compare le plugin et la commande de profil à leur source
-GitHub validée, puis met à jour **broker, contrôleur, superviseur et Web**,
-y compris lorsqu'ils fonctionnent. Le paquet embarque tous les modules du
-broker. La commande prépare et vérifie le jeu, sauvegarde ses seuls artefacts,
-puis place CAB en maintenance partagée. Les nouvelles admissions sont gelées
-et la bascule attend une frontière sûre, sans répondre aux permissions.
-
-Les briques précédemment actives sont arrêtées et redémarrées sur le jeu
-vérifié ; celles qui étaient inactives restent inactives. RUN, pauses,
-décisions, preuves, archives et configurations sont conservés. OpenCode reste
-ouvert. Le succès exige les versions réellement chargées et les identités des
-RUN avant levée du gel. Une erreur de démarrage ou de version déclenche un
-retour aux artefacts sauvegardés, sans restaurer un ancien runtime métier.
-
-Si l'attente atteint 120 secondes, la transaction reste en attente avec ses
-processus et son gel ; relancer `/CAB update` reprend cette transaction.
-Un jeu déjà conforme ne redémarre rien. Le bilan distingue versions du paquet,
-fichiers déployés, processus actifs, inactivité et repli. Une installation
-manuelle non gérée, un répertoire broker inconnu ou situé dans le workspace
-reste un blocage explicite, sans modification de sa configuration. Détails :
+`/CAB update` vérifie le plugin installé, le skill `approval-bridge`, sa
+référence de maintenance et les commandes `CAB.md`, `CABU.md` et `cab.md`.
+CABU délègue à la procédure canonique et attend son rapport complet. Après
+staging et sauvegardes, l'update arrête systématiquement les trois unités
+systemd CAB, remplace les fichiers des quatre briques, recharge systemd puis
+redémarre controller, supervisor et monitor. Il n'inspecte pas les états RUN,
+permissions ou coordination comme précondition ; aucune unité n'est activée au
+login. OpenCode reste ouvert. Son API native recharge le broker si elle répond.
+Si elle est indisponible, les fichiers broker sont quand même remplacés et le
+runtime est rapporté `INDISPONIBLE`. Le bilan distingue versions publiées,
+installées, déployées et réellement actives. Un échec de démarrage déclenche le
+retour aux fichiers sauvegardés et le redémarrage des unités ; le rapport
+indique le résultat du repli. Détails :
 `skills/approval-bridge/references/component-update.md` dans le plugin.
 
 Après un prévol de récupération divergent ou incomplet refusé sans effet,
@@ -642,7 +641,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.10.7`. Le plugin ajoute un cachebuster Codex pour les
+plugin est `1.10.9`. Le plugin ajoute un cachebuster Codex pour les
 installations locales.
 
 ## Documentation
@@ -699,7 +698,7 @@ La mise à jour des briques accepte un registre complet jusqu'à 16 Mio, en HTTP
 
 ### Compatibilité et reprise de maintenance 1.10.7
 
-Les clés logiques historiques Docker/LXC/navigateur sont conservées à la lecture. Les nouvelles réservations de test et les permissions gardent leurs contrôles canoniques. Si le contrôleur cible échoue à lire cette histoire après déconnexion du broker, la réparation ciblée conserve le même gel, le journal initial et les données métier, puis prépare une nouvelle release immuable. Consulter [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md) ; la réussite exige les quatre versions réellement chargées et le même processus OpenCode avant reprise explicite des RUN.
+Les clés logiques historiques Docker/LXC/navigateur sont conservées à la lecture. Les nouvelles réservations de test et les permissions gardent leurs contrôles canoniques. Si le contrôleur cible échoue à lire cette histoire après déconnexion du broker, la réparation ciblée conserve le même gel, le journal initial et les données métier, puis prépare une nouvelle release immuable. Consulter [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md) ; ces vérifications renforcées concernent les profils frozen-recovery-controller et reuse-readonly, pas le flux standard `/CABU`.
 
 Le contrôle du broker 1.10.7 reconnaît aussi un enfant lancé par un thread secondaire du même OpenCode. Les vérifications de parent, UID, commande et unicité restent strictes ; une preuve absente ou divergente conserve le gel de maintenance.
 

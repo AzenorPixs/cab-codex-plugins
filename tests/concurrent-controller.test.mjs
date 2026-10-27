@@ -391,9 +391,24 @@ test('une mutation pendant observation exceptionnelle refuse une cohorte périm�
     transactionId: 'maintenance', authorization: 'authorized maintenance', evidence: ['authorized'] })).body;
   let fired = false; h.native.onRequest = async (path) => {
     if (path !== '/session/status' || fired) return; fired = true;
-    await h.post('/runs/b/suspend', { version: b.version, action: 'PAUSE', evidence: ['targeted pause'] });
+    await h.post('/runs/b/suspend', { version: b.version, action: 'PAUSE', evidence: ['targeted pause'],
+      maintenanceTransactionId: g.transactionId, maintenanceGeneration: g.generation });
   };
   assert.equal((await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] })).body.error, 'native-observation-changed');
+  assert.equal((await h.get('/coordination/global')).body.global.state, 'DRAINING');
+});
+
+test('une pause sous gel global est liée à SHARED_MAINTENANCE et à sa génération', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a');
+  const g = (await h.post('/coordination/global/request', { cause: 'SHARED_MAINTENANCE', scope: 'all',
+    transactionId: 'maintenance-bound-pause', authorization: 'authorized maintenance', evidence: ['authorized'] })).body;
+  assert.equal((await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause'] })).body.error,
+    'global-coordination-suspended');
+  assert.equal((await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause'],
+    maintenanceTransactionId: 'other', maintenanceGeneration: g.generation })).body.error, 'global-coordination-suspended');
+  const paused = await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause'],
+    maintenanceTransactionId: g.transactionId, maintenanceGeneration: g.generation });
+  assert.equal(paused.status, 200); assert.equal(paused.body.suspension.action, 'PAUSE');
   assert.equal((await h.get('/coordination/global')).body.global.state, 'DRAINING');
 });
 
@@ -902,7 +917,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.10.7');
+  assert.equal(initialized.result.serverInfo.version, '1.10.9');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

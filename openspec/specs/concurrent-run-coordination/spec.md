@@ -217,10 +217,20 @@ Une publication MUST conserver ses protections de validation ou réacquérir ses
 - **THEN** A revalide le périmètre affecté avant publication
 
 ### Requirement: Exclusion globale exceptionnelle
-CAB MUST limiter le gel global à GLOBAL_RECONCILIATION, SHARED_MAINTENANCE, GLOBAL_PAUSE ou GLOBAL_STOP, avec cause, portée et autorité persistées. Une réconciliation courante ou un conflit ordinaire MUST NOT acquérir ce gel. Une pause ou un arrêt de RUN MUST rester local sauf cible globale explicite.
+CAB MUST réserver le gel global à GLOBAL_RECONCILIATION, SHARED_MAINTENANCE,
+GLOBAL_PAUSE ou GLOBAL_STOP, avec cause, portée et autorité persistées. Les
+pauses ordinaires MUST rester locales. Le flux `/CAB update` MUST NOT lire ou
+modifier les états RUN, permissions ou coordinations ; les autres opérations
+conservent leurs contrats de coordination globale.
+
+#### Scenario: Mise à jour pendant plusieurs RUN
+- **WHEN** le développeur demande `/CAB update` alors que plusieurs RUN sont
+  réservés
+- **THEN** CAB ne lit ni ne modifie la cohorte et n'émet aucune requête de
+  suspension ou de coordination globale
 
 #### Scenario: Validation OpenSpec
-- **WHEN** un RUN lance openspec validate --all --strict
+- **WHEN** un RUN lance `openspec validate --all --strict`
 - **THEN** il protège les entrées OpenSpec et n'acquiert aucun gel global
 
 #### Scenario: Arrêt ciblé
@@ -229,7 +239,14 @@ CAB MUST limiter le gel global à GLOBAL_RECONCILIATION, SHARED_MAINTENANCE, GLO
 
 #### Scenario: Pause globale
 - **WHEN** le développeur demande explicitement une pause de tous les RUN
-- **THEN** CAB draine puis confirme le gel après vérification des effets et permissions
+- **THEN** CAB draine puis confirme le gel après vérification des effets et
+  permissions
+
+#### Scenario: Transaction globale déjà en cours
+- **WHEN** une coordination globale autre que celle de l'update est déjà
+  `DRAINING` ou `HELD`
+- **THEN** l'update ne remplace ni ne libère cette coordination et ne modifie
+  aucun RUN
 
 ### Requirement: Gel conservatoire d'intégrité commune
 Une incertitude d'intégrité commune empêchant l'isolation des effets MUST suspendre les admissions avec cause GLOBAL_RECONCILIATION. CAB MUST conserver les preuves sans réparer, purger ou libérer automatiquement. Une incertitude dont la portée est connue MUST rester ciblée.

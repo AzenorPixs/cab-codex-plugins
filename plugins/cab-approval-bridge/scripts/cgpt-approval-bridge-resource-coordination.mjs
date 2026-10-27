@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '1.10.7';
+export const VERSION = '1.10.9';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -854,6 +854,12 @@ export class ResourceRunRegistry extends RunRegistry {
   }
   suspend(runId, payload) {
     this.mutable(); evidence(payload.evidence);
+    const global = this.resourceState.global;
+    if (global?.state === 'DRAINING' &&
+        (global.cause !== 'SHARED_MAINTENANCE' || payload.action !== 'PAUSE' ||
+          payload.maintenanceTransactionId !== global.transactionId || payload.maintenanceGeneration !== global.generation)) {
+      throw new CoordinationError('global-coordination-suspended');
+    }
     const run = this.owned(runId, payload.version);
     if (!['PAUSE', 'STOP', 'RESUME'].includes(payload.action)) throw new CoordinationError('suspension-action-invalid', 400);
     if (payload.action === 'RESUME') {
