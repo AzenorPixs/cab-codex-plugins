@@ -4,7 +4,7 @@ import { open, lstat, realpath, readlink } from 'node:fs/promises';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 
-export const VERSION = '1.10.9';
+export const VERSION = '1.10.11';
 export const FROZEN_PROFILE = 'frozen-recovery-controller';
 export const FROZEN_CAPABILITY = 'frozen-recovery-v1';
 const object = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);

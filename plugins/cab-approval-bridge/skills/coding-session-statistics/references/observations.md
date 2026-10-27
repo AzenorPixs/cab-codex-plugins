@@ -1,4 +1,4 @@
-# Statistiques et observations CAB 1.10.9
+# Statistiques et observations CAB 1.10.11
 
 Les consultations sont ponctuelles, en français et en lecture seule. Elles ne démarrent aucun job, ne réveillent aucun RUN et ne produisent aucune permission. Les anciennes vues `/statistics` et `/runs/<runId>/statistics` restent disponibles, dont le brouillon individuel à six sections.
 

@@ -2,7 +2,7 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `1.10.9`.
+Version de référence des briques CAB : `1.10.11`.
 
 La maintenance conserve les propriétaires réels des artefacts et des processus, qui peuvent être distincts lorsqu'ils sont explicitement prouvés. Une demande orpheline du job courant en pause ne peut être reconstruite que pour son rejet après exclusion native de tout effet ; cette réconciliation n'autorise aucune exécution.
 
@@ -301,7 +301,7 @@ de maintenance ne permet aucune décision, permission ou modification de RUN.
 
 ### 5.4 Plugin Codex
 
-Le plugin regroupe les skills `approval-bridge` et `coding-session-statistics`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex. Sa marketplace est versionnée à la racine du dépôt dans `.agents/plugins/marketplace.json` et le plugin dans `plugins/cab-approval-bridge/`.
+Le plugin `cab-approval-bridge` regroupe les skills `approval-bridge` et `coding-session-statistics`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex. Le plugin autonome `cabu` fournit l’entrée skill pour l’update CAB. La marketplace versionnée à la racine du dépôt dans `.agents/plugins/marketplace.json` distribue les deux plugins depuis `plugins/`.
 
 L'orchestrateur prépare la collecte dès le début de chaque change. Après
 chaque archivage OpenSpec autorisé et réussi, il fait produire et vérifier
@@ -322,6 +322,9 @@ la procédure ni télécharger une dépendance implicite.
 `.codex/commands/CAB.md`. Elle orchestre l'exploitation du dispositif de
 communication entre le broker MCP et l'agent Codex ; elle ne rend aucune
 décision d'approbation.
+
+Le skill du plugin `cabu` et la commande `/CABU` sont deux entrées vers la
+même procédure canonique `/CAB update` ; aucune ne duplique sa logique.
 
 - `/CAB status` : affiche en lecture seule un tableau synthétique par RUN et
   change, avec réalisé, en cours, restant, activité ou attente explicite d’un

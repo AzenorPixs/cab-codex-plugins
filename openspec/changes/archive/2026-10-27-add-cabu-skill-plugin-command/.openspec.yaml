@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-10-27
+goal: Après installation du plugin CABU, le développeur peut invoquer CABU comme
+  skill ou commande et obtient la procédure canonique /CAB update; toutes les
+  briques distribuées sont cohérentes en 1.10.11.
