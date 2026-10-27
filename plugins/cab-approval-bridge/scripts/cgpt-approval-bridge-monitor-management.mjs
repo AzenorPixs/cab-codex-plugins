@@ -5,7 +5,7 @@ import { join, parse, relative } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
-export const VERSION = '1.10.4';
+export const VERSION = '1.10.6';
 const execute = promisify(execFile);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, status = 409) => Object.assign(new Error(code), { status });
