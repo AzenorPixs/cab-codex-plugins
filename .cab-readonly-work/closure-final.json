@@ -1,0 +1,21 @@
+{
+  "source_cycle_complete": true,
+  "version": "1.9.0",
+  "archive": "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-support-readonly-broker-reuse",
+  "strict": {
+    "items": 13,
+    "passed": 13,
+    "failed": 0
+  },
+  "requirements_synced": 27,
+  "report_sections": 6,
+  "utf8_lf_checked": 132,
+  "l1_l2_unchanged": true,
+  "tests": {
+    "tests": 445,
+    "pass": 444,
+    "fail": 0,
+    "skipped": 1
+  },
+  "live_activation_executed": false
+}

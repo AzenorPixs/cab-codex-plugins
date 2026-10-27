@@ -1,0 +1,11 @@
+✔ broker en lecture seule : chaîne réelle et intent-crash (8282.469671ms)
+✔ broker en lecture seule : chaîne réelle et disconnect-loss (8134.653645ms)
+✔ broker en lecture seule : chaîne réelle et restart-failure (7317.293169ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 23800.536039

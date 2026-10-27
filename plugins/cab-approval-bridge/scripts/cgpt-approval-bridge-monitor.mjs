@@ -5,7 +5,7 @@ import { MonitorState, monitorConfiguration, VERSION as DATA_VERSION } from './c
 import { guardStatisticsPost, statisticsSelection, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
 import { MonitorCatalog, MonitorServices, guardManagementPost, managementBody, VERSION as MANAGEMENT_VERSION } from './cgpt-approval-bridge-monitor-management.mjs';
 
-export const VERSION = '1.7.1';
+export const VERSION = '1.10.5';
 if ([DATA_VERSION, MAINTENANCE_VERSION, MANAGEMENT_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/stats.mjs', ['stats.mjs', 'text/javascript; charset=utf-8']],
@@ -219,7 +219,7 @@ export async function createMonitorServer(configuration, options = {}) {
     } };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.argv[1])).href) {
   try {
     const configuration = monitorConfiguration();
     configuration.workspace = await realpath(configuration.workspace);

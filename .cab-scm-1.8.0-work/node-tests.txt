@@ -1,0 +1,533 @@
+✔ profil gelé : autorisation et cible absentes refusées avant toute action de service (54.163117ms)
+✔ jeu réel : les quatre briques actives passent en 1.8.0, RUN et archives conservés, deuxième invocation sans arrêt (2605.788118ms)
+✔ services initialement inactifs : fichiers actualisés sans les démarrer (412.527272ms)
+✔ attente puis reprise : aucun arrêt pendant activité et transaction durable réutilisée (630.633608ms)
+✔ paquet incomplet, import absent, downgrade et syntaxe invalide échouent avant arrêt (467.338846ms)
+✔ échec de démarrage et mauvaise version broker déclenchent le retour aux artefacts précédents (1231.79742ms)
+✔ interruption pendant installation : récupération des artefacts sans restauration du runtime (484.644228ms)
+✔ interruption à la libération : réconciliation sans retour arrière après reprise (832.895243ms)
+✔ cibles projet, liens et journal corrompu sont refusés sans écrasement (199.082427ms)
+✔ une dérive des générations interdit la levée du gel et conserve le diagnostic de récupération (496.051461ms)
+✔ interruption avant le gel : la même intention de maintenance est récupérée (487.677032ms)
+✔ autorité flock concurrente refusée, libération et contrat corrompu préservé (891.680163ms)
+✔ une modification externe pendant attente bloque le déploiement ; annulation conserve cette modification (357.108548ms)
+✔ stage altéré pendant attente refusé avant tout arrêt (291.199946ms)
+✔ gel levé par une intervention externe : la récupération ne coupe pas les RUN repris (269.60753ms)
+✔ garde du moniteur : quiescence, origine et exclusion des mutations concurrentes (186.30294ms)
+✔ la garde refuse une mutation déjà en vol sans interrompre sa réservation (228.01744ms)
+✔ API STATS et purge : contrat HTTP, origines et préservation du RUN (159.878729ms)
+✔ statuts publics et journal de supervision en lecture seule : limite 16384 (273.618714ms)
+✔ statuts publics et journal de supervision en lecture seule : limite 4096 (241.085342ms)
+✔ statuts publics et journal de supervision en lecture seule : limite 2000 (239.426009ms)
+✔ le chemin historique accepte une étape et la conserve après redémarrage (374.478361ms)
+✔ cycle par RUN : retour 8→6, idempotence, restauration et nouveau job (460.667976ms)
+✔ deux déclarations concurrentes ne perdent aucun passage et une persistance échouée ne publie pas l’étape (265.52166ms)
+✔ publication ciblée HTTP : reçu après reprise, génération, gate et pair indépendant (576.145634ms)
+✔ le contrôle global exceptionnel regroupe les lectures natives de la cohorte (198.096466ms)
+✔ les attentes de ressources exposent le pair courant sans contenu natif sensible (252.18542ms)
+✔ une cohorte occupée, invalide ou divergente refuse le gel exceptionnel (260.251124ms)
+✔ un événement SSE pendant le contrôle exceptionnel impose une observation neuve (281.754186ms)
+✔ une mutation pendant observation exceptionnelle refuse une cohorte périmée (255.633597ms)
+✔ une progression tardive conserve les effets non résolus pendant le drainage global (176.743768ms)
+✔ deux publications simultanées produisent un seul reçu sans nouvelle permission (281.900527ms)
+✔ une fin native inconnue garde les protections et interdit le gate (216.02071ms)
+✔ sélection simultanée : un seul propriétaire du change et aucun écrasement (236.124657ms)
+✔ trois sessions, permissions once exactes et décisions isolées (264.401443ms)
+✔ un RUN arrêté puis abandonné reprend après redémarrage sans permission héritée (460.069698ms)
+✔ une session allow est refusée sans bloquer la permission once d’un autre RUN (284.287393ms)
+✔ admission ask refusée puis corrigée : aucun propriétaire ou opération orphelin (257.357901ms)
+✔ adoption maintenance : corps client et transaction inconnue ne produisent pas HELD (246.13229ms)
+✔ prévol orphelin : rejet seul durable, notifications répétées, pair actif puis retry existant (573.884744ms)
+✔ réconciliation orpheline : autorisation, identités et preuves divergentes sont refusées sans mutation (561.655462ms)
+✔ réconciliation orpheline : effet natif, permission et candidate allow maintiennent le gel (356.960776ms)
+▶ réconciliation orpheline : opération durable commencée ou incertaine refusée
+  ✔ ISSUING (445.793858ms)
+  ✔ EXECUTING (486.274452ms)
+  ✔ UNKNOWN (529.53771ms)
+  ✔ COMPLETED (530.969282ms)
+✔ réconciliation orpheline : opération durable commencée ou incertaine refusée (1993.422415ms)
+▶ réconciliation orpheline : propriétaire ou opération absent/divergent ne se reconstruit pas
+  ✔ owner-absent (473.02362ms)
+  ✔ owner-digest (464.135071ms)
+  ✔ operation-absent (507.035851ms)
+  ✔ operation-digest (393.133483ms)
+✔ réconciliation orpheline : propriétaire ou opération absent/divergent ne se reconstruit pas (1838.002475ms)
+✔ réconciliation orpheline : un reçu après perte du contexte ne restaure aucune décision (557.211135ms)
+✔ réconciliation orpheline : historique modifié pendant les contrôles reste refusé (401.124218ms)
+✔ réconciliation orpheline : un accès déjà attribué interdit la réparation (368.484852ms)
+✔ réconciliation orpheline : une candidate détenue par un pair est refusée (386.164831ms)
+✔ un RUN indécis ne bloque pas le gate d’un autre et sa libération reste contrôlée (195.124862ms)
+✔ une identité déclarée ne remplace pas le tool part natif de la session ciblée (165.947581ms)
+✔ une publication indépendante ne suspend pas le pair ni sa génération (254.116923ms)
+✔ récupération de A avec B actif : réservation conservée et génération renouvelée (234.446362ms)
+✔ périmètre, génération, identité native et redémarrage refusent les permissions obsolètes (356.932964ms)
+✔ un broker MCP réel transporte trois validations parallèles sans confondre les permissions (1315.847339ms)
+✔ statistiques automatiques : broker relayé, décision, once, SSE filtré et reprise (328.118262ms)
+✔ closing et rapport ciblés : le pair continue et le gate exige la fin native (248.91602ms)
+✔ une réduction quiescente retire project:* sans accepter une génération ancienne (164.449527ms)
+✔ restauration humaine concurrente conserve propriétaire et digest sans nouvelle once (401.815634ms)
+✔ consultations et import statistique HTTP ne changent ni registre ni permissions (292.609484ms)
+✔ pause ciblée et intégrité commune ferment leurs admissions sans approbation implicite (196.490968ms)
+✔ ancien broker ou anciens champs refusés sans permission ni gel ordinaire (153.441022ms)
+✔ un refus explicite reste possible pendant une pause après préparation (155.649024ms)
+✔ migration HTTP conserve les RUN et exige once exact avant leur reprise métier (385.729323ms)
+✔ la fin native accepte un appel commencé avant ask mais refuse un autre callID (197.107326ms)
+✔ l’usage historique unique garde once et exige une clôture réconciliée avant Multi-RUN (232.274569ms)
+✔ bornes de commande HTTP : défaut (175.620955ms)
+✔ bornes de commande HTTP : alias historique (185.106621ms)
+✔ bornes de commande HTTP : priorité principale (180.283393ms)
+✔ comptage UTF-16 : accents BMP et caractères hors BMP aux bornes (155.794376ms)
+✔ refus de longueur sur demandes et rappels : routes historiques, resource et RUN sans enregistrement (161.010098ms)
+✔ commande longue stricte : décision corrélée, commande exacte et once consommé une seule fois (366.513769ms)
+✔ une opération consommée ne réinscrit pas sa session après la réconciliation historique (335.534767ms)
+✔ admission de notification : propriétaire et opération dans une seule persistance (40.860108ms)
+✔ admission de notification : persistance en échec ferme le registre sans résultat durable partiel (27.595063ms)
+✔ reçu orphelin durable : répétition, divergences et verrou rejet seul après restauration (47.069637ms)
+✔ publication et REPORT sont observés en une seule transition durable (88.995192ms)
+✔ une transaction divergente ou sans garde ne modifie ni barrière ni référence (38.628087ms)
+✔ le reçu survit à la reprise et au change suivant du même RUN (77.041574ms)
+✔ une persistance échouée conserve sur disque la barrière sans publication partielle (39.098742ms)
+✔ un reçu corrompu est refusé à la restauration sans réécriture (40.927729ms)
+✔ un conflit sur le rapport refuse toute publication atomique (47.51833ms)
+✔ une sélection atomique admet un seul propriétaire du change ou de son intention (18.242213ms)
+✔ trois RUN indépendants coexistent et les générations anciennes sont refusées (40.433104ms)
+✔ les exclusions couvrent lectures, écritures, répertoires et effets globaux (24.321404ms)
+✔ l'extension conflictuelle préserve la réservation initiale (22.993211ms)
+✔ une dépendance attend la livraison et les réservations abandonnées ne la satisfont pas (56.936645ms)
+✔ une seule intégration à la fois et aucune libération pendant sa détention (74.587245ms)
+✔ traversal et liens sortants sont refusés, les alias internes se recouvrent (21.700525ms)
+✔ restauration conserve propriétaire, génération et intégration ; une autre autorité est refusée (59.056901ms)
+✔ un document invalide échoue fermé sans remplacer l'état (10.757746ms)
+✔ la restauration relit sous verrou et ne perd pas la dernière réservation (30.385313ms)
+✔ le registre refuse liens et identités de contexte invalides sans exposer de contenu (15.795017ms)
+✔ file FIFO durable, drainage des RUN prêts et ordre conservé après réconciliation (95.172556ms)
+✔ annulation explicite de file et réduction de ressources ne transfèrent aucune permission (47.149955ms)
+✔ réduire toutes les écritures ne contourne pas l’obligation de publication (22.382854ms)
+✔ closing libère les fichiers métier, conserve la publication et isole son propre rapport (76.153858ms)
+✔ file ou phase documentaire corrompue échoue fermée à la restauration (22.739433ms)
+✔ supervision partagée : attente de A, reprise unique de B et compteurs séparés (1350.70345ms)
+✔ un conflit de ressource de A ne provoque aucune relance et préserve B (1329.949486ms)
+✔ une pause ciblée reste prioritaire sur le réveil du superviseur (1328.184335ms)
+✔ limite de commande : défaut, alias et priorité du nom principal (1.345414ms)
+✔ configuration de longueur invalide avant tout état runtime : "" (43.124468ms)
+✔ configuration de longueur invalide avant tout état runtime : "0" (45.090268ms)
+✔ configuration de longueur invalide avant tout état runtime : "-1" (39.909155ms)
+✔ configuration de longueur invalide avant tout état runtime : "+1" (52.161446ms)
+✔ configuration de longueur invalide avant tout état runtime : "1.5" (41.14881ms)
+✔ configuration de longueur invalide avant tout état runtime : " 2000" (40.172402ms)
+✔ configuration de longueur invalide avant tout état runtime : "2000 " (41.995379ms)
+✔ configuration de longueur invalide avant tout état runtime : "1e4" (40.15513ms)
+✔ configuration de longueur invalide avant tout état runtime : "NaN" (48.976409ms)
+✔ configuration de longueur invalide avant tout état runtime : "Infinity" (50.876908ms)
+✔ configuration de longueur invalide avant tout état runtime : "private-fixture" (49.128816ms)
+✔ configuration de longueur invalide avant tout état runtime : "9007199254740992" (43.811047ms)
+✔ configuration de longueur invalide avant tout état runtime : "２０００" (50.410189ms)
+✔ refuse une interface contrôleur non loopback (42.785747ms)
+✔ refuse un mode de décision inconnu (49.689843ms)
+✔ accepte le workspace absolu /workspace (42.687013ms)
+✔ accepte le workspace absolu /home/devops/datas/cab (45.095074ms)
+✔ accepte le workspace absolu /tmp/cab-controller-workspace (43.201604ms)
+✔ refuse un workspace relatif (42.660926ms)
+✔ propage les trois identifiants à une décision manuelle (137.880561ms)
+✔ CGP05 refuse le gate tant qu'une validation manuelle locale reste indécise (128.677034ms)
+✔ relances manuelles sans tour Codex, puis décision explicite unique (121.442721ms)
+✔ réconcilie une permission native corrélée apparue après la décision (188.323323ms)
+✔ corrèle les commandes avec strictCommands=false (136.936542ms)
+✔ corrèle les commandes avec strictCommands=true (440.658582ms)
+✔ conserve une décision manuelle rejected face à une décision automatique tardive (1162.154858ms)
+✔ CGP06 URL commune OC_Codex_CONTROLLER_URL avec suffixe base (135.461816ms)
+✔ CGP06 URL commune OC_Codex_CONTROLLER_URL avec suffixe /status (130.517395ms)
+✔ CGP06 URL commune OC_Codex_CONTROLLER_URL avec suffixe /status/ (129.32406ms)
+✔ CGP06 URL commune OC_CGPT_CONTROLLER_URL avec suffixe base (148.473107ms)
+✔ CGP06 URL commune OC_CGPT_CONTROLLER_URL avec suffixe /status (129.900514ms)
+✔ CGP06 URL commune OC_CGPT_CONTROLLER_URL avec suffixe /status/ (127.175671ms)
+✔ un contrat absent permet un démarrage sans job (126.229327ms)
+✔ restaure le contrat valide, son gel et ses sessions révoquées sans réécriture (117.53522ms)
+✔ refuse un JSON malformé sans exposer son contenu ni toucher au fichier (80.52411ms)
+✔ refuse une erreur de lecture sans la traiter comme ENOENT (69.840753ms)
+✔ refuse une racine ou un contrat invalide : null (71.769696ms)
+✔ refuse une racine ou un contrat invalide : false (92.018812ms)
+✔ refuse une racine ou un contrat invalide : 42 (85.405279ms)
+✔ refuse une racine ou un contrat invalide : "synthetic-private-marker" (78.292497ms)
+✔ refuse une racine ou un contrat invalide : [] (71.52372ms)
+✔ refuse une racine ou un contrat invalide : {} (66.60094ms)
+✔ refuse une racine ou un contrat invalide : {"jobId":"synthetic-private-marker"} (72.078148ms)
+✔ restaure le format minimal historique sans réécrire ses champs facultatifs (112.936549ms)
+✔ refuse les types persistés invalides : {"directory":"relative"} (74.564019ms)
+✔ refuse les types persistés invalides : {"criteria":[42]} (74.051448ms)
+✔ refuse les types persistés invalides : {"armed":"true"} (69.230216ms)
+✔ refuse les types persistés invalides : {"changeId":42} (81.513342ms)
+✔ refuse les types persistés invalides : {"strictCommands":"false"} (68.874364ms)
+✔ refuse les types persistés invalides : {"terminalGate":[]} (82.911406ms)
+✔ refuse les types persistés invalides : {"terminalGate":{"status":"invented"}} (76.088001ms)
+✔ refuse les types persistés invalides : {"revokedSessions":[42]} (73.015288ms)
+✔ refuse les types persistés invalides : {"recovery":[]} (75.771205ms)
+✔ refuse les types persistés invalides : {"recoveryHistory":[null]} (73.885777ms)
+✔ refuse les types persistés invalides : {"lastProvenMilestone":42} (75.077884ms)
+✔ refuse les types persistés invalides : {"recovery":{"sessionId":42}} (72.128954ms)
+✔ refuse les types persistés invalides : {"recovery":{"attempts":{}}} (67.503273ms)
+✔ refuse les types persistés invalides : {"recovery":{"attempts":[{}]}} (85.415451ms)
+✔ refuse les types persistés invalides : {"recovery":{"invalidatedRequestIds":[42]}} (70.834871ms)
+✔ refuse les types persistés invalides : {"lifecycle":null} (77.018281ms)
+✔ refuse les types persistés invalides : {"lifecycle":{"schemaVersion":1,"sequence":1,"history":[]}} (76.116061ms)
+✖ les briques distribuées publient la même version de base 1.8.0 (1.176448ms)
+✔ le moniteur web distribue ses ressources locales et reste indépendant des services CAB (0.731608ms)
+✔ le catalogue des étapes et son producteur sont distribués en 1.8.0 (1.433781ms)
+✔ la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué (0.390063ms)
+✔ distribue une unité utilisateur inactive par défaut (0.201243ms)
+✔ la commande CAB installe sans activer, démarre et arrête explicitement (0.219163ms)
+✔ distribue un superviseur utilisateur inactif par défaut (0.126131ms)
+✔ la commande CAB prévole le modèle OpenCode avant la session persistante (0.236373ms)
+✖ les artefacts distribués annoncent la même version de base (1.128545ms)
+✔ la mise à jour confie les quatre briques au moteur transactionnel et conserve les états initiaux (0.350456ms)
+✔ le paquet contient les trois modules broker identiques aux sources et la procédure de mise à jour (0.897467ms)
+✔ la marketplace CAB distribue les statistiques avec le plugin existant (0.379407ms)
+✔ AGENTS renvoie au protocole local dédié avec ses contrats techniques (1.026587ms)
+✔ le protocole exige un rapport par archive et empêche une clôture sans preuve (2.35657ms)
+✔ le protocole distribué protège la lecture seule et décrit la récupération explicite (0.415235ms)
+✔ le protocole distribue des cadences indépendantes et une attente PLLM persistante (1.831041ms)
+✔ la réactivation sûre est distribuée sans tools true pendant la génération (0.257853ms)
+✔ le prévol divergent conserve la candidate et le job dans le protocole distribué (0.650802ms)
+✔ les sondes statistiques n'arrêtent pas le travail pour attendre le créneau (1.871177ms)
+✔ le refus par polling après timeout est distribué avec une sortie humaine explicite (1.909763ms)
+✔ status route directement la consultation avant toute boucle de pilotage (0.242896ms)
+✔ le contrat status conserve le tableau métier, la fraîcheur et les limites des preuves (0.196181ms)
+✔ la réparation de notification est réservée aux RUN et ne remplace pas retry (144.75732ms)
+✔ refuse les règles natives non prouvées avant admission et prépare seulement sous ask (214.920958ms)
+✔ refuse panne HTTP et contexte divergent avant validation sans enregistrer de décision (129.977364ms)
+✔ la réactivation permissive refuse le prévol puis ask permet une décision et once neufs (147.065397ms)
+✔ contrôle aussi edit et permet le refus après une dérive avant décision manuelle (133.125652ms)
+✔ ne transmet pas once après dérive et conserve la décision approuvée intacte (185.687924ms)
+✔ le mode automatique recontrôle ask avant de conserver approved (137.306971ms)
+✔ le mode automatique sous ask conserve une seule approbation et consomme once (148.151387ms)
+✔ un refus concurrent reste définitif pendant le contrôle ask d’une approbation (127.640141ms)
+✔ une récupération concurrente invalide l’admission suspendue sur le contrôle ask (128.89133ms)
+✔ récupère le même job, invalide les anciens mandats et conserve les preuves après redémarrage (432.512053ms)
+✔ refuse les préconditions divergentes sans changer le job (138.019194ms)
+✔ prévol strict même sans strictCommands et consommation unique (394.620232ms)
+✔ refuse true avec un change divergent sans purger ni valider la récupération (121.185477ms)
+▶ refuse les champs absents avant enregistrement et conserve le job gelé
+  ✔ approval_id (134.100105ms)
+  ✔ files (134.031606ms)
+✔ refuse les champs absents avant enregistrement et conserve le job gelé (268.747703ms)
+✔ un refus explicite pour délai prescrit omis ne consomme aucune permission (127.475686ms)
+✔ refuse les fausses preuves natives et garde le gel (204.399829ms)
+✔ sérialise les transitions et restaure le gel après redémarrage (286.259845ms)
+✔ accepte un polling MCP corrélé après délai sans inventer de preuve (163.611929ms)
+✔ retry accepte le refus par cgpt-validation_poll_approval après timeout et conserve la frontière (145.784353ms)
+✔ retry accepte le refus par cgpt-validation_get_approval après timeout et conserve la frontière (145.014285ms)
+✔ retry refuse chaque identité ou opération de polling divergente sans mutation (191.15375ms)
+✔ retry refuse un refus de polling sans décision locale restaurée (212.642501ms)
+✔ retry conserve la candidate et les refus puis complete vérifie seulement le nouvel essai (268.449509ms)
+✔ retry refuse absence de preuve, timeout, effet natif et identités réutilisées (142.416722ms)
+✔ retry refuse un prévol approuvé ou consommé (189.186713ms)
+✔ retry accepte un rejet MCP avant enregistrement et garde les frontières successives (154.404231ms)
+✔ retry sérialise les mutations et ne reconstruit pas une décision perdue (252.19253ms)
+✔ reconcile conserve le prévol invalide, exige un essai neuf avec once et garde retry strict (285.968992ms)
+✔ reconcile après redémarrage utilise les preuves natives sans recréer la décision locale perdue (289.632288ms)
+✔ reconcile refuse autorisation absente, preuve divergente, autre effet et permission allow (195.998254ms)
+✔ reconcile refuse une ancienne permission déjà consommée (153.541189ms)
+✔ complete accepte un timeout cgpt-validation_poll_approval corrélé suivi de APPROVED et once (164.220583ms)
+✔ complete accepte un timeout cgpt-validation_get_approval corrélé suivi de APPROVED et once (140.750711ms)
+✔ complete refuse les timeouts divergents et les preuves manquantes après timeout (172.755846ms)
+✔ prepare borne les diagnostics déjà présents et garde leur empreinte avant complete (162.877211ms)
+✔ prepare refuse un effet natif préalable au lieu de le masquer (132.959106ms)
+✔ complete humain restaure le même job bloqué après restart sans nouvelle once (391.880467ms)
+✔ restauration humaine refuse empreinte, décision, gate ou preuves divergents sans mutation (298.355032ms)
+✔ complete humain accepte une récupération héritée avec diagnostics pré-prepare intacts (306.323988ms)
+✔ processus original 1.7.1 → chargement L2 réel → rejectionOnly/refus/poll/retry, broker conservé (4169.060455ms)
+✔ maintenance gelée : pair actif et ancienne session DENY, aucune relance avant frontière (3773.560017ms)
+✔ maintenance gelée : reprise de la même transaction après arrêt simulé au reçu (4088.197037ms)
+✔ maintenance gelée : échec du chargement et retour conservatoire au contrôleur original (4009.783297ms)
+✔ maintenance gelée : refus cumulatifs sans arrêt ni modification du job (3829.224047ms)
+✔ maintenance gelée : paquet altéré après reçu refusé avant arrêt (3758.881207ms)
+✔ maintenance gelée : reçu privé altéré refusé à la reprise (3793.418322ms)
+✔ catalogue : persistance, restauration, suppression logique et sources préservées (15.801897ms)
+✔ catalogue : génération reprise et modification documentaire restent visibles (6.841755ms)
+✔ éligibilité : refus STOPPED réservé, états inconnus, activité, fraîcheur et troncature (5.016483ms)
+✔ catalogue : corruption et liens refusés sans écrasement (1.126645ms)
+✔ catalogue : suppression sans confirmation et opérations concurrentes refusées (1.927107ms)
+✔ services : unités fixes et broker natif sans redémarrage OpenCode (3.278613ms)
+✔ services : refus de garde ou propriété avant commande, démarrage à froid et erreurs explicites (0.653279ms)
+✔ Web : redémarrage différé seulement pour son propre service (0.510389ms)
+✔ API : origine, JSON, champs, routes et état serveur protégés (24.630234ms)
+✔ le jeu installé documenté démarre depuis son arborescence isolée sans composants CAB (124.453522ms)
+✔ un port occupé est signalé sans interrompre son propriétaire (67.785288ms)
+✔ start, stop et reset documentent la réutilisation et les échecs sans couplage (0.976581ms)
+✔ le bootstrap précède les prévols dans chaque point d’entrée distribué (1.386975ms)
+✔ la reprise avec services CAB actifs exige le bootstrap sans modifier une instance conforme (0.404081ms)
+﹣ OpenCode natif : trois sessions et un seul broker source 1.8.0 dans un contexte isolé (0.433571ms) # SKIP
+✔ durées MONO/MULTI/ZERO et triple concurrence excluent les prévols et distinguent RSMP (3.295552ms)
+✔ déduplication SSE, données sensibles exclues et états natifs distincts des décisions (10.581261ms)
+✔ une approbation ne devient pas un outil exécuté et les erreurs ne sont pas des refus (0.942038ms)
+✔ coupure SSE et horloge longue restent inconnues sans inventer une activité nulle (0.522007ms)
+✔ une baseline tardive ne remplace pas un état SSE plus récent (0.438536ms)
+✔ les tentatives avant admission sont bornées sans être assimilées à des refus distincts (0.543142ms)
+✔ reprise durable et nouveau contexte conservent leurs populations distinctes (6.399723ms)
+✔ quantiles bornés, brouillon à six sections et N/A explicites (39.710617ms)
+✔ snapshot invalide ou enrichi de contenu interdit reste intact et signale sa limite (4.332043ms)
+✔ liens symboliques, liens physiques et échec de persistance restent sans effet métier (2.614486ms)
+✔ coordination par ressources et gels exceptionnels restent séparés et sans chemins (5.273905ms)
+✔ window clipping partitions known, unknown, two and three without adding pairs (1.044139ms)
+✔ concurrent identical imports persist once and recover the same provenance (7.015727ms)
+✔ unknown fields, commands, wrong project and malformed quotas never enter the store (0.617221ms)
+✔ scope changes and missing queue evidence stay unknown (0.20417ms)
+✔ REPORT is current and the last selection requires an observed delivery (0.963245ms)
+✔ native hooks record filtered windows without converting historical cumulative counters (1.617258ms)
+✔ persistence failure stays visible and cannot acknowledge an undurable duplicate (4.977073ms)
+✔ enriched or linked snapshots are preserved and marked invalid (2.343999ms)
+✔ streaming audit migration keeps scopes, gaps, delivery bounds and drops raw bodies (2.749132ms)
+✔ audit migration refuses an active source, linked input and unordered samples (1.16835ms)
+✔ retention and resource metadata remain bounded and explicit in windows (0.400791ms)
+✔ publie le jalon et le gate observés sans hériter du job précédent (592.62729ms)
+✔ compte les émissions réussies et échouées après persistance (1567.310765ms)
+✔ conserve le compteur au redémarrage et au transfert, puis repart à zéro pour un autre job (622.962549ms)
+✔ garde inconnu le compteur historique même après une nouvelle émission (311.576913ms)
+✔ une préparation abandonnée ou une réconciliation échouée ne compte pas une émission (668.294439ms)
+✔ un échec de persistance interdit l'émission et conserve le compteur (316.517924ms)
+✔ CGP07 distingue l'activité ciblée du trafic SSE étranger et du transport (1566.538056ms)
+✔ relance une seule fois une session armée dont le gate reste ouvert (506.785906ms)
+✔ ne relance pas un job dont le gate est validé (1303.048997ms)
+✔ restaure l'état persistant de supervision après redémarrage (57.04909ms)
+✔ gèle les relances pendant la récupération et suit ensuite la session transférée (1560.214397ms)
+✔ stopped abandoned RUN can reserve a fresh generation after restart (59.959786ms)
+✔ stopped delivered RUN can reserve a different change without inheriting STOP (18.670386ms)
+✔ fresh reservation preserves owner, active suspension and global freeze guards (21.454279ms)
+✔ three independent RUNs execute without a cohort or global integration (32.69875ms)
+✔ an entire set waits without partial ownership while independent work advances (26.26221ms)
+✔ readers coexist and later readers do not starve a waiting writer (27.9402ms)
+✔ finished writes make queued preparations stale rather than overwriting a new base (26.100065ms)
+✔ private access promotes safely when a peer declares its parent (21.540451ms)
+✔ no lock extensions or upgrades can wait while holding an access (15.671777ms)
+✔ hardlink aliases are refused and subtree proofs notice new descendants (19.189349ms)
+✔ unknown effects survive restart, fence old permissions and require native proof (62.135078ms)
+✔ OpenSpec read validation does not suspend independent code writes (19.38086ms)
+✔ scoped publication is idempotent, enters REPORT and does not stale independent proofs (69.569332ms)
+✔ pause is targeted, global exceptions drain explicitly and timeout never releases (27.77272ms)
+✔ legacy migration preserves identities and refuses mutations until maintenance (52.684516ms)
+✔ a group retains its complete set but each native operation stays distinct (21.462952ms)
+✔ publication protects all earlier written resources and keeps their revisions after release (17.941223ms)
+✔ migration backup rolls back only before new effects and is reusable for a fresh maintenance (66.714265ms)
+✔ a restored group requires a fresh fence before a new corrective permission (77.681449ms)
+✔ une réponse once tardive conserve la protection inconnue et son acquittement (17.770248ms)
+✔ un état enrichi ou une identité incohérente refuse la restauration sans réécriture (12.873267ms)
+✔ la compatibilité historique reste isolée jusqu’à une réconciliation explicite (55.50437ms)
+✔ reprendre un groupe conservé lève la pause sans libérer ses fichiers ni rejouer once (26.492083ms)
+✔ catalogue unique : onze noms, positions stables et version commune (0.857729ms)
+✔ retours 7→6 et 8→6, idempotence et séquence concurrente périmée (0.784776ms)
+✔ couverture et non applicable conservent les positions et ne valident rien (0.168333ms)
+✔ historique borné avec séquence durable et projections détachées (8.705774ms)
+✔ valeurs inconnues, séquences, dates et états persistés invalides refusés (0.226772ms)
+✔ purge 1 jours : borne stricte, actifs/référencés, segments mixtes, imports et restauration (15.570746ms)
+✔ purge 3 jours : borne stricte, actifs/référencés, segments mixtes, imports et restauration (8.528714ms)
+✔ purge 7 jours : borne stricte, actifs/référencés, segments mixtes, imports et restauration (8.384037ms)
+✔ purge 30 jours : borne stricte, actifs/référencés, segments mixtes, imports et restauration (11.169254ms)
+✔ purge 365 jours : borne stricte, actifs/référencés, segments mixtes, imports et restauration (7.743398ms)
+✔ contrat fermé, expiration, dérive et limite de vingt reçus (6.74672ms)
+✔ échec partiel : magasin observation refusé sans perdre ses données ni réécrire les données supprimées (6.101626ms)
+✔ drainage des écritures, import concurrent refusé et observation récente conservée (7.138033ms)
+✔ lien refusé et donnée invalide : pas de remplacement de cible (6.256906ms)
+✔ dashboard : sources séparées, fenêtres/cumul, projection sans données privées et filtres fermés (7.189772ms)
+✔ une purge réduit la couverture et conserve les agrégats globaux sans inventer ZERO (6.742508ms)
+✔ configuration : port 8790, loopback, alias et valeurs invalides (1.907334ms)
+✔ tâches : total dynamique, clôture indépendante, fences et code ignorés (0.387487ms)
+✔ changes : lecture locale, archive référencée et liens refusés (5.438782ms)
+✔ journal : données filtrées, identité, borne et ordre (0.72487ms)
+✔ collecte : limite effective, RUN isolés, aucune décision ou mutation et ancienne donnée visible (26.184824ms)
+✔ une limite non exposée reste indisponible, sans valeur de défaut inventée (0.249039ms)
+✔ versions propres à chaque source, cycle structuré et état WAITING distinct (5.589008ms)
+✔ ETAT suit les faits frais et ne modifie aucune étape (0.193497ms)
+✔ des champs amont malformés restent inconnus sans arrêter la collecte (0.214544ms)
+✔ collectes non chevauchantes et réponses amont bornées (3.37969ms)
+✔ serveur indépendant : page, CSP, SSE initial et méthodes de mutation refusées (10.793002ms)
+✔ relais STATS : routes fixes, origine obligatoire, corps borné et panne (10.503671ms)
+ℹ tests 340
+ℹ suites 0
+ℹ pass 337
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 1
+ℹ todo 0
+ℹ duration_ms 88472.60552
+
+✖ failing tests:
+
+test at tests/controller-service-distribution.test.mjs:16:1
+✖ les briques distribuées publient la même version de base 1.8.0 (1.176448ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^1\.7\.1\+codex\.\d{14}$/. Input:
+  
+  '1.8.0+codex.20261024231000'
+  
+      at TestContext.<anonymous> (file:///home/devops/datas/cab/tests/controller-service-distribution.test.mjs:22:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.start (node:internal/test_runner/test:1262:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: '1.8.0+codex.20261024231000',
+    expected: /^1\.7\.1\+codex\.\d{14}$/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/controller-service-distribution.test.mjs:140:1
+✖ les artefacts distribués annoncent la même version de base (1.128545ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /^version: 1\.7\.1$/m. Input:
+  
+  '---\n' +
+    'description: Piloter hors sandbox la communication de validation OpenCode–Codex\n' +
+    'version: 1.8.0\n' +
+    '---\n' +
+    '\n' +
+    'Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.\n' +
+    '\n' +
+    'Le développeur accorde une autorisation permanente pour le cycle de vie et les vérifications propres à `/cab`. Ne sollicite donc pas de validation applicative supplémentaire pour lancer, initialiser, superviser, tester ou clôturer le pilotage. Respecte néanmoins toute autorisation technique que l’environnement impose lui-même pour une exécution hors sandbox.\n' +
+    '\n' +
+    'Argument reçu : `$ARGUMENTS`\n' +
+    '\n' +
+    'Pour stats, statslast, stats 24, stats7 ou stats30, appliquer directement la section `/cab stats` puis terminer après la consultation. Ne déclencher ni skill, ni boucle de pilotage, ni action de cycle de vie. Une cible optionnelle --run <run_id> filtre ce RUN exact ; une syntaxe ambiguë est refusée sans collecte.\n' +
+    '\n' +
+    'Pour pause ou stop avec --run <run_id> ou --all, appliquer la section de suspension ciblée/globale ; ne pas exécuter les procédures start, prévol ou update.\n' +
+    '\n' +
+    "Pour l'argument `status` ou `status --run <run_id>`, appliquer directement la\n" +
+    'section `/cab status` puis terminer la réponse après le rapport. Les sections de\n' +
+    'pilotage, continuité du job, démarrage, prévol modèle, cadence et compactage ne\n' +
+    "s'appliquent pas à cette consultation. Ne déclencher ni skill de pilotage ni\n" +
+    'skill de statistiques ; ne transmettre aucun message à un autre chat ou agent.\n' +
+    'Les arguments status invalides affichent seulement la syntaxe, sans collecte.\n' +
+    '\n' +
+    'Pour `start`, `run` ou `resume`, commencer par le seul bootstrap du monitoring\n' +
+    'décrit au début de `/cab start`, dès résolution du workspace, avant toute\n' +
+    'réservation, PLLM ou vérification OpenCode/CAB. Ce renvoi ne déclenche pas\n' +
+    "le reste de `/cab start` lors d'un `run` ou `resume` : aucune purge ni\n" +
+    "réinitialisation n'en découle. Revenir ensuite à la sous-commande demandée ;\n" +
+    'pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter\n' +
+    'les procédures start, prévol ou update.\n' +
+    'Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.\n' +
+    '\n' +
+    '## RUN concurrents CAB 1.8.0\n' +
+    '\n' +
+    'Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.\n' +
+    '\n' +
+    "Le manifeste déclare la portée ; les accès actifs sont temporaires. Les lectures compatibles coexistent, les écritures recouvrantes attendent et /locks/acquire attribue l'ensemble entier ou WAITING sans acquisition partielle. Les fichiers privés prouvés peuvent éviter l'appel de verrou partagé ; leur promotion est coordonnée si un pair les déclare.\n" +
+    '\n' +
+    'Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Préparer le contenu exact, obtenir la décision, acquérir juste avant effet et conserver ask/once. Une base périmée exige une nouvelle demande. Terminer les effets natifs corrélés avant /locks/release ; aucun timeout ni idle ne libère un effet inconnu.\n' +
+    '\n' +
+    'Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.\n' +
+    '\n' +
+    "Installer ensemble les scripts controller, job-context, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu puis actualise les briques actives sous maintenance partagée selon references/component-update.md ; les autres procédures ne remplacent pas un jeu actif implicitement. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.\n" +
+    '\n' +
+    '## Étapes du cycle et observation web\n' +
+    '\n' +
+    'Charger la référence distribuée `references/run-lifecycle.md` du skill\n' +
+    'approval-bridge pour le catalogue des onze étapes. Après armement, lire la\n' +
+    'séquence courante du job puis déclarer chaque étape examinée par\n' +
+    '`POST /runs/<run_id>/job/progress` avec stepId, stepStatus et\n' +
+    'expectedStepSequence. Un retour de Vérifications ou Revue vers Implémentation\n' +
+    'est autorisé et historisé. Les étapes non renseignées ne sont jamais déduites\n' +
+    'du texte libre, du mandat ou de la phase. ETAT, étape, phase technique et\n' +
+    'cases de tâches restent distincts ; aucune déclaration ne vaut permission ou\n' +
+    'gate terminal. Les jobs anciens sans lifecycle restent compatibles.\n' +
+    '\n' +
+    '## Continuité du job\n' +
+    '\n' +
+    'Après `/cab start`, conserver la session de codage active jusqu’aux critères de fin explicitement définis dans le contexte initial du job.\n' +
+    '\n' +
+    'Ne jamais clore la réponse, arrêter le pilotage ou déclarer le travail terminé après un jalon intermédiaire : healthcheck, test POC, lot documentaire, diff, test unitaire ou réponse OpenCode.\n' +
+    '\n' +
+    'Conserver le contexte initial du job comme source de vérité pendant toute la session : objectif, périmètre, spécifications OpenSpec, critères de validation, interdictions et délégations.\n' +
+    '\n' +
+    'Un tour OpenCode achevé n’est jamais une fin de job. Tant que le job n’est ni\n' +
+    'terminé, ni bloqué, ni explicitement arrêté, lire son dernier résultat dans la\n' +
+    'session persistante et transmettre le mandat suivant dans cette même session.\n' +
+    'Ne jamais envoyer de réponse finale au développeur pendant cet état RUN.\n' +
+    '\n' +
+    '## Cadences de pilotage et attente PLLM\n' +
+    '\n' +
+    'Traite les événements SSE OpenCode en temps réel et contrôle les demandes et\n' +
+    'les rapports toutes les 3 secondes dans la boucle de pilotage. Pendant\n' +
+    "l'analyse ou la rédaction de l'agent de codage, utilise des pauses fixes de\n" +
+    '7 secondes entre deux vérifications de progression. Ces pauses ne ralentissent\n' +
+    'ni le SSE ni le contrôle CAB toutes les 3 secondes. Les temporisations\n' +
+    'techniques du superviseur, des heartbeats et des rappels du broker restent\n' +
+    'distinctes.\n' +
+    '\n' +
+    'Après un échec du benchmark PLLM, conserve le même RUN en attente non terminale\n' +
+    'et retente le benchmark toutes les 30 minutes (1 800 secondes), indéfiniment,\n' +
+    "sans limite de tentatives, jusqu'à reprise sûre du RUN ou arrêt explicite du\n" +
+    "développeur. Calcule la prochaine échéance depuis l'échec observé de la dernière\n" +
+    'tentative. Conserve dans le checkpoint non secret le RUN, les horodatages,\n' +
+    'causes, résultats et la prochaine échéance. Après interruption, conserve cette\n' +
+    "échéance et réconcilie toute tentative en cours ou d'effet inconnu avant de\n" +
+    'retenter. Ne lance jamais de tentatives simultanées ni ne duplique un essai\n' +
+    'non réconcilié. Maintiens la supervision sans attente bloquante de trente\n' +
+    'minutes ; ce seul échec ne clôture pas le RUN et ne ferme ni ne redémarre les\n' +
+    'processus.\n' +
+    '\n' +
+    'Après une réussite observée, réconcilie les contextes, la santé OpenCode, MCP,\n' +
+    "la readiness CAB réelle et les permissions avant reprise. Si la reprise n'est\n" +
+    'pas sûre, applique la récupération CAB et conserve sa cause observable.\n' +
+    'La réussite du benchmark ne vaut jamais approbation, ne rejoue aucun mandat\n' +
+    'consommé et ne contourne aucun blocage CAB distinct.\n' +
+    '\n' +
+    'Prévois les sondes statistiques toutes les 30 minutes, en complément des\n' +
+    'sondes initiale et finale. Poursuis le travail entre les échéances, sans\n' +
+    'arrêter le travail pour attendre un créneau. Signale les relèves manquées\n' +
+    'sans reconstruction rétroactive. Une sonde statistique échouée reste distincte\n' +
+    "d'un échec du benchmark PLLM et ne suspend pas, à elle seule, le RUN.\n" +
+    '\n' +
+    '## Compactage coordonné toutes les 1 h 30\n' +
+    '\n' +
+    "L'orchestrateur pilote un cycle commun toutes les 5 400 secondes pour sa\n" +
+    "session réelle et la session de codage. À l'échéance, n'attribue plus de mandat,\n" +
+    "laisse le mandat courant s'achever et traite son rapport. Sauvegarde le\n" +
+    'checkpoint non secret, puis vérifie les API natives réellement exposées pour\n' +
+    'les deux sessions actives. Si les deux sont disponibles, déclenche leurs\n' +
+    'compactages en parallèle sous un même identifiant de cycle ; sinon, compacte\n' +
+    'les seules sessions accessibles et trace les opérations non exécutées.\n' +
+    "Ne compacte pas une conversation auxiliaire à la place de l'orchestrateur\n" +
+    'réellement actif.\n' +
+    '\n' +
+    'Exige deux preuves natives de fin, corrélées aux bonnes sessions, pour déclarer\n' +
+    "une réussite conjointe. Un accusé de lancement n'est pas une fin de compactage.\n" +
+    'Une API absente ou un échec avec contexte préservé laisse le cycle incomplet\n' +
+    'avec sa cause ; après réconciliation sûre des contextes, santé OpenCode, MCP,\n' +
+    'readiness CAB et permissions, poursuis les mandats déjà autorisés. Ce seul\n' +
+    "écart ne classe pas le RUN `BLOQUÉ`, n'arrête pas CAB, ne demande pas de\n" +
+    'dérogation et ne diffère pas les statistiques. Un compactage encore en cours,\n' +
+    'un effet inconnu ou une réconciliation impossible suspend les opérations\n' +
+    "concernées. Ne relance pas aveuglément une opération d'effet inconnu et\n" +
+    "n'attends pas une API absente : réexamine sa disponibilité à la prochaine\n" +
+    'échéance, calculée depuis le déclenchement du cycle courant. Conserve dans le\n' +
+    'checkpoint les sessions, horodatages, résultats et retards observés, sans\n' +
+    "inventer d'identifiant non exposé. Ce cycle ne ferme ou ne redémarre aucun\n" +
+    'processus et ne rejoue aucun mandat consommé.\n' +
+    '\n' +
+    '## Syntaxe\n' +
+    '\n' +
+    'Les seules sous-commandes admises sont :\n' +
+    '\n' +
+    '- `/cab start`\n' +
+    '- `/cab run`\n' +
+    '- `/cab stop`\n' +
+    '- `/cab test`\n' +
+    '- `/cab update`\n' +
+    '- `/cab status`\n' +
+    '- `/cab status --run <run_id>`\n' +
+    '- `/cab stats`, `/cab statsla'... 42666 more characters
+  
+      at TestContext.<anonymous> (file:///home/devops/datas/cab/tests/controller-service-distribution.test.mjs:170:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "---\ndescription: Piloter hors sandbox la communication de validation OpenCode–Codex\nversion: 1.8.0\n---\n\nRéponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.\n\nLe développeur accorde une autorisation permanente pour le cycle de vie et les vérifications propres à `/cab`. Ne sollicite donc pas de validation applicative supplémentaire pour lancer, initialiser, superviser, tester ou clôturer le pilotage. Respecte néanmoins toute autorisation technique que l’environnement impose lui-même pour une exécution hors sandbox.\n\nArgument reçu : `$ARGUMENTS`\n\nPour stats, statslast, stats 24, stats7 ou stats30, appliquer directement la section `/cab stats` puis terminer après la consultation. Ne déclencher ni skill, ni boucle de pilotage, ni action de cycle de vie. Une cible optionnelle --run <run_id> filtre ce RUN exact ; une syntaxe ambiguë est refusée sans collecte.\n\nPour pause ou stop avec --run <run_id> ou --all, appliquer la section de suspension ciblée/globale ; ne pas exécuter les procédures start, prévol ou update.\n\nPour l'argument `status` ou `status --run <run_id>`, appliquer directement la\nsection `/cab status` puis terminer la réponse après le rapport. Les sections de\npilotage, continuité du job, démarrage, prévol modèle, cadence et compactage ne\ns'appliquent pas à cette consultation. Ne déclencher ni skill de pilotage ni\nskill de statistiques ; ne transmettre aucun message à un autre chat ou agent.\nLes arguments status invalides affichent seulement la syntaxe, sans collecte.\n\nPour `start`, `run` ou `resume`, commencer par le seul bootstrap du monitoring\ndécrit au début de `/cab start`, dès résolution du workspace, avant toute\nréservation, PLLM ou vérification OpenCode/CAB. Ce renvoi ne déclenche pas\nle reste de `/cab start` lors d'un `run` ou `resume` : aucune purge ni\nréinitialisation n'en découle. Revenir ensuite à la sous-commande demandée ;\npour `resume`, appliquer la section de suspension ciblée/globale sans exécuter\nles procédures start, prévol ou update.\nLes consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.\n\n## RUN concurrents CAB 1.8.0\n\nLire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.\n\nLe manifeste déclare la portée ; les accès actifs sont temporaires. Les lectures compatibles coexistent, les écritures recouvrantes attendent et /locks/acquire attribue l'ensemble entier ou WAITING sans acquisition partielle. Les fichiers privés prouvés peuvent éviter l'appel de verrou partagé ; leur promotion est coordonnée si un pair les déclare.\n\nChaque request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Préparer le contenu exact, obtenir la décision, acquérir juste avant effet et conserver ask/once. Une base périmée exige une nouvelle demande. Terminer les effets natifs corrélés avant /locks/release ; aucun timeout ni idle ne libère un effet inconnu.\n\nValider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /cab pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.\n\nInstaller ensemble les scripts controller, job-context, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /cab update prépare le jeu puis actualise les briques actives sous maintenance partagée selon references/component-update.md ; les autres procédures ne remplacent pas un jeu actif implicitement. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.\n\n## Étapes du cycle et observation web\n\nCharger la référence distribuée `references/run-lifecycle.md` du skill\napproval-bridge pour le catalogue des onze étapes. Après armement, lire la\nséquence courante du job puis déclarer chaque étape examinée par\n`POST /runs/<run_id>/job/progress` avec stepId, stepStatus et\nexpectedStepSequence. Un retour de Vérifications ou Revue vers Implémentation\nest autorisé et historisé. Les étapes non renseignées ne sont jamais déduites\ndu texte libre, du mandat ou de la phase. ETAT, étape, phase technique et\ncases de tâches restent distincts ; aucune déclaration ne vaut permission ou\ngate terminal. Les jobs anciens sans lifecycle restent compatibles.\n\n## Continuité du job\n\nAprès `/cab start`, conserver la session de codage active jusqu’aux critères de fin explicitement définis dans le contexte initial du job.\n\nNe jamais clore la réponse, arrêter le pilotage ou déclarer le travail terminé après un jalon intermédiaire : healthcheck, test POC, lot documentaire, diff, test unitaire ou réponse OpenCode.\n\nConserver le contexte initial du job comme source de vérité pendant toute la session : objectif, périmètre, spécifications OpenSpec, critères de validation, interdictions et délégations.\n\nUn tour OpenCode achevé n’est jamais une fin de job. Tant que le job n’est ni\nterminé, ni bloqué, ni explicitement arrêté, lire son dernier résultat dans la\nsession persistante et transmettre le mandat suivant dans cette même session.\nNe jamais envoyer de réponse finale au développeur pendant cet état RUN.\n\n## Cadences de pilotage et attente PLLM\n\nTraite les événements SSE OpenCode en temps réel et contrôle les demandes et\nles rapports toutes les 3 secondes dans la boucle de pilotage. Pendant\nl'analyse ou la rédaction de l'agent de codage, utilise des pauses fixes de\n7 secondes entre deux vérifications de progression. Ces pauses ne ralentissent\nni le SSE ni le contrôle CAB toutes les 3 secondes. Les temporisations\ntechniques du superviseur, des heartbeats et des rappels du broker restent\ndistinctes.\n\nAprès un échec du benchmark PLLM, conserve le même RUN en attente non terminale\net retente le benchmark toutes les 30 minutes (1 800 secondes), indéfiniment,\nsans limite de tentatives, jusqu'à reprise sûre du RUN ou arrêt explicite du\ndéveloppeur. Calcule la prochaine échéance depuis l'échec observé de la dernière\ntentative. Conserve dans le checkpoint non secret le RUN, les horodatages,\ncauses, résultats et la prochaine échéance. Après interruption, conserve cette\néchéance et réconcilie toute tentative en cours ou d'effet inconnu avant de\nretenter. Ne lance jamais de tentatives simultanées ni ne duplique un essai\nnon réconcilié. Maintiens la supervision sans attente bloquante de trente\nminutes ; ce seul échec ne clôture pas le RUN et ne ferme ni ne redémarre les\nprocessus.\n\nAprès une réussite observée, réconcilie les contextes, la santé OpenCode, MCP,\nla readiness CAB réelle et les permissions avant reprise. Si la reprise n'est\npas sûre, applique la récupération CAB et conserve sa cause observable.\nLa réussite du benchmark ne vaut jamais approbation, ne rejoue aucun mandat\nconsommé et ne contourne aucun blocage CAB distinct.\n\nPrévois les sondes statistiques toutes les 30 minutes, en complément des\nsondes initiale et finale. Poursuis le travail entre les échéances, sans\narrêter le travail pour attendre un créneau. Signale les relèves manquées\nsans reconstruction rétroactive. Une sonde statistique échouée reste distincte\nd'un échec du benchmark PLLM et ne suspend pas, à elle seule, le RUN.\n\n## Compactage coordonné toutes les 1 h 30\n\nL'orchestrateur pilote un cycle commun toutes les 5 400 secondes pour sa\nsession réelle et la session de codage. À l'échéance, n'attribue plus de mandat,\nlaisse le mandat courant s'achever et traite son rapport. Sauvegarde le\ncheckpoint non secret, puis vérifie les API natives réellement exposées pour\nles deux sessions actives. Si les deux sont disponibles, déclenche leurs\ncompactages en parallèle sous un même identifiant de cycle ; sinon, compacte\nles seules sessions accessibles et trace les opérations non exécutées.\nNe compacte pas une conversation auxiliaire à la place de l'orchestrateur\nréellement actif.\n\nExige deux preuves natives de fin, corrélées aux bonnes sessions, pour déclarer\nune réussite conjointe. Un accusé de lancement n'est pas une fin de compactage.\nUne API absente ou un échec avec contexte préservé laisse le cycle incomplet\navec sa cause ; après réconciliation sûre des contextes, santé OpenCode, MCP,\nreadiness CAB et permissions, poursuis les mandats déjà autorisés. Ce seul\nécart ne classe pas le RUN `BLOQUÉ`, n'arrête pas CAB, ne demande pas de\ndérogation et ne diffère pas les statistiques. Un compactage encore en cours,\nun effet inconnu ou une réconciliation impossible suspend les opérations\nconcernées. Ne relance pas aveuglément une opération d'effet inconnu et\nn'attends pas une API absente : réexamine sa disponibilité à la prochaine\néchéance, calculée depuis le déclenchement du cycle courant. Conserve dans le\ncheckpoint les sessions, horodatages, résultats et retards observés, sans\ninventer d'identifiant non exposé. Ce cycle ne ferme ou ne redémarre aucun\nprocessus et ne rejoue aucun mandat consommé.\n\n## Syntaxe\n\nLes seules sous-commandes admises sont :\n\n- `/cab start`\n- `/cab run`\n- `/cab stop`\n- `/cab test`\n- `/cab update`\n- `/cab status`\n- `/cab status --run <run_id>`\n- `/cab stats`, `/cab statsla"... 42666 more characters,
+    expected: /^version: 1\.7\.1$/m,
+    operator: 'match',
+    diff: 'simple'
+  }

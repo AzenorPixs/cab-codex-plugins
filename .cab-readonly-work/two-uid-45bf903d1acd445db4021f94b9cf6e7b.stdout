@@ -1,0 +1,59 @@
+{
+  "qualification": "two-real-uids",
+  "results": [
+    {
+      "scenario": "success",
+      "originalVersion": "1.10.1",
+      "largeRegistry": true,
+      "publicRegistryBytes": 5218616,
+      "privateRegistryBytes": 5657060,
+      "actualVersions": {
+        "controller": "1.10.2",
+        "supervisor": "1.10.2",
+        "web": "1.10.2",
+        "broker": "1.10.2"
+      },
+      "serviceUids": {
+        "controller": 1000,
+        "supervisor": 1000,
+        "monitor": 1000
+      },
+      "opencodeUid": 1002,
+      "brokerUid": 1002,
+      "sourceUnchanged": true,
+      "kernelWriteDenied": true,
+      "intentChecks": 1,
+      "openCodePreserved": true,
+      "pausesPreserved": true,
+      "workerBroker": true,
+      "artifactDigest": "4cc58b4c5fdb6912a0b6d7e48bd603bb3bff6bc6ee44a575fe6cba794e3b1093"
+    },
+    {
+      "scenario": "disconnect-reply-lost",
+      "originalVersion": "1.10.1",
+      "largeRegistry": true,
+      "publicRegistryBytes": 5218616,
+      "privateRegistryBytes": 5657060,
+      "actualVersions": {
+        "controller": "1.10.2",
+        "supervisor": "1.10.2",
+        "web": "1.10.2",
+        "broker": "1.10.2"
+      },
+      "serviceUids": {
+        "controller": 1000,
+        "supervisor": 1000,
+        "monitor": 1000
+      },
+      "opencodeUid": 1002,
+      "brokerUid": 1002,
+      "sourceUnchanged": true,
+      "kernelWriteDenied": true,
+      "intentChecks": 1,
+      "openCodePreserved": true,
+      "pausesPreserved": true,
+      "workerBroker": true,
+      "artifactDigest": "93b9106f036c122c78689098f256a074cb5349698e5b06dfa737d7000757165d"
+    }
+  ]
+}

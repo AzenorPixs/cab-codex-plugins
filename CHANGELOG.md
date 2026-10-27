@@ -2,6 +2,96 @@
 
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
+## 1.10.5 — préparation source
+
+- Commande canonique `/CAB` en majuscules, avec `/cab` comme alias de compatibilité.
+- Ajout de `/CABU` sans argument, équivalent exact de `/CAB update` ; procédure unique,
+  dépendance locale de même version et refus des arguments supplémentaires avant effet.
+- Distribution du jeu CAB.md, CABU.md et cab.md : préparation complète, vérification
+  des versions et contenus, préservation des copies locales divergentes ou plus récentes,
+  restauration des seules commandes remplacées en cas d'échec.
+- Briques, copies broker, modules, unités, commandes et manifeste alignés sur 1.10.5
+  avec cachebuster neuf. Origine 1.10.4 conservée pour la maintenance ; formats et
+  marqueurs de protocoles existants inchangés. Aucune activation des services utilisateur.
+
+## 1.10.4 — préparation source
+
+- Monitor : dernière vue et cadence sur une seule ligne après l'identité du workspace, avec défilement local sur petit écran.
+- Vue manuelle persistante : états observés, compteurs, sélection et détails conservés entre rafraîchissements, même après perte SSE ou erreur. Les commandes vérifient séparément la fraîcheur courante ; la carte Web garde son expiration de trente minutes.
+- RUN et Changes triés par nombre de tâches cochées décroissant, puis identifiant du change alphabétique et identifiant RUN ; avancement inconnu placé après zéro, sans modifier les données sources.
+- Toutes les briques, modules, copies broker, plugin, commande et supports courants alignés sur 1.10.4 avec cachebuster neuf. Origine de maintenance 1.10.3 conservée et transition qualifiée à deux UID en environnement isolé, sans installation ni activation des services utilisateur.
+- Protocole corrigé dans son référentiel template puis synchronisé vers CAB : bootstrap du Monitor, catalogue des étapes et coordination par ressource réconciliés. Commande et skill conservent le choix PLLM de session et attendent une instruction sans modèle admissible ; les anciennes consignes de benchmark automatique périodique sont retirées.
+- Références OpenSpec PLLM réconciliées avec cette attente humaine : anciennes échéances conservées sans réactivation automatique et sondes statistiques indépendantes. Le contrôle documentaire compare désormais les trois références courantes aux supports CAB ; archives et composants actifs inchangés.
+
+## 1.10.3 — préparation source
+
+- Préparation vérifiée du catalogue public du skill actif et patch non secret à transmettre au contrôleur lors du démarrage autorisé ; configuration explicite et options existantes conservées, sans benchmark ni écriture automatique.
+- Rapprochement contrôlé opencodego vers opencode-go : identité exacte prioritaire, unicité, connexion et modèle inchangé ; provenance logique conservée avec l'identité native, y compris pour les preuves d'indisponibilité.
+- Prévol et indisponibilité compatibles avec parent.info.model.variant et parent.info.variant ; refus des contradictions entre champs parent et assistant, des preuves manquantes et des réponses incomplètes.
+- Incrément commun des briques et paquet reproductible ; transition depuis 1.10.2 qualifiée séparément en banc isolé. Publication et activation restent distinctes. Les anciens contrats restent lisibles ; un ancien lecteur strict ne prend pas en charge le nouveau champ logicalProviderID après nouvel armement.
+
+## 1.10.2 — préparation source
+
+- La session de pilotage peut fournir providerMaxBytes à /model-policy/resolve et dans modelSelection à l'armement : budget entier positif en octets appliqué au seul /provider de l'appel, sans plafond fixe ajouté. Omission compatible à 2 Mio, autres observations et catalogue PLLM inchangés.
+- Dépassements et valeurs invalides refusés sans corps privé ; budget local, sans changement des modèles ou jobs existants. Incrément commun des briques et compatibilité de maintenance depuis 1.10.1 conservée.
+
+## 1.10.1 — préparation source
+
+- Preuve du broker : reconnaître un enfant créé depuis tout thread du même OpenCode, avec déduplication, contrôle d’identité parent après découverte et gardes UID/commande/parent/unicité conservées. Une disparition de thread concurrente est tolérée ; les autres erreurs restent bloquantes.
+
+- Conserver les clés logiques historiques à la restauration sans donner de nouvelle réservation de test non canonique. Réparation ciblée du candidat sous le même HELD après échec de restauration : reçu et stages initiaux préservés, reprise idempotente, nouvelle release immuable et aucune réécriture du registre métier.
+
+- Maintenance ordinaire : porter à 16 Mio les seules lectures du registre GET /runs et controller-runs.json, sans troncature ni purge ; conserver 2 Mio sur les autres réponses et 4 Mio sur les autres fichiers.
+- Tester les refus des bornes et qualifier succès/récupération avec un grand registre et deux UID réels, sans assouplir PAUSE, HELD, propriétés ou identités.
+- Aligner les briques, commande, plugin et supports courants sur 1.10.1 ; conserver 1.10.0 parmi les versions broker chargées qualifiées. Installation locale et reprise CISMP restent distinctes de la préparation source, sans action Git implicite.
+
+## 1.10.0 — préparation source
+
+- Correctif de maintenance : admettre la version broker chargée 1.9.0 dans reuse-readonly vers 1.10.0, en conservant la liste fermée et tous les contrôles de preuve ; qualifier succès et récupération avec deux UID réels.
+
+- Modèle de codage : modèle explicite du prompt prioritaire, sinon PLLM automatique ; raisonnement high par défaut, puis xhigh, puis politique de priorité inférieure. Un modèle explicitement imposé incompatible bloque. Catalogue public configurable, prévol natif exact, choix persisté et transmis lors des reprises ; contrats historiques conservés sans adoption implicite. Aucun benchmark fournisseur ou changement d'agent actif par la préparation source.
+
+- Même verrouillage étendu aux navigateurs externes DEVOPS, notamment Chromium et Firefox : fermeture des sessions/processus de test et restitution vérifiée des profils et ports avant libération, sans toucher aux sessions utilisateur préexistantes.
+
+- Réservations durables Docker/LXC par RUN/change, acquisition atomique et attente FIFO par environnement ; les verrous de commandes restent temporaires. Libération après fins natives, nettoyage puis vérification corrélés et réussis, avec reçus idempotents et reprise sans expiration automatique.
+- Publication, changement de génération et clôture refusés tant qu'un environnement reste réservé ; les pairs indépendants continuent. Le registre 4 enrichi après premier usage est refusé par les anciens lecteurs stricts.
+- Moniteur : liste Manuel, 1s, 3s, 7s, 30s, 1m, 5m, 10m, 30m, choix mémorisé et bouton Actualiser. Le SSE respecte la cadence de la vue et la collecte serveur reste partagée.
+- Carte Web Disponible pendant les 30 minutes suivant un rafraîchissement réussi, puis Non observé. Une perte SSE ou un rafraîchissement échoué ne remet pas ce délai à zéro.
+- Incrément mineur source 1.9.0 vers 1.10.0, sans déploiement, migration runtime ni changement d'infrastructure.
+
+## 1.9.0 — préparation source
+
+- Politique explicite reuse-readonly : preuve des trois artefacts broker
+  existants, aucune installation ou écriture intercomptes de maintenance,
+  versions sur disque et réellement chargées distinguées.
+- Intention durable avant déconnexion ; gel et récupération après panne ou
+  réponse ambiguë, sans faux rollback vers un processus ancien disparu.
+- Qualification isolée de deux UID réels et régressions des modes existants.
+- Incrément mineur demandé de 1.8.0 vers 1.9.0 pour les sources, distribution
+  et supports ; aucune installation, relance réelle, mutation Pixs ou Git.
+
+## 1.8.0 — préparation source
+
+- Admission des validations après vérification native ask ; propriétaire et
+  opération persistés ensemble avant traitement de décision.
+- Réconciliation explicite d'un prévol orphelin PENDING prouvé sans effet,
+  avec reçu durable REJECTION_ONLY : seul le rejet est permis, jamais once.
+- Profil frozen-recovery-controller avec journal privé BOOTSTRAP_HELD,
+  chargement du contrôleur puis adoption native du véritable HELD ; maintien
+  du RUN/job/candidate et des frontières, sans assouplir retry ou complete.
+- Transition bornée contrôleur 1.8.0 / broker, superviseur et Web 1.7.1
+  explicitement qualifiée ; versions du paquet et des processus séparées.
+  OpenCode et broker restent ouverts. Le rollback peut rester gelé ; aucun
+  retour à un lecteur incompatible après reçu REJECTION_ONLY.
+- Jeu source et distribution alignés sur 1.8.0, documentation concurrente
+  réconciliée. Aucun déploiement, réparation de récupération vivante ou effet Git effectué.
+- Mode explicite managed-release : liens relatifs vérifiés, nouvelles releases
+  immuables, bascule des pointeurs et retour arrière conservant les anciennes
+  releases ; alignement ordinaire distinct après la récupération mixte.
+- Diagnostic approval-metadata par GET depuis une observation native existante,
+  sans lecture du magasin privé ni annulation. Une attribution absente reste
+  inconnue et une observation historique ne vaut pas preuve actuelle.
+
 ## 1.7.1 — préparation source
 
 - /cab update déploie broker, contrôleur, superviseur et Web, y compris actifs,

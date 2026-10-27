@@ -1,0 +1,15 @@
+✓ spec/active-component-update
+✓ spec/approval-persistence
+✓ spec/approval-workflow
+✓ spec/archive-session-statistics
+✓ spec/codex-integration-distribution
+✓ spec/concurrent-run-coordination
+✓ spec/controller-transport
+✓ change/fix-orphaned-validation-admission
+✓ spec/local-web-monitor
+✓ spec/monitor-management
+✓ spec/native-session-statistics
+✓ spec/persistent-job-supervision
+✓ spec/supervision-remediation
+✓ spec/web-statistics-retention
+Totals: 14 passed, 0 failed (14 items)

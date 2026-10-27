@@ -111,7 +111,7 @@ La télémétrie des conflits MUST conserver seulement les identités opaques et
 - **THEN** ses métriques sont comptées sans copier le manifeste ou le chemin dans les statistiques
 
 ### Requirement: Comparaison de concurrence étayée
-Un bilan 1.7.1 MUST distinguer réservations, accès compatibles et exécutions natives réellement observées. Il MUST exposer bornes et couverture avant toute comparaison avec une période antérieure. Les fenêtres et imports statistiques effectivement livrés MUST être conservés sans addition des sources recouvrantes.
+Un bilan 1.10.5 MUST distinguer réservations, accès compatibles et exécutions natives réellement observées. Il MUST exposer bornes et couverture avant toute comparaison avec une période antérieure. Les fenêtres et imports statistiques effectivement livrés MUST être conservés sans addition des sources recouvrantes.
 
 #### Scenario: Benchmark synthétique
 - **WHEN** un test démontre des accès indépendants concurrents

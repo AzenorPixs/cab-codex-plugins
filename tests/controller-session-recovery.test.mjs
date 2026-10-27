@@ -14,6 +14,17 @@ const controllerPath = fileURLToPath(new URL(
 ));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+test('la réparation de notification est réservée aux RUN et ne remplace pas retry', async (t) => {
+  const h = await setup(t);
+  const before = await h.get('/job');
+  const response = await h.post('/validation/reconcile', { transactionId: 'without-run',
+    developerAuthorization: 'synthetic-human-approval', jobId: 'job-recovery', recoveryId: 'recovery-1',
+    approval: h.approval('preflight-1') });
+  assert.equal(response.status, 404);
+  assert.deepEqual(await h.get('/job'), before);
+  assert.deepEqual(h.native.replies, []);
+});
+
 async function waitFor(check) {
   for (let i = 0; i < 100; i += 1) {
     if (await check()) return;

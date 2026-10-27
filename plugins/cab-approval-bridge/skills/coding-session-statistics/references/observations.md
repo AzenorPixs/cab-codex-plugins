@@ -1,14 +1,14 @@
-# Statistiques et observations CAB 1.7.1
+# Statistiques et observations CAB 1.10.5
 
 Les consultations sont ponctuelles, en français et en lecture seule. Elles ne démarrent aucun job, ne réveillent aucun RUN et ne produisent aucune permission. Les anciennes vues `/statistics` et `/runs/<runId>/statistics` restent disponibles, dont le brouillon individuel à six sections.
 
 | Commande | Sélection GET /statistics/view |
 |---|---|
-| `/cab stats` | `selection=current` |
-| `/cab statslast` | `selection=last` |
-| `/cab stats 24` | `selection=24h` |
-| `/cab stats7` | `selection=7d` |
-| `/cab stats30` | `selection=30d` |
+| `/CAB stats` | `selection=current` |
+| `/CAB statslast` | `selection=last` |
+| `/CAB stats 24` | `selection=24h` |
+| `/CAB stats7` | `selection=7d` |
+| `/CAB stats30` | `selection=30d` |
 
 Un `runId` explicite filtre son identité ; sans cible, la vue courante présente chaque contexte actif. `contextId` sélectionne un contexte historique. `format=markdown` restitue la vue lisible. La dernière livraison exige un passage DELIVERED observé ; publication, REPORT et simple consultation ne la prouvent pas.
 
