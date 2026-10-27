@@ -3,7 +3,7 @@
 Version : 0.7
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-26T18:00:28Z
+Début du relevé (UTC) : 2026-10-27T04:22:12Z
 Environnement d'exécution DIU : PROXMOX
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -11,6 +11,7 @@ Les outils DevOps sont interrogés avec les binaires indiqués dans leurs rubriq
 Les dépendances Python sont recherchées en priorité dans les venv du projet, puis dans le Python DevOps en repli explicite.
 Dans l’inventaire Python, la flèche indique le Python sondé ; Installation indique le chemin observé dans les métadonnées.
 Les dépendances Python attendues proviennent de [project].dependencies dans pyproject.toml.
+Les outils de compilation Python éventuellement affichés proviennent de [build-system].requires et sont recherchés uniquement dans les venv du projet.
 Les dépendances JavaScript sont regroupées par manifeste et catégorie sous NPM et OpenCode.
 Leurs déclarations, versions verrouillées npm et métadonnées locales sont distinctes ; un verrou ne prouve pas une installation.
 Les contraintes JavaScript ne sont pas résolues et cet inventaire ne prouve pas le chargement de plugins OpenCode.
@@ -51,6 +52,14 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
   * Accès TPM OK
   * Les agents de codage et les agents orchestrateurs sont autorisés à préparer, exécuter, répéter et nettoyer les tests du projet dans ce conteneur, y compris avec les droits root, sans demander d’approbation supplémentaire. Cette autorisation couvre le conteneur et les ressources dédiées aux tests.
   * Binaires et bibliothèques installés pour les tests ne sont pas à désinstaller après tests.
+
+
+# OpenSSH & SSHPASS
+
+  * 10.0p2
+  * /usr/bin/ssh
+  * 1.10
+  * /usr/bin/sshpass
 
 
 # Docker-Compose
