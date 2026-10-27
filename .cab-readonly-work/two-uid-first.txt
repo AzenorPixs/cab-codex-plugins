@@ -1,0 +1,35 @@
+Traceback (most recent call last):
+  File "/home/devops/datas/cab/tests/helpers/run-readonly-broker-two-uid.py", line 76, in <module>
+    main()
+    ~~~~^^
+  File "/home/devops/datas/cab/tests/helpers/run-readonly-broker-two-uid.py", line 65, in main
+    raise RuntimeError("Banc deux UID échoué : " + result.stderr[-12000:])
+RuntimeError: Banc deux UID échoué : file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:119
+      await until(async()=>{if(child.exitCode!==null)throw new Error('service exited '+name+' '+stderr);try{return(await fetch(base+(name==='monitor'?'/api/snapshot':'/status'))).ok;}catch{return false;}});
+                                                           ^
+
+Error: service exited controller file:///work/cab-readonly-uid-XqF929/profile/.local/share/cab-approval-bridge/releases/seed/scripts/cgpt-approval-bridge-runs.mjs:217
+      child.once("error", () => { clearTimeout(timer); reject(new CoordinationError("registry-lock-unavailable")); });
+                                                              ^
+
+CoordinationError: registry-lock-unavailable
+    at ChildProcess.<anonymous> (file:///work/cab-readonly-uid-XqF929/profile/.local/share/cab-approval-bridge/releases/seed/scripts/cgpt-approval-bridge-runs.mjs:217:63)
+    at ChildProcess.wrapper (node:events:639:12)
+    at ChildProcess.emit (node:events:514:28)
+    at ChildProcess._handle.onexit (node:internal/child_process:322:12)
+    at onErrorNT (node:internal/child_process:554:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+  code: 'registry-lock-unavailable',
+  status: 409
+}
+
+Node.js v24.22.1
+
+    at file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:119:60
+    at until (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:15:69)
+    at async start (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:119:7)
+    at async scenario (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:128:5)
+    at async file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:201:64
+
+Node.js v24.22.1
+

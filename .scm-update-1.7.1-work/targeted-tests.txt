@@ -1,0 +1,42 @@
+✔ jeu réel : les quatre briques actives passent en 1.7.1, RUN et archives conservés, deuxième invocation sans arrêt (7365.93774ms)
+✔ services initialement inactifs : fichiers actualisés sans les démarrer (1484.67589ms)
+✔ attente puis reprise : aucun arrêt pendant activité et transaction durable réutilisée (2087.569209ms)
+✔ paquet incomplet, import absent, downgrade et syntaxe invalide échouent avant arrêt (1667.492187ms)
+✔ échec de démarrage et mauvaise version broker déclenchent le retour aux artefacts précédents (5022.780675ms)
+✔ interruption pendant installation : récupération des artefacts sans restauration du runtime (2199.180733ms)
+✔ interruption à la libération : réconciliation sans retour arrière après reprise (3202.546143ms)
+✔ cibles projet, liens et journal corrompu sont refusés sans écrasement (297.816452ms)
+✔ une dérive des générations interdit la levée du gel et conserve le diagnostic de récupération (2675.037733ms)
+✔ interruption avant le gel : la même intention de maintenance est récupérée (2157.743825ms)
+✔ autorité flock concurrente refusée, libération et contrat corrompu préservé (3439.47928ms)
+✔ une modification externe pendant attente bloque le déploiement ; annulation conserve cette modification (1659.512789ms)
+✔ les briques distribuées publient la même version de base 1.7.1 (34.55328ms)
+✔ le moniteur web distribue ses ressources locales et reste indépendant des services CAB (4.272677ms)
+✔ le catalogue des étapes et son producteur sont distribués en 1.7.1 (2.623617ms)
+✔ la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué (1.468398ms)
+✔ distribue une unité utilisateur inactive par défaut (0.551461ms)
+✔ la commande CAB installe sans activer, démarre et arrête explicitement (0.729381ms)
+✔ distribue un superviseur utilisateur inactif par défaut (0.359128ms)
+✔ la commande CAB prévole le modèle OpenCode avant la session persistante (0.690818ms)
+✔ les artefacts distribués annoncent la même version de base (1.797319ms)
+✔ la mise à jour confie les quatre briques au moteur transactionnel et conserve les états initiaux (0.835426ms)
+✔ le paquet contient les trois modules broker identiques aux sources et la procédure de mise à jour (4.385581ms)
+✔ la marketplace CAB distribue les statistiques avec le plugin existant (4.120831ms)
+✔ AGENTS renvoie au protocole local dédié avec ses contrats techniques (3.542877ms)
+✔ le protocole exige un rapport par archive et empêche une clôture sans preuve (8.404529ms)
+✔ le protocole distribué protège la lecture seule et décrit la récupération explicite (1.806629ms)
+✔ le protocole distribue des cadences indépendantes et une attente PLLM persistante (8.100661ms)
+✔ la réactivation sûre est distribuée sans tools true pendant la génération (1.253822ms)
+✔ le prévol divergent conserve la candidate et le job dans le protocole distribué (2.534092ms)
+✔ les sondes statistiques n'arrêtent pas le travail pour attendre le créneau (8.711223ms)
+✔ le refus par polling après timeout est distribué avec une sortie humaine explicite (6.845079ms)
+✔ status route directement la consultation avant toute boucle de pilotage (1.040012ms)
+✔ le contrat status conserve le tableau métier, la fraîcheur et les limites des preuves (0.865886ms)
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 33412.040432

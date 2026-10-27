@@ -1,0 +1,26 @@
+✖ processus original 1.7.1 → chargement L2 réel → rejectionOnly/refus/poll/retry, broker conservé (4278.360985ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4341.970839
+
+✖ failing tests:
+
+test at tests/maintenance-bootstrap.test.mjs:172:1
+✖ processus original 1.7.1 → chargement L2 réel → rejectionOnly/refus/poll/retry, broker conservé (4278.360985ms)
+  Error: maintenance-process-unavailable
+      at maintenanceError (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:14:57)
+      at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:15:32)
+      at processIdentity (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:77:13)
+      at async ownedService (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs:524:24)
+      at async maintainFrozenController (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs:675:39)
+      at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:176:18)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'maintenance-process-unavailable',
+    status: 409
+  }

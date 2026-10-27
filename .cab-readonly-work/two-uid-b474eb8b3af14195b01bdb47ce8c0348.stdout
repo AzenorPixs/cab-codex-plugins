@@ -1,0 +1,39 @@
+{
+  "qualification": "two-real-uids",
+  "results": [
+    {
+      "scenario": "historical-key-forward-recovery",
+      "recoveryProof": {
+        "sameTransaction": true,
+        "sameGeneration": true,
+        "registryUnchanged": true,
+        "originalReceiptPreserved": true,
+        "interruptionRecovered": true,
+        "authorityDriftRefused": true
+      },
+      "originalVersion": "1.9.0",
+      "largeRegistry": false,
+      "publicRegistryBytes": 1731,
+      "privateRegistryBytes": 2360,
+      "actualVersions": {
+        "controller": "1.10.1",
+        "supervisor": "1.10.1",
+        "web": "1.10.1",
+        "broker": "1.10.1"
+      },
+      "serviceUids": {
+        "controller": 1000,
+        "supervisor": 1000,
+        "monitor": 1000
+      },
+      "opencodeUid": 1002,
+      "brokerUid": 1002,
+      "sourceUnchanged": true,
+      "kernelWriteDenied": true,
+      "intentChecks": 1,
+      "openCodePreserved": true,
+      "pausesPreserved": true,
+      "artifactDigest": "96eedbaa00ddc5e8baa0f6cb03f8fcd38080ae9872a95a99dca310c64b89d62c"
+    }
+  ]
+}
