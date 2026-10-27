@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.10.11 — plugin, skill et commande CABU
+
+- Ajout du plugin CABU autonome et de son skill d’entrée ; `/CABU` reste la commande distribuée séparément et délègue à `/CAB update`.
+- Incrément commun des briques CAB à 1.10.11.
+
+## 1.10.10 — alignement de la distribution
+
+- Incrément commun des versions CAB ; `/CABU` reste l’accès direct à `/CAB update`, conformément à la spécification et à l’implémentation existantes.
+
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
 ## 1.10.9 — mise à jour forcée par CABU

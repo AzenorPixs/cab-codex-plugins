@@ -20,6 +20,9 @@ pilotées ; le présent document reste le cadrage technique des composants CAB.
 ```text
 CAB/
 ├── .agents/plugins/marketplace.json
+├── plugins/cabu/
+│   ├── .codex-plugin/plugin.json
+│   └── skills/cabu/SKILL.md
 ├── plugins/cab-approval-bridge/
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
@@ -45,7 +48,7 @@ CAB/
 │   ├── cgpt_approval_bridge_server.py
 │   ├── cgpt_approval_bridge_router.py
 │   └── cgpt_approval_bridge_journal.py
-└── .codex/commands/CAB.md
+└── .codex/commands/{CAB,CABU,cab}.md
 ```
 
 `.codex/commands/CAB.md` est la définition versionnée de la commande Codex
@@ -55,7 +58,7 @@ CAB/
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 
-La version source actuelle est `1.10.9` pour le broker, le contrôleur et le
+La version source actuelle est `1.10.11` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -353,7 +356,7 @@ Le reçu et rejectionOnly sont des extensions conservatrices du registre 4 :
 un ancien lecteur strict peut les refuser. Après première utilisation, aucun
 retour aux anciens modules ni restauration d'une sauvegarde runtime antérieure
 ne doit effacer ces preuves. L'installation et le chargement restent distincts
-de ce lot source. L'update forcé 1.10.9 ne consulte pas l'état de récupération
+de ce lot source. L'update forcé 1.10.11 ne consulte pas l'état de récupération
 pour décider de remplacer les fichiers ou redémarrer systemd ; le profil
 frozen-recovery-controller conserve ses contrôles spécifiques lorsqu'il est
 explicitement sélectionné.
@@ -886,7 +889,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.10.9. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.10.11. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -1017,7 +1020,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 1.10.9 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 1.10.11 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1077,7 +1080,7 @@ sont pas présentées comme des succès. Une libération de garde non confirmée
 est signalée avec son expiration ; un contrôleur remplacé perd sa garde
 en mémoire. Aucun appel LLM ni activation au login n'est ajouté.
 
-## Maintenance de récupération gelée — 1.10.9
+## Maintenance de récupération gelée — 1.10.10
 
 Le profil explicite `frozen-recovery-controller` de update.mjs prépare la
 fermeture d'imports du contrôleur et la sauvegarde de ses seuls artefacts.
@@ -1118,7 +1121,7 @@ exigés. Un chemin fourni dans le corps HTTP n'est jamais suivi.
 Le profil exige des pairs sous PAUSE explicitement autorisée pendant toute
 la transition mixte. Après complete, aucun nouveau mandat métier n'est
 approuvé avant une maintenance ordinaire distinctement autorisée alignant
-réellement les quatre briques en 1.10.9, puis une reprise explicitement validée.
+réellement les quatre briques en 1.10.10, puis une reprise explicitement validée.
 Cette seconde maintenance peut reconnecter le broker et relancer le Web :
 elle n'est pas incluse dans le profil gelé ou dans la préparation source.
 
@@ -1127,11 +1130,11 @@ et attribuer la seule demande au prévol ciblé. Un écart reste bloquant, sans
 déduire sa cause ni annuler une demande inconnue. Une publication fraîche est
 requise après chargement ; le profil attend la télémétrie du broker conservé.
 
-Le profil qualifie temporairement contrôleur 1.10.9 avec broker, superviseur
+Le profil qualifie temporairement contrôleur 1.10.10 avec broker, superviseur
 et Web 1.7.1 conservés. packageVersion, runtimeVersions, maintenanceBuildDigest
 et frozenRecoveryMaintenance distinguent paquet et processus. La preuve
 isolée va jusqu'au prévol neuf once/exit 0 et complete avec le même broker
-original. Elle ne vaut pas déploiement global 1.10.9 ni test produit Pixs.
+original. Elle ne vaut pas déploiement global 1.10.10 ni test produit Pixs.
 Une version préservée inconnue ou différente est refusée. Le mode ordinaire
 update conserve ses contrôles et ses opérations de cycle de vie propres.
 
@@ -1142,12 +1145,12 @@ réinstallé. --rollback est refusé pour ce profil : il ne doit pas être
 interprété comme une nouvelle maintenance. Toute reprise utilise le même
 journal et refuse une preuve expirée ou altérée.
 
-## Mise à jour forcée des briques CAB — 1.10.9
+## Mise à jour forcée des briques CAB — 1.10.11
 
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 1.10.9 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 1.10.11 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1180,7 +1183,7 @@ sortie filtrée conserve null pour les identités absentes et marque l'observati
 historique. Il n'accède pas au magasin privé et n'effectue aucune attribution,
 annulation ou preuve actuelle d'absence d'effet. Une inconnue reste bloquante.
 
-## Broker externe en lecture seule — 1.10.9
+## Broker externe en lecture seule — 1.10.10
 
 update.mjs ajoute brokerPolicy=reuse-readonly avec layout=managed-release et
 preuve privée brokerProof. broker-artifact-proof.mjs vérifie les trois modules

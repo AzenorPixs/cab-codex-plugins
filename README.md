@@ -6,7 +6,8 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 1.10.9. `/CABU` délègue à `/CAB update`,
+La version source courante est CAB 1.10.11. Le plugin CABU fournit un skill
+d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
 des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
@@ -632,17 +633,17 @@ CAB expose quatre états :
 
 ## Distribution
 
-Le dépôt contient directement les sources du bridge et du plugin Codex. La
-marketplace est définie dans `.agents/plugins/marketplace.json` et référence
-le plugin situé dans `plugins/cab-approval-bridge/`.
+Le dépôt contient directement les sources du bridge et des plugins Codex CAB et
+CABU. La marketplace est définie dans `.agents/plugins/marketplace.json` et
+référence les plugins `plugins/cab-approval-bridge/` et `plugins/cabu/`.
 
 Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.10.9`. Le plugin ajoute un cachebuster Codex pour les
-installations locales.
+La version de base actuelle des briques CAB, du plugin CABU et des commandes
+est `1.10.11`. Chaque plugin ajoute un cachebuster Codex pour les installations
+locales.
 
 ## Documentation
 

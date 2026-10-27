@@ -204,6 +204,6 @@ entre sessions. Publier un rapport par archive et vérifier ses six sections,
 UTF-8/LF et totaux avant la libération normale de la réservation. Une session
 SCM directe n'invoque pas cette compétence ni ses sondes.
 
-## Consultations et observations CAB 1.10.9
+## Consultations et observations CAB 1.10.11
 
 Les agrégats, fenêtres et imports filtrés sont décrits dans [la référence observations](references/observations.md). La consultation est ponctuelle et en lecture seule ; elle ne déclenche ni sondes, ni RUN d'observation, ni intervention sur les sessions. Les sources natives et importées restent séparées, les lacunes inconnues et les quotas partagés. Les durées de contention et d'exception peuvent se recouvrir. Cette capacité de consultation ne transforme pas SCM en session pilotée et n'autorise pas l'invocation de cette compétence pendant SCM.

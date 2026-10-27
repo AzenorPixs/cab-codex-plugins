@@ -8,7 +8,7 @@ import readline from "node:readline";
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 
-export const VERSION = "1.10.9";
+export const VERSION = "1.10.11";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -250,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "1.10.9",
+    version: "1.10.11",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1685,7 +1685,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.10.9",
+      version: "1.10.11",
     },
   });
 
