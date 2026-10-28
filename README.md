@@ -6,12 +6,21 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 1.10.11. Le plugin CABU fournit un skill
+La version source courante est CAB 2.0.0. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
 des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
+
+CAB 2.0.0 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
+sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
+fixe `opencode` et le mot de passe configuré par `OPENCODE_PASSWORD` ; CAB
+lit son mot de passe depuis `~/.config/cab-approval-bridge/opencode.password`
+(permissions `0600`) ou depuis le credential systemd provisionné par l'unité.
+Le client local vise `127.0.0.1:4096`, jamais l'adresse de bind `0.0.0.0`.
+Le serveur MCP CAB se déclare dans `mcp.servers.cgpt-validation` avec le type
+`local` et le transport `stdio`.
 
 La version 1.10.7 prend en charge les propriétaires explicitement distincts des modules, du répertoire et des processus broker dans la preuve privée de maintenance. Une demande orpheline du job courant sous PAUSE peut être réconciliée uniquement pour rejet, avec preuve native exacte d'absence d'effet. L'installation de sources et la migration des processus restent vérifiées séparément.
 
@@ -393,7 +402,7 @@ purge. Le plugin fournit l'outil de purge et son protocole. Une reprise
 conserve son état, y compris après prévol de récupération divergent dans la
 candidate, selon la procédure ci-dessous.
 
-`/CAB start` reconnecte et vérifie le MCP actif par `/mcp`, installe de façon différée les
+`/CAB start` reconnecte et vérifie le MCP actif par `/api/mcp`, installe de façon différée les
 services utilisateur du contrôleur et du superviseur sans les activer au
 login, les démarre explicitement, initialise la supervision CAB, puis crée
 une nouvelle session maîtresse persistante visible dans OpenCode.
@@ -642,7 +651,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, du plugin CABU et des commandes
-est `1.10.11`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.0.0`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation

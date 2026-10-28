@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "1.10.11";
+export const VERSION = "2.0.0";
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
@@ -11,11 +12,10 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "1.10.11";
+const version = "2.0.0";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
-const opencodeUrl = (envValue("OC_Codex_OPENCODE_URL") || "http://127.0.0.1:4096").replace(/\/$/, "");
 const resumeDelayMs = Number(envValue("OC_Codex_SUPERVISOR_RESUME_DELAY_MS") || "60000");
 const pollIntervalMs = Number(envValue("OC_Codex_SUPERVISOR_POLL_INTERVAL_MS") || "5000");
 const reconnectMs = Number(envValue("OC_Codex_RECONNECT_MS") || "1000");
@@ -214,18 +214,16 @@ async function reconcile() {
       return;
     }
 
-    const directoryQuery = runId ? `?directory=${encodeURIComponent(job.directory)}` : "";
+    const openCode = createOpenCodeV2ClientFromEnv({ directory: job?.directory || workspace });
     if (runId) {
-      const busy = await fetchJson(`${opencodeUrl}/session/status${directoryQuery}`);
+      const busy = await openCode.activeSessions();
       if (!busy || typeof busy !== "object" || Array.isArray(busy) ||
           (busy[job.sessionId] && busy[job.sessionId].type !== "idle")) {
         await updateState("WAITING", "session-not-idle");
         return;
       }
     }
-    const session = await fetchJson(
-      `${opencodeUrl}/session/${encodeURIComponent(job.sessionId)}${directoryQuery}`
-    );
+    const session = await openCode.session(job.sessionId, job?.directory || workspace);
 
     if (!session || typeof session !== "object" || (runId &&
         (session.id !== job.sessionId || session.directory !== job.directory))) {
@@ -264,18 +262,10 @@ async function reconcile() {
       await updateState('WAITING', changed ? 'job-changed-before-resume' : latestDenial);
       return;
     }
-    await fetchJson(
-      `${opencodeUrl}/session/${encodeURIComponent(job.sessionId)}/message${directoryQuery}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...(job.codingModel ? { model: { providerID: job.codingModel.providerID, modelID: job.codingModel.modelID },
-            variant: job.codingModel.reasoning } : {}),
-          parts: [{ type: "text", text: resumeMessage(job) }],
-        }),
-      }
-    );
+    await openCode.prompt(job.sessionId, resumeMessage(job), {
+      directory: job?.directory || workspace,
+      ...(job.codingModel ? { model: { ...job.codingModel, reasoning: job.codingModel.reasoning } } : {}),
+    });
 
     state.resumeInFlight = false;
     state.lastActivityAt = new Date().toISOString();

@@ -1,8 +1,9 @@
 import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "1.10.11";
+const version = "2.0.0";
 if (CONTEXT_VERSION !== version) throw new Error('CAB supervisor component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -12,7 +13,7 @@ const host = envValue('OC_Codex_SUPERVISOR_STATUS_HOST') || '127.0.0.1';
 if (!['127.0.0.1', '::1'].includes(host)) throw new Error('Loopback requis.');
 const port = Number(envValue('OC_Codex_SUPERVISOR_STATUS_PORT') || 8789);
 const controllerUrl = (envValue('OC_Codex_CONTROLLER_URL') || 'http://127.0.0.1:8788').replace(/\/+$/, '').replace(/\/status$/, '');
-const opencodeUrl = (envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096').replace(/\/$/, '');
+const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace });
 const pollInterval = Number(envValue('OC_Codex_SUPERVISOR_POLL_INTERVAL_MS') || 5000);
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 if (!Number.isFinite(pollInterval) || pollInterval < 250) throw new Error('Intervalle de supervision invalide.');
@@ -49,8 +50,7 @@ async function reconcileAll() {
 }
 async function consumeEvents() {
   try {
-    const response = await fetch(opencodeUrl + '/global/event');
-    if (!response.ok || !response.body) throw new Error('SSE unavailable');
+    const response = await openCode.events();
     const decoder = new TextDecoder();
     let buffer = '';
     for await (const chunk of response.body) {

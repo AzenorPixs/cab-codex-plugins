@@ -57,11 +57,21 @@ CAB/
 ## 3. Broker MCP
 
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
+OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `1.10.11` pour le broker, le contrôleur et le
+La version source actuelle est `2.0.0` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
+
+OpenCode V2 est le seul contrat natif pris en charge. Le client partagé
+`cgpt-approval-bridge-opencode-client.mjs` vérifie `/api/info`, exige la
+majeure 2 et authentifie toutes les requêtes HTTP et SSE en tant que `opencode`.
+Le serveur reçoit son mot de passe via `OPENCODE_PASSWORD`. CAB le lit depuis
+un fichier local privé, jamais depuis l'URL, un
+argument, une sortie ou le modèle. Les unités reçoivent ce fichier via
+`LoadCredential=opencode.password:<chemin>` et le client lit le chemin de
+`CREDENTIALS_DIRECTORY`.
 
 Un verrou exclusif `flock` garantit une instance unique pour un même espace persistant.
 
@@ -356,7 +366,7 @@ Le reçu et rejectionOnly sont des extensions conservatrices du registre 4 :
 un ancien lecteur strict peut les refuser. Après première utilisation, aucun
 retour aux anciens modules ni restauration d'une sauvegarde runtime antérieure
 ne doit effacer ces preuves. L'installation et le chargement restent distincts
-de ce lot source. L'update forcé 1.10.11 ne consulte pas l'état de récupération
+de ce lot source. L'update forcé 2.0.0 ne consulte pas l'état de récupération
 pour décider de remplacer les fichiers ou redémarrer systemd ; le profil
 frozen-recovery-controller conserve ses contrôles spécifiques lorsqu'il est
 explicitement sélectionné.
@@ -399,39 +409,20 @@ doit avoir un refus terminal. Un arrêt ciblé explicitement demandé par le
 développeur reste distinct de retry : gate BLOQUÉ et réconciliation avant
 désarmement et libération, sans purge ni interruption des autres RUN.
 
-### Réconciliation humaine du prévol exécuté sans once
+### Limite de réconciliation des prévols OpenCode V1
 
-La phase distincte `reconcile` traite uniquement un prévol `/usr/bin/true`
-approuvé et exécuté sous `tools.bash=true`, sans permission native `once`.
-Elle exige `developerAuthorization`, référence non secrète de l'accord humain
-spécifique, les identités de récupération conservées, `previousPreflightRequestId`
-et un `preflightRequestId` neuf. Les préconditions techniques restent requises.
-La règle finale de permission `bash` de la candidate doit être `ask` avec
-pattern `*`. Le message natif parent doit prouver `tools.bash=true`, la réponse
-MCP doit être APPROVED corrélée avec reviewer CGPT, et la seule commande exacte
-doit être terminée exit 0 après cette réponse, puis READY sans attente.
+Les versions CAB précédentes pouvaient reconstruire un prévol exécuté sans
+permission `once` en s'appuyant sur `tools.bash=true` dans le message utilisateur
+V1 et sur une autorisation humaine spécifique. OpenCode V2 ne prend pas en charge
+ce champ dans le corps des prompts ni dans le schéma documenté des messages
+utilisateur. CAB 2.0.0 refuse cette ancienne phase `reconcile` avec
+`preflight-native-allow-not-proved`, conserve le job et n'infère aucune
+autorisation ni exécution. Un autre échec de preuve ne consomme aucune permission.
 
-Toute consommation locale connue, autre outil, commande divergente ou preuve
-absente refuse cette réconciliation. L'ancienne tentative reste invalide :
-`EXECUTED_WITHOUT_NATIVE_ONCE`, référence d'autorisation, date, identifiants et
-empreinte native sont persistés. Sa décision ne change pas ; son autorisation
-exécutable locale est invalidée seulement après persistance. Après redémarrage
-coordonné, les mêmes preuves natives et l'accord humain permettent de conserver
-cette frontière sans reconstruire la décision locale perdue. Le nouveau prévol
-exige sa propre décision et consommation `once` avant `complete`. Le `retry`
-ordinaire n'est pas assoupli.
-
-OpenCode 1.19.0 transforme `tools.bash=true` en permission native `allow`.
-Pour réactiver un outil, envoyer le message de cadrage avec `noReply`, rétablir
-ensuite explicitement les permissions `ask` par PATCH de session, les relire,
-puis lancer le message exécutable sans champ `tools`. Ne pas utiliser `true`
-pour réactiver Bash dans un message qui déclenche immédiatement la génération.
-
-Pour les mandats lecture seule, le protocole distribué désactive explicitement
-bash, edit, write, apply_patch, task et skill via le champ tools du message.
-Un mandat exécutable réactive seulement ses outils nécessaires avec permissions
-natives ask et décision CAB unitaire. Ce verrou ne modifie pas la configuration
-persistante OpenCode.
+Les nouveaux prévols V2 contrôlent les règles natives `permissions`, exigent
+`ask` pour les opérations concernées et requièrent une décision CAB corrélée
+ainsi qu'une permission `once` propre avant l'effet natif. Les métadonnées V2
+arbitraires ne remplacent jamais la preuve `tools` désormais absente.
 
 ### Garde des permissions natives — CAB 1.0.1
 
@@ -486,23 +477,27 @@ de son historique. Aucun paramètre de configuration supplémentaire n'est requi
 
 ```text
 OpenCode : http://127.0.0.1:4096
-Health   : /global/health
-MCP      : /mcp
-SSE      : /global/event
+Health   : GET /api/info
+MCP      : GET /api/mcp
+Sessions : /api/session
+Messages : /api/session/{id}/message
+Permissions : /api/permission/request et /api/session/{id}/permission/{requestID}/reply
+SSE      : GET /api/event
 ```
 
 Après reconnexion ou divergence, le contrôleur réconcilie l'état via HTTP et consulte les permissions OpenCode.
 
-L'état `GET /mcp` du serveur OpenCode est l'autorité de connexion du broker
-pour les sessions persistantes. Si `cgpt-validation` n'est pas `connected`, CAB
-réinitialise l'instance OpenCode par `POST /instance/dispose`, attend une
-nouvelle healthcheck et ne crée aucune session avant le rétablissement. CAB ne
-termine ni ne démarre directement le broker, qui est détenu par OpenCode.
+L'état authentifié `GET /api/mcp`, dans la location cible, est l'autorité de
+connexion du broker pour les sessions persistantes. Si `cgpt-validation`
+n'est pas `connected`, CAB peut appeler les routes V2 ciblées de connexion ou
+déconnexion MCP et relire l'état. CAB n'appelle aucune route V1 ni
+`/instance/dispose` et ne termine ni ne démarre directement le broker, qui
+est détenu par OpenCode.
 
 Après la purge d'un nouveau RUN et ce contrôle, CAB crée une nouvelle session
-maîtresse persistante par `POST /session` ; seule une reprise du même RUN
+maîtresse persistante par `POST /api/session` ; seule une reprise du même RUN
 réutilise sa session, sauf remplacement explicitement vérifié par /job/recover. CAB transmet les mandats uniquement par
-`POST /session/<id>/message`. Le test de bout en bout et le travail ultérieur
+`POST /api/session/<id>/prompt`. Le test de bout en bout et le travail ultérieur
 restent dans cette session visible du développeur.
 
 ### Cadences de la boucle de pilotage
@@ -553,14 +548,15 @@ concernées, sans rejeu aveugle. Une API absente est réexaminée à la prochain
 les sessions disponibles ou non exposées, les résultats et les éventuels
 retards de fin de mandat sont conservés dans le checkpoint.
 
-OpenCode expose `POST /session/<id>/summarize`. Codex App Server expose
+OpenCode expose `POST /api/session/<id>/compact`. Codex App Server expose
 `thread/compact/start` sur la connexion qui possède la session active : sa
 réponse immédiate est seulement un accusé de lancement ; la fin doit être
 observée via l'item natif `contextCompaction` achevé, corrélé au bon thread.
 Le thread auxiliaire de décision créé par le contrôleur ne remplace pas celui
 de l'orchestrateur principal. Une API non exposée doit rester une limite
-signalée, pas une preuve fabriquée. `POST /instance/dispose` recharge un
-contexte interne et ne constitue pas un compactage de conversation.
+signalée, pas une preuve fabriquée. OpenCode V2 ne fournit pas de route `/instance/dispose` dans le contrat utilisé.
+Le compactage s'effectue par `POST /api/session/<id>/compact`, et son achèvement
+reste vérifié par les événements ou messages natifs V2.
 
 Cette règle décrit le pilotage attendu ; elle ne prétend pas qu'un automate
 de compactage conjoint est déjà implémenté dans le contrôleur.
@@ -720,7 +716,7 @@ piloté.
   message, écriture ni opération de cycle de vie. La commande distribuée
   définit le format exact et les règles de collecte ;
 - `/CAB start` purge les seuls anciens états CAB après contrôle d'inactivité,
-  vérifie `/mcp`, initialise la supervision et crée une nouvelle session
+  vérifie `/api/mcp`, initialise la supervision et crée une nouvelle session
   maîtresse ; la reprise conserve son état, y compris après prévol divergent
   dans la candidate selon la section 7 ;
 - `/CAB run` arme un contrat de job durable et actualise ses jalons avant de
@@ -866,7 +862,7 @@ le défaut documenté, jamais une valeur de remplacement pour une source absente
 La dernière date de readiness broker reste distincte de la disponibilité HTTP.
 
 Les sources GET sont `/status`, `/runs`, `/monitor/events` du contrôleur,
-`/status` du superviseur, `/global/health`, `/session/status` et `/mcp` d'OpenCode.
+`/status` du superviseur, `/api/info`, `/api/session/active` et `/api/mcp` d'OpenCode.
 Les réponses JSON sont bornées à 2 MiB. La page distingue santé HTTP,
 activité native, attentes métier et gate ; aucun heartbeat ne prouve un jalon.
 Les données anciennes portent la date de leur dernier succès.
@@ -889,7 +885,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 1.10.11. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.0.0. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -1020,7 +1016,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 1.10.11 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 2.0.0 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1068,9 +1064,9 @@ non résolu, sessions natives inactives et aucune permission native en attente.
 Elle bloque les POST concurrents, refuse une mutation déjà en vol, expire
 sous 30 secondes et se libère par /monitor/lifecycle/release avec son jeton.
 Les réponses de statut contrôleur/superviseur ajoutent workspace et pid pour
-vérifier le MainPID systemd. Le broker utilise seulement les POST natifs
-/mcp/cgpt-validation/connect et /disconnect avec directory explicite, puis
-vérifie /mcp. Ces actions ne redémarrent pas OpenCode et ne purgent rien.
+vérifier le MainPID systemd. Le broker utilise seulement les POST natifs V2
+/api/experimental/mcp/cgpt-validation/connect et /disconnect avec directory
+explicite et Basic Auth, puis vérifie /api/mcp. Ces actions ne redémarrent pas OpenCode et ne purgent rien.
 
 Le Web exige son propre MainPID systemd. Sa réponse HTTP 202 précède la
 commande restart --no-block ; le navigateur confirme une nouvelle startedAt
@@ -1145,12 +1141,12 @@ réinstallé. --rollback est refusé pour ce profil : il ne doit pas être
 interprété comme une nouvelle maintenance. Toute reprise utilise le même
 journal et refuse une preuve expirée ou altérée.
 
-## Mise à jour forcée des briques CAB — 1.10.11
+## Mise à jour forcée des briques CAB — 2.0.0
 
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 1.10.11 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.0.0 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1240,7 +1236,7 @@ La preuve de filiation broker parcourt les enfants de tous les threads du proces
 
 ## Budget de lecture défini par la session — 1.10.7
 
-La session de pilotage fixe explicitement `providerMaxBytes` en octets dans le corps de `POST /model-policy/resolve`, puis répète ce champ dans `modelSelection` lors de l'armement négocié. Exemple de structure : `{ "model": "<fournisseur>/<modèle>", "reasoning": "medium", "providerMaxBytes": <budget_entier_en_octets> }`. La valeur appartient à la session ; CAB l'applique exactement au seul `/provider` de cet appel et n'ajoute pas de plafond fixe. Elle doit être un entier sûr strictement positif ; null, chaîne, fraction et dépassement d'entier sûr sont refusés avant observation.
+La session de pilotage fixe explicitement `providerMaxBytes` en octets dans le corps de `POST /model-policy/resolve`, puis répète ce champ dans `modelSelection` lors de l'armement négocié. Exemple de structure : `{ "model": "<fournisseur>/<modèle>", "reasoning": "medium", "providerMaxBytes": <budget_entier_en_octets> }`. La valeur appartient à la session ; CAB l'applique exactement au seul `/api/provider` de cet appel et n'ajoute pas de plafond fixe. Elle doit être un entier sûr strictement positif ; null, chaîne, fraction et dépassement d'entier sûr sont refusés avant observation.
 
 En omission, le défaut compatible reste 2 Mio. Les observations de sessions/messages et le fichier public PLLM gardent leurs bornes distinctes de 2 Mio. Le budget n'est pas global, ne se transmet pas implicitement à un autre appel et ne change aucun modèle ou job déjà armé. Les flux trop grands sont interrompus avant parsing et refusés avec `model-observation-too-large`. Aucun corps /provider, paramètre privé ou erreur brute ne doit être copié dans une sortie, un rapport ou un job. Le prévol exact, les permissions et les gardes de modèle restent inchangés.
 

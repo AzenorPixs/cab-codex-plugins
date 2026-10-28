@@ -1,3 +1,5 @@
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+
 function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
@@ -6,7 +8,7 @@ const controllerBaseUrl = (
   envValue("OC_Codex_CONTROLLER_URL") || "http://127.0.0.1:8788"
 ).replace(/\/+$/, "").replace(/\/status$/, "");
 const controllerUrl = `${controllerBaseUrl}/status`;
-const version = "1.10.11";
+const version = "2.0.0";
 
 const supervisorUrl =
   envValue("OC_Codex_SUPERVISOR_URL") ||
@@ -16,6 +18,7 @@ const opencodeUrl = (
   envValue("OC_Codex_OPENCODE_URL") ||
   "http://127.0.0.1:4096"
 ).replace(/\/$/, "");
+const openCode = createOpenCodeV2ClientFromEnv({ baseUrl: opencodeUrl });
 
 const maxReadinessAgeMs = Number(
   envValue("OC_Codex_READINESS_MAX_AGE_MS") ||
@@ -127,16 +130,7 @@ function validateBrokerReadiness(
 
 async function check() {
   try {
-    const openCode =
-      await fetchJson(
-        `${opencodeUrl}/global/health`
-      );
-
-    if (!openCode.healthy) {
-      throw new HealthError(
-        "OpenCode n'est pas sain."
-      );
-    }
+    await openCode.info();
 
     let status;
 

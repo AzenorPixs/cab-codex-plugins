@@ -241,10 +241,7 @@ Après retry explicite, l'orchestrateur MUST exiger /usr/bin/true exact, change 
 
 ### Requirement: Connexion MCP et création du RUN CAB
 
-Avant de créer une session de codage, `/CAB start` SHALL consulter `GET /mcp` du serveur
-OpenCode et exiger que `cgpt-validation` soit `connected`. En cas d'échec, `/CAB start`
-MAY réinitialiser l'instance par `POST /instance/dispose`, puis SHALL attendre un état
-sain ; `/CAB start` SHALL ne jamais démarrer ni arrêter le broker directement.
+Avant de créer une session, `/CAB start` SHALL lire `/api/mcp` avec authentification V2 et exiger `cgpt-validation: connected` dans la location cible. À une frontière de maintenance autorisée, il MAY reconnecter le MCP ciblé par les seules routes V2 documentées, puis SHALL relire son état. Il MUST NOT utiliser une route V1, `/instance/dispose`, ni gérer directement le processus broker.
 
 #### Scenario: Connexion MCP et création du RUN CAB
 - **WHEN** la purge du nouveau RUN est terminée mais cgpt-validation n'est pas connecté
@@ -256,9 +253,7 @@ sain ; `/CAB start` SHALL ne jamais démarrer ni arrêter le broker directement.
 
 ### Requirement: Messagerie et reprise du même RUN CAB
 
-`/CAB start` MAY réutiliser la session seulement pour la reprise du même RUN, sans
-purge. `/CAB start` SHALL transmettre les mandats par la messagerie native de cette
-session.
+`/CAB start` MAY réutiliser la session seulement pour la reprise du même RUN, sans purge. `/CAB start` SHALL transmettre les mandats via `POST /api/session/{sessionID}/prompt` V2 dans la location persistante, préserver le texte, la corrélation de mandat, les permissions natives et le mode de livraison sans reprise implicite.
 
 #### Scenario: Messagerie et reprise du même RUN CAB
 - **WHEN** CAB reprend le même RUN avec sa session persistante
@@ -728,3 +723,14 @@ La commande `/CABU` SHALL rester distribuée séparément du plugin dans `.codex
 #### Scenario: Arguments CABU refusés avant maintenance
 - **WHEN** `/CABU` est invoquée avec un argument
 - **THEN** elle affiche sa syntaxe et termine avant toute opération réseau ou de maintenance
+
+### Requirement: Configuration MCP OpenCode V2
+Le broker CAB MUST être déclaré comme serveur MCP local `stdio` sous `mcp.servers.cgpt-validation`. La forme V1 plaçant le serveur directement sous `mcp` MUST NOT être utilisée ni réparée automatiquement.
+
+#### Scenario: Configuration compatible
+- **WHEN** la configuration OpenCode V2 est inspectée
+- **THEN** `cgpt-validation` est sous `mcp.servers` avec `type: "local"` et utilise stdio
+
+#### Scenario: Configuration V1 résiduelle
+- **WHEN** le serveur est déclaré directement sous `mcp`
+- **THEN** CAB signale la configuration incompatible sans la réécrire ni démarrer le broker

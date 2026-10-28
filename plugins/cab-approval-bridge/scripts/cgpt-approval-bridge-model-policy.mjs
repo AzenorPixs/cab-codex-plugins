@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, openSync, readSync, realpathSync } fro
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const VERSION = '1.10.11';
+export const VERSION = '2.0.0';
 export const MODEL_SELECTION_PROTOCOL = 'pllm-auto-v1';
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);

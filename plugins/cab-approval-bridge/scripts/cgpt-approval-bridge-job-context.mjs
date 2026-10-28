@@ -7,8 +7,9 @@ import readline from "node:readline";
 
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "1.10.11";
+export const VERSION = "2.0.0";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -40,9 +41,10 @@ export function checkCommandLength(approval, maxLength) {
 export function createJobContext({ workspace, stateDirectory, run = null,
   currentRun = () => run,
   admitOperation = () => true, ownsSession = () => true, observe = () => {},
-  nativeLifecycle = {},
+  nativeLifecycle = {}, openCodeClient = null,
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
+  const openCode = openCodeClient || createOpenCodeV2ClientFromEnv({ directory: workspace });
 function envValue(name) {
   const legacyName = name.replace("OC_Codex_", "OC_CGPT_");
   return process.env[name] || process.env[legacyName];
@@ -59,10 +61,6 @@ if (envValue("OC_Codex_OUTSIDE_SANDBOX") !== "1") {
     "Le contrôleur Codex doit être exécuté hors sandbox (OC_Codex_OUTSIDE_SANDBOX=1 ; alias OC_CGPT_OUTSIDE_SANDBOX accepté)."
   );
 }
-
-const opencodeUrl = (
-  envValue("OC_Codex_OPENCODE_URL") || "http://127.0.0.1:4096"
-).replace(/\/$/, "");
 
 const codexCommand = process.env.CODEX_COMMAND || "codex";
 const statusHost = envValue("OC_Codex_STATUS_HOST") || "127.0.0.1";
@@ -250,7 +248,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "1.10.11",
+    version: "2.0.0",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -479,14 +477,10 @@ async function checkNativeAsk(operation) {
   if (!job?.armed) return;
   let session;
   try {
-    const response = await fetch(
-      `${opencodeUrl}/session/${encodeURIComponent(operation.sessionId)}?directory=${encodeURIComponent(operation.directory)}`,
-      { signal: AbortSignal.timeout(10_000) }
-    );
-    if (!response.ok) nativePermissionFailure("native-permission-control-unavailable");
-    session = await response.json();
+    session = await openCode.session(operation.sessionId, operation.directory);
   } catch (cause) {
     if (cause.code === "NATIVE_PERMISSION_GUARD") throw cause;
+    if (cause.code === "opencode-session-divergent") nativePermissionFailure("native-permission-context-divergent");
     nativePermissionFailure("native-permission-control-unavailable");
   }
   if (session?.id !== operation.sessionId || session.directory !== operation.directory) {
@@ -600,7 +594,7 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
   if (validation && (decision?.decision !== "rejected" || validation.operationConsumed)) {
     recoveryFailure("preflight-not-refused-without-effect");
   }
-  const messages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  const messages = await openCode.messages(recovery.sessionId, job.directory);
   const parts = recoveryTools(messages);
   const current = currentRecoveryTools(recovery, parts, messages);
   const requestIds = new Set([recovery.preflightRequestId]);
@@ -698,14 +692,14 @@ async function inspectNotificationReconciliation(payload, matchesApproval) {
       active.size || reminderNotifications.size || [...validations.values()].some((v) => !httpDecisions.has(v.requestId))) {
     recoveryFailure('notification-reconciliation-validation-exists');
   }
-  const health = await recoveryJson('/global/health');
-  const path = await recoveryJson('/path');
-  const mcp = await recoveryJson('/mcp');
-  if (health.healthy !== true || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') {
+  const health = await openCode.info();
+  const path = await openCode.location(job.directory);
+  const mcp = await openCode.mcp(job.directory);
+  if (!health.version.startsWith('2.') || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') {
     recoveryFailure('opencode-context-divergent');
   }
   await checkNativeAsk(operation);
-  const messages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  const messages = await openCode.messages(recovery.sessionId, job.directory);
   const parts = recoveryTools(messages);
   const current = currentRecoveryTools(recovery, parts, messages);
   let submitted = false;
@@ -728,21 +722,21 @@ async function inspectNotificationReconciliation(payload, matchesApproval) {
     }
   }
   if (!submitted) recoveryFailure('notification-reconciliation-proof-divergent');
-  const busy = await recoveryJson('/session/status');
-  const permissions = await recoveryJson('/permission');
+  const busy = await openCode.sessionStatus(job.directory);
+  const permissions = await openCode.permissions(job.directory);
   if (!busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
       permissions.some((permission) => ownsSession(permission.sessionID))) {
     recoveryFailure('notification-reconciliation-native-not-quiescent');
   }
   for (const sessionId of [job.sessionId, recovery.sessionId]) {
-    const session = await recoveryJson(`/session/${encodeURIComponent(sessionId)}`);
+    const session = await openCode.session(sessionId, job.directory);
     if (session.id !== sessionId || session.directory !== job.directory ||
         (busy[sessionId] && busy[sessionId].type !== 'idle') ||
         (sessionId === recovery.sessionId && !hasNativeAsk(session, 'bash'))) {
       recoveryFailure('notification-reconciliation-native-not-quiescent');
     }
   }
-  const finalMessages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  const finalMessages = await openCode.messages(recovery.sessionId, job.directory);
   if (recoveryToolsHash(recoveryTools(finalMessages)) !== recoveryToolsHash(parts)) {
     recoveryFailure('notification-reconciliation-proof-divergent');
   }
@@ -763,10 +757,9 @@ async function inspectPausedOrphan(payload, matchesApproval) {
   if (validations.has(approval.requestId) || httpDecisions.has(approval.requestId) || active.size ||
       reconcilingPermissions.size || unmatchedNativePermissions.size || reminderNotifications.size ||
       [...validations.values()].some((v) => !httpDecisions.has(v.requestId))) fail('validation-exists');
-  const health = await recoveryJson('/global/health'), path = await recoveryJson('/path'), mcp = await recoveryJson('/mcp');
-  if (health.healthy !== true || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') fail('context-divergent');
-  const endpoint = `/session/${encodeURIComponent(job.sessionId)}`;
-  const parts = recoveryTools(await recoveryJson(endpoint + '/message'));
+  const health = await openCode.info(), path = await openCode.location(job.directory), mcp = await openCode.mcp(job.directory);
+  if (!health.version.startsWith('2.') || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') fail('context-divergent');
+  const parts = recoveryTools(await openCode.messages(job.sessionId, job.directory));
   const submissions = parts.filter((p) => p.tool === 'cgpt-validation_request_validation' && p.state?.input?.requestId === approval.requestId);
   if (submissions.length !== 1 || !matchesApproval(submissions[0].state?.input)) fail('proof-divergent');
   const first = parts.indexOf(submissions[0]); let pending = false;
@@ -783,11 +776,12 @@ async function inspectPausedOrphan(payload, matchesApproval) {
     pending = true;
   }
   if (!pending) fail('proof-divergent');
-  const busy = await recoveryJson('/session/status'), permissions = await recoveryJson('/permission'), session = await recoveryJson(endpoint);
+  const busy = await openCode.sessionStatus(job.directory), permissions = await openCode.permissions(job.directory),
+    session = await openCode.session(job.sessionId, job.directory);
   if (!busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
       permissions.some((p) => ownsSession(p.sessionID)) || session.id !== job.sessionId || session.directory !== job.directory ||
       (busy[job.sessionId] && busy[job.sessionId].type !== 'idle') || !hasNativeAsk(session,operation.kind,['ask','deny'])) fail('native-not-quiescent');
-  if (recoveryToolsHash(recoveryTools(await recoveryJson(endpoint + '/message'))) !== recoveryToolsHash(parts)) fail('proof-divergent');
+  if (recoveryToolsHash(recoveryTools(await openCode.messages(job.sessionId, job.directory))) !== recoveryToolsHash(parts)) fail('proof-divergent');
   return { validation: { requestId:approval.requestId,approvalId:approval.approval_id,changeId:approval.change_id,
     summary:typeof approval.summary === 'string' ? approval.summary : 'Demande en pause réconciliée',operation,rejectionOnly:true,pausedOrphan:true },
     nativeToolCount:parts.length,nativeToolHash:recoveryToolsHash(parts) };
@@ -822,13 +816,13 @@ async function checkExecutedPreflight(recovery, payload) {
       validation.operationConsumed || validation.operationInvalidated)) {
     recoveryFailure("preflight-not-executed-without-once");
   }
-  const session = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}`);
+  const session = await openCode.session(recovery.sessionId, job.directory);
   const bashRule = (Array.isArray(session.permission) ? session.permission : []).findLast((rule) =>
     rule.permission === "bash" || rule.permission === "*");
   if (bashRule?.pattern !== "*" || bashRule.action !== "ask") {
     recoveryFailure("preflight-native-ask-required");
   }
-  const messages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  const messages = await openCode.messages(recovery.sessionId, job.directory);
   const parts = recoveryTools(messages);
   const current = currentRecoveryTools(recovery, parts, messages);
   let parentInfo = null;
@@ -896,15 +890,6 @@ async function checkExecutedPreflight(recovery, payload) {
     nativeParentId: parentInfo.id, nativeParentHash: nativeParentHash(parentInfo) };
 }
 
-async function recoveryJson(path) {
-  const response = await fetch(
-    `${opencodeUrl}${path}?directory=${encodeURIComponent(job.directory)}`,
-    { signal: AbortSignal.timeout(10_000) }
-  );
-  if (!response.ok) recoveryFailure("opencode-control-unavailable");
-  return response.json();
-}
-
 async function checkRecoveryContext(candidate, blockedRestore = false) {
   if (!blockedRestore && (!job?.armed || terminalGate.status !== "OPEN")) recoveryFailure("job-not-recoverable");
   if (job.currentCabMandate) recoveryFailure("current-mandate-not-closed");
@@ -918,12 +903,11 @@ async function checkRecoveryContext(candidate, blockedRestore = false) {
       Number(status.brokerReadiness.pending_count) !== 0) {
     recoveryFailure("broker-not-ready");
   }
-  const health = await recoveryJson("/global/health");
-  const path = await recoveryJson("/path");
-  const mcp = await recoveryJson("/mcp");
-  const busy = await recoveryJson("/session/status");
-  const permissions = await recoveryJson("/permission");
-  if (health.healthy !== true || path.directory !== job.directory ||
+  let health, path, mcp, busy, permissions;
+  try { [health, path, mcp, busy, permissions] = await Promise.all([openCode.info(), openCode.location(job.directory),
+    openCode.mcp(job.directory), openCode.sessionStatus(job.directory), openCode.permissions(job.directory)]); }
+  catch { recoveryFailure('opencode-control-unavailable'); }
+  if (!health.version.startsWith('2.') || path.directory !== job.directory ||
       mcp["cgpt-validation"]?.status !== "connected") {
     recoveryFailure("opencode-context-divergent");
   }
@@ -933,7 +917,7 @@ async function checkRecoveryContext(candidate, blockedRestore = false) {
   }
   if (!busy || typeof busy !== "object" || Array.isArray(busy)) recoveryFailure("session-status-invalid");
   for (const id of [job.sessionId, candidate.sessionId]) {
-    const session = await recoveryJson(`/session/${encodeURIComponent(id)}`);
+    const session = await openCode.session(id, job.directory);
     if (session.id !== id || session.directory !== job.directory) recoveryFailure("session-context-divergent");
     if (busy[id] && busy[id].type !== "idle") recoveryFailure("session-not-idle");
     if (id === candidate.sessionId && !hasNativeAsk(session, "bash")) {
@@ -952,7 +936,7 @@ async function checkRecoveryPreflight(recovery, restored = null) {
       validation.operation?.target !== "/usr/bin/true") {
     recoveryFailure("preflight-permission-not-consumed");
   }
-  const messages = await recoveryJson(`/session/${encodeURIComponent(recovery.sessionId)}/message`);
+  const messages = await openCode.messages(recovery.sessionId, job.directory);
   const parts = currentRecoveryTools(recovery, recoveryTools(messages), messages);
   let submitted = false;
   let approvalEnd = null;
@@ -1038,7 +1022,7 @@ async function checkedBlockedPreflightRestore(payload) {
       typeof proof.nativeToolHash !== "string" || !/^[a-f0-9]{64}$/.test(proof.nativeToolHash)) {
     recoveryFailure("preflight-history-divergent");
   }
-  const messages = await recoveryJson(`/session/${encodeURIComponent(job.recovery.sessionId)}/message`);
+  const messages = await openCode.messages(job.recovery.sessionId, job.directory);
   const parts = recoveryTools(messages);
   if (parts.length < proof.nativeToolCount ||
       canonicalRecoveryHash(parts.slice(0, proof.nativeToolCount)) !== proof.nativeToolHash) {
@@ -1144,7 +1128,7 @@ async function recoverJob(payload) {
   if (payload.phase === "prepare") {
     snapshot.recovery = { ...Object.fromEntries(keys.map((key) => [key, payload[key]])),
       preparedAt: new Date().toISOString() };
-    const preparationParts = recoveryTools(await recoveryJson(`/session/${encodeURIComponent(payload.sessionId)}/message`));
+  const preparationParts = recoveryTools(await openCode.messages(payload.sessionId, job.directory));
     if (preparationParts.some((part) => !isPreparationDiagnostic(part, preparationParts) ||
         !["completed", "error"].includes(part.state?.status))) recoveryFailure("preflight-preparation-tool-forbidden");
     snapshot.recovery.preparationHistory = { nativeToolCount: preparationParts.length,
@@ -1284,20 +1268,7 @@ function hasSameNativePermissions(next) {
 }
 
 async function reconcileNativePermissions() {
-  const response = await fetch(
-    `${opencodeUrl}/permission?directory=${encodeURIComponent(workspace)}`,
-    { signal: AbortSignal.timeout(10_000) }
-  );
-
-  if (!response.ok) {
-    throw new Error(`OpenCode permissions HTTP ${response.status}.`);
-  }
-
-  const permissions = await response.json();
-
-  if (!Array.isArray(permissions)) {
-    throw new Error("Liste de permissions OpenCode invalide.");
-  }
+  const permissions = await openCode.permissions(workspace);
 
   const next = new Map();
 
@@ -1347,22 +1318,7 @@ async function transmitApprovedOperation(validation) {
 
   try {
 
-    const response = await fetch(
-    `${opencodeUrl}/permission?directory=${encodeURIComponent(
-      validation.operation.directory
-    )}`,
-    { signal: AbortSignal.timeout(10_000) }
-  );
-
-    if (!response.ok) {
-      throw new Error(`OpenCode permissions HTTP ${response.status}.`);
-    }
-
-    const permissions = await response.json();
-
-    if (!Array.isArray(permissions)) {
-      throw new Error("Liste de permissions OpenCode invalide.");
-    }
+    const permissions = await openCode.permissions(validation.operation.directory);
 
     const permission = permissions.find((candidate) =>
       matchesApprovedOperation(candidate, validation.operation)
@@ -1374,23 +1330,7 @@ async function transmitApprovedOperation(validation) {
       if (!operationAllowed(validation.operation, validation.requestId, 'permission') ||
           validation.operationInvalidated || validation.operationConsumed) return;
       nativeLifecycle.begin?.(validation.operation, validation.requestId, permission);
-      const reply = await fetch(
-      `${opencodeUrl}/session/${encodeURIComponent(
-        validation.operation.sessionId
-      )}/permissions/${encodeURIComponent(permission.id)}?directory=${encodeURIComponent(
-        validation.operation.directory
-      )}`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ response: "once" }),
-        signal: AbortSignal.timeout(10_000),
-      }
-    );
-
-      if (!reply.ok || !(await reply.json())) {
-        throw new Error(`Réponse permission OpenCode HTTP ${reply.status}.`);
-      }
+      await openCode.replyPermission(validation.operation.sessionId, permission.id, 'once', validation.operation.directory);
 
       validation.operationConsumed = true;
       nativeLifecycle.issued?.(validation.operation, validation.requestId);
@@ -1685,7 +1625,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "1.10.11",
+      version: "2.0.0",
     },
   });
 
@@ -2005,27 +1945,7 @@ async function handleValidation(request) {
 }
 
 async function reconcileOpenCode() {
-  const health = await fetch(
-    `${opencodeUrl}/global/health`,
-    {
-      signal:
-        AbortSignal.timeout(10_000),
-    }
-  );
-
-  if (!health.ok) {
-    throw new Error(
-      `OpenCode health HTTP ${health.status}.`
-    );
-  }
-
-  const value = await health.json();
-
-  if (!value.healthy) {
-    throw new Error(
-      "OpenCode n'est pas sain."
-    );
-  }
+  await openCode.info(true);
 
   updateStatus(
     "opencode-reconciled"

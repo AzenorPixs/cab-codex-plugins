@@ -1,4 +1,5 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
+import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -321,7 +322,7 @@ test("CGP05 refuse le gate tant qu'une validation manuelle locale reste indécis
   const directory = mkdtempSync(join(tmpdir(), "cab-gate-pending-"));
   const fakeCodex = join(directory, "fake-codex.cjs");
   writeFileSync(fakeCodex, "#!/usr/bin/env node\nprocess.stdin.resume();\n", { mode: 0o755 });
-  const opencode = createServer((request, response) => {
+  const opencode = createServer(openCodeV2TestHandler((request, response) => {
     if (request.url.startsWith("/global/event")) {
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.write('data: {"type":"server.connected"}\n\n');
@@ -329,7 +330,7 @@ test("CGP05 refuse le gate tant qu'une validation manuelle locale reste indécis
     }
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify(request.url.startsWith("/global/health") ? { healthy: true } : []));
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
   const baseUrl = `http://127.0.0.1:${await availablePort()}`;
   const controller = spawn(process.execPath, [controllerPath], {
@@ -496,7 +497,7 @@ test("réconcilie une permission native corrélée apparue après la décision",
   const replies = [];
   let permissions = [];
 
-  const opencode = createServer(async (request, response) => {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     const body = [];
 
     for await (const chunk of request) {
@@ -526,7 +527,7 @@ test("réconcilie une permission native corrélée apparue après la décision",
     }
 
     response.writeHead(404).end();
-  });
+  }, { directory }));
 
   await new Promise((resolve) => {
     opencode.listen(opencodePort, "127.0.0.1", resolve);
@@ -626,7 +627,7 @@ async function testCommandCorrelation(context, strictCommands) {
   const replies = [];
   let permissions = [];
 
-  const opencode = createServer(async (request, response) => {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     const body = [];
 
     for await (const chunk of request) {
@@ -663,7 +664,7 @@ async function testCommandCorrelation(context, strictCommands) {
     }
 
     response.writeHead(404).end();
-  });
+  }, { directory }));
 
   await new Promise((resolve) => {
     opencode.listen(opencodePort, "127.0.0.1", resolve);

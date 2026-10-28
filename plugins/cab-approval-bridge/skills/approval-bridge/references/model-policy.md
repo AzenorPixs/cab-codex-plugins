@@ -12,7 +12,7 @@ Résoudre le skill PLLM effectivement actif, puis son data/pllm-current.json pub
 
 Le catalogue schéma 2 et les priorités sont contrôlés. N'utiliser que les entrées Valide évaluées dans cette publication, evaluated_this_run=true, avec dates cohérentes. Une publication active peut conserver des lignes historiques des politiques non visitées : elles ne sont pas des candidates actuelles. En cas de besoin, faire évaluer les politiques nécessaires par le skill actif selon les accords applicables ; ne pas modifier son évaluateur ni présenter sa mémoire comme preuve actuelle. Une simple lecture du catalogue ne lance aucun benchmark.
 
-La sélection publiée low ne prouve pas la disponibilité ou les performances de medium. Vérifier GET /provider de l'OpenCode ciblé : fournisseur connecté, identifiant exact et variantes réellement exposées. Une variante absente ou désactivée est indisponible. Une métadonnée manquante, une erreur d'authentification, de quota ou de réseau n'est pas une preuve d'incompatibilité du raisonnement ; arrêter avec la cause, sans bascule spéculative.
+La sélection publiée low ne prouve pas la disponibilité ou les performances de medium. Vérifier GET /api/provider de l'OpenCode V2 ciblé : fournisseur connecté, identifiant exact et variantes réellement exposées. Une variante absente ou désactivée est indisponible. Une métadonnée manquante, une erreur d'authentification, de quota ou de réseau n'est pas une preuve d'incompatibilité du raisonnement ; arrêter avec la cause, sans bascule spéculative.
 
 ## Résolution, prévol puis armement
 
@@ -45,7 +45,7 @@ Un retour à un ancien contrôleur ou superviseur après un armement négocié n
 
 ## Budget de lecture défini par la session — 1.10.7
 
-La session de pilotage fixe explicitement `providerMaxBytes` en octets dans le corps de `POST /model-policy/resolve`, puis répète ce champ dans `modelSelection` lors de l'armement négocié. Exemple de structure : `{ "model": "<fournisseur>/<modèle>", "reasoning": "medium", "providerMaxBytes": <budget_entier_en_octets> }`. La valeur appartient à la session ; CAB l'applique exactement au seul `/provider` de cet appel et n'ajoute pas de plafond fixe. Elle doit être un entier sûr strictement positif ; null, chaîne, fraction et dépassement d'entier sûr sont refusés avant observation.
+La session de pilotage fixe explicitement `providerMaxBytes` en octets dans le corps de `POST /model-policy/resolve`, puis répète ce champ dans `modelSelection` lors de l'armement négocié. Exemple de structure : `{ "model": "<fournisseur>/<modèle>", "reasoning": "medium", "providerMaxBytes": <budget_entier_en_octets> }`. La valeur appartient à la session ; CAB l'applique exactement au seul `/api/provider` de cet appel et n'ajoute pas de plafond fixe. Elle doit être un entier sûr strictement positif ; null, chaîne, fraction et dépassement d'entier sûr sont refusés avant observation.
 
 En omission, le défaut compatible reste 2 Mio. Les observations de sessions/messages et le fichier public PLLM gardent leurs bornes distinctes de 2 Mio. Le budget n'est pas global, ne se transmet pas implicitement à un autre appel et ne change aucun modèle ou job déjà armé. Les flux trop grands sont interrompus avant parsing et refusés avec `model-observation-too-large`. Aucun corps /provider, paramètre privé ou erreur brute ne doit être copié dans une sortie, un rapport ou un job. Le prévol exact, les permissions et les gardes de modèle restent inchangés.
 

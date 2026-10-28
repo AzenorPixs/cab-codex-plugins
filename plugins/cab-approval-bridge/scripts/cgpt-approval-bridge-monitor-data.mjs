@@ -5,8 +5,9 @@ import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '1.10.11';
+export const VERSION = '2.0.0';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -197,6 +198,8 @@ export function operationalState(run, { controllerFresh = true, registryFresh = 
 export class MonitorState {
   constructor(configuration, { now = () => Date.now(), fetcher = fetch } = {}) {
     this.configuration = configuration; this.now = now; this.fetcher = fetcher;
+    this.openCode = createOpenCodeV2ClientFromEnv({ directory: configuration.workspace,
+      baseUrl: configuration.opencodeUrl, fetchImpl: fetcher });
     this.startedAt = new Date(now()).toISOString(); this.sources = {}; this.events = [];
     this.changes = { available: false, changes: [] }; this.running = false; this.listeners = new Set();
     this.coverage = { instanceId: null, truncated: false, restarted: false, stream: 'connecting' };
@@ -222,17 +225,20 @@ export class MonitorState {
     }
     if (this.events.length > 200) { this.events = this.events.slice(-200); this.coverage.truncated = true; }
   }
-  async source(name, url) {
+  async source(name, urlOrLoader) {
     const attemptedAt = new Date(this.now()).toISOString();
     const previous = this.sources[name] || {};
     try {
-      const value = await fetchJson(url, this.configuration.timeoutMs, this.fetcher);
+      const value = typeof urlOrLoader === 'function' ? await urlOrLoader() :
+        await fetchJson(urlOrLoader, this.configuration.timeoutMs, this.fetcher);
       if ((name === 'registry' && !Array.isArray(value.runs)) ||
-          (name === 'opencode' && typeof value.healthy !== 'boolean') ||
+          (name === 'opencode' && (typeof value.version !== 'string' || !/^2\./.test(value.version) || !Number.isSafeInteger(value.pid))) ||
           (name === 'observations' && (!id(value.instanceId) || !Array.isArray(value.events)))) throw new Error('source-invalid');
       this.sources[name] = { available: true, attemptedAt, lastSuccessAt: new Date(this.now()).toISOString(), value };
-    } catch {
-      this.sources[name] = { ...previous, available: false, attemptedAt, lastSuccessAt: previous.lastSuccessAt || null, error: 'source-unavailable' };
+    } catch (cause) {
+      this.sources[name] = { ...previous, available: false, attemptedAt, lastSuccessAt: previous.lastSuccessAt || null,
+        error: ['opencode-auth-required', 'opencode-v2-required', 'opencode-credential-unavailable']
+          .includes(cause.code) ? cause.code : 'source-unavailable' };
     }
   }
   async collect() {
@@ -247,9 +253,9 @@ export class MonitorState {
     try {
       await Promise.all([this.source('controller', c.controllerUrl + '/status'),
         this.source('registry', c.controllerUrl + '/runs'), this.source('supervisor', c.supervisorUrl + '/status'),
-        this.source('opencode', c.opencodeUrl + '/global/health'),
-        this.source('mcp', c.opencodeUrl + '/mcp?directory=' + encodeURIComponent(c.workspace)),
-        this.source('sessions', c.opencodeUrl + '/session/status?directory=' + encodeURIComponent(c.workspace)),
+        this.source('opencode', () => this.openCode.info()),
+        this.source('mcp', () => this.openCode.mcp(c.workspace)),
+        this.source('sessions', () => this.openCode.sessionStatus(c.workspace)),
         this.source('observations', c.controllerUrl + '/monitor/events')]);
       this.ingest(this.sources.observations?.value);
       const runs = this.runs();
@@ -275,7 +281,7 @@ export class MonitorState {
         supervisor: componentVersion(this.sources.supervisor?.value?.version),
         broker: componentVersion(controller.brokerReadiness?.server_version),
         opencode: componentVersion(this.sources.opencode?.value?.version), monitor: VERSION },
-      nativeHealth: typeof this.sources.opencode?.value?.healthy === 'boolean' ? this.sources.opencode.value.healthy : null,
+      nativeHealth: this.sources.opencode?.available === true && /^2\./.test(this.sources.opencode?.value?.version || '') ? true : null,
       brokerConnection: code(this.sources.mcp?.value?.['cgpt-validation']?.status),
       runsTruncated: !Array.isArray(this.sources.registry?.value?.runs) || this.sources.registry.value.runs.length > 200 ||
         this.sources.registry.value.truncated === true || Object.keys(record(controller.runs)).length > 200,

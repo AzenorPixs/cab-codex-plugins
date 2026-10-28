@@ -1,5 +1,6 @@
 // Qualification explicite : TMPDIR=<dossier local> node tests/web-monitor-browser.mjs
 import assert from 'node:assert/strict';
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -130,7 +131,7 @@ try {
   const statisticsDirectory = join(root, 'statistics-fixture'); await mkdir(statisticsDirectory);
   statistics = new SessionStatistics(statisticsDirectory, { project: root, intervalMs: 0 });
   statistics.registry({ project: root, integrationOwner: null, referenceVersion: 0, runs: runIds.map((runId, index) => ({ runId, contextId: 1,
-    changeId: changeIds[index], sessionId: 'session-' + index, state: 'RESERVED', version: 1 })) });
+    changeId: changeIds[index], sessionId: 'ses_' + index, state: 'RESERVED', version: 1 })) });
   retention = new StatisticsMaintenance(statistics);
   function oldStatistics() {
     const c = statistics.context({ runId: 'RUN-HISTORY', contextId: 1, changeId: 'old-statistics', state: 'DELIVERED' });
@@ -148,7 +149,7 @@ try {
       response.writeHead(status, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ token: 'fixture-lease', workspace: root, pid: process.pid })); return;
     }
-    if (target.pathname.startsWith('/mcp/cgpt-validation/')) {
+    if (target.pathname.startsWith('/api/experimental/mcp/cgpt-validation/')) {
       serviceCalls.push(target.pathname);
       brokerConnection = target.pathname.endsWith('/disconnect') ? 'disabled' : 'connected';
       response.writeHead(200, { 'content-type': 'application/json' }); response.end('{}'); return;
@@ -165,18 +166,18 @@ try {
       } catch (error) { response.writeHead(error.status || 500, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: error.code })); }
       return;
     }
-    const payload = request.url === '/status' ? { version: '1.10.11', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
-      brokerReadiness: { status: 'READY', server_version: '1.10.11' }, brokerReadinessReceivedAt: new Date().toISOString(),
-      runs: Object.fromEntries((managementMode ? [] : runIds).map((runId, i) => [runId, { job: { changeId: changeIds[i], sessionId: 'session-' + i, armed: true,
+    const payload = request.url === '/status' ? { version: '2.0.0', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
+      brokerReadiness: { status: 'READY', server_version: '2.0.0' }, brokerReadinessReceivedAt: new Date().toISOString(),
+      runs: Object.fromEntries((managementMode ? [] : runIds).map((runId, i) => [runId, { job: { changeId: changeIds[i], sessionId: 'ses_' + i, armed: true,
         lifecycle: i === 0 ? lifecycle : nextLifecycle(undefined, i === 1 ? 'IMPLEMENTATION' : 'STATISTICS', undefined, 0),
         lastProvenMilestone: ['Contrat d’observation validé', 'Reprise préparée', 'Événements corrélés'][i], currentCabMandate: 'mandat-' + i },
       terminalGate: { status: 'OPEN' }, undecidedValidationCount: i === 1 ? 1 : 0,
       coordination: { phase: ['WORK', 'WORK', 'REPORT'][i], ...(i === 1 ? { reason: recoveryBlocked ? 'resource-effects-unknown' : 'resource-conflict', blockers: [{ runId: 'RUN-WEB' }] }
         : i === 2 ? { reason: 'resource-effects-unknown' } : {}) } }])) }
       : request.url === '/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
-        : request.url === '/global/health' ? { healthy: true, version: '1.19.3' }
-          : target.pathname === '/mcp' ? { 'cgpt-validation': { status: brokerConnection } }
-          : request.url.startsWith('/session/status') ? managementMode ? {} : { 'session-0': { type: 'busy' }, 'session-1': { type: 'idle' }, 'session-2': { type: 'idle' } }
+        : target.pathname === '/api/info' ? { version: '2.2.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
+          : target.pathname === '/api/mcp' ? { location: { directory: root }, data: [{ name: 'cgpt-validation', status: { status: brokerConnection } }] }
+          : target.pathname === '/api/session/active' ? { data: managementMode ? {} : { ses_0: { type: 'running' } } }
             : request.url === '/monitor/events' ? journal.snapshot() : {};
     if (request.url === '/monitor/events' && request.headers.accept === 'text/event-stream') { journal.stream(request, response); return; }
     response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload));
@@ -207,7 +208,7 @@ try {
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('3/14')"), true);
     assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content th')].map(x=>x.textContent)) === JSON.stringify(['RUN / CHANGE','ETAT','ÉTAPE','TÂCHES COCHÉES','ACTIONS'])"), true);
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('Revue · 8/11') && document.querySelector('#work-content').textContent.includes('WAITING')"), true);
-    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v1.10.11') && document.querySelector('#health').textContent.includes('v1.19.3')"), true);
+    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.0.0') && document.querySelector('#health').textContent.includes('v2.2.0')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(255, 232, 235)');
@@ -379,7 +380,7 @@ try {
       await wait(() => browser.evaluate("document.querySelector('#management-status').textContent.includes('état de la brique confirmé')"), browser.name + ' commande ' + component);
     }
     assert.ok(serviceCalls.some((args) => Array.isArray(args) && args[0] === 'restart'));
-    assert.ok(serviceCalls.includes('/mcp/cgpt-validation/disconnect'));
+    assert.ok(serviceCalls.includes('/api/experimental/mcp/cgpt-validation/disconnect'));
     const originalTasks = await readFile(join(root, 'openspec', 'changes', changeIds[0], 'tasks.md'), 'utf8');
     await browser.evaluate("document.querySelector('#work-content button[aria-label=\"Archiver RUN-WEB\"]').click(); true");
     await wait(() => browser.evaluate("document.querySelector('#management-status').textContent.includes('Élément archivé') && !document.querySelector('#work-content [data-run=RUN-WEB]')"), browser.name + ' RUN archivé');

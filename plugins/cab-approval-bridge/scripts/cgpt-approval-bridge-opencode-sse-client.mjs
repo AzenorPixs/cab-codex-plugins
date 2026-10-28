@@ -2,16 +2,18 @@ import {
   rename,
   writeFile,
 } from "node:fs/promises";
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
 const baseUrl =
   process.env.OPENCODE_BASE_URL ||
   "http://127.0.0.1:4096";
+const openCode = createOpenCodeV2ClientFromEnv({ baseUrl, directory: process.cwd() });
 
 const statePath =
   process.env.OPENCODE_SSE_STATE_PATH ||
   "/tmp/opencode-sse-client-status.json";
 
-const version = "1.10.11";
+const version = "2.0.0";
 let connections = 0;
 
 async function publish(state) {
@@ -33,38 +35,13 @@ async function publish(state) {
 async function connect() {
   connections += 1;
 
-  const sessions = await fetch(
-    `${baseUrl}/session`
-  ).then(
-    (response) =>
-      response.json()
-  );
-
-  const response = await fetch(
-    `${baseUrl}/global/event`,
-    {
-      headers: {
-        Accept:
-          "text/event-stream",
-      },
-    }
-  );
-
-  if (
-    !response.ok ||
-    !response.body
-  ) {
-    throw new Error(
-      `SSE refusé (${response.status})`
-    );
-  }
+  const sessions = await openCode.activeSessions();
+  const response = await openCode.events();
 
   await publish({
     state: "connected",
     connections,
-    sessions: sessions.map(
-      (session) => session.id
-    ),
+    sessions: Object.keys(sessions),
     reconciledAt:
       new Date().toISOString(),
   });

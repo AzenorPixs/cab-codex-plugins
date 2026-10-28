@@ -13,7 +13,7 @@ CAB SHALL publier l'un des états READY, DEGRADED, BLOCKED ou HUMAN_REQUIRED ave
 - **THEN** `broker_readiness` retourne BLOCKED
 
 ### Requirement: Supervision indépendante d'OpenCode
-Le contrôleur SHALL surveiller OpenCode via son SSE HTTP direct et SHALL réconcilier son état par HTTP après une reconnexion ou une divergence détectée.
+Le contrôleur SHALL surveiller OpenCode V2 via son flux d'événements HTTP SSE authentifié `/api/event` et SHALL réconcilier son état par les routes V2 authentifiées après une reconnexion, un débordement ou une divergence détectée. Une réponse HTML, une erreur 401 ou un événement non conforme SHALL NOT être interprété comme santé ou progression.
 
 #### Scenario: Reconnexion SSE
 - **WHEN** le flux SSE OpenCode est fermé
