@@ -28,11 +28,11 @@ Toute preuve d'effet issue d'un outil de transcript MUST inclure `content[].exec
 - **THEN** CAB n'enregistre aucun effet comme prouvé et garde les protections actives
 
 ### Requirement: Version majeure CAB 2.0.0 uniforme
-Le paquet CAB, le broker, tous les scripts, commandes, plugins, skills, unités et moniteur distribués MUST annoncer la version de base `2.0.0`. Les deux manifestes de plugin MAY ajouter un cachebuster après cette version. Aucune brique active ne MUST annoncer une version de base 1.x.
+Le paquet CAB, le broker, tous les scripts, commandes, plugins, skills, unités et moniteur distribués MUST annoncer la version de base courante commune fixée par codex-integration-distribution. Les deux manifestes de plugin MAY ajouter un cachebuster après cette version. Aucune brique active ne MUST annoncer une version de base 1.x.
 
 #### Scenario: Vérification des versions distribuées
 - **WHEN** les artefacts source et les deux manifestes de plugin sont inspectés
-- **THEN** toutes les briques annoncent la base `2.0.0` et les manifestes conservent leur cachebuster propre
+- **THEN** toutes les briques annoncent la base courante commune `2.1.5` et les manifestes conservent leur cachebuster propre
 
 #### Scenario: Faux succès HTML
 - **WHEN** une route API répond HTTP 200 avec HTML, du JSON malformé ou un schéma divergent
@@ -67,7 +67,7 @@ Le mot de passe MUST être lu depuis `OC_Codex_OPENCODE_PASSWORD_FILE` ou son al
 - **THEN** le client refuse l'appel avec `opencode-credential-unavailable` avant toute connexion HTTP
 
 ### Requirement: Transport natif V2 normalisé et borné
-Le client MUST utiliser les routes V2 documentées pour le serveur, les sessions, les messages, les permissions, le MCP et les événements. Il MUST valider les enveloppes, identifiants et champs consommés par CAB. Les réponses paginées MUST être suivies jusqu'à la fin lorsque l'historique complet est requis.
+Le client MUST utiliser les routes V2 documentées pour le serveur, les sessions, les messages, les permissions, le MCP et les événements. Il MUST valider les enveloppes, identifiants et champs consommés par CAB. Les réponses paginées MUST être suivies jusqu'à la fin lorsque l'historique complet est requis. order MUST être envoyé uniquement sur la première page ; les curseurs MUST NOT être combinés avec order.
 
 #### Scenario: Liste des sessions paginée
 - **WHEN** l'historique est paginé par l'API V2
@@ -84,6 +84,10 @@ Le client MUST utiliser les routes V2 documentées pour le serveur, les sessions
 #### Scenario: Déconnexion ou événement perdu
 - **WHEN** `/api/event` échoue, se ferme ou signale une déconnexion de location
 - **THEN** CAB reste en reconnexion, réconcilie santé, MCP, sessions et permissions par les routes V2, puis ne reprend qu'après preuve cohérente
+
+#### Scenario: Curseur natif portant son ordre
+- **WHEN** une page fournit un curseur suivant
+- **THEN** le client suit ce curseur sans order et conserve les refus de page invalide, répétée ou divergente
 
 ### Requirement: Secret OpenCode absent des sorties et états
 Le client MUST exclure le credential Basic des journaux, erreurs, métriques, événements monitor, historiques de décision, checkpoints et rapports. Les identifiants ne MUST NOT être inclus dans une URL ou dans un corps de requête CAB.

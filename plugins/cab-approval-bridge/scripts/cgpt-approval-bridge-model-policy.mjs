@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, openSync, readSync, realpathSync } fro
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const VERSION = '2.1.4';
+export const VERSION = '2.1.5';
 export const MODEL_SELECTION_PROTOCOL = 'pllm-auto-v1';
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -160,12 +160,21 @@ export function reasoningUnavailability({ session, response, parent, workspace, 
 
 export function verifyModelPreflight(selection, { session, response, parent, workspace, now = Date.now() }) {
   const info = response?.info; const user = parent?.info;
+  const legacyParent = user?.model?.providerID === selection.providerID &&
+    user.model.modelID === selection.modelID && observedReasoning(user, info) === selection.reasoning;
+  const sessionModelMatches = session?.model === undefined || (session.model.providerID === selection.providerID &&
+    session.model.modelID === selection.modelID && session.model.variant === selection.reasoning);
+  const nativeParent = session?.model !== undefined && sessionModelMatches && user?.model === undefined && user?.variant === undefined &&
+    info?.nativeSingleExchange === true && info.model?.providerID === selection.providerID &&
+    info.model?.modelID === selection.modelID && info.model?.variant === selection.reasoning &&
+    info.variant === selection.reasoning && Number.isFinite(user?.time?.created) &&
+    user.time.created >= 0 && user.time.created <= info.time?.completed;
   if (!session || session.directory !== workspace || !identifier(session.id) || !info || info.role !== 'assistant' ||
       !identifier(info.id) || info.sessionID !== session.id || info.providerID !== selection.providerID || info.modelID !== selection.modelID ||
       info.error || info.finish !== 'stop' || !Number.isFinite(info.time?.completed) || info.time.completed < 0 || info.time.completed > now ||
       (selection.evaluatedAt && info.time.completed < Date.parse(selection.evaluatedAt)) ||
       !user || user.role !== 'user' || user.id !== info.parentID || user.sessionID !== session.id ||
-      user.model?.providerID !== selection.providerID || user.model?.modelID !== selection.modelID || observedReasoning(user,info) !== selection.reasoning ||
+      !sessionModelMatches || (!legacyParent && !nativeParent) ||
       !Array.isArray(response.parts) || response.parts.some((part) => part.type === 'tool') ||
       !response.parts.some((part) => part.type === 'text' && typeof part.text === 'string' && part.text.trim())) fail('model-preflight-not-proved');
   return { ...selection, preflight: { sessionId: session.id, messageId: info.id, verifiedAt: new Date(now).toISOString() } };

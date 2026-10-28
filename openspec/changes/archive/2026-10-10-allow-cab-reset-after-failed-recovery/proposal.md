@@ -1,3 +1,5 @@
+# SUP03 — Autoriser la réinitialisation après récupération échouée
+
 ## Why
 
 Une récupération CAB échouée après transmission de `true` au lieu de

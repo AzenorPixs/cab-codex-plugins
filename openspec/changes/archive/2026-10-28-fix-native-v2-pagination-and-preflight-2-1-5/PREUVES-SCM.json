@@ -1,0 +1,173 @@
+{
+  "change": "fix-native-v2-pagination-and-preflight-2-1-5",
+  "version": "2.1.5",
+  "mode": "SCM direct",
+  "agent": "Codex gpt-6.1-sol",
+  "subagents": 0,
+  "syntax": {
+    "checked": 72,
+    "errors": []
+  },
+  "node": {
+    "exitCode": 0,
+    "summary": [
+      "ℹ tests 486",
+      "ℹ pass 461",
+      "ℹ fail 0",
+      "ℹ skipped 25",
+      "ℹ duration_ms 23881.446475"
+    ]
+  },
+  "python": {
+    "exitCode": 0,
+    "summary": [
+      ".........................................................................",
+      "----------------------------------------------------------------------",
+      "Ran 73 tests in 4.826s",
+      "",
+      "OK",
+      "SYNTHETIC_BENCHMARK {\"approvals\": 694, \"initial_events\": 16774, \"initial_journal_bytes\": 7521590, \"recovery_journal_reads\": 5, \"recovery_seconds\": 0.738, \"isolated_mcp_process_seconds\": 1.959}",
+      "SYNTHETIC_RECONCILIATION_BENCHMARK {\"approvals\": 694, \"events\": 16774, \"journal_reads\": 1, \"seconds\": 0.109}",
+      "SYNTHETIC_LIST_BENCHMARK {\"approvals\": 694, \"events\": 16774, \"journal_bytes\": 7706222, \"journal_reads\": 1, \"seconds\": 0.107}"
+    ]
+  },
+  "nativeReadOnlyProof": {
+    "status": "passed",
+    "preflight": {
+      "sessionId": "ses_e7be520acfferLCHRlmOIRU4eF",
+      "messageId": "msg_1841adf74001I1SxhPB4IN5t6p",
+      "verifiedAt": "2026-10-28T20:45:41.464Z"
+    },
+    "nativeSingleExchange": true,
+    "parentModelUnchanged": true,
+    "sessionModel": {
+      "providerID": "opencode-go",
+      "modelID": "muse-spark-1.3-contributor",
+      "variant": "medium"
+    },
+    "toolCount": 0
+  },
+  "openspecBeforeArchive": {
+    "standard": "16/16",
+    "strict": "16/16"
+  },
+  "integrity": {
+    "utf8LfFiles": 76,
+    "brokerCopiesIdentical": true
+  },
+  "documentation": {
+    "AGENTS.md": "inchangé par la session, version 0.5 lue",
+    "PROJECT.md": "version et preuve native",
+    "TECHNICAL.md": "pagination et preuve native",
+    "BUILD.md": "distribution 2.1.5",
+    "DEVOPS.md": "inchangé, binaires explicites réutilisés",
+    "DEVELOPMENT_MAP.md": "entrée provisoire sans code, suivi ciblé",
+    "openspec/BATCH_CODES.md": "correspondances conservées, entrée technique provisoire",
+    "README.md": "contrat public décrit",
+    "CHANGELOG.md": "entrée 2.1.5, historique conservé",
+    "ORCHESTRATED_CODING.md": "références de version commune alignées ; règles conservées",
+    "OpenSpec": "trois deltas validés, synchronisation à l’archive"
+  },
+  "limits": [
+    "25 tests historiques non exécutés : paquet original 1.7.1 épinglé absent",
+    "La qualification source ne vaut pas activation ou succès CAB test ; preuves opérationnelles ultérieures distinctes"
+  ],
+  "modifiedSourcePaths": [
+    ".codex/commands/CAB.md",
+    ".codex/commands/CABU.md",
+    ".codex/commands/cab.md",
+    "BUILD.md",
+    "CHANGELOG.md",
+    "DEVELOPMENT_MAP.md",
+    "PROJECT.md",
+    "README.md",
+    "TECHNICAL.md",
+    "openspec/BATCH_CODES.md",
+    "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/.openspec.yaml",
+    "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/design.md",
+    "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/proposal.md",
+    "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/specs/codex-integration-distribution/spec.md",
+    "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/specs/coding-model-policy/spec.md",
+    "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/specs/opencode-v2-transport/spec.md",
+    "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/tasks.md",
+    "plugins/cab-approval-bridge/.codex-plugin/plugin.json",
+    "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py",
+    "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py",
+    "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-forward-repair.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prepare-model-policy.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update-credential.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs",
+    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/monitor-service.md",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md",
+    "plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
+    "plugins/cab-approval-bridge/skills/coding-session-statistics/references/observations.md",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service",
+    "plugins/cabu/.codex-plugin/plugin.json",
+    "plugins/cabu/skills/cabu/SKILL.md",
+    "pyproject.toml",
+    "src/cgpt_approval_bridge_journal.py",
+    "src/cgpt_approval_bridge_router.py",
+    "src/cgpt_approval_bridge_server.py",
+    "tests/active-component-update.test.mjs",
+    "tests/concurrent-controller.test.mjs",
+    "tests/controller-service-distribution.test.mjs",
+    "tests/maintenance-bootstrap.test.mjs",
+    "tests/monitor-service-start.test.mjs",
+    "tests/native-opencode.test.mjs",
+    "tests/opencode-v2-client.test.mjs",
+    "tests/test_crash_recovery.py",
+    "tests/test_session_reset.py",
+    "tests/web-monitor-browser.mjs",
+    "tests/web-monitor.test.mjs"
+  ],
+  "archive": {
+    "status": "success",
+    "specsUpdated": 3,
+    "requirementsModified": 4
+  },
+  "openspecAfterArchive": {
+    "standard": "15/15",
+    "strict": "15/15"
+  },
+  "gitScope": {
+    "mode": "état complet du projet selon SCM",
+    "includesPreexistingACL": true,
+    "preexistingExamples": [
+      "AGENTS.md",
+      ".gitignore",
+      "annotations des propositions archivées",
+      "fix-monitor-historical-lot-codes"
+    ],
+    "ignoredPathsRemovedFromIndex": []
+  }
+}

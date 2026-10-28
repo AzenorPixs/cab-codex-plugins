@@ -49,13 +49,18 @@ test('tâches : total dynamique, clôture indépendante, fences et code ignorés
 });
 
 test('codes de lot : premier titre explicite hors code, formats et absences', () => {
-  for (const code of ['PA01', 'PA02', 'C08', 'O26', 'B02']) {
+  for (const code of ['PA01', 'PA02', 'C08', 'O26', 'B02', 'L1', 'L2', 'L01', 'L10']) {
     for (const separator of ['—', '–', '-', ':']) {
       assert.equal(parseChangeTitle('# ' + code + ' ' + separator + ' Intitulé').lotCode, code);
     }
     assert.equal(parseChangeTitle('# ' + code).lotCode, code);
   }
   for (const source of ['# Sans code PA01', '# PA1 — Court', '# pa01 — Minuscules',
+    '# L0 — Inconnu', '# L3 — Inconnu', '# L9 — Inconnu', '# l1 — Minuscules',
+    '# L1suffixe — Invalide', '# L2 texte sans séparateur', '# L1 —',
+    '# ABCDEFGHIJK01 — Trop de lettres', '# A00001 — Trop de chiffres',
+    '# Sans code\n# L1 — Second titre', '```md\n# L2 — Exemple\n```\n# Sans code',
+    '~~~\n# L1 — Exemple\n~~~', '    # L2 — Code indenté',
     '# PA01 texte sans séparateur', 'PA01 — Sans titre', '## PA01 — Sous-titre',
     '    # PA01 — Code indenté', '# Sans code\n# PA01 — Second titre',
     '```md\n# PA01 — Exemple\n```\n# Sans code', '~~~\n# C08 — Exemple\n~~~']) {
@@ -63,6 +68,27 @@ test('codes de lot : premier titre explicite hors code, formats et absences', ()
   }
   assert.deepEqual(parseChangeTitle('```md\n# PA02 — Exemple\n```\n# B02 — Import ###'),
     { title: 'B02 — Import', lotCode: 'B02' });
+});
+
+test('codes historiques : L1 actif et L2 archivé référencé restent inchangés', async (t) => {
+  const root = await fixture(t);
+  const active = join(root, 'openspec', 'changes', 'change-a');
+  const archived = join(root, 'openspec', 'changes', 'archive', '2026-10-25-historical-change');
+  await mkdir(archived, { recursive: true });
+  await writeFile(join(active, 'proposal.md'), '# L1 — Admission');
+  await writeFile(join(archived, 'proposal.md'), '# L2 — Maintenance');
+  await writeFile(join(archived, 'tasks.md'), '- [x] Qualification\n');
+  const result = await readChanges(root, ['historical-change']);
+  const first = result.changes.find((change) => change.changeId === 'change-a');
+  const second = result.changes.find((change) => change.changeId === 'historical-change');
+  assert.equal(first.lotCode, 'L1');
+  assert.equal(first.title, 'L1 — Admission');
+  assert.equal(first.location, 'active');
+  assert.equal(first.progress.total, 2);
+  assert.equal(second.lotCode, 'L2');
+  assert.equal(second.title, 'L2 — Maintenance');
+  assert.equal(second.location, 'archived');
+  assert.equal(second.progress.completed, 1);
 });
 
 test('changes : lecture locale, archive référencée et liens refusés', async (t) => {
@@ -153,7 +179,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.1.4', mode: 'concurrent', brokerReadiness: { server_version: '2.1.4' },
+    else if (target.pathname === '/status') value = { version: '2.1.5', mode: 'concurrent', brokerReadiness: { server_version: '2.1.5' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -164,7 +190,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.1.4', supervisor: '1.4.0', broker: '2.1.4', opencode: '2.2.0', monitor: '2.1.4' });
+  assert.deepEqual(result.componentVersions, { controller: '2.1.5', supervisor: '1.4.0', broker: '2.1.5', opencode: '2.2.0', monitor: '2.1.5' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);

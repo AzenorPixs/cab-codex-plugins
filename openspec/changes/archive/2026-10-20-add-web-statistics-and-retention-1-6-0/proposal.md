@@ -1,4 +1,4 @@
-# Statistiques web et purge des historiques CAB 1.6.0
+# STA04 — Statistiques web et purge des historiques CAB 1.6.0
 
 ## Why
 

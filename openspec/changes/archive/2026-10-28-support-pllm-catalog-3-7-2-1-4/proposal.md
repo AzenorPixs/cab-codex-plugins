@@ -1,4 +1,4 @@
-# Compatibilité PLLM 2/6 et 3/7 — CAB 2.1.4
+# MOD05 — Compatibilité PLLM 2/6 et 3/7 — CAB 2.1.4
 
 ## Why
 Le contrôleur 2.1.3 refuse le catalogue actif schéma 3 contenant sept politiques avec pllm-catalog-invalid. La préparation du CAB test est bloquée avant création de session et de RUN.

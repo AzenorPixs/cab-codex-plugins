@@ -166,8 +166,8 @@ try {
       } catch (error) { response.writeHead(error.status || 500, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: error.code })); }
       return;
     }
-    const payload = request.url === '/status' ? { version: '2.1.4', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
-      brokerReadiness: { status: 'READY', server_version: '2.1.4' }, brokerReadinessReceivedAt: new Date().toISOString(),
+    const payload = request.url === '/status' ? { version: '2.1.5', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
+      brokerReadiness: { status: 'READY', server_version: '2.1.5' }, brokerReadinessReceivedAt: new Date().toISOString(),
       runs: Object.fromEntries((managementMode ? [] : runIds).map((runId, i) => [runId, { job: { changeId: changeIds[i], sessionId: 'ses_' + i, armed: true,
         lifecycle: i === 0 ? lifecycle : nextLifecycle(undefined, i === 1 ? 'IMPLEMENTATION' : 'STATISTICS', undefined, 0),
         lastProvenMilestone: ['Contrat d’observation validé', 'Reprise préparée', 'Événements corrélés'][i], currentCabMandate: 'mandat-' + i },
@@ -215,7 +215,7 @@ try {
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-lot-codes-changes.png');
     await browser.evaluate("document.querySelector('#runs-tab').click(); true");
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('Revue · 8/11') && document.querySelector('#work-content').textContent.includes('WAITING')"), true);
-    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.4') && document.querySelector('#health').textContent.includes('v2.2.0')"), true);
+    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.5') && document.querySelector('#health').textContent.includes('v2.2.0')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(255, 232, 235)');

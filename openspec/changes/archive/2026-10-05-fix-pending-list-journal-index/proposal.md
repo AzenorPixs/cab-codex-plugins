@@ -1,3 +1,5 @@
+# BR02 — Indexer le journal pendant la liste des approbations
+
 ## Why
 
 `do_list` répare le journal de toutes les approbations avant de filtrer la
