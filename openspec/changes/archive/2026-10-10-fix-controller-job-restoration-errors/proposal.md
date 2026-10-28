@@ -1,3 +1,5 @@
+# CT08 — Traiter explicitement les erreurs de restauration du job
+
 ## Why
 
 CGP-05 constate que le contrôleur masque toutes les erreurs de lecture ou de

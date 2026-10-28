@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.5 — Pagination et preuve native OpenCode
+
+- Ne plus combiner order et cursor sur les pages suivantes des sessions et messages V2 ; conserver les bornes et refus de pagination.
+- Vérifier le prévol V2 d’un échange unique à partir du modèle/variante observés sur l’assistant lorsque le parent les omet, sans fabriquer de métadonnées ni accepter un parent partiel ou contradictoire.
+- Conserver les preuves héritées et les jobs existants, et aligner la distribution 2.1.5.
+
+## Non publié — Codes historiques du moniteur
+
+- Reconnaître exactement L1 et L2 depuis le premier titre admissible, sans renumérotation et sans élargir les autres formats à un seul chiffre.
+- Couvrir les formats existants, les refus et la lecture de changes actifs et archivés référencés.
+
 ## 2.1.4 — Compatibilité des catalogues PLLM
 
 - Accepter les couples stricts schéma 2 / six politiques et schéma 3 / sept politiques ; conserver les gardes de priorité, sélection et dates, ainsi que le raisonnement et le prévol natif.

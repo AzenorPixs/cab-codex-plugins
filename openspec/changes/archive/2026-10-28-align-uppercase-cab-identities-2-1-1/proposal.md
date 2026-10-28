@@ -1,3 +1,5 @@
+# DIS09 — Aligner les identités publiques CAB sur 2.1.1
+
 # Why
 CABU est déjà nommé en majuscules ; le plugin et le skill principaux conservent les identifiants cab-approval-bridge et approval-bridge. Le patch 2.1.1 doit aligner les identifiants visibles et les sélecteurs d'installation tout en gardant les chemins et les contrats runtime.
 

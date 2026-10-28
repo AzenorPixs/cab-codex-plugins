@@ -118,8 +118,8 @@ Le plugin CAB SHALL distribuer coding-session-statistics et ses métadonnées sa
 - **THEN** les skills CAB et coding-session-statistics sont présents et résolus depuis le manifeste
 
 #### Scenario: Release cohérente
-- **WHEN** le patch 2.1.4 est préparé
-- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.4
+- **WHEN** le patch 2.1.5 est préparé
+- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.5
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 

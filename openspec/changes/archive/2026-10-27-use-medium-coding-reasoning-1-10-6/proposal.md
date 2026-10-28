@@ -1,4 +1,4 @@
-# Utiliser medium comme raisonnement automatique par défaut
+# MOD04 — Utiliser medium comme raisonnement automatique par défaut
 
 ## Pourquoi
 

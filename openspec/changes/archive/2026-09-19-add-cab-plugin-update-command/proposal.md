@@ -1,3 +1,5 @@
+# DIS02 — Ajouter la commande de mise à jour du plugin CAB
+
 ## Why
 
 La commande `/cab` ne permet pas de vérifier ni d'actualiser le plugin CAB

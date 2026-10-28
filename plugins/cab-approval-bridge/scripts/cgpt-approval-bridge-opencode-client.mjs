@@ -3,7 +3,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.4';
+export const VERSION = '2.1.5';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -126,7 +126,7 @@ function normalizeMessage(message, sessionId) {
   const metadata = record(message.metadata) ? { ...message.metadata } : {};
   delete metadata.tools;
   const normalized = { info: { ...metadata, id: message.id,
-    sessionID: sessionId, role: message.type, parentID: message.metadata?.parentID,
+    sessionID: sessionId, role: message.type, nativeSingleExchange: false, parentID: message.metadata?.parentID,
     time: message.time, providerID: model?.providerID, modelID: model?.modelID,
     ...(model ? { model, variant: model.variant } : {}),
     ...(typeof message.finish === 'string' ? { finish: message.finish } : {}),
@@ -278,7 +278,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     let cursor;
     const seen = new Set();
     for (let page = 0; page < 100; page++) {
-      const response = await json('/api/session', { query: { directory: directoryValue, order: 'asc', limit: '200', cursor } });
+      const response = await json('/api/session', { query: { directory: directoryValue, order: cursor === undefined ? 'asc' : undefined, limit: '200', cursor } });
       if (!record(response) || !Array.isArray(response.data) || !record(response.cursor)) fail('opencode-sessions-invalid');
       result.push(...response.data.map(normalizeSession));
       const next = response.cursor.next;
@@ -320,7 +320,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     const seen = new Set();
     for (let page = 0; page < 100; page++) {
       const response = await json(`/api/session/${encodeURIComponent(sessionId)}/message`,
-        { query: { order: 'asc', limit: '200', cursor } });
+        { query: { order: cursor === undefined ? 'asc' : undefined, limit: '200', cursor } });
       if (!record(response) || !Array.isArray(response.data) || !record(response.cursor)) fail('opencode-messages-invalid');
       result.push(...response.data.map((item) => normalizeMessage(item, sessionId)));
       const next = response.cursor.next;
@@ -329,6 +329,14 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
         for (const item of result) {
           if (item.info.role === 'user') previousUser = item.info.id;
           else if (item.info.role === 'assistant' && !item.info.parentID && previousUser) item.info.parentID = previousUser;
+        }
+        const users = result.filter(item => item.info.role === 'user');
+        const assistants = result.filter(item => item.info.role === 'assistant');
+        // Cette provenance vient du transcript complet, jamais de metadata envoyées par un client.
+        if (users.length === 1 && assistants.length === 1 &&
+            result.indexOf(users[0]) < result.indexOf(assistants[0]) &&
+            assistants[0].info.parentID === users[0].info.id) {
+          assistants[0].info.nativeSingleExchange = true;
         }
         return result;
       }

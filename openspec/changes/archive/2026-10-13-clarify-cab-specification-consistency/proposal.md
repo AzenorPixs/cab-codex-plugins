@@ -1,3 +1,5 @@
+# SPE02 — Clarifier la cohérence des spécifications CAB
+
 ## Why
 
 L'ACSM du 2026-10-13 constate quinze avertissements OpenSpec pour des textes

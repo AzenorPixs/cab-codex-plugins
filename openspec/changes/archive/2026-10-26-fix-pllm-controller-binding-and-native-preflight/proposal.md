@@ -1,4 +1,4 @@
-# Raccord PLLM, fournisseur natif et variante OpenCode
+# MOD03 — Raccord PLLM, fournisseur natif et variante OpenCode
 
 ## Why
 Le contrôleur peut être préparé sans chemin de catalogue public, compare littéralement opencodego à opencode-go et attend uniquement la variante historique du parent. Ces écarts empêchent l'armement automatique malgré une sélection et un prévol natifs valides.

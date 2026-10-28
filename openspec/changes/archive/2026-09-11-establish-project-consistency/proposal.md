@@ -1,3 +1,5 @@
+# SPE01 — Établir la cohérence du projet CAB
+
 ## Why
 
 CAB implémente déjà un pont de validation riche, mais son contrat OpenSpec est vide et ses artefacts de distribution ne décrivent pas fidèlement les sources. Le contrôleur HTTP est en outre incomplet syntaxiquement, ce qui empêche le cycle de décision annoncé de fonctionner.

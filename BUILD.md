@@ -4,9 +4,9 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.1.4
+### Distribution courante 2.1.5
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.4. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.5. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
 
 OpenCode V2 est la seule version prise en charge. Les appels HTTP utilisent
 `/api/...` avec Basic Auth sous l'utilisateur fixe `opencode`. Configurer le
@@ -245,7 +245,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.1.4` pour le broker,
+artefacts distribués. La version de base actuelle est `2.1.5` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -343,7 +343,7 @@ n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Le retour historique à 0.87.2 exigeait libération ou gel réconcilié de tous les
 RUN car son contrôleur ne comprenait pas le registre concurrent. Ce cas de
-compatibilité historique ne définit plus `/CAB update` 2.1.4, qui remplace le
+compatibilité historique ne définit plus `/CAB update` 2.1.5, qui remplace le
 jeu versionné et redémarre les trois unités sans consulter les états CAB.
 
 Le script cgpt-approval-bridge-prompts.py permet une revue sans écriture puis
@@ -420,7 +420,7 @@ manuellement conserve sa supervision, avec redémarrage systemd indisponible.
 Les tests de commandes utilisent un adaptateur simulé, jamais les services
 réels. Le jeu installé isolé doit contenir onze ressources, dont ce module.
 
-## Distribution de la mise à jour active 2.1.4
+## Distribution de la mise à jour active 2.1.5
 
 Le plugin ajoute scripts/cgpt-approval-bridge-update.mjs, sa référence
 skills/approval-bridge/references/component-update.md et broker/ contenant
@@ -454,7 +454,7 @@ aux anciens lecteurs stricts non garanti après utilisation. Aucun fichier
 runtime antérieur ne doit être restauré pour effacer ces nouveaux reçus.
 
 L'activation du correctif exigeait un mandat distinct. La procédure ordinaire
-`/CAB update` 2.1.4 redémarre les unités sans consulter une récupération
+`/CAB update` 2.1.5 redémarre les unités sans consulter une récupération
 ouverte ; le profil explicite frozen-recovery-controller conserve son autorité
 BOOTSTRAP_HELD qualifiée, suivie d'adoption et du vrai HELD, sans installation
 implicite par la préparation SCM. Le paquet distribue
@@ -532,7 +532,7 @@ broker enfant d’un thread secondaire. Les preuves sont dans
 `output/scm/add-cab-uppercase-update-alias/two-uid-tests-retry.log` ; elles ne
 prouvent aucune installation du profil réel.
 
-### CABU 2.1.4 : coupure courte et reprise
+### CABU 2.1.5 : coupure courte et reprise
 
 CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
 et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
@@ -547,14 +547,14 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.4 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.5 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
 INDISPONIBLE. Les durées preparationMs, unavailableMs et totalMs sont publiées ;
 la cible est moins de cinq secondes de coupure dans le banc contrôlé.
 
-### Migration des identifiants en 2.1.4
+### Migration des identifiants en 2.1.5
 
 La marketplace expose CAB et CABU ; le skill principal est nommé CAB dans
 son frontmatter. Installer `CAB@cab_codex_plugins` et
@@ -563,10 +563,10 @@ maintenance. Sauvegarder le paquet de l'ancienne identité cab-approval-bridge
 dans l'espace privé de l'updater avant son retrait géré. Le gestionnaire peut
 supprimer l'ancien cache ; les sources, sauvegardes et ressources runtime
 restent conservées. Les chemins et commandes compatibles sont détaillés dans
-README.md, section « Identifiants publics CAB 2.1.4 ».
+README.md, section « Identifiants publics CAB 2.1.5 ».
 
 
-## Prévol du credential et installation mixte — 2.1.4
+## Prévol du credential et installation mixte — 2.1.5
 
 Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
 
@@ -578,6 +578,10 @@ Pour une installation mixte, utiliser `--broker-policy cab-source --layout manag
 
 Un échec après coupure expose `failureCode`, `serviceFailures` (composant, ActiveState, SubState, Result, ExecMainStatus), `transactionId` et `recoveryPhase`. Un code 243 désigne un échec systemd CREDENTIALS avant Node.js. Un retour 0 de systemctl start seul ne prouve pas la santé de l’application. La cause filtrée reste dans le reçu après repli, sans sortie brute du journal ou de systemctl.
 
-### Compatibilité des catalogues PLLM — 2.1.4
+### Compatibilité des catalogues PLLM — 2.1.5
 
 CAB accepte strictement le schéma 2 à six politiques et le schéma 3 à sept politiques, sans réécrire le catalogue. Les priorités, dates, sélection courante, medium et prévol natif restent contrôlés ; mode7 peut être sélectionné puis conservé dans le job. Les jobs existants conservent leur choix. Le raccord utilise le catalogue public du skill actif, vérifié par /model-policy/resolve avant nouveau job. Aucune activation ou réussite de CAB test n’est déduite de la qualification source.
+
+### Pagination et prévol natif V2 — 2.1.5
+
+Le client n’envoie order que sur la première page et conserve les curseurs opaques. Le prévol peut corréler un échange natif unique complet lorsque l’utilisateur omet le modèle : la réponse assistant fournit alors le modèle/variante réellement utilisés, avec les dates et gardes habituelles. Aucun champ utilisateur n’est inventé. Les échanges ambigus ou contradictoires restent refusés. La preuve héritée et le choix des jobs existants sont conservés.

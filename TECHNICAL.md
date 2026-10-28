@@ -59,7 +59,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.4` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.5` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -366,7 +366,7 @@ Le reçu et rejectionOnly sont des extensions conservatrices du registre 4 :
 un ancien lecteur strict peut les refuser. Après première utilisation, aucun
 retour aux anciens modules ni restauration d'une sauvegarde runtime antérieure
 ne doit effacer ces preuves. L'installation et le chargement restent distincts
-de ce lot source. L'update forcé 2.1.4 ne consulte pas l'état de récupération
+de ce lot source. L'update forcé 2.1.5 ne consulte pas l'état de récupération
 pour décider de remplacer les fichiers ou redémarrer systemd ; le profil
 frozen-recovery-controller conserve ses contrôles spécifiques lorsqu'il est
 explicitement sélectionné.
@@ -415,7 +415,7 @@ Les versions CAB précédentes pouvaient reconstruire un prévol exécuté sans
 permission `once` en s'appuyant sur `tools.bash=true` dans le message utilisateur
 V1 et sur une autorisation humaine spécifique. OpenCode V2 ne prend pas en charge
 ce champ dans le corps des prompts ni dans le schéma documenté des messages
-utilisateur. CAB 2.1.4 refuse cette ancienne phase `reconcile` avec
+utilisateur. CAB 2.1.5 refuse cette ancienne phase `reconcile` avec
 `preflight-native-allow-not-proved`, conserve le job et n'infère aucune
 autorisation ni exécution. Un autre échec de preuve ne consomme aucune permission.
 
@@ -885,7 +885,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.4. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.5. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -1016,7 +1016,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 2.1.4 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 2.1.5 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1141,12 +1141,12 @@ réinstallé. --rollback est refusé pour ce profil : il ne doit pas être
 interprété comme une nouvelle maintenance. Toute reprise utilise le même
 journal et refuse une preuve expirée ou altérée.
 
-## Mise à jour forcée des briques CAB — 2.1.4
+## Mise à jour forcée des briques CAB — 2.1.5
 
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.4 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.5 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1246,7 +1246,7 @@ prepareControllerModelPolicy et son CLI distribué préparent le patch public du
 
 catalogProviderID rapproche exclusivement opencodego vers le natif unique opencode-go en absence d'identité exacte. Le sélecteur contrôle ensuite connexion, modèle et variantes ; logicalProviderID conserve la provenance avec le digest original. Le contrôleur utilise le même rapprochement pour les preuves d'indisponibilité. L'extracteur commun de variante exige un champ parent valide et la cohérence de parent.variant, parent.model.variant et assistant.variant présents, sans modifier les autres gardes. Les contrats historiques sans logicalProviderID restent lisibles ; le repli vers un ancien lecteur strict après un nouvel armement n'est pas qualifié. Voir la référence model-policy.md pour les opérations de raccord autorisées.
 
-### CABU 2.1.4 : coupure courte et reprise
+### CABU 2.1.5 : coupure courte et reprise
 
 CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
 et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
@@ -1261,7 +1261,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.4 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.5 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1273,7 +1273,7 @@ GET /api/location sans en-tête de projet. Les requêtes MCP utilisent cette
 location ; les requêtes de session gardent le workspace du RUN via
 x-opencode-directory. Ne pas créer un deuxième broker dans un projet distinct.
 
-### Identité et garde d'installation — 2.1.4
+### Identité et garde d'installation — 2.1.5
 
 La garde cab-source vérifie le manifeste du plugin CAB et son égalité avec le
 paquet installé. Le dossier source conserve son chemin cab-approval-bridge ;
@@ -1289,10 +1289,10 @@ hors blocs de code : par exemple `# PA01 — Composition PA`. Il comporte de une
 séparateur explicite (`—`, `–`, `-`, `:`) et d'un intitulé. Sans code reconnu ou
 sans document admissible, la cellule reste vide. Le RUN reprend le code de son
 change corrélé, y compris une archive référencée. Le tri et les actions restent
-identiques. Cette évolution source 2.1.4 ne prouve pas une mise à jour active.
+identiques. Cette évolution source 2.1.5 ne prouve pas une mise à jour active.
 
 
-## Prévol du credential et installation mixte — 2.1.4
+## Prévol du credential et installation mixte — 2.1.5
 
 Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
 
@@ -1304,6 +1304,10 @@ Pour une installation mixte, utiliser `--broker-policy cab-source --layout manag
 
 Un échec après coupure expose `failureCode`, `serviceFailures` (composant, ActiveState, SubState, Result, ExecMainStatus), `transactionId` et `recoveryPhase`. Un code 243 désigne un échec systemd CREDENTIALS avant Node.js. Un retour 0 de systemctl start seul ne prouve pas la santé de l’application. La cause filtrée reste dans le reçu après repli, sans sortie brute du journal ou de systemctl.
 
-### Compatibilité des catalogues PLLM — 2.1.4
+### Compatibilité des catalogues PLLM — 2.1.5
 
 CAB accepte strictement le schéma 2 à six politiques et le schéma 3 à sept politiques, sans réécrire le catalogue. Les priorités, dates, sélection courante, medium et prévol natif restent contrôlés ; mode7 peut être sélectionné puis conservé dans le job. Les jobs existants conservent leur choix. Le raccord utilise le catalogue public du skill actif, vérifié par /model-policy/resolve avant nouveau job. Aucune activation ou réussite de CAB test n’est déduite de la qualification source.
+
+### Pagination et prévol natif V2 — 2.1.5
+
+Le client n’envoie order que sur la première page et conserve les curseurs opaques. Le prévol peut corréler un échange natif unique complet lorsque l’utilisateur omet le modèle : la réponse assistant fournit alors le modèle/variante réellement utilisés, avec les dates et gardes habituelles. Aucun champ utilisateur n’est inventé. Les échanges ambigus ou contradictoires restent refusés. La preuve héritée et le choix des jobs existants sont conservés.

@@ -1,3 +1,5 @@
+# CT03 — Accepter un workspace générique pour le contrôleur
+
 ## Why
 
 Le contrôleur CAB ne doit pas connaître les projets qu'il pilote. Une liste de

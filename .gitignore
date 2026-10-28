@@ -130,6 +130,7 @@ openspec/**
 !openspec/specs/
 !openspec/specs/**
 !openspec/AGENTS.md
+!openspec/BATCH_CODES.md
 !openspec/config.yaml
 
 # ----------------------------------------------------------

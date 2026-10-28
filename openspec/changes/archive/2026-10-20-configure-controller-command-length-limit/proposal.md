@@ -1,4 +1,4 @@
-# Limite configurable des commandes du contrôleur CAB
+# CT12 — Limite configurable des commandes du contrôleur CAB
 
 ## Why
 

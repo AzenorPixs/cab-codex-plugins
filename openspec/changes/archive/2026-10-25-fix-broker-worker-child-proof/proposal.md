@@ -1,4 +1,4 @@
-# Reconnaissance du broker créé depuis un thread OpenCode
+# MAI02 — Reconnaissance du broker créé depuis un thread OpenCode
 
 ## Why
 Après reconnexion native, le broker unique peut être enfant d'un thread secondaire du même processus OpenCode. Le lecteur limité aux enfants du thread principal refuse sa preuve et conserve HELD malgré quatre versions 1.10.1 et READY.

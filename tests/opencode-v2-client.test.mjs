@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { verifyModelPreflight } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 
 function fixture() {
@@ -69,6 +70,7 @@ test('le client suit les pages V2 et normalise les messages et permissions', asy
   const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
     fetchImpl: async (input, init) => {
       const url = new URL(input); calls.push({ path: url.pathname, cursor: url.searchParams.get('cursor'), body: init.body });
+      if (url.searchParams.has('cursor')) assert.equal(url.searchParams.has('order'),false,'le curseur porte son ordre');
       if (url.pathname === '/api/info') return json(info);
       if (url.pathname === '/api/session') return url.searchParams.get('cursor') === firstCursor
         ? json({ data: [{ id: 'ses_busy', directory: '/workspace', permissions: [] }], cursor: { next: null, previous: firstCursor } })
@@ -173,4 +175,69 @@ test('la location V2 est transmise par en-tête et une divergence est refusée',
   assert.equal((await client.mcp())['cgpt-validation'].status, 'connected');
   divergent = true;
   await assert.rejects(client.mcp(), { code: 'opencode-mcp-invalid' });
+});
+
+
+async function nativeProofFixture(t, rows) {
+ const f=fixture();t.after(f.close);const calls=[];
+ const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+  fetchImpl:async(input)=>{
+   const url=new URL(input);calls.push(url);
+   if(url.pathname==='/api/info')return json(info);
+   if(url.searchParams.has('cursor')){
+    assert.equal(url.searchParams.has('order'),false);
+    return json({data:[],cursor:{next:null,previous:'opaque'}});
+   }
+   assert.equal(url.searchParams.get('order'),'asc');
+   return json({data:rows,cursor:{next:'opaque',previous:null}});
+  }});
+ const messages=await client.messages('ses_native');
+ return {messages,calls,selection:{providerID:'p',modelID:'m',reasoning:'medium'},proof:{workspace:'/workspace',now:100,
+  session:{id:'ses_native',directory:'/workspace',model:{providerID:'p',modelID:'m',variant:'medium'}},parent:messages.find(x=>x.info.id===messages.find(y=>y.info.role==='assistant')?.info.parentID),response:messages.find(x=>x.info.role==='assistant')}};
+}
+const nativeRows=()=>[
+ {id:'msg_u',type:'user',text:'fixture',time:{created:1}},
+ {id:'msg_a',type:'assistant',model:{providerID:'p',id:'m',variant:'medium'},time:{created:2,completed:3},finish:'stop',content:[{type:'text',text:'ok'}]},
+ {id:'msg_idle',type:'idle',time:{created:4},outcome:{type:'success'}},
+];
+test('prévol V2 unique : pagination native, modèle observé sur assistant et parent laissé intact',async t=>{
+ const h=await nativeProofFixture(t,nativeRows());
+ assert.equal(h.proof.parent.info.model,undefined);assert.equal(h.proof.parent.info.variant,undefined);
+ assert.equal(h.proof.response.info.nativeSingleExchange,true);
+ assert.equal(verifyModelPreflight(h.selection,h.proof).preflight.messageId,'msg_a');
+ assert.equal(h.calls.filter(u=>u.pathname.endsWith('/message')).length,2);
+});
+test('fausse provenance dans metadata et plusieurs échanges : refus sans parent inventé',async t=>{
+ const rows=nativeRows();rows.unshift({id:'msg_older',type:'user',text:'autre',time:{created:0}});
+ rows[2].metadata={nativeSingleExchange:true};const h=await nativeProofFixture(t,rows);
+ assert.equal(h.proof.response.info.nativeSingleExchange,false);
+ assert.throws(()=>verifyModelPreflight(h.selection,h.proof),/model-preflight-not-proved/);
+});
+test('prévol V2 : modèle partiel du parent, variante contradictoire, dates et outils refusés',async t=>{
+ for(const change of [
+  rows=>rows[0].model={providerID:'p',id:'m'},
+  rows=>rows[0].metadata={variant:'low'},
+  rows=>rows[1].model.variant='low',
+  rows=>rows[1].model.id='other',
+  rows=>rows[0].time.created=10,
+  rows=>rows[1].time.completed=101,
+  rows=>rows[1].content.push({type:'tool',id:'call',name:'bash',executed:false,state:{status:'completed',input:{command:'true'}}}),
+ ]){
+  const rows=nativeRows();change(rows);const h=await nativeProofFixture(t,rows);
+  assert.throws(()=>verifyModelPreflight(h.selection,h.proof),/model-preflight-not-proved/);
+ }
+});
+
+
+test('pagination native : curseur répété ou malformé refusé avant tout résultat partiel',async t=>{
+ for(const next of ['same',42]){
+  const f=fixture();t.after(f.close);
+  const c=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+   fetchImpl:async input=>{const url=new URL(input);if(url.pathname==='/api/info')return json(info);
+    if(url.searchParams.has('cursor'))assert.equal(url.searchParams.has('order'),false);
+    return json({data:[],cursor:{next,previous:null}});
+   }});
+  await assert.rejects(c.messages('ses_1'),/opencode-messages-pagination-invalid/);
+  await assert.rejects(c.listSessions(),/opencode-sessions-pagination-invalid/);
+ }
 });

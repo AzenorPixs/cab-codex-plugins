@@ -7,7 +7,7 @@ import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-mo
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.4';
+export const VERSION = '2.1.5';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -102,7 +102,7 @@ export function parseChangeTitle(markdown) {
     const heading = line.match(/^ {0,3}#\s+(.+)$/);
     if (!heading) continue;
     const title = heading[1].trim().replace(/\s+#+\s*$/, '');
-    const lotCode = title.match(/^([A-Z]{1,10}[0-9]{2,4})(?:\s+[—–:-]\s+.+)?$/)?.[1] || null;
+    const lotCode = title.match(/^([A-Z]{1,10}[0-9]{2,4}|L[12])(?:\s+[—–:-]\s+.+)?$/)?.[1] || null;
     return { title: title.slice(0, 160), lotCode };
   }
   return { title: null, lotCode: null };

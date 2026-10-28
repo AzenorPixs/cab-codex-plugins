@@ -1,4 +1,4 @@
-# CAB 1.10.1 — lectures bornées du registre de maintenance
+# MAI04 — CAB 1.10.1 — lectures bornées du registre de maintenance
 
 ## Why
 Le registre Pixs observé fait 9 602 547 octets en HTTP et 13 321 688 octets sur disque. La maintenance 1.10.0 refuse avant effet avec update-response-too-large (limite 2 Mio) ; le contrôle privé HELD est limité à 4 Mio. Aucun état ne doit être purgé pour contourner ces bornes.

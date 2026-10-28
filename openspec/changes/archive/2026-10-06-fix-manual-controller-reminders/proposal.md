@@ -1,3 +1,5 @@
+# CT07 — Préserver la décision manuelle pendant les rappels
+
 ## Why
 
 Les relances du contrôleur sollicitent un tour Codex auxiliaire même en mode

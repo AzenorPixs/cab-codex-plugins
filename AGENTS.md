@@ -1,6 +1,6 @@
 # AGENTS.md — Codex Approval Bridge
 
-Version : 0.4
+Version : 0.5
 
 ## 1. Contexte
 
@@ -11,8 +11,27 @@ Version : 0.4
 * Cadrage technique : `TECHNICAL.md` ;
 * Cadrage de déploiement : `BUILD.md` ;
 * Envrionnement de développement : `DEVOPS.md` ;
+* Cartographie et progression du développement : `DEVELOPMENT_MAP.md` ;
 * Protocole des sessions de codage pilotées : `ORCHESTRATED_CODING.md`
   (facultatif, uniquement si le projet nécessite ce pilotage) ;
+
+`DEVELOPMENT_MAP.md` fait partie des fichiers de cadrage du projet.
+Il constitue une synthèse de navigation et d’aide à la décision reliant
+les codes de lot, les changes OpenSpec actifs et archivés, leurs ensembles
+et sous-ensembles fonctionnels ou techniques, leurs dépendances et leur
+avancement vérifiable.
+
+Son rôle principal est d’aider à orienter le choix des changes à engager :
+privilégier les travaux dont les prérequis sont vérifiés, puis favoriser
+un nombre et une difficulté faibles de dépendances non satisfaites,
+avant de considérer les travaux dont la réalisation débloque d’autres
+travaux. Il distingue l’avancement
+documentaire, la réalisabilité, les validations, la livraison et l’activation,
+sur la base de sources identifiées et de preuves datées.
+
+Cette cartographie ne lance aucune session et ne remplace aucune validation
+requise. Les informations déterminantes DOIVENT être revérifiées avant
+d’engager les travaux concernés.
 
 L'agent NE DOIT PAS créer, modifier ou supprimer de fichier hors de la racine
 applicable à son environnement sans validation explicite du développeur.
@@ -30,6 +49,11 @@ En cas de contradiction, appliquer cet ordre :
 7. Environnement de développement : `DEVOPS.md` ;
 8. documentation officielle du projet ;
 9. code existant.
+
+`DEVELOPMENT_MAP.md` est une synthèse de cadrage subordonnée aux sources
+de vérité et aux preuves applicables. Il ne modifie pas leur ordre de
+priorité. Toute divergence DOIT être signalée et résolue avant d’utiliser
+l’information concernée.
 
 Un prompt demandé explicitement pour exécution prévaut sur les fichiers de cadrage du projet.
 
@@ -52,9 +76,19 @@ Avant toute intervention, l'agent DOIT lire uniquement ce qui est nécessaire, d
 3. `TECHNICAL.md` ;
 4. `BUILD.md` ;
 5. `DEVOPS.md` ;
-6. spécifications ou évolution OpenSpec applicables ;
-7. conventions applicables du projet ;
-8. code et documentation concernés.
+6. `DEVELOPMENT_MAP.md`, pour les lots, changes et dépendances concernés ;
+7. spécifications ou évolution OpenSpec applicables ;
+8. conventions applicables du projet ;
+9. code et documentation concernés.
+
+Si `DEVELOPMENT_MAP.md` est absent, vide ou réduit à un squelette, l’agent
+DOIT le signaler et recommander le prompt ACL, sans le lancer automatiquement.
+Il poursuit le travail autorisé à partir des sources et preuves accessibles.
+Ce constat n’autorise ni la création ni la complétion de la cartographie.
+
+La création, la reconstruction ou la complétion globale de cette cartographie
+nécessite une validation explicite. Les amendements ciblés d’un document
+exploitable restent soumis aux autorisations du processus applicable.
 
 L'agent DOIT privilégier :
 
@@ -230,6 +264,7 @@ Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimé
 * `BUILD.md`
 * `CHANGELOG.md`
 * `DEVOPS.md`
+* `DEVELOPMENT_MAP.md`
 * `LICENSE`
 * `PROJECT.md`
 * `README.md`
@@ -347,6 +382,7 @@ ORCHESTRATED_CODING.md
 BUILD.md
 CHANGELOG.md
 DEVOPS.md
+DEVELOPMENT_MAP.md
 LICENSE
 PROJECT.md
 README.md
