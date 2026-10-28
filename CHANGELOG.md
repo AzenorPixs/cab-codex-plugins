@@ -1,5 +1,19 @@
 # Changelog
 
+## 2.1.6 — Fermeture de CAB avec le serveur OpenCode
+
+- Calculer le sceau de maintenance depuis un instant unique pour éviter un refus artificiel à 60 001 ms, sans relâcher la limite de 60 000 ms.
+- Arrêter les trois services et le gardien de verrou après disparition prouvée du serveur OpenCode suivi, avec nettoyage borné et sans boucle systemd.
+- Distinguer fermeture du serveur, fermeture d’un client et panne HTTP/SSE ; permettre l’attente avant premier rattachement.
+- Conserver RUN, jobs, réservations, décisions et gels sans purge, clôture métier ou rejeu de permission.
+- Qualifier EOF MCP avec demande en attente ; aligner la distribution et les attentes de cible en 2.1.6 en conservant les preuves historiques 2.1.5. Aucune installation ni activation par cette préparation source.
+
+## Non publié — Qualification historique 1.7.1 vers 2.1.5
+
+- Aligner le contrat de transition mixte et le banc de maintenance sur 2.1.5.
+- Distinguer l’annonce publique reconnue du protocole de test de l’état métier protégé par l’empreinte, en conservant le refus des valeurs inconnues.
+- Restaurer le paquet historique épinglé depuis Git et qualifier les essais uniquement dans des fixtures locales.
+
 ## 2.1.5 — Pagination et preuve native OpenCode
 
 - Ne plus combiner order et cursor sur les pages suivantes des sessions et messages V2 ; conserver les bornes et refus de pagination.

@@ -1,3 +1,4 @@
+import { followOpenCodeLifetime, boundedCleanup, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { readFile, realpath } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
@@ -5,8 +6,8 @@ import { MonitorState, monitorConfiguration, VERSION as DATA_VERSION } from './c
 import { guardStatisticsPost, statisticsSelection, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
 import { MonitorCatalog, MonitorServices, guardManagementPost, managementBody, VERSION as MANAGEMENT_VERSION } from './cgpt-approval-bridge-monitor-management.mjs';
 
-export const VERSION = '2.1.5';
-if ([DATA_VERSION, MAINTENANCE_VERSION, MANAGEMENT_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
+export const VERSION = '2.1.6';
+if ([DATA_VERSION, MAINTENANCE_VERSION, MANAGEMENT_VERSION, LIFECYCLE_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/stats.mjs', ['stats.mjs', 'text/javascript; charset=utf-8']],
   ['/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
@@ -39,7 +40,16 @@ export async function createMonitorServer(configuration, options = {}) {
     for (const response of clients) if (!response.write(frame)) response.destroy();
   }
   state.listeners.add(emit);
-  const server = createServer(async (request, response) => {
+  let closing = false;
+  let closePromise;
+  const requests = new Set();
+  const server = createServer((request, response) => {
+    const pending = handleRequest(request, response);
+    requests.add(pending);
+    void pending.finally(() => requests.delete(pending)).catch(() => response.destroy());
+  });
+  async function handleRequest(request, response) {
+    if (closing) { response.writeHead(503).end(); return; }
     response.setHeader('cache-control', 'no-store');
     response.setHeader('x-content-type-options', 'nosniff');
     response.setHeader('referrer-policy', 'no-referrer');
@@ -156,7 +166,7 @@ export async function createMonitorServer(configuration, options = {}) {
     const file = files.get(url.pathname);
     if (!file) { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'content-type': file.type }); response.end(file.data);
-  });
+  }
   function refresh() {
     if (!refreshTimer && !abort.signal.aborted) refreshTimer = setTimeout(() => {
       refreshTimer = null;
@@ -210,12 +220,18 @@ export async function createMonitorServer(configuration, options = {}) {
       streamTask = streamController();
       return server.address();
     },
-    async close() {
-      abort.abort(); clearInterval(interval); clearTimeout(refreshTimer);
-      for (const response of clients) response.destroy();
-      await streamTask;
-      server.closeAllConnections();
-      await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    close() {
+      if (closePromise) return closePromise;
+      closing = true;
+      closePromise = (async () => {
+        abort.abort(); clearInterval(interval); clearTimeout(refreshTimer);
+        for (const response of clients) response.destroy();
+        await streamTask;
+        server.closeAllConnections();
+        await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+        await Promise.all([...requests]);
+      })();
+      return closePromise;
     } };
 }
 
@@ -228,10 +244,17 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
     process.stdout.write('CAB Monitor ' + VERSION + ' : http://' +
       (configuration.host === '::1' ? '[::1]' : configuration.host) + ':' + configuration.port + '\n');
     let closing = false;
-    const close = () => { if (closing) return; closing = true;
-      void monitor.close().catch(() => { process.stderr.write('Arrêt de CAB Monitor incomplet.\n'); process.exitCode = 1; }); };
-    process.on('SIGTERM', close); process.on('SIGINT', close);
-    monitor.server.on('error', close);
+    const close = async () => {
+      if (closing) return;
+      closing = true; lifetime.stop();
+      try { await boundedCleanup(() => monitor.close()); process.exit(0); }
+      catch { process.stderr.write('Arrêt de CAB Monitor incomplet.\n'); process.exit(SHUTDOWN_INCOMPLETE); }
+    };
+    const lifetime = followOpenCodeLifetime(monitor.state.openCode, { onExit: close,
+      onDiagnostic: (code) => process.stderr.write(code + '\n') });
+    lifetime.start();
+    process.on('SIGTERM', () => { void close(); }); process.on('SIGINT', () => { void close(); });
+    monitor.server.on('error', () => { void close(); });
   } catch {
     process.stderr.write('CAB Monitor : configuration, ressources ou port indisponibles.\n'); process.exitCode = 1;
   }

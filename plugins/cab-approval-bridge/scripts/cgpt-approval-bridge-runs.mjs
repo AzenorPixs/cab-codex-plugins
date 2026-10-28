@@ -5,7 +5,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "2.1.5";
+export const VERSION = "2.1.6";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -239,7 +239,20 @@ export class RunRegistry {
     this.failed = true;
     if (notify) this.onUnavailable(reason);
   }
-  close() { this.authorityClosing = true; this.lock?.stdin.end(); }
+  close() {
+    if (this.authorityClosed) return this.authorityClosed;
+    this.authorityClosing = true;
+    const child = this.lock;
+    this.authorityClosed = new Promise((resolveClosed, reject) => {
+      if (!child || child.exitCode !== null || child.signalCode !== null) { resolveClosed(); return; }
+      child.once('exit', (code, signal) => {
+        if (code === 0 && !signal) resolveClosed(); else reject(new Error('registry-close-failed'));
+      });
+      child.stdin.once('error', reject);
+      child.stdin.end();
+    });
+    return this.authorityClosed;
+  }
   assertHealthy() {
     if (this.failed || !this.lock || this.lock.exitCode !== null || this.lock.signalCode !== null) throw new CoordinationError("registry-unavailable", 503);
   }

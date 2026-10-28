@@ -131,7 +131,7 @@ export function openCodeV2TestHandler(handler, { directory, locationDirectory = 
     }
     if (path === '/api/info') {
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ version: '2.2.0', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }));
+      response.end(JSON.stringify({ version: '2.2.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }));
       return;
     }
     if (path === '/api/location') {

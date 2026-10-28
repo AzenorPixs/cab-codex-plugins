@@ -4,7 +4,7 @@ import { open, lstat, realpath, readlink } from 'node:fs/promises';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 
-export const VERSION = '2.1.5';
+export const VERSION = '2.1.6';
 export const FROZEN_PROFILE = 'frozen-recovery-controller';
 export const FROZEN_CAPABILITY = 'frozen-recovery-v1';
 const object = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -284,7 +284,13 @@ export async function collectFrozenProof({ controllerUrl, openCode, workspace, t
       Object.values(registry.coordination.accesses).some((a) => a.accessId === op.accessId || a.operationIds.includes(op.operationId))) fail('maintenance-orphan-identity-divergent');
   const normalizeResources = (list) => list.map((r) => ({ key:r.key,mode:r.mode })).sort((a,b) => a.key.localeCompare(b.key));
   if (proofHash(normalizeResources(op.resources)) !== proofHash(normalizeResources(approval.resources))) fail('maintenance-orphan-identity-divergent');
-  const stable = { ...registry, version: null, coordination: { ...registry.coordination, global: null } };
+  if (registry.testResourceProtocol !== undefined && registry.testResourceProtocol !== 'test-resources-v1') {
+    fail('maintenance-runtime-incompatible');
+  }
+  // Cette annonce publique est ajoutée par les lecteurs récents ; les données
+  // de réservation et tous les autres champs du registre restent protégés.
+  const { testResourceProtocol, ...registryState } = registry;
+  const stable = { ...registryState, version: null, coordination: { ...registry.coordination, global: null } };
   const proof = { target, registryHash: proofHash(stable), jobsHash: proofHash(jobs), sessions,
     requestDigest: nativeDigest, recoveryHash: proofHash(recovery), brokerInstance: readiness.instance_id };
   proof.fingerprint = proofHash(proof);

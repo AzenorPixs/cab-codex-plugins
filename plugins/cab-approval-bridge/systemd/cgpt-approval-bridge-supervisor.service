@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 2.1.5 — Superviseur persistant CAB
+Description=CAB 2.1.6 — Superviseur persistant CAB
 After=cgpt-approval-bridge-controller.service
 
 [Service]
@@ -8,4 +8,5 @@ EnvironmentFile=%h/.config/cab-approval-bridge/controller.env
 LoadCredential=opencode.password:%h/.config/cab-approval-bridge/opencode.password
 ExecStart=/usr/bin/env node %h/.local/share/cab-approval-bridge/cgpt-approval-bridge-supervisor.mjs
 Restart=on-failure
+RestartPreventExitStatus=78
 RestartSec=5

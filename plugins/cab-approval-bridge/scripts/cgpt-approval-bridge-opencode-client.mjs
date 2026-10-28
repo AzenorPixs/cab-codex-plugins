@@ -3,7 +3,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.5';
+export const VERSION = '2.1.6';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -160,7 +160,7 @@ function normalizeMessage(message, sessionId) {
   return normalized;
 }
 
-export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, fetchImpl = fetch, timeoutMs = 10000 }) {
+export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, fetchImpl = fetch, timeoutMs = 10000, signal }) {
   const origin = loopbackUrl(baseUrl);
   const user = username || 'opencode';
   const credentialPath = passwordFile || (process.env.CREDENTIALS_DIRECTORY
@@ -196,7 +196,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     let response;
     try {
       response = await fetchImpl(url, { method, headers, body: body === undefined ? undefined : JSON.stringify(body),
-        redirect: 'error', signal: AbortSignal.timeout(timeout) });
+        redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(timeout)]) : AbortSignal.timeout(timeout) });
     } catch (cause) {
       throw Object.assign(new Error('opencode-unavailable'), { code: 'opencode-unavailable', cause });
     }
@@ -463,7 +463,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     const headers = { accept: 'text/event-stream', authorization: await authorization(),
       ...(directory ? { 'x-opencode-directory': directory } : {}) };
     let response;
-    try { response = await fetchImpl(new URL('/api/event', origin), { headers, redirect: 'error' }); }
+    try { response = await fetchImpl(new URL('/api/event', origin), { headers, redirect: 'error', signal }); }
     catch (cause) { throw Object.assign(new Error('opencode-event-unavailable'), { code: 'opencode-event-unavailable', cause }); }
     if (response.status === 401) { await response.body?.cancel(); fail('opencode-auth-required'); }
     if (!response.ok || !response.body || !(response.headers.get('content-type') || '').toLowerCase().includes('text/event-stream')) {
@@ -476,11 +476,11 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     providerList, modelList, createSession, prompt, switchModel, replyPermission, connectMcp, disconnectMcp, events, request: json });
 }
 
-export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch } = {}) {
+export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {
   return createOpenCodeV2Client({
     baseUrl: baseUrl || envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096',
     directory,
     passwordFile: envValue('OC_Codex_OPENCODE_PASSWORD_FILE'),
-    fetchImpl,
+    fetchImpl, signal,
   });
 }

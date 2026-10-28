@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.5. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.6. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -14,7 +14,7 @@ des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche 
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
 
-CAB 2.1.5 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
+CAB 2.1.6 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
 sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
 fixe `opencode` et le mot de passe configuré par `OPENCODE_PASSWORD` ; CAB
 lit son mot de passe depuis `~/.config/cab-approval-bridge/opencode.password`
@@ -25,7 +25,7 @@ Le serveur MCP CAB se déclare dans `mcp.servers.cgpt-validation` avec le type
 
 La version 1.10.7 prend en charge les propriétaires explicitement distincts des modules, du répertoire et des processus broker dans la preuve privée de maintenance. Une demande orpheline du job courant sous PAUSE peut être réconciliée uniquement pour rejet, avec preuve native exacte d'absence d'effet. L'installation de sources et la migration des processus restent vérifiées séparément.
 
-Le patch 2.1.5 vérifie le credential systemd avant toute coupure. Le raccord explicite `--opencode-password-env-file <workspace>/project.env` peut provisionner le fichier privé depuis la seule variable OPENCODE_PASSWORD lorsque le projet utilise OpenCode. Cette variable n’est pas obligatoire dans les autres projets et aucune lecture de project.env n’a lieu sans cette option. Un credential différent n’est jamais écrasé. Le mode mixte `cab-source --layout managed-release` conserve le broker src/ ordinaire. Les diagnostics par service et le résultat du repli sont détaillés dans [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
+Le patch 2.1.6 vérifie le credential systemd avant toute coupure. Le raccord explicite `--opencode-password-env-file <workspace>/project.env` peut provisionner le fichier privé depuis la seule variable OPENCODE_PASSWORD lorsque le projet utilise OpenCode. Cette variable n’est pas obligatoire dans les autres projets et aucune lecture de project.env n’a lieu sans cette option. Un credential différent n’est jamais écrasé. Le mode mixte `cab-source --layout managed-release` conserve le broker src/ ordinaire. Les diagnostics par service et le résultat du repli sont détaillés dans [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
 
 ## Prévol orphelin et maintenance contrôlée — 1.10.7
 
@@ -654,7 +654,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, du plugin CABU et des commandes
-est `2.1.5`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.6`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -723,12 +723,12 @@ La session de pilotage peut imposer providerMaxBytes dans /model-policy/resolve 
 
 Le paquet prépare un patch de catalogue public à transmettre au contrôleur, rapproche l'alias logique Go avec l'identité native vérifiée et accepte les variantes de prévol imbriquées ou historiques cohérentes. Les cas ambigus, déconnectés ou contradictoires restent refusés. La référence [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) précise préparation, transmission et compatibilité ; les sources ne déploient aucun service.
 
-CABU 2.1.5 conserve les RUN sans notification pendant sa coupure technique.
+CABU 2.1.6 conserve les RUN sans notification pendant sa coupure technique.
 La reprise restaure les états persistants et interdit tout rejeu implicite
 des permissions consommées. Les mesures et limites de durée figurent dans
-TECHNICAL.md, section « CABU 2.1.5 : coupure courte et reprise ».
+TECHNICAL.md, section « CABU 2.1.6 : coupure courte et reprise ».
 
-### Identifiants publics CAB 2.1.5
+### Identifiants publics CAB 2.1.6
 
 | Élément | Identifiant |
 | --- | --- |
@@ -755,12 +755,20 @@ hors blocs de code : par exemple `# PA01 — Composition PA`. Il comporte de une
 séparateur explicite (`—`, `–`, `-`, `:`) et d'un intitulé. Sans code reconnu ou
 sans document admissible, la cellule reste vide. Le RUN reprend le code de son
 change corrélé, y compris une archive référencée. Le tri et les actions restent
-identiques. Cette évolution source 2.1.5 ne prouve pas une mise à jour active.
+identiques. Cette évolution source 2.1.6 ne prouve pas une mise à jour active.
 
-### Compatibilité des catalogues PLLM — 2.1.5
+### Compatibilité des catalogues PLLM — 2.1.6
 
 CAB accepte strictement le schéma 2 à six politiques et le schéma 3 à sept politiques, sans réécrire le catalogue. Les priorités, dates, sélection courante, medium et prévol natif restent contrôlés ; mode7 peut être sélectionné puis conservé dans le job. Les jobs existants conservent leur choix. Le raccord utilise le catalogue public du skill actif, vérifié par /model-policy/resolve avant nouveau job. Aucune activation ou réussite de CAB test n’est déduite de la qualification source.
 
-### Pagination et prévol natif V2 — 2.1.5
+### Pagination et prévol natif V2 — 2.1.6
 
 Le client n’envoie order que sur la première page et conserve les curseurs opaques. Le prévol peut corréler un échange natif unique complet lorsque l’utilisateur omet le modèle : la réponse assistant fournit alors le modèle/variante réellement utilisés, avec les dates et gardes habituelles. Aucun champ utilisateur n’est inventé. Les échanges ambigus ou contradictoires restent refusés. La preuve héritée et le choix des jobs existants sont conservés.
+
+### Fermeture avec OpenCode — 2.1.6
+
+Lorsque le serveur `opencode serve` auquel CAB s’est rattaché termine, le contrôleur, le superviseur et le moniteur se ferment également ; le gardien de verrou du contrôleur est libéré. Le broker MCP termine avec son transport OpenCode. Fermer seulement le client terminal, interrompre SSE ou rendre l’API inaccessible laisse CAB disponible tant que le serveur identifié vit encore.
+
+CAB peut démarrer avant OpenCode et attendre sa première connexion vérifiable. Après une fermeture complète, la remise en service est explicite : les RUN, jobs, réservations et gels sont conservés et leur reprise suit la réconciliation habituelle. Aucun gate de réussite ni libération métier n’est inventé. Le moniteur continue à afficher une panne isolée du contrôleur ; sa fermeture dépend de la disparition prouvée du serveur OpenCode.
+
+Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Les preuves et limites sont conservées avec le change OpenSpec de cycle de vie.

@@ -1,10 +1,11 @@
+import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.5";
-if (CONTEXT_VERSION !== version) throw new Error('CAB supervisor component version mismatch');
+const version = "2.1.6";
+if ([CONTEXT_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB supervisor component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspace = envValue('OC_Codex_WORKSPACE');
@@ -13,7 +14,8 @@ const host = envValue('OC_Codex_SUPERVISOR_STATUS_HOST') || '127.0.0.1';
 if (!['127.0.0.1', '::1'].includes(host)) throw new Error('Loopback requis.');
 const port = Number(envValue('OC_Codex_SUPERVISOR_STATUS_PORT') || 8789);
 const controllerUrl = (envValue('OC_Codex_CONTROLLER_URL') || 'http://127.0.0.1:8788').replace(/\/+$/, '').replace(/\/status$/, '');
-const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace });
+const transportAbort = new AbortController();
+const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace, signal: transportAbort.signal });
 const pollInterval = Number(envValue('OC_Codex_SUPERVISOR_POLL_INTERVAL_MS') || 5000);
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 if (!Number.isFinite(pollInterval) || pollInterval < 250) throw new Error('Intervalle de supervision invalide.');
@@ -21,16 +23,20 @@ const stateDirectory = join(workspace, '.opencode', 'state', 'cgpt-approval-brid
 const legacy = createSupervisorContext({ workspace, controllerUrl,
   statePath: envValue('OC_Codex_SUPERVISOR_STATE_PATH') || join(stateDirectory, 'supervisor-state.json') });
 const contexts = new Map();
+let closing = false;
+let reconnectTimer;
+let pollTimer;
 let concurrent = false;
 let reconcileInFlight = false;
 let publicError = null;
 async function reconcileAll() {
-  if (reconcileInFlight) return;
+  if (closing || reconcileInFlight) return;
   reconcileInFlight = true;
   try {
-    const response = await fetch(controllerUrl + '/status', { signal: AbortSignal.timeout(10000) });
+    const response = await fetch(controllerUrl + '/status', { signal: AbortSignal.any([transportAbort.signal, AbortSignal.timeout(10000)]) });
     if (!response.ok) throw new Error('controller-unavailable');
     const status = await response.json();
+    if (closing) return;
     concurrent = status.mode === 'concurrent';
     if (!concurrent) { await legacy.reconcile(); return; }
     const active = new Set(Object.keys(status.runs || {}));
@@ -44,11 +50,13 @@ async function reconcileAll() {
     await Promise.all([...contexts.values()].map((context) => context.reconcile()));
     publicError = null;
   } catch {
+    if (closing) return;
     publicError = 'controller-reconciliation-failed';
     if (!concurrent) await legacy.reconcile();
   } finally { reconcileInFlight = false; }
 }
 async function consumeEvents() {
+  if (closing) return;
   try {
     const response = await openCode.events();
     const decoder = new TextDecoder();
@@ -64,11 +72,13 @@ async function consumeEvents() {
       }
     }
   } catch {
+    if (closing) return;
     await Promise.all((concurrent ? [...contexts.values()] : [legacy]).map((c) => c.disconnected()));
   }
-  setTimeout(() => { void consumeEvents(); }, reconnectMs);
+  if (!closing) reconnectTimer = setTimeout(() => { void consumeEvents(); }, reconnectMs);
 }
-createServer((request, response) => {
+const server = createServer((request, response) => {
+  if (closing) { response.writeHead(503).end(); return; }
   const url = new URL(request.url, 'http://localhost');
   if (request.method !== 'GET' || url.pathname !== '/status') { response.writeHead(404).end(); return; }
   const runId = url.searchParams.get('runId');
@@ -83,5 +93,25 @@ createServer((request, response) => {
 }).listen(port, host, () => {
   void reconcileAll();
   void consumeEvents();
-  setInterval(() => { void reconcileAll(); }, pollInterval);
+  pollTimer = setInterval(() => { void reconcileAll(); }, pollInterval);
 });
+
+async function shutdown() {
+  if (closing) return;
+  closing = true;
+  lifetime.stop(); transportAbort.abort();
+  clearTimeout(reconnectTimer); clearInterval(pollTimer);
+  try {
+    await boundedCleanup(() => Promise.all([closeHttpServer(server), legacy.close(),
+      ...[...contexts.values()].map((context) => context.close())]));
+    process.exit(0);
+  } catch {
+    process.stderr.write('CAB superviseur : arrêt incomplet.\n');
+    process.exit(SHUTDOWN_INCOMPLETE);
+  }
+}
+const lifetime = followOpenCodeLifetime(openCode, { onExit: shutdown,
+  onDiagnostic: (code) => process.stderr.write(code + '\n') });
+lifetime.start();
+process.on('SIGTERM', () => { void shutdown(); });
+process.on('SIGINT', () => { void shutdown(); });
