@@ -210,8 +210,8 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
     const result=await updateComponents(h.c,{serviceCommand:h.serviceCommand});
     h.stopTelemetry();
     assert.equal(result.status,'completed');assert.equal(result.originalRefusal.error,'run-not-quiescent');
-    assert.equal(result.packageVersion,'2.1.0');
-    assert.deepEqual(result.runtimeVersions,{controller:'2.1.0',broker:'1.7.1',supervisor:'1.7.1',web:'1.7.1'});
+    assert.equal(result.packageVersion,'2.1.1');
+    assert.deepEqual(result.runtimeVersions,{controller:'2.1.1',broker:'1.7.1',supervisor:'1.7.1',web:'1.7.1'});
     assert.notEqual(h.processes.controller.pid,oldPid);assert.equal(h.broker.pid,brokerPid);assert.equal(h.broker.exitCode,null);
     const status=await h.request('/status');assert.equal(status.maintenanceBuildDigest,h.c.frozenRecovery.expectedBuildDigest);
     assert.equal(status.notificationReconciliation,'rejection-only-v1');assert.equal(status.frozenRecoveryMaintenance,'frozen-recovery-v1');
@@ -303,7 +303,7 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
           else assert.ok(receipt.externalBroker.disconnectIntentAt);
           assert.ok(['STOPPING','READONLY_RECOVERY_REQUIRED'].includes(receipt.phase));
           assert.ok(!receipt.files.some((file)=>file.group==='broker'));
-          assert.equal(receipt.externalBroker.beforeLoadedVersion,'1.7.1');assert.equal(receipt.externalBroker.artifactVersion,'2.1.0');
+          assert.equal(receipt.externalBroker.beforeLoadedVersion,'1.7.1');assert.equal(receipt.externalBroker.artifactVersion,'2.1.1');
           assert.deepEqual(await inspectBrokerArtifacts(normal.brokerDirectory,normal.brokerProof),readonlyBefore);
           const calls=h.native.events.length;
           if(reuse==='before-intent-crash')assert.equal((await updateComponents(normal,{serviceCommand:h.serviceCommand,rollbackOnly:true})).status,'rolled-back');
@@ -319,7 +319,7 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
         }}),/update-failed-rolled-back/);
         assert.equal(await readlink(h.controllerFile),controllerLink);
         assert.equal(await readlink(join(h.c.home,'.local/share/cab-approval-bridge-monitor/scripts')),monitorLink);
-        assert.equal((await h.request('/status')).version,'2.1.0');
+        assert.equal((await h.request('/status')).version,'2.1.1');
         assert.equal((await maintenanceHttp(h.c.supervisorUrl,'/status')).version,'1.7.1');
         assert.equal((await maintenanceHttp(h.c.monitorUrl,'/api/snapshot')).version,'1.7.1');
         assert.equal((await h.tool('broker_readiness',{})).server_version,'1.7.1');
@@ -329,27 +329,27 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
       }
       const aligned=await updateComponents(normal,{serviceCommand:h.serviceCommand});assert.equal(aligned.status,'completed');
       if(reuse){
-        assert.equal(aligned.brokerArtifactPolicy,'reuse-readonly');assert.equal(aligned.brokerLoadedBefore,'1.7.1');assert.equal(aligned.brokerLoadedAfter,'2.1.0');
+        assert.equal(aligned.brokerArtifactPolicy,'reuse-readonly');assert.equal(aligned.brokerLoadedBefore,'1.7.1');assert.equal(aligned.brokerLoadedAfter,'2.1.1');
         assert.deepEqual(await inspectBrokerArtifacts(normal.brokerDirectory,normal.brokerProof),readonlyBefore);
         assert.equal((await updateComponents(normal,{serviceCommand:h.serviceCommand})).status,'up-to-date');
       }
-      assert.equal((await h.request('/status')).version,'2.1.0');
-      assert.equal((await maintenanceHttp(h.c.supervisorUrl,'/status')).version,'2.1.0');
-      assert.equal((await maintenanceHttp(h.c.monitorUrl,'/api/snapshot')).version,'2.1.0');
-      const ready=await h.tool('broker_readiness',{});assert.equal(ready.server_version,'2.1.0');
+      assert.equal((await h.request('/status')).version,'2.1.1');
+      assert.equal((await maintenanceHttp(h.c.supervisorUrl,'/status')).version,'2.1.1');
+      assert.equal((await maintenanceHttp(h.c.monitorUrl,'/api/snapshot')).version,'2.1.1');
+      const ready=await h.tool('broker_readiness',{});assert.equal(ready.server_version,'2.1.1');
       assert.notEqual(h.getBroker().pid,brokerPid);assert.equal(h.c.frozenRecovery.preservedProcesses.opencode.pid,process.pid);
       assert.equal((await h.request('/runs/a/job')).jobId,'job-a');assert.equal(h.native.replies.length,1);
       assert.deepEqual(await moduleManifest(h.originalEntry),h.originalManifest);
     }
 }
 
-test('processus original 1.7.1 → contrôleur 2.1.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé',
+test('processus original 1.7.1 → contrôleur 2.1.1 → rejectionOnly/refus/poll/retry/once/complete, broker conservé',
   {skip:!originalPlugin,timeout:40000},transitionAndRecovery);
 
 test('release gérée : processus original lié → nouvelle release → once/complete sans toucher à l’ancienne',
   {skip:!originalPlugin,timeout:40000},(t)=>transitionAndRecovery(t,true));
 
-test('release gérée : après complete, maintenance ordinaire jusqu’aux quatre processus homogènes 2.1.0',
+test('release gérée : après complete, maintenance ordinaire jusqu’aux quatre processus homogènes 2.1.1',
   {skip:!originalPlugin,timeout:60000},(t)=>transitionAndRecovery(t,true,true));
 
 test('release gérée : un échec ordinaire restaure les pointeurs et les versions actives précédentes',

@@ -28,15 +28,15 @@ L'outil MUST limiter les écritures aux destinations CAB explicites hors workspa
 - **THEN** la release originale reste identique et les processus broker/Web ainsi que les liens non concernés sont préservés
 
 ### Requirement: Exception explicite pour les sources CAB
-La politique `cab-source` MUST autoriser uniquement les trois modules broker nommés dans `<workspace>/src`, sans managed-release. Le projet MUST être nommé `cab` dans pyproject.toml et son manifeste local cab-approval-bridge MUST être identique au paquet installé. Les contrôles de type, propriétaire et absence de liens MUST rester applicables. Toute autre destination dans le workspace ou les caches MUST rester refusée.
+La politique `cab-source` MUST autoriser uniquement les trois modules broker nommés dans `<workspace>/src`, sans managed-release. Le projet MUST être nommé `cab` dans pyproject.toml et son manifeste local du plugin CAB MUST être identique au paquet installé. Les contrôles de type, propriétaire et absence de liens MUST rester applicables. Toute autre destination dans le workspace ou les caches MUST rester refusée.
 
 #### Scenario: Broker source du dépôt CAB
-- **WHEN** la politique `cab-source` vise exactement src/ dans un dépôt CAB identifié et conforme au manifeste installé
+- **WHEN** la politique `cab-source` vise exactement src/ dans un dépôt CAB identifié et conforme au manifeste CAB installé
 - **THEN** seuls les trois modules broker nommés sont sauvegardés et remplacés transactionnellement ; les autres sources restent intactes
 
 #### Scenario: Exception source non prouvée
-- **WHEN** le projet, le manifeste, le chemin src/ ou les contrôles de liens ne sont pas conformes
-- **THEN** l’outil refuse avant arrêt des services ou création du journal de transaction
+- **WHEN** le projet, le manifeste CAB, le chemin src/ ou les contrôles de liens ne sont pas conformes
+- **THEN** l'outil refuse avant arrêt des services ou création du journal de transaction
 
 ### Requirement: Workspace des services conservé
 Avec `cab-source`, l'option explicite `--service-workspace` MAY désigner le workspace absolu existant des services, distinct de la racine source CAB. Les vérifications HTTP et les appels natifs MCP MUST utiliser ce workspace. Les configurations existantes MUST rester intactes. La récupération MUST conserver le même journal et les mêmes destinations d'artefacts.

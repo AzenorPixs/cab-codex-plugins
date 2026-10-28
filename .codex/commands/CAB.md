@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 2.1.0
+version: 2.1.1
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -41,7 +41,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 2.1.0
+## RUN concurrents CAB 2.1.1
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -353,7 +353,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 2.1.0 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 2.1.1 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -579,7 +579,7 @@ charge. Si `cab_codex_plugins` pointe vers GitHub, mémoriser sa source, retirer
 la marketplace, puis exécuter `codex plugin marketplace add <CAB_ROOT>`. Si
 l'ajout local échoue, restaurer immédiatement la source Git mémorisée et arrêter
 sans toucher aux services. Si l'ajout réussit, exécuter
-`codex plugin add cab-approval-bridge@cab_codex_plugins` et vérifier que le
+`codex plugin add CAB@cab_codex_plugins` et vérifier que le
 manifeste installé correspond au paquet CAB local. Ne jamais éditer le cache du
 plugin à la main. Garder la marketplace locale tant que GitHub est inférieur ;
 revenir au dépôt Git seulement quand sa version atteint ou dépasse le paquet
@@ -615,7 +615,7 @@ et de relecture des étapes 11 à 13.
    autres ressources CAB.
 4. Actualise l'instantané Git par
    `codex plugin marketplace upgrade cab_codex_plugins`, puis vérifie que
-   `cab-approval-bridge@cab_codex_plugins` est disponible.
+   `CAB@cab_codex_plugins` est disponible.
 5. Télécharge et valide le manifeste distant
    `plugins/cab-approval-bridge/.codex-plugin/plugin.json` depuis la même
    branche GitHub. Compare sa version SemVer de base, sans son cachebuster
@@ -626,10 +626,10 @@ et de relecture des étapes 11 à 13.
    la même version de base. Un accès manquant ou une divergence arrête la
    préparation avant l'updater. Ne déduis aucune version GitHub d'un fichier
    local, du cache installé ou du reçu de déploiement.
-6. Si la version distante est égale ou antérieure à celle installée, affiche
+6. Si le plugin CAB est installé et que la version distante est égale ou antérieure à celle installée, affiche
    `CAB_PLUGIN_DÉJÀ_À_JOUR` et ne réinstalle pas le plugin.
-7. Si la version distante est strictement plus récente, exécute une seule fois
-   `codex plugin add cab-approval-bridge@cab_codex_plugins`, puis relit les
+7. Si le plugin CAB est absent ou si la version distante est strictement plus récente, exécute une seule fois
+   `codex plugin add CAB@cab_codex_plugins`, puis relit les
    métadonnées installées. Affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si la
    version installée est celle du manifeste distant ; sinon, affiche
    `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
@@ -639,6 +639,12 @@ et de relecture des étapes 11 à 13.
    dans cette invocation distante. À version égale, vérifie les empreintes
    du jeu installé contre le paquet GitHub actualisé ; une divergence arrête
    la préparation sans remplacement implicite du cache.
+   Applique également ces contrôles au plugin `CABU@cab_codex_plugins`, depuis
+   `plugins/cabu/.codex-plugin/plugin.json` : installe-le s'il manque ou si sa
+   version est antérieure. Vérifie CAB et CABU sur la même base de version
+   avant maintenance. Une ancienne entrée `cab-approval-bridge` se migre vers
+   `CAB` ; sauvegarde son paquet privé, installe et vérifie CAB puis retire
+   l'ancienne entrée par le gestionnaire Codex, sans éditer le cache.
 8. Résout le jeu complet dans le plugin installé, notamment
    `scripts/cgpt-approval-bridge-update.mjs`,
    `scripts/cgpt-approval-bridge-supervisor.mjs`,
@@ -908,7 +914,7 @@ Ces contrôles ne modifient aucune permission ; les règles doivent rester
 stables pendant le mandat. Une modification externe après contrôle n'est
 pas atomique avec l'exécution native et reste hors garantie du contrôleur.
 
-## Environnements de test et rafraîchissement — 2.1.0
+## Environnements de test et rafraîchissement — 2.1.1
 
 Pour les RUN coordonnés, consulter le protocole `test-resources-v1` et la référence concurrent-runs avant tout usage Docker/LXC. Acquérir l'environnement avant préparation et le conserver entre commandes jusqu'aux preuves de fin, nettoyage et restitution. Le moniteur affiche les attentes de test et propose une cadence locale Manuel/1s/3s/7s/30s/1m/5m/10m/30m avec Actualiser ; sa carte Web conserve Disponible pendant 30 minutes après un rafraîchissement réussi. Ces fonctions ne déclenchent aucune mise à jour de service par leur présence dans les sources.
 
@@ -916,7 +922,7 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 2.1.0, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, examiner la politique PLLM suivante. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni sélection implicite d'un autre niveau. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 2.1.1, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, examiner la politique PLLM suivante. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni sélection implicite d'un autre niveau. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
@@ -930,7 +936,7 @@ Le script valide le fichier public régulier et borné ainsi que la publication,
 
 Après démarrage ou rechargement coordonné, appeler /model-policy/resolve avec les exigences du prompt et providerMaxBytes choisi par la session. Exiger une résolution réussie du contrôleur avant prévol et nouvel armement ; la simple réussite du CLI ne prouve pas la transmission au service. pllm-catalog-unconfigured indique un raccord absent dans le processus chargé ; les autres diagnostics de catalogue, fournisseur ou prévol restent distincts. Ne pas contourner par un modèle manuel. Une erreur conserve le job non armé et exige la récupération autorisée.
 
-Pour le raccord 2.1.0, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+Pour le raccord 2.1.1, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
 
 Pour `cab-source`, si les services sont configurés pour un autre projet, fournir
 `--service-workspace <workspace-absolu-observé>` : les contrôles de version et
@@ -938,7 +944,7 @@ les appels MCP ciblent ce workspace réel sans modifier les configurations.
 La récupération conserve le même journal et les mêmes destinations. Le jeu Web
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs.
 
-Contrat courant CABU 2.1.0 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.1 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.

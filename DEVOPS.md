@@ -3,7 +3,7 @@
 Version : 0.7
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-28T09:25:05Z
+Début du relevé (UTC) : 2026-10-28T09:50:40Z
 Environnement d'exécution DIU : PHYSICAL
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -30,10 +30,10 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
   * Chemin : /dev/tpmrm0
   * Version : 2.0
-  * Fabricant : non vérifiable (tpm2_getcap absent)
-  * Identifiant fournisseur : non vérifiable (tpm2_getcap absent)
-  * Révision de spécification : non vérifiable (tpm2_getcap absent)
-  * Registres PCR : non vérifiable (tpm2_getcap absent)
+  * Fabricant : NTC
+  * Identifiant fournisseur : 0x4E544300
+  * Révision de spécification : 1.59
+  * Registres PCR : sha1: [] ; sha256: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] ; sha384: []
 
 
 # OpenSSH & SSHPASS

@@ -12,7 +12,7 @@ import { FROZEN_PROFILE, FROZEN_CAPABILITY, collectFrozenProof, proofHash, modul
 import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.0';
+export const VERSION = '2.1.1';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -177,7 +177,7 @@ export async function updateComponents(input, options = {}) {
     const local = JSON.parse((await regular(join(c.workspace, 'plugins/cab-approval-bridge/.codex-plugin/plugin.json'))).data);
     const installed = JSON.parse((await regular(join(c.pluginRoot, '.codex-plugin/plugin.json'))).data);
     if (!/^\[project\]\s*\nname\s*=\s*["']cab["']\s*$/m.test(project) ||
-        local.name !== 'cab-approval-bridge' || JSON.stringify(local) !== JSON.stringify(installed)) throw error('update-cab-source-invalid');
+        local.name !== 'CAB' || JSON.stringify(local) !== JSON.stringify(installed)) throw error('update-cab-source-invalid');
   }
   const readonlyBroker = input.brokerPolicy === 'reuse-readonly';
   if (readonlyBroker) {
