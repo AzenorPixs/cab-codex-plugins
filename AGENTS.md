@@ -201,7 +201,7 @@ avant de poursuivre ce pilotage.
 ### Statistiques d'archivage
 
 Après chaque archivage OpenSpec autorisé et réussi, produire un rapport par
-archive dans `openspec/changes/archive/<archive>/STATISTIQUES.md`, avec un
+archive dans `openspec/changes/archive/<archive>/STATISTICS.md`, avec un
 mandat d'édition distinct pour ce seul fichier lorsque le protocole CAB
 s'applique. Vérifier les six sections, UTF-8/LF et les totaux ; afficher `N/A`
 motivé pour les mesures absentes. Ne pas déclarer `TERMINÉ` sans preuve du

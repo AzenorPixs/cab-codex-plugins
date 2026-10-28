@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.3';
 const execute = promisify(execFile);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, status = 409) => Object.assign(new Error(code), { status });

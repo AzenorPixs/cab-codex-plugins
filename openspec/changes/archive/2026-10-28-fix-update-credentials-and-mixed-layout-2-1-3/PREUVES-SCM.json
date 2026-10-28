@@ -1,0 +1,104 @@
+{
+  "change": "fix-update-credentials-and-mixed-layout-2-1-3",
+  "dateUtc": "2026-10-28T18:09:27.352046+00:00",
+  "agent": "Codex gpt-6.1-sol, session directe SCM",
+  "targetVersion": "2.1.3",
+  "authorization": "Périmètre explicitement validé : credentials, diagnostics, installation mixte, tests, archivage et statistiques. OC démarré par le développeur pour tests.",
+  "syntax": {
+    "checked": 73,
+    "errors": []
+  },
+  "node": {
+    "exitCode": 0,
+    "files": 24,
+    "summary": [
+      "ℹ tests 478",
+      "ℹ pass 453",
+      "ℹ fail 0",
+      "ℹ skipped 25",
+      "ℹ duration_ms 23636.700431"
+    ]
+  },
+  "python": {
+    "exitCode": 0,
+    "summary": [
+      ".........................................................................",
+      "----------------------------------------------------------------------",
+      "Ran 73 tests in 4.356s",
+      "",
+      "OK",
+      "SYNTHETIC_BENCHMARK {\"approvals\": 694, \"initial_events\": 16774, \"initial_journal_bytes\": 7521590, \"recovery_journal_reads\": 5, \"recovery_seconds\": 0.634, \"isolated_mcp_process_seconds\": 1.722}",
+      "SYNTHETIC_RECONCILIATION_BENCHMARK {\"approvals\": 694, \"events\": 16774, \"journal_reads\": 1, \"seconds\": 0.102}",
+      "SYNTHETIC_LIST_BENCHMARK {\"approvals\": 694, \"events\": 16774, \"journal_bytes\": 7706222, \"journal_reads\": 1, \"seconds\": 0.099}"
+    ]
+  },
+  "liveOpenCode": {
+    "status": "passed",
+    "version": "2.2.0",
+    "pid": 284326,
+    "location": "/home/devops/datas/cab",
+    "sameProcess": true,
+    "routes": [
+      "GET /api/info",
+      "GET /api/location"
+    ],
+    "credential": "temporaire privé, supprimé ; aucune valeur ou empreinte conservée"
+  },
+  "limits": [
+    "25 tests historiques non exécutés : CAB_TEST_ORIGINAL_PLUGIN 1.7.1 épinglé non fourni",
+    "Aucune installation réelle de la version 2.1.3 ni redémarrage des services existants pendant SCM",
+    "Journaux utilisateur systemd inaccessibles au diagnostic ; 243/CREDENTIALS et absence du fichier privé observés directement"
+  ],
+  "documentation": {
+    "AGENTS.md": "inchangé : règles de sécurité et rapport STATISTICS.md suivis",
+    "PROJECT.md": "mis à jour : version et prérequis de mise à jour 2.1.3",
+    "TECHNICAL.md": "mis à jour : prévol credential, mode mixte et diagnostics",
+    "BUILD.md": "mis à jour : raccord privé explicite et distribution 2.1.3",
+    "DEVOPS.md": "inchangé : généré DIU, déclare OPENCODE_PASSWORD dans project.env et binaires de validation",
+    "README.md": "mis à jour : version, option explicite, absence d’obligation pour projets sans OC",
+    "CHANGELOG.md": "mis à jour : entrée 2.1.3, historique 2.1.2 conservé",
+    "ORCHESTRATED_CODING.md": "version commune alignée ; contrat de coordination conservé, référence embarquée réalignée sur son contenu",
+    "OpenSpec": "4 spécifications synchronisées puis change archivé avec succès"
+  },
+  "integrity": {
+    "utf8LfCheckedFiles": 161,
+    "errors": [],
+    "brokerCopiesIdentical": true
+  },
+  "openspec": {
+    "targetStrict": "valid",
+    "globalStandard": {
+      "passed": 16,
+      "failed": 0
+    },
+    "globalStrict": {
+      "passed": 16,
+      "failed": 0
+    },
+    "postArchiveStandard": {
+      "passed": 15,
+      "failed": 0
+    },
+    "postArchiveStrict": {
+      "passed": 15,
+      "failed": 0
+    },
+    "postArchiveCorrection": "Exigence cab-source condensée après un warning de longueur à la synchronisation ; sens et scénarios conservés, sans nouvel archivage."
+  },
+  "archive": {
+    "status": "success",
+    "path": "openspec/changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3",
+    "specsSynchronized": 4,
+    "requirementsAdded": 2,
+    "requirementsModified": 4
+  },
+  "gitScope": {
+    "mode": "état complet du projet prescrit par SCM",
+    "pathsBeforeStaging": 232,
+    "modified": 81,
+    "deleted": 55,
+    "untracked": 96,
+    "includesPreexistingChanges": true,
+    "attribution": "ne pas attribuer tous les changements au patch"
+  }
+}

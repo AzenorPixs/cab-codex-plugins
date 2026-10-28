@@ -1,13 +1,13 @@
 {
-  "name": "cabu",
-  "version": "2.0.0+codex.20261028011316",
+  "name": "CABU",
+  "version": "2.1.3+codex.20261028180253",
   "description": "Skill CABU pour déclencher la mise à jour canonique de Codex Approval Bridge.",
   "author": {
     "name": "CAB"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "CABU — mise à jour CAB",
+    "displayName": "CABU",
     "shortDescription": "Déclenche la mise à jour canonique CAB.",
     "longDescription": "Fournit le skill CABU pour lancer l'update CAB par la commande canonique, sans dupliquer sa procédure.",
     "developerName": "CAB",

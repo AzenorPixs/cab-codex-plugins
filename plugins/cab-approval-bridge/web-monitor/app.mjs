@@ -174,7 +174,7 @@ function renderWork() {
     view === 'runs' ? 'Aucun RUN observé. Les exécutions apparaîtront dès leur disponibilité.' : 'Aucun change actif disponible.')); return; }
   const table = node('table');
   const header = node('tr');
-  for (const label of view === 'runs' ? ['RUN / CHANGE', 'ETAT', 'ÉTAPE', 'TÂCHES COCHÉES', 'ACTIONS'] : ['CHANGE', 'EMPLACEMENT', 'TÂCHES COCHÉES', 'ACTIONS']) header.append(node('th', '', label));
+  for (const label of view === 'runs' ? ['RUN / CHANGE', 'codes de lot', 'ETAT', 'ÉTAPE', 'TÂCHES COCHÉES', 'ACTIONS'] : ['CHANGE', 'codes de lot', 'EMPLACEMENT', 'TÂCHES COCHÉES', 'ACTIONS']) header.append(node('th', '', label));
   table.append(node('thead')); table.firstChild.append(header);
   const body = node('tbody');
   for (const value of values) {
@@ -191,6 +191,7 @@ function renderWork() {
     button.addEventListener('click', () => { if (isRun) selectedRun = value.runId; else selectedChange = value.changeId;
       tasksOpen = false; cycleOpen = false; historyOpen = false; render(); });
     identity.append(button, node('div', 'subtext', isRun ? value.changeId || 'Change non observé' : value.title)); row.append(identity);
+    row.append(node('td', 'lot-code', (isRun ? changeFor(value.changeId) : value)?.lotCode || ''));
     const state = node('td'); state.append(isRun ? badge(...runState(value)) : badge(value.location === 'archived' ? 'Archivé' : value.location === 'active' ? 'Actif' : 'Indisponible', 'neutral')); row.append(state);
     if (isRun) {
       const step = node('td', 'step-cell'); step.append(node('div', 'step-name', stepLabel(value.step)));

@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { processIdentity, proofHash } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.3';
 export const BROKER_ARTIFACT_FILES = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value);
@@ -26,7 +26,7 @@ export function validateBrokerProof(proof, directory) {
       !Number.isSafeInteger(proof.expectedGid) || proof.expectedGid < 0 ||
       !object(proof.manifest) || Object.keys(proof.manifest).sort().join(',') !== [...BROKER_ARTIFACT_FILES].sort().join(',') ||
       Object.values(proof.manifest).some((value) => !/^[a-f0-9]{64}$/.test(value)) ||
-      !['1.7.1', '1.8.0', '1.9.0', '1.10.0', '1.10.1', '1.10.2', '1.10.3', '1.10.4', '1.10.5', '1.10.6', '1.10.7', '1.10.8', '1.10.9', '1.10.10', VERSION].includes(proof.loadedVersion) ||
+      !['1.7.1', '1.8.0', '1.9.0', '1.10.0', '1.10.1', '1.10.2', '1.10.3', '1.10.4', '1.10.5', '1.10.6', '1.10.7', '1.10.8', '1.10.9', '1.10.10', '2.1.0', '2.1.1', '2.1.2', VERSION].includes(proof.loadedVersion) ||
       typeof proof.instanceId !== 'string' || !/^inst-[A-Za-z0-9-]{1,100}$/.test(proof.instanceId) ||
       !identity(proof.opencodeProcess) || !identity(proof.brokerProcess) ||
       proof.brokerProcess.uid !== proof.expectedUid || proof.opencodeProcess.uid !== proof.expectedUid ||

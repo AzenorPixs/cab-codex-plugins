@@ -1,13 +1,13 @@
 {
-  "name": "cab-approval-bridge",
-  "version": "2.0.0+codex.20261028011316",
+  "name": "CAB",
+  "version": "2.1.3+codex.20261028180253",
   "description": "Pilote et vérifie le pont de validation OpenCode–Codex.",
   "author": {
     "name": "CAB"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Pilotage OC–Codex",
+    "displayName": "CAB",
     "shortDescription": "Configure et vérifie le pont OpenCode–Codex.",
     "longDescription": "Ajoute les skills de pilotage CAB et de statistiques de session, ainsi que les scripts locaux de supervision. Exige un rapport après chaque archivage OpenSpec réussi.",
     "developerName": "CAB",

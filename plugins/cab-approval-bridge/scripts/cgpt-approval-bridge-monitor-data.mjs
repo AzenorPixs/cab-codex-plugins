@@ -7,7 +7,7 @@ import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-mo
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.3';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -89,6 +89,25 @@ export function parseTasks(markdown) {
     completed: tasks.length ? tasks.filter((task) => task.done).length : null, total: tasks.length || null };
 }
 
+export function parseChangeTitle(markdown) {
+  let fence = null;
+  for (const line of markdown.split(/\r?\n/)) {
+    const marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+    if (marker) {
+      if (!fence) fence = { character: marker[1][0], length: marker[1].length };
+      else if (marker[1][0] === fence.character && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
+      continue;
+    }
+    if (fence) continue;
+    const heading = line.match(/^ {0,3}#\s+(.+)$/);
+    if (!heading) continue;
+    const title = heading[1].trim().replace(/\s+#+\s*$/, '');
+    const lotCode = title.match(/^([A-Z]{1,10}[0-9]{2,4})(?:\s+[—–:-]\s+.+)?$/)?.[1] || null;
+    return { title: title.slice(0, 160), lotCode };
+  }
+  return { title: null, lotCode: null };
+}
+
 async function regularDirectory(path) {
   const value = await lstat(path);
   if (!value.isDirectory() || value.isSymbolicLink()) throw new Error('unsafe-directory');
@@ -105,7 +124,7 @@ async function document(directory, name) {
 }
 
 export async function readChanges(workspace, referenced = []) {
-  const unavailable = (changeId, reason) => ({ changeId, title: changeId, location: 'unknown',
+  const unavailable = (changeId, reason) => ({ changeId, title: changeId, lotCode: null, location: 'unknown',
     progress: { available: false, reason, completed: null, total: null, tasks: [] } });
   try {
     const root = await realpath(workspace);
@@ -134,12 +153,16 @@ export async function readChanges(workspace, referenced = []) {
       try {
         await regularDirectory(entry.directory);
         let title = entry.changeId;
-        try { title = (await document(entry.directory, 'proposal.md')).match(/^#\s+(.+)$/m)?.[1]?.slice(0, 160) || title; }
+        let lotCode = null;
+        try {
+          const parsed = parseChangeTitle(await document(entry.directory, 'proposal.md'));
+          title = parsed.title || title; lotCode = parsed.lotCode;
+        }
         catch { /* The task document remains useful without a proposal title. */ }
         let progress;
         try { progress = parseTasks(await document(entry.directory, 'tasks.md')); }
         catch { progress = unavailable(entry.changeId, 'tasks-unavailable').progress; }
-        result.push({ changeId: entry.changeId, title, location: entry.location, progress });
+        result.push({ changeId: entry.changeId, title, lotCode, location: entry.location, progress });
       } catch { result.push(unavailable(entry.changeId, 'unsafe-change')); }
     }
     for (const value of missing) if (!result.some((entry) => entry.changeId === value)) result.push(unavailable(value, 'change-unavailable'));

@@ -13,19 +13,48 @@ Le plugin MUST distribuer le broker Python complet synchronisé avec src/, les s
 - **THEN** la mise à jour échoue avant arrêt ou remplacement
 
 ### Requirement: Destinations fermées et privées
-L'outil MUST réserver les écritures aux destinations CAB explicites hors workspace et paquet, avec type et propriétaire vérifiés. Les liens non reconnus MUST être refusés. managed-release autorisé MAY lire les liens relatifs internes, installer une release immuable et basculer atomiquement l'entrée du contrôleur arrêté, sans écrire à travers un lien ni modifier l'ancienne release. reuse-readonly MUST exclure les trois artefacts broker de toute destination.
+L'outil MUST limiter les écritures aux destinations CAB explicites hors workspace, paquet et caches, sauf l'exception `cab-source` définie ci-dessous. Les types, propriétaires et liens MUST être vérifiés. managed-release MAY basculer les liens relatifs reconnus vers une release immuable sans modifier l'ancienne. reuse-readonly MUST exclure les trois artefacts broker de toute destination.
 
 #### Scenario: Lien non géré
 - **WHEN** l'entrée est absolue, sort de la racine, traverse un lien interne ou diverge de l'autorisation
 - **THEN** aucun arrêt, remplacement ou changement de lien n'est effectué
 
 #### Scenario: Destination dans le projet
-- **WHEN** une destination désigne le workspace piloté
+- **WHEN** une destination désigne le workspace piloté sans satisfaire l’exception explicite `cab-source`
 - **THEN** l'outil refuse sans aucune écriture dans ce workspace
 
 #### Scenario: Release gérée conservée
 - **WHEN** le contrôleur est chargé depuis la nouvelle release sous autorité d'amorçage
 - **THEN** la release originale reste identique et les processus broker/Web ainsi que les liens non concernés sont préservés
+
+### Requirement: Exception explicite pour les sources CAB
+La politique cab-source MUST limiter le broker aux trois modules ordinaires de <workspace>/src. managed-release MAY gérer les scripts des services et le Web. Le projet MUST être nommé cab dans pyproject.toml et son manifeste CAB MUST correspondre au paquet installé. Les contrôles de type, propriétaire et absence de liens broker MUST rester applicables. Toute autre destination dans le workspace ou les caches MUST être refusée.
+
+#### Scenario: Broker source du dépôt CAB
+- **WHEN** la politique `cab-source` vise exactement src/ dans un dépôt CAB identifié et conforme au manifeste CAB installé
+- **THEN** seuls les trois modules broker nommés sont sauvegardés et remplacés transactionnellement ; les autres sources restent intactes
+
+#### Scenario: Exception source non prouvée
+- **WHEN** le projet, le manifeste CAB, le chemin src/ ou les contrôles de liens ne sont pas conformes
+- **THEN** l'outil refuse avant arrêt des services ou création du journal de transaction
+
+#### Scenario: Installation mixte prouvée
+- **WHEN** cab-source et managed-release sont fournis ensemble avec trois modules broker source ordinaires
+- **THEN** les services et le Web basculent par liens gérés, les seuls trois modules broker sont remplacés en fichiers ordinaires et le repli restaure chaque type original
+
+### Requirement: Workspace des services conservé
+Avec `cab-source`, l'option explicite `--service-workspace` MAY désigner le workspace absolu existant des services, distinct de la racine source CAB. Les vérifications HTTP et les appels natifs MCP MUST utiliser ce workspace. Les configurations existantes MUST rester intactes. La récupération MUST conserver le même journal et les mêmes destinations d'artefacts.
+
+#### Scenario: Services attachés à un autre projet
+- **WHEN** le paquet est préparé depuis CAB et les services existants déclarent un autre workspace explicitement fourni
+- **THEN** le contrôle des versions exige ce workspace réel, sans réécriture des configurations
+
+### Requirement: Fermeture indépendante du moniteur
+Le jeu indépendant du moniteur MUST inclure le client OpenCode V2 importé par monitor-data, avec la même version que les autres modules.
+
+#### Scenario: Moniteur déployé séparément
+- **WHEN** l'updater installe le jeu indépendant Web
+- **THEN** les imports du moniteur sont tous présents et le client V2 est sauvegardé et remplacé transactionnellement
 
 ### Requirement: Mise à jour forcée des services CAB
 Le profil ordinaire MUST valider et sauvegarder le paquet, arrêter controller,
@@ -74,15 +103,19 @@ ses contrôles spécifiques.
   rapportée et la version chargée est `INDISPONIBLE`.
 
 ### Requirement: Rapport des versions après redémarrage
-Le rapport post-redémarrage MUST séparer source publiée, plugin, fichiers et processus controller/supervisor/monitor. Il MUST afficher le broker fichier; si OpenCode V2 est absent, non authentifié, d'une version majeure différente de 2 ou si sa réponse V2 est invalide, son runtime MUST être `INDISPONIBLE`, sans bloquer le compte rendu explicite des autres briques. Une version non observée MUST NOT être déduite des fichiers et aucun repli vers OpenCode 1.x MUST être tenté.
+Le rapport MUST séparer paquet, fichiers et versions réellement servies. OpenCode actif MUST imposer une preuve fraîche de la version cible du broker après reconnexion ; un broker non vérifiable MUST interdire le succès. Seule l'absence prouvée d'OpenCode MAY autoriser le broker runtime `INDISPONIBLE`. Aucun repli V1 MUST être tenté.
 
 #### Scenario: Broker de mauvaise version après reconnexion
-- **WHEN** la readiness indique une ancienne version du broker
-- **THEN** le rapport conserve la version active comme non vérifiée et confirme séparément que les fichiers broker ciblés ont été installés
+- **WHEN** OpenCode est actif et le broker annonce une ancienne version
+- **THEN** l'update échoue et conserve le journal de récupération ; le rapport ne déduit jamais la version chargée des fichiers
 
 #### Scenario: Redémarrage natif du broker OpenCode
 - **WHEN** OpenCode est accessible et le broker CAB est connecté avant l'update
-- **THEN** CAB tente `disconnect`, remplace les fichiers, puis tente `connect` et rapporte la readiness obtenue sans tuer OpenCode
+- **THEN** CAB déconnecte, remplace les fichiers, reconnecte puis vérifie une readiness postérieure portant la version cible sans tuer OpenCode
+
+#### Scenario: Broker initialement en erreur
+- **WHEN** l'API V2 est accessible mais le serveur MCP existant est failed ou pending
+- **THEN** CABU le déconnecte puis le reconnecte après remplacement et exige la même preuve fraîche que pour un broker initialement connecté
 
 ### Requirement: Journal et retour arrière récupérables
 Un verrou exclusif MUST protéger un journal privé atomique et les sauvegardes
@@ -292,3 +325,46 @@ La preuve reuse-readonly MUST accepter les champs optionnels artifactOwnerUid et
 #### Scenario: Propriétaire tiers ou dérive
 - **WHEN** un propriétaire n'est ni l'acteur ni expectedUid, ou une identité/empreinte/propriété change
 - **THEN** la maintenance refuse ou conserve son gel selon la frontière franchie, sans élargissement de permission
+
+### Requirement: Coupure rapide et restauration sans notification
+CABU MUST préparer, vérifier et sauvegarder les artefacts avant la coupure. Il MUST arrêter et redémarrer les trois services sur les versions cibles sans avertir ni modifier les RUN. Les états persistants et décisions consommées MUST être conservés. Les nouvelles opérations dépendantes du transport MUST rester bloquées pendant la coupure. Une issue inconnue MUST NOT être rejouée implicitement.
+
+#### Scenario: Coupure pendant un RUN actif
+- **WHEN** CABU est déclenché pendant une session
+- **THEN** les briques disparaissent sans notification, puis restaurent leurs états durables sans nouvelle permission implicite
+
+### Requirement: Broker actif rechargé et versions prouvées
+Si OpenCode est actif, CABU MUST recharger le broker par les routes natives et vérifier sa version cible et une readiness postérieure à la reconnexion. Un OpenCode absent MAY laisser uniquement le runtime broker indisponible. Les trois services MUST toujours être actifs et servir la version cible pour conclure au succès.
+
+#### Scenario: OpenCode lancé
+- **WHEN** le serveur OpenCode est actif
+- **THEN** le broker est reconnecté et sa version chargée est prouvée ; une erreur de reconnexion interdit le succès global
+
+### Requirement: Durées mesurées
+CABU MUST rapporter préparation, indisponibilité et durée totale. Le banc contrôlé SHOULD atteindre une indisponibilité inférieure à cinq secondes. Les validations en cache MUST être liées au contenu exact et recontrôlées avant coupure.
+
+#### Scenario: Paquet inchangé déjà vérifié
+- **WHEN** les empreintes et le runtime de validation sont identiques
+- **THEN** les validations syntaxiques en cache sont réutilisées sans supprimer les contrôles d'intégrité ni le redémarrage
+
+### Requirement: Credential contrôlé avant coupure
+L’updater MUST vérifier le credential privé avant toute coupure. L’option --opencode-password-env-file MAY le provisionner depuis la seule affectation littérale OPENCODE_PASSWORD du project.env source ou des services. Les sources ambiguës MUST être refusées sans arrêt. Le credential MUST être régulier, privé et détenu par l’utilisateur. Un credential existant différent MUST rester intact. Les valeurs secrètes MUST NOT figurer dans les reçus, empreintes, arguments, environnement ou sorties.
+
+#### Scenario: Credential absent sans source explicite
+- **WHEN** le credential est absent et aucune source explicite n’est fournie
+- **THEN** la préparation échoue avec une cause dédiée avant toute coupure
+
+#### Scenario: Source explicite valide
+- **WHEN** project.env contient une unique affectation littérale valide et le credential cible est absent ; les autres variables sont ignorées sans interprétation shell
+- **THEN** seul le processus local provisionne le credential en 0600 puis poursuit sans exposer sa valeur
+
+#### Scenario: Source ambiguë ou conflit
+- **WHEN** la source contient une clé dupliquée, une valeur vide, des échappements/interpolations, un chemin non autorisé ou une valeur différente d’un credential existant
+- **THEN** l’updater refuse sans remplacement du credential existant ni arrêt de service
+
+### Requirement: Cause systemd conservée par service
+Un échec de démarrage ou de vérification MUST conserver dans le reçu une cause filtrée par composant avant tout repli, ainsi que le résultat de ce repli. Le bilan CLI MUST rapporter ces causes même après restauration réussie. Les seules données systemd admises MUST être le composant, ActiveState, SubState, Result et ExecMainStatus ; aucune sortie brute ou secret MUST être exposé.
+
+#### Scenario: Échec de credential au démarrage
+- **WHEN** une unité retourne 243/CREDENTIALS après remplacement
+- **THEN** le rapport nomme cette unité, son statut 243 et le résultat du repli sans assimiler systemctl start réussi à une application opérationnelle

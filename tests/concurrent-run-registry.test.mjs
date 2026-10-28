@@ -13,7 +13,7 @@ async function setup(t) {
   const registry = new RunRegistry(directory, state);
   await registry.acquireAuthority();
   t.after(async () => {
-    if (registry.lock?.exitCode === null) {
+    if (registry.lock?.exitCode === null && registry.lock?.signalCode === null) {
       const exited = new Promise((resolve) => registry.lock.once("exit", resolve));
       registry.close();
       await exited;
@@ -36,7 +36,9 @@ async function notificationRegistry(t) {
   const state = join(directory, 'state');
   const registry = new ResourceRunRegistry(directory, state); await registry.acquireAuthority();
   t.after(async () => {
-    const ended = new Promise((resolve) => registry.lock.once('exit', resolve)); registry.close(); await ended;
+    if (registry.lock.exitCode === null && registry.lock.signalCode === null) {
+      const ended = new Promise((resolve) => registry.lock.once('exit', resolve)); registry.close(); await ended;
+    }
     rmSync(directory, { recursive: true, force: true });
   });
   const a = registry.reserve({ runId: 'a', ownerId: 'codex-a', sessionId: 'ses_a', directory,
@@ -443,4 +445,17 @@ test('file ou phase documentaire corrompue échoue fermée à la restauration', 
   const data = registry.snapshot(); data.integrationQueue.push({ ...data.integrationQueue[0] });
   writeFileSync(registry.path, JSON.stringify(data));
   assert.throws(() => new RunRegistry(directory, state), /registry-restoration-invalid/);
+});
+
+test('perte du helper : refus immédiat, notification unique et registre durable conservé', async (t) => {
+  const { registry, directory, state } = await notificationRegistry(t);
+  const before = registry.snapshot();
+  const reasons = []; registry.onUnavailable = reason => reasons.push(reason);
+  const exited = new Promise(resolve => registry.lock.once('exit', resolve));
+  registry.lock.kill('SIGTERM'); await exited;
+  assert.throws(() => registry.assertHealthy(), /registry-unavailable/);
+  assert.deepEqual(reasons, ['registry-authority-lost']);
+  registry.unavailable('again'); assert.equal(reasons.length, 1);
+  const restored = new ResourceRunRegistry(directory, state);
+  assert.deepEqual(restored.snapshot(), before);
 });
