@@ -324,11 +324,18 @@ ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
 
-La voie locale CABU réutilise les cibles non secrètes du reçu
-last-deployment.json privé, produit après succès, et le paquet installé
-correspondant aux sources locales qualifiées. Elle ne contacte pas GitHub et
-ne rafraîchit pas une marketplace distante sur le chemin critique. Les
-contrôles de chemins, versions et empreintes restent obligatoires.
+GitHub `AzenorPixs/cab-codex-plugins`, branche `main`, fournit par défaut les
+versions cibles des plugins CAB/CABU, du broker, du contrôleur, du superviseur,
+du Web et des commandes. Appliquer la procédure distante de `CAB.md`, même
+en présence d'une marketplace locale. Vérifier le jeu publié et sa cohérence
+avant la coupure ; une source distante inaccessible ou divergente interdit
+un repli local implicite. Préserver une version installée plus récente sans
+déployer ses briques au titre d'une mise à jour distante.
+
+Le reçu last-deployment.json privé, produit après succès, fournit seulement
+les cibles non secrètes de déploiement ; il ne choisit pas la source des
+versions. Une voie locale exige une demande explicite pour cette invocation.
+Les contrôles de chemins, versions et empreintes restent obligatoires.
 
 Le broker MCP unique appartient à la location serveur OpenCode, découverte via
 GET /api/location sans en-tête de projet. Les requêtes MCP utilisent cette

@@ -45,6 +45,12 @@ frère `CAB.md` de même version et lui transmet exactement `update` ; ne dupliq
 pas la procédure dans CABU. Cette référence décrit l'updater
 `scripts/cgpt-approval-bridge-update.mjs` distribué par le plugin.
 
+La procédure canonique prend GitHub `AzenorPixs/cab-codex-plugins`, branche
+`main`, comme référence de version des plugins CAB/CABU, des quatre briques et
+des commandes. Elle vérifie le jeu distant avant maintenance, même si la
+marketplace est locale. Un accès distant impossible ou un jeu incohérent
+arrête la préparation ; une installation locale exige une demande explicite.
+
 Après validation et sauvegarde du jeu, l'updater ne consulte aucun état de RUN,
 permission, coordination globale ou service systemd comme précondition. Il
 arrête systématiquement les unités controller, supervisor et monitor, remplace

@@ -546,27 +546,31 @@ redémarrer et servir leur nouvelle version. La procédure détaillée et les
 mesures preparationMs/unavailableMs/totalMs figurent dans
 `references/component-update.md` du plugin installé.
 
-### Voie rapide locale CABU
+### GitHub comme référence de version par défaut
 
-Lorsque cab_codex_plugins est déjà local, utiliser directement le paquet local
-qualifié et le plugin installé correspondant, sans appel GitHub ni upgrade de
-marketplace sur le chemin critique. Installer par `codex plugin add` uniquement
-si le manifeste local et le manifeste installé divergent. Résoudre les cibles
-non secrètes depuis `~/.local/state/cab-approval-bridge-update/last-deployment.json`
-si présent, vérifier leurs chemins, leurs URLs loopback et le workspace observé,
-puis lancer une seule fois l'updater installé. Le manifeste local et les
-contrôles de l'updater restent obligatoires ; ne pas éditer son cache.
-La mise à jour des trois commandes utilise les sources locales du même paquet.
-Les étapes GitHub suivantes restent applicables à une marketplace distante ou
-à une actualisation distante explicitement demandée, hors de cette voie locale.
+Pour `/CAB update` et `$CABU`, appliquer les étapes distantes 1 à 14 depuis
+`AzenorPixs/cab-codex-plugins`, branche `main`, même si `cab_codex_plugins`
+est une marketplace locale. GitHub fournit les versions cibles des plugins
+CAB/CABU, du broker, du contrôleur, du superviseur, du Web et des trois commandes.
+La présence d'un paquet local ou de fichiers déjà installés n'autorise jamais
+à sauter la vérification distante ni l'actualisation de la marketplace Git.
+Une source GitHub indisponible ou un jeu distant incohérent arrête la
+préparation avant toute coupure, sans repli local implicite.
+
+Résoudre les cibles non secrètes depuis
+`~/.local/state/cab-approval-bridge-update/last-deployment.json` si présent,
+vérifier leurs chemins, leurs URLs loopback et le workspace observé. Ce reçu
+décrit les destinations, jamais la provenance ni la version cible du paquet.
 
 ### Source locale CAB plus récente que GitHub
 
-Avant toute actualisation de marketplace, comparer le manifeste GitHub `main`
+Uniquement si une installation locale est explicitement demandée pour cette
+invocation, appliquer cette exception. Avant toute actualisation de marketplace,
+comparer le manifeste GitHub `main`
 au manifeste du paquet local `CAB_ROOT/plugins/cab-approval-bridge`, où
 `CAB_ROOT` est la racine CAB résolue depuis `DEVOPS.md`. Si GitHub est au moins
 à la version locale, appliquer les étapes distantes ci-dessous. Si GitHub est
-antérieur, préserver cette provenance locale : ne pas migrer la marketplace
+antérieur, préserver cette provenance locale explicitement demandée : ne pas migrer la marketplace
 vers une version plus ancienne et ne pas lancer `codex plugin marketplace
 upgrade`.
 
@@ -588,7 +592,8 @@ comparaison, sauvegarde, remplacement atomique et relecture définis aux étapes
 10 à 14. Le rapport conserve les provenances locale et GitHub séparées. Le
 commit ou la publication du dépôt ne découlent pas de cette installation locale.
 
-Lorsque le manifeste du paquet CAB local est plus récent que GitHub, applique
+Uniquement dans cette installation locale explicitement demandée, lorsque
+le manifeste du paquet CAB local est plus récent que GitHub, applique
 la branche locale ci-dessus, saute les étapes distantes 1 à 7, puis résous le
 plugin local installé à l'étape 8. Pour ce cas, les étapes 9 et 10 sont
 remplacées par la préparation des trois fichiers depuis
@@ -615,6 +620,12 @@ et de relecture des étapes 11 à 13.
    `plugins/cab-approval-bridge/.codex-plugin/plugin.json` depuis la même
    branche GitHub. Compare sa version SemVer de base, sans son cachebuster
    `+codex`, à celle renvoyée par `codex plugin list --marketplace cab_codex_plugins --available --json`.
+   Vérifie aussi le manifeste `plugins/cabu/.codex-plugin/plugin.json` et
+   les versions distribuées du contrôleur, du superviseur, du Web, du broker
+   et des trois commandes sur cette même révision GitHub. Le jeu doit partager
+   la même version de base. Un accès manquant ou une divergence arrête la
+   préparation avant l'updater. Ne déduis aucune version GitHub d'un fichier
+   local, du cache installé ou du reçu de déploiement.
 6. Si la version distante est égale ou antérieure à celle installée, affiche
    `CAB_PLUGIN_DÉJÀ_À_JOUR` et ne réinstalle pas le plugin.
 7. Si la version distante est strictement plus récente, exécute une seule fois
@@ -622,6 +633,12 @@ et de relecture des étapes 11 à 13.
    métadonnées installées. Affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si la
    version installée est celle du manifeste distant ; sinon, affiche
    `CAB_PLUGIN_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée.
+   Applique les mêmes contrôles au plugin CABU avec son identifiant publié
+   dans la marketplace distante. Si un plugin installé est plus récent que
+   GitHub, conserve-le et signale l'écart sans déployer ses briques locales
+   dans cette invocation distante. À version égale, vérifie les empreintes
+   du jeu installé contre le paquet GitHub actualisé ; une divergence arrête
+   la préparation sans remplacement implicite du cache.
 8. Résout le jeu complet dans le plugin installé, notamment
    `scripts/cgpt-approval-bridge-update.mjs`,
    `scripts/cgpt-approval-bridge-supervisor.mjs`,
