@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.0. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.1. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -14,7 +14,7 @@ des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche 
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
 
-CAB 2.1.0 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
+CAB 2.1.1 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
 sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
 fixe `opencode` et le mot de passe configuré par `OPENCODE_PASSWORD` ; CAB
 lit son mot de passe depuis `~/.config/cab-approval-bridge/opencode.password`
@@ -453,7 +453,7 @@ ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
 installées mais inactives jusqu'au prochain
 `/CAB start`.
 
-`/CAB update` vérifie le plugin installé, le skill `approval-bridge`, sa
+`/CAB update` vérifie le plugin installé, le skill `CAB`, sa
 référence de maintenance et les commandes `CAB.md`, `CABU.md` et `cab.md`.
 CABU délègue à la procédure canonique et attend son rapport complet. Après
 staging et sauvegardes, l'update arrête systématiquement les trois unités
@@ -652,7 +652,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, du plugin CABU et des commandes
-est `2.1.0`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.1`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -721,7 +721,25 @@ La session de pilotage peut imposer providerMaxBytes dans /model-policy/resolve 
 
 Le paquet prépare un patch de catalogue public à transmettre au contrôleur, rapproche l'alias logique Go avec l'identité native vérifiée et accepte les variantes de prévol imbriquées ou historiques cohérentes. Les cas ambigus, déconnectés ou contradictoires restent refusés. La référence [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) précise préparation, transmission et compatibilité ; les sources ne déploient aucun service.
 
-CABU 2.1.0 conserve les RUN sans notification pendant sa coupure technique.
+CABU 2.1.1 conserve les RUN sans notification pendant sa coupure technique.
 La reprise restaure les états persistants et interdit tout rejeu implicite
 des permissions consommées. Les mesures et limites de durée figurent dans
-TECHNICAL.md, section « CABU 2.1.0 : coupure courte et reprise ».
+TECHNICAL.md, section « CABU 2.1.1 : coupure courte et reprise ».
+
+### Identifiants publics CAB 2.1.1
+
+| Élément | Identifiant |
+| --- | --- |
+| Plugin principal | `CAB` |
+| Skill principal | `$CAB` |
+| Commande principale | `/CAB` |
+| Plugin de mise à jour | `CABU` |
+| Skill de mise à jour | `$CABU` |
+| Commande de mise à jour | `/CABU` |
+| Marketplace affichée | `CAB Codex Plugins` |
+
+Le skill de statistiques garde son nom `coding-session-statistics`, sous le
+namespace `CAB`. Les chemins `plugins/cab-approval-bridge/`,
+`skills/approval-bridge/` et `plugins/cabu/` restent stables. L'alias historique
+`/cab` conserve la compatibilité. Les noms des services, routes et données
+persistantes ne sont pas renommés.

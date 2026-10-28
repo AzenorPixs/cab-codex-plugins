@@ -1,11 +1,11 @@
 {
   "name": "cab_codex_plugins",
   "interface": {
-    "displayName": "Cab Codex Plugins"
+    "displayName": "CAB Codex Plugins"
   },
   "plugins": [
     {
-      "name": "cab-approval-bridge",
+      "name": "CAB",
       "source": {
         "source": "local",
         "path": "./plugins/cab-approval-bridge"

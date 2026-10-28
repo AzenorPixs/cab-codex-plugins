@@ -59,7 +59,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.0` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.1` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -366,7 +366,7 @@ Le reçu et rejectionOnly sont des extensions conservatrices du registre 4 :
 un ancien lecteur strict peut les refuser. Après première utilisation, aucun
 retour aux anciens modules ni restauration d'une sauvegarde runtime antérieure
 ne doit effacer ces preuves. L'installation et le chargement restent distincts
-de ce lot source. L'update forcé 2.1.0 ne consulte pas l'état de récupération
+de ce lot source. L'update forcé 2.1.1 ne consulte pas l'état de récupération
 pour décider de remplacer les fichiers ou redémarrer systemd ; le profil
 frozen-recovery-controller conserve ses contrôles spécifiques lorsqu'il est
 explicitement sélectionné.
@@ -415,7 +415,7 @@ Les versions CAB précédentes pouvaient reconstruire un prévol exécuté sans
 permission `once` en s'appuyant sur `tools.bash=true` dans le message utilisateur
 V1 et sur une autorisation humaine spécifique. OpenCode V2 ne prend pas en charge
 ce champ dans le corps des prompts ni dans le schéma documenté des messages
-utilisateur. CAB 2.1.0 refuse cette ancienne phase `reconcile` avec
+utilisateur. CAB 2.1.1 refuse cette ancienne phase `reconcile` avec
 `preflight-native-allow-not-proved`, conserve le job et n'infère aucune
 autorisation ni exécution. Un autre échec de preuve ne consomme aucune permission.
 
@@ -885,7 +885,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.0. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.1. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -1016,7 +1016,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 2.1.0 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 2.1.1 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1141,12 +1141,12 @@ réinstallé. --rollback est refusé pour ce profil : il ne doit pas être
 interprété comme une nouvelle maintenance. Toute reprise utilise le même
 journal et refuse une preuve expirée ou altérée.
 
-## Mise à jour forcée des briques CAB — 2.1.0
+## Mise à jour forcée des briques CAB — 2.1.1
 
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.0 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.1 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1246,7 +1246,7 @@ prepareControllerModelPolicy et son CLI distribué préparent le patch public du
 
 catalogProviderID rapproche exclusivement opencodego vers le natif unique opencode-go en absence d'identité exacte. Le sélecteur contrôle ensuite connexion, modèle et variantes ; logicalProviderID conserve la provenance avec le digest original. Le contrôleur utilise le même rapprochement pour les preuves d'indisponibilité. L'extracteur commun de variante exige un champ parent valide et la cohérence de parent.variant, parent.model.variant et assistant.variant présents, sans modifier les autres gardes. Les contrats historiques sans logicalProviderID restent lisibles ; le repli vers un ancien lecteur strict après un nouvel armement n'est pas qualifié. Voir la référence model-policy.md pour les opérations de raccord autorisées.
 
-### CABU 2.1.0 : coupure courte et reprise
+### CABU 2.1.1 : coupure courte et reprise
 
 CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
 et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
@@ -1261,7 +1261,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.0 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.1 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1272,3 +1272,10 @@ Le broker MCP unique appartient à la location serveur OpenCode, découverte via
 GET /api/location sans en-tête de projet. Les requêtes MCP utilisent cette
 location ; les requêtes de session gardent le workspace du RUN via
 x-opencode-directory. Ne pas créer un deuxième broker dans un projet distinct.
+
+### Identité et garde d'installation — 2.1.1
+
+La garde cab-source vérifie le manifeste du plugin CAB et son égalité avec le
+paquet installé. Le dossier source conserve son chemin cab-approval-bridge ;
+son nom technique ne détermine pas le namespace public. Les identifiants
+publics de référence figurent dans README.md.

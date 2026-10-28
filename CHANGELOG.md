@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.1 — Identifiants CAB en majuscules
+
+- Plugin principal `CAB`, skill `$CAB`, commande `/CAB` et marketplace affichée `CAB Codex Plugins` alignés avec `CABU`, `$CABU` et `/CABU`.
+- Sélecteurs d’installation et garde cab-source adaptés au plugin `CAB` ; chemins techniques et alias `/cab` conservés.
+- Base commune 2.1.1 pour les quatre briques, plugins, scripts et commandes ; preuve de broker chargé 2.1.0 conservée pour la maintenance qualifiée.
+
 ## 2.1.0 — CABU rapide et récupération runtime
 
 - Plugin `CABU`, skill `$CABU` et commande `/CABU` nommés en majuscules ; chemins de distribution alignés.

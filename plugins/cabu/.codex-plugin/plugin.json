@@ -1,6 +1,6 @@
 {
   "name": "CABU",
-  "version": "2.1.0+codex.20261028084530",
+  "version": "2.1.1+codex.20261028095146",
   "description": "Skill CABU pour déclencher la mise à jour canonique de Codex Approval Bridge.",
   "author": {
     "name": "CAB"
