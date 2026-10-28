@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { ObservationStatistics, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = "2.0.0";
+export const VERSION = "2.1.0";
 if (OBSERVATION_VERSION !== VERSION) throw new Error('CAB statistics component version mismatch');
 const categories = ['reservation', 'changes', 'native', 'nativeChanges'];
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });

@@ -4,9 +4,9 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.0.0
+### Distribution courante 2.1.0
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.0.0. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.0. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
 
 OpenCode V2 est la seule version prise en charge. Les appels HTTP utilisent
 `/api/...` avec Basic Auth sous l'utilisateur fixe `opencode`. Configurer le
@@ -245,7 +245,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.0.0` pour le broker,
+artefacts distribués. La version de base actuelle est `2.1.0` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -343,7 +343,7 @@ n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Le retour historique à 0.87.2 exigeait libération ou gel réconcilié de tous les
 RUN car son contrôleur ne comprenait pas le registre concurrent. Ce cas de
-compatibilité historique ne définit plus `/CAB update` 2.0.0, qui remplace le
+compatibilité historique ne définit plus `/CAB update` 2.1.0, qui remplace le
 jeu versionné et redémarre les trois unités sans consulter les états CAB.
 
 Le script cgpt-approval-bridge-prompts.py permet une revue sans écriture puis
@@ -420,7 +420,7 @@ manuellement conserve sa supervision, avec redémarrage systemd indisponible.
 Les tests de commandes utilisent un adaptateur simulé, jamais les services
 réels. Le jeu installé isolé doit contenir onze ressources, dont ce module.
 
-## Distribution de la mise à jour active 2.0.0
+## Distribution de la mise à jour active 2.1.0
 
 Le plugin ajoute scripts/cgpt-approval-bridge-update.mjs, sa référence
 skills/approval-bridge/references/component-update.md et broker/ contenant
@@ -454,7 +454,7 @@ aux anciens lecteurs stricts non garanti après utilisation. Aucun fichier
 runtime antérieur ne doit être restauré pour effacer ces nouveaux reçus.
 
 L'activation du correctif exigeait un mandat distinct. La procédure ordinaire
-`/CAB update` 2.0.0 redémarre les unités sans consulter une récupération
+`/CAB update` 2.1.0 redémarre les unités sans consulter une récupération
 ouverte ; le profil explicite frozen-recovery-controller conserve son autorité
 BOOTSTRAP_HELD qualifiée, suivie d'adoption et du vrai HELD, sans installation
 implicite par la préparation SCM. Le paquet distribue
@@ -531,3 +531,25 @@ succès et perte de réponse à la déconnexion, deux UID réels, grand registre
 broker enfant d’un thread secondaire. Les preuves sont dans
 `output/scm/add-cab-uppercase-update-alias/two-uid-tests-retry.log` ; elles ne
 prouvent aucune installation du profil réel.
+
+### CABU 2.1.0 : coupure courte et reprise
+
+CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
+et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
+être réutilisées uniquement pour le même contenu et le même validateur ; les
+empreintes des sources, stages et destinations restent vérifiées à chaque appel.
+Les fichiers prêts sont préparés sur le système de fichiers cible ; la coupure
+contient principalement les arrêts, renommages et redémarrages. systemd est
+rechargé lorsque les unités changent, sans activation au login.
+
+Les RUN ne sont ni avertis, ni placés en PAUSE, ni modifiés. L'absence du
+transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés côté
+OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
+effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
+
+Les trois services doivent servir 2.1.0 en fin de transaction. OpenCode actif
+exige une déconnexion/reconnexion native du broker et une readiness fraîche
+portant la version cible. Une API ou une reconnexion non vérifiable interdit
+le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
+INDISPONIBLE. Les durées preparationMs, unavailableMs et totalMs sont publiées ;
+la cible est moins de cinq secondes de coupure dans le banc contrôlé.

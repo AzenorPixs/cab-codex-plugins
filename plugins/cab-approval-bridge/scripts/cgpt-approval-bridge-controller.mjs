@@ -14,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.0.0";
+const version = "2.1.0";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -45,6 +45,10 @@ function observeStatistics(callback) {
   try { callback(); } catch { statistics.error = 'statistics-observation-unavailable'; }
 }
 const registry = new ResourceRunRegistry(workspace, stateDirectory, {
+  onUnavailable: () => {
+    process.stderr.write('CAB registry authority unavailable; restarting from durable state.\n');
+    setImmediate(() => process.exit(1));
+  },
   observe: (snapshot) => {
     registryRevision++;
     observeStatistics(() => statistics.registry(snapshot));

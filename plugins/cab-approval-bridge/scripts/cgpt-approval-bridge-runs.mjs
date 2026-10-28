@@ -5,7 +5,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "2.0.0";
+export const VERSION = "2.1.0";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -78,7 +78,7 @@ function readRegistry(path) {
 }
 
 export class RunRegistry {
-  constructor(directory, stateDirectory, { observe = () => {} } = {}) {
+  constructor(directory, stateDirectory, { observe = () => {}, onUnavailable = () => {} } = {}) {
     this.directory = realpathSync(directory);
     this.stateDirectory = stateDirectory;
     if (realTarget(stateDirectory) !== resolve(stateDirectory)) throw new CoordinationError('registry-path-invalid');
@@ -86,6 +86,8 @@ export class RunRegistry {
     this.runs = new Map();
     this.integrationOwner = null;
     this.failed = false;
+    this.authorityClosing = false;
+    this.onUnavailable = onUnavailable;
     this.lock = null;
     this.sequence = 0;
     this.requestOwners = {};
@@ -217,7 +219,7 @@ export class RunRegistry {
       const timer = setTimeout(() => { child.kill(); reject(new CoordinationError("registry-lock-timeout")); }, 5000);
       child.once("error", () => { clearTimeout(timer); reject(new CoordinationError("registry-lock-unavailable")); });
       child.once("exit", () => {
-        this.failed = true;
+        this.unavailable('registry-authority-lost');
         clearTimeout(timer);
         if (!ready) reject(new CoordinationError("registry-already-owned"));
       });
@@ -232,9 +234,14 @@ export class RunRegistry {
     });
   }
 
-  close() { this.lock?.stdin.end(); }
+  unavailable(reason) {
+    const notify = !this.failed && !this.authorityClosing;
+    this.failed = true;
+    if (notify) this.onUnavailable(reason);
+  }
+  close() { this.authorityClosing = true; this.lock?.stdin.end(); }
   assertHealthy() {
-    if (this.failed || !this.lock || this.lock.exitCode !== null) throw new CoordinationError("registry-unavailable", 503);
+    if (this.failed || !this.lock || this.lock.exitCode !== null || this.lock.signalCode !== null) throw new CoordinationError("registry-unavailable", 503);
   }
   snapshot() {
     return structuredClone({ schemaVersion: this.schemaVersion, version: VERSION, project: this.directory,
@@ -259,7 +266,7 @@ export class RunRegistry {
       fd = openSync(this.stateDirectory, constants.O_RDONLY);
       fsyncSync(fd);
     } catch {
-      this.failed = true;
+      this.unavailable("registry-persistence-failed");
       throw new CoordinationError("registry-persistence-failed", 503);
     } finally { if (fd !== undefined) closeSync(fd); }
     this.observe(this.snapshot());

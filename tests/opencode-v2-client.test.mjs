@@ -24,13 +24,14 @@ test('le client V2 authentifie les appels, normalise MCP et refuse les routes ho
     fetchImpl: async (input, init) => {
       const url = new URL(input); calls.push({ path: url.pathname, auth: init.headers.authorization, method: init.method });
       if (url.pathname === '/api/info') return json(info);
+      if (url.pathname === '/api/location') return json(location);
       if (url.pathname === '/api/mcp') return json({ location, data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] });
       return json({ _tag: 'NotFoundError', message: 'not found' }, 404);
     } });
 
   const servers = await client.mcp('/workspace');
   assert.equal(servers['cgpt-validation'].status, 'connected');
-  assert.deepEqual(calls.map((call) => call.path), ['/api/info', '/api/mcp']);
+  assert.deepEqual(calls.map((call) => call.path), ['/api/info', '/api/location', '/api/mcp']);
   assert.ok(calls.every((call) => call.auth === `Basic ${Buffer.from('opencode:synthetic-test-password').toString('base64')}`));
   assert.ok(calls.every((call) => call.path.startsWith('/api/')));
 });
@@ -153,4 +154,23 @@ test('un credential lisible par groupe est refusé avant toute requête', async 
     fetchImpl: async () => { calls++; return json(info); } });
   await assert.rejects(client.info(), { code: 'opencode-credential-unavailable' });
   assert.equal(calls, 0);
+});
+
+test('la location V2 est transmise par en-tête et une divergence est refusée', async (context) => {
+  const f = fixture(); context.after(f.close);
+  const directory = '/workspace/location';
+  let divergent = false;
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory, passwordFile: f.passwordFile,
+    fetchImpl: async (url, options) => {
+      if (new URL(url).pathname === '/api/location') {
+        assert.equal(options.headers['x-opencode-directory'], undefined);
+        return json({ directory: '/shared-server' });
+      }
+      assert.equal(options.headers['x-opencode-directory'], new URL(url).pathname === '/api/info' ? directory : '/shared-server');
+      if (new URL(url).pathname === '/api/info') return json(info);
+      return json({ location: { directory: divergent ? '/other' : '/shared-server' }, data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] });
+    } });
+  assert.equal((await client.mcp())['cgpt-validation'].status, 'connected');
+  divergent = true;
+  await assert.rejects(client.mcp(), { code: 'opencode-mcp-invalid' });
 });
