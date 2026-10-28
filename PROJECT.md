@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.0.0`.
+Version de référence des briques CAB : `2.1.0`.
 
-CAB 2.0.0 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.0 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -529,3 +529,8 @@ La preuve du broker reste liée au processus OpenCode, y compris lorsqu'un de se
 La session de pilotage choisit le budget de lecture du catalogue natif /provider via providerMaxBytes ; CAB applique la valeur de cet appel sans plafond fixe ajouté, sans modifier les modèles existants.
 
 Le raccord du modèle prépare et transmet explicitement le catalogue public du skill actif. Il conserve les identités logiques/native et les variantes corrélées, sans choisir un autre modèle ni changer les priorités PLLM. La publication par le développeur et l'activation coordonnée restent distinctes de la livraison source.
+
+CABU 2.1.0 conserve les RUN sans notification pendant sa coupure technique.
+La reprise restaure les états persistants et interdit tout rejeu implicite
+des permissions consommées. Les mesures et limites de durée figurent dans
+TECHNICAL.md, section « CABU 2.1.0 : coupure courte et reprise ».

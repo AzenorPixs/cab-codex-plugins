@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.0 — CABU rapide et récupération runtime
+
+- Ciblage V2 par x-opencode-directory, sans repli V1.
+- Arrêt en échec du contrôleur après perte d’autorité afin que systemd restaure le registre durable.
+- CABU prépare les fichiers avant coupure et réutilise les validations syntaxiques liées aux empreintes ; durées de préparation, coupure et total mesurées.
+- Redémarrage systématique des trois services ; OpenCode actif exige le rechargement du broker et une preuve fraîche de sa version.
+- Coupure sans notification ni modification des RUN ; conservation des décisions consommées et réconciliation des effets inconnus sans rejeu.
+
 ## 2.0.0 — Migration exclusive OpenCode V2
 
 - Passage de toutes les briques CAB à la version majeure 2.0.0.

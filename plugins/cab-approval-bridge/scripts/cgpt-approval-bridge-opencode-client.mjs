@@ -3,7 +3,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.0';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -176,7 +176,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   async function request(path, { method = 'GET', query = {}, body, accept = 'application/json', timeout = timeoutMs,
-    maxResponseBytes = RESPONSE_LIMIT } = {}) {
+    maxResponseBytes = RESPONSE_LIMIT, scoped = true } = {}) {
     if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) fail('opencode-response-limit-invalid');
     if (typeof path !== 'string' || !path.startsWith('/api/') || path.startsWith('//') || path.includes('..')) {
       fail('opencode-v2-route-invalid');
@@ -187,6 +187,11 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
     }
     const headers = { accept, authorization: await authorization() };
+    const locationDirectory = query.directory ?? directory;
+    if (scoped && locationDirectory !== undefined) {
+      if (typeof locationDirectory !== 'string' || !isAbsolute(locationDirectory)) fail('opencode-location-invalid');
+      headers['x-opencode-directory'] = locationDirectory;
+    }
     if (body !== undefined) headers['content-type'] = 'application/json';
     let response;
     try {
@@ -240,7 +245,18 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     return value;
   }
 
+  let sharedMcp;
+  async function mcpLocation() {
+    const server = await info();
+    if (sharedMcp?.pid === server.pid) return sharedMcp.directory;
+    const { data } = await request('/api/location', { scoped: false });
+    if (!record(data) || typeof data.directory !== 'string' || !isAbsolute(data.directory)) fail('opencode-location-invalid');
+    sharedMcp = { pid: server.pid, directory: data.directory };
+    return data.directory;
+  }
+
   async function mcp(directoryValue = directory) {
+    directoryValue = await mcpLocation();
     const response = await json('/api/mcp', { query: { directory: directoryValue } });
     if (!record(response) || !record(response.location) || response.location.directory !== directoryValue || !Array.isArray(response.data)) {
       fail('opencode-mcp-invalid');
@@ -422,21 +438,22 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
 
   async function connectMcp(serverId, directoryValue = directory) {
     if (typeof serverId !== 'string' || !/^[A-Za-z0-9_.-]{1,100}$/.test(serverId)) fail('opencode-mcp-id-invalid');
-    await info();
+    directoryValue = await mcpLocation();
     return request(`/api/experimental/mcp/${encodeURIComponent(serverId)}/connect`,
       { method: 'POST', query: { directory: directoryValue } });
   }
 
   async function disconnectMcp(serverId, directoryValue = directory) {
     if (typeof serverId !== 'string' || !/^[A-Za-z0-9_.-]{1,100}$/.test(serverId)) fail('opencode-mcp-id-invalid');
-    await info();
+    directoryValue = await mcpLocation();
     return request(`/api/experimental/mcp/${encodeURIComponent(serverId)}/disconnect`,
       { method: 'POST', query: { directory: directoryValue } });
   }
 
   async function events() {
     await info();
-    const headers = { accept: 'text/event-stream', authorization: await authorization() };
+    const headers = { accept: 'text/event-stream', authorization: await authorization(),
+      ...(directory ? { 'x-opencode-directory': directory } : {}) };
     let response;
     try { response = await fetchImpl(new URL('/api/event', origin), { headers, redirect: 'error' }); }
     catch (cause) { throw Object.assign(new Error('opencode-event-unavailable'), { code: 'opencode-event-unavailable', cause }); }

@@ -27,7 +27,7 @@ async function artifactFixture(t) {
 
 test('broker externe : trois artefacts cibles vérifiés sans mutation et processus antérieur annoncé séparément',async(t)=>{
   const h=await artifactFixture(t),before=await inspectBrokerArtifacts(h.directory,h.proof);
-  assert.equal(before.version,'2.0.0');assert.equal(h.proof.loadedVersion,'1.7.1');
+  assert.equal(before.version,'2.1.0');assert.equal(h.proof.loadedVersion,'1.7.1');
   assert.equal(Object.keys(before.files).length,3);
   assert.deepEqual(await inspectBrokerArtifacts(h.directory,h.proof),before);
   for(const name of BROKER_ARTIFACT_FILES)assert.equal(createHash('sha256').update(await readFile(join(h.directory,name))).digest('hex'),h.proof.manifest[name]);
@@ -128,7 +128,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     await mkdir(target, { recursive: true }); await cp(source, target, { recursive: true });
     for (const entry of await readdir(target, { withFileTypes: true })) {
       if (entry.isFile()) {
-        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('2.0.0', '1.7.0'));
+        const path = join(target, entry.name); await writeFile(path, (await readFile(path, 'utf8')).replaceAll('2.1.0', '1.7.0'));
       }
     }
   };
@@ -157,7 +157,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     if (path.endsWith('/disconnect')) { state.broker = false; return {}; }
     if (path.endsWith('/connect')) {
       state.broker = true; state.brokerVersion = version(await readFile(join(c.brokerDirectory, 'cgpt_approval_bridge_server.py'), 'utf8'));
-      if (state.wrongBroker && state.brokerVersion === '2.0.0') state.brokerVersion = '1.7.0';
+      if (state.wrongBroker && state.brokerVersion === '2.1.0') state.brokerVersion = '1.7.0';
       return {};
     }
     if (path === '/api/snapshot') {
@@ -197,7 +197,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
     if (path === '/coordination/global/release') { state.global.state = 'RELEASED'; return state.global; }
     throw new Error('unexpected-path:' + path);
   };
-  const options = { http: request, now: () => state.now, sleep: async (ms) => { state.now += ms; },
+  const options = { processProbe: async () => ({ openCode: false, broker: false, unknown: false }), http: request, now: () => state.now, sleep: async (ms) => { state.now += ms; },
     openCodeClient: {
       mcp: async (directory) => {
         state.events.push(['http', '/api/mcp', directory]);
@@ -213,7 +213,7 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
         state.events.push(['http', '/api/experimental/mcp/cgpt-validation/connect', directory]);
         if (state.openCodeOffline) throw Object.assign(new Error('opencode-offline'), { code: 'update-source-unavailable' });
         state.broker = true; state.brokerVersion = version(await readFile(join(c.brokerDirectory, 'cgpt_approval_bridge_server.py'), 'utf8'));
-        if (state.wrongBroker && state.brokerVersion === '2.0.0') state.brokerVersion = '1.7.0';
+        if (state.wrongBroker && state.brokerVersion === '2.1.0') state.brokerVersion = '1.7.0';
       },
     },
     ...(realSyntax ? {} : { syntax: async () => {} }),
@@ -230,6 +230,14 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
       } else throw new Error('unexpected-command');
       return '';
     } };
+  const serviceCommand = options.serviceCommand;
+  options.serviceCommand = async args => {
+    if (['stop', 'start'].includes(args[0]) && args.length > 2) {
+      for (const name of args.slice(1)) await serviceCommand([args[0], name]);
+      return '';
+    }
+    return serviceCommand(args);
+  };
   return { root, c, options, state, scripts, entry, runtime, catalog,
     receipt: async () => JSON.parse(await readFile(join(c.home, '.local/state/cab-approval-bridge-update/current.json'), 'utf8')) };
 }
@@ -237,9 +245,9 @@ async function fixture(t, { active = ['controller', 'supervisor', 'monitor'], br
 test('mise à jour forcée : les quatre briques sont installées et les trois unités redémarrées à chaque invocation', async (t) => {
   const h = await fixture(t, { realSyntax: true }); const before = await readFile(h.runtime, 'utf8');
   const result = await updateComponents(h.c, h.options);
-  assert.equal(result.status, 'completed'); assert.equal(result.version, '2.0.0');
-  assert.deepEqual(h.state.versions, { controller: '2.0.0', supervisor: '2.0.0', monitor: '2.0.0' });
-  assert.equal(h.state.brokerVersion, '2.0.0'); assert.equal(h.state.global, null);
+  assert.equal(result.status, 'completed'); assert.equal(result.version, '2.1.0');
+  assert.deepEqual(h.state.versions, { controller: '2.1.0', supervisor: '2.1.0', monitor: '2.1.0' });
+  assert.equal(h.state.brokerVersion, '2.1.0'); assert.equal(h.state.global, null);
   assert.equal(await readFile(h.runtime, 'utf8'), before); assert.equal(await readFile(h.catalog, 'utf8'), 'ARCHIVE-SENTINEL');
   assert.equal(h.state.run.suspension.action, 'PAUSE');
   const brokerActions = h.state.events.filter((event) => ['/api/experimental/mcp/cgpt-validation/disconnect','/api/experimental/mcp/cgpt-validation/connect'].includes(event[1]));
@@ -257,7 +265,7 @@ test('services initialement inactifs : les trois unités sont démarrées après
   const result = await updateComponents(h.c, h.options);
   assert.equal(result.status, 'completed');
   assert.deepEqual(h.state.services, { controller: true, supervisor: true, monitor: true });
-  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '2.0.0');
+  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '2.1.0');
   for (const component of ['controller','supervisor','monitor']) {
     assert.ok(h.state.events.some((event) => event[1] === 'start' && event[2] === `cgpt-approval-bridge-${component}.service`));
   }
@@ -274,8 +282,8 @@ test('un jeu déjà déployé redémarre systématiquement les trois unités', a
     [join(h.c.pluginRoot,'broker'),h.c.brokerDirectory],
   ];
   for (const [source,target] of copies) await cp(source,target,{recursive:true,force:true});
-  h.state.versions={controller:'2.0.0',supervisor:'2.0.0',monitor:'2.0.0'};
-  h.state.brokerVersion='2.0.0';
+  h.state.versions={controller:'2.1.0',supervisor:'2.1.0',monitor:'2.1.0'};
+  h.state.brokerVersion='2.1.0';
   const result=await updateComponents(h.c,h.options);
   assert.equal(result.status,'completed');
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
@@ -293,7 +301,7 @@ test('layout managed-release conserve le répertoire broker source en fichiers o
   assert.equal((await lstat(h.entry('controller'))).isSymbolicLink(),true);
   const brokerEntry=join(h.c.brokerDirectory,'cgpt_approval_bridge_server.py');
   assert.equal((await lstat(brokerEntry)).isSymbolicLink(),false);
-  assert.equal(version(await readFile(brokerEntry,'utf8')),'2.0.0');
+  assert.equal(version(await readFile(brokerEntry,'utf8')),'2.1.0');
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
 });
 
@@ -315,10 +323,10 @@ test('OpenCode absent avec RUN réservé : les fichiers broker sont mis à jour 
   h.options.processProbe=async()=>({openCode:false,broker:false});
   const result=await updateComponents(h.c,h.options);
   assert.equal(result.status,'completed');
-  assert.equal(result.brokerArtifactVersion,'2.0.0');
+  assert.equal(result.brokerArtifactVersion,'2.1.0');
   assert.equal(result.brokerRuntimeVersion,null);
   assert.equal(result.brokerRuntimeStatus,'INDISPONIBLE');
-  assert.equal(version(await readFile(join(h.c.brokerDirectory,'cgpt_approval_bridge_server.py'),'utf8')),'2.0.0');
+  assert.equal(version(await readFile(join(h.c.brokerDirectory,'cgpt_approval_bridge_server.py'),'utf8')),'2.1.0');
   assert.equal(h.state.run.suspension,undefined);
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
   assert.ok(!h.state.events.some((event)=>['/api/experimental/mcp/cgpt-validation/disconnect','/api/experimental/mcp/cgpt-validation/connect','/coordination/global/request'].includes(event[1])));
@@ -345,13 +353,11 @@ test('OpenCode absent : mise à jour possible sans RUN réservé ni broker à re
   assert.ok(!h.state.events.some((event)=>['/api/experimental/mcp/cgpt-validation/disconnect','/api/experimental/mcp/cgpt-validation/connect'].includes(event[1])));
 });
 
-test('processProbe ambigu ne bloque pas l’installation broker quand l’API OpenCode est absente', async (t) => {
-  const h=await fixture(t,{openCodeOffline:true});
-  h.options.processProbe=async()=>({openCode:false,broker:false,unknown:true});
-  const result=await updateComponents(h.c,h.options);
-  assert.equal(result.status,'completed');
-  assert.equal(result.brokerRuntimeStatus,'INDISPONIBLE');
-  assert.equal(version(await readFile(join(h.c.brokerDirectory,'cgpt_approval_bridge_server.py'),'utf8')),'2.0.0');
+test('présence OpenCode incertaine interdit le succès avant la coupure', async (t) => {
+  const h = await fixture(t, { openCodeOffline: true });
+  h.options.processProbe = async () => ({ openCode: false, broker: false, unknown: true });
+  await assert.rejects(updateComponents(h.c, h.options), /update-opencode-active-unavailable/);
+  assert.ok(!h.state.events.some(event => event[1] === 'stop'));
 });
 
 test('activité CAB non consultée : la mise à jour termine sans attendre de quiescence', async (t) => {
@@ -360,7 +366,7 @@ test('activité CAB non consultée : la mise à jour termine sans attendre de qu
   assert.equal(result.status, 'completed');
   assert.equal(h.state.global, null);
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
-  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '2.0.0');
+  assert.equal(version(await readFile(h.entry('controller'), 'utf8')), '2.1.0');
   assert.equal(h.state.events.filter((event) => event[1] === 'stop').length,3);
 });
 
@@ -387,14 +393,11 @@ test('échec de démarrage déclenche le retour aux artefacts précédents et re
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
 });
 
-test('broker non vérifiable après connexion : les fichiers restent installés et le rapport le distingue', async (t) => {
+test('broker actif de mauvaise version interdit le succès et restaure les artefacts', async (t) => {
   const h = await fixture(t); h.state.wrongBroker = true;
-  const result=await updateComponents(h.c,h.options);
-  assert.equal(result.status,'completed');
-  assert.equal(result.brokerArtifactVersion,'2.0.0');
-  assert.equal(result.brokerRuntimeVersion,null);
-  assert.equal(result.brokerRuntimeStatus,'NON_VERIFIE');
-  assert.equal(version(await readFile(join(h.c.brokerDirectory,'cgpt_approval_bridge_server.py'),'utf8')),'2.0.0');
+  await assert.rejects(updateComponents(h.c, h.options), /update-failed-rolled-back/);
+  assert.equal((await h.receipt()).phase, 'ROLLED_BACK');
+  assert.equal(h.state.versions.controller, '1.7.0');
 });
 
 test('interruption pendant installation : récupération des artefacts sans restauration du runtime', async (t) => {
@@ -449,8 +452,8 @@ test('dépôt CAB : exception explicite src, manifeste et projet vérifiés', as
   assert.ok(!h.state.events.some((event) => event[0] === 'systemd'));
   const result = await updateComponents(c, h.options);
   assert.equal(result.status, 'completed');
-  assert.equal(result.brokerArtifactVersion, '2.0.0');
-  assert.equal(version(await readFile(join(c.home, '.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-opencode-client.mjs'), 'utf8')), '2.0.0');
+  assert.equal(result.brokerArtifactVersion, '2.1.0');
+  assert.equal(version(await readFile(join(c.home, '.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-opencode-client.mjs'), 'utf8')), '2.1.0');
   assert.equal(await readFile(h.runtime, 'utf8'), '{"consumedOnce":["once-1"],"run":"a","gate":"OPEN"}\n');
 });
 
@@ -473,7 +476,7 @@ test("un reçu déjà terminé d'une ancienne version ne bloque pas une nouvelle
   await writeFile(current,JSON.stringify({schema:1,phase:'COMPLETED',version:'1.10.8',managed:{stale:true}}));
   const result=await updateComponents(h.c,h.options);
   assert.equal(result.status,'completed');
-  assert.equal(result.version,'2.0.0');
+  assert.equal(result.version,'2.1.0');
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
   assert.equal(h.state.events.filter((event)=>event[1]==='stop').length,3);
 });
@@ -544,17 +547,17 @@ test('reprise après arrêt interrompu : la procédure forcée restaure puis red
   const result=await updateComponents(h.c,h.options);
   assert.equal(result.status,'completed');
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
-  assert.equal(version(await readFile(h.entry('controller'),'utf8')),'2.0.0');
+  assert.equal(version(await readFile(h.entry('controller'),'utf8')),'2.1.0');
 });
 
 
-test('broker 1.9.0 chargé vers artefacts 2.0.0 : admission fermée sans mutation',async(t)=>{
+test('broker 1.9.0 chargé vers artefacts 2.1.0 : admission fermée sans mutation',async(t)=>{
   const h=await artifactFixture(t);h.proof.loadedVersion='1.9.0';
   assert.equal(validateBrokerProof(h.proof,h.directory),h.proof);
   const before=await inspectBrokerArtifacts(h.directory,h.proof);
-  assert.equal(before.version,'2.0.0');assert.equal(h.proof.loadedVersion,'1.9.0');
-  for(const loadedVersion of ['1.7.1','1.8.0','1.9.0','1.10.0','1.10.1','1.10.2','1.10.3','1.10.4','1.10.5','1.10.6','1.10.7','1.10.8','1.10.9','1.10.10','2.0.0'])assert.equal(validateBrokerProof({...h.proof,loadedVersion},h.directory).loadedVersion,loadedVersion);
-  for(const loadedVersion of ['1.9.1','1.9.0+codex.20261025101020','1.10.12','2.0.0+codex.20261028011316',null])assert.throws(()=>validateBrokerProof({...h.proof,loadedVersion},h.directory),/proof-invalid/);
+  assert.equal(before.version,'2.1.0');assert.equal(h.proof.loadedVersion,'1.9.0');
+  for(const loadedVersion of ['1.7.1','1.8.0','1.9.0','1.10.0','1.10.1','1.10.2','1.10.3','1.10.4','1.10.5','1.10.6','1.10.7','1.10.8','1.10.9','1.10.10','2.1.0'])assert.equal(validateBrokerProof({...h.proof,loadedVersion},h.directory).loadedVersion,loadedVersion);
+  for(const loadedVersion of ['1.9.1','1.9.0+codex.20261025101020','1.10.12','2.1.0+codex.20261028011316',null])assert.throws(()=>validateBrokerProof({...h.proof,loadedVersion},h.directory),/proof-invalid/);
   assert.throws(()=>validateBrokerProof({...h.proof,expectedUid:h.proof.expectedUid+1},h.directory),/proof-invalid/);
   assert.deepEqual(await inspectBrokerArtifacts(h.directory,h.proof),before);
 });
@@ -601,8 +604,39 @@ test('registre HTTP supérieur à 16 Mio non lu avant mise à jour',async(t)=>{
 test('un rapport contrôleur trop volumineux conserve le journal de récupération',async(t)=>{
   const h=await networkFixture(t,{statusPadding:2*1024*1024+1});
   await assert.rejects(updateComponents(h.c,h.options),/update-recovery-required/);
-  assert.equal(h.state.broker,true);
+  // An unverified controller must not receive a freshly connected broker.
+  assert.equal(h.state.broker,false);
   assert.deepEqual(h.state.versions,{controller:'1.7.0',supervisor:'1.7.0',monitor:'1.7.0'});
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
   assert.equal((await h.receipt()).phase,'ROLLBACK_FAILED');
+});
+
+test('CABU chronométré : coupure courte, cache exact et redémarrage à chaud', async (t) => {
+  const h = await fixture(t, { realSyntax: true });
+  h.options.now = () => { h.state.now = Date.now(); return h.state.now; };
+  h.options.sleep = ms => new Promise(resolve => setTimeout(resolve, Math.min(ms, 10)));
+  const cold = await updateComponents(h.c, h.options);
+  const warm = await updateComponents(h.c, h.options);
+  for (const result of [cold, warm]) {
+    assert.equal(result.status, 'completed');
+    assert.ok(result.timings.unavailableMs < 5000, JSON.stringify(result.timings));
+    assert.ok(result.timings.totalMs >= result.timings.unavailableMs);
+  }
+  const cache = JSON.parse(await readFile(join(h.c.home, '.local/state/cab-approval-bridge-update/syntax-cache.json'), 'utf8'));
+  assert.ok(Object.keys(cache).length > 10);
+  assert.ok(!h.state.events.some(event => event[1].includes('/suspend') || event[1].includes('/coordination/')));
+  t.diagnostic(JSON.stringify({ cold: cold.timings, warm: warm.timings }));
+});
+
+test('OpenCode actif avec broker initialement failed est rechargé et vérifié', async (t) => {
+  const h = await fixture(t);
+  const mcp = h.options.openCodeClient.mcp;
+  let first = true;
+  h.options.openCodeClient.mcp = async directory => {
+    if (first) { first = false; return { 'cgpt-validation': { status: 'failed' } }; }
+    return mcp(directory);
+  };
+  const result = await updateComponents(h.c, h.options);
+  assert.equal(result.status, 'completed'); assert.equal(result.brokerRuntimeVersion, '2.1.0');
+  assert.ok(h.state.events.some(event => event[1].endsWith('/disconnect')));
 });

@@ -12,7 +12,7 @@ import { FROZEN_PROFILE, FROZEN_CAPABILITY, collectFrozenProof, proofHash, modul
 import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.0';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -188,6 +188,29 @@ export async function updateComponents(input, options = {}) {
   const openCode = options.openCodeClient || createOpenCodeV2ClientFromEnv({ directory: c.serviceWorkspace, baseUrl: c.opencodeUrl,
     ...(options.openCodeFetch ? { fetchImpl: options.openCodeFetch } : {}) });
   const validate = options.syntax || syntax;
+  const syntaxCachePath = join(c.state, 'syntax-cache.json');
+  const validationKeys = new Set();
+  let syntaxCache = {};
+  let validatorIdentity;
+  async function validateCached(path, data) {
+    if (!validatorIdentity) {
+      const python = options.syntax ? 'injected-validator' : (await exec('python3', ['--version'], { timeout: 5000 })).stdout.trim();
+      validatorIdentity = [process.execPath, process.version, python];
+      if (!options.syntax) {
+        const cached = await optional(syntaxCachePath);
+        if (cached && cached.uid === process.getuid() && !(cached.mode & 0o077)) {
+          try { const value = JSON.parse(cached.data); if (value && typeof value === 'object' && !Array.isArray(value)) syntaxCache = value; } catch { syntaxCache = {}; }
+        }
+      }
+    }
+    const key = hash(JSON.stringify([validatorIdentity, path.endsWith('.py') ? 'py' : 'mjs', hash(data)]));
+    if (!validationKeys.has(key) && (options.syntax || syntaxCache[key] !== true)) {
+      const exact = join(transaction(), 'syntax-' + key + (path.endsWith('.py') ? '.py' : '.mjs'));
+      await atomic(exact, data);
+      await validate(exact, transaction());
+    }
+    validationKeys.add(key); syntaxCache[key] = true;
+  }
   const now = options.now || Date.now;
   const sleep = options.sleep || ((ms) => new Promise((done) => setTimeout(done, ms)));
   const processProbe = options.processProbe;
@@ -272,7 +295,7 @@ export async function updateComponents(input, options = {}) {
     if (readonlyBroker) return { brokerArtifactPolicy:'reuse-readonly',brokerArtifactVersion:VERSION,
       brokerLoadedBefore:receipt.externalBroker.beforeLoadedVersion,brokerLoadedAfter:VERSION,
       brokerProcess:receipt.externalBroker.afterProcess,opencodeProcess:input.brokerProof.opencodeProcess };
-    return { brokerArtifactVersion:VERSION, brokerRuntimeVersion:receipt.brokerConnected ? VERSION : null,
+    return { timings: receipt.timings || {}, brokerArtifactVersion:VERSION, brokerRuntimeVersion:receipt.brokerConnected ? VERSION : null,
       brokerRuntimeStatus:receipt.openCodeAvailable === false ? 'INDISPONIBLE' :
         receipt.brokerConnected ? 'VERIFIE' : 'NON_VERIFIE' };
   }
@@ -389,15 +412,9 @@ export async function updateComponents(input, options = {}) {
     return value;
   }
   async function brokerState() {
-    let value;
-    try { value = await openCode.mcp(c.serviceWorkspace); }
-    catch (cause) {
-      if (cause.code !== 'update-source-unavailable') throw cause;
-      if (receipt) receipt.openCodeAvailable = false;
-      return 'disabled';
-    }
+    const value = await openCode.mcp(c.serviceWorkspace);
     const status = value?.['cgpt-validation']?.status;
-    if (!['connected', 'disabled'].includes(status)) throw error('update-broker-state-unknown');
+    if (!['connected', 'disabled', 'failed', 'pending', 'needs_auth'].includes(status)) throw error('update-broker-state-unknown');
     if (receipt) receipt.openCodeAvailable = true;
     return status;
   }
@@ -439,7 +456,7 @@ export async function updateComponents(input, options = {}) {
     do {
       try { if (await check()) return true; } catch (cause) { if (cause.code === 'update-runtime-incompatible') throw cause; }
       if (now() >= deadline) return false;
-      await sleep(Math.min(1000, deadline - now()));
+      await sleep(Math.min(50, deadline - now()));
     } while (true);
   }
   async function drain() {
@@ -467,14 +484,8 @@ export async function updateComponents(input, options = {}) {
   }
   async function stopAll() {
     if (!readonlyBroker) {
-      for (const component of ['controller', 'supervisor', 'monitor']) await service(['stop', unit(component)]);
-      try {
-        receipt.brokerWasConnected = await brokerState() === 'connected';
-        if (receipt.brokerWasConnected) await nativeBroker('disconnect');
-      } catch {
-        receipt.openCodeAvailable = false;
-        receipt.brokerWasConnected = false;
-      }
+      await service(['stop', ...['controller', 'supervisor', 'monitor'].map(unit)]);
+      if (receipt.openCodeAvailable && receipt.brokerWasConnected) await nativeBroker('disconnect');
       return;
     }
 
@@ -499,15 +510,17 @@ export async function updateComponents(input, options = {}) {
       if ((await metadata(component)).ActiveState === 'active') throw error('update-service-stop-unconfirmed');
     }
   }
-  async function startAll(active = receipt.active) {
+  async function startAll(active = receipt.active, expectedVersion = receipt.version) {
     if (!readonlyBroker) {
-      for (const component of ['controller', 'supervisor', 'monitor']) await service(['start', unit(component)]);
+      await service(['start', ...['controller', 'supervisor', 'monitor'].map(unit)]);
       if (receipt.openCodeAvailable) {
         try {
+          if (!await wait(async () => (await request(c.controllerUrl, '/status')).version === expectedVersion, 10000)) throw error('update-controller-start-unconfirmed');
           await nativeBroker('connect');
           receipt.brokerConnected = true;
         } catch {
           receipt.brokerConnected = false;
+          throw error('update-broker-reload-unconfirmed');
         }
       }
       return;
@@ -530,16 +543,22 @@ export async function updateComponents(input, options = {}) {
   }
   async function verified(expected, active = targetActive()) {
     if (readonlyBroker) await brokerArtifactsUnchanged();
-    for (const component of ['controller', 'supervisor', 'monitor']) {
-      const meta = await metadata(component);
+    const observations = await Promise.all(['controller', 'supervisor', 'monitor'].map(async component => {
+      const [meta, status] = await Promise.all([
+        metadata(component),
+        active[component] ? request(c[component === 'monitor' ? 'monitorUrl' : component + 'Url'], component === 'monitor' ? '/api/snapshot' : '/status') : null,
+      ]);
+      return { component, meta, status };
+    }));
+    for (const { component, meta, status } of observations) {
       if ((meta.ActiveState === 'active') !== active[component]) return false;
       if (!active[component]) continue;
-      const status = await request(c[component === 'monitor' ? 'monitorUrl' : component + 'Url'], component === 'monitor' ? '/api/snapshot' : '/status');
       const workspace = component === 'monitor' ? status.identity?.workspace : status.workspace;
       if (status.version !== expected[component] || (workspace && workspace !== c.serviceWorkspace) ||
           (status.pid && status.pid !== Number(meta.MainPID))) return false;
       if (component === 'monitor' && workspace !== c.serviceWorkspace) return false;
     }
+    const controllerStatus = observations.find(row => row.component === 'controller').status;
     if (active.controller && readonlyBroker) {
       if (receipt.runIdentity && receipt.runIdentity !== runIdentity(await registry())) throw error('update-run-identity-changed');
       if (receipt.brokerConnected) {
@@ -561,10 +580,10 @@ export async function updateComponents(input, options = {}) {
       }
     }
     if (active.controller && receipt.brokerConnected && !readonlyBroker) {
-      const status = await request(c.controllerUrl, '/status');
+      const status = controllerStatus;
       if (status.brokerReadiness?.server_version !== expected.broker || !status.brokerReadinessReceivedAt ||
           Date.parse(status.brokerReadinessReceivedAt) < (receipt.brokerReconnectedAt || now() - 10000)) {
-        receipt.brokerConnected = false;
+        return false;
       }
     }
     return true;
@@ -595,7 +614,7 @@ export async function updateComponents(input, options = {}) {
       await restoreManagedFile(file,i);
     }
     for(const plan of Object.values(receipt.managed||{}))if(plan.mode==='directory')await linkSwitch(plan.logical,plan.oldLink);
-    await service(['daemon-reload']); receipt.brokerReconnectedAt = now(); await startAll();
+    await service(['daemon-reload']); receipt.brokerReconnectedAt = now(); await startAll(receipt.active, receipt.previousVersions.controller);
     if (!await wait(() => verified(receipt.previousVersions, receipt.active), 30000)) throw error('update-rollback-unconfirmed');
     await save('ROLLBACK_RELEASING'); await release(); await save('ROLLED_BACK');
   }
@@ -699,7 +718,7 @@ export async function updateComponents(input, options = {}) {
       receipt = { schema: 1, contextKey, id: 'update-' + randomUUID(), version, phase: 'PREPARING',
         active: { controller: true, supervisor: true, monitor: true },
         targetActive: { controller: true, supervisor: true, monitor: true }, servicesObserved: false,
-        files: [], brokerConnected: false };
+        files: [], brokerConnected: false, startedAtMs: now(), timings: {} };
       receiptTrusted = true;
       await save('PREPARING');
       if (readonlyBroker) {
@@ -742,7 +761,7 @@ export async function updateComponents(input, options = {}) {
           for (const match of content.data.toString('utf8').matchAll(/(?:from\s+|import\s*)['"](\.\/[^'"]+)['"]/g)) {
             if (!byPath.has(resolve(dirname(artifact.source), match[1]))) throw error('update-package-import-missing');
           }
-          await validate(artifact.source, transaction());
+          await validateCached(artifact.source, content.data);
         }
         if (artifact.group === 'units') {
           const component = artifact.name.replace('cgpt-approval-bridge-', '').replace('.service', '');
@@ -781,6 +800,7 @@ export async function updateComponents(input, options = {}) {
         const status = await request(c.monitorUrl, '/api/snapshot');
         if (status.identity?.workspace !== c.serviceWorkspace) throw error('update-workspace-divergent');
       }
+      if (!options.syntax) await atomic(syntaxCachePath, JSON.stringify(Object.fromEntries([...validationKeys].map((key) => [key, true]))) + '\n');
       await save('PREPARED');
       if (readonlyBroker) {
         receipt.brokerReconnectedAt = 0;
@@ -814,18 +834,54 @@ export async function updateComponents(input, options = {}) {
       if (forwardRecovery) await requireStoredHeld();
       else if (!await drain()) { await save('WAITING'); return { status: 'waiting', transactionId: receipt.id, version: receipt.version }; }
     }
+    if (!readonlyBroker) {
+      try { receipt.brokerWasConnected = await brokerState() !== 'disabled'; }
+      catch {
+        const presence = processProbe ? await processProbe(c.brokerDirectory) : await processPresence(c.brokerDirectory);
+        if (presence.openCode || presence.unknown) throw error('update-opencode-active-unavailable');
+        receipt.openCodeAvailable = false; receipt.brokerWasConnected = false;
+      }
+    }
+    const preparedPath = (i) => join(dirname(target(receipt.files[i])), '.cab-ready-' + receipt.id + '-' + i);
+    if (!input.layout && !readonlyBroker) {
+      for (let i = 0; i < receipt.files.length; i++) {
+        const data = (await regular(join(transaction(), 'stage', String(i)))).data;
+        if (hash(data) !== receipt.files[i].afterHash) throw error('update-stage-changed');
+        await atomic(preparedPath(i), data, receipt.files[i].mode);
+      }
+    }
+    receipt.timings ||= {};
+    receipt.cutoverAtMs = now();
+    receipt.timings.preparationMs = receipt.cutoverAtMs - (receipt.startedAtMs || receipt.cutoverAtMs);
     await save('STOPPING'); await stopAll(); await save('INSTALLING');
     if(input.layout==='managed-release')await installManagedFiles();
     else for (let i = 0; i < receipt.files.length; i++) {
       const file = receipt.files[i], data = (await regular(join(transaction(), 'stage', String(i)))).data;
       if (hash(data) !== file.afterHash) throw error('update-stage-changed');
-      await atomic(target(file), data, file.mode);
+      if (!readonlyBroker) {
+        const installed = await deployed(file);
+        if ((installed ? hash(installed.data) : null) !== file.beforeHash) throw error('update-installed-artifact-changed');
+        if (hash((await regular(preparedPath(i))).data) !== file.afterHash) throw error('update-stage-changed');
+        await rename(preparedPath(i), target(file));
+      } else await atomic(target(file), data, file.mode);
     }
-    await service(['daemon-reload']); await save('RESTARTING');
+    if (!input.layout && !readonlyBroker) {
+      for (const directory of new Set(receipt.files.map((file) => dirname(target(file))))) {
+        const fd = await open(directory, 'r'); try { await fd.sync(); } finally { await fd.close(); }
+      }
+    }
+    if (receipt.files.some((file) => file.group === 'units' && file.beforeHash !== file.afterHash)) await service(['daemon-reload']);
+    await save('RESTARTING');
     receipt.brokerReconnectedAt = now(); await startAll(targetActive()); await save('VERIFYING');
     const desired = Object.fromEntries(['controller', 'supervisor', 'monitor', 'broker'].map((name) => [name, receipt.version]));
     if (!await wait(() => verified(desired, targetActive()), 30000)) throw error('update-active-version-unconfirmed');
+    receipt.timings ||= {};
+    receipt.timings.unavailableMs = now() - receipt.cutoverAtMs;
+    receipt.timings.totalMs = now() - (receipt.startedAtMs || receipt.cutoverAtMs);
     await save('RELEASING'); await release(); await save('COMPLETED');
+    await atomic(join(c.state, 'last-deployment.json'), JSON.stringify(Object.fromEntries(
+      ['home','workspace','serviceWorkspace','brokerDirectory','brokerPolicy','layout','controllerUrl','supervisorUrl','monitorUrl','opencodeUrl']
+        .filter((key) => c[key] !== undefined).map((key) => [key, c[key]])), null, 2) + '\n');
     return { status: 'completed', version: receipt.version, transactionId: receipt.id, active: targetActive(),
       brokerConnected: receipt.brokerConnected, deployedVersions: desired,
       ...brokerResult(),
@@ -860,7 +916,14 @@ export async function updateComponents(input, options = {}) {
     const failure = error('update-preparation-failed');
     failure.causeCode = safeCauseCode(cause.code);
     throw failure;
-  } finally { await lock.close(); }
+  } finally {
+    try { if (receipt && complete.has(receipt.phase)) {
+      for (let i = 0; i < receipt.files.length; i++) {
+        try { await unlink(join(dirname(target(receipt.files[i])), '.cab-ready-' + receipt.id + '-' + i)); }
+        catch (cause) { if (cause.code !== 'ENOENT') throw error('update-prepared-cleanup-failed'); }
+      }
+    } } finally { await lock.close(); }
+  }
 }
 
 export async function maintainFrozenController(input, options = {}) {
