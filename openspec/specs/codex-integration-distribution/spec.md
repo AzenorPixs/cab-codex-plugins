@@ -699,14 +699,14 @@ rester exactes.
 - **THEN** chaque composant versionné annonce 1.10.6 et les références à 1.10.5 ne désignent que des historiques ou versions chargées compatibles
 
 ### Requirement: Plugin CABU et skill d'entrée
-La marketplace CAB SHALL distribuer un plugin autonome `cabu`. Celui-ci SHALL exposer un skill directement invocable qui déclenche la procédure canonique `/CAB update` sans dupliquer cette procédure.
+La marketplace CAB SHALL distribuer un plugin autonome `CABU`. Celui-ci SHALL exposer un skill directement invocable qui déclenche la procédure canonique `/CAB update` sans dupliquer cette procédure.
 
 #### Scenario: Invocation directe du skill CABU
-- **WHEN** le skill `cabu` est installé et invoqué
+- **WHEN** le skill `CABU` est installé et invoqué
 - **THEN** il exécute `/CAB update` dans la conversation courante et restitue son rapport terminal
 
 #### Scenario: Procédure canonique indisponible
-- **WHEN** le skill `cabu` est invoqué sans commande CAB compatible disponible
+- **WHEN** le skill `CABU` est invoqué sans commande CAB compatible disponible
 - **THEN** il signale la dépendance absente et n'entame aucune opération de maintenance
 
 ### Requirement: Distribution cohérente du plugin et de la commande CABU

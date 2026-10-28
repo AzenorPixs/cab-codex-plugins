@@ -2,6 +2,8 @@
 
 ## 2.1.0 — CABU rapide et récupération runtime
 
+- Plugin `CABU`, skill `$CABU` et commande `/CABU` nommés en majuscules ; chemins de distribution alignés.
+
 - Ciblage V2 par x-opencode-directory, sans repli V1.
 - Arrêt en échec du contrôleur après perte d’autorité afin que systemd restaure le registre durable.
 - CABU prépare les fichiers avant coupure et réutilise les validations syntaxiques liées aux empreintes ; durées de préparation, coupure et total mesurées.

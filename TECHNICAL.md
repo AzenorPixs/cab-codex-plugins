@@ -20,9 +20,9 @@ pilotées ; le présent document reste le cadrage technique des composants CAB.
 ```text
 CAB/
 ├── .agents/plugins/marketplace.json
-├── plugins/cabu/
+├── plugins/CABU/
 │   ├── .codex-plugin/plugin.json
-│   └── skills/cabu/SKILL.md
+│   └── skills/CABU/SKILL.md
 ├── plugins/cab-approval-bridge/
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
