@@ -49,15 +49,15 @@ test("les briques distribuées publient la même version de base 2.1.0", () => {
 test('le plugin CABU expose son skill et partage la version distribuée', () => {
   const root = new URL('../', import.meta.url);
   const marketplace = JSON.parse(readFileSync(new URL('.agents/plugins/marketplace.json', root), 'utf8'));
-  const entry = marketplace.plugins.find((plugin) => plugin.name === 'cabu');
+  const entry = marketplace.plugins.find((plugin) => plugin.name === 'CABU');
   assert.ok(entry);
-  assert.equal(entry.source.path, './plugins/cabu');
+  assert.equal(entry.source.path, './plugins/CABU');
   const pluginRoot = new URL(`${entry.source.path}/`, root);
   const manifest = JSON.parse(readFileSync(new URL('.codex-plugin/plugin.json', pluginRoot), 'utf8'));
-  assert.equal(manifest.name, 'cabu');
+  assert.equal(manifest.name, 'CABU');
   assert.match(manifest.version, /^2\.1\.0\+codex\.\d{14}$/);
-  const skill = readFileSync(new URL('skills/cabu/SKILL.md', pluginRoot), 'utf8');
-  assert.match(skill, /^name: cabu$/m);
+  const skill = readFileSync(new URL('skills/CABU/SKILL.md', pluginRoot), 'utf8');
+  assert.match(skill, /^name: CABU$/m);
   assert.match(skill, /\$CABU/);
   assert.match(skill, /\/CAB update/);
   assert.match(skill, /conversation/);

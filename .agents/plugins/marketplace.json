@@ -20,7 +20,7 @@
       "name": "CABU",
       "source": {
         "source": "local",
-        "path": "./plugins/cabu"
+        "path": "./plugins/CABU"
       },
       "policy": {
         "installation": "AVAILABLE",
