@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { createObservationJournal } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
-import { monitorConfiguration, parseTasks, readChanges, MonitorState, fetchJson, normalizeRuns, operationalState } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs';
+import { monitorConfiguration, parseTasks, parseChangeTitle, readChanges, MonitorState, fetchJson, normalizeRuns, operationalState } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs';
 import { nextLifecycle } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs';
 import { createMonitorServer } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
 
@@ -48,17 +48,40 @@ test('tâches : total dynamique, clôture indépendante, fences et code ignorés
   assert.equal(parseTasks('- [x] Seule').completed, 1);
 });
 
+test('codes de lot : premier titre explicite hors code, formats et absences', () => {
+  for (const code of ['PA01', 'PA02', 'C08', 'O26', 'B02']) {
+    for (const separator of ['—', '–', '-', ':']) {
+      assert.equal(parseChangeTitle('# ' + code + ' ' + separator + ' Intitulé').lotCode, code);
+    }
+    assert.equal(parseChangeTitle('# ' + code).lotCode, code);
+  }
+  for (const source of ['# Sans code PA01', '# PA1 — Court', '# pa01 — Minuscules',
+    '# PA01 texte sans séparateur', 'PA01 — Sans titre', '## PA01 — Sous-titre',
+    '    # PA01 — Code indenté', '# Sans code\n# PA01 — Second titre',
+    '```md\n# PA01 — Exemple\n```\n# Sans code', '~~~\n# C08 — Exemple\n~~~']) {
+    assert.equal(parseChangeTitle(source).lotCode, null, source);
+  }
+  assert.deepEqual(parseChangeTitle('```md\n# PA02 — Exemple\n```\n# B02 — Import ###'),
+    { title: 'B02 — Import', lotCode: 'B02' });
+});
+
 test('changes : lecture locale, archive référencée et liens refusés', async (t) => {
   const root = await fixture(t);
   const archived = join(root, 'openspec', 'changes', 'archive', '2026-10-20-old-change');
   await mkdir(archived, { recursive: true }); await writeFile(join(archived, 'tasks.md'), '- [x] Livraison');
+  await writeFile(join(archived, 'proposal.md'), '# C08 — Installation');
+  await writeFile(join(root, 'openspec', 'changes', 'change-a', 'proposal.md'), '# PA01 — Compilation');
   const outside = join(root, 'private-fixture.md'); await writeFile(outside, '- [x] PRIVATE-SENTINEL');
   const unsafe = join(root, 'openspec', 'changes', 'unsafe'); await mkdir(unsafe);
   await symlink(outside, join(unsafe, 'tasks.md'));
+  await symlink(outside, join(unsafe, 'proposal.md'));
   await symlink(join(root, 'openspec', 'changes', 'change-a'), join(root, 'openspec', 'changes', 'linked'));
   const result = await readChanges(root, ['old-change', '../private', 'missing', 'linked']);
   assert.equal(result.changes.find((c) => c.changeId === 'change-a').progress.total, 2);
   assert.equal(result.changes.find((c) => c.changeId === 'old-change').location, 'archived');
+  assert.equal(result.changes.find((c) => c.changeId === 'old-change').lotCode, 'C08');
+  assert.equal(result.changes.find((c) => c.changeId === 'change-a').lotCode, 'PA01');
+  for (const changeId of ['unsafe', 'missing', 'linked']) assert.equal(result.changes.find((c) => c.changeId === changeId).lotCode, null);
   assert.equal(result.changes.find((c) => c.changeId === 'unsafe').progress.available, false);
   assert.equal(result.changes.find((c) => c.changeId === 'linked').progress.available, false);
   assert.ok(!JSON.stringify(result).includes('PRIVATE-SENTINEL'));
@@ -130,7 +153,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.1.1', mode: 'concurrent', brokerReadiness: { server_version: '2.1.1' },
+    else if (target.pathname === '/status') value = { version: '2.1.2', mode: 'concurrent', brokerReadiness: { server_version: '2.1.2' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -141,7 +164,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.1.1', supervisor: '1.4.0', broker: '2.1.1', opencode: '2.2.0', monitor: '2.1.1' });
+  assert.deepEqual(result.componentVersions, { controller: '2.1.2', supervisor: '1.4.0', broker: '2.1.2', opencode: '2.2.0', monitor: '2.1.2' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);

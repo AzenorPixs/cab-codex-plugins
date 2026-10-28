@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.2 — Codes de lot dans le moniteur
+
+- Colonne « codes de lot » en deuxième position des tableaux RUN et CHANGE, issue du titre du change associé, actif ou archivé référencé.
+- Cellule vide sans code explicite ou document admissible ; tris, filtres, compteurs et actions conservés.
+- Base commune CAB 2.1.2 et cachebusters des plugins renouvelés ; admission du broker chargé 2.1.1 conservée. Aucun déploiement actif déduit de cette qualification source.
+
 ## 2.1.1 — Identifiants CAB en majuscules
 
 - Plugin principal `CAB`, skill `$CAB`, commande `/CAB` et marketplace affichée `CAB Codex Plugins` alignés avec `CABU`, `$CABU` et `/CABU`.
