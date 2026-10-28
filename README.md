@@ -645,7 +645,7 @@ CAB expose quatre états :
 
 Le dépôt contient directement les sources du bridge et des plugins Codex CAB et
 CABU. La marketplace est définie dans `.agents/plugins/marketplace.json` et
-référence les plugins `plugins/cab-approval-bridge/` et `plugins/CABU/`.
+référence les plugins `plugins/cab-approval-bridge/` et `plugins/cabu/`.
 
 Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
