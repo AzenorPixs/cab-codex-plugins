@@ -13,19 +13,45 @@ Le plugin MUST distribuer le broker Python complet synchronisé avec src/, les s
 - **THEN** la mise à jour échoue avant arrêt ou remplacement
 
 ### Requirement: Destinations fermées et privées
-L'outil MUST réserver les écritures aux destinations CAB explicites hors workspace et paquet, avec type et propriétaire vérifiés. Les liens non reconnus MUST être refusés. managed-release autorisé MAY lire les liens relatifs internes, installer une release immuable et basculer atomiquement l'entrée du contrôleur arrêté, sans écrire à travers un lien ni modifier l'ancienne release. reuse-readonly MUST exclure les trois artefacts broker de toute destination.
+L'outil MUST limiter les écritures aux destinations CAB explicites hors workspace, paquet et caches, sauf l'exception `cab-source` définie ci-dessous. Les types, propriétaires et liens MUST être vérifiés. managed-release MAY basculer les liens relatifs reconnus vers une release immuable sans modifier l'ancienne. reuse-readonly MUST exclure les trois artefacts broker de toute destination.
 
 #### Scenario: Lien non géré
 - **WHEN** l'entrée est absolue, sort de la racine, traverse un lien interne ou diverge de l'autorisation
 - **THEN** aucun arrêt, remplacement ou changement de lien n'est effectué
 
 #### Scenario: Destination dans le projet
-- **WHEN** une destination désigne le workspace piloté
+- **WHEN** une destination désigne le workspace piloté sans satisfaire l’exception explicite `cab-source`
 - **THEN** l'outil refuse sans aucune écriture dans ce workspace
 
 #### Scenario: Release gérée conservée
 - **WHEN** le contrôleur est chargé depuis la nouvelle release sous autorité d'amorçage
 - **THEN** la release originale reste identique et les processus broker/Web ainsi que les liens non concernés sont préservés
+
+
+### Requirement: Exception explicite pour les sources CAB
+La politique `cab-source` MUST autoriser uniquement les trois modules broker nommés dans `<workspace>/src`, sans managed-release. Le projet MUST être nommé `cab` dans pyproject.toml et son manifeste local cab-approval-bridge MUST être identique au paquet installé. Les contrôles de type, propriétaire et absence de liens MUST rester applicables. Toute autre destination dans le workspace ou les caches MUST rester refusée.
+
+#### Scenario: Broker source du dépôt CAB
+- **WHEN** la politique `cab-source` vise exactement src/ dans un dépôt CAB identifié et conforme au manifeste installé
+- **THEN** seuls les trois modules broker nommés sont sauvegardés et remplacés transactionnellement ; les autres sources restent intactes
+
+#### Scenario: Exception source non prouvée
+- **WHEN** le projet, le manifeste, le chemin src/ ou les contrôles de liens ne sont pas conformes
+- **THEN** l’outil refuse avant arrêt des services ou création du journal de transaction
+
+### Requirement: Workspace des services conservé
+Avec `cab-source`, l'option explicite `--service-workspace` MAY désigner le workspace absolu existant des services, distinct de la racine source CAB. Les vérifications HTTP et les appels natifs MCP MUST utiliser ce workspace. Les configurations existantes MUST rester intactes. La récupération MUST conserver le même journal et les mêmes destinations d'artefacts.
+
+#### Scenario: Services attachés à un autre projet
+- **WHEN** le paquet est préparé depuis CAB et les services existants déclarent un autre workspace explicitement fourni
+- **THEN** le contrôle des versions exige ce workspace réel, sans réécriture des configurations
+
+### Requirement: Fermeture indépendante du moniteur
+Le jeu indépendant du moniteur MUST inclure le client OpenCode V2 importé par monitor-data, avec la même version que les autres modules.
+
+#### Scenario: Moniteur déployé séparément
+- **WHEN** l'updater installe le jeu indépendant Web
+- **THEN** les imports du moniteur sont tous présents et le client V2 est sauvegardé et remplacé transactionnellement
 
 ### Requirement: Mise à jour forcée des services CAB
 Le profil ordinaire MUST valider et sauvegarder le paquet, arrêter controller,

@@ -50,7 +50,11 @@ pas le remplacement des fichiers ; le broker chargé est rapporté
 
 Pour le dépôt CAB, la destination du broker est le répertoire `src/` sous la
 racine CAB : BUILD.md y définit le point d'entrée source et les trois modules
-importables. Cette destination ne dépend pas d'un processus OpenCode en cours.
+importables. Cette destination ne dépend pas d'un processus OpenCode en cours. Utiliser
+`--broker-policy cab-source` : cette exception exige exactement src/, le projet
+`cab` dans pyproject.toml et un manifeste local identique au paquet installé.
+Les liens, caches, autres destinations dans le workspace et le layout
+managed-release restent refusés pour cette politique.
 
 Après redémarrage, l'updater vérifie les versions réellement servies par le
 contrôleur, le superviseur et le moniteur, et leur workspace. Il produit un
@@ -288,3 +292,9 @@ Après prepared ou already-prepared, relancer l'updater ordinaire reuse-readonly
 ## Broker créé depuis un thread OpenCode
 
 La découverte examine children de chaque TID numérique sous /proc/<OpenCode>/task et déduplique les PID. Elle vérifie ensuite UID, PPID OpenCode, Python avec l'unique argument du point d'entrée déclaré, identité PID/startTime/UID et unicité. L'identité OpenCode est contrôlée avant et après découverte. Une disparition concurrente de thread est tolérée ; les autres erreurs restent bloquantes. Aucune donnée d'environnement ni argv brut n'est restitué. Le même processus OpenCode est préservé. Cette reconnaissance ne vaut ni readiness ni permission : leurs contrôles restent distincts.
+
+Pour `cab-source`, si les services sont configurés pour un autre projet, fournir
+`--service-workspace <workspace-absolu-observé>` : les contrôles de version et
+les appels MCP ciblent ce workspace réel sans modifier les configurations.
+La récupération conserve le même journal et les mêmes destinations. Le jeu Web
+indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs.

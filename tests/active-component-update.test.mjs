@@ -420,6 +420,40 @@ test('interruption au bilan final : reprise idempotente et nouveau redémarrage'
   assert.equal(h.state.events.filter((event) => event[1] === 'stop').length, stops + 3);
 });
 
+test('dépôt CAB : exception explicite src, manifeste et projet vérifiés', async (t) => {
+  const h = await fixture(t, { openCodeOffline: true });
+  h.c.brokerDirectory = join(h.c.workspace, 'src');
+  await cp(join(h.c.pluginRoot, 'broker'), h.c.brokerDirectory, { recursive: true });
+  await mkdir(join(h.c.workspace, 'plugins/cab-approval-bridge/.codex-plugin'), { recursive: true });
+  const manifest = join(h.c.workspace, 'plugins/cab-approval-bridge/.codex-plugin/plugin.json');
+  await cp(join(h.c.pluginRoot, '.codex-plugin/plugin.json'), manifest);
+  await writeFile(join(h.c.workspace, 'pyproject.toml'), '[project]\nname = "cab"\n');
+  await assert.rejects(updateComponents(h.c, h.options), /project-destination/);
+  const c = { ...h.c, brokerPolicy: 'cab-source', serviceWorkspace: join(h.root, 'service-project') };
+  const http = h.options.http;
+  h.options.http = async (...args) => {
+    const value = await http(...args);
+    if (value?.version) {
+      if (value.identity) value.identity.workspace = c.serviceWorkspace;
+      else value.workspace = c.serviceWorkspace;
+    }
+    return value;
+  };
+  await writeFile(manifest, '{"name":"other"}');
+  await assert.rejects(updateComponents(c, h.options), /cab-source-invalid/);
+  await cp(join(h.c.pluginRoot, '.codex-plugin/plugin.json'), manifest);
+  await writeFile(join(h.c.workspace, 'pyproject.toml'), '[project]\nname = "other"\n');
+  await assert.rejects(updateComponents(c, h.options), /cab-source-invalid/);
+  await writeFile(join(h.c.workspace, 'pyproject.toml'), '[project]\nname = "cab"\n');
+  await assert.rejects(updateComponents({ ...c, brokerDirectory: join(c.workspace, 'another') }, h.options), /project-destination/);
+  assert.ok(!h.state.events.some((event) => event[0] === 'systemd'));
+  const result = await updateComponents(c, h.options);
+  assert.equal(result.status, 'completed');
+  assert.equal(result.brokerArtifactVersion, '2.0.0');
+  assert.equal(version(await readFile(join(c.home, '.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-opencode-client.mjs'), 'utf8')), '2.0.0');
+  assert.equal(await readFile(h.runtime, 'utf8'), '{"consumedOnce":["once-1"],"run":"a","gate":"OPEN"}\n');
+});
+
 test('cibles projet, liens et journal corrompu sont refusés sans écrasement', async (t) => {
   const h = await fixture(t);
   await assert.rejects(updateComponents({ ...h.c, brokerDirectory: join(h.c.workspace, 'broker') }, h.options), /project-destination/);

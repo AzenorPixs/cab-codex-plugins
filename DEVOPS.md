@@ -3,7 +3,7 @@
 Version : 0.7
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-10-28T06:41:34Z
+Début du relevé (UTC) : 2026-10-28T07:56:57Z
 Environnement d'exécution DIU : PHYSICAL
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -76,7 +76,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # OpenCode
 
-  * 1.19.5
+  * 2.2.0
   * /home/devops/.opencode/bin/opencode
 
 
