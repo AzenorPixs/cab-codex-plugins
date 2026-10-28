@@ -101,7 +101,14 @@ function services({ active = true, refused = false, unmanaged = false, commandFa
   const configuration = { workspace: '/fixture', controllerUrl: 'http://127.0.0.1:8788',
     supervisorUrl: 'http://127.0.0.1:8789', opencodeUrl: 'http://127.0.0.1:4096' };
   let broker = 'connected';
+  const openCodeClient = {
+    mcp: async (directory) => { calls.push(['GET', '/api/mcp', '?directory=' + encodeURIComponent(directory)]);
+      return { 'cgpt-validation': { status: broker } }; },
+    disconnectMcp: async (_server, directory) => { calls.push(['POST', '/api/experimental/mcp/cgpt-validation/disconnect', '?directory=' + encodeURIComponent(directory)]); broker = 'disabled'; },
+    connectMcp: async (_server, directory) => { calls.push(['POST', '/api/experimental/mcp/cgpt-validation/connect', '?directory=' + encodeURIComponent(directory)]); broker = 'connected'; },
+  };
   const instance = new MonitorServices(configuration, { pid: 22,
+    openCodeClient,
     serviceCommand: async (args) => {
       calls.push(args);
       if (args[0] === 'show') return 'LoadState=loaded\nActiveState=' + (units.get(args[1]) || (active ? 'active' : 'inactive')) +
@@ -126,8 +133,8 @@ test('services : unités fixes et broker natif sans redémarrage OpenCode', asyn
     assert.equal((await h.instance.act({ component, action: 'restart' })).status, 'completed');
   }
   assert.ok(h.calls.some((args) => args[0] === 'restart' && args[1] === 'cgpt-approval-bridge-controller.service'));
-  assert.ok(h.calls.some((args) => args[1] === '/mcp/cgpt-validation/disconnect' && args[2] === '?directory=%2Ffixture'));
-  assert.ok(h.calls.some((args) => args[1] === '/mcp/cgpt-validation/connect'));
+  assert.ok(h.calls.some((args) => args[1] === '/api/experimental/mcp/cgpt-validation/disconnect' && args[2] === '?directory=%2Ffixture'));
+  assert.ok(h.calls.some((args) => args[1] === '/api/experimental/mcp/cgpt-validation/connect'));
   assert.ok(!JSON.stringify(h.calls).includes('/instance/dispose'));
   await assert.rejects(h.instance.act({ component: 'opencode', action: 'restart' }), /invalid/);
 });

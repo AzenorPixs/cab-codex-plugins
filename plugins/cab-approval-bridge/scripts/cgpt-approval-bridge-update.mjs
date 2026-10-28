@@ -10,8 +10,9 @@ import { FROZEN_PROFILE, FROZEN_CAPABILITY, collectFrozenProof, proofHash, modul
   processIdentity, originalGone, maintenanceHttp, readBootstrapJournal, validateFrozenTarget,
   inspectControllerInstallation, checkInstallationJournal } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '1.10.11';
+export const VERSION = '2.0.0';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -171,6 +172,8 @@ export async function updateComponents(input, options = {}) {
     validateBrokerProof(input.brokerProof,c.brokerDirectory);
   } else if (input.brokerProof !== undefined) throw error('update-broker-policy-invalid');
   const service = options.serviceCommand || command, request = options.http || http;
+  const openCode = options.openCodeClient || createOpenCodeV2ClientFromEnv({ directory: c.workspace, baseUrl: c.opencodeUrl,
+    ...(options.openCodeFetch ? { fetchImpl: options.openCodeFetch } : {}) });
   const validate = options.syntax || syntax;
   const now = options.now || Date.now;
   const sleep = options.sleep || ((ms) => new Promise((done) => setTimeout(done, ms)));
@@ -372,10 +375,9 @@ export async function updateComponents(input, options = {}) {
     }
     return value;
   }
-  const nativePath = (path) => path + '?directory=' + encodeURIComponent(c.workspace);
   async function brokerState() {
     let value;
-    try { value = await request(c.opencodeUrl, nativePath('/mcp')); }
+    try { value = await openCode.mcp(c.workspace); }
     catch (cause) {
       if (cause.code !== 'update-source-unavailable') throw cause;
       if (receipt) receipt.openCodeAvailable = false;
@@ -407,7 +409,9 @@ export async function updateComponents(input, options = {}) {
     return { openCode, broker, unknown };
   }
   async function nativeBroker(action) {
-    await request(c.opencodeUrl, nativePath('/mcp/cgpt-validation/' + action), {});
+    if (action === 'connect') await openCode.connectMcp('cgpt-validation', c.workspace);
+    else if (action === 'disconnect') await openCode.disconnectMcp('cgpt-validation', c.workspace);
+    else throw error('update-broker-action-invalid');
     if (await brokerState() !== (action === 'connect' ? 'connected' : 'disabled')) throw error('update-broker-state-unconfirmed');
   }
   async function registry() {
@@ -859,6 +863,8 @@ export async function maintainFrozenController(input, options = {}) {
       !Object.hasOwn(spec.preservedProcesses, 'web')) throw error('update-frozen-contract-invalid');
   validateFrozenTarget(spec.target);
   const service = options.serviceCommand || command, request = maintenanceHttp;
+  const openCode = options.openCodeClient || createOpenCodeV2ClientFromEnv({ directory: c.workspace, baseUrl: c.opencodeUrl,
+    ...(options.openCodeFetch ? { fetchImpl: options.openCodeFetch } : {}) });
   const root = join(c.state, 'frozen-controller'), transactionId = spec.transactionId;
   await directories(c.state, true); await directories(root, true);
   if ((await lstat(root)).uid !== process.getuid() || ((await lstat(root)).mode & 0o077)) throw error('update-private-state-required');
@@ -893,17 +899,16 @@ export async function maintainFrozenController(input, options = {}) {
       if (proofHash(await processIdentity(identity.pid)) !== proofHash(identity)) throw error('update-preserved-process-changed');
     }
   }
-  const native = (path) => request(c.opencodeUrl, path + '?directory=' + encodeURIComponent(c.workspace));
   async function nativeUnchanged() {
     await preserved();
     const [health,path,mcp,busy,permissions] = await Promise.all([
-      native('/global/health'),native('/path'),native('/mcp'),native('/session/status'),native('/permission')]);
-    if (health.healthy !== true || path.directory !== c.workspace || mcp['cgpt-validation']?.status !== 'connected' ||
+      openCode.info(),openCode.location(c.workspace),openCode.mcp(c.workspace),openCode.sessionStatus(c.workspace),openCode.permissions(c.workspace)]);
+    if (!health.version.startsWith('2.') || path.directory !== c.workspace || mcp['cgpt-validation']?.status !== 'connected' ||
         !busy || Object.values(busy).some((s) => s?.type !== 'idle') || !Array.isArray(permissions) || permissions.length) {
       throw error('update-native-boundary-changed');
     }
     for (const [id, original] of Object.entries(journal.seal.proof.sessions)) {
-      const [session,messages] = await Promise.all([native('/session/' + encodeURIComponent(id)), native('/session/' + encodeURIComponent(id) + '/message')]);
+      const [session,messages] = await Promise.all([openCode.session(id,c.workspace),openCode.messages(id,c.workspace)]);
       if (session.id !== id || session.directory !== c.workspace || !Array.isArray(messages) ||
           messages.some((m) => !Array.isArray(m.parts))) throw error('update-native-boundary-changed');
       const parts = messages.flatMap((m) => m.parts.filter((p) => p.type === 'tool'));
@@ -957,7 +962,7 @@ export async function maintainFrozenController(input, options = {}) {
       if ((installed ? hash(installed.data) : null) !== (reached('INSTALLED') ? file.afterHash : file.beforeHash)) throw error('update-installed-artifact-changed');
     }
     await nativeUnchanged();
-    const actual = await collectFrozenProof({ ...c, target: spec.target, request });
+    const actual = await collectFrozenProof({ controllerUrl:c.controllerUrl, openCode, workspace:c.workspace, target: spec.target, request });
     if (proofHash(actual) !== proofHash(journal.seal.proof)) throw error('update-frozen-proof-changed');
   }
   try {
@@ -1034,8 +1039,8 @@ export async function maintainFrozenController(input, options = {}) {
       try { await request(c.controllerUrl, '/coordination/global/confirm', { transactionId, generation: global.generation, evidence: ['original-boundary-check'] }); }
       catch (cause) { refusal = { status: cause.httpStatus, error: cause.refusal }; }
       if (global.state !== 'DRAINING' || refusal?.status !== 409 || refusal.error !== 'run-not-quiescent') throw error('update-original-refusal-not-proved');
-      const proof = await collectFrozenProof({ ...c, target: spec.target, request });
-      const second = await collectFrozenProof({ ...c, target: spec.target, request });
+      const proof = await collectFrozenProof({ controllerUrl:c.controllerUrl, openCode, workspace:c.workspace, target: spec.target, request });
+      const second = await collectFrozenProof({ controllerUrl:c.controllerUrl, openCode, workspace:c.workspace, target: spec.target, request });
       if (proofHash(proof) !== proofHash(second)) throw error('update-frozen-proof-changed');
       journal.seal = { transactionId, workspace: c.workspace, authorization: spec.authorization, authority: 'BOOTSTRAP_HELD',
         target: spec.target, generation: global.generation, globalInputDigest: global.inputDigest,

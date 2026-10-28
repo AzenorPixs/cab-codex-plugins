@@ -1,9 +1,10 @@
 [Unit]
-Description=CAB 1.10.11 — Contrôleur local Codex Approval Bridge
+Description=CAB 2.0.0 — Contrôleur local Codex Approval Bridge
 
 [Service]
 Type=simple
 EnvironmentFile=%h/.config/cab-approval-bridge/controller.env
+LoadCredential=opencode.password:%h/.config/cab-approval-bridge/opencode.password
 ExecStart=/usr/bin/env node %h/.local/share/cab-approval-bridge/cgpt-approval-bridge-controller.mjs
 Restart=on-failure
 RestartSec=5

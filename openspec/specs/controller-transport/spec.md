@@ -193,11 +193,17 @@ POST /job/recover MUST accepter prepare, retry, reconcile et complete, corrélé
 - **THEN** elle est refusée sans modifier le contrat
 
 ### Requirement: Préconditions techniques de récupération
-prepare, retry et complete MUST vérifier un job armé avec gate OPEN, mandat courant clôturé, aucune demande indécise, aucun rappel, aucune permission native ni transmission en cours. Seule la reprise humaine attestée décrite ci-dessous MAY déroger au statut armé et au gate OPEN. Via OpenCode dans directory, ils MUST vérifier santé, chemin, MCP connecté et les deux sessions inactives dans cette racine. Un contrôle indisponible ou divergent MUST refuser la transition.
+prepare, retry et complete MUST vérifier un job armé, son gate OPEN, le mandat courant clôturé et l’absence de demande indécise, rappel, permission native ou transmission en cours. Ils MUST vérifier par l’API V2 authentifiée la location cible, la majeure 2 de `/api/info`, le MCP connecté, les sessions inactives et l’absence de permissions natives. Toute observation indisponible, non authentifiée ou divergente MUST refuser la transition sans repli V1.
 
 #### Scenario: Précondition manquante
 - **WHEN** une permission, une session occupée, une demande indécise ou un contexte divergent est observé
 - **THEN** la transition est refusée sans transfert ni approbation implicite
+
+#### Scenario: Réconciliation héritée sans preuve V2
+- **WHEN** la récupération historique cherche une preuve fondée sur le champ `tools` d'un message utilisateur et que le transcript V2 ne l'expose pas
+- **THEN** CAB refuse la réconciliation avec une erreur explicite, conserve le job et n'infère ni autorisation ni exécution native
+
+Les métadonnées V2 arbitraires MUST NOT être interprétées comme le champ V1 `tools`.
 
 ### Requirement: Gel et persistance de récupération
 prepare MUST persister un gel observable sans contenu de projet ni secret et invalider les autorisations exécutables de l'ancienne session sans modifier les décisions historiques. Le gel et les sessions révoquées MUST survivre à un redémarrage. Un échec de complete MUST conserver le gel.

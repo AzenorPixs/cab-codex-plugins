@@ -22,7 +22,7 @@ vérifie les preuves. L'agent de codage analyse et exécute seulement les
 opérations autorisées. Le développeur conserve le contrôle des décisions qui
 lui sont réservées. Aucun de ces rôles ne peut inventer une autorisation.
 
-Le profil technique actuellement décrit utilise OpenCode comme agent de codage,
+Le profil technique actuellement décrit utilise exclusivement OpenCode V2 comme agent de codage,
 l'agent orchestrateur désigné par le prompt et CAB comme transport neutre.
 Le nom `CGPT` désigne le rôle d'orchestrateur dans les messages et interfaces
 ci-dessous. Un autre agent de codage ou transport exige un contrat d'intégration
@@ -535,13 +535,13 @@ dans le contexte autorisé, sans lire de secret.
 
 | Composant | Interface | Usage |
 |---|---|---|
-| OpenCode | `http://127.0.0.1:4096/global/health` | Santé technique |
-| OpenCode | `GET /mcp` | Connexion MCP native, dont `cgpt-validation` |
-| OpenCode | `GET /global/event` | SSE direct en temps réel |
-| OpenCode | `POST /session` | Nouvelle session native du RUN autorisé |
-| OpenCode | `POST /session/<id>/message?directory=<racine encodée>` | Mandats dans la session persistante |
-| OpenCode | `GET /session/status?directory=...` | Sessions occupées ou inactives |
-| OpenCode | `GET /permission?directory=...` | Permissions natives à réconcilier |
+| OpenCode V2 | `GET /api/info` avec Basic Auth | Santé et version majeure 2 |
+| OpenCode V2 | `GET /api/mcp?directory=...` avec Basic Auth | Connexion MCP native dans la location ciblée |
+| OpenCode V2 | `GET /api/event` avec Basic Auth | SSE direct en temps réel |
+| OpenCode V2 | `POST /api/session` | Nouvelle session native du RUN autorisé |
+| OpenCode V2 | `POST /api/session/<id>/prompt` | Mandats dans la session persistante |
+| OpenCode V2 | `GET /api/session/active` et `GET /api/session/<id>` | Sessions actives et détails |
+| OpenCode V2 | `GET /api/permission/request` | Permissions natives à réconcilier |
 | Contrôleur CAB | `http://127.0.0.1:8788/status` | État technique, compteurs et gate |
 | Contrôleur CAB | `GET /runs/<run_id>/job` | Contrat durable courant |
 | Contrôleur CAB | `POST /runs/<run_id>/job/arm`, `POST /runs/<run_id>/job/progress` | Armement et jalons prouvés |
@@ -554,14 +554,14 @@ dans le contexte autorisé, sans lire de secret.
 
 Le SSE et les états HTTP ne remplacent pas un appel MCP réel de
 `broker_readiness` dans la session de codage ciblée. L'état `connected` de
-`GET /mcp` ne constitue ni une readiness métier ni une décision.
+`GET /api/mcp` ne constitue ni une readiness métier ni une décision.
 
 ## Initialisation technique et identité du RUN
 
 1. Fixer le projet, le répertoire absolu, le change, les critères, les limites
    et les conditions terminales. Identifier les deux sessions réellement
    pilotées ; signaler un identifiant non exposé sans l'inventer.
-2. Vérifier la santé OpenCode et le MCP natif. La connexion CAB est gérée par
+2. Vérifier `/api/info`, sa version majeure 2, l'authentification et le MCP natif. La connexion CAB est gérée par
    OpenCode ; l'orchestrateur ne tue ni ne démarre directement le broker.
 3. Avant une initialisation globale exclusive, appliquer le protocole autorisé
    de nouvelle session : propriété et inactivité prouvées, arrêt des seules
@@ -820,7 +820,7 @@ OpenCode, le broker ou les services communs des autres RUN.
 Prévoir un cycle commun de compactage toutes les 1 h 30 (5 400 secondes),
 à une frontière entre mandats après traitement du rapport et sauvegarde du
 checkpoint. Utiliser uniquement les API natives des sessions réellement
-actives : OpenCode `POST /session/<id>/summarize` et, lorsqu'elle est exposée
+actives : OpenCode `POST /api/session/<id>/compact` et, lorsqu'elle est exposée
 par la connexion propriétaire, Codex App Server `thread/compact/start`.
 
 Un accusé de lancement ne prouve pas la fin. Pour Codex, observer l'item

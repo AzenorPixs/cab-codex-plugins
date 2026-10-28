@@ -1,4 +1,5 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
+import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -33,16 +34,19 @@ async function fixture(context) {
   ].join("\n"), { mode: 0o755 });
 
   const requests = [];
-  const opencode = createServer((request, response) => {
+  const opencode = createServer(openCodeV2TestHandler((request, response) => {
     requests.push(request.url);
     if (request.url === "/global/event") {
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.write('data: {"type":"server.connected"}\n\n');
       return;
     }
+    const path = new URL(request.url, 'http://localhost').pathname;
+    const payload = path === '/session/status' ? {} : path === '/mcp' ? { 'cgpt-validation': { status: 'connected' } } :
+      path === '/permission' ? [] : path === '/provider' ? { all: [], connected: [] } : [];
     response.writeHead(200, { "content-type": "application/json" });
-    response.end(JSON.stringify(request.url === "/global/health" ? { healthy: true } : []));
-  });
+    response.end(JSON.stringify(payload));
+  }, { directory }));
   opencode.listen(0, "127.0.0.1");
   await once(opencode, "listening");
 

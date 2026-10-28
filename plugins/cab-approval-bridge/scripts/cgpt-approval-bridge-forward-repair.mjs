@@ -9,8 +9,9 @@ import { processIdentity, proofHash, maintenanceHttp } from './cgpt-approval-bri
 import { validateBrokerProof, inspectBrokerArtifacts } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
 import { ResourceRunRegistry } from './cgpt-approval-bridge-resource-coordination.mjs';
 import { publicLifecycle } from './cgpt-approval-bridge-run-steps.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '1.10.11';
+export const VERSION = '2.0.0';
 const exec = promisify(execFile);
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -61,6 +62,8 @@ export async function repairForwardRelease(input,options={}) {
   for(const key of ['home','workspace','pluginRoot','brokerDirectory']){if(typeof c[key]!=='string'||!isAbsolute(c[key])||resolve(c[key])!==c[key]||c[key]==='/')fail('forward-path-invalid');await directory(c[key]);}
   if(!/^update-[a-f0-9-]{36}$/.test(c.transactionId)||typeof c.authorization!=='string'||!c.authorization.trim()||c.authorization.length>500)fail('forward-authorization-required');
   for(const key of ['controllerUrl','supervisorUrl','monitorUrl','opencodeUrl']){const u=new URL(c[key]);if(u.protocol!=='http:'||!['127.0.0.1','localhost','[::1]'].includes(u.hostname)||u.username||u.password||u.pathname!=='/'||u.search||u.hash)fail('forward-url-invalid');c[key]=u.origin;}
+  const openCode=options.openCodeClient||createOpenCodeV2ClientFromEnv({directory:c.workspace,baseUrl:c.opencodeUrl,
+    ...(options.openCodeFetch?{fetchImpl:options.openCodeFetch}:{})});
   const service=options.serviceCommand|| (async args=>(await exec('/usr/bin/systemctl',['--user',...args],{timeout:15000,maxBuffer:16384})).stdout);
   const request=options.http||maintenanceHttp;
   const state=join(c.home,'.local/state/cab-approval-bridge-update');await directory(state,true);
@@ -84,11 +87,10 @@ export async function repairForwardRelease(input,options={}) {
       registryIdentity(registry)!==receipt.runIdentity||registry.runs.some(r=>r.state==='RESERVED'&&r.suspension?.action!=='PAUSE')||
       Object.values(registry.coordination.accesses).some(a=>['HELD','WAITING','EXECUTING','UNKNOWN'].includes(a.state))||
       Object.values(registry.coordination.operations).some(o=>['ISSUING','EXECUTING','UNKNOWN'].includes(o.state)))fail('forward-held-proof-invalid');
-    const native=(path)=>request(c.opencodeUrl,path+(path.includes('?')?'&':'?')+'directory='+encodeURIComponent(c.workspace));
-    const health=await native('/global/health'),mcp=await native('/mcp'),permissions=await native('/permission'),sessions=await native('/session/status');
-    if(health?.healthy!==true||mcp?.['cgpt-validation']?.status!=='disabled'||!Array.isArray(permissions)||permissions.length||
+    const [health,mcp,permissions,sessions]=await Promise.all([openCode.info(),openCode.mcp(c.workspace),openCode.permissions(c.workspace),openCode.sessionStatus(c.workspace)]);
+    if(!health.version.startsWith('2.')||mcp?.['cgpt-validation']?.status!=='disabled'||!Array.isArray(permissions)||permissions.length||
       !sessions||typeof sessions!=='object'||Object.values(sessions).some(s=>s.type!=='idle'))fail('forward-native-not-quiescent');
-    for(const run of registry.runs.filter(r=>r.state==='RESERVED')){const s=await native('/session/'+encodeURIComponent(run.sessionId));if(s.id!==run.sessionId||s.directory!==c.workspace)fail('forward-native-session-divergent');}
+    for(const run of registry.runs.filter(r=>r.state==='RESERVED')){const s=await openCode.session(run.sessionId,c.workspace);if(s.id!==run.sessionId||s.directory!==c.workspace)fail('forward-native-session-divergent');}
     const jobViews=[];
     for(const run of registry.runs.filter(r=>r.state==='RESERVED').sort((a,b)=>a.runId.localeCompare(b.runId))){
       const path=join(c.workspace,'.opencode/state/cgpt-approval-bridge/runs',run.runId,String(run.contextId||run.version),'controller-job.json');

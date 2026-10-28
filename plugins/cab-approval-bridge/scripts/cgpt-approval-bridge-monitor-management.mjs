@@ -4,8 +4,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { join, parse, relative } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '1.10.11';
+export const VERSION = '2.0.0';
 const execute = promisify(execFile);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, status = 409) => Object.assign(new Error(code), { status });
@@ -167,8 +168,10 @@ export async function systemd(args) {
 }
 
 export class MonitorServices {
-  constructor(configuration, { fetcher = fetch, serviceCommand = systemd, pid = process.pid } = {}) {
+  constructor(configuration, { fetcher = fetch, serviceCommand = systemd, pid = process.pid, openCodeClient } = {}) {
     this.configuration = configuration; this.fetcher = fetcher; this.command = serviceCommand;
+    this.openCode = openCodeClient || createOpenCodeV2ClientFromEnv({ directory: configuration.workspace,
+      baseUrl: configuration.opencodeUrl, fetchImpl: fetcher });
     this.pid = pid; this.pending = false;
   }
   async service(component) {
@@ -229,10 +232,9 @@ export class MonitorServices {
         if (identity.workspace !== c.workspace || Number(identity.pid) !== Number(service.MainPID)) throw fail('monitor-service-unmanaged');
       }
       if (body.component === 'broker') {
-        const suffix = '?directory=' + encodeURIComponent(c.workspace);
-        if (body.action !== 'start') await this.json(c.opencodeUrl, '/mcp/cgpt-validation/disconnect' + suffix, {});
-        if (body.action !== 'stop') await this.json(c.opencodeUrl, '/mcp/cgpt-validation/connect' + suffix, {});
-        const status = await this.json(c.opencodeUrl, '/mcp' + suffix);
+        if (body.action !== 'start') await this.openCode.disconnectMcp('cgpt-validation', c.workspace);
+        if (body.action !== 'stop') await this.openCode.connectMcp('cgpt-validation', c.workspace);
+        const status = await this.openCode.mcp(c.workspace);
         if (status['cgpt-validation']?.status !== (body.action === 'stop' ? 'disabled' : 'connected')) {
           throw fail('monitor-broker-state-unconfirmed');
         }
