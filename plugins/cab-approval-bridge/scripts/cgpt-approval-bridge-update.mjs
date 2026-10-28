@@ -142,12 +142,15 @@ function configuration(input) {
   const cacheRoots = [join(c.home, '.codex/plugins/cache')];
   const cacheAt = c.pluginRoot.indexOf('/plugins/cache/');
   if (cacheAt >= 0) cacheRoots.push(c.pluginRoot.slice(0, cacheAt) + '/plugins/cache');
-  for (const target of Object.values(c.roots)) {
+  for (const [group, target] of Object.entries(c.roots)) {
     if (cacheRoots.some((cache) => within(cache, target))) throw error('update-cache-destination-refused');
-    if (within(c.workspace, target) || within(c.pluginRoot, target) || within(target, c.pluginRoot) || within(target, c.workspace)) {
+    const cabSource = c.brokerPolicy === 'cab-source' && group === 'broker' && target === join(c.workspace, 'src');
+    if ((!cabSource && within(c.workspace, target)) || within(c.pluginRoot, target) || within(target, c.pluginRoot) || within(target, c.workspace)) {
       throw error('update-project-destination-refused');
     }
   }
+  if (c.serviceWorkspace !== undefined && (c.brokerPolicy !== 'cab-source' || !isAbsolute(c.serviceWorkspace) || resolve(c.serviceWorkspace) === '/')) throw error('update-service-workspace-invalid');
+  c.serviceWorkspace = c.serviceWorkspace === undefined ? c.workspace : resolve(c.serviceWorkspace);
   c.state = join(c.home, '.local/state/cab-approval-bridge-update');
   if (within(c.workspace, c.state) || within(c.pluginRoot, c.state)) throw error('update-project-destination-refused');
   return c;
@@ -164,15 +167,25 @@ export async function updateComponents(input, options = {}) {
   }
   if (input.profile !== undefined) throw error('update-profile-invalid');
   if (input.layout !== undefined && input.layout !== 'managed-release') throw error('update-layout-invalid');
-  if (input.brokerPolicy !== undefined && !['install','reuse-readonly'].includes(input.brokerPolicy)) throw error('update-broker-policy-invalid');
+  if (input.brokerPolicy !== undefined && !['install','cab-source','reuse-readonly'].includes(input.brokerPolicy)) throw error('update-broker-policy-invalid');
   const c = configuration(input);
+  if (input.brokerPolicy === 'cab-source') {
+    if (c.brokerDirectory !== join(c.workspace, 'src') || input.layout !== undefined) throw error('update-cab-source-invalid');
+    await directories(c.workspace);
+    await directories(c.brokerDirectory);
+    const project = (await regular(join(c.workspace, 'pyproject.toml'))).data.toString('utf8');
+    const local = JSON.parse((await regular(join(c.workspace, 'plugins/cab-approval-bridge/.codex-plugin/plugin.json'))).data);
+    const installed = JSON.parse((await regular(join(c.pluginRoot, '.codex-plugin/plugin.json'))).data);
+    if (!/^\[project\]\s*\nname\s*=\s*["']cab["']\s*$/m.test(project) ||
+        local.name !== 'cab-approval-bridge' || JSON.stringify(local) !== JSON.stringify(installed)) throw error('update-cab-source-invalid');
+  }
   const readonlyBroker = input.brokerPolicy === 'reuse-readonly';
   if (readonlyBroker) {
     if (input.layout !== 'managed-release') throw error('update-broker-policy-layout-invalid');
     validateBrokerProof(input.brokerProof,c.brokerDirectory);
   } else if (input.brokerProof !== undefined) throw error('update-broker-policy-invalid');
   const service = options.serviceCommand || command, request = options.http || http;
-  const openCode = options.openCodeClient || createOpenCodeV2ClientFromEnv({ directory: c.workspace, baseUrl: c.opencodeUrl,
+  const openCode = options.openCodeClient || createOpenCodeV2ClientFromEnv({ directory: c.serviceWorkspace, baseUrl: c.opencodeUrl,
     ...(options.openCodeFetch ? { fetchImpl: options.openCodeFetch } : {}) });
   const validate = options.syntax || syntax;
   const now = options.now || Date.now;
@@ -377,7 +390,7 @@ export async function updateComponents(input, options = {}) {
   }
   async function brokerState() {
     let value;
-    try { value = await openCode.mcp(c.workspace); }
+    try { value = await openCode.mcp(c.serviceWorkspace); }
     catch (cause) {
       if (cause.code !== 'update-source-unavailable') throw cause;
       if (receipt) receipt.openCodeAvailable = false;
@@ -409,8 +422,8 @@ export async function updateComponents(input, options = {}) {
     return { openCode, broker, unknown };
   }
   async function nativeBroker(action) {
-    if (action === 'connect') await openCode.connectMcp('cgpt-validation', c.workspace);
-    else if (action === 'disconnect') await openCode.disconnectMcp('cgpt-validation', c.workspace);
+    if (action === 'connect') await openCode.connectMcp('cgpt-validation', c.serviceWorkspace);
+    else if (action === 'disconnect') await openCode.disconnectMcp('cgpt-validation', c.serviceWorkspace);
     else throw error('update-broker-action-invalid');
     if (await brokerState() !== (action === 'connect' ? 'connected' : 'disabled')) throw error('update-broker-state-unconfirmed');
   }
@@ -523,9 +536,9 @@ export async function updateComponents(input, options = {}) {
       if (!active[component]) continue;
       const status = await request(c[component === 'monitor' ? 'monitorUrl' : component + 'Url'], component === 'monitor' ? '/api/snapshot' : '/status');
       const workspace = component === 'monitor' ? status.identity?.workspace : status.workspace;
-      if (status.version !== expected[component] || (workspace && workspace !== c.workspace) ||
+      if (status.version !== expected[component] || (workspace && workspace !== c.serviceWorkspace) ||
           (status.pid && status.pid !== Number(meta.MainPID))) return false;
-      if (component === 'monitor' && workspace !== c.workspace) return false;
+      if (component === 'monitor' && workspace !== c.serviceWorkspace) return false;
     }
     if (active.controller && readonlyBroker) {
       if (receipt.runIdentity && receipt.runIdentity !== runIdentity(await registry())) throw error('update-run-identity-changed');
@@ -712,7 +725,7 @@ export async function updateComponents(input, options = {}) {
       if (scripts.length > 64 || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
       const artifacts = [
         ...scripts.map((name) => ({ group: 'scripts', name, source: join(c.pluginRoot, 'scripts', name) })),
-        ...['monitor', 'monitor-data', 'monitor-events', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics']
+        ...['monitor', 'monitor-data', 'monitor-events', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client']
           .map((name) => ({ group: 'monitorScripts', name: 'cgpt-approval-bridge-' + name + '.mjs', source: join(c.pluginRoot, 'scripts/cgpt-approval-bridge-' + name + '.mjs') })),
         ...(readonlyBroker ? [] : brokerFiles.map((name) => ({ group: 'broker', name, source: join(c.pluginRoot, 'broker', name) }))),
         ...['index.html', 'app.mjs', 'stats.mjs', 'style.css'].map((name) => ({ group: 'web', name, source: join(c.pluginRoot, 'web-monitor', name) })),
@@ -766,7 +779,7 @@ export async function updateComponents(input, options = {}) {
         const initialRegistry = await registry();
         receipt.runIdentity = runIdentity(initialRegistry);
         const status = await request(c.monitorUrl, '/api/snapshot');
-        if (status.identity?.workspace !== c.workspace) throw error('update-workspace-divergent');
+        if (status.identity?.workspace !== c.serviceWorkspace) throw error('update-workspace-divergent');
       }
       await save('PREPARED');
       if (readonlyBroker) {
@@ -1138,7 +1151,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
     const keys = { '--plugin-root': 'pluginRoot', '--workspace': 'workspace', '--broker-directory': 'brokerDirectory', '--home': 'home',
       '--controller-url': 'controllerUrl', '--supervisor-url': 'supervisorUrl', '--monitor-url': 'monitorUrl', '--opencode-url': 'opencodeUrl', '--wait-ms': 'waitMs',
       '--profile': 'profile', '--frozen-proof-file': 'frozenProofFile', '--layout':'layout',
-      '--broker-policy':'brokerPolicy','--broker-proof-file':'brokerProofFile' };
+      '--service-workspace':'serviceWorkspace','--broker-policy':'brokerPolicy','--broker-proof-file':'brokerProofFile' };
     const input = {}; let rollbackOnly = false;
     for (let i = 2; i < process.argv.length; i++) {
       const argument = process.argv[i];

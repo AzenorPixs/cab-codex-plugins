@@ -625,8 +625,10 @@ et de relecture des étapes 11 à 13.
    des artefacts ; passe `--layout managed-release` lorsque les entrées pointent
    vers des releases gérées. L'absence d'OpenCode n'empêche pas l'update : les
    fichiers broker sont toujours remplacés dans cette destination.
-   Le home système n'est pas CODEX_HOME. Refuse une destination dans le
-   workspace ou dans le cache du plugin ; ne modifie pas le lancement MCP ni
+   Pour le dépôt CAB uniquement, passe `--broker-policy cab-source` avec
+   `<CAB_ROOT>/src` : l'outil vérifie le projet cab et le manifeste local identique
+   au paquet installé. Le home système n'est pas CODEX_HOME. Refuse toute autre
+   destination dans le workspace ou dans le cache du plugin ; ne modifie pas le lancement MCP ni
    ses variables.
    Lance l'outil depuis le paquet installé, avec les chemins absolus protégés
    comme arguments distincts, le workspace et toutes les URLs effectives :
@@ -900,3 +902,9 @@ Le script valide le fichier public régulier et borné ainsi que la publication,
 Après démarrage ou rechargement coordonné, appeler /model-policy/resolve avec les exigences du prompt et providerMaxBytes choisi par la session. Exiger une résolution réussie du contrôleur avant prévol et nouvel armement ; la simple réussite du CLI ne prouve pas la transmission au service. pllm-catalog-unconfigured indique un raccord absent dans le processus chargé ; les autres diagnostics de catalogue, fournisseur ou prévol restent distincts. Ne pas contourner par un modèle manuel. Une erreur conserve le job non armé et exige la récupération autorisée.
 
 Pour le raccord 2.0.0, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+
+Pour `cab-source`, si les services sont configurés pour un autre projet, fournir
+`--service-workspace <workspace-absolu-observé>` : les contrôles de version et
+les appels MCP ciblent ce workspace réel sans modifier les configurations.
+La récupération conserve le même journal et les mêmes destinations. Le jeu Web
+indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs.
