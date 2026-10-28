@@ -18,7 +18,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 1.10.6 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 2.0.0 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -26,7 +26,7 @@ et port existants, sans activation au login. Un échec PLLM ou CAB ultérieur
 n'arrête pas le moniteur. Une divergence active ou un échec de monitoring ne
 permet aucun arrêt, redémarrage ou changement de RUN dans les autres briques.
 
-## RUN concurrents CAB 1.10.6
+## RUN concurrents CAB 2.0.0
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -36,7 +36,29 @@ Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_i
 
 Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /CAB pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
-Installer ensemble les scripts controller, job-context, model-policy, prepare-model-policy, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Un jeu mixte est refusé avant permission. Le registre schéma 4 exige une maintenance explicite pour migration ; /CAB update prépare le jeu puis actualise les briques actives sous maintenance partagée selon references/component-update.md ; les autres procédures ne remplacent pas un jeu actif implicitement. Aucun démarrage/reprise de RUN ne purge ou reconnecte l'infrastructure commune.
+Installer ensemble les scripts controller, job-context, model-policy, prepare-model-policy, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, client OpenCode V2, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Le manifeste doit référencer le répertoire skills distribué ; approval-bridge doit porter `references/component-update.md`, la référence utilisée par l'updater. Un jeu mixte est refusé avant permission.
+
+## Mise à jour forcée CAB 2.0.0
+
+`/CAB update` est la procédure unique. `/CABU` sans argument charge le fichier
+frère `CAB.md` de même version et lui transmet exactement `update` ; ne duplique
+pas la procédure dans CABU. Cette référence décrit l'updater
+`scripts/cgpt-approval-bridge-update.mjs` distribué par le plugin.
+
+Après validation et sauvegarde du jeu, l'updater ne consulte aucun état de RUN,
+permission, coordination globale ou service systemd comme précondition. Il
+arrête systématiquement les unités controller, supervisor et monitor, remplace
+atomiquement les fichiers des quatre briques, recharge systemd puis démarre
+systématiquement les trois unités. Il n'active aucune unité au login. Les RUN,
+permissions et autres états CAB ne sont ni suspendus, ni réconciliés, ni
+modifiés par cette procédure.
+
+OpenCode n'est jamais arrêté. Si son API répond après le remplacement, l'updater
+tente le rechargement natif du broker et rapporte la readiness obtenue. Si
+OpenCode ou son API sont absents, les trois fichiers broker sont tout de même
+installés ; la version chargée est alors rapportée `INDISPONIBLE` et ne bloque
+pas le résultat des autres briques. Le bilan sépare versions du paquet, fichiers
+déployés et processus réellement observés.
 
 ## Étapes du cycle et observation web
 
@@ -66,18 +88,16 @@ gate terminal. Les jobs anciens sans lifecycle restent compatibles.
 - OpenCode est observé indépendamment via son SSE HTTP direct.
 - Après reconnexion SSE ou divergence, réconcilier l’état réel par HTTP auprès d’OpenCode.
 - Les validations normales passent par MCP stdio.
-- L’état `GET /mcp` du serveur OpenCode est la source de vérité de connexion MCP pour les sessions persistantes ; une sortie CLI ne peut pas s’y substituer.
-- Une réinitialisation globale exclusive CAB purge entièrement son ancien état technique et crée une nouvelle session maîtresse après confirmation de `cgpt-validation: connected`. La réutilisation d'une session concerne seulement la reprise du même RUN. Tous les mandats passent par `POST /session/<id>/message` et restent observables dans OpenCode.
+- L’état `GET /api/mcp` du serveur OpenCode est la source de vérité de connexion MCP pour les sessions persistantes ; une sortie CLI ne peut pas s’y substituer.
+- Une réinitialisation globale exclusive CAB purge entièrement son ancien état technique et crée une nouvelle session maîtresse après confirmation de `cgpt-validation: connected`. La réutilisation d'une session concerne seulement la reprise du même RUN. Tous les mandats passent par `POST /api/session/<id>/prompt` et restent observables dans OpenCode.
 - Chaque opération OpenCode nécessitant une permission native constitue un mandat unitaire. Avant cette opération, l’agent soumet `request_validation` avec l’identifiant de session, le répertoire cible et exactement un fichier relatif ou une commande complète. Le contrôleur ne transmet `once` qu’après une décision CAB `approved` explicite et corrélée à ce mandat unique ; cette décision est consommée après une seule permission native correspondante.
 - La fin d’un tour OpenCode ne constitue pas la fin du job : conserver la boucle de pilotage et transmettre le mandat suivant dans la même session jusqu’à un état terminal explicite.
 - Ne jamais lire, journaliser ou afficher de secret.
 - Une interdiction de fermer ou redémarrer OpenCode vise son processus et
-  l’interface visible. Elle ne prohibe pas une authentification fournisseur
-  explicitement autorisée, son stockage privé standard par OpenCode, ni un
-  rechargement interne via `POST /instance/dispose`. Le secret reste hors du
-  broker, du modèle, des sorties et des sources. Attendre la fin du mandat
-  courant, préserver le processus et la session, puis réconcilier santé, MCP,
-  `broker_readiness` réel et test CAB avant de reprendre le pilotage.
+  l’interface visible. Le protocole V2 ne s'appuie pas sur `/instance/dispose`.
+  Le secret Basic Auth reste hors du broker, du modèle, des sorties et des
+  sources. Préserver le processus et la session, puis réconcilier `/api/info`,
+  `/api/mcp`, `broker_readiness` réel et test CAB avant de reprendre le pilotage.
 
 ## Rôle non déléguable de l’orchestrateur
 
@@ -212,7 +232,7 @@ ne redémarre les processus des agents.
 
 ## Statistiques obligatoires à chaque archivage
 
-Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.10.6 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
+Les agrégats /statistics et /runs/<runId>/statistics préparent un brouillon individuel à six sections. Les consultations de fenêtres et imports sont décrits dans references/concurrent-runs.md. Préparer pendant le travail, publier avec les accès ciblés et finaliser le rapport après libération des protections métier. Les anciennes /integration et /integration-request sont refusées dans le profil 1.10.10 ; /publish fournit le reçu durable et l'entrée éventuelle en REPORT. Le rapport vérifié reste obligatoire avant gate et livraison, avec un mandat distinct pour ce seul fichier et N/A motivés pour les mesures absentes.
 
 Charger le skill voisin `../coding-session-statistics/SKILL.md` dès le début
 de chaque change piloté. Préparer ses relevés de quota et ses sondes avant le
@@ -251,21 +271,21 @@ Une reprise ordinaire du même RUN conserve son état et commence par la
 réconciliation. Un prévol de récupération divergent conserve la candidate,
 le job et le runtime selon la procédure ci-dessous, sans purge ni renouvellement.
 
-1. Vérifier `GET /global/health` d’OpenCode.
+1. Vérifier `GET /api/info` d’OpenCode avec Basic Auth, une version majeure 2 et un schéma V2 valide.
 2. Vérifier que `cgpt-validation` est déclaré comme MCP local `stdio`.
-3. Vérifier `GET /mcp` et exiger `cgpt-validation: connected`.
-4. Si ce statut est absent ou en échec, exécuter seulement la récupération contrôlée `POST /instance/dispose`, puis attendre `/global/health` et `/mcp` sains. Ne jamais tuer ou lancer directement le broker, qui appartient à OpenCode.
+3. Vérifier `GET /api/mcp` dans la location demandée et exiger `cgpt-validation: connected`.
+4. Si ce statut est absent ou en échec, tenter uniquement les routes V2 documentées de reconnexion de ce serveur MCP puis relire `/api/mcp`. Ne jamais appeler `/instance/dispose`, tuer ou lancer directement le broker, qui appartient à OpenCode.
 5. Relever par API, pour l’agent de codage ciblé, le fournisseur, le modèle et le niveau de raisonnement effectivement configurés. Vérifier que le fournisseur et le modèle sont publiés par OpenCode sans lire de secret.
 6. Créer une session de prévol temporaire sans outil ni accès au projet, lui adresser une requête inoffensive en imposant exactement ces paramètres et vérifier la réponse ainsi que ses métadonnées observées. Fermer la session temporaire après le contrôle.
 7. Si la réponse, le fournisseur, le modèle ou le raisonnement est absent ou divergent, publier `CAB_INACTIF` avec la cause et ne créer ni session persistante ni contrôleur. Ne jamais corriger la configuration à la place du développeur.
 8. Installer ou actualiser les ressources utilisateur du contrôleur et du superviseur sans `systemctl --user enable`, puis démarrer ou réutiliser explicitement le service `cgpt-approval-bridge-controller.service`, qui exécute `../../scripts/cgpt-approval-bridge-controller.mjs` hors sandbox avec `OC_Codex_OUTSIDE_SANDBOX=1` (ou l’alias historique `OC_CGPT_OUTSIDE_SANDBOX=1`). Vérifier qu'il est actif et que son redémarrage sur échec est actif.
 9. Vérifier le statut local du contrôleur.
 10. Démarrer explicitement `cgpt-approval-bridge-supervisor.service` après le contrôleur, sans activation au login. Vérifier son statut local et `Restart=on-failure` ; il supervise le job sans créer de décision ni de session de remplacement.
-11. Démarrer ou maintenir le SSE direct OpenCode.
-12. Créer une nouvelle session maîtresse pour un nouveau RUN via `POST /session` ; réutiliser la session seulement pour une reprise du même RUN. Conserver son identifiant et adresser tous les mandats par `POST /session/<id>/message`.
+11. Démarrer ou maintenir le SSE authentifié `GET /api/event`.
+12. Créer une nouvelle session maîtresse pour un nouveau RUN via `POST /api/session` ; réutiliser la session seulement pour une reprise du même RUN. Conserver son identifiant et adresser tous les mandats par `POST /api/session/<id>/prompt`.
 13. Appeler `broker_readiness` dans cette session, sans accès au projet.
 14. Interpréter `READY`, `DEGRADED`, `BLOCKED` ou `HUMAN_REQUIRED`.
-15. Réconcilier l’état OpenCode via HTTP après chaque reconnexion ou divergence, puis revalider `/mcp` avant tout mandat.
+15. Réconcilier l’état OpenCode via HTTP après chaque reconnexion ou divergence, puis revalider `/api/mcp` avant tout mandat.
 16. Vérifier qu’aucune approbation parasite n’est en attente.
 17. Tester `request_validation` avec un `requestId` inédit dans la session persistante.
 18. Rendre une décision Codex explicite unique.
@@ -514,10 +534,11 @@ phase ne reconstruit aucune décision locale perdue. `complete` exige encore
 un nouveau prévol intégral avec décision et permission `once` propres.
 Le retry ordinaire d'une décision approved reste interdit.
 
-Pour OpenCode 1.19.0, `tools.bash=true` donne `allow`. Précharger le cadrage
-avec `noReply`, rétablir `ask` par PATCH natif et le vérifier avant génération.
-Envoyer ensuite les mandats exécutables sans champ `tools`. Les analyses en
-lecture seule continuent à désactiver explicitement leurs outils mutables.
+OpenCode V2 n'accepte pas le champ V1 `tools` dans le corps d'un prompt. CAB
+vérifie donc les règles natives V2 de la session et n'envoie jamais d'instruction
+V1. Si une reprise héritée exige une preuve du champ `tools` que le transcript
+V2 n'expose pas, CAB conserve le job et refuse la réconciliation sans inférer
+une autorisation ou une exécution.
 
 ## Environnements Docker/LXC réservés par change
 
@@ -527,8 +548,8 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 1.10.6, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, examiner la politique PLLM suivante. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni sélection implicite d'un autre niveau. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 2.0.0, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, examiner la politique PLLM suivante. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni sélection implicite d'un autre niveau. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
-Pour le raccord 1.10.6, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+Pour le raccord 2.0.0, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.

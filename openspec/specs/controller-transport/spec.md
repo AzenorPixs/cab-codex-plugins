@@ -193,11 +193,17 @@ POST /job/recover MUST accepter prepare, retry, reconcile et complete, corrélé
 - **THEN** elle est refusée sans modifier le contrat
 
 ### Requirement: Préconditions techniques de récupération
-prepare, retry et complete MUST vérifier un job armé avec gate OPEN, mandat courant clôturé, aucune demande indécise, aucun rappel, aucune permission native ni transmission en cours. Seule la reprise humaine attestée décrite ci-dessous MAY déroger au statut armé et au gate OPEN. Via OpenCode dans directory, ils MUST vérifier santé, chemin, MCP connecté et les deux sessions inactives dans cette racine. Un contrôle indisponible ou divergent MUST refuser la transition.
+prepare, retry et complete MUST vérifier un job armé, son gate OPEN, le mandat courant clôturé et l’absence de demande indécise, rappel, permission native ou transmission en cours. Ils MUST vérifier par l’API V2 authentifiée la location cible, la majeure 2 de `/api/info`, le MCP connecté, les sessions inactives et l’absence de permissions natives. Toute observation indisponible, non authentifiée ou divergente MUST refuser la transition sans repli V1.
 
 #### Scenario: Précondition manquante
 - **WHEN** une permission, une session occupée, une demande indécise ou un contexte divergent est observé
 - **THEN** la transition est refusée sans transfert ni approbation implicite
+
+#### Scenario: Réconciliation héritée sans preuve V2
+- **WHEN** la récupération historique cherche une preuve fondée sur le champ `tools` d'un message utilisateur et que le transcript V2 ne l'expose pas
+- **THEN** CAB refuse la réconciliation avec une erreur explicite, conserve le job et n'infère ni autorisation ni exécution native
+
+Les métadonnées V2 arbitraires MUST NOT être interprétées comme le champ V1 `tools`.
 
 ### Requirement: Gel et persistance de récupération
 prepare MUST persister un gel observable sans contenu de projet ni secret et invalider les autorisations exécutables de l'ancienne session sans modifier les décisions historiques. Le gel et les sessions révoquées MUST survivre à un redémarrage. Un échec de complete MUST conserver le gel.
@@ -673,3 +679,39 @@ OC_Codex_MAINTENANCE_STATE_DIR MAY désigner un répertoire absolu privé hors w
 #### Scenario: Chemin client arbitraire
 - **WHEN** un client tente de choisir un autre fichier ou un journal non privé
 - **THEN** l'adoption est refusée sans lire ce chemin
+
+### Requirement: Réconciliation de rejet du job courant suspendu
+La route de réconciliation MUST accepter recoveryId=null uniquement pour le job armé courant, la session réservée exacte et le RUN sous PAUSE explicite. La preuve native MUST établir une unique soumission identique et un état PENDING corrélé ; un timeout -32001 MUST exiger un polling ultérieur du même approval_id.
+
+#### Scenario: Écriture non exécutée refusée avant admission
+- **WHEN** la soumission du job courant a expiré, un polling exact confirme PENDING, le RUN est en PAUSE et aucune permission ou effet n'existe
+- **THEN** un reçu REJECTION_ONLY autorise seulement le refus corrélé, sans exécuter ni rejouer l'écriture
+
+#### Scenario: Effet ou identité non prouvée
+- **WHEN** la séquence comporte un outil métier, une autre identité, un polling différent, une permission, une décision ou une dérive du préfixe
+- **THEN** la réconciliation refuse sans création partielle ni permission
+
+### Requirement: Absence d'effet avant rejet réconcilié
+La réconciliation MUST refuser tout outil d'effet, autre demande, permission native, session occupée, décision ou acquisition dans la séquence examinée. Elle MUST recontrôler le préfixe natif avant persistance.
+
+#### Scenario: Préfixe modifié
+- **WHEN** les parties natives diffèrent entre l'inspection et le dernier recontrôle
+- **THEN** aucun reçu n'est créé
+
+### Requirement: Admission atomique limitée au rejet
+Le propriétaire, l'opération et le reçu MUST être persistés atomiquement lorsque l'admission initiale est absente. La validation reconstruite MUST accepter exclusivement rejected, jamais approved ou needs_clarification. Le profil de récupération historique MUST rester compatible.
+
+#### Scenario: Refus de l'approbation
+- **WHEN** une décision approved ou needs_clarification est proposée sur une demande réconciliée
+- **THEN** le contrôleur refuse sans transmission native
+
+#### Scenario: Ancien contrôleur sans propriétaire
+- **WHEN** la route de décision ne peut attribuer la demande non exécutée et une décision explicite de rejet est fournie par l'orchestrateur autorisé
+- **THEN** l'outil manuel reject du broker peut enregistrer uniquement ce refus ; le même approval_id MUST confirmer REJECTED avant clôture du mandat, sans faire passer une pause pour une approbation
+
+### Requirement: Compatibilité du reçu générique
+Le reçu générique MUST conserver recoveryId=null et les preuves dans le schéma 4. Un ancien lecteur incompatible MUST refuser cet état après premier usage. Un retour à cet ancien lecteur MUST exiger une réconciliation distincte et MUST NOT restaurer un registre antérieur effaçant les nouvelles décisions.
+
+#### Scenario: Retour après premier rejet générique
+- **WHEN** un ancien lecteur ne reconnaît pas recoveryId=null
+- **THEN** le retour reste bloqué jusqu'à conversion autorisée, sans perte de décision

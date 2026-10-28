@@ -27,7 +27,8 @@ crée ni permission ni remédiation des composants observés.
    malsaine ou un ancien job abandonné n'interdit pas la purge d'une nouvelle
    session dont l'inactivité et la propriété sont prouvées.
 3. Déconnecter uniquement `cgpt-validation` par
-   `POST /mcp/cgpt-validation/disconnect?directory=<contexte encodé>`.
+   `POST /api/experimental/mcp/cgpt-validation/disconnect?directory=<contexte encodé>`
+   avec Basic Auth et le credential local privé.
    Vérifier la déconnexion et la libération du verrou du broker. Ne pas tuer
    ni lancer directement le broker ; ne pas fermer ou redémarrer OpenCode.
 4. Résoudre les espaces d'état réellement utilisés. Le broker utilise par
@@ -58,9 +59,9 @@ crée ni permission ni remédiation des composants observés.
    un état recréé impose `CAB_INACTIF` ; ne pas poursuivre après une purge
    partielle. Les sources, secrets, configurations, rapports et historiques
    natifs OpenCode/Codex restent hors des espaces purgés.
-7. Reconnecter le broker par
-   `POST /mcp/cgpt-validation/connect?directory=<racine encodée>`, puis vérifier
-   `/global/health`, `/path` et `/mcp` dans ce contexte. Installer et démarrer
+7. Reconnecter le broker par la route V2 authentifiée
+   `POST /api/experimental/mcp/cgpt-validation/connect?directory=<racine encodée>`, puis vérifier
+   `/api/info`, `/api/location` et `/api/mcp` dans cette location. Installer et démarrer
    ensuite les ressources CAB conformément au skill, puis créer une nouvelle
    session maîtresse. Ne pas réadopter l'ancien job ou sa session.
 8. Appeler réellement `broker_readiness` dans cette session et exiger `READY`,

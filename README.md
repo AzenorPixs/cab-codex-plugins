@@ -6,7 +6,25 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-## Prévol orphelin et maintenance contrôlée — 1.10.6
+La version source courante est CAB 2.0.0. Le plugin CABU fournit un skill
+d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
+qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
+des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas
+le remplacement des fichiers broker ; sa version chargée est alors rapportée
+`INDISPONIBLE`.
+
+CAB 2.0.0 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
+sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
+fixe `opencode` et le mot de passe configuré par `OPENCODE_PASSWORD` ; CAB
+lit son mot de passe depuis `~/.config/cab-approval-bridge/opencode.password`
+(permissions `0600`) ou depuis le credential systemd provisionné par l'unité.
+Le client local vise `127.0.0.1:4096`, jamais l'adresse de bind `0.0.0.0`.
+Le serveur MCP CAB se déclare dans `mcp.servers.cgpt-validation` avec le type
+`local` et le transport `stdio`.
+
+La version 1.10.7 prend en charge les propriétaires explicitement distincts des modules, du répertoire et des processus broker dans la preuve privée de maintenance. Une demande orpheline du job courant sous PAUSE peut être réconciliée uniquement pour rejet, avec preuve native exacte d'absence d'effet. L'installation de sources et la migration des processus restent vérifiées séparément.
+
+## Prévol orphelin et maintenance contrôlée — 1.10.7
 
 Une notification refusée avant admission ne laisse plus de propriétaire de
 demande sans validation locale. Pour un ancien prévol orphelin PENDING,
@@ -21,9 +39,9 @@ ce reçu et confirme le véritable HELD après recontrôle. La maintenance ne
 répare pas elle-même le prévol et n'accorde aucune permission métier.
 
 Cette transition qualifiée conserve OpenCode et le broker, ainsi que le Web.
-Elle peut charger le contrôleur 1.10.6 en conservant ces processus 1.7.1 ; son
-bilan annonce chaque version réellement observée. Le paquet 1.10.6 ne prouve
-pas que tout le runtime est déjà en 1.10.6. Toute autre combinaison est refusée.
+Elle peut charger le contrôleur 1.10.7 en conservant ces processus 1.7.1 ; son
+bilan annonce chaque version réellement observée. Le paquet 1.10.7 ne prouve
+pas que tout le runtime est déjà en 1.10.7. Toute autre combinaison est refusée.
 L'activation exige un accord distinct. Procédure, limites de reprise et
 configuration : `TECHNICAL.md` et la référence distribuée `component-update.md`.
 
@@ -33,7 +51,7 @@ relatifs, avec conservation des anciennes releases. Le diagnostic
 demandes non attribuées. Les procédures et leurs limites figurent dans
 [la référence de maintenance](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
 
-## Supervision web locale — CAB Monitor 1.10.6
+## Supervision web locale — CAB Monitor 1.10.7
 
 CAB Monitor fournit une interface moderne et responsive, indépendante du LLM,
 du contrôleur et du superviseur. Elle affiche les briques, les RUN, leurs
@@ -160,9 +178,9 @@ Les corps de messages, commandes, URL et sorties ne sont pas collectés ;
 les métriques absentes restent `N/A`. L'orchestrateur vérifie le brouillon,
 le complète depuis les preuves autorisées et mandate sa publication.
 
-CAB 1.10.6 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
+CAB 1.10.7 utilise des ensembles de verrous atomiques sur les ressources partagées : lectures compatibles, écriture exclusive, attente limitée aux conflits. Les fichiers privés prouvés bénéficient d'une admission exclusive sans appel séparé de verrou partagé. La publication ciblée conserve les preuves, le reçu durable et la phase REPORT ; les pairs indépendants continuent. Le gel global concerne seulement réconciliation commune, maintenance partagée, pause globale ou arrêt global.
 
-Le jeu source 1.10.6 conserve la correction de reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
+Le jeu source 1.10.7 conserve la correction de reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
 
 Les consultations /CAB stats, /CAB statslast, /CAB stats 24, /CAB stats7 et /CAB stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
@@ -196,7 +214,7 @@ Le broker MCP est **local en stdio** : aucun serveur MCP réseau n'est exposé.
 
 ## Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.10.6 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.10.7 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -232,7 +250,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.10.6 partagée"]
+    subgraph CAB["Infrastructure CAB 1.10.7 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -343,9 +361,9 @@ commune du projet ; elle n'autorise pas un commit ou un déploiement.
 
 ## Commande `/CAB`
 
-La commande canonique utilise les majuscules : `/CAB`. Le raccourci `/CABU`
-sans argument exécute exactement `/CAB update`, avec les mêmes contrôles et
-la même reprise. L'ancienne entrée `/cab` reste compatible et transmet ses
+La commande canonique utilise les majuscules : `/CAB`. `/CABU` sans argument
+exécute exactement `/CAB update` jusqu'au rapport complet. L'ancienne entrée
+`/cab` reste compatible et transmet ses
 arguments inchangés. Les fichiers `CAB.md`, `CABU.md` et `cab.md` sont livrés
 ensemble ; les alias exigent leur fichier frère canonique de même version.
 Leur installation dans le profil reste une opération distincte de cette
@@ -384,7 +402,7 @@ purge. Le plugin fournit l'outil de purge et son protocole. Une reprise
 conserve son état, y compris après prévol de récupération divergent dans la
 candidate, selon la procédure ci-dessous.
 
-`/CAB start` reconnecte et vérifie le MCP actif par `/mcp`, installe de façon différée les
+`/CAB start` reconnecte et vérifie le MCP actif par `/api/mcp`, installe de façon différée les
 services utilisateur du contrôleur et du superviseur sans les activer au
 login, les démarre explicitement, initialise la supervision CAB, puis crée
 une nouvelle session maîtresse persistante visible dans OpenCode.
@@ -434,26 +452,19 @@ ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
 installées mais inactives jusqu'au prochain
 `/CAB start`.
 
-`/CAB update` compare le plugin et la commande de profil à leur source
-GitHub validée, puis met à jour **broker, contrôleur, superviseur et Web**,
-y compris lorsqu'ils fonctionnent. Le paquet embarque tous les modules du
-broker. La commande prépare et vérifie le jeu, sauvegarde ses seuls artefacts,
-puis place CAB en maintenance partagée. Les nouvelles admissions sont gelées
-et la bascule attend une frontière sûre, sans répondre aux permissions.
-
-Les briques précédemment actives sont arrêtées et redémarrées sur le jeu
-vérifié ; celles qui étaient inactives restent inactives. RUN, pauses,
-décisions, preuves, archives et configurations sont conservés. OpenCode reste
-ouvert. Le succès exige les versions réellement chargées et les identités des
-RUN avant levée du gel. Une erreur de démarrage ou de version déclenche un
-retour aux artefacts sauvegardés, sans restaurer un ancien runtime métier.
-
-Si l'attente atteint 120 secondes, la transaction reste en attente avec ses
-processus et son gel ; relancer `/CAB update` reprend cette transaction.
-Un jeu déjà conforme ne redémarre rien. Le bilan distingue versions du paquet,
-fichiers déployés, processus actifs, inactivité et repli. Une installation
-manuelle non gérée, un répertoire broker inconnu ou situé dans le workspace
-reste un blocage explicite, sans modification de sa configuration. Détails :
+`/CAB update` vérifie le plugin installé, le skill `approval-bridge`, sa
+référence de maintenance et les commandes `CAB.md`, `CABU.md` et `cab.md`.
+CABU délègue à la procédure canonique et attend son rapport complet. Après
+staging et sauvegardes, l'update arrête systématiquement les trois unités
+systemd CAB, remplace les fichiers des quatre briques, recharge systemd puis
+redémarre controller, supervisor et monitor. Il n'inspecte pas les états RUN,
+permissions ou coordination comme précondition ; aucune unité n'est activée au
+login. OpenCode reste ouvert. Son API native recharge le broker si elle répond.
+Si elle est indisponible, les fichiers broker sont quand même remplacés et le
+runtime est rapporté `INDISPONIBLE`. Le bilan distingue versions publiées,
+installées, déployées et réellement actives. Un échec de démarrage déclenche le
+retour aux fichiers sauvegardés et le redémarrage des unités ; le rapport
+indique le résultat du repli. Détails :
 `skills/approval-bridge/references/component-update.md` dans le plugin.
 
 Après un prévol de récupération divergent ou incomplet refusé sans effet,
@@ -631,17 +642,17 @@ CAB expose quatre états :
 
 ## Distribution
 
-Le dépôt contient directement les sources du bridge et du plugin Codex. La
-marketplace est définie dans `.agents/plugins/marketplace.json` et référence
-le plugin situé dans `plugins/cab-approval-bridge/`.
+Le dépôt contient directement les sources du bridge et des plugins Codex CAB et
+CABU. La marketplace est définie dans `.agents/plugins/marketplace.json` et
+référence les plugins `plugins/cab-approval-bridge/` et `plugins/cabu/`.
 
 Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-La version de base actuelle du broker, du contrôleur, du superviseur et du
-plugin est `1.10.6`. Le plugin ajoute un cachebuster Codex pour les
-installations locales.
+La version de base actuelle des briques CAB, du plugin CABU et des commandes
+est `2.0.0`. Chaque plugin ajoute un cachebuster Codex pour les installations
+locales.
 
 ## Documentation
 
@@ -654,13 +665,13 @@ installations locales.
 - **CHANGELOG.md** — historique des versions.
 - **openspec/specs/** — contrats normatifs des capacités CAB.
 
-## Plusieurs sessions CISMP — CAB 1.10.6
+## Plusieurs sessions CISMP — CAB 1.10.7
 
 Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
 
 Consulter GET /runs puis les routes /runs/<runId>/... ; négocier resource-scoped-v1 avant mandat mutable. Les anciens appels d'intégration globale ordinaire sont refusés sans effet. Lire ORCHESTRATED_CODING.md et la référence du skill avant activation. Les formats historiques exigent une maintenance explicite ; CISM, CAISM et prompts directs restent hors concurrence pilotée. Les worktrees nécessitent une qualification distincte.
 
-## Broker existant sous un autre compte — 1.10.6
+## Broker existant sous un autre compte — 1.10.7
 
 Le mode explicite reuse-readonly réutilise les trois fichiers broker déjà
 cibles sans les installer ni changer leurs droits. Une preuve privée lie
@@ -669,9 +680,9 @@ relancés par leurs autorités respectives, sans fermer OpenCode ou modifier
 son MCP. Après intention de déconnexion, une panne conserve le gel pour
 récupération ; elle ne promet pas un retour au processus ancien. Voir la
 référence component-update.md pour la procédure. Aucune activation réelle
-n'est déclenchée par la préparation source 1.10.6.
+n'est déclenchée par la préparation source 1.10.7.
 
-## Réservation Docker/LXC et actualisation — 1.10.6
+## Réservation Docker/LXC et actualisation — 1.10.7
 
 Chaque change peut réserver ses environnements de test Docker/LXC avant leur préparation. La réservation reste détenue entre commandes jusqu'à la fin de tous les tests et à une restitution vérifiée : nettoyage puis contrôle distincts, réussis et corrélés. Une interruption, un échec ou un timeout ne libère rien automatiquement. Les changes utilisant d'autres environnements continuent. Le protocole et les limites entre registres CAB sont détaillés dans la référence [concurrent-runs](plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md).
 
@@ -683,28 +694,28 @@ RUN et Changes sont classés par nombre absolu de tâches cochées décroissant,
 
 Les états des composants et RUN, les compteurs et les détails représentent le snapshot daté affiché. Ils restent stables jusqu'à la prochaine vue appliquée, notamment en Manuel ou après erreur de rafraîchissement. Une source déjà ancienne lors du relevé reste indiquée comme telle. Les commandes de gestion vérifient séparément la fraîcheur à l'heure courante et peuvent demander une actualisation avant exécution.
 
-Le pavé **Web** indique **Disponible** pendant les 30 minutes suivant le dernier rafraîchissement réussi de la vue, puis **Non observé**, même sans nouvelle récupération. Une perte SSE seule ne change pas ce délai et un rafraîchissement échoué ne le prolonge pas. Les autres composants conservent l'état observé à la date du snapshot affiché. La version source 1.10.6 ne prouve aucune mise à jour de l'installation active.
+Le pavé **Web** indique **Disponible** pendant les 30 minutes suivant le dernier rafraîchissement réussi de la vue, puis **Non observé**, même sans nouvelle récupération. Une perte SSE seule ne change pas ce délai et un rafraîchissement échoué ne le prolonge pas. Les autres composants conservent l'état observé à la date du snapshot affiché. La version source 1.10.7 ne prouve aucune mise à jour de l'installation active.
 
 Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromium et Firefox, suivent aussi ce cycle avec les clés `browser:<hôte>/<navigateur>`. La réservation reste détenue jusqu'à fermeture des sessions WebDriver/BiDi et processus, libération des ports et profils temporaires du change, nettoyage puis vérification distincts. Les sessions utilisateur préexistantes sont préservées. Les ensembles navigateur/conteneur sont acquis atomiquement ; des mécanismes indépendants peuvent avancer.
 
-## Sélection du modèle de codage — 1.10.6
+## Sélection du modèle de codage — 1.10.7
 
 Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, demander medium ; si cette variante est indisponible, examiner la politique PLLM suivante. Un modèle imposé incompatible bloque. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.
 
-## Maintenance des registres volumineux — 1.10.6
+## Maintenance des registres volumineux — 1.10.7
 
 La mise à jour des briques accepte un registre complet jusqu'à 16 Mio, en HTTP et pour son contrôle privé sous maintenance. Cette exception reste limitée au registre ; les autres bornes et toutes les gardes sont conservées. Le déploiement local distingue sources qualifiées, plugin installé, publication distante et versions réellement chargées. Les CISMP en pause ne reprennent qu'après preuve de mise à jour et réconciliation.
 
-### Compatibilité et reprise de maintenance 1.10.6
+### Compatibilité et reprise de maintenance 1.10.7
 
-Les clés logiques historiques Docker/LXC/navigateur sont conservées à la lecture. Les nouvelles réservations de test et les permissions gardent leurs contrôles canoniques. Si le contrôleur cible échoue à lire cette histoire après déconnexion du broker, la réparation ciblée conserve le même gel, le journal initial et les données métier, puis prépare une nouvelle release immuable. Consulter [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md) ; la réussite exige les quatre versions réellement chargées et le même processus OpenCode avant reprise explicite des RUN.
+Les clés logiques historiques Docker/LXC/navigateur sont conservées à la lecture. Les nouvelles réservations de test et les permissions gardent leurs contrôles canoniques. Si le contrôleur cible échoue à lire cette histoire après déconnexion du broker, la réparation ciblée conserve le même gel, le journal initial et les données métier, puis prépare une nouvelle release immuable. Consulter [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md) ; ces vérifications renforcées concernent les profils frozen-recovery-controller et reuse-readonly, pas le flux standard `/CABU`.
 
-Le contrôle du broker 1.10.6 reconnaît aussi un enfant lancé par un thread secondaire du même OpenCode. Les vérifications de parent, UID, commande et unicité restent strictes ; une preuve absente ou divergente conserve le gel de maintenance.
+Le contrôle du broker 1.10.7 reconnaît aussi un enfant lancé par un thread secondaire du même OpenCode. Les vérifications de parent, UID, commande et unicité restent strictes ; une preuve absente ou divergente conserve le gel de maintenance.
 
-### Budget /provider — 1.10.6
+### Budget /provider — 1.10.7
 
 La session de pilotage peut imposer providerMaxBytes dans /model-policy/resolve et dans modelSelection lors de l'armement. Ce budget entier positif en octets s'applique à ce seul appel /provider. Sans valeur, le défaut reste 2 Mio ; sessions/messages et catalogue PLLM conservent leurs limites. Voir la référence [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md). Aucun corps fournisseur privé n'est enregistré dans les preuves.
 
-### Raccord PLLM/OpenCode — 1.10.6
+### Raccord PLLM/OpenCode — 1.10.7
 
 Le paquet prépare un patch de catalogue public à transmettre au contrôleur, rapproche l'alias logique Go avec l'identité native vérifiée et accepte les variantes de prévol imbriquées ou historiques cohérentes. Les cas ambigus, déconnectés ou contradictoires restent refusés. La référence [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) précise préparation, transmission et compatibilité ; les sources ne déploient aucun service.

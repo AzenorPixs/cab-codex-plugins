@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '1.10.6';
+export const VERSION = '2.0.0';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -446,11 +446,14 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('resource-revision-stale');
     }
   }
-  operationCandidate(runId, approval, { candidateSession = null } = {}) {
+  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false } = {}) {
     const preflight = Array.isArray(approval.files) && approval.files.length === 0 &&
       approval.commands?.length === 1 && approval.commands[0] === '/usr/bin/true' &&
       Array.isArray(approval.resources) && approval.resources.every((r) => r.mode === 'read');
-    this.admission(runId, preflight);
+    if (rejectionOnly) {
+      this.mutable();
+      if (this.runs.get(runId)?.suspension?.action !== 'PAUSE') throw new CoordinationError('notification-reconciliation-pause-required');
+    } else this.admission(runId, preflight);
     const { run, resources } = this.scope(runId, approval.reservation_version, approval.resources);
     if (approval.coordination_protocol !== COORDINATION_PROTOCOL || !id(approval.operation_id) ||
         !hash(approval.operation_digest) || !id(approval.requestId) ||
@@ -497,20 +500,21 @@ export class ResourceRunRegistry extends RunRegistry {
     this.persist();
   }
   reconcileNotification(runId, approval, identityDigest, receipt) {
-    const op = this.operationCandidate(runId, approval, { candidateSession: receipt.sessionId });
-    const prior = this.checkRequestReconciliation(runId, approval.requestId, identityDigest, receipt);
+    const pausedOrphan = receipt.recoveryId === null;
+    const op = this.operationCandidate(runId, approval, { candidateSession: receipt.sessionId, rejectionOnly: pausedOrphan });
+    const prior = this.checkRequestReconciliation(runId, approval.requestId, identityDigest, receipt, { allowMissing: pausedOrphan });
     if (receipt.operationId !== op.operationId || receipt.approvalId !== approval.approval_id ||
         receipt.contextId !== op.contextId || receipt.version !== op.version || receipt.sessionId !== op.sessionId) {
       throw new CoordinationError('notification-reconciliation-identity-divergent');
     }
-    if (!this.resourceState.operations[op.operationId] || op.state !== 'PREPARED' || op.native !== undefined ||
+    if ((!pausedOrphan && !this.resourceState.operations[op.operationId]) || op.state !== 'PREPARED' || op.native !== undefined ||
         Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId ||
           access.operationIds.includes(op.operationId)) || this.unresolvedAccess(runId)) {
       throw new CoordinationError('notification-reconciliation-effect-not-excluded');
     }
     if (prior) return copy(prior);
-    this.resourceState.operations[op.operationId].rejectionOnly = true;
-    this.requestOwners[approval.requestId].reconciliation = copy(receipt);
+    this.resourceState.operations[op.operationId] = { ...op, rejectionOnly: true };
+    this.requestOwners[approval.requestId] = { runId, digest: identityDigest, reconciliation: copy(receipt) };
     this.persist();
     return copy(receipt);
   }
@@ -850,6 +854,12 @@ export class ResourceRunRegistry extends RunRegistry {
   }
   suspend(runId, payload) {
     this.mutable(); evidence(payload.evidence);
+    const global = this.resourceState.global;
+    if (global?.state === 'DRAINING' &&
+        (global.cause !== 'SHARED_MAINTENANCE' || payload.action !== 'PAUSE' ||
+          payload.maintenanceTransactionId !== global.transactionId || payload.maintenanceGeneration !== global.generation)) {
+      throw new CoordinationError('global-coordination-suspended');
+    }
     const run = this.owned(runId, payload.version);
     if (!['PAUSE', 'STOP', 'RESUME'].includes(payload.action)) throw new CoordinationError('suspension-action-invalid', 400);
     if (payload.action === 'RESUME') {

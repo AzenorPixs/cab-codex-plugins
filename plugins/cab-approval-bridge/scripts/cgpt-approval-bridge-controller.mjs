@@ -12,8 +12,9 @@ import { StatisticsMaintenance, statisticsDashboard, guardStatisticsPost, VERSIO
 import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.mjs';
 import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "1.10.6";
+const version = "2.0.0";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -30,9 +31,9 @@ const controllerEntry = fileURLToPath(import.meta.url);
 const loadedBuildDigest = proofHash(await moduleManifest(controllerEntry));
 const observations = createObservationJournal();
 const workspace = realpathSync(workspaceInput);
+const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace });
 const stateDirectory = join(workspace, '.opencode', 'state', 'cgpt-approval-bridge');
 const port = Number(envValue('OC_Codex_STATUS_PORT') || 8788);
-const opencodeUrl = (envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096').replace(/\/$/, '');
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 const statistics = new SessionStatistics(stateDirectory, { project: workspace });
 let registryRevision = 0;
@@ -96,6 +97,7 @@ function contextFor(run) {
   let context;
   context = createJobContext({
     workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run, maxCommandLength,
+    currentRun: () => registry.runs.get(run.runId),
     observe: (type, details) => {
       observations.record(type, { runId: run.runId, changeId: run.changeId, sessionId: run.sessionId, ...details });
       observeStatistics(() => statistics.observe(run, type, details));
@@ -182,20 +184,20 @@ async function nativeCohort() {
   }
   const revision = registryRevision;
   const generation = nativeGeneration;
-  async function get(path, directory = workspace) {
-    try {
-      const response = await fetch(opencodeUrl + path + '?directory=' + encodeURIComponent(directory),
-        { signal: AbortSignal.timeout(10000) });
-      if (!response.ok) throw new Error('unavailable');
-      return await response.json();
-    } catch { throw new CoordinationError('native-reconciliation-unavailable'); }
-  }
   const directories = [...new Set([workspace, ...entries.map((entry) => entry.directory)])];
-  const [observations, sessions] = await Promise.all([
-    Promise.all(directories.map(async (directory) => ({ directory, busy: await get('/session/status', directory),
-      permissions: await get('/permission', directory) }))),
-    Promise.all(entries.map((entry) => get('/session/' + encodeURIComponent(entry.sessionId), entry.directory))),
-  ]);
+  let observations;
+  let sessions;
+  try {
+    [observations, sessions] = await Promise.all([
+      Promise.all(directories.map(async (directory) => ({ directory, busy: await openCode.sessionStatus(directory),
+        permissions: await openCode.permissions(directory) }))),
+      Promise.all(entries.map((entry) => openCode.session(entry.sessionId, entry.directory))),
+    ]);
+  } catch (cause) {
+    if (cause.code === 'opencode-session-status-invalid') throw new CoordinationError('native-reconciliation-invalid');
+    if (cause.code === 'opencode-session-divergent') throw new CoordinationError('native-session-divergent');
+    throw cause;
+  }
   if (observations.some(({busy, permissions}) => !busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
       Object.values(busy).some((state) => !state || !['idle', 'busy', 'retry'].includes(state.type)) ||
       permissions.some((permission) => !permission || typeof permission.sessionID !== 'string' || typeof permission.id !== 'string'))) {
@@ -230,7 +232,7 @@ async function maintenanceCohort(payload) {
       !existsSync(join(maintenanceDirectory(), payload.transactionId + '.json'))) return checkCohort();
   const address = server.address();
   return verifyBootstrap({ root: maintenanceDirectory(), transactionId: payload.transactionId,
-    controllerUrl: `http://${host === '::1' ? '[::1]' : host}:${address.port}`, opencodeUrl,
+    controllerUrl: `http://${host === '::1' ? '[::1]' : host}:${address.port}`, openCode,
     workspace, controllerPid: process.pid, entry: controllerEntry });
 }
 function proofReferences(payload) {
@@ -253,19 +255,12 @@ async function publishTo(context, readiness) {
     { writeHead() { return this; }, end() {} }, new URL('http://localhost/broker/readiness'));
 }
 async function checkNative(sessionId, idle = false) {
-  const r = await fetch(opencodeUrl + '/session/' + encodeURIComponent(sessionId) +
-    '?directory=' + encodeURIComponent(workspace), { signal: AbortSignal.timeout(10000) });
-  if (!r.ok) throw new CoordinationError('native-session-unavailable');
-  const session = await r.json();
+  let session;
+  try { session = await openCode.session(sessionId, workspace); }
+  catch { throw new CoordinationError('native-session-unavailable'); }
   if (session.id !== sessionId || session.directory !== workspace) throw new CoordinationError('native-session-divergent');
   if (idle) {
-    const [busyResponse, permissionsResponse] = await Promise.all([
-      fetch(opencodeUrl + '/session/status?directory=' + encodeURIComponent(workspace)),
-      fetch(opencodeUrl + '/permission?directory=' + encodeURIComponent(workspace)),
-    ]);
-    if (!busyResponse.ok || !permissionsResponse.ok) throw new CoordinationError('native-reconciliation-unavailable');
-    const busy = await busyResponse.json();
-    const permissions = await permissionsResponse.json();
+    const [busy, permissions] = await Promise.all([openCode.sessionStatus(workspace), openCode.permissions(workspace)]);
     if (!busy || typeof busy !== 'object' || Array.isArray(busy) ||
         !Array.isArray(permissions) || (busy[sessionId] && busy[sessionId].type !== 'idle') ||
         permissions.some((p) => p.sessionID === sessionId)) throw new CoordinationError('native-session-not-quiescent');
@@ -284,10 +279,7 @@ function nativeIdentity(approval) {
     .map((key) => [key, approval[key] ?? (['resources', 'commands'].includes(key) ? [] : key === 'summary' ? '' : null)]));
 }
 async function verifyNativeValidation(approval) {
-  const response = await fetch(opencodeUrl + '/session/' + encodeURIComponent(approval.session_id) +
-    '/message?directory=' + encodeURIComponent(workspace), { signal: AbortSignal.timeout(10000) });
-  if (!response.ok) throw new CoordinationError('native-validation-unavailable');
-  const messages = await response.json();
+  const messages = await openCode.messages(approval.session_id, workspace);
   const expected = JSON.stringify(nativeIdentity(approval));
   if (!Array.isArray(messages) || !messages.some((message) => Array.isArray(message.parts) &&
       message.parts.some((part) => part.type === 'tool' &&
@@ -299,7 +291,7 @@ async function verifyNativeValidation(approval) {
 }
 function nativePartProof(operation, part, sessionId) {
   if (!operation.native || operation.sessionId !== sessionId || part?.type !== 'tool' ||
-      !['completed', 'error'].includes(part.state?.status)) return null;
+      part.executed !== true || !['completed', 'error'].includes(part.state?.status)) return null;
   const state = part.state;
   const callId = part.callID || part.callId || null;
   if (operation.native.callId && operation.native.callId !== callId) return null;
@@ -337,10 +329,9 @@ async function proveNativeCompletions(runId, access) {
     .filter((op) => ['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(op.state));
   if (!pending.length) return;
   const sessionId = pending[0].sessionId;
-  const response = await fetch(opencodeUrl + '/session/' + encodeURIComponent(sessionId) +
-    '/message?directory=' + encodeURIComponent(workspace), { signal: AbortSignal.timeout(10000) });
-  if (!response.ok) throw new CoordinationError('native-completion-unavailable');
-  const messages = await response.json();
+  let messages;
+  try { messages = await openCode.messages(sessionId, workspace); }
+  catch { throw new CoordinationError('native-completion-unavailable'); }
   if (!Array.isArray(messages)) throw new CoordinationError('native-completion-invalid');
   for (const op of pending) {
     const proof = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : [])
@@ -349,26 +340,13 @@ async function proveNativeCompletions(runId, access) {
     registry.completeNative(runId, op.operationId, proof);
   }
 }
-async function modelObservation(route, maxBytes = 2 * 1024 * 1024) {
-  const response = await fetch(opencodeUrl + route + (route.includes('?') ? '&' : '?') + 'directory=' + encodeURIComponent(workspace),
-    { signal: AbortSignal.timeout(10000), redirect: 'error' });
-  if (!response.ok || !response.body) { await response.body?.cancel(); throw new CoordinationError('model-observation-unavailable'); }
-  const chunks = []; let size = 0;
-  for await (const chunk of response.body) {
-    size += chunk.length;
-    if (size > maxBytes) throw new CoordinationError('model-observation-too-large');
-    chunks.push(chunk);
-  }
-  try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); }
-  catch { throw new CoordinationError('model-observation-invalid'); }
-}
 async function resolveCodingModel(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['model','reasoning','unavailablePreflights','providerMaxBytes'].includes(key)) ||
       (input.providerMaxBytes !== undefined && (!Number.isSafeInteger(input.providerMaxBytes) || input.providerMaxBytes <= 0))) {
     throw new CoordinationError('model-selection-input-invalid',400);
   }
   const catalog = input.model === undefined ? readModelCatalog() : undefined;
-  const providers = await modelObservation('/provider', input.providerMaxBytes);
+  const providers = await openCode.providerList(workspace, input.providerMaxBytes);
   const refs = input.unavailablePreflights === undefined ? [] : input.unavailablePreflights;
   if (!Array.isArray(refs) || refs.length > 12) throw new CoordinationError('model-selection-input-invalid',400);
   const unavailable = [];
@@ -390,10 +368,25 @@ async function resolveCodingModel(input) {
 async function modelPreflightObservation(proof) {
   if (!proof || Object.keys(proof).length !== 2 || !['sessionId','messageId'].every((key) =>
     typeof proof[key] === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(proof[key]))) throw new CoordinationError('model-preflight-not-proved');
-  const session = await modelObservation('/session/'+proof.sessionId);
-  const response = await modelObservation('/session/'+proof.sessionId+'/message/'+proof.messageId);
+  let session;
+  let messages;
+  try {
+    [session, messages] = await Promise.all([openCode.session(proof.sessionId, workspace),
+      openCode.messages(proof.sessionId, workspace)]);
+  } catch (cause) {
+    if (cause.code === 'opencode-response-too-large') throw new CoordinationError('model-observation-too-large');
+    throw cause;
+  }
+  const response = messages.find((entry) => entry.info.id === proof.messageId);
   if (!response?.info?.parentID || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(response.info.parentID)) throw new CoordinationError('model-preflight-not-proved');
-  const parent = await modelObservation('/session/'+proof.sessionId+'/message/'+response.info.parentID);
+  const parent = messages.find((entry) => entry.info.id === response.info.parentID);
+  if (parent?.info?.role === 'user' && !parent.info.model && session.model &&
+      session.model.providerID === response.info.providerID && session.model.modelID === response.info.modelID &&
+      session.model.variant === response.info.variant) {
+    parent.info.model = session.model;
+    parent.info.variant = session.model.variant;
+  }
+  if (!parent) throw new CoordinationError('model-preflight-not-proved');
   return { session, response, parent };
 }
 async function provedCodingModel(input, proof) {
@@ -437,19 +430,7 @@ const server = createServer(async (request, response) => {
       lifecycleLease = lease;
       try {
         const revision = registryRevision;
-        const read = async (path) => {
-          const result = await fetch(opencodeUrl + path + '?directory=' + encodeURIComponent(workspace),
-            { redirect: 'error', signal: AbortSignal.timeout(5000) });
-          if (!result.ok) throw new CoordinationError('monitor-native-unavailable');
-          const chunks = []; let bytes = 0;
-          for await (const chunk of result.body) {
-            bytes += chunk.length;
-            if (bytes > 2 * 1024 * 1024) throw new CoordinationError('monitor-native-unavailable');
-            chunks.push(chunk);
-          }
-          return JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        };
-        const [sessions, permissions] = await Promise.all([read('/session/status'), read('/permission')]);
+        const [sessions, permissions] = await Promise.all([openCode.sessionStatus(workspace), openCode.permissions(workspace)]);
         if (!sessions || typeof sessions !== 'object' || Array.isArray(sessions) ||
             Object.values(sessions).some((session) => session?.type !== 'idle') ||
             !Array.isArray(permissions) || permissions.length || revision !== registryRevision ||
@@ -524,7 +505,7 @@ const server = createServer(async (request, response) => {
           throw new CoordinationError('maintenance-adoption-contract-invalid', 400);
         }
         const checked = await verifyBootstrap({ root: maintenanceDirectory(), transactionId: payload.transactionId,
-          controllerUrl: `http://${host === '::1' ? '[::1]' : host}:${server.address().port}`, opencodeUrl,
+          controllerUrl: `http://${host === '::1' ? '[::1]' : host}:${server.address().port}`, openCode,
           workspace, controllerPid: process.pid, entry: controllerEntry });
         if (checked.journal.sealDigest !== payload.sealDigest || loadedBuildDigest !== checked.journal.seal.buildDigest) {
           throw new CoordinationError('maintenance-adoption-digest-divergent');
@@ -891,16 +872,12 @@ server.listen(port, host, () => { void consumeEvents(); });
 
 async function consumeEvents() {
   try {
-    const response = await fetch(opencodeUrl + '/global/event');
-    if (!response.ok || !response.body) throw new Error('SSE unavailable');
+    const response = await openCode.events();
     sseState = 'connected';
     nativeGeneration++;
     const generation = ++sseGeneration;
     statistics.connection(true);
-    void fetch(opencodeUrl + '/session/status?directory=' + encodeURIComponent(workspace),
-      { signal: AbortSignal.timeout(10000) }).then(async (state) => {
-      if (!state.ok) throw new Error('native baseline unavailable');
-      const baseline = await state.json();
+    void openCode.sessionStatus(workspace).then((baseline) => {
       if (sseState === 'connected' && generation === sseGeneration) {
         observeStatistics(() => statistics.nativeSnapshot(baseline, true));
       }

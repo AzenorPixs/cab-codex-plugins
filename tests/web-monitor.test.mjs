@@ -4,6 +4,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
+import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { createObservationJournal } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
 import { monitorConfiguration, parseTasks, readChanges, MonitorState, fetchJson, normalizeRuns, operationalState } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs';
 import { nextLifecycle } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs';
@@ -83,20 +84,24 @@ test('collecte : limite effective, RUN isolés, aucune décision ou mutation et 
     requests.push({ method: request.method, path: request.url });
     if (failed) { response.writeHead(503).end(); return; }
     if (request.url === '/status') return json(response, { mode: 'concurrent', configuration: { maxCommandLength: 2000 },
-      runs: { a: { job: { changeId: 'change-a', sessionId: 'ses-a', armed: true }, terminalGate: { status: 'OPEN' },
+      runs: { a: { job: { changeId: 'change-a', sessionId: 'ses_a', armed: true }, terminalGate: { status: 'OPEN' },
         coordination: { reason: 'resource-conflict', blockers: [{ runId: 'b' }] } },
-      b: { job: { changeId: 'change-b', sessionId: 'ses-b', armed: true }, terminalGate: { status: 'OPEN' } } } });
+      b: { job: { changeId: 'change-b', sessionId: 'ses_b', armed: true }, terminalGate: { status: 'OPEN' } } } });
     if (request.url === '/runs') return json(response, { runs: [{ runId: 'a', state: 'RESERVED' }, { runId: 'b', state: 'RESERVED' }], privateToken: 'PRIVATE-SENTINEL' });
     if (request.url === '/monitor/events') return json(response, journal.snapshot());
-    if (request.url === '/global/health') return json(response, { healthy: true });
-    return json(response, { 'ses-b': { type: 'busy' } });
+    if (request.url.startsWith('/api/info')) return json(response, { version: '2.2.0', pid: 42,
+      hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } });
+    if (request.url.startsWith('/api/mcp')) return json(response, { location: { directory: workspace },
+      data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] });
+    if (request.url === '/api/session/active') return json(response, { data: { 'ses_b': { type: 'running' } } });
+    return json(response, { 'ses_b': { type: 'busy' } });
   });
   const state = new MonitorState({ ...config(), workspace, controllerUrl: base, supervisorUrl: base, opencodeUrl: base }, { now: () => now });
   await state.collect(); const first = state.snapshot();
   assert.equal(first.configuration.maxCommandLength, 2000); assert.equal(first.runs.length, 2);
   assert.equal(first.runs.find((r) => r.runId === 'a').cause, 'resource-conflict');
   assert.equal(first.runs.find((r) => r.runId === 'b').nativeActivity, 'busy');
-  assert.equal(first.nativeHealth, true);
+  assert.equal(first.nativeHealth, true, JSON.stringify(first.sources.opencode));
   assert.ok(requests.every((r) => r.method === 'GET' && !r.path.includes('/decision')));
   assert.ok(!JSON.stringify(first).includes('PRIVATE-SENTINEL'));
   failed = true; now += 15000; await state.collect(); const next = state.snapshot();
@@ -120,19 +125,23 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const fetcher = async (url) => {
     const target = new URL(url); let value;
     if (target.port === '10002') value = { version: '1.4.0' };
-    else if (target.pathname === '/global/health') value = { healthy: true, version: '1.19.3' };
-    else if (target.pathname === '/status') value = { version: '1.10.6', mode: 'concurrent', brokerReadiness: { server_version: '1.10.6' },
+    else if (target.pathname === '/api/info') value = { version: '2.2.0', pid: 42,
+      hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+    else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
+      data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
+    else if (target.pathname === '/api/session/active') value = { data: {} };
+    else if (target.pathname === '/status') value = { version: '2.0.0', mode: 'concurrent', brokerReadiness: { server_version: '2.0.0' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
     else if (target.pathname === '/monitor/events') value = createObservationJournal().snapshot();
     else value = {};
-    return new Response(JSON.stringify(value));
+    return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
   };
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '1.10.6', supervisor: '1.4.0', broker: '1.10.6', opencode: '1.19.3', monitor: '1.10.6' });
+  assert.deepEqual(result.componentVersions, { controller: '2.0.0', supervisor: '1.4.0', broker: '2.0.0', opencode: '2.2.0', monitor: '2.0.0' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -168,9 +177,18 @@ test('des champs amont malformés restent inconnus sans arrêter la collecte', (
 test('collectes non chevauchantes et réponses amont bornées', async () => {
   let resolve; let requests = 0;
   const pending = new Promise((done) => { resolve = done; });
-  const state = new MonitorState(config(), { fetcher: async () => { requests++; await pending; return new Response('{}'); } });
+  const paths = [];
+  const state = new MonitorState(config(), { fetcher: async (url) => {
+    requests++; const target = new URL(url); paths.push(target.pathname); await pending; let value = {};
+    if (target.pathname === '/api/info') value = { version: '2.2.0', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+    else if (target.pathname === '/api/mcp') value = { location: { directory: process.cwd() }, data: [] };
+    else if (target.pathname === '/api/session/active') value = { data: {} };
+    return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
+  } });
   const first = state.collect(); const second = state.collect();
-  assert.equal(requests, 7); resolve(); await Promise.all([first, second]);
+  for (let attempt = 0; attempt < 100 && requests < 5; attempt++) await new Promise((done) => setTimeout(done, 1));
+  assert.equal(requests, 5, 'requêtes avant résolution : ' + requests + ' ' + paths.join(','));
+  resolve(); await Promise.all([first, second]); assert.equal(requests, 7);
   await assert.rejects(fetchJson('http://127.0.0.1/', 1000, async () => new Response(' '.repeat(2 * 1024 * 1024 + 1))), /source-too-large/);
 });
 

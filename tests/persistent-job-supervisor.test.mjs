@@ -1,4 +1,5 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
+import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -60,7 +61,7 @@ async function statusFixture(context, initialState) {
     response.end(JSON.stringify(request.url === "/status" ? controllerStatus() : control.job));
   });
   await new Promise((resolve) => controller.listen(0, "127.0.0.1", resolve));
-  const opencode = createServer(async (request, response) => {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     if (request.url === "/global/event") {
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.write('data: {"type":"server.connected"}\n\n');
@@ -77,7 +78,7 @@ async function statusFixture(context, initialState) {
     }
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ id: control.job?.sessionId }));
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
   let supervisor;
   async function stop() {
@@ -216,7 +217,7 @@ test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transpor
   await new Promise((resolve) => controller.listen(0, "127.0.0.1", resolve));
   const messages = [];
   let stream;
-  const opencode = createServer(async (request, response) => {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     if (request.url === "/global/event") {
       response.writeHead(200, { "content-type": "text/event-stream" });
       response.write('data: {"type":"server.connected"}\n\n');
@@ -230,7 +231,7 @@ test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transpor
     }
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ id: job.sessionId, directory }));
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
   const supervisor = spawn(process.execPath, [supervisorPath], {
     env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory,
@@ -280,10 +281,10 @@ test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transpor
   assert.equal((await status()).lastActivityAt, targetedAt, "Le trafic étranger ne vaut pas activité du job.");
   traffic = setInterval(emitForeign, 40);
   await waitFor(() => messages.length === 1, "Le trafic étranger a empêché la reprise du job inactif.");
-  assert.equal(messages[0].url, "/session/ses_sse_scope/message");
+  assert.equal(new URL(messages[0].url, 'http://localhost').pathname, "/session/ses_sse_scope/message");
   job.sessionId = "ses_sse_transferred";
   await waitFor(() => messages.length === 2, "L'activité de l'ancienne session a retardé le contexte transféré.");
-  assert.equal(messages[1].url, "/session/ses_sse_transferred/message");
+  assert.equal(new URL(messages[1].url, 'http://localhost').pathname, "/session/ses_sse_transferred/message");
 });
 
 test("relance une seule fois une session armée dont le gate reste ouvert", async (context) => {
@@ -295,7 +296,7 @@ test("relance une seule fois une session armée dont le gate reste ouvert", asyn
   const job = {
     jobId: "job-supervisor-123",
     sessionId: "ses_supervisor_456",
-    directory: "/workspace",
+    directory,
     changeId: "change-supervisor-789",
     criteria: ["preuve"],
     lastProvenMilestone: "analyse",
@@ -320,14 +321,15 @@ test("relance une seule fois une session armée dont le gate reste ouvert", asyn
   });
   await new Promise((resolve) => controller.listen(controllerPort, "127.0.0.1", resolve));
 
-  const opencode = createServer(async (request, response) => {
-    if (request.method === "GET" && request.url === "/session/ses_supervisor_456") {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
+    const url = new URL(request.url, 'http://localhost');
+    if (request.method === "GET" && url.pathname === "/session/ses_supervisor_456") {
       response.writeHead(200, { "content-type": "application/json" });
       response.end(JSON.stringify({ id: "ses_supervisor_456" }));
       return;
     }
 
-    if (request.method === "POST" && request.url === "/session/ses_supervisor_456/message") {
+    if (request.method === "POST" && url.pathname === "/session/ses_supervisor_456/message") {
       let body = "";
       for await (const chunk of request) body += chunk;
       messages.push(JSON.parse(body));
@@ -336,13 +338,13 @@ test("relance une seule fois une session armée dont le gate reste ouvert", asyn
       return;
     }
 
-    if (request.method === "GET" && request.url === "/global/event") {
+    if (request.method === "GET" && url.pathname === "/global/event") {
       response.writeHead(200, { "content-type": "text/event-stream" });
       return;
     }
 
     response.writeHead(404).end();
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
@@ -395,11 +397,11 @@ test("ne relance pas un job dont le gate est validé", async (context) => {
   });
   await new Promise((resolve) => controller.listen(controllerPort, "127.0.0.1", resolve));
 
-  const opencode = createServer((request, response) => {
+  const opencode = createServer(openCodeV2TestHandler((request, response) => {
     if (request.method === "POST") messageCount += 1;
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({}));
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
@@ -457,10 +459,10 @@ test("restaure l'état persistant de supervision après redémarrage", async (co
   });
   await new Promise((resolve) => controller.listen(controllerPort, "127.0.0.1", resolve));
 
-  const opencode = createServer((request, response) => {
+  const opencode = createServer(openCodeV2TestHandler((request, response) => {
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.end();
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
@@ -516,7 +518,7 @@ test("gèle les relances pendant la récupération et suit ensuite la session tr
     response.end(JSON.stringify(request.url === "/status" ? controllerStatus() : job));
   });
   await new Promise((resolve) => controller.listen(controllerPort, "127.0.0.1", resolve));
-  const opencode = createServer(async (request, response) => {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     if (request.url === "/global/event") {
       response.writeHead(200, { "content-type": "text/event-stream" });
       return;
@@ -528,7 +530,7 @@ test("gèle les relances pendant la récupération et suit ensuite la session tr
     }
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ id: "ses_new", directory }));
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
   const supervisor = spawn(process.execPath, [supervisorPath], {
     env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory,
@@ -552,6 +554,6 @@ test("gèle les relances pendant la récupération et suit ensuite la session tr
   assert.equal(status.reason, "session-recovery-pending");
   job.sessionId = "ses_new"; job.recovery = null;
   await waitFor(() => messages.length === 1, "La session transférée n'a pas été suivie.");
-  assert.equal(messages[0].url, "/session/ses_new/message");
+  assert.equal(new URL(messages[0].url, 'http://localhost').pathname, "/session/ses_new/message");
   assert.match(messages[0].body.parts[0].text, /REPRISE_CAB_SUPERVISEUR/);
 });

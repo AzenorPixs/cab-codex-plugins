@@ -1,8 +1,8 @@
 import { pathToFileURL } from 'node:url';
 import { realpath } from 'node:fs/promises';
-import { maintenanceHttp } from './cgpt-approval-bridge-maintenance-proof.mjs';
+import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '1.10.6';
+export const VERSION = '2.0.0';
 const fail = (code) => { throw Object.assign(new Error(code),{code}); };
 const identity = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value) ? value : null;
 const diagnostic = (value) => typeof value === 'string' && /^[A-Z0-9_:-]{1,80}$/.test(value) ? value : null;
@@ -28,17 +28,17 @@ export function projectApprovalMetadata(health, approvalId, evidence = {}) {
     attribution_complete:Boolean(metadata.run_id&&metadata.session_id&&metadata.directory&&metadata.change_id)};
 }
 
-export async function readApprovalMetadata({opencodeUrl,directory,sessionId,approvalId,partId},request=maintenanceHttp) {
+export async function readApprovalMetadata({opencodeUrl,directory,sessionId,approvalId,partId,openCodeClient}) {
   let url;
   try { url=new URL(opencodeUrl); } catch { fail('metadata-url-invalid'); }
   if (url.protocol!=='http:' || !['127.0.0.1','localhost','[::1]'].includes(url.hostname) ||
       url.username||url.password||url.search||url.hash||url.pathname!=='/' ||
       typeof directory!=='string'||!directory.startsWith('/')||!identity(sessionId)||!identity(approvalId)||
       (partId!==undefined&&!identity(partId))) fail('metadata-context-invalid');
-  const query='?directory='+encodeURIComponent(directory),path='/session/'+encodeURIComponent(sessionId);
-  const session=await request(url.origin,path+query);
+  const client=openCodeClient||createOpenCodeV2ClientFromEnv({baseUrl:url.origin,directory});
+  const session=await client.session(sessionId,directory);
   if (session?.id!==sessionId||session.directory!==directory) fail('metadata-session-divergent');
-  const messages=await request(url.origin,path+'/message'+query);
+  const messages=await client.messages(sessionId,directory);
   if (!Array.isArray(messages)) fail('metadata-messages-invalid');
   const parts=messages.flatMap((m)=>Array.isArray(m.parts)?m.parts:[]).filter((p)=>p.type==='tool'&&
     p.tool==='cgpt-validation_broker_health'&&p.state?.status==='completed'&&(!partId||p.id===partId));

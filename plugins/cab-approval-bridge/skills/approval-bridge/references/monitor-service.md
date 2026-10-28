@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 1.10.6
+# Service web de monitoring — CAB 2.0.0
 
 Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace
@@ -37,7 +37,7 @@ attendue dans le profil utilisateur et son appartenance à cette installation.
 
 Si elle est active, interroger uniquement l'URL loopback attendue :
 
-- GET /api/snapshot doit réussir et annoncer version 1.10.6 ainsi que
+- GET /api/snapshot doit réussir et annoncer version 2.0.0 ainsi que
   identity.workspace exactement égal au workspace canonique attendu ;
 - GET / doit servir la page CAB Monitor ;
 - l'unité doit utiliser Restart=on-failure.
@@ -63,6 +63,7 @@ scripts/
   cgpt-approval-bridge-run-steps.mjs
   cgpt-approval-bridge-statistics-maintenance.mjs
   cgpt-approval-bridge-observation-statistics.mjs
+  cgpt-approval-bridge-opencode-client.mjs
 web-monitor/
   index.html
   app.mjs
@@ -71,8 +72,10 @@ web-monitor/
 ```
 
 Conserver ces deux dossiers frères : les imports et ressources sont résolus
-relativement aux modules. Vérifier la version 1.10.6 et la présence de chaque
-fichier avant publication du jeu. Aucune dépendance tierce n'est installée.
+relativement aux modules. Vérifier la version 2.0.0 et la présence de chaque
+fichier avant publication du jeu. Provisionner le credential OpenCode partagé
+dans `~/.config/cab-approval-bridge/opencode.password` avec les permissions
+`0600`; l'unité le charge via `LoadCredential`. Aucune dépendance tierce n'est installée.
 Refuser les destinations symboliques, étrangères ou sans propriété prouvée.
 Remplacer les seuls fichiers nécessaires de façon atomique ; conserver les
 anciens fichiers du périmètre pour un repli ciblé en cas d'échec. Ne pas
@@ -143,7 +146,7 @@ ce bootstrap ne déclenche aucun arrêt du moniteur. Il continue à présenter l
 observations disponibles et les sources indisponibles ; son démarrage ne prouve
 pas à lui seul un diagnostic PLLM ou un prévol réussi.
 
-## 6. Gestion depuis le Web 1.10.6
+## 6. Gestion depuis le Web 2.0.0
 
 La page propose des commandes explicites des briques. Les unités fixes
 contrôleur/superviseur et leur PID/workspace sont contrôlés ; le broker passe

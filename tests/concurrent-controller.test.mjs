@@ -1,4 +1,5 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
+import { openCodeV2TestHandler, v2ProviderResponseBytes, v2NormalizedToolPart } from './helpers/opencode-v2-test-server.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -32,13 +33,14 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     if(prepareCatalog){native.preparation=prepareControllerModelPolicy({environment,activeSkillRoot:activeRoot});environment={...environment,...native.preparation.environment};}
     else environment={...environment,OC_Codex_PLLM_CATALOG:path};
     native.providers={connected:catalog.models.map(m=>m.provider),all:catalog.models.map(m=>({id:m.provider,models:{[m.model_id]:{variants:{medium:{},high:{},xhigh:{},low:{}}}}}))};
-    native.messages.ses_probe=[{info:{id:'msg_user',sessionID:'ses_probe',role:'user',model:{providerID:'provider1',modelID:'model1'},variant:'medium'},parts:[]},
-      {info:{id:'msg_response',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_user',providerID:'provider1',modelID:'model1',time:{completed:Date.now()-10}},parts:[{type:'text',text:'probe ok'}]}];
+    native.messages.ses_probe=[{info:{id:'msg_user',sessionID:'ses_probe',role:'user'},parts:[]},
+      {info:{id:'msg_response',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_user',providerID:'provider1',modelID:'model1',variant:'medium',time:{completed:Date.now()-10}},parts:[{type:'text',text:'probe ok'}]}];
+    native.sessions.ses_probe={id:'ses_probe',directory,model:{providerID:'provider1',modelID:'model1',variant:'medium'},permission:[]};
   }
   const eventStreams = new Set();
   native.emit = (event) => { for (const stream of eventStreams) stream.write('data: ' + JSON.stringify(event) + '\n\n'); };
   const children = [];
-  const opencode = createServer(async (request, response) => {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     native.requests.push(url.pathname);
     if (native.onRequest) await native.onRequest(url.pathname);
@@ -65,7 +67,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       ...native.sessions[url.pathname.split('/')[2]] };
     else { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'content-type': 'application/json', connection: 'close' }); response.end(JSON.stringify(payload));
-  });
+  }, { directory }));
   await new Promise((resolve) => opencode.listen(0, '127.0.0.1', resolve));
   const listener = createServer();
   await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
@@ -366,7 +368,8 @@ test('une cohorte occupée, invalide ou divergente refuse le gel exceptionnel', 
     transactionId: 'pause', authorization: 'explicit pause all', evidence: ['authorized'] })).body;
   const confirm = () => h.post('/coordination/global/confirm', { ...g, evidence: ['quiescent'] });
   h.native.busy.ses_b = { type: 'busy' }; assert.equal((await confirm()).body.error, 'native-session-not-quiescent');
-  h.native.busy = { ses_b: { type: 'invalid' } }; assert.equal((await confirm()).body.error, 'native-reconciliation-invalid');
+  h.native.busy = { ses_b: { type: 'invalid' } };
+  assert.ok(['native-reconciliation-invalid', 'opencode-session-status-invalid'].includes((await confirm()).body.error));
   h.native.busy = {}; h.native.sessions.ses_b = { directory: '/different' };
   assert.equal((await confirm()).body.error, 'native-session-divergent');
   assert.equal((await h.get('/coordination/global')).body.global.state, 'DRAINING');
@@ -391,9 +394,24 @@ test('une mutation pendant observation exceptionnelle refuse une cohorte périm�
     transactionId: 'maintenance', authorization: 'authorized maintenance', evidence: ['authorized'] })).body;
   let fired = false; h.native.onRequest = async (path) => {
     if (path !== '/session/status' || fired) return; fired = true;
-    await h.post('/runs/b/suspend', { version: b.version, action: 'PAUSE', evidence: ['targeted pause'] });
+    await h.post('/runs/b/suspend', { version: b.version, action: 'PAUSE', evidence: ['targeted pause'],
+      maintenanceTransactionId: g.transactionId, maintenanceGeneration: g.generation });
   };
   assert.equal((await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] })).body.error, 'native-observation-changed');
+  assert.equal((await h.get('/coordination/global')).body.global.state, 'DRAINING');
+});
+
+test('une pause sous gel global est liée à SHARED_MAINTENANCE et à sa génération', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a');
+  const g = (await h.post('/coordination/global/request', { cause: 'SHARED_MAINTENANCE', scope: 'all',
+    transactionId: 'maintenance-bound-pause', authorization: 'authorized maintenance', evidence: ['authorized'] })).body;
+  assert.equal((await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause'] })).body.error,
+    'global-coordination-suspended');
+  assert.equal((await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause'],
+    maintenanceTransactionId: 'other', maintenanceGeneration: g.generation })).body.error, 'global-coordination-suspended');
+  const paused = await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause'],
+    maintenanceTransactionId: g.transactionId, maintenanceGeneration: g.generation });
+  assert.equal(paused.status, 200); assert.equal(paused.body.suspension.action, 'PAUSE');
   assert.equal((await h.get('/coordination/global')).body.global.state, 'DRAINING');
 });
 
@@ -560,6 +578,63 @@ async function orphanedPreflight(t, mutate = () => {}) {
     jobId: recovery.jobId, recoveryId: recovery.recoveryId, approval };
   return { h, a, b, approval, recovery, payload };
 }
+
+async function pausedOrphan(t, timeout = false) {
+  const h=await setup(t),a=await h.reserve('a');
+  const approval=h.approval(a,'paused-write');approval.commands=['printf operation-non-executee'];
+  const part=h.native.messages.ses_a.at(-1).parts[0];
+  part.state={status:timeout?'error':'completed',input:structuredClone(approval),
+    ...(timeout?{error:'MCP error -32001: request timed out'}:{output:JSON.stringify({...approval,status:'PENDING'})})};
+  if(timeout)h.native.messages.ses_a.push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'PENDING'})}}]});
+  await h.post('/runs/a/suspend',{version:a.version,action:'PAUSE',evidence:['human maintenance pause']});
+  await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:approval.requestId});
+  return {h,a,approval,payload:{transactionId:'paused-repair',developerAuthorization:'human maintenance authorization',jobId:'job-a',recoveryId:null,approval}};
+}
+
+for(const timeout of [false,true])test(`demande orpheline en pause : admission absente et rejet seul, timeout=${timeout}`,async(t)=>{
+  const {h,approval,payload}=await pausedOrphan(t,timeout);
+  if(timeout)h.native.rules.ses_a=[{permission:'*',pattern:'*',action:'deny'}];
+  const before=(await h.get('/runs')).body;
+  assert.equal(before.requestOwners[approval.requestId],undefined);
+  const receipt=await h.post('/runs/a/validation/reconcile',payload);
+  assert.equal(receipt.status,201,JSON.stringify(receipt));assert.equal(receipt.body.recoveryId,null);
+  assert.deepEqual((await h.post('/runs/a/validation/reconcile',payload)).body,receipt.body);
+  for(const decision of ['approved','needs_clarification'])assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision})).status,400);
+  const after=(await h.get('/runs')).body;
+  assert.equal(after.requestOwners[approval.requestId].reconciliation.outcome,'REJECTION_ONLY');
+  const restored=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode/state/cgpt-approval-bridge'));
+  assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly,true);
+  assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,201);
+  assert.deepEqual(h.native.replies,[]);
+});
+
+for(const variant of ['no-pause','busy','permission','allow','effect','poll-identity','timeout-no-poll','duplicate','history-drift','job','mandate','approval-divergent','stale-version','poll-status'])test(`demande orpheline en pause : refuse ${variant} sans admission partielle`,async(t)=>{
+  const {h,a,approval,payload}=await pausedOrphan(t,true);
+  if(variant==='no-pause')await h.post('/runs/a/suspend',{version:a.version,action:'RESUME',evidence:['isolated test']});
+  if(variant==='busy')h.native.busy.ses_a={type:'busy'};
+  if(variant==='permission')h.native.permissions=[{id:'permission-a',sessionID:'ses_a',permission:'bash',patterns:['*']}];
+  if(variant==='allow')h.native.rules.ses_a=[{permission:'*',pattern:'*',action:'allow'}];
+  if(variant==='effect')h.native.messages.ses_a.push({parts:[{type:'tool',tool:'bash',state:{status:'completed',input:{command:'printf danger'},output:''}}]});
+  if(variant==='poll-identity')h.native.messages.ses_a.at(-1).parts[0].state.input.approval_id='approval-other';
+  if(variant==='timeout-no-poll')h.native.messages.ses_a.pop();
+  if(variant==='duplicate')h.native.messages.ses_a.push(structuredClone(h.native.messages.ses_a[0]));
+  if(variant==='job')payload.jobId='other-job';
+  if(variant==='mandate')await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:'other-request'});
+  if(variant==='approval-divergent')payload.approval={...approval,commands:['other command']};
+  if(variant==='stale-version'){
+    approval.reservation_version++;
+    h.native.messages.ses_a[0].parts[0].state.input=structuredClone(approval);
+    h.native.messages.ses_a.at(-1).parts[0].state.output=JSON.stringify({...approval,status:'PENDING'});
+  }
+  if(variant==='poll-status')h.native.messages.ses_a.at(-1).parts[0].state.output=JSON.stringify({...approval,status:'APPROVED'});
+  if(variant==='history-drift'){
+    let reads=0;h.native.onRequest=(path)=>{if(path==='/session/ses_a/message'&&++reads===2)h.native.messages.ses_a.push({parts:[{type:'tool',tool:'bash',state:{status:'completed'}}]});};
+  }
+  const before=(await h.get('/runs')).body;
+  const rejected=await h.post('/runs/a/validation/reconcile',payload);
+  assert.ok(rejected.status>=400,JSON.stringify(rejected));
+  assert.deepEqual((await h.get('/runs')).body,before);assert.deepEqual(h.native.replies,[]);
+});
 
 test('prévol orphelin : rejet seul durable, notifications répétées, pair actif puis retry existant', async (t) => {
   const { h, b, approval, recovery, payload } = await orphanedPreflight(t);
@@ -845,7 +920,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '1.10.6');
+  assert.equal(initialized.result.serverInfo.version, '2.0.0');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -965,18 +1040,21 @@ test('restauration humaine concurrente conserve propriétaire et digest sans nou
   const ordered = (v) => Array.isArray(v) ? v.map(ordered) : v !== null && typeof v === 'object'
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, ordered(v[k])])) : v;
   const hash = () => createHash('sha256').update(JSON.stringify(ordered(
-    h.native.messages.ses_a_new.flatMap((m) => m.parts)))).digest('hex');
+    h.native.messages.ses_a_new.flatMap((m) => m.parts).map(v2NormalizedToolPart)))).digest('hex');
+  for (const message of h.native.messages.ses_a_new) for (const part of message.parts) if (part.type === 'tool') {
+    part.callID ||= 'call_fixture'; part.executed = true; part.state.metadata ||= {};
+  }
   const payload = { ...recovery, phase: 'complete', developerAuthorization: 'accord-ciblé-fixture',
     restoredPreflightProof: { nativeToolCount: 3, nativeToolHash: hash(), decision,
       blockedGateValidatedAt: gate.body.validatedAt } };
-  const history = structuredClone(h.native.messages.ses_a_new);
+  const v2History = structuredClone(h.native.messages.ses_a_new);
   await h.stop(); await h.start();
   await h.post('/broker/readiness', { status: 'READY', pending_count: 0,
     by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
   h.native.messages.ses_a_new[0].parts[0].state.input.resources = [{ key: 'file:src/foreign.py', mode: 'write' }];
   const changed = structuredClone(payload); changed.restoredPreflightProof.nativeToolHash = hash();
   assert.equal((await h.post('/runs/a/job/recover', changed)).body.error, 'preflight-approval-divergent');
-  h.native.messages.ses_a_new = history;
+  h.native.messages.ses_a_new = v2History;
   const result = await h.post('/runs/a/job/recover', payload);
   assert.equal(result.status, 200, JSON.stringify(result));
   assert.equal(result.body.sessionId, 'ses_a_new');
@@ -1305,15 +1383,15 @@ test('PLLM HTTP : défaut medium, prévol exact, choix persisté et modèle du j
  const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['delivery'],
    modelSelectionProtocol:'pllm-auto-v1',modelSelection:{},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
  assert.equal((await h.post('/runs/a/job/arm',{...arm,modelSelection:0})).body.error,'model-selection-input-invalid');
- h.native.messages.ses_probe[0].info.variant='low';
+ h.native.sessions.ses_probe.model.variant='low';
  assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-preflight-not-proved');
- h.native.messages.ses_probe[0].info.variant='medium';
+ h.native.sessions.ses_probe.model.variant='medium';
  const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));
  assert.equal(armed.body.codingModel.modelID,'model1');assert.equal(armed.body.codingModel.reasoning,'medium');
  const selected=armed.body.codingModel;await h.stop();await h.start();
  assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
  assert.equal((await h.post('/runs/a/job/arm',{...arm,codingModel:selected})).body.error,'model-selection-server-owned');
- h.native.messages.ses_probe[0].info.model={providerID:'provider2',modelID:'model2'};
+ h.native.sessions.ses_probe.model={providerID:'provider2',modelID:'model2',variant:'medium'};
  h.native.messages.ses_probe[1].info.providerID='provider2';h.native.messages.ses_probe[1].info.modelID='model2';
  const changed=await h.post('/runs/a/job/arm',{...arm,modelSelection:{model:'provider2/model2'}});
  assert.equal(changed.status,400);assert.equal(changed.body.error,'job-coding-model-immutable');
@@ -1335,15 +1413,15 @@ test('PLLM HTTP : refus natif corrélé de medium autorise la politique suivante
  const h=await setup(t,{codingPolicy:true});
  const reject=(reasoning,status=400)=>{
   const name=reasoning+'-'+status;const user=structuredClone(h.native.messages.ses_probe[0]);
-  user.info.id='msg_user_'+name;user.info.variant=reasoning;
-  const response=structuredClone(h.native.messages.ses_probe[1]);response.info.id='msg_bad_'+name;response.info.parentID=user.info.id;
+  user.info.id='msg_user_'+name;
+  const response=structuredClone(h.native.messages.ses_probe[1]);response.info.id='msg_bad_'+name;response.info.parentID=user.info.id;response.info.variant=reasoning;
   response.info.error={name:'APIError',data:{statusCode:status,responseBody:JSON.stringify({error:{code:'unsupported_value',param:'reasoning_effort',message:'diagnostic privé fictif'}})}};
   response.parts=[];h.native.messages.ses_probe.push(user,response);
   return {sessionId:'ses_probe',messageId:response.info.id};
  };
  const medium=reject('medium');
  const next=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});
- assert.equal(next.body.mode,'mode2');assert.equal(next.body.unavailabilityProofs.length,1);
+ assert.equal(next.body.mode,'mode2',JSON.stringify(next));assert.equal(next.body.unavailabilityProofs.length,1);
  assert.equal(JSON.stringify(next.body).includes('diagnostic privé fictif'),false);
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[medium]})).body.error,'explicit-model-unavailable');
  assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('medium',429)]})).body.error,'model-unavailability-not-proved');
@@ -1353,7 +1431,7 @@ test('PLLM HTTP : refus natif corrélé de medium autorise la politique suivante
 test('Budget /provider fourni par la session : bornes exactes, portée locale et confidentialité',async(t)=>{
  const h=await setup(t,{codingPolicy:true});const marker='DONNEE_PRIVEE_SYNTHETIQUE';
  h.native.providers.privatePadding=marker+'x'.repeat(3*1024*1024);
- const bytes=Buffer.byteLength(JSON.stringify(h.native.providers));
+ const bytes=v2ProviderResponseBytes(h.native.providers,h.directory);
  assert.equal((await h.post('/model-policy/resolve',{})).body.error,'model-observation-too-large');
  for(const value of [0,-1,1.5,'8000000',null,Number.MAX_SAFE_INTEGER+1]){
   const observations=()=>h.native.requests.filter(p=>p==='/provider'||p.startsWith('/session/ses_probe')).length;
@@ -1361,22 +1439,24 @@ test('Budget /provider fourni par la session : bornes exactes, portée locale et
   const result=await h.post('/model-policy/resolve',{providerMaxBytes:value});
   assert.equal(result.body.error,'model-selection-input-invalid');assert.equal(observations(),before);
  }
- assert.equal((await h.post('/model-policy/resolve',{providerMaxBytes:bytes-1})).body.error,'model-observation-too-large');
+ const overLimit=await h.post('/model-policy/resolve',{providerMaxBytes:bytes-1});
+ assert.equal(overLimit.body.error,'model-observation-too-large',JSON.stringify({overLimit,bytes}));
  const exact=await h.post('/model-policy/resolve',{providerMaxBytes:bytes});assert.equal(exact.status,200);assert.equal(exact.body.reasoning,'medium');
  assert.ok(!JSON.stringify(exact).includes(marker));
  assert.equal((await h.post('/model-policy/resolve',{})).body.error,'model-observation-too-large');
  const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
  const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['budget'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{providerMaxBytes:bytes},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
+ const probeSession=structuredClone(h.native.sessions.ses_probe);
  h.native.sessions.ses_probe={privatePadding:marker+'x'.repeat(2*1024*1024)};
  assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-observation-too-large');
- delete h.native.sessions.ses_probe;
+ h.native.sessions.ses_probe=probeSession;
  h.native.messages.ses_probe[1].parts.push({type:'text',text:marker+'x'.repeat(2*1024*1024)});
  assert.equal((await h.post('/runs/a/job/arm',arm)).body.error,'model-observation-too-large');
  h.native.messages.ses_probe[1].parts.pop();
  const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));
  assert.ok(!JSON.stringify(armed).includes(marker));assert.ok(!JSON.stringify((await h.get('/runs/a/job')).body).includes(marker));
  h.native.providers.privatePadding=marker+'x'.repeat(17*1024*1024);
- const larger=Buffer.byteLength(JSON.stringify(h.native.providers));assert.ok(larger>16*1024*1024);
+ const larger=v2ProviderResponseBytes(h.native.providers,h.directory);assert.ok(larger>16*1024*1024);
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',providerMaxBytes:larger})).status,200);
 });
 
@@ -1386,13 +1466,14 @@ test('Raccord HTTP préparé : catalogue transmis, alias natif, variante imbriqu
  const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.models[0].provider='opencodego';writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
  h.native.providers.all[0].id='opencode-go';h.native.providers.connected[0]='opencode-go';
  const parent=h.native.messages.ses_probe[0].info;parent.model={providerID:'opencode-go',modelID:'model1',variant:'medium'};delete parent.variant;
+ h.native.sessions.ses_probe.model={providerID:'opencode-go',modelID:'model1',variant:'medium'};
  h.native.messages.ses_probe[1].info.providerID='opencode-go';h.native.messages.ses_probe[1].info.variant='medium';
  const resolved=await h.post('/model-policy/resolve',{});assert.equal(resolved.status,200,JSON.stringify(resolved));
  assert.equal(h.native.preparation.source,'active-skill');assert.equal(resolved.body.source,'pllm-automatic');assert.equal(resolved.body.providerID,'opencode-go');assert.equal(resolved.body.logicalProviderID,'opencodego');
  assert.ok(!JSON.stringify(resolved).includes('NE_PAS_RESTITUER'));
  const run=(await h.post('/runs/reserve',h.candidate('a'))).body;
  const arm={jobId:'job-a',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,strictCommands:true,criteria:['raccord'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{},modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}};
- const bad=structuredClone(arm);parent.variant='low';assert.equal((await h.post('/runs/a/job/arm',bad)).body.error,'model-preflight-not-proved');delete parent.variant;
+ const bad=structuredClone(arm);h.native.sessions.ses_probe.model.variant='low';assert.equal((await h.post('/runs/a/job/arm',bad)).body.error,'model-preflight-not-proved');h.native.sessions.ses_probe.model.variant='medium';
  const armed=await h.post('/runs/a/job/arm',arm);assert.equal(armed.status,201,JSON.stringify(armed));assert.equal(armed.body.codingModel.providerID,'opencode-go');assert.equal(armed.body.codingModel.logicalProviderID,'opencodego');
  const selected=armed.body.codingModel;await h.stop();await h.start();assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
 });
@@ -1405,6 +1486,7 @@ test('Raccord HTTP : indisponibilités imbriquées rattachées au catalogue logi
  h.native.providers.all[0].id='opencode-go';h.native.providers.connected[0]='opencode-go';
  const reject=(reasoning,status=400,contradiction=false)=>{
   const name=reasoning+'-'+status+'-'+contradiction;const user=structuredClone(h.native.messages.ses_probe[0]);user.info.id='msg_user_'+name;
+  h.native.sessions.ses_probe.model={providerID:'opencode-go',modelID:'model1',variant:reasoning};
   user.info.model={providerID:'opencode-go',modelID:'model1',variant:reasoning};delete user.info.variant;
   const response=structuredClone(h.native.messages.ses_probe[1]);Object.assign(response.info,{id:'msg_bad_'+name,parentID:user.info.id,providerID:'opencode-go',variant:contradiction?'low':reasoning});
   response.info.error={name:'APIError',data:{statusCode:status,responseBody:JSON.stringify({error:{code:'unsupported_value',param:'reasoning_effort',message:'PRIVE_SYNTHETIQUE'}})}};

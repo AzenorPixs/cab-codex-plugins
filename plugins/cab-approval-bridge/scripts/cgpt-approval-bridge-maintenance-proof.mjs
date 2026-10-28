@@ -4,7 +4,7 @@ import { open, lstat, realpath, readlink } from 'node:fs/promises';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 
-export const VERSION = '1.10.6';
+export const VERSION = '2.0.0';
 export const FROZEN_PROFILE = 'frozen-recovery-controller';
 export const FROZEN_CAPABILITY = 'frozen-recovery-v1';
 const object = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -154,9 +154,9 @@ export function validateFrozenTarget(target) {
       typeof target[k] !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(target[k]))) fail('maintenance-target-invalid');
 }
 
-export async function collectFrozenProof({ controllerUrl, opencodeUrl, workspace, target, request = maintenanceHttp }) {
+export async function collectFrozenProof({ controllerUrl, openCode, workspace, target, request = maintenanceHttp }) {
   validateFrozenTarget(target);
-  const native = (path) => request(opencodeUrl, path + '?directory=' + encodeURIComponent(workspace));
+  if (!openCode) fail('maintenance-opencode-client-required');
   const registry = await request(controllerUrl, '/runs');
   const status = await request(controllerUrl, '/status');
   const readiness = status.brokerReadiness;
@@ -196,12 +196,13 @@ export async function collectFrozenProof({ controllerUrl, opencodeUrl, workspace
   }
   if (!jobs[target.runId]) fail('maintenance-target-not-reserved');
   const [health, path, mcp, busy, permissions] = await Promise.all([
-    native('/global/health'), native('/path'), native('/mcp'), native('/session/status'), native('/permission')]);
-  if (health.healthy !== true || path.directory !== workspace || mcp['cgpt-validation']?.status !== 'connected') fail('maintenance-native-context-divergent');
+    openCode.info(), openCode.location(workspace), openCode.mcp(workspace),
+    openCode.sessionStatus(workspace), openCode.permissions(workspace)]);
+  if (!health.version.startsWith('2.') || path.directory !== workspace || mcp['cgpt-validation']?.status !== 'connected') fail('maintenance-native-context-divergent');
   if (!object(busy) || Object.values(busy).some((s) => s?.type !== 'idle') || !Array.isArray(permissions) || permissions.length) fail('maintenance-native-not-quiescent');
   const sessions = {}, toolParts = []; let candidateMessages;
   for (const id of [...sessionIds].sort()) {
-    const [session, messages] = await Promise.all([native('/session/' + encodeURIComponent(id)), native('/session/' + encodeURIComponent(id) + '/message')]);
+    const [session, messages] = await Promise.all([openCode.session(id, workspace), openCode.messages(id, workspace)]);
     if (session.id !== id || session.directory !== workspace || !Array.isArray(messages) || messages.some((m) => !Array.isArray(m.parts))) fail('maintenance-native-session-divergent');
     const parts = messages.flatMap((m) => m.parts.filter((p) => p.type === 'tool'));
     toolParts.push(...parts);
@@ -290,7 +291,7 @@ export async function collectFrozenProof({ controllerUrl, opencodeUrl, workspace
   return proof;
 }
 
-export async function verifyBootstrap({ root, transactionId, controllerUrl, opencodeUrl, workspace,
+export async function verifyBootstrap({ root, transactionId, controllerUrl, openCode, workspace,
   controllerPid, entry, request = maintenanceHttp }) {
   const journal = await readBootstrapJournal(root, transactionId), seal = journal.seal;
   await checkInstallationJournal(journal,true);
@@ -312,7 +313,7 @@ export async function verifyBootstrap({ root, transactionId, controllerUrl, open
   if (global?.transactionId !== transactionId || global.generation !== seal.generation ||
       global.inputDigest !== seal.globalInputDigest || global.cause !== 'SHARED_MAINTENANCE' ||
       !['DRAINING','HELD'].includes(global.state)) fail('maintenance-global-divergent');
-  const proof = await collectFrozenProof({ controllerUrl, opencodeUrl, workspace, target: seal.target, request });
+  const proof = await collectFrozenProof({ controllerUrl, openCode, workspace, target: seal.target, request });
   if (proofHash(proof) !== proofHash(seal.proof)) fail('maintenance-frozen-proof-changed');
   return { journal, proof, manifest, global };
 }

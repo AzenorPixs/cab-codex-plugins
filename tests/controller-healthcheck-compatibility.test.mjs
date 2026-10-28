@@ -1,4 +1,5 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
+import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -27,7 +28,7 @@ for (const prefix of ["OC_Codex_", "OC_CGPT_"]) {
         `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(marker)}, 'called');\n`,
         { mode: 0o755 });
       const requests = [];
-      const server = createServer((request, response) => {
+      const server = createServer(openCodeV2TestHandler((request, response) => {
         requests.push(request.url);
         if (request.url === "/global/event") {
           response.writeHead(200, { "content-type": "text/event-stream" });
@@ -46,7 +47,7 @@ for (const prefix of ["OC_Codex_", "OC_CGPT_"]) {
         else { response.writeHead(404).end(); return; }
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify(payload));
-      });
+      }, { directory, allowNonApi: true }));
       await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
       const base = `http://127.0.0.1:${server.address().port}`;
       const listener = createServer();

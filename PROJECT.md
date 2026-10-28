@@ -2,7 +2,15 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `1.10.6`.
+Version de référence des briques CAB : `2.0.0`.
+
+CAB 2.0.0 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
+passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
+transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
+route V1 n'est utilisée comme repli.
+
+La maintenance conserve les propriétaires réels des artefacts et des processus, qui peuvent être distincts lorsqu'ils sont explicitement prouvés. Une demande orpheline du job courant en pause ne peut être reconstruite que pour son rejet après exclusion native de tout effet ; cette réconciliation n'autorise aucune exécution.
 
 Codex Approval Bridge, abrégé **CAB**, est un projet autonome de liaison, de validation et de supervision entre **OpenCode** et **Codex**.
 
@@ -16,7 +24,7 @@ CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni u
 
 ## 3. Principes architecturaux
 
-CAB 1.10.6 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
+CAB 1.10.7 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
 
 Validation, synchronisation, archivage, publication et rapport protègent leurs périmètres réels sans demander la stabilité de tous les RUN. Le gel global est réservé à la réconciliation commune, la maintenance partagée, la pause globale ou l'arrêt global explicites. Les décisions unitaires, ask/once, preuves et gates sont conservés. Le contrat détaillé est dans ORCHESTRATED_CODING.md et OpenSpec.
 
@@ -103,7 +111,7 @@ Le transport entre OpenCode et le broker est exclusivement **MCP stdio local**. 
 
 ### 4.1 Architecture technique détaillée
 
-Cette vue détaille le profil concurrent CAB 1.10.6 : un processus OpenCode,
+Cette vue détaille le profil concurrent CAB 1.10.7 : un processus OpenCode,
 un broker MCP stdio, un contrôleur et un superviseur communs, avec des
 contextes isolés par RUN. A et B illustrent deux sessions ; le même modèle
 s'applique aux autres RUN admis. Les contextes et la barrière sont des
@@ -139,7 +147,7 @@ flowchart TB
         O2 -.-> F
     end
 
-    subgraph CAB["Infrastructure CAB 1.10.6 partagée"]
+    subgraph CAB["Infrastructure CAB 1.10.7 partagée"]
         B["Un broker MCP local<br/>corrélation et readiness par RUN / session"]
         E[("Approbations persistantes<br/>journal et intégrité")]
         subgraph CTRL["Un contrôleur Codex — API HTTP locale"]
@@ -257,7 +265,7 @@ CAB observe OpenCode par une voie SSE directe indépendante du cycle MCP. Cette 
 
 ### 5.3.1 Moniteur web indépendant
 
-CAB Monitor 1.10.6 fournit une vue locale des briques, des RUN et des changes,
+CAB Monitor 1.10.7 fournit une vue locale des briques, des RUN et des changes,
 sans appel LLM. Son processus indépendant reste accessible pendant une panne
 du contrôleur ou du superviseur. Il agrège des observations filtrées, avec
 fraîcheur explicite, puis actualise les navigateurs par SSE. Le port par
@@ -299,7 +307,7 @@ de maintenance ne permet aucune décision, permission ou modification de RUN.
 
 ### 5.4 Plugin Codex
 
-Le plugin regroupe les skills `approval-bridge` et `coding-session-statistics`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex. Sa marketplace est versionnée à la racine du dépôt dans `.agents/plugins/marketplace.json` et le plugin dans `plugins/cab-approval-bridge/`.
+Le plugin `cab-approval-bridge` regroupe les skills `approval-bridge` et `coding-session-statistics`, les scripts du contrôleur et de supervision ainsi que les métadonnées nécessaires à son intégration Codex. Le plugin autonome `cabu` fournit l’entrée skill pour l’update CAB. La marketplace versionnée à la racine du dépôt dans `.agents/plugins/marketplace.json` distribue les deux plugins depuis `plugins/`.
 
 L'orchestrateur prépare la collecte dès le début de chaque change. Après
 chaque archivage OpenSpec autorisé et réussi, il fait produire et vérifier
@@ -321,6 +329,9 @@ la procédure ni télécharger une dépendance implicite.
 communication entre le broker MCP et l'agent Codex ; elle ne rend aucune
 décision d'approbation.
 
+Le skill du plugin `cabu` et la commande `/CABU` sont deux entrées vers la
+même procédure canonique `/CAB update` ; aucune ne duplique sa logique.
+
 - `/CAB status` : affiche en lecture seule un tableau synthétique par RUN et
   change, avec réalisé, en cours, restant, activité ou attente explicite d’un
   pair ; les preuves actuelles sont recoupées sans modifier le projet suivi ;
@@ -332,10 +343,12 @@ décision d'approbation.
 - `/CAB test` : vérifie le chemin complet de validation dans cette session ;
 - `/CAB run` : maintient le job piloté et ses mandats unitaires dans cette
   même session, sauf récupération explicite contrôlée conservant le RUN ;
-- `/CAB update` : actualise le plugin et la commande de profil depuis leur
-  source validée, puis déploie broker, contrôleur, superviseur et Web. Les
-  briques actives sont mises à jour sous maintenance partagée, avec sauvegarde,
-  contrôle des RUN et repli ; les briques inactives restent inactives ;
+- `/CAB update` (`/CABU` sans argument) : valide le jeu, arrête systématiquement
+  les trois unités systemd CAB, remplace les fichiers du broker, contrôleur,
+  superviseur et Web, puis redémarre les unités sans activation au login. Il ne
+  consulte pas les états RUN ou de coordination en précondition. Si OpenCode est
+  absent, les fichiers broker sont quand même installés et sa version runtime
+  est rapportée `INDISPONIBLE` ; le bilan sépare fichiers et processus ;
 - `/CAB stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
   arrêter OpenCode ni le broker MCP géré par OpenCode.
 
@@ -470,7 +483,7 @@ Codex intervient en analyse, en revue de code, et en validateur.
 
 ## 16. Documentation officiel
 
-## Pilotage concurrent 1.10.6
+## Pilotage concurrent 1.10.7
 
 Le profil concurrent partage un OpenCode, un broker MCP stdio et un contexte
 absolu de projet. Plusieurs RUN possèdent chacun leur session, contrat,
@@ -490,7 +503,7 @@ Le protocole détaillé est dans ORCHESTRATED_CODING.md. Les worktrees ne font
 pas partie du profil concurrent initial. Les prompts directs ne sont pas
 exécutés en concurrence avec ces RUN et ne sont pas modifiés par cette évolution.
 
-## Réutilisation du broker externe — 1.10.6
+## Réutilisation du broker externe — 1.10.7
 
 La maintenance ordinaire peut réutiliser un jeu broker déjà cible sous un
 autre compte, avec preuve explicite et sans écrire ses artefacts. Les versions
@@ -499,7 +512,7 @@ une panne conserve le gel pour récupération vers le jeu autorisé ; elle ne
 prétend pas restaurer le processus disparu. OpenCode, sa configuration et les
 PAUSE restent conservés. La préparation SCM et ses essais ne déploient rien.
 
-## Environnements de test — 1.10.6
+## Environnements de test — 1.10.7
 
 Un change réserve durablement ses environnements Docker/LXC avant préparation et les conserve entre ses commandes. La fin des tests, le nettoyage et la vérification de restitution sont distincts et corrélés. Les pairs attendent seulement les environnements incompatibles ; interruption et délai ne libèrent rien. Ces réservations concernent les RUN du même registre CAB, sans changer les permissions unitaires.
 
@@ -507,7 +520,7 @@ La vue Web possède une cadence réglable depuis sa page et un mode Manuel. Les 
 
 Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromium et Firefox, suivent aussi ce cycle avec les clés `browser:<hôte>/<navigateur>`. La réservation reste détenue jusqu'à fermeture des sessions WebDriver/BiDi et processus, libération des ports et profils temporaires du change, nettoyage puis vérification distincts. Les sessions utilisateur préexistantes sont préservées. Les ensembles navigateur/conteneur sont acquis atomiquement ; des mécanismes indépendants peuvent avancer.
 
-## Sélection du modèle de codage — 1.10.6
+## Sélection du modèle de codage — 1.10.7
 
 Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, demander medium ; si cette variante est indisponible, examiner la politique PLLM suivante. Un modèle imposé incompatible bloque. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.
 
