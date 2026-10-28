@@ -51,12 +51,12 @@ test('le plugin CABU expose son skill et partage la version distribuée', () => 
   const marketplace = JSON.parse(readFileSync(new URL('.agents/plugins/marketplace.json', root), 'utf8'));
   const entry = marketplace.plugins.find((plugin) => plugin.name === 'CABU');
   assert.ok(entry);
-  assert.equal(entry.source.path, './plugins/CABU');
+  assert.equal(entry.source.path, './plugins/cabu');
   const pluginRoot = new URL(`${entry.source.path}/`, root);
   const manifest = JSON.parse(readFileSync(new URL('.codex-plugin/plugin.json', pluginRoot), 'utf8'));
   assert.equal(manifest.name, 'CABU');
   assert.match(manifest.version, /^2\.1\.0\+codex\.\d{14}$/);
-  const skill = readFileSync(new URL('skills/CABU/SKILL.md', pluginRoot), 'utf8');
+  const skill = readFileSync(new URL('skills/cabu/SKILL.md', pluginRoot), 'utf8');
   assert.match(skill, /^name: CABU$/m);
   assert.match(skill, /\$CABU/);
   assert.match(skill, /\/CAB update/);

@@ -55,9 +55,9 @@ CAB/
 │       ├── cgpt-approval-bridge-healthcheck.mjs
 │       ├── cgpt-approval-bridge-opencode-sse-client.mjs
 │       └── cgpt-approval-bridge-opencode-client.mjs
-├── plugins/CABU/                     # plugin Codex d'entrée CABU
+├── plugins/cabu/                     # plugin Codex d'entrée CABU
 │   ├── .codex-plugin/plugin.json
-│   └── skills/CABU/SKILL.md
+│   └── skills/cabu/SKILL.md
 ├── src/                 # bridge Python
 ├── .codex/
 │   └── commands/        # commandes /CAB, /CABU et /cab
