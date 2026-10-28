@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, openSync, readSync, realpathSync } fro
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const VERSION = '2.1.3';
+export const VERSION = '2.1.4';
 export const MODEL_SELECTION_PROTOCOL = 'pllm-auto-v1';
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -30,11 +30,12 @@ export function readModelCatalog(environment = process.env) {
 }
 
 function validateCatalog(catalog, now) {
-  if (!object(catalog) || catalog.schema_version !== 2 || !stamp(catalog.evaluated_at) || !stamp(catalog.published_at) ||
-    !['selected','no_valid_model'].includes(catalog.selection_status) || !Array.isArray(catalog.models) || catalog.models.length !== 6 ||
-    catalog.models.some((entry) => !object(entry) || !Number.isInteger(entry.priority) || entry.priority < 1 || entry.priority > 6 ||
+  const policyCount = catalog?.schema_version === 2 ? 6 : catalog?.schema_version === 3 ? 7 : 0;
+  if (!object(catalog) || policyCount === 0 || !stamp(catalog.evaluated_at) || !stamp(catalog.published_at) ||
+    !['selected','no_valid_model'].includes(catalog.selection_status) || !Array.isArray(catalog.models) || catalog.models.length !== policyCount ||
+    catalog.models.some((entry) => !object(entry) || !Number.isInteger(entry.priority) || entry.priority < 1 || entry.priority > policyCount ||
       entry.mode !== 'mode'+entry.priority || !['Valide','Invalide'].includes(entry.state)) ||
-    new Set(catalog.models.map((entry) => entry.priority)).size !== 6 || Date.parse(catalog.evaluated_at) > now ||
+    new Set(catalog.models.map((entry) => entry.priority)).size !== policyCount || Date.parse(catalog.evaluated_at) > now ||
     Date.parse(catalog.published_at) < Date.parse(catalog.evaluated_at) || Date.parse(catalog.published_at) > now) fail('pllm-catalog-invalid');
   const selected = catalog.models.filter((entry) => entry.selected === true);
   if (catalog.selection_status === 'no_valid_model') fail('pllm-no-valid-model');
@@ -124,7 +125,7 @@ export function validCodingModel(value) {
     (value.logicalProviderID === undefined || (value.source === 'pllm-automatic' && identifier(value.logicalProviderID))) &&
     identifier(value.providerID) && modelId(value.modelID) && identifier(value.reasoning) && stamp(value.selectedAt) &&
     (value.source === 'prompt' ? value.mode === null && value.priority === null && value.catalogDigest === null && value.evaluatedAt === null :
-      Number.isInteger(value.priority) && value.priority >= 1 && value.priority <= 6 && value.mode === 'mode'+value.priority &&
+      Number.isInteger(value.priority) && value.priority >= 1 && value.priority <= 7 && value.mode === 'mode'+value.priority &&
       stamp(value.evaluatedAt) && /^[a-f0-9]{64}$/.test(value.catalogDigest)) &&
     (value.unavailabilityProofs === undefined || (Array.isArray(value.unavailabilityProofs) && value.unavailabilityProofs.length <= 12 &&
       value.unavailabilityProofs.every((proof) => object(proof) && Object.keys(proof).every((key) =>

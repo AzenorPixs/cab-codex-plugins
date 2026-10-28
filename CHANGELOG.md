@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.4 — Compatibilité des catalogues PLLM
+
+- Accepter les couples stricts schéma 2 / six politiques et schéma 3 / sept politiques ; conserver les gardes de priorité, sélection et dates, ainsi que le raisonnement et le prévol natif.
+- Permettre la sélection, la preuve et la conservation de mode7 sans modifier les jobs existants ou réécrire le catalogue.
+- Aligner la distribution 2.1.4 et documenter le raccord au catalogue public actif.
+
 ## 2.1.3 — Credential de mise à jour et installation mixte
 
 - Prévol du credential systemd avant coupure et raccord explicite `--opencode-password-env-file` à la seule variable OPENCODE_PASSWORD de project.env ; aucune obligation pour les projets sans OpenCode, aucun secret dans les reçus et aucun écrasement de credential différent.

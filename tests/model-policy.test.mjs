@@ -167,3 +167,38 @@ test('indisponibilité native imbriquée de medium et refus des variantes contra
   const q=structuredClone(input);change(q);assert.throws(()=>reasoningUnavailability(q),/model-unavailability-not-proved/);
  }
 });
+
+
+function catalog3() {
+ const c=catalog();c.schema_version=3;c.models.push({...c.models[5],mode:'mode7',priority:7,provider:'provider7',model_id:'model7',selected:false});return c;
+}
+function providers7() {
+ const p=providers();p.connected.push('provider7');p.all.push({id:'provider7',models:{model7:{variants:{medium:{}}}}});return p;
+}
+test('formats stricts 2/6 et 3/7 : préparation sans mutation et sélection de mode7',t=>{
+ const root=mkdtempSync(join(tmpdir(),'cab-catalog3-'));t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'data'));
+ const path=join(root,'data/pllm-current.json');
+ for(const c of [catalog(),catalog3()]) {
+  const source=JSON.stringify(c);writeFileSync(path,source);
+  assert.equal(prepareControllerModelPolicy({activeSkillRoot:root,now}).catalogPath,path);
+  assert.deepEqual(readModelCatalog({OC_Codex_PLLM_CATALOG:path}),c);
+  assert.equal(choose({catalog:c,providers:providers7()}).mode,'mode1');
+ }
+ const c=catalog3(),p=providers7();for(const row of p.all.slice(0,6))for(const model of Object.values(row.models))model.variants={low:{}};
+ const selected=choose({catalog:c,providers:p});assert.equal(selected.mode,'mode7');assert.equal(selected.priority,7);assert.equal(selected.reasoning,'medium');
+ const verified=verifyModelPreflight(selected,nativeProof(selected));assert.equal(validCodingModel(verified),true);assert.equal(validCodingModel({...verified,priority:8,mode:'mode8'}),false);
+});
+test('schémas et cardinalités incohérents, priorités dupliquées et modes ambigus restent refusés',()=>{
+ for(const c of [{...catalog(),schema_version:3}, {...catalog3(),schema_version:2}, {...catalog3(),schema_version:4}, {...catalog(),schema_version:'2'}, {...catalog3(),schema_version:null}])
+  assert.throws(()=>choose({catalog:c,providers:providers7()}),/pllm-catalog-invalid/);
+ for(const change of [c=>c.models[6].priority=6,c=>c.models[6].mode='mode6',c=>c.models[6].priority=8,c=>c.models[6].priority=0]){
+  const c=catalog3();change(c);assert.throws(()=>choose({catalog:c,providers:providers7()}),/pllm-catalog-invalid/);
+ }
+});
+test('format 3/7 : dates, sélection unique et preuve courante restent exigées',()=>{
+ for(const change of [c=>c.published_at=new Date(now+1000).toISOString(),c=>c.evaluated_at='invalid',c=>c.models[1].selected=true,c=>c.models[0].evaluated_this_run=false,c=>c.models[0].state='Invalide']){
+  const c=catalog3();change(c);assert.throws(()=>choose({catalog:c,providers:providers7()}),/pllm-catalog-invalid/);
+ }
+ const c=catalog3();c.models[0].evaluated_this_run=false;c.models[0].selected=false;c.models[6].selected=true;c.selected_mode='mode7';
+ assert.equal(choose({catalog:c,providers:providers7()}).mode,'mode2');
+});

@@ -20,7 +20,7 @@ async function waitFor(check, milliseconds = 15000) {
   throw new Error('native integration timeout');
 }
 
-test('OpenCode natif : trois sessions et un seul broker source 2.1.3 dans un contexte isolé',
+test('OpenCode natif : trois sessions et un seul broker source 2.1.4 dans un contexte isolé',
   { skip: !binary, timeout: 45000 }, async (t) => {
     const temporary = mkdtempSync(join(tmpdir(), 'cab-native-opencode-'));
     const workspace = join(temporary, 'workspace'); mkdirSync(workspace);
@@ -82,7 +82,7 @@ test('OpenCode natif : trois sessions et un seul broker source 2.1.3 dans un con
         OC_Codex_OPENCODE_PASSWORD_FILE: passwordFile,
         CODEX_COMMAND: 'cab-test-unused-app-server' }, stdio: 'ignore' });
     await waitFor(async () => { try { return Boolean(await request(controllerBase + '/status')); } catch { return false; } });
-    await waitFor(async () => (await request(controllerBase + '/status')).brokerReadiness?.server_version === '2.1.3');
+    await waitFor(async () => (await request(controllerBase + '/status')).brokerReadiness?.server_version === '2.1.4');
     const sessions = await Promise.all(['a', 'b', 'c'].map((id) => native('/api/session', 'POST', {
       location: { directory: workspace }, title: 'CAB isolated fixture ' + id })));
     const mcp = await native('/api/mcp');
@@ -101,7 +101,7 @@ test('OpenCode natif : trois sessions et un seul broker source 2.1.3 dans un con
     assert.equal((await request(controllerBase + '/status')).activeRunCount, 3);
     assert.equal(new Set(sessions.map((s) => s.data.id)).size, 3);
     const brokers = readFileSync(starts, 'utf8').trim().split('\n').map(JSON.parse);
-    assert.equal(brokers.length, 1); assert.equal(brokers[0].version, '2.1.3');
+    assert.equal(brokers.length, 1); assert.equal(brokers[0].version, '2.1.4');
     for (const run of reservations) {
       await request(controllerBase + '/runs/' + run.runId + '/job/terminal-gate', 'POST', { state: 'BLOQUÉ' });
       await request(controllerBase + '/runs/' + run.runId + '/job/disarm', 'POST', { jobId: 'job-' + run.runId.split('-')[1] });
