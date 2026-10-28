@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.0 — Migration exclusive OpenCode V2
+
+- Passage de toutes les briques CAB à la version majeure 2.0.0.
+- OpenCode V1 et toutes les versions 1.x sont refusés ; transport HTTP V2 authentifié par Basic Auth, avec credential local protégé.
+- Contrôleur, superviseur, moniteur, maintenance, réparation, broker, commandes et documentation migrés vers les contrats V2.
+- Les anciens champs de transcript `tools` ne sont pas exposés par le schéma V2 ; la réconciliation qui dépend de cette preuve refuse donc ce cas sans effet.
+
+## 1.10.11 — plugin, skill et commande CABU
+
+- Ajout du plugin CABU autonome et de son skill d’entrée ; `/CABU` reste la commande distribuée séparément et délègue à `/CAB update`.
+- Incrément commun des briques CAB à 1.10.11.
+
+## 1.10.10 — alignement de la distribution
+
+- Incrément commun des versions CAB ; `/CABU` reste l’accès direct à `/CAB update`, conformément à la spécification et à l’implémentation existantes.
+
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
 
 ## 1.10.9 — mise à jour forcée par CABU

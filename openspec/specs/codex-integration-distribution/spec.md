@@ -241,10 +241,7 @@ Après retry explicite, l'orchestrateur MUST exiger /usr/bin/true exact, change 
 
 ### Requirement: Connexion MCP et création du RUN CAB
 
-Avant de créer une session de codage, `/CAB start` SHALL consulter `GET /mcp` du serveur
-OpenCode et exiger que `cgpt-validation` soit `connected`. En cas d'échec, `/CAB start`
-MAY réinitialiser l'instance par `POST /instance/dispose`, puis SHALL attendre un état
-sain ; `/CAB start` SHALL ne jamais démarrer ni arrêter le broker directement.
+Avant de créer une session, `/CAB start` SHALL lire `/api/mcp` avec authentification V2 et exiger `cgpt-validation: connected` dans la location cible. À une frontière de maintenance autorisée, il MAY reconnecter le MCP ciblé par les seules routes V2 documentées, puis SHALL relire son état. Il MUST NOT utiliser une route V1, `/instance/dispose`, ni gérer directement le processus broker.
 
 #### Scenario: Connexion MCP et création du RUN CAB
 - **WHEN** la purge du nouveau RUN est terminée mais cgpt-validation n'est pas connecté
@@ -256,9 +253,7 @@ sain ; `/CAB start` SHALL ne jamais démarrer ni arrêter le broker directement.
 
 ### Requirement: Messagerie et reprise du même RUN CAB
 
-`/CAB start` MAY réutiliser la session seulement pour la reprise du même RUN, sans
-purge. `/CAB start` SHALL transmettre les mandats par la messagerie native de cette
-session.
+`/CAB start` MAY réutiliser la session seulement pour la reprise du même RUN, sans purge. `/CAB start` SHALL transmettre les mandats via `POST /api/session/{sessionID}/prompt` V2 dans la location persistante, préserver le texte, la corrélation de mandat, les permissions natives et le mode de livraison sans reprise implicite.
 
 #### Scenario: Messagerie et reprise du même RUN CAB
 - **WHEN** CAB reprend le même RUN avec sa session persistante
@@ -702,3 +697,40 @@ rester exactes.
 #### Scenario: Jeu source aligné
 - **WHEN** le jeu 1.10.6 est qualifié
 - **THEN** chaque composant versionné annonce 1.10.6 et les références à 1.10.5 ne désignent que des historiques ou versions chargées compatibles
+
+### Requirement: Plugin CABU et skill d'entrée
+La marketplace CAB SHALL distribuer un plugin autonome `cabu`. Celui-ci SHALL exposer un skill directement invocable qui déclenche la procédure canonique `/CAB update` sans dupliquer cette procédure.
+
+#### Scenario: Invocation directe du skill CABU
+- **WHEN** le skill `cabu` est installé et invoqué
+- **THEN** il exécute `/CAB update` dans la conversation courante et restitue son rapport terminal
+
+#### Scenario: Procédure canonique indisponible
+- **WHEN** le skill `cabu` est invoqué sans commande CAB compatible disponible
+- **THEN** il signale la dépendance absente et n'entame aucune opération de maintenance
+
+### Requirement: Distribution cohérente du plugin et de la commande CABU
+La commande `/CABU` SHALL rester distribuée séparément du plugin dans `.codex/commands/CABU.md`, sans argument et avec la même base de version que le plugin CABU et le plugin CAB. Elle SHALL déléguer à `/CAB update` sans dupliquer sa procédure.
+
+#### Scenario: Plugin et commande distribués à la même version
+- **WHEN** une release CAB est préparée
+- **THEN** la marketplace, le manifeste du plugin CABU, le skill CABU, le plugin CAB et la commande `/CABU` annoncent la base de version commune
+
+#### Scenario: Invocation de la commande CABU
+- **WHEN** `/CABU` est invoquée sans argument
+- **THEN** elle délègue à la procédure `/CAB update` et produit le même rapport terminal
+
+#### Scenario: Arguments CABU refusés avant maintenance
+- **WHEN** `/CABU` est invoquée avec un argument
+- **THEN** elle affiche sa syntaxe et termine avant toute opération réseau ou de maintenance
+
+### Requirement: Configuration MCP OpenCode V2
+Le broker CAB MUST être déclaré comme serveur MCP local `stdio` sous `mcp.servers.cgpt-validation`. La forme V1 plaçant le serveur directement sous `mcp` MUST NOT être utilisée ni réparée automatiquement.
+
+#### Scenario: Configuration compatible
+- **WHEN** la configuration OpenCode V2 est inspectée
+- **THEN** `cgpt-validation` est sous `mcp.servers` avec `type: "local"` et utilise stdio
+
+#### Scenario: Configuration V1 résiduelle
+- **WHEN** le serveur est déclaré directement sous `mcp`
+- **THEN** CAB signale la configuration incompatible sans la réécrire ni démarrer le broker
