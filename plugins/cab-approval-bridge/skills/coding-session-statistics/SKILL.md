@@ -1,6 +1,6 @@
 ---
 name: coding-session-statistics
-description: Préparer et produire des statistiques détaillées et auditables d'une session de codage ou de pilotage OpenCode, notamment la télémétrie périodique des agents de codage, les messages, outils, approbations, refus, fichiers, commandes et accès web. Utiliser lorsqu'un utilisateur demande de mesurer une session, des statistiques, un bilan quantifié ou un rapport STATISTIQUES.md sur une session de développement.
+description: Préparer et produire des statistiques détaillées et auditables d'une session de codage ou de pilotage OpenCode, notamment la télémétrie périodique des agents de codage, les messages, outils, approbations, refus, fichiers, commandes et accès web. Utiliser lorsqu'un utilisateur demande de mesurer une session, des statistiques, un bilan quantifié ou un rapport STATISTICS.md sur une session de développement.
 ---
 
 # Statistiques de session de codage
@@ -146,7 +146,7 @@ OpenSpec réussi, même sans demande supplémentaire de rapport.
 2. Effectuer les contrôles finaux de collecte et le relevé de quota après
    archivage, puis fixer la fin de l'intervalle avant rédaction de la synthèse.
 3. Faire autoriser un mandat d'édition distinct pour le seul fichier
-   `openspec/changes/archive/<archive>/STATISTIQUES.md` du projet piloté.
+   `openspec/changes/archive/<archive>/STATISTICS.md` du projet piloté.
 4. Produire les six sections ci-dessous, puis vérifier l'existence, l'encodage
    UTF-8/LF, les six titres de niveau 2 et la cohérence des totaux.
 5. Rapporter le chemin et les validations observées à l'orchestrateur avant
@@ -192,7 +192,7 @@ Utiliser des tableaux Markdown pour les comparaisons répétées. Pour les chemi
 
 ## Production de fichier
 
-Dans un cycle CAB, créer systématiquement `STATISTIQUES.md` dans le dossier réel de chaque évolution OpenSpec archivée, selon le protocole ci-dessus. Hors de ce cycle, si l'utilisateur demande un fichier, utiliser l'emplacement explicitement demandé. Respecter les autorisations du projet, UTF-8 et une fin de ligne Unix LF, puis vérifier qu'il existe exactement six titres de niveau 2.
+Dans un cycle CAB, créer systématiquement `STATISTICS.md` dans le dossier réel de chaque évolution OpenSpec archivée, selon le protocole ci-dessus. Hors de ce cycle, si l'utilisateur demande un fichier, utiliser l'emplacement explicitement demandé. Respecter les autorisations du projet, UTF-8 et une fin de ligne Unix LF, puis vérifier qu'il existe exactement six titres de niveau 2.
 
 ## Attribution concurrente CAB 1.0.0
 
@@ -204,6 +204,6 @@ entre sessions. Publier un rapport par archive et vérifier ses six sections,
 UTF-8/LF et totaux avant la libération normale de la réservation. Une session
 SCM directe n'invoque pas cette compétence ni ses sondes.
 
-## Consultations et observations CAB 2.0.0
+## Consultations et observations CAB 2.1.3
 
 Les agrégats, fenêtres et imports filtrés sont décrits dans [la référence observations](references/observations.md). La consultation est ponctuelle et en lecture seule ; elle ne déclenche ni sondes, ni RUN d'observation, ni intervention sur les sessions. Les sources natives et importées restent séparées, les lacunes inconnues et les quotas partagés. Les durées de contention et d'exception peuvent se recouvrir. Cette capacité de consultation ne transforme pas SCM en session pilotée et n'autorise pas l'invocation de cette compétence pendant SCM.

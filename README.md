@@ -6,14 +6,15 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.0.0. Le plugin CABU fournit un skill
+La version source courante est CAB 2.1.3. CABU prépare les artefacts avant la coupure,
+redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
 des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
 
-CAB 2.0.0 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
+CAB 2.1.3 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
 sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
 fixe `opencode` et le mot de passe configuré par `OPENCODE_PASSWORD` ; CAB
 lit son mot de passe depuis `~/.config/cab-approval-bridge/opencode.password`
@@ -23,6 +24,8 @@ Le serveur MCP CAB se déclare dans `mcp.servers.cgpt-validation` avec le type
 `local` et le transport `stdio`.
 
 La version 1.10.7 prend en charge les propriétaires explicitement distincts des modules, du répertoire et des processus broker dans la preuve privée de maintenance. Une demande orpheline du job courant sous PAUSE peut être réconciliée uniquement pour rejet, avec preuve native exacte d'absence d'effet. L'installation de sources et la migration des processus restent vérifiées séparément.
+
+Le patch 2.1.3 vérifie le credential systemd avant toute coupure. Le raccord explicite `--opencode-password-env-file <workspace>/project.env` peut provisionner le fichier privé depuis la seule variable OPENCODE_PASSWORD lorsque le projet utilise OpenCode. Cette variable n’est pas obligatoire dans les autres projets et aucune lecture de project.env n’a lieu sans cette option. Un credential différent n’est jamais écrasé. Le mode mixte `cab-source --layout managed-release` conserve le broker src/ ordinaire. Les diagnostics par service et le résultat du repli sont détaillés dans [la procédure de mise à jour](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
 
 ## Prévol orphelin et maintenance contrôlée — 1.10.7
 
@@ -185,7 +188,7 @@ Le jeu source 1.10.7 conserve la correction de reprise d'un RUN arrêté puis li
 Les consultations /CAB stats, /CAB statslast, /CAB stats 24, /CAB stats7 et /CAB stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
 Le plugin CAB embarque `coding-session-statistics`. Son protocole impose un
-rapport `STATISTIQUES.md` dans chaque dossier d'archive OpenSpec après un
+rapport `STATISTICS.md` dans chaque dossier d'archive OpenSpec après un
 archivage autorisé et réussi, avant la clôture normale du travail. La collecte
 est préparée dès le début du change ; les données absentes sont signalées
 `N/A` sans estimation. Le suivi des quotas utilise l'outil natif Codex, sans
@@ -452,7 +455,7 @@ ni arrêter le broker MCP géré par OpenCode. Les unités utilisateur restent
 installées mais inactives jusqu'au prochain
 `/CAB start`.
 
-`/CAB update` vérifie le plugin installé, le skill `approval-bridge`, sa
+`/CAB update` vérifie le plugin installé, le skill `CAB`, sa
 référence de maintenance et les commandes `CAB.md`, `CABU.md` et `cab.md`.
 CABU délègue à la procédure canonique et attend son rapport complet. Après
 staging et sauvegardes, l'update arrête systématiquement les trois unités
@@ -651,7 +654,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, du plugin CABU et des commandes
-est `2.0.0`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.3`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -719,3 +722,37 @@ La session de pilotage peut imposer providerMaxBytes dans /model-policy/resolve 
 ### Raccord PLLM/OpenCode — 1.10.7
 
 Le paquet prépare un patch de catalogue public à transmettre au contrôleur, rapproche l'alias logique Go avec l'identité native vérifiée et accepte les variantes de prévol imbriquées ou historiques cohérentes. Les cas ambigus, déconnectés ou contradictoires restent refusés. La référence [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) précise préparation, transmission et compatibilité ; les sources ne déploient aucun service.
+
+CABU 2.1.3 conserve les RUN sans notification pendant sa coupure technique.
+La reprise restaure les états persistants et interdit tout rejeu implicite
+des permissions consommées. Les mesures et limites de durée figurent dans
+TECHNICAL.md, section « CABU 2.1.3 : coupure courte et reprise ».
+
+### Identifiants publics CAB 2.1.3
+
+| Élément | Identifiant |
+| --- | --- |
+| Plugin principal | `CAB` |
+| Skill principal | `$CAB` |
+| Commande principale | `/CAB` |
+| Plugin de mise à jour | `CABU` |
+| Skill de mise à jour | `$CABU` |
+| Commande de mise à jour | `/CABU` |
+| Marketplace affichée | `CAB Codex Plugins` |
+
+Le skill de statistiques garde son nom `coding-session-statistics`, sous le
+namespace `CAB`. Les chemins `plugins/cab-approval-bridge/`,
+`skills/approval-bridge/` et `plugins/cabu/` restent stables. L'alias historique
+`/cab` conserve la compatibilité. Les noms des services, routes et données
+persistantes ne sont pas renommés.
+
+## Codes de lot dans le moniteur
+
+Les tableaux RUN et CHANGE affichent « codes de lot » en deuxième colonne. Le
+code provient du début du premier titre Markdown de niveau 1 de `proposal.md`,
+hors blocs de code : par exemple `# PA01 — Composition PA`. Il comporte de une
+à dix lettres majuscules puis de deux à quatre chiffres, seul ou suivi d'un
+séparateur explicite (`—`, `–`, `-`, `:`) et d'un intitulé. Sans code reconnu ou
+sans document admissible, la cellule reste vide. Le RUN reprend le code de son
+change corrélé, y compris une archive référencée. Le tri et les actions restent
+identiques. Cette évolution source 2.1.3 ne prouve pas une mise à jour active.

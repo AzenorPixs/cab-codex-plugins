@@ -99,7 +99,7 @@ Un RUN MUST pouvoir réduire son périmètre à une frontière sûre avec preuve
 - **THEN** il retire cette portée sans invalider les accès indépendants des pairs
 
 ### Requirement: Phase documentaire après publication
-Après publication prouvée, un RUN MUST pouvoir entrer irréversiblement en REPORT, limité au STATISTIQUES.md de son archive. Les autres protections MUST être libérées seulement après preuve de fin. Rapport vérifié et gate TERMINÉ MUST rester requis avant livraison.
+Après publication prouvée, un RUN MUST pouvoir entrer irréversiblement en REPORT, limité au STATISTICS.md de son archive. Les autres protections MUST être libérées seulement après preuve de fin. Rapport vérifié et gate TERMINÉ MUST rester requis avant livraison.
 
 #### Scenario: Rapport préparé pendant la reprise du pair
 - **WHEN** A entre en closing après publication tandis que B poursuit son travail indépendant
@@ -380,3 +380,10 @@ Le lecteur MUST conserver sans réécriture les clés logiques historiques des r
 #### Scenario: Nouvelle acquisition non canonique
 - **WHEN** un RUN tente de réserver cette ancienne clé comme environnement de test
 - **THEN** l'acquisition reste refusée et aucune permission native n'est admise sans une réservation canonique détenue
+
+### Requirement: Perte d'autorité récupérable sans faux service sain
+Le contrôleur MUST refuser les mutations après perte d'autorité. Il MUST sortir en échec pour permettre la restauration systemd plutôt que rester indéfiniment vivant avec registry-unavailable. Les fichiers durables MUST rester conservés et aucun verrou concurrent MUST être contourné.
+
+#### Scenario: Helper de verrou interrompu
+- **WHEN** le helper d'autorité se termine hors arrêt volontaire
+- **THEN** le contrôleur devient indisponible puis redémarre en restaurant le registre, sans rejouer les décisions consommées

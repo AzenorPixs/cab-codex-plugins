@@ -123,7 +123,7 @@ async function firefox() {
 try {
   for (const [index, changeId] of changeIds.entries()) {
     const directory = join(root, 'openspec', 'changes', changeId); await mkdir(directory, { recursive: true });
-    await writeFile(join(directory, 'proposal.md'), '# ' + ['Supervision web locale', 'Reprise des sessions', 'Observation des événements'][index]);
+    await writeFile(join(directory, 'proposal.md'), '# ' + ['PA01 — Supervision web locale', 'Reprise des sessions', 'O26 — Observation des événements'][index]);
     await writeFile(join(directory, 'tasks.md'), '- [x] Préparation\n- [ ] Validation\n');
   }
   await tasks();
@@ -166,8 +166,8 @@ try {
       } catch (error) { response.writeHead(error.status || 500, { 'content-type': 'application/json' }); response.end(JSON.stringify({ error: error.code })); }
       return;
     }
-    const payload = request.url === '/status' ? { version: '2.0.0', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
-      brokerReadiness: { status: 'READY', server_version: '2.0.0' }, brokerReadinessReceivedAt: new Date().toISOString(),
+    const payload = request.url === '/status' ? { version: '2.1.3', mode: 'concurrent', workspace: root, pid: process.pid, configuration: { maxCommandLength: limit },
+      brokerReadiness: { status: 'READY', server_version: '2.1.3' }, brokerReadinessReceivedAt: new Date().toISOString(),
       runs: Object.fromEntries((managementMode ? [] : runIds).map((runId, i) => [runId, { job: { changeId: changeIds[i], sessionId: 'ses_' + i, armed: true,
         lifecycle: i === 0 ? lifecycle : nextLifecycle(undefined, i === 1 ? 'IMPLEMENTATION' : 'STATISTICS', undefined, 0),
         lastProvenMilestone: ['Contrat d’observation validé', 'Reprise préparée', 'Événements corrélés'][i], currentCabMandate: 'mandat-' + i },
@@ -176,6 +176,7 @@ try {
         : i === 2 ? { reason: 'resource-effects-unknown' } : {}) } }])) }
       : request.url === '/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
         : target.pathname === '/api/info' ? { version: '2.2.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
+          : target.pathname === '/api/location' ? { directory: root }
           : target.pathname === '/api/mcp' ? { location: { directory: root }, data: [{ name: 'cgpt-validation', status: { status: brokerConnection } }] }
           : target.pathname === '/api/session/active' ? { data: managementMode ? {} : { ses_0: { type: 'running' } } }
             : request.url === '/monitor/events' ? journal.snapshot() : {};
@@ -206,9 +207,15 @@ try {
     await wait(() => browser.evaluate("document.querySelector('#connection').textContent.includes('connectée') && document.querySelectorAll('#work-content tbody tr').length === 3"), browser.name + ' affichage initial');
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('3/14')"), true);
-    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content th')].map(x=>x.textContent)) === JSON.stringify(['RUN / CHANGE','ETAT','ÉTAPE','TÂCHES COCHÉES','ACTIONS'])"), true);
+    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content th')].map(x=>x.textContent)) === JSON.stringify(['RUN / CHANGE','codes de lot','ETAT','ÉTAPE','TÂCHES COCHÉES','ACTIONS'])"), true);
+    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content tbody tr')].map(row=>[row.querySelector('[data-run]').dataset.run,row.cells[1].textContent]).sort())"), JSON.stringify([['RUN-AUDIT','O26'],['RUN-RECOVERY',''],['RUN-WEB','PA01']]));
+    await browser.evaluate("document.querySelector('#changes-tab').click(); true");
+    assert.equal(await browser.evaluate("document.querySelectorAll('#work-content th')[1].textContent"), 'codes de lot');
+    assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content tbody tr')].map(row=>[row.querySelector('[data-change]').dataset.change,row.cells[1].textContent]).sort())"), JSON.stringify([['add-local-web-monitor','PA01'],['improve-session-recovery',''],['review-event-traces','O26']]));
+    await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-lot-codes-changes.png');
+    await browser.evaluate("document.querySelector('#runs-tab').click(); true");
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('Revue · 8/11') && document.querySelector('#work-content').textContent.includes('WAITING')"), true);
-    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.0.0') && document.querySelector('#health').textContent.includes('v2.2.0')"), true);
+    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.3') && document.querySelector('#health').textContent.includes('v2.2.0')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(255, 232, 235)');
@@ -220,6 +227,11 @@ try {
     await browser.viewport(390, 844);
     assert.equal(await browser.evaluate("document.documentElement.scrollWidth<=window.innerWidth && getComputedStyle(document.querySelector('.environment')).display!=='none' && document.querySelector('.topbar-context').scrollWidth>document.querySelector('.topbar-context').clientWidth"), true);
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-header-mobile.png');
+    assert.equal(await browser.evaluate("document.querySelectorAll('#work-content th')[1].textContent"), 'codes de lot');
+    await browser.evaluate("document.querySelector('#changes-tab').click(); true");
+    assert.equal(await browser.evaluate("document.documentElement.scrollWidth<=window.innerWidth && document.querySelectorAll('#work-content th')[1].textContent==='codes de lot'"), true);
+    await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-lot-codes-mobile.png');
+    await browser.evaluate("document.querySelector('#runs-tab').click(); true");
     await browser.viewport(1440, 1100);
     if (unit === 'header') { await finishUnit(browser, ['métadonnées alignées après workspace', 'ligne mobile défilable sans débordement']); continue; }
     const orderedSnapshot = await (await fetch(url + '/api/snapshot')).json();
@@ -416,7 +428,7 @@ try {
       'titre simplifié et gras', 'cinq cartes dont Web', 'boutons actifs protégés', 'commandes trois briques',
       'archivage RUN et change', 'navigation ARCHIVES', 'désarchivage sans reprise', 'annulation suppression',
       'suppression logique persistante', 'sources intactes', 'archives mobile', 'redémarrage Web avec reconnexion'] });
-    results.at(-1).passed.push('métadonnées alignées et responsive', 'vue manuelle stable au-delà du délai de fraîcheur', 'gardes de gestion à l’horloge courante', 'tri des deux tableaux avec égalités et inconnus');
+    results.at(-1).passed.push('codes de lot en deuxième colonne RUN et CHANGE avec cellule vide sans code', 'métadonnées alignées et responsive', 'vue manuelle stable au-delà du délai de fraîcheur', 'gardes de gestion à l’horloge courante', 'tri des deux tableaux avec égalités et inconnus');
     await browser.close(); browserClose = null; console.log(browser.name + ' : qualification réussie');
   }
   await writeFile(join(artifactDirectory, 'web-monitor-browser' + (unit ? '-' + unit : '') + '-results.json'), JSON.stringify(results, null, 2) + '\n');

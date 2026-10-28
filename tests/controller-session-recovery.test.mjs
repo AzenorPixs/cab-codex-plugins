@@ -78,7 +78,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
     }
     if (native.unavailable) { response.writeHead(503).end(); return; }
     if (native.delayPath && url.pathname === "/path") {
-      await new Promise((resolve) => { native.releasePath = resolve; });
+      await new Promise((resolve) => { const previous = native.releasePath; native.releasePath = () => { previous?.(); resolve(); }; });
     }
     let payload;
     if (url.pathname === "/global/health") payload = { healthy: native.health };
@@ -106,7 +106,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify(payload));
   }, { directory, locationDirectory: async () => {
-    if (native.delayPath) await new Promise((resolve) => { native.releasePath = resolve; });
+    if (native.delayPath) await new Promise((resolve) => { const previous = native.releasePath; native.releasePath = () => { previous?.(); resolve(); }; });
     return native.path;
   } }));
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
