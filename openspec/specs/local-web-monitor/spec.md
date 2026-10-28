@@ -258,3 +258,14 @@ Le code MUST provenir du début du premier titre Markdown de niveau 1 hors blocs
 #### Scenario: Exception historique strictement limitée
 - **WHEN** le titre porte L0, L3, PA1, un suffixe accolé à L1 ou L2, ou un code historique seulement dans le corps ou un bloc de code
 - **THEN** aucun code n’est exposé depuis cette mention et les règles du premier titre admissible restent applicables
+
+### Requirement: Fin du serveur OpenCode suivi
+Le moniteur MUST appliquer cab-process-lifecycle à son serveur OpenCode local identifié. Il MUST rester indépendant d’une panne isolée du contrôleur ou du superviseur ; leur indisponibilité MUST NOT constituer une preuve de fermeture d’OpenCode.
+
+#### Scenario: Contrôleur seul arrêté
+- **WHEN** le contrôleur tombe mais le serveur OpenCode identifié vit encore
+- **THEN** le moniteur reste disponible et expose la panne
+
+#### Scenario: Serveur OpenCode terminé
+- **WHEN** la disparition de l’instance OpenCode suivie est prouvée localement
+- **THEN** le moniteur ferme ses flux et son serveur sans modifier les RUN

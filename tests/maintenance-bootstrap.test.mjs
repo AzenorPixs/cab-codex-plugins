@@ -18,9 +18,14 @@ import { BROKER_ARTIFACT_FILES, inspectBrokerArtifacts } from '../plugins/cab-ap
 const originalPlugin = process.env.CAB_TEST_ORIGINAL_PLUGIN;
 const currentPlugin = fileURLToPath(new URL('../plugins/cab-approval-bridge/', import.meta.url));
 const pause = (ms) => new Promise((done) => setTimeout(done,ms));
+const portReservations=new Map();
 async function freePort() {
   const s=createServer(); await new Promise((done)=>s.listen(0,'127.0.0.1',done));
-  const port=s.address().port; await new Promise((done)=>s.close(done)); return port;
+  const port=s.address().port; portReservations.set(port,s); return port;
+}
+async function releasePort(base) {
+  const port=Number(new URL(base).port), listener=portReservations.get(port);
+  if(listener){portReservations.delete(port);await new Promise((done)=>listener.close(done));}
 }
 async function until(check) {
   const end=Date.now()+10000;
@@ -33,6 +38,9 @@ async function fixture(t, { webActive = true, managed = false } = {}) {
   const monitorScripts=join(home,'.local/share/cab-approval-bridge-monitor/scripts');
   const brokerDirectory=join(root,'broker');
   for(const dir of [workspace,scripts,monitorScripts,brokerDirectory]) await mkdir(dir,{recursive:true,mode:0o700});
+  const credentialDirectory=join(home,'.config/cab-approval-bridge');
+  await mkdir(credentialDirectory,{recursive:true,mode:0o700});
+  await copyFile(fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE,join(credentialDirectory,'opencode.password'));
   const realScripts=managed?join(scripts,'releases','1.7.1+original','scripts'):scripts;
   await mkdir(realScripts,{recursive:true,mode:0o700});
   for(const name of await readdir(join(originalPlugin,'scripts'))) if(/\.(mjs|py)$/.test(name)) {
@@ -86,12 +94,14 @@ async function fixture(t, { webActive = true, managed = false } = {}) {
   const controllerUrl='http://127.0.0.1:'+await freePort();
   const supervisorUrl='http://127.0.0.1:'+await freePort();
   const monitorUrl='http://127.0.0.1:'+await freePort();
+  assert.equal(new Set([controllerUrl,supervisorUrl,monitorUrl]).size,3);
   const maintenanceRoot=join(home,'.local/state/cab-approval-bridge-update/frozen-controller');
   const children=[];const processes={};const serviceEvents=[];let stderr='';let telemetry;const waiters=new Map();
   t.after(async()=>{
     if(telemetry)clearInterval(telemetry);
     for(const w of waiters.values())clearTimeout(w.timer);
     for(const child of children)if(child.exitCode===null&&child.signalCode===null){const ended=new Promise((done)=>child.once('exit',done));child.kill('SIGTERM');await ended;}
+    for(const base of [controllerUrl,supervisorUrl,monitorUrl])await releasePort(base);
     server.closeAllConnections();for(const s of streams)s.end();await new Promise((done)=>server.close(done));await rm(root,{recursive:true,force:true});
   });
   const environment={...fixtureEnvironment,OC_Codex_WORKSPACE:workspace,OC_Codex_OUTSIDE_SANDBOX:'1',
@@ -103,10 +113,25 @@ async function fixture(t, { webActive = true, managed = false } = {}) {
     CODEX_COMMAND:'cab-fixture-unused'};
   async function start(name) {
     if(processes[name]?.exitCode===null&&processes[name]?.signalCode===null)return;
-    const child=spawn(process.execPath,[await realpath(join(name==='monitor'?monitorScripts:scripts,'cgpt-approval-bridge-'+name+'.mjs'))],{env:environment,stdio:['ignore','ignore','pipe']});
-    processes[name]=child;children.push(child);child.stderr.on('data',(d)=>{stderr+=d;});
     const base=name==='controller'?controllerUrl:name==='monitor'?monitorUrl:supervisorUrl;
-    await until(async()=>{if(child.exitCode!==null)throw new Error(stderr);try{return(await fetch(base+(name==='monitor'?'/api/snapshot':'/status'))).ok;}catch{return false;}});
+    const entry=await realpath(join(name==='monitor'?monitorScripts:scripts,'cgpt-approval-bridge-'+name+'.mjs'));
+    await releasePort(base);
+    const child=spawn(process.execPath,[entry],{env:environment,stdio:['ignore','ignore','pipe']});
+    processes[name]=child;children.push(child);child.stderr.on('data',(d)=>{stderr+=d;});
+    let observed=null;
+    try {
+      await until(async()=>{
+        if(child.exitCode!==null||child.signalCode!==null)throw new Error('fixture child exited: '+name+' '+child.exitCode+' '+child.signalCode+' '+stderr);
+        let response, payload;
+        try {response=await fetch(base+(name==='monitor'?'/api/snapshot':'/status'));observed={status:response.status};
+          if(!response.ok)return false;payload=await response.json();}
+        catch{return false;}
+        const identity=name==='monitor'?payload.identity?.workspace:payload.workspace;
+        assert.equal(identity,workspace,'fixture service workspace mismatch: '+name);
+        if(name!=='monitor')assert.equal(payload.pid,child.pid,'fixture service PID mismatch: '+name);
+        return true;
+      });
+    } catch(cause) {throw new Error('fixture start failed: '+JSON.stringify({component:name,pid:child.pid,exitCode:child.exitCode,signalCode:child.signalCode,observed})+' '+stderr,{cause});}
   }
   async function stop(name) {
     const p=processes[name]; if(!p||p.exitCode!==null||p.signalCode!==null)return;
@@ -121,8 +146,11 @@ async function fixture(t, { webActive = true, managed = false } = {}) {
       const dir=name==='monitor'?monitorScripts:scripts;
       return `LoadState=loaded\nActiveState=${active?'active':'inactive'}\nMainPID=${pid}\nExecStart=/usr/bin/env node ${join(dir,'cgpt-approval-bridge-'+name+'.mjs')}\n`;
     }
-    assert.ok(['controller','supervisor','monitor'].includes(name),'aucune commande OpenCode');
-    if(args[0]==='stop')await stop(name);else if(args[0]==='start')await start(name);else assert.fail('commande service inattendue');
+    for(const target of args.slice(1)) {
+      const component=target.replace('cgpt-approval-bridge-','').replace('.service','');
+      assert.ok(['controller','supervisor','monitor'].includes(component),'aucune commande OpenCode');
+      if(args[0]==='stop')await stop(component);else if(args[0]==='start')await start(component);else assert.fail('commande service inattendue');
+    }
     return '';
   };
   await start('controller');
@@ -190,7 +218,7 @@ async function fixture(t, { webActive = true, managed = false } = {}) {
   assert.ok(originalRuns.requestOwners[approval.requestId]);
   assert.equal((await request('/runs/a/status')).hasUnresolvedOperation,false);
   await start('supervisor');
-  if(webActive)await start('monitor');
+  if(webActive)await start('monitor');else await releasePort(monitorUrl);
   const c={profile:'frozen-recovery-controller',home,workspace,pluginRoot:currentPlugin,brokerDirectory,controllerUrl,
     supervisorUrl,monitorUrl,opencodeUrl,waitMs:5000,frozenRecovery:{
       transactionId:'maintenance-'+randomUUID(),authorization:'specific isolated maintenance approval',layout:managed?'managed-release':'flat',
@@ -207,11 +235,24 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
     const observation=(await h.request('/status')).brokerReadiness;
     assert.equal(observation.by_session?.ses_new?.pending_count,1,JSON.stringify({total:observation.pending_count,by_run:observation.by_run,by_session:observation.by_session}));
     const beforeJob=await h.request('/runs/a/job');
+    const { createOpenCodeV2ClientFromEnv } = await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs');
+    const proofOptions={controllerUrl:h.c.controllerUrl,workspace:h.c.workspace,target:h.c.frozenRecovery.target,
+      openCode:createOpenCodeV2ClientFromEnv({directory:h.c.workspace,baseUrl:h.c.opencodeUrl})};
+    const baselineProof=await collectFrozenProof(proofOptions);
+    const withRegistry=(amend)=>({...proofOptions,request:async(base,path,body)=>{
+      const value=await maintenanceHttp(base,path,body);
+      return path==='/runs'?amend(value):value;
+    }});
+    assert.deepEqual(await collectFrozenProof(withRegistry((r)=>({...r,testResourceProtocol:'test-resources-v1'}))),baselineProof);
+    await assert.rejects(collectFrozenProof(withRegistry((r)=>({...r,testResourceProtocol:'unknown-v99'}))),/maintenance-runtime-incompatible/);
+    const altered=await collectFrozenProof(withRegistry((r)=>({...r,runs:r.runs.map((run,index)=>index?run:{...run,selectionKey:'altered-fixture-intent'})})));
+    assert.notEqual(altered.registryHash,baselineProof.registryHash);
+
     const result=await updateComponents(h.c,{serviceCommand:h.serviceCommand});
     h.stopTelemetry();
     assert.equal(result.status,'completed');assert.equal(result.originalRefusal.error,'run-not-quiescent');
-    assert.equal(result.packageVersion,'2.1.5');
-    assert.deepEqual(result.runtimeVersions,{controller:'2.1.5',broker:'1.7.1',supervisor:'1.7.1',web:'1.7.1'});
+    assert.equal(result.packageVersion,'2.1.6');
+    assert.deepEqual(result.runtimeVersions,{controller:'2.1.6',broker:'1.7.1',supervisor:'1.7.1',web:'1.7.1'});
     assert.notEqual(h.processes.controller.pid,oldPid);assert.equal(h.broker.pid,brokerPid);assert.equal(h.broker.exitCode,null);
     const status=await h.request('/status');assert.equal(status.maintenanceBuildDigest,h.c.frozenRecovery.expectedBuildDigest);
     assert.equal(status.notificationReconciliation,'rejection-only-v1');assert.equal(status.frozenRecoveryMaintenance,'frozen-recovery-v1');
@@ -268,7 +309,7 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
     assert.equal((await updateComponents(h.c,{serviceCommand:h.serviceCommand})).status,'up-to-date');
     assert.deepEqual(await moduleManifest(h.originalEntry),managed?h.originalManifest:
       await moduleManifest(join(currentPlugin,'scripts/cgpt-approval-bridge-controller.mjs')));
-    if(managed)assert.match(await readlink(h.controllerFile),/^releases\/1\.10\.7\+build\.[a-f0-9]+\/scripts\/cgpt-approval-bridge-controller\.mjs$/);
+    if(managed)assert.match(await readlink(h.controllerFile),/^releases\/2\.1\.6\+build\.[a-f0-9]+\/scripts\/cgpt-approval-bridge-controller\.mjs$/);
     if(homogeneous){
       const run=(await h.request('/runs')).runs.find((r)=>r.runId==='a');
       await h.request('/runs/a/suspend',{version:run.version,action:'PAUSE',evidence:['explicit homogeneous alignment rendezvous']});
@@ -289,12 +330,15 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
         readonlyBefore=await inspectBrokerArtifacts(normal.brokerDirectory,normal.brokerProof);
         if(reuse==='disconnect-loss')h.native.loseDisconnectResponse=true;
         if(reuse!=='complete'){
+          let restartFailureInjected=false;
           const onPhase=(phase,receipt)=>{
             if(reuse==='before-intent-crash'&&phase==='STOPPING'&&receipt.externalBroker?.disconnectIntentAt===null)
               throw Object.assign(new Error('fixture readonly before intent crash'),{code:'SIMULATED_CRASH'});
             if(reuse==='intent-crash'&&phase==='STOPPING'&&receipt.externalBroker?.disconnectIntentAt!==null)
               throw Object.assign(new Error('fixture readonly intent crash'),{code:'SIMULATED_CRASH'});
-            if(reuse==='restart-failure'&&phase==='RESTARTING')throw new Error('fixture readonly restart failure');
+            if(reuse==='restart-failure'&&phase==='RESTARTING'&&!restartFailureInjected){
+              restartFailureInjected=true;throw new Error('fixture readonly restart failure');
+            }
           };
           await assert.rejects(updateComponents(normal,{serviceCommand:h.serviceCommand,onPhase}),
             reuse==='before-intent-crash'?/fixture readonly before intent crash/:reuse==='intent-crash'?/fixture readonly intent crash/:/update-broker-forward-recovery-required/);
@@ -303,7 +347,7 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
           else assert.ok(receipt.externalBroker.disconnectIntentAt);
           assert.ok(['STOPPING','READONLY_RECOVERY_REQUIRED'].includes(receipt.phase));
           assert.ok(!receipt.files.some((file)=>file.group==='broker'));
-          assert.equal(receipt.externalBroker.beforeLoadedVersion,'1.7.1');assert.equal(receipt.externalBroker.artifactVersion,'2.1.5');
+          assert.equal(receipt.externalBroker.beforeLoadedVersion,'1.7.1');assert.equal(receipt.externalBroker.artifactVersion,'2.1.6');
           assert.deepEqual(await inspectBrokerArtifacts(normal.brokerDirectory,normal.brokerProof),readonlyBefore);
           const calls=h.native.events.length;
           if(reuse==='before-intent-crash')assert.equal((await updateComponents(normal,{serviceCommand:h.serviceCommand,rollbackOnly:true})).status,'rolled-back');
@@ -314,12 +358,13 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
       if(rollbackOrdinary){
         const controllerLink=await readlink(h.controllerFile);
         const monitorLink=await readlink(join(h.c.home,'.local/share/cab-approval-bridge-monitor/scripts'));
+        let failureInjected=false;
         await assert.rejects(updateComponents(normal,{serviceCommand:h.serviceCommand,onPhase:(phase)=>{
-          if(phase==='RESTARTING')throw new Error('fixture ordinary install failure');
+          if(phase==='RESTARTING'&&!failureInjected){failureInjected=true;throw new Error('fixture ordinary install failure');}
         }}),/update-failed-rolled-back/);
         assert.equal(await readlink(h.controllerFile),controllerLink);
         assert.equal(await readlink(join(h.c.home,'.local/share/cab-approval-bridge-monitor/scripts')),monitorLink);
-        assert.equal((await h.request('/status')).version,'2.1.5');
+        assert.equal((await h.request('/status')).version,'2.1.6');
         assert.equal((await maintenanceHttp(h.c.supervisorUrl,'/status')).version,'1.7.1');
         assert.equal((await maintenanceHttp(h.c.monitorUrl,'/api/snapshot')).version,'1.7.1');
         assert.equal((await h.tool('broker_readiness',{})).server_version,'1.7.1');
@@ -329,27 +374,36 @@ async function transitionAndRecovery(t, managed=false,homogeneous=false,rollback
       }
       const aligned=await updateComponents(normal,{serviceCommand:h.serviceCommand});assert.equal(aligned.status,'completed');
       if(reuse){
-        assert.equal(aligned.brokerArtifactPolicy,'reuse-readonly');assert.equal(aligned.brokerLoadedBefore,'1.7.1');assert.equal(aligned.brokerLoadedAfter,'2.1.5');
+        assert.equal(aligned.brokerArtifactPolicy,'reuse-readonly');assert.equal(aligned.brokerLoadedBefore,'1.7.1');assert.equal(aligned.brokerLoadedAfter,'2.1.6');
         assert.deepEqual(await inspectBrokerArtifacts(normal.brokerDirectory,normal.brokerProof),readonlyBefore);
-        assert.equal((await updateComponents(normal,{serviceCommand:h.serviceCommand})).status,'up-to-date');
+        await assert.rejects(updateComponents(normal,{serviceCommand:h.serviceCommand}),
+          (cause)=>cause.code==='update-preparation-failed'&&['maintenance-process-unavailable','update-broker-process-changed'].includes(cause.causeCode));
+        const fresh=await h.publishBroker(),previousBrokerPid=h.getBroker().pid;
+        normal.brokerProof={...normal.brokerProof,loadedVersion:fresh.server_version,instanceId:fresh.instance_id,
+          brokerProcess:await processIdentity(previousBrokerPid)};
+        const repeated=await updateComponents(normal,{serviceCommand:h.serviceCommand});
+        assert.ok(['up-to-date','completed'].includes(repeated.status));
+        if(repeated.status==='up-to-date')assert.equal(h.getBroker().pid,previousBrokerPid);
+        else assert.notEqual(h.getBroker().pid,previousBrokerPid);
+        assert.deepEqual(await inspectBrokerArtifacts(normal.brokerDirectory,normal.brokerProof),readonlyBefore);
       }
-      assert.equal((await h.request('/status')).version,'2.1.5');
-      assert.equal((await maintenanceHttp(h.c.supervisorUrl,'/status')).version,'2.1.5');
-      assert.equal((await maintenanceHttp(h.c.monitorUrl,'/api/snapshot')).version,'2.1.5');
-      const ready=await h.tool('broker_readiness',{});assert.equal(ready.server_version,'2.1.5');
+      assert.equal((await h.request('/status')).version,'2.1.6');
+      assert.equal((await maintenanceHttp(h.c.supervisorUrl,'/status')).version,'2.1.6');
+      assert.equal((await maintenanceHttp(h.c.monitorUrl,'/api/snapshot')).version,'2.1.6');
+      const ready=await h.tool('broker_readiness',{});assert.equal(ready.server_version,'2.1.6');
       assert.notEqual(h.getBroker().pid,brokerPid);assert.equal(h.c.frozenRecovery.preservedProcesses.opencode.pid,process.pid);
       assert.equal((await h.request('/runs/a/job')).jobId,'job-a');assert.equal(h.native.replies.length,1);
       assert.deepEqual(await moduleManifest(h.originalEntry),h.originalManifest);
     }
 }
 
-test('processus original 1.7.1 → contrôleur 2.1.5 → rejectionOnly/refus/poll/retry/once/complete, broker conservé',
+test('processus original 1.7.1 → contrôleur 2.1.6 → rejectionOnly/refus/poll/retry/once/complete, broker conservé',
   {skip:!originalPlugin,timeout:40000},transitionAndRecovery);
 
 test('release gérée : processus original lié → nouvelle release → once/complete sans toucher à l’ancienne',
   {skip:!originalPlugin,timeout:40000},(t)=>transitionAndRecovery(t,true));
 
-test('release gérée : après complete, maintenance ordinaire jusqu’aux quatre processus homogènes 2.1.5',
+test('release gérée : après complete, maintenance ordinaire jusqu’aux quatre processus homogènes 2.1.6',
   {skip:!originalPlugin,timeout:60000},(t)=>transitionAndRecovery(t,true,true));
 
 test('release gérée : un échec ordinaire restaure les pointeurs et les versions actives précédentes',
@@ -442,7 +496,14 @@ test('maintenance gelée : reçu privé altéré refusé à la reprise',
 
 test('transition mixte : version Web non qualifiée refusée sans arrêt',
   {skip:!originalPlugin,timeout:30000},async(t)=>{
-    const h=await fixture(t);h.native.webVersion='1.6.0';h.c.monitorUrl=h.c.opencodeUrl;
+    const h=await fixture(t);
+    const web=createServer((_request,response)=>{
+      response.writeHead(200,{'content-type':'application/json'});
+      response.end(JSON.stringify({version:'1.6.0',identity:{workspace:h.c.workspace}}));
+    });
+    await new Promise((done)=>web.listen(0,'127.0.0.1',done));
+    t.after(async()=>{web.closeAllConnections();await new Promise((done)=>web.close(done));});
+    h.c.monitorUrl='http://127.0.0.1:'+web.address().port;
     await assert.rejects(updateComponents(h.c,{serviceCommand:h.serviceCommand}),/update-frozen-mixed-version-not-qualified/);
     assert.equal(h.serviceEvents.filter((e)=>e[0]==='stop').length,0);
   });
@@ -530,4 +591,27 @@ test('release gérée : rollback du seul pointeur, ancienne release conservée',
     assert.deepEqual(await moduleManifest(h.originalEntry),h.originalManifest);
     const journal=JSON.parse(await readFile(join(h.maintenanceRoot,h.c.frozenRecovery.transactionId+'.json')));
     assert.equal(journal.phase,'ROLLED_BACK_FROZEN');assert.deepEqual(h.native.replies,[]);
+  });
+
+test('maintenance gelée : une frontière de milliseconde conserve un sceau de 60 secondes',
+  {skip:!originalPlugin,timeout:30000},async(t)=>{
+    const h=await fixture(t);
+    const originalNow=Date.now;
+    let previous=originalNow();
+    // Force actual clock boundaries without inventing a future timestamp.
+    const tickNow=()=>{let now=originalNow();while(now<=previous)now=originalNow();previous=now;return now;};
+    try {
+      await assert.rejects(updateComponents(h.c,{serviceCommand:h.serviceCommand,onPhase:(phase)=>{
+        if(phase==='PREPARED')Date.now=tickNow;
+        if(phase==='BOOTSTRAP_HELD'){
+          Date.now=originalNow;
+          throw Object.assign(new Error('fixture interruption'),{code:'SIMULATED_CRASH'});
+        }
+      }}),/fixture interruption/);
+      Date.now=originalNow;
+      const journal=await readBootstrapJournal(h.maintenanceRoot,h.c.frozenRecovery.transactionId);
+      assert.equal(journal.seal.expiresAt-journal.seal.createdAt,60000);
+      const result=await updateComponents(h.c,{serviceCommand:h.serviceCommand});
+      assert.equal(result.status,'completed');
+    } finally {Date.now=originalNow;}
   });

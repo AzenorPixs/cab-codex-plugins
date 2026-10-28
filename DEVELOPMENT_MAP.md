@@ -1,6 +1,6 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
-Actualisation SCM du 28 octobre 2026 : **74 changes archivés, 0 change actif**, **607/607 tâches cochées**. Les correspondances existantes sont conservées. Le suivi du correctif 2.1.5, sans code attribué, est consigné ci-dessous ; les relevés ACL antérieurs restent historiques.
+Actualisation SCM du 28 octobre 2026 : **76 changes archivés, 0 change actif**, **618/618 tâches cochées**. Attribution ACL du 28 octobre 2026, plan CAB-ACL-R5 : SUP10 pour la fermeture technique CAB ; 76 correspondances vérifiées, dont les 75 codes antérieurs conservés. MAI11 conserve son attribution rétrospective CAB-ACL-R4. Le suivi de CT14, correctif 2.1.5 archivé avec six tâches validées, est consigné ci-dessous ; les relevés ACL antérieurs restent historiques.
 
 ## 1. Périmètre et fraîcheur
 
@@ -19,11 +19,11 @@ Cette synthèse reste subordonnée aux sources de vérité et aux preuves applic
 ```mermaid
 flowchart TB
     E1["Broker<br/>BR01, BR02, BR03"]
-    E2["Contrôle et supervision<br/>CT01, CT02, CT03, CT04, CT05, SUP01, CT06, CT07, SUP02, SUP03, SUP04, SUP05, CT08, SUP06, SUP07, CT09, SUP08, CT10, SUP09, CT11, CT12, L1, CT13, CT14"]
+    E2["Contrôle et supervision<br/>CT01, CT02, CT03, CT04, CT05, SUP01, CT06, CT07, SUP02, SUP03, SUP04, SUP05, CT08, SUP06, SUP07, CT09, SUP08, CT10, SUP09, CT11, CT12, L1, CT13, CT14, SUP10"]
     E3["Coordination<br/>CO01, CO02, CO03, CO04, CO05"]
     E4["Observation et statistiques<br/>STA01, STA02, OBS01, STA03, OBS02, OBS03, OBS04, STA04, OBS05, OBS06, OBS07, OBS08, OBS09"]
     E5["Modèles<br/>MOD01, MOD02, MOD03, MOD04, MOD05"]
-    E6["Maintenance et distribution<br/>DIS01, DIS02, DIS03, DIS04, DIS05, DIS06, MAI01, MAI02, MAI03, MAI04, MAI05, L2, MAI06, DIS07, DIS08, MAI07, MAI08, DIS09, MAI09, MAI10"]
+    E6["Maintenance et distribution<br/>DIS01, DIS02, DIS03, DIS04, DIS05, DIS06, MAI01, MAI02, MAI03, MAI04, MAI05, L2, MAI06, DIS07, DIS08, MAI07, MAI08, DIS09, MAI09, MAI10, MAI11"]
     E7["Cohérence documentaire<br/>SPE01, SPE02, SPE03, SPE04"]
 ```
 
@@ -31,7 +31,7 @@ La seule lecture du classement ne démontre ni succession chronologique ni effet
 
 ## 3. Vues détaillées
 
-Les nœuds ci-dessous désignent 73 changes **ARCHIVÉS** et le change **ACTIF CT14**, dont le suivi documentaire est séparé des preuves opérationnelles. Les titres complets, identifiants techniques et sources figurent en section 4. Les intitulés génériques historiques Proposal et Proposition sont conservés dans les propositions ; les libellés courts des nœuds explicitent leur objet à partir de leurs artefacts.
+Les nœuds ci-dessous désignent 76 changes **ARCHIVÉS**, dont CT14, MAI11 et SUP10. Le suivi documentaire reste séparé des preuves opérationnelles. Les titres complets, identifiants techniques et sources figurent en section 4. Les intitulés génériques historiques Proposal et Proposition sont conservés dans les propositions ; les libellés courts des nœuds explicitent leur objet à partir de leurs artefacts.
 
 ### 3.1 Broker
 
@@ -69,11 +69,12 @@ flowchart TB
     SUP08["SUP08 — Compléter le statut public du superviseur<br/>ARCHIVÉ"]
     CT10["CT10 — Refuser les contrats de job restaurés invalides<br/>ARCHIVÉ"]
     SUP09["SUP09 — Autoriser le retry réconcilié après timeout MCP<br/>ARCHIVÉ"]
+    SUP10["SUP10 — Fermeture propre liée à OpenCode<br/>ARCHIVÉ"]
     CT11["CT11 — Prévenir les exécutions natives sans permission CAB<br/>ARCHIVÉ"]
     CT12["CT12 — Limite configurable des commandes du contrôleur CAB<br/>ARCHIVÉ"]
     L1["L1 — Corriger l’admission des validations orphelines<br/>ARCHIVÉ"]
     CT13["CT13 — Migration exclusive vers OpenCode V2<br/>ARCHIVÉ"]
-    CT14["CT14 — Pagination et prévol natifs<br/>ACTIF"]
+    CT14["CT14 — Pagination et prévol natifs<br/>ARCHIVÉ"]
 ```
 
 ### 3.3 Coordination
@@ -149,6 +150,7 @@ flowchart TB
     DIS09["DIS09 — Aligner les identités publiques CAB sur 2.1.1<br/>ARCHIVÉ"]
     MAI09["MAI09 — Fiabiliser la récupération runtime et accélérer CABU<br/>ARCHIVÉ"]
     MAI10["MAI10 — Fiabiliser la mise à jour CAB 2.1.3<br/>ARCHIVÉ"]
+    MAI11["MAI11 — Qualification historique 1.7.1 vers 2.1.5<br/>ARCHIVÉ"]
 ```
 
 ### 3.7 Cohérence documentaire
@@ -167,7 +169,7 @@ flowchart TB
 
 Les ratios ci-dessous comptent les cases cochées du fichier tasks.md, sans assimiler une case à une validation actuelle ou à un pourcentage de réalisation fonctionnelle. Les preuves de réalisation et de validation historique sont celles rapportées par les tâches et, lorsqu’ils existent, les documents de qualification et statistiques liés. Leur présence et leur lecture ne constituent pas une réexécution.
 
-État des 73 archives : **ARCHIVÉ**. CT14 reste **ACTIF** ; son état et son ratio sont indiqués dans sa propre ligne. Réalisabilité d’une nouvelle session : **sans objet pour ces archives**, aucune de ces archives à classer comme change actif. Validations, intégrations ou qualifications nouvelles nécessaires avant réutilisation : **À VÉRIFIER selon le futur périmètre**. Livraison et activation actuelles : **NON VÉRIFIÉES par ACL**, pour chacune des 72 lignes.
+État des 76 archives : **ARCHIVÉ**. SUP10 est archivé avec 7/7 tâches et qualification source finale acquise ; aucune installation ni activation. CT14 est clôturé avec 6/6 tâches ; l’archivage ne vaut ni déploiement ni activation. Réalisabilité d’une nouvelle session : **sans objet pour ces archives**, aucune de ces archives à classer comme change actif. Validations, intégrations ou qualifications nouvelles nécessaires avant réutilisation : **À VÉRIFIER selon le futur périmètre**. Livraison et activation actuelles : **NON VÉRIFIÉES par ACL**, pour chacune des 72 lignes.
 
 | Code | Identifiant technique et dossier | Titre | Ensemble | État | Cases cochées / total | Sources de réalisation et validation historique |
 |---|---|---|---|---|---|---|
@@ -192,7 +194,7 @@ Les ratios ci-dessous comptent les cases cochées du fichier tasks.md, sans assi
 | CT11 | [prevent-native-permission-bypass](openspec/changes/archive/2026-10-14-prevent-native-permission-bypass/) | Prévenir les exécutions natives sans permission CAB | Contrôle et supervision | ARCHIVÉ | 8/8 | [proposition](openspec/changes/archive/2026-10-14-prevent-native-permission-bypass/proposal.md) ; [tâches](openspec/changes/archive/2026-10-14-prevent-native-permission-bypass/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-14-prevent-native-permission-bypass/STATISTICS.md) |
 | CT12 | [configure-controller-command-length-limit](openspec/changes/archive/2026-10-20-configure-controller-command-length-limit/) | Limite configurable des commandes du contrôleur CAB | Contrôle et supervision | ARCHIVÉ | 11/11 | [proposition](openspec/changes/archive/2026-10-20-configure-controller-command-length-limit/proposal.md) ; [tâches](openspec/changes/archive/2026-10-20-configure-controller-command-length-limit/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-20-configure-controller-command-length-limit/STATISTICS.md) |
 | CT13 | [support-opencode-v2-only-transport](openspec/changes/archive/2026-10-28-support-opencode-v2-only-transport/) | Migration exclusive vers OpenCode V2 | Contrôle et supervision | ARCHIVÉ | 14/14 | [proposition](openspec/changes/archive/2026-10-28-support-opencode-v2-only-transport/proposal.md) ; [tâches](openspec/changes/archive/2026-10-28-support-opencode-v2-only-transport/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-28-support-opencode-v2-only-transport/STATISTICS.md) |
-| CT14 | [fix-native-v2-pagination-and-preflight-2-1-5](openspec/changes/fix-native-v2-pagination-and-preflight-2-1-5/) | Pagination et preuve native OpenCode — CAB 2.1.5 | Contrôle et supervision | ACTIF | 3/6 | [proposition](openspec/changes/fix-native-v2-pagination-and-preflight-2-1-5/proposal.md) ; [tâches](openspec/changes/fix-native-v2-pagination-and-preflight-2-1-5/tasks.md) ; [design](openspec/changes/fix-native-v2-pagination-and-preflight-2-1-5/design.md) |
+| CT14 | [fix-native-v2-pagination-and-preflight-2-1-5](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/) | Pagination et preuve native OpenCode — CAB 2.1.5 | Contrôle et supervision | ARCHIVÉ | 6/6 | [proposition](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/proposal.md) ; [tâches](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/tasks.md) ; [design](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/design.md) |
 | DIS01 | [correct-plugin-layout-traceability](openspec/changes/archive/2026-09-11-correct-plugin-layout-traceability/) | Corriger la traçabilité de l’arborescence du plugin | Maintenance et distribution | ARCHIVÉ | 4/4 | [proposition](openspec/changes/archive/2026-09-11-correct-plugin-layout-traceability/proposal.md) ; [tâches](openspec/changes/archive/2026-09-11-correct-plugin-layout-traceability/tasks.md) |
 | DIS02 | [add-cab-plugin-update-command](openspec/changes/archive/2026-09-19-add-cab-plugin-update-command/) | Ajouter la commande de mise à jour du plugin CAB | Maintenance et distribution | ARCHIVÉ | 6/6 | [proposition](openspec/changes/archive/2026-09-19-add-cab-plugin-update-command/proposal.md) ; [tâches](openspec/changes/archive/2026-09-19-add-cab-plugin-update-command/tasks.md) |
 | DIS03 | [add-cab-command-profile-update](openspec/changes/archive/2026-09-21-add-cab-command-profile-update/) | Actualiser la commande CAB du profil Codex | Maintenance et distribution | ARCHIVÉ | 8/8 | [proposition](openspec/changes/archive/2026-09-21-add-cab-command-profile-update/proposal.md) ; [tâches](openspec/changes/archive/2026-09-21-add-cab-command-profile-update/tasks.md) |
@@ -214,6 +216,7 @@ Les ratios ci-dessous comptent les cases cochées du fichier tasks.md, sans assi
 | MAI08 | [fix-maintenance-ownership-and-paused-orphan-rejection](openspec/changes/archive/2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection/) | CAB 1.10.7 — propriétaires et demande orpheline en pause | Maintenance et distribution | ARCHIVÉ | 10/10 | [proposition](openspec/changes/archive/2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection/proposal.md) ; [tâches](openspec/changes/archive/2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection/tasks.md) ; [VALIDATION.md](openspec/changes/archive/2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection/VALIDATION.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection/STATISTICS.md) |
 | MAI09 | [fix-runtime-recovery-and-fast-cabu-update](openspec/changes/archive/2026-10-28-fix-runtime-recovery-and-fast-cabu-update/) | Fiabiliser la récupération runtime et accélérer CABU | Maintenance et distribution | ARCHIVÉ | 9/9 | [proposition](openspec/changes/archive/2026-10-28-fix-runtime-recovery-and-fast-cabu-update/proposal.md) ; [tâches](openspec/changes/archive/2026-10-28-fix-runtime-recovery-and-fast-cabu-update/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-28-fix-runtime-recovery-and-fast-cabu-update/STATISTICS.md) |
 | MAI10 | [fix-update-credentials-and-mixed-layout-2-1-3](openspec/changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3/) | Fiabiliser la mise à jour CAB 2.1.3 | Maintenance et distribution | ARCHIVÉ | 8/8 | [proposition](openspec/changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3/proposal.md) ; [tâches](openspec/changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3/STATISTICS.md) |
+| MAI11 | [qualify-historical-bootstrap-2-1-5](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/) | Qualifier le banc historique CAB 1.7.1 vers 2.1.5 | Maintenance et distribution | ARCHIVÉ | 4/4 | [proposition](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/proposal.md) ; [tâches](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/tasks.md) ; [QUALIFICATION.md](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/QUALIFICATION.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/STATISTICS.md) |
 | MOD01 | [add-opencode-model-preflight](openspec/changes/archive/2026-10-13-add-opencode-model-preflight/) | Ajouter le prévol du modèle OpenCode | Modèles | ARCHIVÉ | 5/5 | [proposition](openspec/changes/archive/2026-10-13-add-opencode-model-preflight/proposal.md) ; [tâches](openspec/changes/archive/2026-10-13-add-opencode-model-preflight/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-13-add-opencode-model-preflight/STATISTICS.md) |
 | MOD02 | [add-session-provider-read-limit](openspec/changes/archive/2026-10-26-add-session-provider-read-limit/) | Budget de lecture fournisseur défini par la session | Modèles | ARCHIVÉ | 5/5 | [proposition](openspec/changes/archive/2026-10-26-add-session-provider-read-limit/proposal.md) ; [tâches](openspec/changes/archive/2026-10-26-add-session-provider-read-limit/tasks.md) ; [QUALIFICATION.md](openspec/changes/archive/2026-10-26-add-session-provider-read-limit/QUALIFICATION.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-26-add-session-provider-read-limit/STATISTICS.md) |
 | MOD03 | [fix-pllm-controller-binding-and-native-preflight](openspec/changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/) | Raccord PLLM, fournisseur natif et variante OpenCode | Modèles | ARCHIVÉ | 6/6 | [proposition](openspec/changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/proposal.md) ; [tâches](openspec/changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/tasks.md) ; [QUALIFICATION.md](openspec/changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/QUALIFICATION.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/STATISTICS.md) |
@@ -245,8 +248,9 @@ Les ratios ci-dessous comptent les cases cochées du fichier tasks.md, sans assi
 | SUP07 | [update-cab-orchestration-cadences](openspec/changes/archive/2026-10-10-update-cab-orchestration-cadences/) | Définir les cadences de l’orchestration CAB | Contrôle et supervision | ARCHIVÉ | 7/7 | [proposition](openspec/changes/archive/2026-10-10-update-cab-orchestration-cadences/proposal.md) ; [tâches](openspec/changes/archive/2026-10-10-update-cab-orchestration-cadences/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-10-update-cab-orchestration-cadences/STATISTICS.md) |
 | SUP08 | [complete-supervisor-public-status](openspec/changes/archive/2026-10-13-complete-supervisor-public-status/) | Compléter le statut public du superviseur | Contrôle et supervision | ARCHIVÉ | 8/8 | [proposition](openspec/changes/archive/2026-10-13-complete-supervisor-public-status/proposal.md) ; [tâches](openspec/changes/archive/2026-10-13-complete-supervisor-public-status/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-13-complete-supervisor-public-status/STATISTICS.md) |
 | SUP09 | [fix-recovery-retry-after-mcp-timeout](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/) | Autoriser le retry réconcilié après timeout MCP | Contrôle et supervision | ARCHIVÉ | 8/8 | [proposition](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/proposal.md) ; [tâches](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/STATISTICS.md) |
+| SUP10 | [fix-cab-shutdown-on-opencode-exit](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/) | Fermeture propre de CAB avec OpenCode — 2.1.6 | Contrôle et supervision | ARCHIVÉ | 7/7 | [proposition](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/proposal.md) ; [tâches](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/tasks.md) ; [design](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/design.md) |
 
-**Total courant du registre des archives : 73 archives, 601/601 cases cochées et 73 codes attestés**, après CAB-ACL-R2. Le relevé ACL initial portait sur 72 archives et 597 tâches ; il reste historique. Le suivi SCM distinct conserve l’unique change actif CT14, avec 3/6 tâches cochées ; le registre complet comporte 74 codes attestés après CAB-ACL-R3. Aucune tâche n’est modifiée par cette cartographie. Le [registre](openspec/BATCH_CODES.md) conserve les preuves d’attribution, y compris les annotations rétrospectives.
+**Total courant du registre des archives : 76 archives, 618/618 cases cochées et 76 codes attestés**, après clôture de la qualification historique et de SUP10 ; attributions CAB-ACL-R4 et CAB-ACL-R5 conservées. Le relevé ACL initial portait sur 72 archives et 597 tâches ; il reste historique. Le suivi SCM distinct conserve la clôture de CT14, avec 6/6 tâches cochées ; les 75 codes attribués, dont OBS09, CT14 et MAI11, sont préservés. Le change SUP10 (2.1.6) archivé conserve son suivi séparé ; le registre complet compte 76 codes attestés. Aucune tâche n’est modifiée par cette cartographie. Le [registre](openspec/BATCH_CODES.md) conserve les preuves d’attribution, y compris les annotations rétrospectives.
 
 ## 5. Registre des dépendances
 
@@ -304,11 +308,21 @@ Le nœud OBS09 figure dans la vue « Observation et statistiques » ; il remplac
 |---|---|---|---|
 | OBS09 — fix-monitor-historical-lot-codes | Sans objet après archivage ; correctif source réalisé et validé, sans prérequis externe pour les fixtures locales | Réalisation et validation source achevées : 4/4 tâches, 14/14 tests ciblés, OpenSpec cible valide et global standard/strict 16/16 ; archivage vérifié, déploiement et activation NON EFFECTUÉS | [proposition](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/proposal.md), [tâches](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/tasks.md), [tests](tests/web-monitor.test.mjs) ; tout engagement runtime exige un périmètre et des preuves distincts |
 
-Pour l’archive OBS09, aucun travail nouveau à sélectionner ; le seul change actif CT14 est suivi séparément ci-dessous. Le correctif source est réalisé, validé et archivé sur demande explicite du développeur. Aucun déploiement ni activation effectué. [STATISTICS.md](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/STATISTICS.md) conserve le bilan du change. Contrôles après archivage : OpenSpec global standard et strict **15/15** chacun ; tâches des archives **73/73**.
+Aucun change actif à sélectionner ; la clôture de CT14 est consignée ci-dessous. Le correctif source est réalisé, validé et archivé sur demande explicite du développeur. Aucun déploiement ni activation effectué. [STATISTICS.md](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/STATISTICS.md) conserve le bilan du change. Contrôles après archivage : OpenSpec global standard et strict **15/15** chacun ; tâches des archives **73/73**.
 
 Pour une prochaine demande explicitement autorisée : revérifier l’inventaire, le mandat, les sources de vérité, les BLOCKERS.md éventuels et les preuves des prérequis. Examiner d’abord la réalisabilité immédiate des unités visées, puis le nombre et la difficulté des dépendances manquantes, l’effet de déblocage direct et transitif, la progression vérifiable et enfin l’effort et l’incertitude documentés. Aucun score numérique ou ordre de release n’est utilisé comme priorité.
 
-Les prérequis externes non vérifiés interdisent de déduire une disponibilité. Les conditions de réexamen sont une nouvelle demande de travail, l’apparition d’un change actif ou d’une preuve nouvelle affectant un prérequis. Les données du relevé ACL (72 archives, 597 tâches et 60 rapports) restent historiques : après cette clôture, le périmètre courant contient 73 archives, 601 tâches et 61 rapports STATISTICS.md ; les douze absences historiques demeurent. Les estimations d’effort et la disponibilité opérationnelle nécessaires à une sélection future restent à établir pour son périmètre.
+Les prérequis externes non vérifiés interdisent de déduire une disponibilité. Les conditions de réexamen sont une nouvelle demande de travail, l’apparition d’un change actif ou d’une preuve nouvelle affectant un prérequis. Les données du relevé ACL (72 archives, 597 tâches et 60 rapports) restent historiques : après la clôture CT14, le périmètre courant contient 74 archives, 607 tâches et 62 rapports STATISTICS.md ; les douze absences historiques demeurent. Les estimations d’effort et la disponibilité opérationnelle nécessaires à une sélection future restent à établir pour son périmètre.
+
+### Qualification historique archivée — MAI11
+
+Le change [qualify-historical-bootstrap-2-1-5](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/proposal.md) est ARCHIVÉ sous le code MAI11, attribué rétrospectivement par CAB-ACL-R4. Il qualifie le paquet 1.7.1 authentifié et la transition 2.1.5 dans une copie complète isolée ; aucun déploiement ni activation réelle effectué.
+
+Le nœud MAI11 figure dans la vue « Maintenance et distribution » et remplace le repère provisoire sans doublonner le change. Les preuves concernent le snapshot 2.1.5 ; elles ne qualifient pas la version 2.1.6. Aucune dépendance nouvelle n’est déduite de cette attribution.
+
+| Identifiant technique | Réalisabilité | Avancement | Sources et limites |
+|---|---|---|---|
+| MAI11 — qualify-historical-bootstrap-2-1-5 | Sans objet après archivage ; source historique authentifiée et qualification globale 2.1.5 achevée | 4/4 tâches ; suite globale 2.1.5 isolée : Node 494/494 et Python 73/73, aucun échec ni saut. Le banc historique 33/33 est inclus dans Node ; archivage et STATISTICS.md vérifiés | [proposition](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/proposal.md), [tâches](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/tasks.md), [design](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/design.md), [qualification](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/QUALIFICATION.md), [statistiques](openspec/changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/STATISTICS.md). Les compteurs documentaires et les essais locaux ne prouvent aucun déploiement. |
 
 ## 7. Incertitudes, anomalies et contrôles
 
@@ -345,34 +359,43 @@ Les résultats documentaires sont à confronter aux artefacts effectifs ; les co
 Les tests produit et constructions ne sont pas exécutés pour ces annotations documentaires. Aucun archivage, commit, publication, installation ou activation effectué. Les limites documentées ci-dessus restent applicables et ne sont pas des corrections fonctionnelles autorisées par ce plan.
 
 <!-- SCM:fix-native-v2-pagination-and-preflight-2-1-5 -->
-### Suivi SCM 2.1.5 — code non attribué
+### Clôture SCM 2.1.5 — CT14
 
-```mermaid
-flowchart TB
-    native_proof_215["fix-native-v2-pagination-and-preflight-2-1-5<br/>code non attribué — ARCHIVÉ"]
-    classDef provisional stroke-dasharray: 5 5;
-    class native_proof_215 provisional;
-```
+CT14 figure dans la vue « Contrôle et supervision ». Son titre porte le code attribué par CAB-ACL-R3 ; aucune renumérotation ni dépendance inter-change nouvelle.
 
 | Identifiant technique | État documentaire | Avancement source | Sources et limites |
 |---|---|---|---|
-| fix-native-v2-pagination-and-preflight-2-1-5 — code non attribué | ARCHIVÉ | 6/6 tâches cochées sur preuves | [proposition](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/proposal.md), [tâches](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/tasks.md). Aucun code nouveau attribué, aucune dépendance inter-change inférée. Activation et CAB test restent distincts de la qualification source ; leurs preuves opérationnelles sont conservées dans output/scm-2.1.5. |
+| CT14 — fix-native-v2-pagination-and-preflight-2-1-5 | ARCHIVÉ | 6/6 tâches cochées sur preuves | [proposition](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/proposal.md), [tâches](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/tasks.md), [preuves SCM](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/PREUVES-SCM.json), [statistiques](openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/STATISTICS.md). Qualification source, archivage et rapport vérifiés séparément ; aucun déploiement ni activation dans cette finalisation. |
 
-L’objectif demandé est la pagination native et la preuve de prévol, réalisables dans le périmètre approuvé. ACL reste nécessaire pour attribuer ultérieurement un code. Aucun état d’un autre lot n’est modifié par cette maintenance.
+Contrôles après archive : OpenSpec global standard et strict 15/15 chacun ; archives 74/74. Aucun autre candidat actif à engager ; le change de qualification historique demandé est suivi séparément. Les preuves natives enregistrées restent celles de la qualification antérieure, sans nouvelle génération fournisseur ni exécution de mandat métier.
 <!-- /SCM:fix-native-v2-pagination-and-preflight-2-1-5 -->
 
 
 
 
+<!-- SCM:fix-cab-shutdown-on-opencode-exit -->
+### Clôture source SCM 2.1.6 — SUP10
+
+Le nœud SUP10 figure dans la vue « Contrôle et supervision » et remplace le repère provisoire sans doublon. Son rattachement repose sur la surveillance de l’identité du serveur et la conservation des sessions et protections décrites dans la proposition et les deltas cab-process-lifecycle / persistent-job-supervision. Aucune dépendance inter-change nouvelle n’est inférée.
+
+| Identifiant technique | État | Avancement | Sources et limites |
+|---|---|---|---|
+| SUP10 — fix-cab-shutdown-on-opencode-exit | ARCHIVÉ | 7/7 tâches cochées sur preuves | [proposition](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/proposal.md), [tâches](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/tasks.md), [conception](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/design.md). Détection, arrêt des processus, EOF MCP, distribution et horodatage du sceau qualifiés ; validation globale finale acquise : 513 tests Node, 74 Python et deux navigateurs. [Qualification](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/QUALIFICATION.md), [statistiques](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/STATISTICS.md). Aucune installation ni activation. |
+
+La frontière de qualification historique 2.1.5 est libérée ; ses sources de preuve sont conservées. Cette coordination n’est pas une dépendance fonctionnelle inter-change. ACL reste nécessaire pour attribuer un code ; aucune attribution ni réservation de code effectuée ici.
+
+Attribution documentaire CAB-ACL-R5 : SUP10, sans modification des tâches ni de leurs preuves. Lors de CAB-ACL-R5, 6/7 cases ne prouvaient pas une qualification globale. La réalisation a depuis validé les 7/7 tâches sur les preuves finales ; l’archivage natif est effectué et les statistiques sont produites dans son dossier. Aucune installation ni activation n’est déduite de cette qualification. Avant toute poursuite, revérifier les prérequis natifs et les preuves du périmètre visé. ACL ne lance aucune session de développement.
+<!-- /SCM:fix-cab-shutdown-on-opencode-exit -->
+
 ## 8. Légende
 
-- **Code de lot :** repère documentaire unique ; L1/L2 historiques conservés, autres codes attribués rétrospectivement par CAB-ACL-R1. Aucun code de regroupement ajouté.
+- **Code de lot :** repère documentaire unique ; L1/L2 historiques conservés ; les autres codes suivent leurs attributions datées dans le registre (CAB-ACL-R1 à CAB-ACL-R4). Aucun code de regroupement ajouté.
 - **Ensemble :** appartenance à une responsabilité documentée ; les familles et capacités transverses ne démontrent aucune dépendance. Les identifiants E1 à E7 du premier diagramme servent uniquement à son dessin.
-- **ARCHIVÉ :** présence vérifiée dans le dossier d’archives ; ne signifie ni service disponible, ni activation. Tous les nœuds portent explicitement cet état ; aucune couleur ne véhicule seule une information.
+- **ARCHIVÉ :** présence vérifiée dans le dossier d’archives ; ne signifie ni service disponible, ni activation. Chaque nœud porte explicitement son état ; aucune couleur ne véhicule seule une information.
 - **Cases cochées / total :** indicateur documentaire du tasks.md, pas pourcentage fonctionnel.
 - **Fait documenté :** affirmation ou relation explicite d’une source liée ; **fait vérifié :** constat local daté ; **hypothèse à confirmer :** interprétation exclue d’une décision automatique.
 - **SATISFAITE :** condition atteinte dans la portée et la phase indiquées ; **NON SATISFAITE :** condition manquante démontrée ; **NON VÉRIFIÉE :** preuve insuffisante pour conclure.
 - **RÉALISABLE / PARTIELLEMENT RÉALISABLE / BLOQUÉ / À VÉRIFIER :** états destinés aux changes actifs selon les prérequis des unités visées ; non appliqués aux archives.
 - **Livraison / activation :** distinctes du code, de la documentation, des validations et de l’archivage ; leur état actuel n’est pas vérifié par ACL.
-- **Entrée provisoire « code non attribué » :** repère sans code ni réservation, à séparer des correspondances vérifiées ; aucune au relevé ACL ; l’entrée archivée provisoire est remplacée par OBS09 après CAB-ACL-R2 ; l’entrée active provisoire est remplacée par CT14 après CAB-ACL-R3 ; aucune entrée sans code dans le périmètre courant.
+- **Entrée provisoire « code non attribué » :** repère sans code ni réservation, à séparer des correspondances vérifiées ; aucune au relevé ACL ; l’entrée archivée provisoire est remplacée par OBS09 après CAB-ACL-R2 ; l’entrée provisoire est remplacée par CT14 après CAB-ACL-R3, puis archivée ; l’entrée archivée provisoire de qualification historique est remplacée par MAI11 après CAB-ACL-R4 ; l’entrée active 2.1.6 est remplacée par SUP10 après CAB-ACL-R5 ; aucune entrée sans code dans le périmètre actuel.
 - **Flèche dirigée : A → B signifie que A dépend de B.** La flèche part du dépendant et pointe vers son prérequis. Les libellés précisent la phase ; les références et coordinations sans dépendance sont présentées en tableau séparé.

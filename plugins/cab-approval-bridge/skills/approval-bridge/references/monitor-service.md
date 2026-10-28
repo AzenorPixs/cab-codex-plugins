@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 2.1.5
+# Service web de monitoring — CAB 2.1.6
 
 Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace
@@ -37,7 +37,7 @@ attendue dans le profil utilisateur et son appartenance à cette installation.
 
 Si elle est active, interroger uniquement l'URL loopback attendue :
 
-- GET /api/snapshot doit réussir et annoncer version 2.1.5 ainsi que
+- GET /api/snapshot doit réussir et annoncer version 2.1.6 ainsi que
   identity.workspace exactement égal au workspace canonique attendu ;
 - GET / doit servir la page CAB Monitor ;
 - l'unité doit utiliser Restart=on-failure.
@@ -64,6 +64,7 @@ scripts/
   cgpt-approval-bridge-statistics-maintenance.mjs
   cgpt-approval-bridge-observation-statistics.mjs
   cgpt-approval-bridge-opencode-client.mjs
+  cgpt-approval-bridge-process-lifecycle.mjs
 web-monitor/
   index.html
   app.mjs
@@ -72,7 +73,7 @@ web-monitor/
 ```
 
 Conserver ces deux dossiers frères : les imports et ressources sont résolus
-relativement aux modules. Vérifier la version 2.1.5 et la présence de chaque
+relativement aux modules. Vérifier la version 2.1.6 et la présence de chaque
 fichier avant publication du jeu. Provisionner le credential OpenCode partagé
 dans `~/.config/cab-approval-bridge/opencode.password` avec les permissions
 `0600`; l'unité le charge via `LoadCredential`. Aucune dépendance tierce n'est installée.
@@ -146,7 +147,7 @@ ce bootstrap ne déclenche aucun arrêt du moniteur. Il continue à présenter l
 observations disponibles et les sources indisponibles ; son démarrage ne prouve
 pas à lui seul un diagnostic PLLM ou un prévol réussi.
 
-## 6. Gestion depuis le Web 2.1.5
+## 6. Gestion depuis le Web 2.1.6
 
 La page propose des commandes explicites des briques. Les unités fixes
 contrôleur/superviseur et leur PID/workspace sont contrôlés ; le broker passe

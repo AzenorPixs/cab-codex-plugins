@@ -4,15 +4,17 @@ import { dirname, isAbsolute, join } from "node:path";
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.5";
+export const VERSION = "2.1.6";
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
+let closed = false;
+const transportAbort = new AbortController();
 function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "2.1.5";
+const version = "2.1.6";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -89,7 +91,7 @@ function updateState(nextState, reason, details = {}) {
 async function fetchJson(url, options = {}) {
   const response = await fetch(url, {
     ...options,
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.any([transportAbort.signal, AbortSignal.timeout(10_000)]),
   });
 
   if (!response.ok) {
@@ -192,6 +194,7 @@ async function reconcile() {
       fetchJson(`${controllerUrl}/job`),
     ]);
 
+    if (closed) return;
     selectSupervisedJob(job);
     state.lastReconciliationAt = new Date().toISOString();
     const denial = resumeAllowed(status, job);
@@ -214,7 +217,7 @@ async function reconcile() {
       return;
     }
 
-    const openCode = createOpenCodeV2ClientFromEnv({ directory: job?.directory || workspace });
+    const openCode = createOpenCodeV2ClientFromEnv({ directory: job?.directory || workspace, signal: transportAbort.signal });
     if (runId) {
       const busy = await openCode.activeSessions();
       if (!busy || typeof busy !== "object" || Array.isArray(busy) ||
@@ -231,6 +234,7 @@ async function reconcile() {
       return;
     }
 
+    if (closed) return;
     state.resumeInFlight = true;
     state.lastResumeAttempt = {
       at: new Date().toISOString(),
@@ -253,6 +257,7 @@ async function reconcile() {
 
     const latestStatus = await fetchJson(`${controllerUrl}/status`);
     const latestJob = await fetchJson(`${controllerUrl}/job`);
+    if (closed) return;
     const changed = latestJob?.jobId !== job.jobId || latestJob?.sessionId !== job.sessionId ||
       JSON.stringify(latestJob?.codingModel) !== JSON.stringify(job.codingModel);
     const latestDenial = resumeAllowed(latestStatus, latestJob);
@@ -272,6 +277,7 @@ async function reconcile() {
     state.lastResumeAttempt.result = "sent";
     await updateState("WATCHING", "resume-sent");
   } catch (cause) {
+    if (closed) return;
     state.resumeInFlight = false;
     state.lastResumeAttempt = {
       at: new Date().toISOString(),
@@ -287,11 +293,12 @@ let reconciling = false;
 return {
   snapshot: () => ({ ...state, ...(runId ? { runId } : {}) }),
   reconcile: async () => {
-    if (reconciling) return;
+    if (closed || reconciling) return;
     reconciling = true;
     try { await reconcile(); } finally { reconciling = false; }
   },
-  observe: async (frame) => { if (observeSessionEvent(frame)) await persistState(); },
-  disconnected: () => updateState("WAITING", "opencode-sse-reconnecting"),
+  observe: async (frame) => { if (!closed && observeSessionEvent(frame)) await persistState(); },
+  disconnected: () => closed ? Promise.resolve() : updateState("WAITING", "opencode-sse-reconnecting"),
+  close: async () => { closed = true; transportAbort.abort(); await statePersistence; },
 };
 }

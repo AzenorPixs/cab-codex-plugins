@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.5";
+export const VERSION = "2.1.6";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -44,7 +44,8 @@ export function createJobContext({ workspace, stateDirectory, run = null,
   nativeLifecycle = {}, openCodeClient = null,
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
-  const openCode = openCodeClient || createOpenCodeV2ClientFromEnv({ directory: workspace });
+  const transportAbort = new AbortController();
+  const openCode = openCodeClient || createOpenCodeV2ClientFromEnv({ directory: workspace, signal: transportAbort.signal });
 function envValue(name) {
   const legacyName = name.replace("OC_Codex_", "OC_CGPT_");
   return process.env[name] || process.env[legacyName];
@@ -115,6 +116,7 @@ let recoveryTransitionInFlight = false;
 let lifecycleTransitionInFlight = false;
 let permissionTimer;
 let closed = false;
+let closePromise;
 
 try {
   const persisted = JSON.parse(readFileSync(reminderStatePath, "utf8"));
@@ -248,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.5",
+    version: "2.1.6",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1625,7 +1627,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.5",
+      version: "2.1.6",
     },
   });
 
@@ -2709,7 +2711,16 @@ const handle = async (request, response, url) => {
 
 return {
   handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
-  close: () => { closed = true; clearInterval(permissionTimer); codex?.kill(); },
+  close: () => {
+    if (closePromise) return closePromise;
+    closed = true; transportAbort.abort(); clearInterval(permissionTimer);
+    closePromise = new Promise((resolveClosed) => {
+      if (!codex?.pid || codex.exitCode !== null || codex.signalCode !== null) { resolveClosed(); return; }
+      codex.once('close', resolveClosed);
+      codex.kill();
+    });
+    return closePromise;
+  },
   hasUnresolvedValidation: () => [...validations.values()].some((v) => !httpDecisions.has(v.requestId) ||
     (httpDecisions.get(v.requestId)?.decision === "approved" && !v.operationConsumed && !v.operationInvalidated)),
   pendingEffects: () => Boolean(job?.currentCabMandate || reconcilingPermissions.size ||

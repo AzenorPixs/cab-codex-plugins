@@ -86,7 +86,12 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     } });
     child.stderr.on('data', (data) => { stderr += data; });
     await waitFor(async () => { if (child.exitCode !== null) throw new Error(stderr);
-      try { return (await fetch(base + '/status')).ok; } catch { return false; } });
+      let status;
+      try { const response = await fetch(base + '/status'); if (!response.ok) return false; status = await response.json(); }
+      catch { return false; }
+      assert.equal(status.pid, child.pid, 'fixture controller PID mismatch');
+      assert.equal(status.workspace, directory, 'fixture controller workspace mismatch');
+      return true; });
   }
   async function stop() {
     if (child.exitCode !== null) return;
@@ -920,7 +925,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.5');
+  assert.equal(initialized.result.serverInfo.version, '2.1.6');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1129,7 +1134,10 @@ test('migration HTTP conserve les RUN et exige once exact avant leur reprise mé
   await h.stop();
   const state = join(h.directory,'.opencode','state','cgpt-approval-bridge');
   writeFileSync(join(state,'controller-runs.json'),JSON.stringify(legacy)+'\n');
-  await h.start(); await h.post('/broker/readiness',{status:'READY',pending_count:0});
+  await h.start();
+  // A nominal cohort proof requires the initial SSE connection to be established.
+  await waitFor(async () => (await h.get('/status')).body.opencodeSse === 'connected');
+  await h.post('/broker/readiness',{status:'READY',pending_count:0});
   assert.equal((await h.get('/runs/a/status')).body.coordination.reason,'coordination-upgrade-required');
   const migrated = await h.post('/coordination/migrate',{cause:'SHARED_MAINTENANCE',authorization:'explicit migration',evidence:['native quiescence and backup']});
   assert.equal(migrated.status,200,JSON.stringify(migrated));
@@ -1401,7 +1409,9 @@ test('PLLM HTTP : défaut medium, prévol exact, choix persisté et modèle du j
 test('PLLM HTTP : absence de medium examine la politique inférieure, modèle explicite incompatible bloqué',async(t)=>{
  const h=await setup(t,{codingPolicy:true});
  h.native.providers.all[0].models.model1.variants={high:{},xhigh:{}};
- assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
+ const resolved=await h.post('/model-policy/resolve',{});
+ assert.equal(resolved.status,200,JSON.stringify(resolved));
+ assert.equal(resolved.body.mode,'mode2');
  h.native.providers.all[0].models.model1.variants={low:{}};
  assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1'})).body.error,'explicit-model-unavailable');

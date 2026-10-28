@@ -1,3 +1,4 @@
+import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -14,8 +15,8 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.5";
-if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
+const version = "2.1.6";
+if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspaceInput = envValue('OC_Codex_WORKSPACE');
@@ -31,7 +32,8 @@ const controllerEntry = fileURLToPath(import.meta.url);
 const loadedBuildDigest = proofHash(await moduleManifest(controllerEntry));
 const observations = createObservationJournal();
 const workspace = realpathSync(workspaceInput);
-const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace });
+const transportAbort = new AbortController();
+const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace, signal: transportAbort.signal });
 const stateDirectory = join(workspace, '.opencode', 'state', 'cgpt-approval-bridge');
 const port = Number(envValue('OC_Codex_STATUS_PORT') || 8788);
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
@@ -72,6 +74,7 @@ const transitions = new Set();
 let broker = null;
 let sseState = 'connecting';
 let reconnectTimer;
+let closing = false;
 let sseGeneration = 0;
 const legacy = createJobContext({ workspace, stateDirectory, maxCommandLength,
   observe: (type, details) => observations.record(type, details), admitOperation: (operation, requestId, stage) => {
@@ -401,7 +404,14 @@ for (const run of registry.runs.values()) if (run.state === 'RESERVED') contextF
 if (contexts.size && legacy.publicJob()?.armed) throw new Error('Legacy job must be reconciled before concurrent RUNs.');
 legacy.start();
 
-const server = createServer(async (request, response) => {
+const requests = new Set();
+const server = createServer((request, response) => {
+  const pending = handleRequest(request, response);
+  requests.add(pending);
+  void pending.finally(() => requests.delete(pending)).catch(() => response.destroy());
+});
+async function handleRequest(request, response) {
+  if (closing) { json(response, 503, { error: 'cab-stopping' }); return; }
   request.cabReceivedAt = Date.now();
   let transitionRun = null;
   let observedRun = null;
@@ -871,10 +881,11 @@ const server = createServer(async (request, response) => {
     if (transitionRun) transitions.delete(transitionRun);
     if (lifecycleMutation) lifecycleMutations--;
   }
-});
+}
 server.listen(port, host, () => { void consumeEvents(); });
 
 async function consumeEvents() {
+  if (closing) return;
   try {
     const response = await openCode.events();
     sseState = 'connected';
@@ -917,6 +928,7 @@ async function consumeEvents() {
       }
     }
   } catch { /* Connection state is published below; no event or effect is invented. */ }
+  if (closing) return;
   sseState = 'reconnecting';
   nativeGeneration++;
   sseGeneration++;
@@ -927,11 +939,30 @@ async function consumeEvents() {
   reconnectTimer = setTimeout(() => { void consumeEvents(); }, reconnectMs);
 }
 async function shutdown() {
+  if (closing) return;
+  closing = true;
+  lifetime.stop();
   clearTimeout(reconnectTimer);
-  registry.close();
-  server.close();
-  await statistics.close();
-  process.exit(0);
+  transportAbort.abort();
+  try {
+    const closedContexts = [legacy.close(), ...[...contexts.values()].map((context) => context.close())];
+    await boundedCleanup(async () => {
+      await closeHttpServer(server);
+      await Promise.all([...requests, ...closedContexts]);
+      await statistics.close();
+      await registry.close();
+      if ((statistics.persistEnabled && statistics.dirty) || statistics.observations.error) {
+        throw new Error('statistics-shutdown-incomplete');
+      }
+    });
+    process.exit(0);
+  } catch {
+    process.stderr.write('CAB contrôleur : arrêt incomplet.\n');
+    process.exit(SHUTDOWN_INCOMPLETE);
+  }
 }
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+const lifetime = followOpenCodeLifetime(openCode, { onExit: shutdown,
+  onDiagnostic: (code) => process.stderr.write(code + '\n') });
+lifetime.start();
+process.on('SIGTERM', () => { void shutdown(); });
+process.on('SIGINT', () => { void shutdown(); });

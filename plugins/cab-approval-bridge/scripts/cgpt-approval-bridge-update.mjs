@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.5';
+export const VERSION = '2.1.6';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -765,11 +765,11 @@ export async function updateComponents(input, options = {}) {
         'statistics.mjs', 'observation-statistics.mjs', 'statistics-maintenance.mjs', 'import-observations.mjs',
         'registry-lock.py', 'supervisor.mjs', 'supervisor-context.mjs', 'opencode-sse-client.mjs', 'healthcheck.mjs',
         'reset.py', 'prompts.py', 'monitor.mjs', 'monitor-data.mjs', 'monitor-events.mjs', 'monitor-management.mjs',
-        'run-steps.mjs', 'update.mjs'];
+        'run-steps.mjs', 'process-lifecycle.mjs', 'update.mjs'];
       if (scripts.length > 64 || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
       const artifacts = [
         ...scripts.map((name) => ({ group: 'scripts', name, source: join(c.pluginRoot, 'scripts', name) })),
-        ...['monitor', 'monitor-data', 'monitor-events', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client']
+        ...['monitor', 'monitor-data', 'monitor-events', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'process-lifecycle']
           .map((name) => ({ group: 'monitorScripts', name: 'cgpt-approval-bridge-' + name + '.mjs', source: join(c.pluginRoot, 'scripts/cgpt-approval-bridge-' + name + '.mjs') })),
         ...(readonlyBroker ? [] : brokerFiles.map((name) => ({ group: 'broker', name, source: join(c.pluginRoot, 'broker', name) }))),
         ...['index.html', 'app.mjs', 'stats.mjs', 'style.css'].map((name) => ({ group: 'web', name, source: join(c.pluginRoot, 'web-monitor', name) })),
@@ -1149,13 +1149,14 @@ export async function maintainFrozenController(input, options = {}) {
       const proof = await collectFrozenProof({ controllerUrl:c.controllerUrl, openCode, workspace:c.workspace, target: spec.target, request });
       const second = await collectFrozenProof({ controllerUrl:c.controllerUrl, openCode, workspace:c.workspace, target: spec.target, request });
       if (proofHash(proof) !== proofHash(second)) throw error('update-frozen-proof-changed');
+      const createdAt = Date.now();
       journal.seal = { transactionId, workspace: c.workspace, authorization: spec.authorization, authority: 'BOOTSTRAP_HELD',
         target: spec.target, generation: global.generation, globalInputDigest: global.inputDigest,
         proof, filesHash: proofHash(journal.files), installationHash:proofHash(journal.installation), deploymentHash:proofHash(journal.deployment),
         manifest: journal.manifest, buildDigest: spec.expectedBuildDigest,
         originalController: journal.originalController, originalManifest: journal.originalManifest,
         preservedProcesses: spec.preservedProcesses, originalRefusal: refusal,
-        createdAt: Date.now(), expiresAt: Date.now() + 60000 };
+        createdAt, expiresAt: createdAt + 60000 };
       journal.sealDigest = proofHash(journal.seal); await save('BOOTSTRAP_HELD');
     }
     if (!reached('STOPPED')) {
