@@ -153,7 +153,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.1.3', mode: 'concurrent', brokerReadiness: { server_version: '2.1.3' },
+    else if (target.pathname === '/status') value = { version: '2.1.4', mode: 'concurrent', brokerReadiness: { server_version: '2.1.4' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -164,7 +164,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.1.3', supervisor: '1.4.0', broker: '2.1.3', opencode: '2.2.0', monitor: '2.1.3' });
+  assert.deepEqual(result.componentVersions, { controller: '2.1.4', supervisor: '1.4.0', broker: '2.1.4', opencode: '2.2.0', monitor: '2.1.4' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
