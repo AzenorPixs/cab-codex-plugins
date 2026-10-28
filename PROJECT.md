@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.0.0`.
+Version de référence des briques CAB : `2.1.3`.
 
-CAB 2.0.0 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.3 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -529,3 +529,16 @@ La preuve du broker reste liée au processus OpenCode, y compris lorsqu'un de se
 La session de pilotage choisit le budget de lecture du catalogue natif /provider via providerMaxBytes ; CAB applique la valeur de cet appel sans plafond fixe ajouté, sans modifier les modèles existants.
 
 Le raccord du modèle prépare et transmet explicitement le catalogue public du skill actif. Il conserve les identités logiques/native et les variantes corrélées, sans choisir un autre modèle ni changer les priorités PLLM. La publication par le développeur et l'activation coordonnée restent distinctes de la livraison source.
+
+CABU 2.1.3 conserve les RUN sans notification pendant sa coupure technique.
+La reprise restaure les états persistants et interdit tout rejeu implicite
+des permissions consommées. Les mesures et limites de durée figurent dans
+TECHNICAL.md, section « CABU 2.1.3 : coupure courte et reprise ».
+
+La distribution 2.1.3 expose les plugins et skills CAB/CABU en majuscules.
+Les identifiants publics de référence sont recensés dans README.md ; la
+migration et les chemins conservés sont précisés dans BUILD.md.
+
+### Prérequis de mise à jour 2.1.3
+
+Le credential systemd est vérifié avant coupure ; sa source project.env n’est utilisée que sur option explicite et n’est pas obligatoire pour les projets sans OpenCode. Le mode mixte protège les releases des services et garde le broker source ordinaire. Les causes de démarrage restent disponibles après repli. Voir BUILD.md pour le raccord privé ; aucune activation n’est déduite de la préparation source.

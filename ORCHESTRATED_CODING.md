@@ -22,7 +22,7 @@ vérifie les preuves. L'agent de codage analyse et exécute seulement les
 opérations autorisées. Le développeur conserve le contrôle des décisions qui
 lui sont réservées. Aucun de ces rôles ne peut inventer une autorisation.
 
-Le profil technique actuellement décrit utilise exclusivement OpenCode V2 comme agent de codage,
+Le profil technique actuellement décrit utilise OpenCode comme agent de codage,
 l'agent orchestrateur désigné par le prompt et CAB comme transport neutre.
 Le nom `CGPT` désigne le rôle d'orchestrateur dans les messages et interfaces
 ci-dessous. Un autre agent de codage ou transport exige un contrat d'intégration
@@ -45,7 +45,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 1.10.6 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 1.10.4 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -138,7 +138,7 @@ accord. Sinon, sa barrière de démarrage demeure applicable. Un sous-job
 hérite seulement du feu vert que son parent lui délègue effectivement.
 
 Ces règles ne déclenchent ni écriture ni implémentation dans un diagnostic.
-DOPP conserve son fonctionnement en lecture seule, sans `/CAB run`.
+DOPP conserve son fonctionnement en lecture seule, sans `/cab run`.
 Les validations spécifiques de périmètre, de reprise RSMP,
 d'OpenSpec, de Git, d'infrastructure et les mandats CAB restent applicables.
 La persistance suit les conditions terminales du prompt ; elle ne crée aucun
@@ -506,7 +506,7 @@ une infrastructure partagée pour libérer ce seul RUN.
 ### Statistiques d'archivage
 
 Après chaque archivage OpenSpec autorisé et réussi, produire un rapport par
-archive dans `openspec/changes/archive/<archive>/STATISTIQUES.md`, avec un
+archive dans `openspec/changes/archive/<archive>/STATISTICS.md`, avec un
 mandat d'édition distinct pour ce seul fichier lorsque le protocole CAB
 s'applique. Vérifier les six sections, UTF-8/LF et les totaux ; afficher `N/A`
 motivé pour les mesures absentes. Ne pas déclarer `TERMINÉ` sans preuve du
@@ -535,13 +535,13 @@ dans le contexte autorisé, sans lire de secret.
 
 | Composant | Interface | Usage |
 |---|---|---|
-| OpenCode V2 | `GET /api/info` avec Basic Auth | Santé et version majeure 2 |
-| OpenCode V2 | `GET /api/mcp?directory=...` avec Basic Auth | Connexion MCP native dans la location ciblée |
-| OpenCode V2 | `GET /api/event` avec Basic Auth | SSE direct en temps réel |
-| OpenCode V2 | `POST /api/session` | Nouvelle session native du RUN autorisé |
-| OpenCode V2 | `POST /api/session/<id>/prompt` | Mandats dans la session persistante |
-| OpenCode V2 | `GET /api/session/active` et `GET /api/session/<id>` | Sessions actives et détails |
-| OpenCode V2 | `GET /api/permission/request` | Permissions natives à réconcilier |
+| OpenCode | `http://127.0.0.1:4096/global/health` | Santé technique |
+| OpenCode | `GET /mcp` | Connexion MCP native, dont `cgpt-validation` |
+| OpenCode | `GET /global/event` | SSE direct en temps réel |
+| OpenCode | `POST /session` | Nouvelle session native du RUN autorisé |
+| OpenCode | `POST /session/<id>/message?directory=<racine encodée>` | Mandats dans la session persistante |
+| OpenCode | `GET /session/status?directory=...` | Sessions occupées ou inactives |
+| OpenCode | `GET /permission?directory=...` | Permissions natives à réconcilier |
 | Contrôleur CAB | `http://127.0.0.1:8788/status` | État technique, compteurs et gate |
 | Contrôleur CAB | `GET /runs/<run_id>/job` | Contrat durable courant |
 | Contrôleur CAB | `POST /runs/<run_id>/job/arm`, `POST /runs/<run_id>/job/progress` | Armement et jalons prouvés |
@@ -554,14 +554,14 @@ dans le contexte autorisé, sans lire de secret.
 
 Le SSE et les états HTTP ne remplacent pas un appel MCP réel de
 `broker_readiness` dans la session de codage ciblée. L'état `connected` de
-`GET /api/mcp` ne constitue ni une readiness métier ni une décision.
+`GET /mcp` ne constitue ni une readiness métier ni une décision.
 
 ## Initialisation technique et identité du RUN
 
 1. Fixer le projet, le répertoire absolu, le change, les critères, les limites
    et les conditions terminales. Identifier les deux sessions réellement
    pilotées ; signaler un identifiant non exposé sans l'inventer.
-2. Vérifier `/api/info`, sa version majeure 2, l'authentification et le MCP natif. La connexion CAB est gérée par
+2. Vérifier la santé OpenCode et le MCP natif. La connexion CAB est gérée par
    OpenCode ; l'orchestrateur ne tue ni ne démarre directement le broker.
 3. Avant une initialisation globale exclusive, appliquer le protocole autorisé
    de nouvelle session : propriété et inactivité prouvées, arrêt des seules
@@ -820,7 +820,7 @@ OpenCode, le broker ou les services communs des autres RUN.
 Prévoir un cycle commun de compactage toutes les 1 h 30 (5 400 secondes),
 à une frontière entre mandats après traitement du rapport et sauvegarde du
 checkpoint. Utiliser uniquement les API natives des sessions réellement
-actives : OpenCode `POST /api/session/<id>/compact` et, lorsqu'elle est exposée
+actives : OpenCode `POST /session/<id>/summarize` et, lorsqu'elle est exposée
 par la connexion propriétaire, Codex App Server `thread/compact/start`.
 
 Un accusé de lancement ne prouve pas la fin. Pour Codex, observer l'item
@@ -845,7 +845,7 @@ checkpoint lorsqu'ils existent, avec preuve de relecture. Il distingue les
 tâches prouvées et les contrôles empêchés, sans exiger de
 réussite globale ni d'archive du change incomplet. Le gate est BLOQUÉ et les
 ressources du seul RUN sont libérées après désarmement et réconciliation.
-La présence de STATISTIQUES.md, ses six sections, UTF-8/LF et les totaux
+La présence de STATISTICS.md, ses six sections, UTF-8/LF et les totaux
 doivent être prouvés pour chaque archive ; les mesures absentes sont N/A
 motivées. Un rapport échoué est repris sans réarchiver.
 
@@ -869,9 +869,9 @@ exige gate BLOQUÉ, bilan durable, désarmement et effets réconciliés ; libér
 avec delivered=false sans archiver le change incomplet. Un sous-job rend le
 contrôle au parent ; aucune libération ciblée n'arrête l'infrastructure commune.
 
-## Pilotage concurrent CAB 1.10.6
+## Pilotage concurrent CAB 1.10.4
 
-### CAB 1.10.6 — coordination atomique par ressource
+### CAB 1.10.4 — coordination atomique par ressource
 
 Un processus OpenCode, un broker MCP stdio, un contrôleur et un superviseur servent plusieurs RUN dans un répertoire commun. Chaque RUN conserve session, job, décisions, preuves et checkpoint. Le contrat courant est `resource-scoped-v1` ; l'ancienne barrière ordinaire d'intégration n'est plus admise.
 
@@ -921,7 +921,7 @@ Avant toute préparation, déclarer les environnements dans le manifeste du chan
 
 `GET /runs/<runId>/test-resources` expose réservations, attentes, propriétaire et besoin de réconciliation. `/test-resources/cancel` avec version, transactionId et evidence annule uniquement une attente. Après crash, PAUSE, STOP ou délai dépassé, conserver les protections. `/test-resources/reconcile` exige l'ancien jeton/fencing, la génération, un `reconciliationId` neuf et les preuves ; après recontrôle natif, il renouvelle jeton/fencing sans libérer l'environnement. Réconcilier séparément les accès de commande restaurés et ne jamais rejouer une once consommée. Publication, réduction de portée, changement de génération et gate normal restent bloqués jusqu'à restitution.
 
-Le registre 4 n'ajoute `testReservations` qu'au premier usage. Les anciens lecteurs stricts refusent cet état enrichi ; revenir à un ancien lecteur après utilisation demande une réconciliation/conversion autorisée, sans effacer les protections. Cette préparation 1.10.6 n'installe ni ne migre aucun runtime et ne propage aucun prompt consommateur.
+Le registre 4 n'ajoute `testReservations` qu'au premier usage. Les anciens lecteurs stricts refusent cet état enrichi ; revenir à un ancien lecteur après utilisation demande une réconciliation/conversion autorisée, sans effacer les protections. Cette préparation 1.10.4 n'installe ni ne migre aucun runtime et ne propage aucun prompt consommateur.
 
 #### Navigateurs externes de test
 
@@ -939,7 +939,7 @@ POST /runs/<runId>/publish porte version, transactionId, operationId, token, fen
 
 Synchronisation et archivage OpenSpec restent des mandats distincts autorisés décrivant sources, destinations et parents utiles. Ils attendent les seuls accès incompatibles. Git reste distinctement autorisé ; son index/référence est une ressource logique sans gel des éditions indépendantes.
 
-Le passage atomique en REPORT, ou /closing après publication, limite irréversiblement le contexte au STATISTIQUES.md de sa propre archive. Écrire et vérifier ce rapport sous son seul accès. Rapport à six sections, preuves, gate individuel, désarmement puis /release restent obligatoires avant livraison. Une archive seule ne prouve pas la fin du change ou du parent.
+Le passage atomique en REPORT, ou /closing après publication, limite irréversiblement le contexte au STATISTICS.md de sa propre archive. Écrire et vérifier ce rapport sous son seul accès. Rapport à six sections, preuves, gate individuel, désarmement puis /release restent obligatoires avant livraison. Une archive seule ne prouve pas la fin du change ou du parent.
 
 #### Pause, arrêt et exceptions communes
 
@@ -949,7 +949,7 @@ Les seules causes globales sont GLOBAL_RECONCILIATION (état commun non isolable
 
 POST /coordination/global/request exige transactionId, cause, scope=all, authorization et evidence. DRAINING ferme les admissions. /coordination/global/confirm vérifie la cohorte native et les protections avant HELD. /coordination/global/release exige transaction, génération, autorité et preuves de reprise ; aucun délai ne libère le gel. Une défaillance commune d'intégrité ferme conservatoirement l'admission pour réconciliation sans réparation ni purge. Une incertitude localisée reste ciblée.
 
-/CAB pause|stop --run <run_id> est ciblé ; --all est explicitement global. Le démarrage d'un RUN rejoint l'infrastructure sans purge/reconnexion. Fermer ou redémarrer OpenCode exige une demande distincte. Le healthcheck reste diagnostique. La purge refuse réservations, accès actifs, effets incertains, gel non libéré et état invalide.
+/cab pause|stop --run <run_id> est ciblé ; --all est explicitement global. Le démarrage d'un RUN rejoint l'infrastructure sans purge/reconnexion. Fermer ou redémarrer OpenCode exige une demande distincte. Le healthcheck reste diagnostique. La purge refuse réservations, accès actifs, effets incertains, gel non libéré et état invalide.
 
 #### Compatibilité historique unique
 
@@ -957,7 +957,7 @@ Les anciens usages uniques sans RUN conservent leurs décisions et once. Une tra
 
 #### Formats et migration
 
-Le registre 1.10.6 utilise le schéma 4 ; les schémas 1/2/3 sont lus en mode migration requise sans anciennes acquisitions globales. Les mutations incompatibles reçoivent coordination-upgrade-required. Broker, clients et contrôleur confirment le protocole avant permission. Le broker concurrent notifie /validation/resource-request et /validation/resource-reminder, routes absentes des anciens contrôleurs, sans repli incompatible. Les versions des modules chargés sont vérifiées avant démarrage. Le magasin broker reste au schéma extensible 2 : les nouveaux champs sont persistés et corrélés, sans conversion implicite des anciens enregistrements.
+Le registre 1.10.4 utilise le schéma 4 ; les schémas 1/2/3 sont lus en mode migration requise sans anciennes acquisitions globales. Les mutations incompatibles reçoivent coordination-upgrade-required. Broker, clients et contrôleur confirment le protocole avant permission. Le broker concurrent notifie /validation/resource-request et /validation/resource-reminder, routes absentes des anciens contrôleurs, sans repli incompatible. Les versions des modules chargés sont vérifiées avant démarrage. Le magasin broker reste au schéma extensible 2 : les nouveaux champs sont persistés et corrélés, sans conversion implicite des anciens enregistrements.
 
 La migration explicitement autorisée vérifie quiescence et sauvegarde privée avec empreinte. RUN, demandes consommées, jobs, candidates et reçus sont conservés ; les ressources historiques restent conservatrices. /coordination/migrate conserve les RUN en PAUSE et impose maintenancePreflightRequired. Vérifier MCP/SSE/readiness en lecture, lever explicitement le gel pour le prévol ciblé en maintenant les pairs en pause, puis autoriser uniquement /usr/bin/true avec manifeste read. Une once acquittée et exit 0 prouvés avant libération de cet accès autorisent ensuite le métier ; un échec conserve cette obligation. /coordination/rollback restitue la sauvegarde uniquement avant nouvel usage sous maintenance quiescente. Le retour arrière avant nouvel usage restitue la sauvegarde exacte ; après de nouveaux effets, une réconciliation/conversion explicite est obligatoire. Une préparation source ne déploie ni ne migre aucun état actif.
 
@@ -965,7 +965,7 @@ La migration explicitement autorisée vérifie quiescence et sauvegarde privée 
 
 La collecte distingue réservations, natif observé, attente/détention/promotion de ressources, réconciliation ciblée et quatre causes exceptionnelles. Les lacunes restent inconnues ; durées et paires recouvrantes ne s'additionnent pas. Busy ne prouve ni codage productif ni gain causal.
 
-GET /statistics et /runs/<runId>/statistics conservent les agrégats et le brouillon individuel à six sections. /statistics/view et /runs/<runId>/statistics/view acceptent selection=current|last|24h|7d|30d, cible/contextId éventuels et format=markdown. /CAB stats, /CAB statslast, /CAB stats 24, /CAB stats7 et /CAB stats30 sont ponctuels, sans action de cycle de vie.
+GET /statistics et /runs/<runId>/statistics conservent les agrégats et le brouillon individuel à six sections. /statistics/view et /runs/<runId>/statistics/view acceptent selection=current|last|24h|7d|30d, cible/contextId éventuels et format=markdown. /cab stats, /cab statslast, /cab stats 24, /cab stats7 et /cab stats30 sont ponctuels, sans action de cycle de vie.
 
 POST /statistics/import accepte seulement un bundle filtré du projet exact avec provenance/empreinte, sans modifier permissions, décisions ou réservations. L'importeur distribué lit en flux borné les fichiers d'audit explicitement désignés, sans suivre les chemins du contenu ni réactiver le job arrêté. Sources natives/importées restent séparées. Les quotas sont partagés et comparés seulement à compte/fenêtre identiques. Contenu, commandes, chemins d'opérations, URL et secrets sont exclus.
 

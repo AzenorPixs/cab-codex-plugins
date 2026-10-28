@@ -1,5 +1,5 @@
 ---
-name: cabu
+name: CABU
 description: Lance la mise à jour CAB lorsque le développeur invoque $CABU ou demande l'actualisation des briques Codex Approval Bridge.
 ---
 
@@ -9,6 +9,15 @@ Ce skill est l'entrée directe CABU. Lorsqu'il est invoqué, exécute dans cette
 conversation la commande CAB `/CAB update` jusqu'à son rapport terminal ; ne
 te limite pas à présenter la commande ou à proposer de la lancer. La procédure
 de maintenance reste définie par CAB et n'est pas dupliquée ici.
+
+GitHub est la référence de version par défaut pour toutes les briques CAB
+(broker, contrôleur, superviseur et Web), les plugins CAB/CABU et les commandes.
+Applique la procédure distante de `/CAB update` depuis
+`AzenorPixs/cab-codex-plugins`, branche `main`, même si une marketplace ou un
+paquet local existe. La présence de sources locales n'autorise pas à sauter
+la vérification GitHub. Une source distante indisponible ou incohérente arrête
+la préparation avant toute maintenance ; aucun repli local implicite.
+Une installation locale exige une demande explicite pour cette invocation.
 
 Avant toute opération, vérifie que la commande CAB compatible est disponible.
 Si elle manque ou si sa version ne correspond pas à celle du plugin CAB

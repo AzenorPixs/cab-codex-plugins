@@ -1,9 +1,9 @@
 ---
-name: approval-bridge
+name: CAB
 description: Met en place, teste et supervise le dialogue OpenCode–Codex via broker MCP stdio, contrôleur local et SSE OpenCode, sans déléguer les décisions.
 ---
 
-# Codex Approval Bridge
+# CAB — Codex Approval Bridge
 
 Utiliser ce skill lorsqu’un développeur demande de mettre en place, tester, superviser ou reprendre le pilotage d’OpenCode par Codex.
 
@@ -18,7 +18,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 2.0.0 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 2.1.3 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -26,7 +26,7 @@ et port existants, sans activation au login. Un échec PLLM ou CAB ultérieur
 n'arrête pas le moniteur. Une divergence active ou un échec de monitoring ne
 permet aucun arrêt, redémarrage ou changement de RUN dans les autres briques.
 
-## RUN concurrents CAB 2.0.0
+## RUN concurrents CAB 2.1.3
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -34,16 +34,22 @@ Le manifeste déclare la portée ; les accès actifs sont temporaires. Les lectu
 
 Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Préparer le contenu exact, obtenir la décision, acquérir juste avant effet et conserver ask/once. Une base périmée exige une nouvelle demande. Terminer les effets natifs corrélés avant /locks/release ; aucun timeout ni idle ne libère un effet inconnu.
 
-Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTIQUES.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /CAB pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
+Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTICS.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /CAB pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
 Installer ensemble les scripts controller, job-context, model-policy, prepare-model-policy, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, client OpenCode V2, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Le manifeste doit référencer le répertoire skills distribué ; approval-bridge doit porter `references/component-update.md`, la référence utilisée par l'updater. Un jeu mixte est refusé avant permission.
 
-## Mise à jour forcée CAB 2.0.0
+## Mise à jour forcée CAB 2.1.3
 
 `/CAB update` est la procédure unique. `/CABU` sans argument charge le fichier
 frère `CAB.md` de même version et lui transmet exactement `update` ; ne duplique
 pas la procédure dans CABU. Cette référence décrit l'updater
 `scripts/cgpt-approval-bridge-update.mjs` distribué par le plugin.
+
+La procédure canonique prend GitHub `AzenorPixs/cab-codex-plugins`, branche
+`main`, comme référence de version des plugins CAB/CABU, des quatre briques et
+des commandes. Elle vérifie le jeu distant avant maintenance, même si la
+marketplace est locale. Un accès distant impossible ou un jeu incohérent
+arrête la préparation ; une installation locale exige une demande explicite.
 
 Après validation et sauvegarde du jeu, l'updater ne consulte aucun état de RUN,
 permission, coordination globale ou service systemd comme précondition. Il
@@ -53,12 +59,11 @@ systématiquement les trois unités. Il n'active aucune unité au login. Les RUN
 permissions et autres états CAB ne sont ni suspendus, ni réconciliés, ni
 modifiés par cette procédure.
 
-OpenCode n'est jamais arrêté. Si son API répond après le remplacement, l'updater
-tente le rechargement natif du broker et rapporte la readiness obtenue. Si
-OpenCode ou son API sont absents, les trois fichiers broker sont tout de même
-installés ; la version chargée est alors rapportée `INDISPONIBLE` et ne bloque
-pas le résultat des autres briques. Le bilan sépare versions du paquet, fichiers
-déployés et processus réellement observés.
+OpenCode reste ouvert. S'il est actif, l'updater recharge le broker par les
+routes natives V2 et exige une readiness fraîche portant la version cible.
+Un échec de vérification interdit le succès. Seule l'absence prouvée
+d'OpenCode permet `INDISPONIBLE` pour la version chargée du broker.
+Le bilan sépare versions du paquet, fichiers déployés et processus observés.
 
 ## Étapes du cycle et observation web
 
@@ -241,7 +246,7 @@ La lecture des quotas utilise directement l'outil natif Codex, sans skill
 `cgpt` externe. Toute donnée inaccessible reste `N/A` avec sa cause.
 
 Inscrire dans les critères de fin du job la preuve de publication de
-`openspec/changes/archive/<archive>/STATISTIQUES.md` après chaque archivage.
+`openspec/changes/archive/<archive>/STATISTICS.md` après chaque archivage.
 Après la preuve d'un archivage autorisé et réussi, obtenir le relevé final
 et la fin de l'intervalle, puis faire produire le rapport par un mandat
 d'édition distinct. Vérifier ses six sections, ses totaux, son encodage
@@ -548,8 +553,13 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 2.0.0, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, examiner la politique PLLM suivante. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni sélection implicite d'un autre niveau. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 2.1.3, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, examiner la politique PLLM suivante. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni sélection implicite d'un autre niveau. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
-Pour le raccord 2.0.0, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+Pour le raccord 2.1.3, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+
+Contrat courant CABU 2.1.3 : les tolérances historiques de broker non vérifiable
+ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
+requise pour la seule exception broker. Appliquer le contrat de coupure courte
+de component-update.md ; ne prévenir ni modifier les RUN pour cet update.

@@ -1,5 +1,34 @@
 # Changelog
 
+## 2.1.3 — Credential de mise à jour et installation mixte
+
+- Prévol du credential systemd avant coupure et raccord explicite `--opencode-password-env-file` à la seule variable OPENCODE_PASSWORD de project.env ; aucune obligation pour les projets sans OpenCode, aucun secret dans les reçus et aucun écrasement de credential différent.
+- Politique cab-source compatible avec les releases gérées des services/Web ; les trois modules broker src/ restent ordinaires et les anciens liens restent restaurables.
+- Diagnostics systemd filtrés par composant conservés après repli et rapportés par le CLI, notamment 243/CREDENTIALS.
+- Base distribuée 2.1.3 et cachebusters renouvelés ; tests source et raccord OpenCode distincts d’une activation réelle du patch.
+
+## 2.1.2 — Codes de lot dans le moniteur
+
+- Colonne « codes de lot » en deuxième position des tableaux RUN et CHANGE, issue du titre du change associé, actif ou archivé référencé.
+- Cellule vide sans code explicite ou document admissible ; tris, filtres, compteurs et actions conservés.
+- Base commune CAB 2.1.2 et cachebusters des plugins renouvelés ; admission du broker chargé 2.1.1 conservée. Aucun déploiement actif déduit de cette qualification source.
+
+## 2.1.1 — Identifiants CAB en majuscules
+
+- Plugin principal `CAB`, skill `$CAB`, commande `/CAB` et marketplace affichée `CAB Codex Plugins` alignés avec `CABU`, `$CABU` et `/CABU`.
+- Sélecteurs d’installation et garde cab-source adaptés au plugin `CAB` ; chemins techniques et alias `/cab` conservés.
+- Base commune 2.1.1 pour les quatre briques, plugins, scripts et commandes ; preuve de broker chargé 2.1.0 conservée pour la maintenance qualifiée.
+
+## 2.1.0 — CABU rapide et récupération runtime
+
+- Plugin `CABU`, skill `$CABU` et commande `/CABU` nommés en majuscules ; chemins de distribution alignés.
+
+- Ciblage V2 par x-opencode-directory, sans repli V1.
+- Arrêt en échec du contrôleur après perte d’autorité afin que systemd restaure le registre durable.
+- CABU prépare les fichiers avant coupure et réutilise les validations syntaxiques liées aux empreintes ; durées de préparation, coupure et total mesurées.
+- Redémarrage systématique des trois services ; OpenCode actif exige le rechargement du broker et une preuve fraîche de sa version.
+- Coupure sans notification ni modification des RUN ; conservation des décisions consommées et réconciliation des effets inconnus sans rejeu.
+
 ## 2.0.0 — Migration exclusive OpenCode V2
 
 - Passage de toutes les briques CAB à la version majeure 2.0.0.

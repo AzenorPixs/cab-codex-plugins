@@ -27,7 +27,7 @@ utiliser l'outil natif de lecture des quotas sans exiger le skill `cgpt`.
 ### Requirement: Rapport obligatoire après chaque archivage réussi
 
 Après chaque archivage OpenSpec explicitement autorisé et réussi, l'orchestrateur SHALL
-faire produire `STATISTIQUES.md` dans le dossier réel
+faire produire `STATISTICS.md` dans le dossier réel
 `openspec/changes/archive/<archive>/`. L'orchestrateur CAB SHALL relever les quotas
 finaux et la fin de session après archivage et avant la synthèse. Le rapport SHALL
 respecter les six sections du skill, les pourcentages, les preuves disponibles, les

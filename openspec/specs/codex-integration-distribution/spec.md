@@ -111,15 +111,15 @@ superviseur SHALL annoncer la même version de base.
   l'active pas pour le login
 
 ### Requirement: Skill de statistiques embarqué dans CAB
-Le plugin cab-approval-bridge SHALL distribuer coding-session-statistics et ses métadonnées sans plugin Tools Codex ni skill cgpt externe. Le protocole et la commande SHALL imposer les statistiques après chaque archive réussie selon archive-session-statistics. Les composants versionnés SHALL partager la base 1.10.5 ; le plugin MAY ajouter un cachebuster Codex.
+Le plugin CAB SHALL distribuer coding-session-statistics et ses métadonnées sans plugin Tools Codex ni skill cgpt externe. Le protocole et la commande SHALL imposer les statistiques après chaque archive réussie selon archive-session-statistics. Les composants versionnés SHALL partager la base de version courante ; le plugin MAY ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
 - **WHEN** le plugin CAB est installé depuis sa marketplace
-- **THEN** les skills approval-bridge et coding-session-statistics sont présents et résolus depuis le manifeste
+- **THEN** les skills CAB et coding-session-statistics sont présents et résolus depuis le manifeste
 
 #### Scenario: Release cohérente
-- **WHEN** la version 1.10.5 est préparée
-- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugin et commande annoncent la même base 1.10.5
+- **WHEN** le patch 2.1.3 est préparé
+- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.3
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 
@@ -302,17 +302,11 @@ une publication plus ancienne ; les caches de plugin MUST NOT être édités à 
   manuellement
 
 ### Requirement: Actualisation conditionnelle du plugin CAB
-
-`/CAB update` SHALL actualiser l'instantané Git par `codex plugin marketplace upgrade
-cab_codex_plugins`, comparer le manifeste distant de `cab-approval-bridge` à la version
-installée et appeler `codex plugin add cab-approval-bridge@cab_codex_plugins` seulement
-si le manifeste distant est strictement plus récent. `/CAB update` SHALL refuser une
-version absente ou invalide et SHALL vérifier la version installée après la
-réinstallation.
+/CAB update SHALL actualiser la marketplace GitHub, comparer le manifeste du plugin CAB à la version installée et appeler codex plugin add CAB@cab_codex_plugins si le plugin CAB est absent ou si le manifeste distant est strictement plus récent. La commande SHALL refuser une version absente ou invalide et vérifier la version et l'identité après installation. Les noms CABU et CAB MUST rester sensibles à la casse.
 
 #### Scenario: Actualisation conditionnelle du plugin CAB
-- **WHEN** le manifeste distant fournit une version strictement plus récente
-- **THEN** la commande native réinstalle le plugin puis vérifie la version réellement installée
+- **WHEN** le manifeste distant est strictement plus récent ou l'ancien identifiant est encore installé
+- **THEN** la commande installe CAB puis vérifie son identité et sa version
 
 ### Requirement: Source et remplacement atomique de la commande de profil CAB
 
@@ -370,7 +364,7 @@ inconnue MUST NOT être déduite d'un paquet.
   `INDISPONIBLE`, puis conclut sur les versions vérifiées des autres services
 
 ### Requirement: Distribution concurrente 1.0.0
-Les garanties d'identité et d'isolation introduites en 1.0.0 MUST être conservées dans les briques 1.10.5 ; les exclusions MUST suivre le nouveau contrat de ressources. Les prompts pilotés des huit projets MUST rester cohérents lors de leur déploiement autorisé. CISM, CAISM et prompts directs MUST rester inchangés. La préparation source MUST NOT modifier consommateurs ou services actifs.
+Les garanties d'identité et d'isolation introduites en 1.0.0 MUST être conservées dans les briques 1.10.5 ; les exclusions MUST suivre le nouveau contrat de ressources. Les prompts pilotés des projets concernés MUST rester cohérents lors de leur déploiement autorisé, quel que soit le nombre de projets. CISM, CAISM et prompts directs MUST rester inchangés. La préparation source MUST NOT modifier consommateurs ou services actifs.
 
 #### Scenario: Isolation concurrente
 - **WHEN** la distribution source est contrôlée
@@ -699,14 +693,14 @@ rester exactes.
 - **THEN** chaque composant versionné annonce 1.10.6 et les références à 1.10.5 ne désignent que des historiques ou versions chargées compatibles
 
 ### Requirement: Plugin CABU et skill d'entrée
-La marketplace CAB SHALL distribuer un plugin autonome `cabu`. Celui-ci SHALL exposer un skill directement invocable qui déclenche la procédure canonique `/CAB update` sans dupliquer cette procédure.
+La marketplace CAB SHALL distribuer un plugin autonome `CABU`. Celui-ci SHALL exposer un skill directement invocable qui déclenche la procédure canonique `/CAB update` sans dupliquer cette procédure.
 
 #### Scenario: Invocation directe du skill CABU
-- **WHEN** le skill `cabu` est installé et invoqué
+- **WHEN** le skill `CABU` est installé et invoqué
 - **THEN** il exécute `/CAB update` dans la conversation courante et restitue son rapport terminal
 
 #### Scenario: Procédure canonique indisponible
-- **WHEN** le skill `cabu` est invoqué sans commande CAB compatible disponible
+- **WHEN** le skill `CABU` est invoqué sans commande CAB compatible disponible
 - **THEN** il signale la dépendance absente et n'entame aucune opération de maintenance
 
 ### Requirement: Distribution cohérente du plugin et de la commande CABU
@@ -734,3 +728,14 @@ Le broker CAB MUST être déclaré comme serveur MCP local `stdio` sous `mcp.ser
 #### Scenario: Configuration V1 résiduelle
 - **WHEN** le serveur est déclaré directement sous `mcp`
 - **THEN** CAB signale la configuration incompatible sans la réécrire ni démarrer le broker
+
+### Requirement: Identités CAB et CABU en majuscules
+La marketplace MUST identifier les plugins par CAB et CABU. Leurs skills principaux MUST être nommés CAB et CABU et invocables comme $CAB et $CABU. Les commandes canoniques MUST rester /CAB et /CABU. Le nom affiché de la marketplace MUST être CAB Codex Plugins. Les chemins techniques et l'alias /cab MUST rester compatibles. Le skill auxiliaire coding-session-statistics MUST rester accessible sous le namespace CAB.
+
+#### Scenario: Distribution vérifiée
+- **WHEN** un paquet est préparé
+- **THEN** les entrées marketplace, manifestes et frontmatters annoncent les identifiants majuscules et les sélecteurs CLI utilisent CAB@cab_codex_plugins et CABU@cab_codex_plugins
+
+#### Scenario: Ancien plugin installé
+- **WHEN** une installation utilise encore cab-approval-bridge
+- **THEN** le gestionnaire installe et vérifie CAB avant retrait de l'ancienne entrée, sans édition manuelle du cache ni modification des données métier

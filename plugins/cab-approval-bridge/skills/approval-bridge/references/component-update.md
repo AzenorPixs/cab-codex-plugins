@@ -1,4 +1,4 @@
-# Mise à jour autonome des briques CAB — CAB 2.0.0
+# Mise à jour autonome des briques CAB — CAB 2.1.3
 
 ## Association du skill et des commandes
 
@@ -34,23 +34,26 @@ les sauvegardes privées, recharge systemd, puis appelle systématiquement
 activées au login. Une invocation dont les versions sont déjà égales effectue
 tout de même cet arrêt et ce redémarrage.
 
-OpenCode reste ouvert. Après l'arrêt systemd et le remplacement des fichiers,
-l'updater tente le rechargement natif du broker seulement si son API répond.
-L'absence d'OpenCode, du broker ou de l'API ne bloque jamais le remplacement des
-fichiers broker ni le démarrage des trois unités. Dans ce cas, le rapport donne
-la version du fichier broker et marque sa version réellement chargée
-`INDISPONIBLE`. Une readiness accessible est rapportée séparément de la version
-sur disque. Le remplacement est suivi de `systemctl --user daemon-reload`.
-Si l'API native répond, l'updater tente `POST /api/experimental/mcp/cgpt-validation/disconnect`
-avant le remplacement et `POST /api/experimental/mcp/cgpt-validation/connect` après le démarrage,
-avec le workspace exact et Basic Auth depuis le credential local. OpenCode 1.x est
-refusé avant ces appels. Une erreur ou indisponibilité de ces routes ne bloque
-pas le remplacement des fichiers ; le broker chargé est rapporté
-`INDISPONIBLE`.
+OpenCode reste ouvert. L'updater détecte sa disponibilité avant la coupure,
+sans lire les RUN. Si OpenCode est actif, il déconnecte le broker via la route
+native V2 après arrêt des services, installe les fichiers, démarre les trois
+services puis reconnecte le broker. Une readiness fraîche doit prouver sa
+version cible. Un échec d'authentification, de location, de reconnexion ou de
+version sur un OpenCode actif interdit le succès et déclenche le repli.
+
+L'absence prouvée du processus OpenCode autorise l'installation des fichiers
+broker sans version chargée ; le rapport indique alors `INDISPONIBLE`. Une
+présence incertaine ne vaut pas preuve d'absence. systemd est rechargé si les
+unités changent ; les trois services sont toujours arrêtés et redémarrés.
 
 Pour le dépôt CAB, la destination du broker est le répertoire `src/` sous la
 racine CAB : BUILD.md y définit le point d'entrée source et les trois modules
-importables. Cette destination ne dépend pas d'un processus OpenCode en cours.
+importables. Cette destination ne dépend pas d'un processus OpenCode en cours. Utiliser
+`--broker-policy cab-source` : cette exception exige exactement src/, le projet
+`cab` dans pyproject.toml et un manifeste local identique au paquet installé.
+Les liens broker, caches et autres destinations dans le workspace restent refusés.
+Le layout managed-release est admis pour les scripts des services et le Web ;
+les trois modules broker src/ restent des fichiers ordinaires, y compris au repli.
 
 Après redémarrage, l'updater vérifie les versions réellement servies par le
 contrôleur, le superviseur et le moniteur, et leur workspace. Il produit un
@@ -89,7 +92,7 @@ Web restent ouverts ; aucun connect/disconnect ni instance/dispose n'est permis.
 Les pairs doivent conserver une PAUSE explicitement autorisée. Après complete,
 la récupération ne vaut pas autorisation métier dans l'état mixte : une
 maintenance ordinaire distinctement autorisée doit aligner réellement les
-quatre briques en 2.0.0, puis chaque reprise est validée. Cette seconde étape
+quatre briques en 2.1.3, puis chaque reprise est validée. Cette seconde étape
 peut reconnecter le broker et relancer le Web, sans fermer OpenCode.
 Un autre PENDING ou un écart entre compteurs global/RUN/session bloque le
 profil ; aucune demande inconnue n'est annulée ou attribuée par déduction.
@@ -168,7 +171,7 @@ La politique ordinaire explicite `--broker-policy reuse-readonly` exige
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
-doit être la cible 2.0.0 ; la version chargée est vérifiée indépendamment.
+doit être la cible 2.1.3 ; la version chargée est vérifiée indépendamment.
 Les trois fichiers sont seulement lus et comparés au paquet. Aucun stage,
 backup restaurable, remplacement, nouveau lien ou compilation sur place du
 broker n'est effectué. Les droits et propriétaires restent conservés.
@@ -256,7 +259,7 @@ présenté comme vérifié sur la seule base d'un test simulé.
 
 ## Transition ordinaire depuis 1.9.0 vers 1.10.5
 
-Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.10.7, 1.10.8, 1.10.9, 1.10.10 et la cible 2.0.0. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 2.0.0, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
+Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.10.7, 1.10.8, 1.10.9, 1.10.10 et la cible 2.1.3. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 2.1.3, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
 
 ## Registre de maintenance volumineux — 1.10.9
 
@@ -288,3 +291,67 @@ Après prepared ou already-prepared, relancer l'updater ordinaire reuse-readonly
 ## Broker créé depuis un thread OpenCode
 
 La découverte examine children de chaque TID numérique sous /proc/<OpenCode>/task et déduplique les PID. Elle vérifie ensuite UID, PPID OpenCode, Python avec l'unique argument du point d'entrée déclaré, identité PID/startTime/UID et unicité. L'identité OpenCode est contrôlée avant et après découverte. Une disparition concurrente de thread est tolérée ; les autres erreurs restent bloquantes. Aucune donnée d'environnement ni argv brut n'est restitué. Le même processus OpenCode est préservé. Cette reconnaissance ne vaut ni readiness ni permission : leurs contrôles restent distincts.
+
+Pour `cab-source`, si les services sont configurés pour un autre projet, fournir
+`--service-workspace <workspace-absolu-observé>` : les contrôles de version et
+les appels MCP ciblent ce workspace réel sans modifier les configurations.
+La récupération conserve le même journal et les mêmes destinations. Le jeu Web
+indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs.
+
+### CABU 2.1.3 : coupure courte et reprise
+
+CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
+et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
+être réutilisées uniquement pour le même contenu et le même validateur ; les
+empreintes des sources, stages et destinations restent vérifiées à chaque appel.
+Les fichiers prêts sont préparés sur le système de fichiers cible ; la coupure
+contient principalement les arrêts, renommages et redémarrages. systemd est
+rechargé lorsque les unités changent, sans activation au login.
+
+Les RUN ne sont ni avertis, ni placés en PAUSE, ni modifiés. L'absence du
+transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés côté
+OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
+effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
+
+Les trois services doivent servir 2.1.3 en fin de transaction. OpenCode actif
+exige une déconnexion/reconnexion native du broker et une readiness fraîche
+portant la version cible. Une API ou une reconnexion non vérifiable interdit
+le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
+INDISPONIBLE. Les durées preparationMs, unavailableMs et totalMs sont publiées ;
+la cible est moins de cinq secondes de coupure dans le banc contrôlé.
+
+Contrat courant CABU 2.1.3 : les tolérances historiques de broker non vérifiable
+ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
+requise pour la seule exception broker. Appliquer le contrat de coupure courte
+de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
+
+GitHub `AzenorPixs/cab-codex-plugins`, branche `main`, fournit par défaut les
+versions cibles des plugins CAB/CABU, du broker, du contrôleur, du superviseur,
+du Web et des commandes. Appliquer la procédure distante de `CAB.md`, même
+en présence d'une marketplace locale. Vérifier le jeu publié et sa cohérence
+avant la coupure ; une source distante inaccessible ou divergente interdit
+un repli local implicite. Préserver une version installée plus récente sans
+déployer ses briques au titre d'une mise à jour distante.
+
+Le reçu last-deployment.json privé, produit après succès, fournit seulement
+les cibles non secrètes de déploiement ; il ne choisit pas la source des
+versions. Une voie locale exige une demande explicite pour cette invocation.
+Les contrôles de chemins, versions et empreintes restent obligatoires.
+
+Le broker MCP unique appartient à la location serveur OpenCode, découverte via
+GET /api/location sans en-tête de projet. Les requêtes MCP utilisent cette
+location ; les requêtes de session gardent le workspace du RUN via
+x-opencode-directory. Ne pas créer un deuxième broker dans un projet distinct.
+
+
+## Prévol du credential et installation mixte — 2.1.3
+
+Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
+
+Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0600 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
+
+Cette option est facultative : les projets sans OpenCode ou session pilotée n’ont pas à définir OPENCODE_PASSWORD. Sans option, le credential privé existant suffit et aucun project.env n’est lu. Cette préparation source ne provisionne rien dans le profil réel.
+
+Pour une installation mixte, utiliser `--broker-policy cab-source --layout managed-release` : le broker dans src/ reste ordinaire ; seuls les scripts des services et le Web utilisent les releases gérées. Les anciens liens et releases sont sauvegardés et restaurables ; aucune conversion manuelle des liens n’est nécessaire. `--service-workspace` conserve le workspace réel des services.
+
+Un échec après coupure expose `failureCode`, `serviceFailures` (composant, ActiveState, SubState, Result, ExecMainStatus), `transactionId` et `recoveryPhase`. Un code 243 désigne un échec systemd CREDENTIALS avant Node.js. Un retour 0 de systemctl start seul ne prouve pas la santé de l’application. La cause filtrée reste dans le reçu après repli, sans sortie brute du journal ou de systemctl.

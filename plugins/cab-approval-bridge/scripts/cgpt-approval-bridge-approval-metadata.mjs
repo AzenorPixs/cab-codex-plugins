@@ -2,7 +2,7 @@ import { pathToFileURL } from 'node:url';
 import { realpath } from 'node:fs/promises';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.0.0';
+export const VERSION = '2.1.3';
 const fail = (code) => { throw Object.assign(new Error(code),{code}); };
 const identity = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value) ? value : null;
 const diagnostic = (value) => typeof value === 'string' && /^[A-Z0-9_:-]{1,80}$/.test(value) ? value : null;
