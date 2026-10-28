@@ -1,9 +1,10 @@
 [Unit]
-Description=CAB 1.10.6 — Supervision web locale indépendante
+Description=CAB 2.0.0 — Supervision web locale indépendante
 
 [Service]
 Type=simple
 EnvironmentFile=%h/.config/cab-approval-bridge/monitor.env
+LoadCredential=opencode.password:%h/.config/cab-approval-bridge/opencode.password
 ExecStart=/usr/bin/env node %h/.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-monitor.mjs
 Restart=on-failure
 RestartSec=3

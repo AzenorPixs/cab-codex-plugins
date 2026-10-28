@@ -4,11 +4,26 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
+### Distribution courante 2.0.0
+
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.0.0. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+
+OpenCode V2 est la seule version prise en charge. Les appels HTTP utilisent
+`/api/...` avec Basic Auth sous l'utilisateur fixe `opencode`. Configurer le
+serveur V2 avec `OPENCODE_PASSWORD`. Avant le démarrage des unités CAB, provisionner
+le même mot de passe configuré sur OpenCode dans
+`~/.config/cab-approval-bridge/opencode.password`, fichier régulier détenu
+par l'utilisateur et accessible uniquement à celui-ci (`0600`). Les unités
+le reçoivent par `LoadCredential`; le secret n'est pas une variable d'unité.
+Le client vise `127.0.0.1:4096` ; `0.0.0.0` est uniquement une adresse de
+bind du serveur.
+
 ## 2. État actuel de la distribution
 
-CAB est actuellement un dépôt source autonome comprenant le broker Python, le
-plugin Codex, ses skills, la commande Codex versionnée `/CAB` et les scripts
-Node.js de contrôle et de supervision.
+CAB est actuellement un dépôt source autonome comprenant le broker Python, les
+plugins Codex `cab-approval-bridge` et `cabu`, leurs skills, les commandes
+versionnées `/CAB`, `/CABU` et `/cab`, ainsi que les scripts Node.js de contrôle
+et de supervision.
 
 Aucun Dockerfile ni format de paquet système n'est actuellement défini dans les sources CAB. Une image Docker ou un paquet Debian ne constitue donc pas encore un mode de distribution du projet.
 
@@ -38,10 +53,14 @@ CAB/
 │       ├── cgpt-approval-bridge-prompts.py
 │       ├── cgpt-approval-bridge-reset.py
 │       ├── cgpt-approval-bridge-healthcheck.mjs
-│       └── cgpt-approval-bridge-opencode-sse-client.mjs
+│       ├── cgpt-approval-bridge-opencode-sse-client.mjs
+│       └── cgpt-approval-bridge-opencode-client.mjs
+├── plugins/cabu/                     # plugin Codex d'entrée CABU
+│   ├── .codex-plugin/plugin.json
+│   └── skills/cabu/SKILL.md
 ├── src/                 # bridge Python
 ├── .codex/
-│   └── commands/        # commande /CAB
+│   └── commands/        # commandes /CAB, /CABU et /cab
 ├── PROJECT.md
 ├── TECHNICAL.md
 ├── BUILD.md
@@ -94,6 +113,10 @@ mécanisme équivalent ou adapter ces composants.
 ## 5. Installation du broker dans OpenCode
 
 OpenCode doit déclarer CAB comme serveur MCP local `stdio`.
+En OpenCode V2, la déclaration est un membre de `mcp.servers` nommé
+`cgpt-validation`, avec `type: "local"` et le point d'entrée du broker dans
+`command`. La forme V1 qui place directement le nom sous `mcp` n'est pas prise
+en charge. Ne pas copier de secret dans la configuration du projet.
 
 Le point d'entrée source est :
 
@@ -150,15 +173,15 @@ du workspace, recharge systemd puis démarre explicitement le service. Elle ne
 doit jamais appeler `systemctl --user enable`. `/CAB stop` arrête le service
 mais conserve son unité inactive pour un démarrage ultérieur.
 
-Les trois commandes sont distribuées ensemble : `CAB.md` porte la procédure
+Les commandes `/CAB`, `/CABU` et `/cab` sont distribuées ensemble : `CAB.md` porte la procédure
 canonique `/CAB`, `CABU.md` fournit `/CABU` sans argument et `cab.md` conserve
 l'ancienne entrée avec transmission inchangée. Tous les fichiers ont le même
-frontmatter de version. `/CAB update` prépare le jeu complet depuis la même
-source ; il préserve toute copie plus récente ou divergente à version égale.
-Un échec de publication restaure les seules commandes remplacées. Les alias
-absents peuvent être complétés à version égale si les copies présentes concordent.
+frontmatter de version. `/CABU` délègue à `/CAB update`, qui mène le déploiement
+jusqu'au rapport terminal. Les commandes du profil sont remplacées atomiquement
+depuis une source validée et toute copie locale plus récente ou divergente est
+préservée.
 
-La commande Codex `/CAB` est maintenue séparément dans :
+Les commandes Codex sont maintenues séparément dans :
 
 ```text
 .codex/commands/CAB.md
@@ -168,23 +191,30 @@ Cet artefact orchestre `start`, `run`, `test`, `update` et `stop` pour les resso
 doit être distribué et installé avec son plugin et sa skill, sans prendre en
 charge la décision métier ni le cycle de vie direct du broker MCP OpenCode.
 
-`/CAB update` s'assure que `cab_codex_plugins` est le marketplace Git
-`AzenorPixs/cab-codex-plugins`, branche `main`, avec une extraction sparse de
-`.agents/plugins` et `plugins`. Elle migre de manière réversible une source locale homonyme,
-actualise l'instantané Git, puis réinstalle le plugin uniquement lorsque son
-manifeste distant est plus récent. Elle compare aussi le
-frontmatter de la commande installée dans le profil Codex à celui téléchargé
-depuis `AzenorPixs/cab-codex-plugins`, branche `main`, et la remplace atomiquement
-uniquement si GitHub fournit une version plus récente. Elle déploie aussi
-le jeu complet des briques et leurs unités depuis le plugin installé. Son outil transactionnel
-recharge systemd et remet en service les seules briques précédemment actives,
-sous maintenance durable ; les composants inactifs restent inactifs. Cette commande ne modifie ni le manifeste ni la
-configuration Codex ; seule la migration réversible de la marketplace CAB est
-admise.
+La source de publication est `AzenorPixs/cab-codex-plugins`, branche `main`,
+avec extraction sparse `.agents/plugins` et `plugins`. `/CAB update` compare
+la version de base distante à la version du paquet source CAB. Si GitHub est au
+moins à jour, il conserve la marketplace Git, actualise son instantané et
+installe le plugin seulement si la version distante est plus récente. Si le
+développeur demande l'installation d'une version source locale plus récente,
+la commande utilise le mécanisme pris en charge `codex plugin marketplace add`
+avec la racine CAB, installe le plugin local par `codex plugin add`, et garde
+cette marketplace locale jusqu'à publication d'une version distante au moins
+égale. Une mise à jour locale ne modifie pas les fichiers de cache du plugin à
+la main.
 
+Les commandes CAB du profil sont rapprochées de la source retenue (GitHub ou
+locale) et remplacées atomiquement depuis un staging privé si cette source est
+plus récente. Une copie locale plus récente ou divergente est préservée et
+rapportée. Après validation du jeu complet, `/CAB update` arrête les trois
+unités systemd CAB, met à jour les quatre briques, recharge systemd puis
+redémarre les unités. Il ne lit pas les états RUN ou coordination en
+précondition. L'API OpenCode reconnecte le broker si elle répond ; sinon ses
+fichiers sont installés et le runtime broker est `INDISPONIBLE`. Aucune donnée
+de projet piloté n'est modifiée.
 La vérification d'intégration de la release doit confirmer que `/CAB start`
 purge complètement l'ancien runtime avant une nouvelle session, observe
-l'état réel `GET /mcp`, que le broker reste géré par OpenCode et que `/CAB test`
+l'état réel `GET /api/mcp`, que le broker reste géré par OpenCode et que `/CAB test`
 utilise la nouvelle session maîtresse. Une reprise ordinaire doit préserver
 ses preuves sans purge ; sa session est conservée, sauf remplacement explicite
 vérifié par `/job/recover`. Un prévol divergent conserve sa candidate et le
@@ -215,7 +245,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `1.10.6` pour le broker,
+artefacts distribués. La version de base actuelle est `2.0.0` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -311,11 +341,10 @@ registry-lock.py avec Python 3. Ces fichiers sont
 indissociables et doivent partager la version source courante 1.10.6. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
-Une mise à jour prépare et vérifie un jeu complet avant sa publication locale.
-Ne pas remplacer un jeu actif ni reconnecter le broker pendant des RUN sans
-coordination. Le retour à 0.87.2 exige libération ou gel réconcilié de tous les
-RUN et conservation des preuves ; son contrôleur ne comprend pas le registre
-concurrent. La mise à jour ne migre pas silencieusement un job actif.
+Le retour historique à 0.87.2 exigeait libération ou gel réconcilié de tous les
+RUN car son contrôleur ne comprenait pas le registre concurrent. Ce cas de
+compatibilité historique ne définit plus `/CAB update` 2.0.0, qui remplace le
+jeu versionné et redémarre les trois unités sans consulter les états CAB.
 
 Le script cgpt-approval-bridge-prompts.py permet une revue sans écriture puis
 une application explicite aux projets passés par --project. Il ne touche que
@@ -391,7 +420,7 @@ manuellement conserve sa supervision, avec redémarrage systemd indisponible.
 Les tests de commandes utilisent un adaptateur simulé, jamais les services
 réels. Le jeu installé isolé doit contenir onze ressources, dont ce module.
 
-## Distribution de la mise à jour active 1.10.6
+## Distribution de la mise à jour active 2.0.0
 
 Le plugin ajoute scripts/cgpt-approval-bridge-update.mjs, sa référence
 skills/approval-bridge/references/component-update.md et broker/ contenant
@@ -402,15 +431,16 @@ Le paquet complet permet de mettre à jour le broker sans extraire du code
 d'un autre commit ou réécrire la configuration OpenCode.
 
 Le script est exécuté depuis le plugin installé, hors des destinations qu'il
-remplace. Il installe les fichiers CAB nommés et les unités dédiées ; il ne
-modifie ni caches de plugin, secrets, environnements, drop-ins ni projet piloté.
-L'invocation explicite /CAB update permet la maintenance et le redémarrage des
-briques actives. Leurs états actif/inactif sont mémorisés, vérifiés et rétablis.
-Le gel et les schémas doivent être compatibles avant bascule. Les reçus et
-sauvegardes sont conservés pour récupération sans restauration de données métier.
-La qualification SCM utilise des processus isolés réels et un adaptateur de
-services contrôlé ; installation,
-publication et déploiement réels restent des opérations distinctes.
+remplace. Il valide et sauvegarde le jeu complet avant tout effet. Il ne modifie
+ni cache de plugin, secret, environnement, drop-in ni projet piloté. L'invocation
+`/CAB update` arrête systématiquement les trois unités systemd CAB, remplace
+atomiquement les fichiers des quatre briques, exécute `daemon-reload`, puis
+démarre systématiquement les trois unités, sans consulter les états RUN ou de
+coordination en précondition. Aucune unité n'est activée au login. OpenCode
+reste ouvert ; si son API répond après remplacement, les routes natives
+rechargent le broker. En son absence, les fichiers broker sont quand même
+installés et sa version runtime est rapportée `INDISPONIBLE`. Le journal et les
+sauvegardes permettent le retour arrière sans restaurer de données métier.
 
 ### Correctif source de notification orpheline
 
@@ -423,10 +453,11 @@ Les nouveaux reçus et le verrou rejectionOnly du registre 4 rendent un retour
 aux anciens lecteurs stricts non garanti après utilisation. Aucun fichier
 runtime antérieur ne doit être restauré pour effacer ces nouveaux reçus.
 
-L'activation exige un mandat distinct. La procédure ordinaire /CAB update
-refuse une récupération ouverte. Le profil explicite frozen-recovery-controller
-ajoute l'autorité BOOTSTRAP_HELD qualifiée, suivie d'adoption et du vrai HELD,
-sans installation implicite par la préparation SCM. Le paquet distribue
+L'activation du correctif exigeait un mandat distinct. La procédure ordinaire
+`/CAB update` 2.0.0 redémarre les unités sans consulter une récupération
+ouverte ; le profil explicite frozen-recovery-controller conserve son autorité
+BOOTSTRAP_HELD qualifiée, suivie d'adoption et du vrai HELD, sans installation
+implicite par la préparation SCM. Le paquet distribue
 maintenance-proof avec la fermeture d'imports du contrôleur. Les sources sont
 1.10.6 ; broker, superviseur et Web 1.7.1 peuvent être conservés uniquement dans
 la transition bornée qualifiée et explicitement annoncée. Leur mise à niveau

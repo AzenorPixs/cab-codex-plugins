@@ -1,6 +1,49 @@
 # Changelog
 
+## 2.0.0 — Migration exclusive OpenCode V2
+
+- Passage de toutes les briques CAB à la version majeure 2.0.0.
+- OpenCode V1 et toutes les versions 1.x sont refusés ; transport HTTP V2 authentifié par Basic Auth, avec credential local protégé.
+- Contrôleur, superviseur, moniteur, maintenance, réparation, broker, commandes et documentation migrés vers les contrats V2.
+- Les anciens champs de transcript `tools` ne sont pas exposés par le schéma V2 ; la réconciliation qui dépend de cette preuve refuse donc ce cas sans effet.
+
+## 1.10.11 — plugin, skill et commande CABU
+
+- Ajout du plugin CABU autonome et de son skill d’entrée ; `/CABU` reste la commande distribuée séparément et délègue à `/CAB update`.
+- Incrément commun des briques CAB à 1.10.11.
+
+## 1.10.10 — alignement de la distribution
+
+- Incrément commun des versions CAB ; `/CABU` reste l’accès direct à `/CAB update`, conformément à la spécification et à l’implémentation existantes.
+
 Toutes les évolutions significatives de CAB seront documentées dans ce fichier.
+
+## 1.10.9 — mise à jour forcée par CABU
+
+- `/CABU` continue de déléguer à `/CAB update`, qui ne consulte plus les états
+  RUN ou de coordination avant l'arrêt des trois unités systemd CAB.
+- L'update remplace les fichiers des quatre briques et redémarre controller,
+  supervisor et monitor à chaque invocation, avec sauvegardes et retour arrière.
+- Les fichiers broker sont installés même sans OpenCode ; le rapport marque sa
+  version runtime `INDISPONIBLE` lorsqu'elle n'est pas observable.
+- Plugin, broker, modules, unités, Web, commandes et package Python passent en
+  1.10.9.
+
+## 1.10.8 — mise à jour autonome du bridge
+
+- `/CAB update` et `/CABU` vérifient leur association au plugin et au skill de
+  maintenance, suspendent les RUN réservés sous `SHARED_MAINTENANCE`, mettent à
+  jour les quatre briques et démarrent les trois unités systemd CAB.
+- Le broker géré par OpenCode est reconnecté par les routes MCP natives, avec
+  contrôle de `/mcp` et de sa readiness ; OpenCode n'est pas tué ni redémarré.
+- Les RUN restent en `PAUSE` ou `STOP`, les gels globaux étrangers restent
+  intacts et aucune unité n'est activée au login.
+
+## 1.10.7 — maintenance et demande en pause
+
+- Preuve broker avec propriétaires de fichiers et de répertoire explicitement distincts de l'UID d'exécution ; ancienne preuve compatible, aucun changement de droits ou d'artefact par la maintenance.
+- Réconciliation d'une demande du job courant sous PAUSE, même sans admission préalable, limitée au rejet après preuve native PENDING sans effet ; timeout suivi du même polling, persistance atomique et refus des approbations ou acquisitions.
+- Distribution commune 1.10.7 ; migration et reprise CISMP autorisées séparément par le développeur, avec vérification des versions réellement actives.
 
 ## 1.10.6 — medium par défaut
 

@@ -35,6 +35,7 @@ def main() -> None:
     parser.add_argument("--historical-key-recovery", action="store_true")
     parser.add_argument("--failing-plugin", type=Path)
     parser.add_argument("--worker-broker", action="store_true")
+    parser.add_argument("--actor-artifacts", action="store_true")
     args = parser.parse_args()
     if args.historical_key_recovery and not args.failing_plugin:
         parser.error("--failing-plugin requis pour la récupération historique")
@@ -74,6 +75,8 @@ def main() -> None:
         command[command.index("--entrypoint"):command.index("--entrypoint")] = ["--env", "CAB_TEST_HISTORICAL_RECOVERY=1"]
     if args.worker_broker:
         command[command.index("--entrypoint"):command.index("--entrypoint")] = ["--env", "CAB_TEST_WORKER_BROKER=1"]
+    if args.actor_artifacts:
+        command[command.index("--entrypoint"):command.index("--entrypoint")] = ["--env", "CAB_TEST_ACTOR_ARTIFACTS=1"]
     try:
         result = subprocess.run(command, capture_output=True, text=True, timeout=240)
         (work / ("two-uid-" + key + ".stdout")).write_text(result.stdout)

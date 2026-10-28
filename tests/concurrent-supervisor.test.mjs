@@ -1,4 +1,5 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
+import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -19,7 +20,7 @@ async function checkSupervision(t, coordinationReason = null, codingModel = fals
   if (codingModel) jobs.b.codingModel={protocol:'pllm-auto-v1',source:'prompt',providerID:'provider1',modelID:'model1',reasoning:'medium',
     mode:null,priority:null,evaluatedAt:null,catalogDigest:null,selectedAt:new Date().toISOString(),
     preflight:{sessionId:'ses_probe',messageId:'msg_probe',verifiedAt:new Date().toISOString()}};
-  const sent = []; const busy = {};
+  const sent = []; const modelSwitches = []; const busy = {};
   const controller = createServer((request, response) => {
     const path = new URL(request.url, 'http://localhost').pathname;
     const match = path.match(/^\/runs\/([ab])\/(status|job)$/);
@@ -27,7 +28,7 @@ async function checkSupervision(t, coordinationReason = null, codingModel = fals
       : match ? (match[2] === 'status' ? statuses[match[1]] : jobs[match[1]]) : null;
     response.writeHead(payload ? 200 : 404, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload));
   });
-  const opencode = createServer(async (request, response) => {
+  const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
     if (url.pathname === '/global/event') {
       response.writeHead(200, { 'content-type': 'text/event-stream' });
@@ -41,7 +42,7 @@ async function checkSupervision(t, coordinationReason = null, codingModel = fals
       busy.ses_b = { type: 'busy' }; payload = { parts: [] };
     } else payload = { id: url.pathname.split('/')[2], directory };
     response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(payload));
-  });
+  }, { directory, onModelSwitch: (switchRequest) => modelSwitches.push(switchRequest) }));
   await new Promise((r) => controller.listen(0, '127.0.0.1', r));
   await new Promise((r) => opencode.listen(0, '127.0.0.1', r));
   const listener = createServer(); await new Promise((r) => listener.listen(0, '127.0.0.1', r));
@@ -60,7 +61,10 @@ async function checkSupervision(t, coordinationReason = null, codingModel = fals
   });
   for (let i = 0; i < 100 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
   assert.equal(sent.length, 1); assert.equal(sent[0].sessionId, 'ses_b');
-  if(codingModel){assert.deepEqual(sent[0].body.model,{providerID:'provider1',modelID:'model1'});assert.equal(sent[0].body.variant,'medium');}
+  if(codingModel){
+    assert.deepEqual(modelSwitches, [{ sessionId: 'ses_b', body: { model: { id: 'model1', providerID: 'provider1', variant: 'medium' } } }]);
+    assert.equal(sent[0].body.model, undefined); assert.equal(sent[0].body.variant, undefined);
+  }
   let state;
   for (let i = 0; i < 50; i++) {
     state = await (await fetch('http://127.0.0.1:' + port + '/status')).json();

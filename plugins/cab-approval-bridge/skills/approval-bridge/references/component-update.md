@@ -1,4 +1,64 @@
-# Mise à jour des briques actives — CAB 1.10.6
+# Mise à jour autonome des briques CAB — CAB 2.0.0
+
+## Association du skill et des commandes
+
+Le manifeste du plugin MUST référencer `./skills/`. Le skill
+`skills/approval-bridge/SKILL.md` MUST pointer vers cette référence et décrire
+le script `scripts/cgpt-approval-bridge-update.mjs`. `/CAB update` MUST vérifier
+ce lien avant mutation. `/CABU` MUST charger le fichier frère `CAB.md` de même
+version et lui déléguer exactement `update` ; il ne contient pas de procédure
+de maintenance parallèle.
+
+## Processus forcé de `/CAB update` et `/CABU`
+
+`/CABU` sans argument charge le fichier frère `CAB.md` de même version et lui
+délègue exactement `update`. La procédure est portée par `CAB.md` et cette
+référence ; elle ne se duplique pas dans l'alias.
+
+L'update valide le manifeste, le skill, cette référence, l'updater, les trois
+commandes, les versions du paquet, la fermeture des imports, les syntaxes, les
+destinations explicites et les sauvegardes. Il ne consulte aucun RUN, job,
+permission, gel global ni état de service pour décider de commencer. Il ne
+demande pas `SHARED_MAINTENANCE`, ne suspend pas les RUN et ne relit pas le
+registre métier avant l'arrêt.
+
+Après validation et staging, l'updater appelle systématiquement, dans l'ordre,
+`systemctl --user stop` pour les unités
+`cgpt-approval-bridge-controller.service`,
+`cgpt-approval-bridge-supervisor.service` et
+`cgpt-approval-bridge-monitor.service`.
+Il remplace atomiquement tous les fichiers des quatre briques, y compris les
+trois fichiers Python broker dans le répertoire explicitement déclaré, conserve
+les sauvegardes privées, recharge systemd, puis appelle systématiquement
+`systemctl --user start` pour les trois unités. Les unités ne sont jamais
+activées au login. Une invocation dont les versions sont déjà égales effectue
+tout de même cet arrêt et ce redémarrage.
+
+OpenCode reste ouvert. Après l'arrêt systemd et le remplacement des fichiers,
+l'updater tente le rechargement natif du broker seulement si son API répond.
+L'absence d'OpenCode, du broker ou de l'API ne bloque jamais le remplacement des
+fichiers broker ni le démarrage des trois unités. Dans ce cas, le rapport donne
+la version du fichier broker et marque sa version réellement chargée
+`INDISPONIBLE`. Une readiness accessible est rapportée séparément de la version
+sur disque. Le remplacement est suivi de `systemctl --user daemon-reload`.
+Si l'API native répond, l'updater tente `POST /api/experimental/mcp/cgpt-validation/disconnect`
+avant le remplacement et `POST /api/experimental/mcp/cgpt-validation/connect` après le démarrage,
+avec le workspace exact et Basic Auth depuis le credential local. OpenCode 1.x est
+refusé avant ces appels. Une erreur ou indisponibilité de ces routes ne bloque
+pas le remplacement des fichiers ; le broker chargé est rapporté
+`INDISPONIBLE`.
+
+Pour le dépôt CAB, la destination du broker est le répertoire `src/` sous la
+racine CAB : BUILD.md y définit le point d'entrée source et les trois modules
+importables. Cette destination ne dépend pas d'un processus OpenCode en cours.
+
+Après redémarrage, l'updater vérifie les versions réellement servies par le
+contrôleur, le superviseur et le moniteur, et leur workspace. Il produit un
+rapport complet des versions publiées, du plugin installé, des fichiers
+déployés, des processus observés et du résultat transactionnel. Un échec de
+validation de paquet ou de destination survient avant l'arrêt. Un échec après
+arrêt restaure les seuls artefacts sauvegardés, recharge systemd et redémarre
+les trois unités ; il conserve le journal et signale le repli.
 
 ## Profil de récupération gelée
 
@@ -29,7 +89,7 @@ Web restent ouverts ; aucun connect/disconnect ni instance/dispose n'est permis.
 Les pairs doivent conserver une PAUSE explicitement autorisée. Après complete,
 la récupération ne vaut pas autorisation métier dans l'état mixte : une
 maintenance ordinaire distinctement autorisée doit aligner réellement les
-quatre briques en 1.10.6, puis chaque reprise est validée. Cette seconde étape
+quatre briques en 2.0.0, puis chaque reprise est validée. Cette seconde étape
 peut reconnecter le broker et relancer le Web, sans fermer OpenCode.
 Un autre PENDING ou un écart entre compteurs global/RUN/session bloque le
 profil ; aucune demande inconnue n'est annulée ou attribuée par déduction.
@@ -99,19 +159,24 @@ CAB ; l'exécution d'une session SCM ne déclenche pas cette procédure réelle.
 
 ## Cibles et prérequis
 
+En 1.10.7, `expectedUid` désigne les processus OpenCode/broker. Les champs privés optionnels `artifactOwnerUid` et `directoryOwnerUid` lient les propriétaires des modules et du répertoire. Ils doivent être l'acteur de maintenance ou expectedUid ; leur omission conserve le contrat ancien. La maintenance conserve ces propriétaires et les recontrôle avec groupe, modes et empreintes. Un broker exécuté sous devops peut ainsi charger des modules détenus par l'acteur ADE, sans changement de droits.
+
+Une demande orpheline du job courant en PAUSE utilise `recoveryId: null` dans `/runs/<run_id>/validation/reconcile`. Seule la décision rejected devient possible après preuve native de non-exécution ; la même approbation doit confirmer REJECTED avant clôture du mandat. Si l'ancien contrôleur ne connaît pas le propriétaire, l'orchestrateur peut transmettre sa décision explicite par l'outil manuel reject du broker existant, puis observer REJECTED sans réémettre la demande ou exécuter le métier.
+
 La politique ordinaire explicite `--broker-policy reuse-readonly` exige
 `--layout managed-release` et `--broker-proof-file` privé 0600, propriétaire
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
-doit être la cible 1.10.6 ; la version chargée est vérifiée indépendamment.
+doit être la cible 2.0.0 ; la version chargée est vérifiée indépendamment.
 Les trois fichiers sont seulement lus et comparés au paquet. Aucun stage,
 backup restaurable, remplacement, nouveau lien ou compilation sur place du
 broker n'est effectué. Les droits et propriétaires restent conservés.
 
-Tous les RUN doivent être sous PAUSE explicite. Les services sont gérés par
-leur compte et OpenCode relance son propre enfant MCP, sans changement de
-configuration. L'intention est persistée avant la première déconnexion.
+Dans la seule politique explicite `reuse-readonly`, tous les RUN doivent être
+sous PAUSE explicite. Les services sont gérés par leur compte et OpenCode
+relance son propre enfant MCP, sans changement de configuration. L'intention
+est persistée avant la première déconnexion.
 Une erreur après cette intention conserve HELD sous READONLY_RECOVERY_REQUIRED ;
 --rollback ne peut pas recréer l'ancien processus depuis les sources cibles.
 Relancer la même commande avec la même preuve pour réconcilier puis poursuivre
@@ -124,13 +189,11 @@ OpenCode, ainsi que jobs, réservations et PAUSE. Une deuxième invocation
 conforme ne redémarre rien. Le profil gelé M2 refuse cette politique. Les
 comportements par défaut d'installation restent inchangés.
 
-Résoudre les seuls chemins et paramètres non secrets : plugin installé,
-workspace canonique, home du compte systemd, URLs contrôleur/superviseur/Web/
-OpenCode, et répertoire réellement lancé du broker. Les chemins sont absolus,
-les URLs HTTP sont loopback sans identifiants. Ne pas exposer un environnement
-complet ou lire un fichier sensible pour cette résolution. Une cible inconnue,
-un processus manuel non géré ou une installation dans le workspace reste un
-blocage explicite ; ne pas déplacer son code ou modifier sa configuration.
+Résoudre les chemins absolus du plugin, du workspace canonique, du home systemd,
+des URLs loopback et de la destination broker déclarée. Pour le dépôt CAB, cette
+destination est `<CAB_ROOT>/src`. OpenCode n'est pas une précondition de
+l'update ; sa base loopback peut rester indisponible. Ne pas lire de fichier
+sensible, déplacer un code broker ou modifier son lancement MCP.
 
 L'outil installe seulement les scripts nommés dans
 `~/.local/share/cab-approval-bridge/`, le jeu indépendant Web dans
@@ -142,56 +205,49 @@ projet piloté restent conservés. Aucun script n'est exécuté depuis le paquet
 pour valider son contenu : Node vérifie la syntaxe et Python compile dans un
 cache temporaire privé. src/ reste l'autorité des copies broker distribuées.
 
-OpenCode doit être accessible pour prouver la connexion MCP. Si le broker ou
-le superviseur fonctionne, le contrôleur doit être accessible. Une instance
-active doit appartenir à l'unité attendue, avec le chemin ExecStart attendu,
-et le registre doit confirmer son workspace et le protocole resource-scoped-v1
-avec schéma 4. Une incompatibilité de runtime exige une maintenance distincte.
+Après redémarrage, vérifier les trois unités systemd CAB et les endpoints de
+version controller, supervisor et monitor. La readiness broker est vérifiée
+si OpenCode répond ; son indisponibilité est rapportée `INDISPONIBLE` et
+n'empêche pas la mise à jour des fichiers. Aucune lecture du registre des RUN
+ou de la coordination globale n'est requise par la procédure ordinaire.
 
 ## Transaction et reprise
 
 Le journal privé se trouve sous
-`~/.local/state/cab-approval-bridge-update/`. Un verrou exclusif couvre les
-briques partagées du profil. L’autorité utilise un
-verrou flock tenu par le helper Python déjà distribué. Sa fermeture libère
-l'autorité, même après interruption ; l'inode reste en place et n'est jamais
-supprimé pour forcer une opération concurrente. Le journal doit être valide
-avant toute récupération.
+`~/.local/state/cab-approval-bridge-update/`. Un verrou flock tenu par le
+helper Python protège l'installation. Sa fermeture libère le verrou, même
+après interruption ; l'inode reste en place et n'est jamais supprimé pour
+forcer une opération concurrente.
 
 Le paquet complet est vérifié puis sauvegardé. Les empreintes des fichiers
-installés sont recontrôlées avant remplacement. Une dérive externe bloque la
-transaction sans écraser cette modification. L'intention de gel est persistée
-avant la requête de maintenance. DRAINING ferme les nouvelles admissions ;
-l'outil ne décide aucune permission et attend que les mandats, effets et
-permissions en cours soient réconciliés. HELD est confirmé par le contrôleur.
-Une attente bornée retourne code 2 et conserve les processus et le gel.
-Relancer la même commande pour reprendre cette transaction.
+installés sont recontrôlées avant remplacement ; une modification concurrente
+des artefacts cibles est préservée et bloque avant arrêt.
 
-Sous HELD, l'outil arrête les briques actives, déconnecte le broker par le MCP
-natif, remplace atomiquement les seuls artefacts, recharge systemd et rétablit
-les états actif/inactif initiaux. Il ne démarre pas OpenCode, ne crée aucune
-session et n'active aucune unité au login. Les pauses déjà demandées ne sont
-pas levées. Les schémas métier ne sont pas migrés.
+L'outil arrête systématiquement les trois unités systemd CAB, tente une
+déconnexion native du broker si OpenCode répond, remplace atomiquement les
+fichiers des quatre briques, puis exécute `systemctl --user daemon-reload` et
+démarre controller, supervisor et monitor. Aucune unité n'est activée au login.
+OpenCode n'est ni fermé ni tué. Si son API est absente, le broker reste
+`INDISPONIBLE` côté runtime mais ses fichiers sont installés. Aucun état de RUN
+ou schéma métier n'est modifié par cette opération.
 
-Le succès exige les versions propres aux composants relancés et les mêmes
-identités, générations, réservations et propriétaires de demandes. Une version
-broker doit provenir d'une readiness reçue après reconnexion. Le gel est levé
-seulement après ces preuves. Une transaction déjà conforme ne redémarre rien.
+Le succès exige les versions des trois unités après redémarrage et la version
+des fichiers broker. La version runtime broker vient uniquement d'une readiness
+postérieure au rechargement ; sans elle, le rapport indique `INDISPONIBLE`.
+Chaque invocation redémarre les trois unités, même si le jeu est déjà conforme.
 
 ## Retour arrière
 
 Une erreur après le début des arrêts déclenche le retour aux seuls artefacts
-sauvegardés, puis aux états initiaux. Les fichiers runtime, décisions consommées,
-RUN et archives ne sont jamais restaurés depuis une ancienne copie. Un échec
-de repli conserve le gel et la phase ROLLBACK_FAILED ; ne pas annoncer un succès.
+sauvegardés, recharge systemd et redémarre les trois unités. Les fichiers runtime,
+décisions consommées, RUN et archives ne sont jamais restaurés depuis une
+ancienne copie. Un échec de repli conserve la phase ROLLBACK_FAILED et interdit
+d'annoncer un succès.
 
-Une nouvelle invocation récupère d'abord la transaction interrompue. L'option
-`--rollback`, avec les mêmes cibles et URLs, permet un repli explicite. Pour une
-transaction restée WAITING, cette option attend une frontière sûre puis lève
-seulement son gel : aucune modification externe survenue pendant l'attente
-n'est écrasée. Une libération de maintenance ambiguë est réconciliée avant toute
-autre action ; si le gel est déjà levé, aucun repli automatique n'interrompt
-des RUN susceptibles d'avoir repris.
+Une invocation suivante réconcilie d'abord un reçu interrompu. L'option
+`--rollback`, avec les mêmes cibles, permet un repli explicite sur les seules
+sauvegardes correspondantes. Aucune coordination globale n'est créée ou
+libérée par le chemin ordinaire forcé.
 
 Les sauvegardes et reçus restent privés et ne sont pas purgés automatiquement.
 Le bilan sépare fichiers déployés, versions actives, inactivité, attente,
@@ -200,9 +256,9 @@ présenté comme vérifié sur la seule base d'un test simulé.
 
 ## Transition ordinaire depuis 1.9.0 vers 1.10.5
 
-Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5 et la cible 1.10.6. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 1.10.6, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
+Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.10.7, 1.10.8, 1.10.9, 1.10.10 et la cible 2.0.0. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 2.0.0, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
 
-## Registre de maintenance volumineux — 1.10.6
+## Registre de maintenance volumineux — 1.10.9
 
 Dans le profil ordinaire, seul GET /runs sans suffixe et le lecteur privé de controller-runs.json acceptent jusqu'à 16 Mio. Les autres réponses HTTP gardent 2 Mio et les autres fichiers 4 Mio. La lecture reste intégrale et bornée ; un dépassement est refusé, sans troncature ni purge. Identités, schéma, permissions, génération, PAUSE, HELD et preuves restent recontrôlés. Le banc grand registre vérifie les deux UID réels, les deux issues et le refus d'écriture au broker.
 
