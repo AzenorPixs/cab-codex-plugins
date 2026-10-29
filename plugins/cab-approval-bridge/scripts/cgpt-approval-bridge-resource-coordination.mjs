@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.12';
+export const VERSION = '2.1.13';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -31,6 +31,11 @@ function evidence(value) {
       !value.every((item) => typeof item === 'string' && item.length > 0 && item.length <= 500)) {
     throw new CoordinationError('evidence-references-required', 400);
   }
+}
+function validUnusedNativeProof(proof) {
+  return onlyKeys(proof, ['messageCount','toolCount','historyHash']) &&
+    Number.isSafeInteger(proof.messageCount) && proof.messageCount >= 0 &&
+    Number.isSafeInteger(proof.toolCount) && proof.toolCount >= 0 && hash(proof.historyHash);
 }
 function emptyState() {
   return { protocol: COORDINATION_PROTOCOL, sequence: 0, revisions: {}, operations: {}, accesses: {},
@@ -153,7 +158,7 @@ export class ResourceRunRegistry extends RunRegistry {
       for (const [key, entry] of Object.entries(state.testReservations)) {
         const owner = [...this.runs.values(), ...this.history].find((r) => r.runId === entry?.runId && r.contextId === entry?.contextId);
         if (!id(key) || !onlyKeys(entry, ['transactionId','runId','contextId','version','resources','inputDigest','state',
-          'order','requestedAt','grantedAt','token','fencing','finishedAt','releaseDigest','proofDigest','reconciliationReceipts']) ||
+          'order','requestedAt','grantedAt','token','fencing','finishedAt','releaseDigest','proofDigest','reconciliationReceipts','unusedReleaseReceipt']) ||
           entry.transactionId !== key || !owner || !hash(entry.inputDigest) ||
           !Number.isSafeInteger(entry.version) || entry.version < entry.contextId || entry.version > owner.version ||
           !['WAITING','HELD','RELEASED','CANCELLED'].includes(entry.state) ||
@@ -165,6 +170,17 @@ export class ResourceRunRegistry extends RunRegistry {
           entry.fencing < entry.order || entry.fencing > state.sequence)) fail();
         if (entry.releaseDigest !== undefined && !hash(entry.releaseDigest)) fail();
         if (entry.proofDigest !== undefined && !hash(entry.proofDigest)) fail();
+        if (entry.unusedReleaseReceipt !== undefined) {
+          const receipt = entry.unusedReleaseReceipt;
+          if (entry.state !== 'RELEASED' || !hash(entry.releaseDigest) || !hash(entry.proofDigest) ||
+              !onlyKeys(receipt, ['mode','authorizationDigest','attestationDigest','boundaryDigest','nativeProof','operationIds','evidenceDigest']) ||
+              receipt.mode !== 'unused-no-effect' || entry.proofDigest !== digest(receipt) ||
+              !['authorizationDigest','attestationDigest','boundaryDigest','evidenceDigest'].every((key) => hash(receipt[key])) ||
+              !validUnusedNativeProof(receipt.nativeProof) || !Array.isArray(receipt.operationIds) ||
+              new Set(receipt.operationIds).size !== receipt.operationIds.length ||
+              receipt.operationIds.some((key) => !id(key) || state.operations[key]?.runId !== entry.runId ||
+                state.operations[key]?.contextId !== entry.contextId)) fail();
+        }
         if (entry.reconciliationReceipts !== undefined && (!record(entry.reconciliationReceipts) ||
           Object.entries(entry.reconciliationReceipts).some(([key, value]) => !id(key) ||
             !onlyKeys(value,['inputDigest','fencing']) || !hash(value.inputDigest) ||
@@ -243,7 +259,8 @@ export class ResourceRunRegistry extends RunRegistry {
   testReservations(runId) {
     return Object.values(this.resourceState.testReservations || {}).filter((r) => !runId || r.runId === runId).map((r) =>
       ({ ...copy(r), reconciliationRequired: this.restoredTests.has(r.transactionId),
-        blockers: r.state === 'WAITING' ? this.testBlockers(r) : [] }));
+        blockers: r.state === 'WAITING' ? this.testBlockers(r) : [],
+        ...(r.state === 'HELD' ? { unusedReleaseBoundary: this.unusedTestBoundary(r) } : {}) }));
   }
   testBlockers(entry) {
     return Object.values(this.resourceState.testReservations || {}).filter((other) => other !== entry &&
@@ -325,10 +342,72 @@ export class ResourceRunRegistry extends RunRegistry {
   operationTests(entry) {
     return Object.values(this.resourceState.operations).filter((op) => op.testReservationId === entry.transactionId);
   }
+  unusedTestOperations(entry) {
+    return Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId &&
+      op.contextId === entry.contextId && (op.testReservationId === entry.transactionId ||
+        Date.parse(op.preparedAt) >= Date.parse(entry.grantedAt))).sort((a, b) => a.operationId.localeCompare(b.operationId));
+  }
+  unusedTestBoundary(entry) {
+    return digest({ entry, run: this.runs.get(entry.runId),
+      operations: Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId),
+      accesses: Object.values(this.resourceState.accesses).filter((access) => access.runId === entry.runId),
+      owners: Object.fromEntries(Object.entries(this.requestOwners).filter(([, owner]) => owner.runId === entry.runId)) });
+  }
+  unusedTestReplay(runId, payload) {
+    const prior = this.resourceState.testReservations?.[payload.transactionId];
+    if (prior?.state !== 'RELEASED') return null;
+    if (prior.runId !== runId || !prior.unusedReleaseReceipt || prior.releaseDigest !== digest(payload)) {
+      throw new CoordinationError('test-unused-release-divergent');
+    }
+    return copy(prior);
+  }
+  releaseUnusedTests(runId, payload, verifiedNativeProof) {
+    this.mutable();
+    const replay = this.unusedTestReplay(runId, payload);
+    if (replay) return replay;
+    this.admission(runId);
+    const entry = this.testHeld(runId, payload);
+    const run = this.runs.get(runId);
+    evidence(payload.evidence);
+    const attestation = payload.attestation;
+    if (!onlyKeys(payload, ['version','transactionId','token','fencing','contextId','sessionId','boundaryDigest',
+        'developerAuthorization','evidence','attestation','nativeProof']) ||
+        payload.contextId !== entry.contextId || payload.sessionId !== run.sessionId ||
+        typeof payload.developerAuthorization !== 'string' || !payload.developerAuthorization.trim() ||
+        payload.developerAuthorization.length > 500 ||
+        !onlyKeys(attestation, ['noEnvironmentMutation','noMutatingMandate','operations']) ||
+        attestation.noEnvironmentMutation !== true || attestation.noMutatingMandate !== true ||
+        !Array.isArray(attestation.operations) || !validUnusedNativeProof(payload.nativeProof) ||
+        digest(payload.nativeProof) !== digest(verifiedNativeProof)) {
+      throw new CoordinationError('test-unused-attestation-required');
+    }
+    if (this.unresolvedAccess(runId, false)) throw new CoordinationError('test-effects-unresolved');
+    if (!hash(payload.boundaryDigest) || payload.boundaryDigest !== this.unusedTestBoundary(entry)) {
+      throw new CoordinationError('test-unused-boundary-stale');
+    }
+    const ops = this.unusedTestOperations(entry);
+    if (attestation.operations.length !== ops.length || new Set(attestation.operations.map((op) => op?.operationId)).size !== ops.length) {
+      throw new CoordinationError('test-unused-operations-divergent');
+    }
+    for (const op of ops) {
+      const review = attestation.operations.find((review) => review?.operationId === op.operationId);
+      if (!onlyKeys(review, ['operationId','classification']) ||
+          (op.state === 'CANCELLED' && !op.native ? review.classification !== 'cancelled-without-execution' :
+            op.state !== 'COMPLETED' || op.native?.kind !== 'bash' || !op.native.onceAcknowledged ||
+            review.classification !== 'read-only-no-effect')) {
+        throw new CoordinationError('test-unused-operation-not-proved');
+      }
+    }
+    entry.unusedReleaseReceipt = { mode: 'unused-no-effect', authorizationDigest: digest(payload.developerAuthorization),
+      attestationDigest: digest(attestation), boundaryDigest: payload.boundaryDigest, nativeProof: copy(verifiedNativeProof),
+      operationIds: ops.map((op) => op.operationId), evidenceDigest: digest(payload.evidence) };
+    entry.state = 'RELEASED'; entry.finishedAt = now(); entry.releaseDigest = digest(payload);
+    entry.proofDigest = digest(entry.unusedReleaseReceipt); this.grantTests(); this.persist(); return copy(entry);
+  }
   releaseTests(runId, payload) {
     this.mutable(); evidence(payload.evidence);
     const prior = this.resourceState.testReservations?.[payload.transactionId];
-    if (prior?.state === 'RELEASED' && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
+    if (prior?.state === 'RELEASED' && !prior.unusedReleaseReceipt && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
     const entry = this.testHeld(runId, payload);
     const ops = this.operationTests(entry);
     if (this.unresolvedAccess(runId, false) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {

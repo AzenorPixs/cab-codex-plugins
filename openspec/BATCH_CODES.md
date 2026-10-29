@@ -142,3 +142,7 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Actualisation SCM diagnostics — 29 octobre 2026
 
 `fix-notification-admission-diagnostics` : ARCHIVÉ, **code non attribué**, source2.1.12. Sources qualifiées : Node520 réussis/28 ignorés, Python80/80, natif1/1 ; archive vérifiée ; activation CABU à suivre séparément. [Proposition](changes/archive/2026-10-29-fix-notification-admission-diagnostics/proposal.md), [tâches](changes/archive/2026-10-29-fix-notification-admission-diagnostics/tasks.md). CABU explicitement autorisé après clôture source et coordination ; attribution ACL ultérieure.
+
+### Restitution sans effet — SCM 2.1.13
+
+`release-unused-test-reservations` : ARCHIVÉ, **code non attribué**, 5/5 unités qualifiées ; Node534/28 ignorés, Python80/80, HTTP7/7, natif1/1 ; archive vérifiée ; aucune activation. [Proposition](changes/archive/2026-10-29-release-unused-test-reservations/proposal.md), [tâches](changes/archive/2026-10-29-release-unused-test-reservations/tasks.md). Attribution ACL ultérieure.

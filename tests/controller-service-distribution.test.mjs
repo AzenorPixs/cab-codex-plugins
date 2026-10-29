@@ -13,13 +13,13 @@ const supervisorServicePath = new URL(
 );
 const monitorServicePath = new URL('../plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service', import.meta.url);
 
-test("les briques distribuées publient la même version de base 2.1.12", () => {
+test("les briques distribuées publient la même version de base 2.1.13", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "2.1.12");
+  assert.equal(version, "2.1.13");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
-  assert.match(plugin.version, /^2\.1\.12\+codex\.\d{14}$/);
+  assert.match(plugin.version, /^2\.1\.13\+codex\.\d{14}$/);
   assert.equal(plugin.skills, './skills/');
   assert.equal(plugin.name, 'CAB');
   assert.equal(plugin.interface.displayName, 'CAB');
@@ -27,7 +27,7 @@ test("les briques distribuées publient la même version de base 2.1.12", () => 
   assert.equal(marketplace.interface.displayName, 'CAB Codex Plugins');
   assert.ok(marketplace.plugins.some(entry => entry.name === 'CAB'));
   assert.ok(!marketplace.plugins.some(entry => entry.name === 'cab-approval-bridge'));
-  assert.match(readFileSync(commandPath, "utf8"), /^version: 2\.1\.12$/m);
+  assert.match(readFileSync(commandPath, "utf8"), /^version: 2\.1\.13$/m);
   const skill = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md', import.meta.url), 'utf8');
   const updateReference = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md', import.meta.url), 'utf8');
   const distributedSkills = readdirSync(new URL('../plugins/cab-approval-bridge/skills/', import.meta.url));
@@ -49,7 +49,7 @@ test("les briques distribuées publient la même version de base 2.1.12", () => 
     }
   }
   for (const path of [servicePath, supervisorServicePath, monitorServicePath]) {
-    assert.match(readFileSync(path, "utf8"), /^Description=CAB 2\.1\.12 /m);
+    assert.match(readFileSync(path, "utf8"), /^Description=CAB 2\.1\.13 /m);
   }
 });
 
@@ -62,13 +62,13 @@ test('le plugin CABU expose son skill et partage la version distribuée', () => 
   const pluginRoot = new URL(`${entry.source.path}/`, root);
   const manifest = JSON.parse(readFileSync(new URL('.codex-plugin/plugin.json', pluginRoot), 'utf8'));
   assert.equal(manifest.name, 'CABU');
-  assert.match(manifest.version, /^2\.1\.12\+codex\.\d{14}$/);
+  assert.match(manifest.version, /^2\.1\.13\+codex\.\d{14}$/);
   const skill = readFileSync(new URL('skills/cabu/SKILL.md', pluginRoot), 'utf8');
   assert.match(skill, /^name: CABU$/m);
   assert.match(skill, /\$CABU/);
   assert.match(skill, /\/CAB update/);
   assert.match(skill, /conversation/);
-  assert.match(readFileSync(new URL('../.codex/commands/CABU.md', import.meta.url), 'utf8'), /^version: 2\.1\.12$/m);
+  assert.match(readFileSync(new URL('../.codex/commands/CABU.md', import.meta.url), 'utf8'), /^version: 2\.1\.13$/m);
 });
 
 test('le moniteur web distribue ses ressources locales et reste indépendant des services CAB', () => {
@@ -91,9 +91,9 @@ test('le moniteur web distribue ses ressources locales et reste indépendant des
   assert.match(start, /identity\.workspace/);
 });
 
-test('le catalogue des étapes et son producteur sont distribués en 2.1.12', async () => {
+test('le catalogue des étapes et son producteur sont distribués en 2.1.13', async () => {
   const { RUN_STEPS, VERSION } = await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs');
-  assert.equal(VERSION, '2.1.12');
+  assert.equal(VERSION, '2.1.13');
   const reference = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md', import.meta.url), 'utf8');
   for (const step of RUN_STEPS) {
     assert.ok(reference.includes(step.id), step.id); assert.ok(reference.includes(step.name), step.name);
@@ -203,12 +203,12 @@ test("les artefacts distribués annoncent la même version de base", () => {
 
   const project = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8");
 
-  assert.match(command, /^version: 2\.1\.12$/m);
-  assert.match(manifest, /"version": "2\.1\.12\+codex\./);
-  assert.match(controller, /const version = "2\.1\.12"/);
-  assert.match(supervisor, /const version = "2\.1\.12"/);
-  assert.match(broker, /SERVER_VERSION = "2\.1\.12"/);
-  assert.match(project, /^version = "2\.1\.12"$/m);
+  assert.match(command, /^version: 2\.1\.13$/m);
+  assert.match(manifest, /"version": "2\.1\.13\+codex\./);
+  assert.match(controller, /const version = "2\.1\.13"/);
+  assert.match(supervisor, /const version = "2\.1\.13"/);
+  assert.match(broker, /SERVER_VERSION = "2\.1\.13"/);
+  assert.match(project, /^version = "2\.1\.13"$/m);
 });
 
 test("la mise à jour forcée redémarre les trois unités et délègue au skill associé", () => {
@@ -564,7 +564,7 @@ test("les trois noms de commandes sont explicites et leurs versions concordent",
   for (const name of ['CAB.md', 'CABU.md', 'cab.md']) {
     assert.ok(names.includes(name), name);
     const source = readFileSync(new URL(name, root), 'utf8');
-    assert.match(source, /^version: 2\.1\.12$/m);
+    assert.match(source, /^version: 2\.1\.13$/m);
   }
   const canonical = readFileSync(commandPath, 'utf8');
   assert.match(canonical, /Commande canonique : `\/CAB`/);
@@ -577,7 +577,7 @@ test("CABU impose update sans argument et cab transmet ses arguments", () => {
   for (const name of ['CABU.md', 'cab.md']) {
     const alias = readFileSync(new URL(name, root), 'utf8');
     assert.match(alias, /Charge intégralement le fichier frère `CAB\.md`/);
-    assert.match(alias, /version: 2\.1\.12/);
+    assert.match(alias, /version: 2\.1\.13/);
     assert.match(alias, /absent, illisible ou d'une version différente/);
     assert.match(alias, /CAB_COMMANDE_ALIAS_INDISPONIBLE/);
     assert.match(alias, /sans recherche\nglobale ni téléchargement/);
@@ -619,4 +619,15 @@ test('les identités et sélecteurs CAB/CABU restent en majuscules', () => {
   assert.ok(!command.includes('cabu@cab_codex_plugins'));
   const updater = readFileSync(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs', import.meta.url), 'utf8');
   assert.ok(updater.includes("local.name !== 'CAB'"));
+});
+
+
+test('release-unused distribue la procédure distincte et conserve le contrat concurrent embarqué',()=>{
+  const doc=readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/unused-test-reservations.md',import.meta.url),'utf8');
+  for(const word of ['release-unused','developerAuthorization','noEnvironmentMutation','noMutatingMandate',
+    'unusedReleaseBoundary','historyHash','unused-no-effect','compaction','ancien lecteur strict'])assert.ok(doc.includes(word),word);
+  for(const name of ['../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md','../.codex/commands/CAB.md']){
+    const text=readFileSync(new URL(name,import.meta.url),'utf8');
+    assert.ok(text.includes('references/unused-test-reservations.md'));assert.ok(text.includes('release-unused'));
+  }
 });

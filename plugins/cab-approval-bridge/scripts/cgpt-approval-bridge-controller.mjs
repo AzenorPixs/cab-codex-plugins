@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.12";
+const version = "2.1.13";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -40,6 +40,7 @@ const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 const statistics = new SessionStatistics(stateDirectory, { project: workspace });
 let registryRevision = 0;
 let nativeGeneration = 0;
+const nativeSessionGenerations = new Map();
 let lifecycleLease = null;
 let lifecycleMutations = 0;
 let observedOperations = new Map();
@@ -375,6 +376,70 @@ async function proveNativeCompletions(runId, access) {
     registry.completeNative(runId, op.operationId, proof);
   }
 }
+// This path verifies provenance and completeness; the orchestrator owns the no-effect review.
+async function verifyUnusedTestHistory(runId, context, entry, payload) {
+  const sessionId = registry.runs.get(runId)?.sessionId;
+  const quiescent = () => {
+    const job = context.publicJob();
+    if (payload.sessionId !== sessionId || payload.contextId !== entry.contextId ||
+        job?.currentCabMandate || job?.recovery || context.publicStatus().undecidedValidationCount || context.pendingEffects()) {
+      throw new CoordinationError('run-not-quiescent');
+    }
+  };
+  quiescent();
+  const boundary = registry.unusedTestBoundary(entry);
+  if (payload.boundaryDigest !== boundary) throw new CoordinationError('test-unused-boundary-stale');
+  const jobDigest = proofHash(context.publicJob());
+  const generation = nativeGeneration;
+  const sessionGeneration = nativeSessionGenerations.get(sessionId);
+  const read = async () => {
+    try { return await openCode.messages(sessionId, workspace); }
+    catch { throw new CoordinationError('test-unused-history-unavailable'); }
+  };
+  await checkNative(sessionId, true);
+  const messages = await read();
+  const parts = messages.flatMap((message) => message.parts.filter((part) => part.type === 'tool'));
+  const proof = { messageCount: messages.length, toolCount: parts.length, historyHash: proofHash(messages) };
+  if (!payload.nativeProof || proofHash(proof) !== proofHash(payload.nativeProof)) throw new CoordinationError('test-unused-history-divergent');
+  const ops = registry.unusedTestOperations(entry);
+  for (const op of ops) {
+    if (op.state === 'CANCELLED' && !op.native) continue;
+    if (op.state !== 'COMPLETED' || !op.native?.onceAcknowledged || op.native.kind !== 'bash') {
+      throw new CoordinationError('test-unused-operation-not-proved');
+    }
+    const matches = parts.map((part) => nativePartProof(op, part, sessionId)).filter(Boolean);
+    if (matches.length !== 1 || proofHash(matches[0]) !== op.completionDigest) {
+      throw new CoordinationError('test-unused-native-completion-divergent');
+    }
+  }
+  const acquiredAt = Date.parse(entry.grantedAt);
+  for (const message of messages) {
+    if (!Number.isFinite(message.info?.time?.created)) throw new CoordinationError('test-unused-history-invalid');
+    if (message.info.role === 'compaction' && message.info.time.created >= acquiredAt) {
+      throw new CoordinationError('test-unused-history-incomplete');
+    }
+    for (const part of message.parts.filter((part) => part.type === 'tool')) {
+      const time = part.state?.time;
+      if (!Number.isFinite(time?.start)) throw new CoordinationError('test-unused-history-invalid');
+      if (time.start < acquiredAt && message.info.time.created < acquiredAt &&
+          !ops.some((op) => op.native?.callId === (part.callID || part.callId))) continue;
+      if (!['completed','error'].includes(part.state.status) || !Number.isFinite(time.end) || time.end < time.start ||
+          part.state.metadata?.truncated === true) throw new CoordinationError('test-unused-history-incomplete');
+      const controlled = ops.some((op) => op.state === 'COMPLETED' && nativePartProof(op, part, sessionId));
+      const observation = ['read','glob','grep','cab_codemode_discovery',
+        'cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_broker_readiness',
+        'cgpt-validation_broker_health'].includes(part.tool);
+      if (!controlled && !observation) throw new CoordinationError('test-unused-native-tool-unreviewable');
+    }
+  }
+  await checkNative(sessionId, true);
+  const finalMessages = await read();
+  if (proofHash(finalMessages) !== proof.historyHash || generation !== nativeGeneration ||
+      sessionGeneration !== nativeSessionGenerations.get(sessionId) || jobDigest !== proofHash(context.publicJob()) ||
+      boundary !== registry.unusedTestBoundary(entry)) throw new CoordinationError('test-unused-boundary-stale');
+  quiescent();
+  return proof;
+}
 async function resolveCodingModel(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['model','reasoning','unavailablePreflights','providerMaxBytes'].includes(key)) ||
       (input.providerMaxBytes !== undefined && (!Number.isSafeInteger(input.providerMaxBytes) || input.providerMaxBytes <= 0))) {
@@ -660,6 +725,10 @@ async function handleRequest(request, response) {
         registry.resourceState.accesses[payload?.operationId]?.state === 'RELEASED') {
       json(response, 200, registry.releaseAccess(runId, payload)); return;
     }
+    if (match?.[2] === '/test-resources/release-unused' && request.method === 'POST' &&
+        registry.resourceState.testReservations?.[payload?.transactionId]?.state === 'RELEASED') {
+      json(response, 200, registry.unusedTestReplay(runId, payload)); return;
+    }
     if (match?.[2] === '/test-resources/release' && request.method === 'POST' &&
         registry.resourceState.testReservations?.[payload?.transactionId]?.state === 'RELEASED') {
       json(response, 200, registry.releaseTests(runId, payload)); return;
@@ -680,7 +749,7 @@ async function handleRequest(request, response) {
       if (!run || run.state !== 'RESERVED') throw new CoordinationError('run-not-reserved');
       observedRun = run;
       if (request.method === 'POST' && transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -694,6 +763,12 @@ async function handleRequest(request, response) {
       }
       if (request.method === 'POST' && url.pathname === '/test-resources/cancel') {
         json(response, 200, registry.cancelTests(runId, payload)); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/test-resources/release-unused') {
+        registry.admission(runId);
+        const entry = registry.testHeld(runId, payload);
+        const proof = await verifyUnusedTestHistory(runId, context, entry, payload);
+        json(response, 200, registry.releaseUnusedTests(runId, payload, proof)); return;
       }
       if (request.method === 'POST' && ['/test-resources/release', '/test-resources/reconcile'].includes(url.pathname)) {
         if (url.pathname.endsWith('/reconcile') && registry.resourceState.testReservations?.[payload.transactionId]?.reconciliationReceipts?.[payload.reconciliationId]) {
@@ -961,6 +1036,9 @@ async function consumeEvents() {
         const props = event.payload?.properties || event.properties || {};
         const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID || props.info?.id;
         const type = event.payload?.type || event.type;
+        if (session && activeContexts().some(([, context]) => context.sessions().includes(session))) {
+          nativeSessionGenerations.set(session, (nativeSessionGenerations.get(session) || 0) + 1);
+        }
         if (['session.status', 'session.idle', 'session.updated', 'session.deleted', 'session.inbox.enqueued', 'session.execution.started', 'session.execution.succeeded', 'session.execution.failed', 'session.execution.interrupted', 'permission.asked', 'permission.replied'].includes(type) &&
             (legacy.sessions().includes(session) || registry.resourceState.legacySources.some((source) => source.sessionId === session) ||
               activeContexts().some(([, context]) => context.sessions().includes(session)))) nativeGeneration++;

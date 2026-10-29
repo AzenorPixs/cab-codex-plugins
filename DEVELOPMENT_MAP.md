@@ -465,3 +465,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class notificationDiagnostics provisional
 ```
+
+### Restitution sans effet — SCM 2.1.13
+
+`release-unused-test-reservations` : ARCHIVÉ, **code non attribué**, 5/5 unités qualifiées ; Node534/28 ignorés, Python80/80, HTTP7/7, natif1/1 ; archive vérifiée ; aucune activation. [Proposition](openspec/changes/archive/2026-10-29-release-unused-test-reservations/proposal.md), [tâches](openspec/changes/archive/2026-10-29-release-unused-test-reservations/tasks.md). Attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    unusedTests["release-unused-test-reservations<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class unusedTests provisional
+```

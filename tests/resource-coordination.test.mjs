@@ -520,3 +520,88 @@ test('identifiants logiques historiques conservés sans donner de nouvelle rése
   const alias=[{key:'browser:host-a/Chromium',mode:'write'}];
   assert.throws(()=>h.r.testResources(alias),/test-resources-invalid/);
 });
+
+
+function unusedPayload(h, run, entry, extra = {}) {
+  return testPayload(run, entry, { contextId: run.contextId, sessionId: run.sessionId,
+    boundaryDigest: h.r.unusedTestBoundary(h.r.resourceState.testReservations[entry.transactionId]),
+    developerAuthorization: 'autorisation humaine ciblée de restitution sans effet',
+    attestation: { noEnvironmentMutation: true, noMutatingMandate: true,
+      operations: h.r.unusedTestOperations(h.r.resourceState.testReservations[entry.transactionId]).map((op) =>
+        ({ operationId: op.operationId, classification: op.state === 'CANCELLED' ? 'cancelled-without-execution' : 'read-only-no-effect' })) },
+    nativeProof: { messageCount: 4, toolCount: 2, historyHash: fingerprint('observed full native history') }, ...extra });
+}
+
+test('restitution sans effet : reçu durable, FIFO, idempotence et reprise des travaux indépendants', async (t) => {
+  const h = await fixture(t); const a = h.reserve('a', [lxcTest]); const b = h.reserve('b', [lxcTest]);
+  const entry = testLease(h, a, 'unused-a'); testLease(h, b, 'waiting-b');
+  const p = unusedPayload(h, a, entry);
+  assert.throws(() => h.r.extend('a', { version: a.version, resources: [file('independent')] }), /run-accesses-unresolved/);
+  const receipt = h.r.releaseUnusedTests('a', p, p.nativeProof);
+  assert.equal(receipt.state, 'RELEASED'); assert.equal(receipt.unusedReleaseReceipt.mode, 'unused-no-effect');
+  assert.equal(h.r.testReservations('b')[0].state, 'HELD');
+  assert.deepEqual(h.r.releaseUnusedTests('a', p, p.nativeProof), receipt);
+  assert.throws(() => h.r.releaseUnusedTests('a', {...p, evidence:['changed']}, p.nativeProof), /test-unused-release-divergent/);
+  assert.throws(() => h.r.releaseTests('a', p), /test-token-invalid/);
+  assert.equal(h.r.extend('a', { version:a.version, resources:[file('independent')] }).state, 'RESERVED');
+  const restored = await h.restart();
+  assert.deepEqual(restored.resourceState.testReservations[entry.transactionId], receipt);
+  assert.deepEqual(restored.releaseUnusedTests('a', p, p.nativeProof), receipt);
+});
+
+test('restitution sans effet : diagnostic terminé exit1 reste un échec, sans nettoyage fictif', async (t) => {
+  const h=await fixture(t); const a=h.reserve('a',[lxcTest]); const entry=testLease(h,a,'diagnostic-a');
+  const op=finishTestCommand(h,a,'diagnostic',a.resources,1); const p=unusedPayload(h,a,entry);
+  const receipt=h.r.releaseUnusedTests('a',p,p.nativeProof);
+  assert.deepEqual(receipt.unusedReleaseReceipt.operationIds,[op.operationId]);
+  assert.equal(h.r.resourceState.operations[op.operationId].nativeResult.exit,1);
+  assert.equal(receipt.cleanup,undefined);
+});
+
+test('restitution sans effet : attestations incomplètes, mutation, identités, preuve et frontière divergentes refusées', async (t) => {
+  const h=await fixture(t); const a=h.reserve('a',[lxcTest]); const entry=testLease(h,a,'negative-a');
+  finishTestCommand(h,a,'diagnostic',a.resources,1); const p=unusedPayload(h,a,entry);
+  for(const change of [x=>delete x.developerAuthorization,x=>x.developerAuthorization=' ',
+    x=>x.attestation.noEnvironmentMutation=false,x=>x.attestation.noMutatingMandate=false,
+    x=>x.attestation.operations=[],x=>x.attestation.operations.push(x.attestation.operations[0]),
+    x=>x.attestation.operations[0].classification='mutation',x=>x.attestation.extra=true,
+    x=>x.sessionId='ses_other',x=>x.contextId++,x=>x.version++,x=>x.token='wrong',x=>x.fencing++,
+    x=>x.boundaryDigest=fingerprint('old'),x=>x.nativeProof.historyHash=fingerprint('forged'),x=>x.extra=true]){
+    const q=structuredClone(p);change(q);assert.throws(()=>h.r.releaseUnusedTests('a',q,p.nativeProof));
+    assert.equal(h.r.testReservations('a')[0].state,'HELD');
+  }
+  finishTestCommand(h,a,'late-command');
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-unused-boundary-stale/);
+});
+
+test('restitution sans effet : opération préparée et restauration restent protégées', async (t) => {
+  const h=await fixture(t); const a=h.reserve('a',[lxcTest]); const entry=testLease(h,a,'guards-a');
+  h.prepare(a,'not-started'); let p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-unused-operation-not-proved/);
+  await h.restart();p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-reconciliation-required/);
+});
+
+
+test('restitution sans effet : accès actif, STOP et gel global ne sont jamais contournés',async(t)=>{
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'active-guard');
+  const op=h.prepare(a,'active-command');h.acquire(a,op);let p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-effects-unresolved/);
+  h.r.suspend('a',{version:a.version,action:'STOP',evidence:['arrêt ciblé']});p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/run-stop/);
+  const other=await fixture(t);const b=other.reserve('b',[lxcTest]);const held=testLease(other,b,'frozen-unused');
+  other.r.requestGlobal({cause:'GLOBAL_PAUSE',scope:'all',transactionId:'freeze-unused',authorization:'gel humain',evidence:['frontière']});
+  const frozen=unusedPayload(other,b,held);
+  assert.throws(()=>other.r.releaseUnusedTests('b',frozen,frozen.nativeProof),/global-coordination-suspended/);
+});
+
+test('restitution sans effet : opération annulée sans exécution et intégrité du reçu restauré',async(t)=>{
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'cancelled-cycle');
+  const op=h.prepare(a,'cancelled-operation');
+  const access=h.acquire(a,op);h.release(a,access,'NO_EFFECT');
+  const p=unusedPayload(h,a,entry);const receipt=h.r.releaseUnusedTests('a',p,p.nativeProof);
+  assert.deepEqual(receipt.unusedReleaseReceipt.operationIds,[op.operationId]);
+  const state=structuredClone(h.r.resourceState);state.testReservations[entry.transactionId].unusedReleaseReceipt.nativeProof.historyHash='0'.repeat(64);
+  assert.throws(()=>h.r.validateResourceState(state),/registry-restoration-invalid/);
+  assert.equal(h.r.resourceState.testReservations[entry.transactionId].state,'RELEASED');
+});
