@@ -1,5 +1,12 @@
 # CAB 1.10.4 — coordination atomique par ressource
 
+Ce profil est la référence du pilotage concurrent. Les anciens blocs techniques
+copiés dans les prompts ne font plus autorité. Les barrières ordinaires `/ready`,
+`/integration` et `/reconcile` issues de ces blocs ne sont pas utilisées à leur
+place : appliquer les accès, révisions, reçus et publications par ressources
+ci-dessous. Une migration historique suit uniquement la procédure de compatibilité
+prouvée ; elle ne réactive aucune permission consommée.
+
 Un processus OpenCode, un broker MCP stdio, un contrôleur et un superviseur servent plusieurs RUN dans un répertoire commun. Chaque RUN conserve session, job, décisions, preuves et checkpoint. Le contrat courant est `resource-scoped-v1` ; l'ancienne barrière ordinaire d'intégration n'est plus admise.
 
 ## Réservation et périmètre
@@ -66,7 +73,7 @@ POST /runs/<runId>/publish porte version, transactionId, operationId, token, fen
 
 Synchronisation et archivage OpenSpec restent des mandats distincts autorisés décrivant sources, destinations et parents utiles. Ils attendent les seuls accès incompatibles. Git reste distinctement autorisé ; son index/référence est une ressource logique sans gel des éditions indépendantes.
 
-Le passage atomique en REPORT, ou /closing après publication, limite irréversiblement le contexte au STATISTICS.md de sa propre archive. Écrire et vérifier ce rapport sous son seul accès. Rapport à six sections, preuves, gate individuel, désarmement puis /release restent obligatoires avant livraison. Une archive seule ne prouve pas la fin du change ou du parent.
+Lorsqu'un archivage autorisé a effectivement réussi et qu'un rapport d'archive est requis, le passage atomique en REPORT, ou /closing après publication, limite irréversiblement le contexte au STATISTICS.md de cette archive. Cette procédure d'archive ne s'applique pas à un diagnostic, à une préparation ou à une revalidation sans nouvel archivage ; employer le contrat correspondant à sa finalité. Écrire et vérifier ce rapport sous son seul accès. Rapport à six sections, preuves, gate individuel, désarmement puis /release restent obligatoires avant livraison. Une archive seule ne prouve pas la fin du change ou du parent.
 
 ## Pause, arrêt et exceptions communes
 

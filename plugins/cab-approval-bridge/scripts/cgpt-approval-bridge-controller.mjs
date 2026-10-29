@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.11";
+const version = "2.1.12";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -445,6 +445,12 @@ async function handleRequest(request, response) {
   let observedRun = null;
   let attemptedReservation = null;
   let lifecycleMutation = false;
+  let httpFailureObserved = false;
+  request.cabObserveHttpFailure = (code) => {
+    if (httpFailureObserved || !observedRun || !/^[a-z][a-z0-9-]{0,79}$/.test(code || '')) return;
+    httpFailureObserved = true;
+    observeStatistics(() => statistics.httpFailure(observedRun, code));
+  };
   try {
     const url = new URL(request.url, 'http://localhost');
     if (url.pathname.startsWith('/monitor/lifecycle/')) {
@@ -910,7 +916,7 @@ async function handleRequest(request, response) {
     const newSession = context.publicJob()?.sessionId;
     if (runId && oldSession && newSession !== oldSession) registry.transfer(runId, newSession);
   } catch (cause) {
-    observeStatistics(() => statistics.httpFailure(observedRun, cause.code));
+    request.cabObserveHttpFailure(cause.code);
     observeStatistics(() => statistics.admissionFailure(attemptedReservation, cause.code));
     if (!response.headersSent) json(response, cause.status || 409,
       cause.code === 'command-too-long' ? cause.diagnostic : { error: cause.code || cause.message });

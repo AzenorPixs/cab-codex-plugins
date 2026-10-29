@@ -1,4 +1,6 @@
 import copy
+import io
+import json
 import hashlib
 import os
 from pathlib import Path
@@ -12,6 +14,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import cgpt_approval_bridge_server as bridge
+
+real_maybe_notify_controller = bridge.maybe_notify_controller
 
 
 class ConcurrentBrokerTest(unittest.TestCase):
@@ -94,6 +98,51 @@ class ConcurrentBrokerTest(unittest.TestCase):
                 bridge.do_propose({**self.args(), "access_id": value})
             self.assertEqual(bridge.load_store(bridge.store_path())["approvals"], {})
         self.assertEqual(bridge.do_propose(self.args())["status"], "PENDING")
+
+    def test_notification_diagnostic_persists_only_under_current_lease_and_clears_on_delivery(self):
+        args = self.args()
+        item = bridge.do_propose(args)
+        diagnostic = {"http_status": 409, "error_code": "resource-revision-stale"}
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        bridge.complete_notification_lease(item["approval_id"], "stale-lease", False, diagnostic)
+        self.assertNotIn("notification_diagnostic", bridge.do_get({"approval_id": item["approval_id"]}))
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, diagnostic)
+        restored = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertEqual(restored["notification_diagnostic"], diagnostic)
+        self.assertEqual(restored["status"], "PENDING")
+        self.assertEqual(restored["notification_status"], "FAILED")
+        self.assertEqual(restored["notification_attempts"], 1)
+        with patch.object(bridge, "notification_retry_due", return_value=True):
+            current = bridge.acquire_notification_lease(item["approval_id"])
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], True)
+        self.assertEqual(bridge.do_get({"approval_id": item["approval_id"]})["notification_status"], "SENDING")
+        bridge.complete_notification_lease(item["approval_id"], current["lease_id"], True)
+        delivered = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertNotIn("notification_diagnostic", delivered)
+        self.assertEqual(delivered["notification_status"], "DELIVERED")
+        self.assertEqual(delivered["notification_attempts"], 2)
+        self.assertEqual(delivered["status"], "PENDING")
+
+    def test_notification_diagnostic_rejects_untrusted_shape(self):
+        item = bridge.do_propose(self.args())
+        diagnostic = {"http_status": 409, "error_code": "resource-revision-stale"}
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, {**diagnostic, "message": "PRIVATE"})
+        restored = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertNotIn("notification_diagnostic", restored)
+        self.assertNotIn("PRIVATE", str(restored))
+
+    def test_http_refusal_diagnostic_reaches_persisted_approval_without_decision(self):
+        item = bridge.do_propose(self.args())
+        body = json.dumps({"error": "resource-revision-stale", "message": "PRIVATE"}).encode()
+        exc = bridge.error.HTTPError("http://controller", 409, "Conflict", {}, io.BytesIO(body))
+        with patch.object(bridge.request, "urlopen", side_effect=exc):
+            self.assertFalse(real_maybe_notify_controller(item))
+        restored = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertEqual(restored["notification_diagnostic"], {"http_status": 409, "error_code": "resource-revision-stale"})
+        self.assertEqual(restored["notification_attempts"], 1)
+        self.assertEqual(restored["status"], "PENDING")
+        self.assertNotIn("PRIVATE", str(restored))
 
     def test_old_controller_cannot_receive_new_run_through_legacy_route(self):
         item = bridge.do_propose(self.args())

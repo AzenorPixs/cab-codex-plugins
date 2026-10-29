@@ -60,7 +60,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.11` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.12` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -1160,7 +1160,7 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.11 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.12 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1275,7 +1275,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.11 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.12 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1340,7 +1340,7 @@ Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de 
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.11.
+La distribution courante des quatre briques, plugins et commandes est 2.1.12.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -1465,3 +1465,31 @@ ni tronquer le transcript pour franchir cette limite.
 Les tests et lectures filtrées qualifient les sources. L’activation CABU et
 la récupération réelle du RUN restent des étapes distinctes, coordonnées
 séparément ; les services actifs ne sont pas modifiés par cette préparation.
+
+## Diagnostics de notification et refus avant admission — source 2.1.12
+
+Une approbation peut rester `PENDING` alors que sa notification au contrôleur
+est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
+échec HTTP sous la forme `{http_status, error_code}`. Le code est reconnu dans
+une liste fermée pour son statut ; `null` signifie inconnu. Le corps est lu
+sous une limite de1024 octets, sans recopier message distant, ressources,
+commande ou champ arbitraire. Le diagnostic existant `command-too-long` reste
+filtré comme auparavant. La lease exacte conditionne la persistance ; un
+résultat périmé n’écrase rien et une livraison réussie retire l’ancien diagnostic.
+Les anciennes approbations restent compatibles sans ce champ.
+
+Les refus de validation corrélés au RUN connu sont comptés dans
+`GET /runs/<runId>/statistics`, section `contexts[].httpFailures`, y compris
+lorsqu’ils surviennent localement avant admission. Chaque requête HTTP compte
+au plus une fois ; les réessais sont des tentatives distinctes. Ce compteur
+ne représente ni des demandes uniques, ni des décisions `REJECTED`. Une demande
+non admise ne doit pas apparaître comme validation indécise. Les compteurs ne
+contiennent aucun corps ou contenu métier.
+
+Lire le diagnostic et les révisions réellement observées ; ne pas inventer
+une révision0 pour une ressource non listée. Réconcilier l’ancienne demande
+sans effet puis préparer une demande exacte neuve selon les règles applicables.
+`FAILED` ne donne aucune décision, attribution, admission, permission ou retry
+exécutable ; les corrélations, révisions, accès et `ask/once` restent inchangés.
+La préparation source n’active rien. L’activation CABU coordonnée est rapportée
+avec les versions des processus réels avant notification aux sessions.

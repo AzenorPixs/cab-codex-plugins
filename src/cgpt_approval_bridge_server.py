@@ -69,7 +69,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.11"
+SERVER_VERSION = "2.1.12"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -2187,18 +2187,32 @@ def journal_controller_event(
     )
 
 
-def controller_length_failure(exc):
-    """Reconstruit uniquement le diagnostic de longueur connu, sans texte distant."""
-    if exc.code != 400:
-        return None
+CONTROLLER_NOTIFICATION_ERROR_CODES = {
+    400: frozenset(("expected-revisions-invalid", "command-too-long")),
+    409: frozenset((
+        "resource-revision-stale", "reservation-version-stale",
+        "operation-outside-reservation", "validation-reservation-divergent",
+        "run-mandate-already-active", "coordination-upgrade-required",
+        "native-validation-not-correlated", "native-permission-ask-required",
+        "native-permission-context-divergent", "native-permission-control-unavailable",
+        "validation-session-not-admitted", "run-not-reserved", "run-transition-in-flight",
+    )),
+}
+
+
+def controller_error_payload(exc):
+    """Lit un diagnostic JSON borné, sans propager de texte distant."""
     try:
         body = exc.read(1025)
         if len(body) > 1024:
             return None
-        payload = json.loads(body.decode("utf-8"))
+        return json.loads(body.decode("utf-8"))
     except (OSError, HTTPException, ValueError, UnicodeError):
         return None
-    if not isinstance(payload, dict):
+
+
+def controller_length_diagnostic(status, payload):
+    if status != 400 or not isinstance(payload, dict):
         return None
     maximum = payload.get("maxLength")
     actual = payload.get("actualLength")
@@ -2208,6 +2222,23 @@ def controller_length_failure(exc):
         return None
     return ("command-too-long: longueur %d, limite autorisée %d (utf16)."
             % (actual, maximum))
+
+
+def controller_length_failure(exc):
+    """Compatibilité du diagnostic de longueur déjà publié."""
+    return controller_length_diagnostic(exc.code, controller_error_payload(exc))
+
+
+def filtered_notification_diagnostic(value):
+    if not isinstance(value, dict) or set(value) != {"http_status", "error_code"}:
+        return None
+    status, code = value["http_status"], value["error_code"]
+    if type(status) is not int or not 100 <= status <= 599:
+        return None
+    if code is not None and (not isinstance(code, str)
+            or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())):
+        return None
+    return {"http_status": status, "error_code": code}
 
 
 def notify_controller(
@@ -2257,6 +2288,7 @@ def notify_controller(
     delivered = False
     status = None
     failure = ""
+    diagnostic = None
 
     try:
         with request.urlopen(
@@ -2279,7 +2311,14 @@ def notify_controller(
     except error.HTTPError as exc:
         status = exc.code
         with exc:
-            failure = controller_length_failure(exc) or "HTTPError: %s" % status
+            payload = controller_error_payload(exc)
+            length_failure = controller_length_diagnostic(status, payload)
+            code = payload.get("error") if isinstance(payload, dict) else None
+            if (not isinstance(code, str) or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())
+                    or (code == "command-too-long" and not length_failure)):
+                code = None
+            diagnostic = filtered_notification_diagnostic({"http_status": status, "error_code": code})
+            failure = length_failure or "HTTPError: %s" % status
 
     except error.URLError as exc:
         failure = (
@@ -2320,6 +2359,9 @@ def notify_controller(
             "error": failure,
         }
 
+    if diagnostic is not None:
+        event_data["diagnostic"] = diagnostic
+
     journal_controller_event(
         item,
         event_type,
@@ -2335,6 +2377,7 @@ def notify_controller(
         "delivered": delivered,
         "http_status": status,
         "error": failure,
+        "diagnostic": diagnostic,
     }
 
 
@@ -3044,6 +3087,7 @@ def complete_notification_lease(
     approval_id,
     lease_id,
     delivered,
+    diagnostic=None,
 ):
     path = store_path()
 
@@ -3126,6 +3170,12 @@ def complete_notification_lease(
                 )
             )
 
+        safe_diagnostic = filtered_notification_diagnostic(diagnostic)
+        if not delivered and safe_diagnostic is not None:
+            item["notification_diagnostic"] = safe_diagnostic
+        else:
+            item.pop("notification_diagnostic", None)
+
         save_store(
             path,
             data,
@@ -3167,6 +3217,7 @@ def maybe_notify_controller(item):
             "lease_id"
         ],
         delivered,
+        notification_result.get("diagnostic"),
     )
 
     return delivered

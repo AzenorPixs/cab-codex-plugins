@@ -454,3 +454,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class directRecovery provisional
 ```
+
+### Actualisation SCM diagnostics — 29 octobre 2026
+
+`fix-notification-admission-diagnostics` : ARCHIVÉ, **code non attribué**, source2.1.12. Sources qualifiées : Node520 réussis/28 ignorés, Python80/80, natif1/1 ; archive vérifiée ; activation CABU à suivre séparément. [Proposition](openspec/changes/archive/2026-10-29-fix-notification-admission-diagnostics/proposal.md), [tâches](openspec/changes/archive/2026-10-29-fix-notification-admission-diagnostics/tasks.md). CABU explicitement autorisé après clôture source et coordination ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    notificationDiagnostics["fix-notification-admission-diagnostics<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class notificationDiagnostics provisional
+```

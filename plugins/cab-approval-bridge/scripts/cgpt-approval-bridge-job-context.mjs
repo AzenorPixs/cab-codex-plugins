@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.11";
+export const VERSION = "2.1.12";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -250,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.11",
+    version: "2.1.12",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -492,12 +492,13 @@ async function checkNativeAsk(operation, nativeKind = operation?.kind) {
   if (!hasNativeAsk(session, nativeKind)) nativePermissionFailure("native-permission-ask-required");
 }
 
-async function nativeAskGuard(operation, response) {
+async function nativeAskGuard(operation, response, request) {
   try {
     await checkNativeAsk(operation);
     return true;
   } catch (cause) {
     if (cause.code !== "NATIVE_PERMISSION_GUARD") throw cause;
+    request?.cabObserveHttpFailure?.(cause.message);
     updateStatus("native-permission-guard-refused", { error: cause.message });
     response.writeHead(409, { "content-type": "application/json" });
     response.end(JSON.stringify({ error: cause.message }));
@@ -1743,7 +1744,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.11",
+      version: "2.1.12",
     },
   });
 
@@ -2434,12 +2435,14 @@ const handle = async (request, response, url) => {
           ? operationContextAllowed(operation, requestId) : operationAllowed(operation, requestId);
         if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
+          request.cabObserveHttpFailure?.("validation-session-not-admitted");
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
         }
-        if (!(await nativeAskGuard(operation, response))) return;
+        if (!(await nativeAskGuard(operation, response, request))) return;
         if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
+          request.cabObserveHttpFailure?.("validation-session-not-admitted");
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
         }
@@ -2524,6 +2527,7 @@ const handle = async (request, response, url) => {
           })
         );
       } catch (cause) {
+        request.cabObserveHttpFailure?.(cause.code || 'validation-request-invalid');
         if (cause.code === 'command-too-long') {
           response.writeHead(400, { 'content-type': 'application/json' });
           response.end(JSON.stringify(cause.diagnostic));
@@ -2557,12 +2561,14 @@ const handle = async (request, response, url) => {
           ? operationContextAllowed(operation, requestId) : operationAllowed(operation, requestId);
         if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
+          request.cabObserveHttpFailure?.("validation-session-not-admitted");
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
         }
-        if (!(await nativeAskGuard(operation, response))) return;
+        if (!(await nativeAskGuard(operation, response, request))) return;
         if (!admissionAllowed() || !recoveryApprovalAllowed(approval)) {
           response.writeHead(409, { "content-type": "application/json" });
+          request.cabObserveHttpFailure?.("validation-session-not-admitted");
           response.end(JSON.stringify({ error: "validation-session-not-admitted" }));
           return;
         }
@@ -2620,6 +2626,7 @@ const handle = async (request, response, url) => {
         response.writeHead(202, { "content-type": "application/json" });
         response.end(JSON.stringify({ requestId, status: "PENDING" }));
       } catch (cause) {
+        request.cabObserveHttpFailure?.(cause.code || 'validation-request-invalid');
         if (cause.code === 'command-too-long') {
           response.writeHead(400, { 'content-type': 'application/json' });
           response.end(JSON.stringify(cause.diagnostic));
@@ -2728,7 +2735,7 @@ const handle = async (request, response, url) => {
           }
 
           if (decision.decision === "approved" &&
-              !(await nativeAskGuard(validation.operation, response))) return;
+              !(await nativeAskGuard(validation.operation, response, request))) return;
           if (httpDecisions.has(requestId) || (decision.decision === 'approved' && (validation.operationInvalidated ||
               !operationAllowed(validation.operation, requestId)))) {
             throw new Error("Validation déjà décidée ou hors session admise.");
