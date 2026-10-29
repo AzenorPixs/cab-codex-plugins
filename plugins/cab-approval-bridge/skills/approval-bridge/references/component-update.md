@@ -1,4 +1,4 @@
-# Mise à jour autonome des briques CAB — CAB 2.1.10
+# Mise à jour autonome des briques CAB — CAB 2.1.11
 
 ## Association du skill et des commandes
 
@@ -92,7 +92,7 @@ Web restent ouverts ; aucun connect/disconnect ni instance/dispose n'est permis.
 Les pairs doivent conserver une PAUSE explicitement autorisée. Après complete,
 la récupération ne vaut pas autorisation métier dans l'état mixte : une
 maintenance ordinaire distinctement autorisée doit aligner réellement les
-quatre briques en 2.1.10, puis chaque reprise est validée. Cette seconde étape
+quatre briques en 2.1.11, puis chaque reprise est validée. Cette seconde étape
 peut reconnecter le broker et relancer le Web, sans fermer OpenCode.
 Un autre PENDING ou un écart entre compteurs global/RUN/session bloque le
 profil ; aucune demande inconnue n'est annulée ou attribuée par déduction.
@@ -171,7 +171,7 @@ La politique ordinaire explicite `--broker-policy reuse-readonly` exige
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
-doit être la cible 2.1.10 ; la version chargée est vérifiée indépendamment.
+doit être la cible 2.1.11 ; la version chargée est vérifiée indépendamment.
 Les trois fichiers sont seulement lus et comparés au paquet. Aucun stage,
 backup restaurable, remplacement, nouveau lien ou compilation sur place du
 broker n'est effectué. Les droits et propriétaires restent conservés.
@@ -259,7 +259,7 @@ présenté comme vérifié sur la seule base d'un test simulé.
 
 ## Transition ordinaire depuis 1.9.0 vers 1.10.5
 
-Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.10.7, 1.10.8, 1.10.9, 1.10.10 et la cible 2.1.10. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 2.1.10, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
+Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.10.7, 1.10.8, 1.10.9, 1.10.10 et la cible 2.1.11. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 2.1.11, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
 
 ## Registre de maintenance volumineux — 1.10.9
 
@@ -299,7 +299,7 @@ La récupération conserve le même journal et les mêmes destinations. Le jeu W
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs et
 cgpt-approval-bridge-process-lifecycle.mjs.
 
-### CABU 2.1.10 : coupure courte et reprise
+### CABU 2.1.11 : coupure courte et reprise
 
 CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
 et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
@@ -314,14 +314,14 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.10 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.11 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
 INDISPONIBLE. Les durées preparationMs, unavailableMs et totalMs sont publiées ;
 la cible est moins de cinq secondes de coupure dans le banc contrôlé.
 
-Contrat courant CABU 2.1.10 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.11 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -345,7 +345,7 @@ location ; les requêtes de session gardent le workspace du RUN via
 x-opencode-directory. Ne pas créer un deuxième broker dans un projet distinct.
 
 
-## Prévol du credential et installation mixte — 2.1.10
+## Prévol du credential et installation mixte — 2.1.11
 
 Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
 
@@ -360,15 +360,15 @@ Un échec après coupure expose `failureCode`, `serviceFailures` (composant, Act
 
 ### Permissions réappliquées par DIU
 
-DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.10, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
+DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.11, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
 
 Le provisionnement d’un credential absent exige en revanche un répertoire détenu par l’utilisateur et non modifiable par le groupe ou les autres. Si DIU a remis `0770` et que le fichier manque, rétablir les permissions sûres du seul répertoire CAB, par exemple `0700`, avant le raccord explicitement autorisé à OPENCODE_PASSWORD. Préserver le credential et son mode lors des mises à jour DIU ; ne jamais afficher sa valeur. La variable reste facultative pour les projets qui n’utilisent pas OpenCode.
 
-### Arrêt technique 2.1.10
+### Arrêt technique 2.1.11
 
 Le paquet inclut process-lifecycle dans les scripts communs et ceux du moniteur. La disparition prouvée de l’instance serveur OpenCode suivie ferme les trois services ; une simple déconnexion MCP pendant update ne ferme pas le serveur et ne déclenche pas cet arrêt. Les unités empêchent la relance du statut de nettoyage incomplet 78. Une installation en absence initiale d’OpenCode reste possible : les services attendent leur premier rattachement. Les données métier et les contrôles de reprise restent conservés.
 
-## Réconciliation humaine du rejet après redémarrage — 2.1.10
+## Réconciliation humaine du rejet après redémarrage — 2.1.11
 
 Après accord humain spécifique, utiliser la phase `reconcile-rejected` de
 `POST /runs/<run_id>/job/recover` avec les mêmes jobId, expectedSessionId,
@@ -388,7 +388,7 @@ récupération non réconciliée ou effet inconnu interdit la levée. Le nouveau
 prévol normal exige ensuite ask, décision, once, exit 0 et READY avant
 complete. Cette voie ne remplace ni retry ni la procédure CABU.
 
-## Raccord Code Mode OpenCode 2.2 — 2.1.10
+## Raccord Code Mode OpenCode 2.2 — 2.1.11
 
 Le client reconnaît seulement le retour direct d'un appel MCP cgpt-validation
 avec objet de données littérales. Les clés peuvent être des identifiants
@@ -421,7 +421,7 @@ synthétique loopback, broker réel, prévol et écriture sous once, puis contr�
 de disparition du broker et nettoyage. Aucune configuration ou credential
 réel n'est copié. Après archive et publication, CABU précède le recovery réel.
 
-## Découverte non autorisante — complément 2.1.10
+## Découverte non autorisante — complément 2.1.11
 
 Le diagnostic Code Mode admet aussi un unique search à données littérales
 suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
@@ -429,4 +429,30 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.10 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.11 ; les preuves 2.1.8 restent historiques.
+
+## Récupération directe et pagination — source 2.1.11
+
+Le retry historique du refus `access_id` vide reconnaît aussi les erreurs MCP
+natives directes qualifiées, en plus de Code Mode : partie assistant tool pour
+request_validation/get_approval, executed faux, error de type tool.execution,
+itemId natif fc_ lié exactement au call_, et temps created/ran/completed
+entiers positifs ordonnés. Le client dérive la provenance et l’empreinte de
+la partie complète ; une marque libre ne suffit pas. Le refus déterministe,
+les identités/génération exactes, `/usr/bin/true` unique, le lookup natif inconnu
+corrélé, la quiescence et l’absence d’effet restent requis. Le prévol suivant
+a une identité neuve dans la même candidate. Aucun -32602 n’est fabriqué et
+aucun once n’est rejoué. Les autres formes restent refusées.
+
+Pour les historiques volumineux, le client conserve le plafond de 2 Mio et
+réduit par moitié la limite de la même page seulement après
+`opencode-response-too-large`, de 200 jusqu’à un minimum de un. Il n’avance pas
+le curseur et ne conserve aucune réponse partielle lors de cette réduction.
+Les pages complètes, l’ordre, les curseurs et la borne de 100 pages restent
+contrôlés ; un message unique trop volumineux échoue explicitement. Les autres
+erreurs ne sont pas masquées ni réessayées par ce mécanisme. Ne pas purger
+ni tronquer le transcript pour franchir cette limite.
+
+Les tests et lectures filtrées qualifient les sources. L’activation CABU et
+la récupération réelle du RUN restent des étapes distinctes, coordonnées
+séparément ; les services actifs ne sont pas modifiés par cette préparation.

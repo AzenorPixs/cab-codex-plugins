@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.10';
+export const VERSION = '2.1.11';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -248,6 +248,18 @@ function nativeUsage(message) {
   return Object.keys(usage).length ? { ...usage, usageSource: 'opencode-v2' } : usage;
 }
 
+function directMcpError(content) {
+  if (!['cgpt-validation_request_validation', 'cgpt-validation_get_approval'].includes(content.name) ||
+      content.executed !== false || content.state.status !== 'error' ||
+      !record(content.state.error) || content.state.error.type !== 'tool.execution' ||
+      typeof content.state.error.message !== 'string' || !/^call_[A-Za-z0-9_-]{1,200}$/.test(content.id) ||
+      !record(content.native) || content.native.itemId !== 'fc_' + content.id.slice(5)) return null;
+  const time = content.time;
+  if (!record(time) || ['created', 'ran', 'completed'].some(key => !Number.isSafeInteger(time[key]) || time[key] <= 0) ||
+      time.created > time.ran || time.ran > time.completed) return null;
+  return { itemId: content.native.itemId, envelopeHash: createHash('sha256').update(canonical(content)).digest('hex') };
+}
+
 function normalizeMessage(message, sessionId) {
   if (!record(message) || typeof message.id !== 'string' || typeof message.type !== 'string') fail('opencode-message-invalid');
   const model = record(message.model) ? { providerID: message.model.providerID, modelID: message.model.id,
@@ -281,13 +293,14 @@ function normalizeMessage(message, sessionId) {
     const error = typeof state.error === 'string' ? state.error : record(state.error) && typeof state.error.message === 'string'
       ? state.error.message : undefined;
     const nativeMetadata = record(state.metadata) ? { ...state.metadata } : state.metadata;
-    if (record(nativeMetadata)) delete nativeMetadata.cabCodeMode;
+    if (record(nativeMetadata)) { delete nativeMetadata.cabCodeMode; delete nativeMetadata.cabDirectMcpError; }
+    const directError = directMcpError(content);
     if (content.executed !== undefined && typeof content.executed !== 'boolean') fail('opencode-message-invalid');
     const part = { type: 'tool', id: content.id, tool: content.name === 'shell' ? 'bash' : content.name, callID: content.id, executed: content.executed,
       ...((content.name === 'shell' || ['write', 'edit'].includes(content.name) && content.executed === false)
         ? { nativeFormat: 'opencode-v2', nativeTool: content.name } : {}),
       state: { status: state.status, input: state.input, output, error,
-        metadata: nativeMetadata, time: { start: content.time?.ran ?? content.time?.created,
+        metadata: directError ? { ...nativeMetadata, cabDirectMcpError: directError } : nativeMetadata, time: { start: content.time?.ran ?? content.time?.created,
           end: content.time?.completed } } };
     normalized.parts.push(content.name === 'execute' ? codeModePart(content, part) || part : part);
   }
@@ -466,10 +479,20 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   async function messages(sessionId, directoryValue = directory) {
     const result = [];
     let cursor;
+    let pageSize = 200;
     const seen = new Set();
     for (let page = 0; page < 100; page++) {
-      const response = await json(`/api/session/${encodeURIComponent(sessionId)}/message`,
-        { query: { order: cursor === undefined ? 'asc' : undefined, limit: '200', cursor } });
+      let response;
+      for (;;) {
+        try {
+          response = await json(`/api/session/${encodeURIComponent(sessionId)}/message`,
+            { query: { order: cursor === undefined ? 'asc' : undefined, limit: String(pageSize), cursor } });
+          break;
+        } catch (cause) {
+          if (cause.code !== 'opencode-response-too-large' || pageSize === 1) throw cause;
+          pageSize = Math.max(1, Math.floor(pageSize / 2));
+        }
+      }
       if (!record(response) || !Array.isArray(response.data) || !record(response.cursor)) fail('opencode-messages-invalid');
       result.push(...response.data.map((item) => normalizeMessage(item, sessionId)));
       const next = response.cursor.next;

@@ -926,7 +926,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.10');
+  assert.equal(initialized.result.serverInfo.version, '2.1.11');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1633,6 +1633,73 @@ for (const type of ['session.execution.started', 'session.execution.succeeded', 
     };
     const result = await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] });
     assert.equal(result.body.error, 'native-observation-changed');
+    assert.deepEqual(h.native.replies, []);
+  });
+}
+
+async function directNativeRefusal(t) {
+  const value = await unregisteredNativeRefusal(t);
+  const { h, recovery, refusal, lookup } = value;
+  const stamp = Date.now();
+  const direct = (part, index) => ({ type: 'tool', id: 'call_direct' + index,
+    name: part === refusal ? 'cgpt-validation_request_validation' : 'cgpt-validation_get_approval',
+    executed: false, native: { itemId: 'fc_direct' + index }, time: { created: stamp, ran: stamp + 1, completed: stamp + 2 },
+    state: { status: 'error', input: structuredClone(part.state.metadata.toolCalls[0].input),
+      error: { type: 'tool.execution', message: part.state.output } } });
+  const parts = [direct(refusal, 1), direct(lookup, 2)];
+  h.native.messages[recovery.sessionId] = [{ nativeV2: { id: 'msg_direct', type: 'assistant', content: parts } }];
+  return { ...value, parts };
+}
+
+test('retry MCP direct : refus et lookup natifs conservent la candidate, prévol neuf sous once puis complete', async t => {
+  const { h, recovery } = await directNativeRefusal(t);
+  const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-direct-next' });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal(result.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(result.body.recovery.attempts[0].nativeToolCount, 2);
+  assert.deepEqual(h.native.replies, []);
+  const run = (await h.get('/runs')).body.runs.find(r => r.runId === 'refusal');
+  const { approval, access } = await h.approvedAccess({ ...run, sessionId: recovery.sessionId }, 'preflight-direct-next');
+  await h.execute(approval); await h.completeTool(approval);
+  const messages = h.native.messages[recovery.sessionId], command = messages.at(-1).parts[0];
+  const submitted = messages.find(message => message.parts?.[0]?.state?.input?.requestId === approval.requestId).parts[0];
+  submitted.state = { ...submitted.state, status: 'completed', output: JSON.stringify({ ...approval, status: 'APPROVED' }),
+    time: { start: command.state.time.start - 2, end: command.state.time.start - 1 } };
+  messages.push({ parts: [{ type: 'tool', tool: 'cgpt-validation_broker_readiness', state: { status: 'completed',
+    input: {}, output: JSON.stringify({ status: 'READY', pending_count: 0 }),
+    time: { start: command.state.time.end + 1, end: command.state.time.end + 2 } } }] });
+  assert.equal((await h.releaseOperation(run, approval, access)).status, 200);
+  const done = await h.post('/runs/refusal/job/recover', { ...recovery, preflightRequestId: 'preflight-direct-next', phase: 'complete' });
+  assert.equal(done.status, 200, JSON.stringify(done));
+  assert.equal(done.body.sessionId, recovery.sessionId); assert.equal(done.body.recovery, null);
+  assert.equal(h.native.replies.length, 1);
+});
+
+for (const kind of ['type-libre', 'item-divergent', 'temps-absent', 'temps-inverse', 'execute-vrai', 'session-divergente',
+  'generation-divergente', 'lookup-absent', 'lookup-faux', 'effet-supplementaire', 'marqueur-fabrique', 'refus-non-deterministe']) {
+  test('retry MCP direct reste fermé : ' + kind, async t => {
+    const { h, recovery, parts } = await directNativeRefusal(t);
+    if (kind === 'type-libre') parts[0].state.error = parts[0].state.error.message;
+    if (kind === 'item-divergent') parts[0].native.itemId = 'fc_other';
+    if (kind === 'temps-absent') delete parts[0].time.ran;
+    if (kind === 'temps-inverse') parts[0].time.completed = parts[0].time.created - 1;
+    if (kind === 'execute-vrai') parts[0].executed = true;
+    if (kind === 'session-divergente') parts[0].state.input.session_id = 'ses_other';
+    if (kind === 'generation-divergente') parts[0].state.input.reservation_version++;
+    if (kind === 'lookup-absent') parts.pop();
+    if (kind === 'lookup-faux') parts[1].state.error.message = 'approval inconnue';
+    if (kind === 'effet-supplementaire') parts.push({ type: 'tool', id: 'call_shell', name: 'shell', executed: true,
+      time: { created: 1, ran: 2, completed: 3 }, state: { status: 'completed', input: { command: '/usr/bin/true' }, metadata: { exit: 0 } } });
+    if (kind === 'marqueur-fabrique') {
+      delete parts[0].native; parts[0].state.metadata = { cabDirectMcpError: { itemId: 'fc_forged', envelopeHash: '0'.repeat(64) } };
+    }
+    if (kind === 'refus-non-deterministe') parts[0].state.input.access_id = 'valid-access';
+    const before = (await h.get('/runs/refusal/job')).body;
+    const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+      previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-direct-next' });
+    assert.equal(result.status, 409, JSON.stringify(result));
+    assert.deepEqual((await h.get('/runs/refusal/job')).body.recovery, before.recovery);
     assert.deepEqual(h.native.replies, []);
   });
 }

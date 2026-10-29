@@ -443,3 +443,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class nativeEditMandate provisional
 ```
+
+### Actualisation SCM directe — 29 octobre 2026
+
+`fix-direct-native-mcp-error-recovery` : ARCHIVÉ, **code non attribué**, source 2.1.11 ; provenance directe et retry qualifiés sur banc isolé, pagination adaptative testée ; Node519 réussis/28 ignorés, Python75/75 et natif1/1 ; archive vérifiée. [Proposition](openspec/changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/proposal.md), [tâches](openspec/changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/tasks.md). Aucune activation ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    directRecovery["fix-direct-native-mcp-error-recovery<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class directRecovery provisional
+```

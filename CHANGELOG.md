@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.11 — Erreurs MCP directes et historiques volumineux
+
+- Provenance native directe qualifiée pour le retry historique access_id vide, sans retrait des gardes, altération du transcript ou rejeu once.
+- Pagination adaptative sous le plafond inchangé de 2 Mio, sans résultat partiel ; un message unique trop volumineux reste refusé. Consignes CAB et version commune alignées ; activation distincte.
+
 ## 2.1.10 — Édition native, récupération et protocole V2
 
 - Qualification isolée de `edit` natif OpenCode 2.2 : signature, remplacement partiel sous CAB ask/once, refus et ambiguïté sans écriture. Consignes V2 dans le skill et la commande CAB ; distinction avec la découverte MCP.

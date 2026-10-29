@@ -412,3 +412,71 @@ test('erreur MCP V2 : provenance structurée stricte et texte libre sans preuve 
     assert.equal((await codeModeFixture(t, changed)).tool, 'execute');
   }
 });
+
+function directErrorFixture(name = 'request_validation') {
+  return { type: 'tool', id: 'call_direct01', name: 'cgpt-validation_' + name, executed: false,
+    native: { itemId: 'fc_direct01' }, time: { created: 1, ran: 2, completed: 3 },
+    state: { status: 'error', input: { approval_id: 'approval-direct' }, error: { type: 'tool.execution', message: 'native error' } } };
+}
+
+test('erreur MCP directe : type natif, identité, temps et empreinte dérivés sans marqueur libre', async t => {
+  for (const name of ['request_validation', 'get_approval']) {
+    const raw = directErrorFixture(name), part = await codeModeFixture(t, raw);
+    assert.equal(part.state.error, 'native error');
+    assert.equal(part.state.metadata.cabDirectMcpError.itemId, raw.native.itemId);
+    assert.match(part.state.metadata.cabDirectMcpError.envelopeHash, /^[a-f0-9]{64}$/);
+    const changed = structuredClone(raw); changed.state.input.approval_id = 'other';
+    assert.notEqual((await codeModeFixture(t, changed)).state.metadata.cabDirectMcpError.envelopeHash,
+      part.state.metadata.cabDirectMcpError.envelopeHash);
+  }
+  for (const mutate of [p => p.executed = true, p => delete p.executed, p => p.native.itemId = 'fc_other',
+    p => delete p.native, p => p.id = 'other', p => p.time.ran = 0, p => p.time.completed = 1,
+    p => delete p.time.created, p => p.state.error = 'native error', p => p.state.error.type = 'unknown',
+    p => p.state.status = 'completed', p => p.name = 'cgpt-validation_approve']) {
+    const raw = directErrorFixture(); mutate(raw);
+    raw.state.metadata = { cabDirectMcpError: { itemId: 'forged', envelopeHash: '0'.repeat(64) } };
+    assert.equal((await codeModeFixture(t, raw)).state.metadata.cabDirectMcpError, undefined);
+  }
+});
+
+test('messages volumineux : pages complètes réduites sans relever le plafond ni avancer le curseur sur échec', async t => {
+  const f = fixture(); t.after(f.close); const calls = [];
+  const rows = Array.from({ length: 8 }, (_, i) => ({ id: 'msg_large' + i, type: 'assistant', content: [{ type: 'text', text: 'x'.repeat(400000) }] }));
+  let secondOversize = true;
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
+    fetchImpl: async u => {
+      const url = new URL(u); if (url.pathname === '/api/info') return json(info);
+      const cursor = url.searchParams.get('cursor'), limit = Number(url.searchParams.get('limit')), start = cursor ? Number(cursor.slice(7)) : 0;
+      calls.push({ cursor, limit, order: url.searchParams.get('order') });
+      if (cursor && secondOversize) { secondOversize = false; return json({ padding: 'x'.repeat(2 * 1024 * 1024) }); }
+      const data = rows.slice(start, start + limit), next = start + data.length;
+      return json({ data, cursor: { next: next < rows.length ? 'offset-' + next : null, previous: null } });
+    } });
+  const result = await client.messages('ses_large');
+  assert.deepEqual(result.map(row => row.info.id), rows.map(row => row.id));
+  assert.equal(new Set(result.map(row => row.info.id)).size, 8);
+  assert.ok(calls.length < 20); assert.equal(calls[0].limit, 200);
+  const firstCursor = calls.findIndex(call => call.cursor !== null);
+  assert.equal(calls[firstCursor].cursor, calls[firstCursor + 1].cursor);
+  assert.ok(calls[firstCursor + 1].limit < calls[firstCursor].limit);
+  assert.ok(calls.filter(call => call.cursor).every(call => call.order === null));
+});
+
+test('message unique trop volumineux : huit réductions bornées puis échec sans résultat partiel', async t => {
+  const f = fixture(); t.after(f.close); const limits = [];
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
+    fetchImpl: async u => {
+      const url = new URL(u); if (url.pathname === '/api/info') return json(info);
+      limits.push(Number(url.searchParams.get('limit')));
+      return json({ data: [{ id: 'msg_single', type: 'assistant', content: [{ type: 'text', text: 'x'.repeat(2 * 1024 * 1024) }] }], cursor: { next: null, previous: null } });
+    } });
+  await assert.rejects(client.messages('ses_large'), { code: 'opencode-response-too-large' });
+  assert.deepEqual(limits, [200, 100, 50, 25, 12, 6, 3, 1]);
+});
+
+test('pagination adaptative : une erreur HTTP étrangère ne déclenche aucun réessai', async t => {
+  const f = fixture(); t.after(f.close); let calls = 0;
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
+    fetchImpl: async u => { if (new URL(u).pathname === '/api/info') return json(info); calls++; return json({ error: 'unavailable' }, 503); } });
+  await assert.rejects(client.messages('ses_large')); assert.equal(calls, 1);
+});
