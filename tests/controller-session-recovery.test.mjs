@@ -1,5 +1,6 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
+import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -186,6 +187,7 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
   }
   const httpStatus = async (path) => (await fetch(base + path)).status;
   return { native, get, post, recovery, contract, approval, validate, approve, preflight, start, stop, httpStatus,
+    nativeBase: 'http://127.0.0.1:' + opencode.address().port, directory,
     releaseDecision: () => writeFileSync(decisionRelease, "release\n") };
 }
 
@@ -634,6 +636,30 @@ test("retry refuse chaque identité ou opération de polling divergente sans mut
   }
   h.native.messages = good;
   assert.equal((await h.post("/job/recover", retryPayload(h))).status, 200);
+});
+
+test('reconcile-rejected Code Mode conserve découverte, interruption et rejet natif', async t => {
+  const h=await setup(t);await h.post('/job/recover',{...h.recovery,phase:'prepare'});
+  const a=h.approval(h.recovery.preflightRequestId);
+  const raw=(name,input,status,output,index)=>({type:'tool',id:'native_'+index,name:'execute',executed:false,
+    time:{created:index*2,ran:index*2,completed:index*2+1},state:{status,
+      input:{code:`return await tools["cgpt-validation"].${name}(${JSON.stringify(input)});`},
+      content:output?[{type:'text',text:JSON.stringify(output)}]:[],
+      ...(status==='error'?{error:{type:'ToolError',message:'Tool execution interrupted'}}:{}),
+      metadata:{toolCalls:[{tool:'cgpt-validation.'+name,status,input}],truncated:false}}});
+  const parts=[raw('request_validation',a,'completed',{...a,status:'PENDING'},1),
+    raw('poll_approval',{approval_id:a.approval_id},'error',null,2),
+    raw('reject',{approval_id:a.approval_id,reviewer:'CGPT'},'completed',{...a,status:'REJECTED'},3)];
+  h.native.messages=[{nativeV2:{id:'msg_codemode',type:'assistant',content:parts}}];
+  const client=createOpenCodeV2Client({baseUrl:h.nativeBase,directory:h.directory,
+    passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE});
+  const normalized=(await client.messages('ses_new')).flatMap(m=>m.parts);
+  const sort=v=>Array.isArray(v)?v.map(sort):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,sort(v[k])])):v;
+  const payload={...retryPayload(h),phase:'reconcile-rejected',developerAuthorization:'human fixture',
+    rejectedPreflightProof:{nativeToolCount:normalized.length,nativeToolHash:createHash('sha256').update(JSON.stringify(sort(normalized))).digest('hex')}};
+  const result=await h.post('/job/recover',payload);assert.equal(result.status,200,JSON.stringify(result.body));
+  assert.deepEqual(h.native.replies,[]);h.recovery.preflightRequestId='preflight-2';
+  await h.preflight();assert.equal((await h.post('/job/recover',{...h.recovery,phase:'complete'})).status,200);
 });
 
 test('reconcile-rejected scelle un rejet après redémarrage sans restaurer de décision', async (context) => {

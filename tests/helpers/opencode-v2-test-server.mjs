@@ -2,6 +2,7 @@ const fixturePassword = 'synthetic-v2-test-password';
 const fixtureAuthorization = `Basic ${Buffer.from(`opencode:${fixturePassword}`).toString('base64')}`;
 
 function v2Message(message) {
+  if (message?.nativeV2) return structuredClone(message.nativeV2);
   const info = message?.info || {};
   const role = info.role || (Array.isArray(message?.parts) && message.parts.length ? 'assistant' : 'system');
   const id = info.id || 'msg_fixture';

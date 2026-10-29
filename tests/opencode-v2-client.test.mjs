@@ -18,6 +18,91 @@ const info = { version: '2.2.0', pid: 42, hostname: '127.0.0.1', urls: [], paths
 const location = { directory: '/workspace', project: { id: 'fixture', directory: '/workspace', canonical: '/workspace' } };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
+async function codeModeFixture(t, content) {
+  const f = fixture(); t.after(f.close);
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace',
+    passwordFile: f.passwordFile, fetchImpl: async u => new URL(u).pathname === '/api/info' ? json(info) : json({ data: [{ id: 'msg_code', type: 'assistant',
+      content: [content] }], cursor: { next: null, previous: null } }) });
+  return (await client.messages('ses_code'))[0].parts[0];
+}
+
+const wrapped = (code, toolCalls, status = 'completed') => ({ type: 'tool', id: 'call_execute',
+  name: 'execute', executed: false, time: { created: 1, ran: 2, completed: status === 'running' ? undefined : 3 },
+  state: { status, input: { code }, content: [{ type: 'text', text: '{"status":"PENDING"}' }],
+    metadata: { toolCalls, truncated: false } } });
+
+test('Code Mode : projection littérale, provenance et découverte pure', async t => {
+  const input = { requestId: 'request', commands: ['/usr/bin/true'] };
+  const raw = wrapped('return await tools["cgpt-validation"].request_validation('+JSON.stringify(input)+');',
+    [{ tool: 'cgpt-validation.request_validation', status: 'completed', input }]);
+  const p = await codeModeFixture(t, raw);
+  assert.equal(p.tool, 'cgpt-validation_request_validation'); assert.deepEqual(p.state.input, input);
+  assert.equal(p.callID, raw.id); assert.equal(p.executed, false);
+  assert.match(p.state.metadata.cabCodeMode.envelopeHash, /^[a-f0-9]{64}$/);
+  const changed = structuredClone(raw); changed.state.input.code = ' '+changed.state.input.code;
+  assert.notEqual((await codeModeFixture(t, changed)).state.metadata.cabCodeMode.envelopeHash,
+    p.state.metadata.cabCodeMode.envelopeHash);
+  const search = { query: 'broker_readiness', namespace: 'cgpt-validation' };
+  const discovery = await codeModeFixture(t, wrapped('const r = search('+JSON.stringify(search)+'); return r;',
+    [{tool:'search',status:'completed',input:search}]));
+  assert.equal(discovery.tool,'cab_codemode_discovery');
+  const combined = await codeModeFixture(t, wrapped('const s = search('+JSON.stringify(search)+'); return await tools["cgpt-validation"].broker_readiness({});',
+    [{tool:'search',status:'completed',input:search},{tool:'cgpt-validation.broker_readiness',status:'completed',input:{}}]));
+  assert.equal(combined.tool,'cgpt-validation_broker_readiness');
+  const identifiers=await codeModeFixture(t,wrapped('const s = search({query:"broker_readiness", namespace:"cgpt-validation"}); return await tools["cgpt-validation"].broker_readiness({run_id:"fixture"});',
+    [{tool:'search',status:'completed',input:search},{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:'fixture'}}]));
+  assert.equal(identifiers.tool,'cgpt-validation_broker_readiness');
+  assert.deepEqual(identifiers.state.input,{run_id:'fixture'});
+});
+
+test('Code Mode : formes ambiguës conservées comme execute bloquant', async t => {
+  const base = wrapped('return await tools["cgpt-validation"].request_validation({});',
+    [{tool:'cgpt-validation.request_validation',status:'completed',input:{}}]);
+  for (const mutate of [
+    p=>p.state.input.code='return {status:"APPROVED"};',
+    p=>p.state.input.code='const x = await tools["cgpt-validation"].request_validation({}); return {...x,status:"APPROVED"};',
+    p=>p.state.input.code+=' await tools["cgpt-validation"].reject({});',
+    p=>p.state.input.code='return await tools["cgpt-validation"].request_validation({requestId:someVariable});',
+    p=>p.state.input.code='return await tools["cgpt-validation"].request_validation({requestId:1+2});',
+    p=>p.state.input.code='const tools = search({}); return await tools["cgpt-validation"].request_validation({});',
+    p=>p.state.metadata.toolCalls.push({tool:'shell',status:'completed',input:{}}),
+    p=>p.state.metadata.toolCalls[0].input={other:true},
+    p=>p.state.metadata.toolCalls=null,
+    p=>p.state.metadata.truncated=true,
+    p=>delete p.state.metadata,
+    p=>p.state.input.code='return await tools["cgpt-validation"].approve({});',
+  ]) { const raw=structuredClone(base);mutate(raw);assert.equal((await codeModeFixture(t,raw)).tool,'execute'); }
+  const running=structuredClone(base);running.state.status='running';running.state.metadata={};
+  assert.equal((await codeModeFixture(t,running)).tool,'cgpt-validation_request_validation');
+  running.state.metadata={toolCalls:[{tool:'cgpt-validation.request_validation',input:{},status:'running'}]};
+  assert.equal((await codeModeFixture(t,running)).tool,'cgpt-validation_request_validation');
+  running.state.status='completed';assert.equal((await codeModeFixture(t,running)).tool,'execute');
+  const forged=wrapped('return {};',[], 'completed');forged.name='cab_codemode_discovery';
+  forged.state.metadata.cabCodeMode={wrapperId:'forged',envelopeHash:'0'.repeat(64)};
+  assert.equal((await codeModeFixture(t,forged)).state.metadata.cabCodeMode,undefined);
+});
+
+test('permissions shell et écriture relative : source native et cible vérifiées', async t => {
+  const f=fixture();t.after(f.close);
+  for(const kind of ['shell','write']) {
+    let corrupt=false, wrongMessage=false;
+    const input=kind==='shell'?{command:'/usr/bin/true'}:{path:'/workspace/fixture.txt',content:'fixture'};
+    const action=kind==='shell'?'shell':'edit',resources=kind==='shell'?['/usr/bin/true']:['fixture.txt'];
+    const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+      fetchImpl:async u=>new URL(u).pathname==='/api/info'?json(info):new URL(u).pathname==='/api/permission/request'
+        ?json({location,data:[{id:'per_native',sessionID:'ses_code',action,resources,source:{type:'tool',messageID:'msg_native',id:'call_native'}}]})
+        :json({data:{id:wrongMessage?'other_message':'msg_native',type:'assistant',content:[{type:'tool',id:corrupt?'other':'call_native',name:kind,executed:false,
+          time:{created:1,ran:2},state:{status:'running',input,metadata:{}}}]}})});
+    const p=(await client.permissions())[0];assert.equal(p.permission,kind==='shell'?'bash':'edit');
+    assert.equal(p.tool.callID,'call_native');assert.equal(p.metadata.nativeSourceVerified,true);
+    assert.equal(kind==='shell'?p.metadata.command:p.metadata.filepath,kind==='shell'?'/usr/bin/true':'/workspace/fixture.txt');
+    corrupt=true;await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
+    corrupt=false;wrongMessage=true;await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
+    wrongMessage=false;if(kind==='shell')input.background=true;else input.path='/other/fixture.txt';
+    await assert.rejects(client.permissions(),{code:'opencode-permission-target-invalid'});
+  }
+});
+
 test('le client V2 authentifie les appels, normalise MCP et refuse les routes hors API', async (context) => {
   const f = fixture(); context.after(f.close);
   const calls = [];

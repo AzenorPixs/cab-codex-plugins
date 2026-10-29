@@ -2,7 +2,7 @@ import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, SHUTDOWN_INCOM
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { isAbsolute, join, relative } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createJobContext, commandLengthLimit, checkCommandLength, VERSION as JOB_CONTEXT_VERSION } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, VERSION } from './cgpt-approval-bridge-runs.mjs';
 import { ResourceRunRegistry, COORDINATION_PROTOCOL, TEST_RESOURCE_PROTOCOL, VERSION as RESOURCE_VERSION } from './cgpt-approval-bridge-resource-coordination.mjs';
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.7";
+const version = "2.1.8";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -319,13 +319,20 @@ async function verifyNativeValidation(approval) {
 }
 function nativePartProof(operation, part, sessionId) {
   if (!operation.native || operation.sessionId !== sessionId || part?.type !== 'tool' ||
-      part.executed !== true || !['completed', 'error'].includes(part.state?.status)) return null;
+      !(part.executed === true || part.executed === false && part.nativeFormat === 'opencode-v2') ||
+      !['completed', 'error'].includes(part.state?.status)) return null;
   const state = part.state;
   const callId = part.callID || part.callId || null;
   if (operation.native.callId && operation.native.callId !== callId) return null;
   let kind;
   let target;
-  if (part.tool === 'bash') { kind = 'bash'; target = state.input?.command; }
+  if (part.tool === 'bash') {
+    if (part.nativeTool === 'shell' && (state.input?.background === true ||
+        (state.input?.workdir !== undefined && (typeof state.input.workdir !== 'string' || resolve(workspace, state.input.workdir) !== workspace)) ||
+        (state.status === 'completed' && (state.metadata?.status !== 'completed' ||
+          !Number.isInteger(state.metadata?.exit))))) return null;
+    kind = 'bash'; target = state.input?.command;
+  }
   else if (['edit', 'write', 'apply_patch'].includes(part.tool)) {
     kind = 'edit'; target = state.input?.filePath || state.input?.filepath || state.input?.path;
     if (part.tool === 'apply_patch') {

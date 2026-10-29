@@ -1,9 +1,10 @@
 import { constants } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.7';
+export const VERSION = '2.1.8';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -103,20 +104,105 @@ function normalizeSession(session) {
 
 function normalizePermission(permission) {
   if (!record(permission) || typeof permission.id !== 'string' || typeof permission.sessionID !== 'string' ||
-      typeof permission.action !== 'string' || !Array.isArray(permission.resources)) {
+      typeof permission.action !== 'string' || !Array.isArray(permission.resources) ||
+      permission.resources.some(value => typeof value !== 'string')) {
     fail('opencode-permission-invalid');
   }
   const metadata = record(permission.metadata) ? { ...permission.metadata } : {};
   if (permission.action === 'edit' && typeof metadata.filepath !== 'string' && permission.resources.length === 1) {
     metadata.filepath = permission.resources[0];
   }
-  if (permission.action === 'bash' && typeof metadata.command !== 'string' && permission.resources.length === 1) {
+  if (['bash', 'shell'].includes(permission.action) && typeof metadata.command !== 'string' && permission.resources.length === 1) {
     metadata.command = permission.resources[0];
   }
-  return { id: permission.id, sessionID: permission.sessionID, permission: permission.action, metadata,
+  return { id: permission.id, sessionID: permission.sessionID, permission: permission.action === 'shell' ? 'bash' : permission.action, metadata,
+    ...(permission.action === 'shell' ? { nativeAction: 'shell' } : {}),
     source: permission.source, message: permission.message,
     ...(record(permission.source) && permission.source.type === 'tool' && typeof permission.source.id === 'string'
       ? { tool: { callID: permission.source.id } } : {}) };
+}
+
+function canonical(value) {
+  return JSON.stringify((function ordered(v) {
+    return Array.isArray(v) ? v.map(ordered) : record(v)
+      ? Object.fromEntries(Object.keys(v).sort().map(k => [k, ordered(v[k])])) : v;
+  })(value));
+}
+
+// Une grammaire de données, jamais un interpréteur JavaScript.
+function parseLiteralData(raw) {
+  let text = '', quoted = false, escaped = false;
+  for (let i = 0; i < raw.length; i++) {
+    const c = raw[i]; text += c;
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === '{' || c === ',') {
+      const match = /^(\s*)([A-Za-z_$][\w$]*)\s*:/.exec(raw.slice(i + 1));
+      if (match) { text += match[1] + JSON.stringify(match[2]) + ':'; i += match[0].length; }
+    }
+  }
+  return JSON.parse(text);
+}
+
+function literalObject(source) {
+  if (source[0] !== '{') return null;
+  let depth = 0, quoted = false, escaped = false;
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (c === '\\') escaped = true;
+      else if (c === '"') quoted = false;
+    } else if (c === '"') quoted = true;
+    else if (c === '{' || c === '[') { if (++depth > 32) return null; }
+    else if (c === '}' || c === ']') {
+      depth--;
+      if (depth === 0) {
+        try { return { value: parseLiteralData(source.slice(0, i + 1)), rest: source.slice(i + 1).trim() }; }
+        catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
+function codeModePart(content, part) {
+  if (typeof part.state.input?.code !== 'string' || part.state.metadata?.truncated === true) return null;
+  let code = part.state.input.code.trim(), discovery;
+  const prefix = /^const\s+([A-Za-z_$][\w$]*)\s*=\s*search\s*\(\s*/.exec(code);
+  if (prefix) {
+    if (['tools', 'search'].includes(prefix[1])) return null;
+    const literal = literalObject(code.slice(prefix[0].length));
+    if (!literal || !/^\)\s*;/.test(literal.rest)) return null;
+    code = literal.rest.replace(/^\)\s*;/, '').trim();
+    discovery = { tool: 'search', input: literal.value };
+    if (new RegExp('^return\\s+' + prefix[1].replace(/[$]/g, '\\$&') + '\\s*;?$').test(code)) code = '';
+  }
+  const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
+  let call;
+  if (match) {
+    if (!['broker_readiness', 'request_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
+    const literal = literalObject(code.slice(match[0].length));
+    if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
+    call = { tool: 'cgpt-validation.' + match[2], input: literal.value };
+  } else if (code || !discovery) return null;
+  const expected = [discovery, call].filter(Boolean), observed = part.state.metadata?.toolCalls;
+  if ((observed !== undefined && !Array.isArray(observed)) ||
+      (part.state.status === 'completed' && part.state.metadata?.truncated !== false)) return null;
+  if (part.state.status !== 'running' || (Array.isArray(observed) && observed.length)) {
+    if (!Array.isArray(observed) || observed.length !== expected.length || observed.some((entry, i) =>
+        !record(entry) || entry.tool !== expected[i].tool || canonical(entry.input) !== canonical(expected[i].input) ||
+        !(['completed', 'error'].includes(entry.status) || part.state.status === 'running' &&
+          entry.tool === 'cgpt-validation.request_validation' && i === expected.length - 1 && entry.status === 'running')) ||
+        (part.state.status === 'completed' && observed.some(entry => entry.status !== 'completed'))) return null;
+  } else if (!call || call.tool !== 'cgpt-validation.request_validation') return null;
+  return { ...part, tool: call ? call.tool.replace('cgpt-validation.', 'cgpt-validation_') : 'cab_codemode_discovery',
+    state: { ...part.state, input: call?.input || discovery.input,
+      metadata: { ...part.state.metadata, cabCodeMode: {
+        wrapperId: content.id, envelopeHash: createHash('sha256').update(canonical(content)).digest('hex') } } } };
 }
 
 function normalizeMessage(message, sessionId) {
@@ -151,11 +237,16 @@ function normalizeMessage(message, sessionId) {
       .map((part) => part.text).join('\n') : '';
     const error = typeof state.error === 'string' ? state.error : record(state.error) && typeof state.error.message === 'string'
       ? state.error.message : undefined;
+    const nativeMetadata = record(state.metadata) ? { ...state.metadata } : state.metadata;
+    if (record(nativeMetadata)) delete nativeMetadata.cabCodeMode;
     if (content.executed !== undefined && typeof content.executed !== 'boolean') fail('opencode-message-invalid');
-    normalized.parts.push({ type: 'tool', id: content.id, tool: content.name, callID: content.id, executed: content.executed,
+    const part = { type: 'tool', id: content.id, tool: content.name === 'shell' ? 'bash' : content.name, callID: content.id, executed: content.executed,
+      ...((content.name === 'shell' || ['write', 'edit'].includes(content.name) && content.executed === false)
+        ? { nativeFormat: 'opencode-v2', nativeTool: content.name } : {}),
       state: { status: state.status, input: state.input, output, error,
-        metadata: state.metadata, time: { start: content.time?.ran ?? content.time?.created,
-          end: content.time?.completed } } });
+        metadata: nativeMetadata, time: { start: content.time?.ran ?? content.time?.created,
+          end: content.time?.completed } } };
+    normalized.parts.push(content.name === 'execute' ? codeModePart(content, part) || part : part);
   }
   return normalized;
 }
@@ -352,7 +443,37 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     if (!record(response) || !record(response.location) || response.location.directory !== directoryValue || !Array.isArray(response.data)) {
       fail('opencode-permissions-invalid');
     }
-    return response.data.map(normalizePermission);
+    return Promise.all(response.data.map(async raw => {
+      const permission = normalizePermission(raw);
+      if (raw.action !== 'shell' && !(raw.action === 'edit' &&
+          raw.resources.length === 1 && !isAbsolute(raw.resources[0]))) return permission;
+      if (raw.source?.type !== 'tool' || typeof raw.source.id !== 'string' || typeof raw.source.messageID !== 'string') {
+        fail('opencode-permission-source-invalid');
+      }
+      const envelope = await json(`/api/session/${encodeURIComponent(raw.sessionID)}/message/${encodeURIComponent(raw.source.messageID)}`);
+      const source = normalizeMessage(unwrapData(envelope, 'opencode-message-invalid'), raw.sessionID);
+      if (source.info.id !== raw.source.messageID) fail('opencode-permission-source-invalid');
+      const matches = source.parts.filter(p => p.type === 'tool' && p.callID === raw.source.id);
+      if (matches.length !== 1) fail('opencode-permission-source-invalid');
+      const part = matches[0], input = part.state.input;
+      if (!record(input) || !['running', 'completed'].includes(part.state.status)) fail('opencode-permission-source-invalid');
+      if (raw.action === 'shell') {
+        if (part.nativeTool !== 'shell' || raw.resources.length !== 1 || raw.resources[0] !== input.command ||
+            input.background === true || (input.workdir !== undefined &&
+              (typeof input.workdir !== 'string' || resolve(directoryValue, input.workdir) !== directoryValue))) {
+          fail('opencode-permission-target-invalid');
+        }
+        permission.metadata.command = input.command;
+      } else {
+        const file = input.path ?? input.filePath ?? input.filepath;
+        const target = typeof file === 'string' ? resolve(directoryValue, file) : '';
+        if (!['edit', 'write'].includes(part.nativeTool) || !target.startsWith(directoryValue + '/') ||
+            resolve(directoryValue, raw.resources[0]) !== target) fail('opencode-permission-target-invalid');
+        permission.metadata.filepath = target;
+      }
+      permission.metadata.nativeSourceVerified = true;
+      return permission;
+    }));
   }
 
   async function providerList(directoryValue = directory, maxBytes = RESPONSE_LIMIT) {

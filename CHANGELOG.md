@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.8 — Preuves natives Code Mode OpenCode 2.2
+
+- Corréler les enveloppes execute strictes avec leurs appels MCP et leur provenance native, en refusant programmes ambigus, résultats transformés et sorties tronquées.
+- Vérifier les permissions shell et les écritures relatives depuis leurs appels sources ; conserver once, cible, dates et fin native sans utiliser executed comme preuve autonome.
+- Qualifier le prévol et une écriture sur OpenCode 2.2 réel isolé, conserver les frontières des recoveries et aligner la distribution commune en 2.1.8.
+
 ## 2.1.7 — Réconciliation explicite des prévols rejetés
 
 - Ajouter reconcile-rejected sous autorité humaine, avec empreinte native et exclusion de tout effet, sans reconstruction de décision exécutable.
