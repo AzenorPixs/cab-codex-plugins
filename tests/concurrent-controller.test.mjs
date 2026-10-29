@@ -11,6 +11,8 @@ import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import test from 'node:test';
 import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
+import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
@@ -152,13 +154,13 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       metadata: value.commands.length ? { command: value.commands[0] } : { filepath: directory + '/' + value.files[0] } });
     await waitFor(() => native.replies.some((r) => r.path.endsWith('/perm-' + value.requestId)));
   }
-  async function completeTool(value) {
+  async function completeTool(value, exit = 0) {
     const op = (await get('/runs')).body.coordination.operations[value.operation_id];
     const stamp = Math.max(Date.now(), op.native.startedAt) + 1;
     const part = { type: 'tool', id: 'part-' + value.requestId, callID: 'call-' + value.requestId,
       sessionID: value.session_id, tool: value.commands.length ? 'bash' : 'edit', state: { status: 'completed',
         input: value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] },
-        time: { start: stamp, end: stamp + 1 }, metadata: { exit: 0 } } };
+        time: { start: stamp, end: stamp + 1 }, metadata: { exit } } };
     native.messages[value.session_id].push({ parts: [part] });
     native.emit({ type: 'message.part.updated', properties: { part } });
   }
@@ -167,7 +169,9 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     return post('/runs/' + run.runId + '/locks/release', { version: run.version, operationId: current.accessId,
       token: current.token, fencing: current.fencing, outcome: 'COMPLETED', evidence: ['native effects reviewed'] });
   }
-  return { native, children, directory, base, get, post, candidate, reserve, approval, start, stop,
+  const nativeClient = createOpenCodeV2Client({ baseUrl:'http://127.0.0.1:'+opencode.address().port, directory,
+    passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE });
+  return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
     approvedAccess, execute, completeTool, releaseOperation };
 }
 
@@ -926,7 +930,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.12');
+  assert.equal(initialized.result.serverInfo.version, '2.1.13');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1728,3 +1732,124 @@ test('notification stale avant admission : chaque tentative locale est comptée 
   assert.deepEqual(h.native.replies, []);
 });
 
+
+
+async function unusedHttpPayload(h, run, lease) {
+  const current = (await h.get('/runs/'+run.runId+'/test-resources')).body.reservations.find((r)=>r.transactionId===lease.transactionId);
+  const all=(await h.get('/runs')).body.coordination.operations;
+  const ops=Object.values(all).filter((op)=>op.runId===run.runId && op.contextId===run.contextId &&
+    (op.testReservationId===lease.transactionId || Date.parse(op.preparedAt)>=Date.parse(current.grantedAt)));
+  const messages=await h.nativeClient.messages(run.sessionId,h.directory);
+  return {version:run.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,
+    contextId:run.contextId,sessionId:run.sessionId,boundaryDigest:current.unusedReleaseBoundary,
+    developerAuthorization:'autorisation humaine ciblée de cette réservation sans effet',evidence:['mandats et historique natif examinés'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:ops.map((op)=>
+      ({operationId:op.operationId,classification:op.state==='CANCELLED'?'cancelled-without-execution':'read-only-no-effect'}))},
+    nativeProof:{messageCount:messages.length,toolCount:messages.flatMap(m=>m.parts.filter(p=>p.type==='tool')).length,historyHash:proofHash(messages)}};
+}
+async function unusedHttpLease(h, run, transactionId='unused-http') {
+  const result=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,transactionId,
+    resources:run.resources.filter(r=>r.key.startsWith('lxc:')),evidence:['instance canonique examinée']});
+  assert.equal(result.status,200,JSON.stringify(result)); return result.body;
+}
+
+test('release-unused HTTP : frontière sans opération, reçu exact, FIFO et extend débloqué sans effet natif',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/101',mode:'write'}];
+  const a=await h.reserve('a',{resources});const b=await h.reserve('b',{resources});const lease=await unusedHttpLease(h,a);
+  const waiting=await h.post('/runs/b/test-resources/acquire',{version:b.version,transactionId:'wait-b',resources,evidence:['même instance']});
+  assert.equal(waiting.status,202);
+  const extension={version:a.version,resources:[{key:'file:independent.py',mode:'write'}]};
+  assert.equal((await h.post('/runs/a/extend',extension)).body.error,'run-accesses-unresolved');
+  const p=await unusedHttpPayload(h,a,lease);const replies=h.native.replies.length;
+  const result=await h.post('/runs/a/test-resources/release-unused',p);
+  assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.unusedReleaseReceipt.mode,'unused-no-effect');
+  assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
+  assert.deepEqual((await h.post('/runs/a/test-resources/release-unused',p)).body,result.body);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',{...p,evidence:['différent']})).status,409);
+  assert.equal((await h.post('/runs/a/test-resources/release',p)).status,409);
+  assert.equal((await h.post('/runs/a/extend',extension)).status,200);
+  assert.equal(h.native.replies.length,replies);
+});
+
+test('release-unused HTTP : fin native exit1 relue même COMPLETED et diagnostic non converti en succès',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const op=await h.approvedAccess(a,'readonly-diagnostic');
+  await h.execute(op.approval);await h.completeTool(op.approval,1);
+  assert.equal((await h.releaseOperation(a,op.approval,op.access)).status,200);
+  const p=await unusedHttpPayload(h,a,lease);const result=await h.post('/runs/a/test-resources/release-unused',p);
+  assert.equal(result.status,200,JSON.stringify(result));
+  assert.equal((await h.get('/runs')).body.coordination.operations[op.approval.operation_id].nativeResult.exit,1);
+  assert.equal(h.native.replies.length,1); assert.equal(h.native.replies[0].body.response,'once');
+});
+
+test('release-unused HTTP : autorisation, attestations, mutation et preuve incomplète refusées sans nouvelle once',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const p=await unusedHttpPayload(h,a,lease);
+  for(const change of [x=>delete x.developerAuthorization,x=>x.attestation.noMutatingMandate=false,
+    x=>x.attestation.noEnvironmentMutation=false,x=>delete x.nativeProof,x=>x.nativeProof.historyHash='0'.repeat(64),
+    x=>x.contextId++,x=>x.sessionId='ses_b',x=>x.token='wrong']){
+    const q=structuredClone(p);change(q);const result=await h.post('/runs/a/test-resources/release-unused',q);
+    assert.equal(result.status,409,JSON.stringify(result));
+    assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+  }
+  h.native.busy.ses_a={type:'busy'};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).status,409);h.native.busy={};
+  h.native.permissions=[{id:'pending',sessionID:a.sessionId,permission:'bash',metadata:{command:'true'}}];
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).status,409);h.native.permissions=[];
+  assert.equal(h.native.replies.length,0);
+});
+
+test('release-unused HTTP : résultat natif déjà enregistré puis altéré ne peut pas être rescellé',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const op=await h.approvedAccess(a,'diagnostic-altered');
+  await h.execute(op.approval);await h.completeTool(op.approval,1);await h.releaseOperation(a,op.approval,op.access);
+  h.native.messages.ses_a.at(-1).parts[0].state.metadata.exit=0;
+  const p=await unusedHttpPayload(h,a,lease);const result=await h.post('/runs/a/test-resources/release-unused',p);
+  assert.equal(result.body.error,'test-unused-native-completion-divergent');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+test('release-unused HTTP : changement du transcript pendant relecture et outil hors CAB bloquent',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const p=await unusedHttpPayload(h,a,lease);let reads=0;
+  h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message' && ++reads===2)
+    h.native.messages.ses_a=[{info:{id:'msg_late',role:'user',time:{created:Date.now()}},parts:[{type:'text',text:'late'}]}];};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-boundary-stale');
+  h.native.onRequest=null;const stamp=Date.now()+1;
+  h.native.messages.ses_a.push({info:{id:'msg_untracked',role:'assistant',time:{created:stamp}},parts:[{type:'tool',tool:'bash',callID:'call_untracked',
+    state:{status:'completed',input:{command:'/usr/bin/true'},time:{start:stamp,end:stamp+1},metadata:{exit:0}}}]});
+  const q=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',q)).body.error,'test-unused-native-tool-unreviewable');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');assert.equal(h.native.replies.length,0);
+});
+
+
+test('release-unused HTTP : mandat courant, restauration, compaction et fin absente conservent HELD',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);let p=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:'inspection en cours'})).status,202);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'run-not-quiescent');
+  assert.equal((await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:''})).status,202);
+  const stamp=Date.now()+1;
+  h.native.messages.ses_a=[{nativeV2:{id:'msg_compaction',type:'compaction',time:{created:stamp}}}];
+  p=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-incomplete');
+  h.native.messages.ses_a=[{info:{id:'msg_running',role:'assistant',time:{created:stamp}},parts:[{type:'tool',tool:'read',callID:'call_running',
+    state:{status:'running',input:{path:'/test'},time:{start:stamp},metadata:{}}}]}];
+  p=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-incomplete');
+  h.native.messages.ses_a=[];p=await unusedHttpPayload(h,a,lease);await h.stop();await h.start();
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-reconciliation-required');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+test('release-unused HTTP : course de permission et indisponibilité native refusent sans réparation',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const p=await unusedHttpPayload(h,a,lease);let reads=0;
+  h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message' && ++reads===1)
+    h.native.permissions=[{id:'late-native',sessionID:a.sessionId,permission:'bash',metadata:{command:'true'}}];};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'native-session-not-quiescent');
+  h.native.permissions=[];h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message')h.native.messages.ses_a=[{nativeV2:{id:'msg_bad',type:'assistant',content:'invalid',time:{created:Date.now()}}}];};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-unavailable');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');assert.equal(h.native.replies.length,0);
+});

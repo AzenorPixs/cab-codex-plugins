@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.13 — Restitution des réservations sans effet
+
+- Route release-unused explicite avec autorisation humaine, attestation exhaustive, relecture native et reçu durable ; aucun nettoyage fictif ni libération sur timeout.
+- Gardes de génération, quiescence, restauration et parcours ordinaire conservés ; documentation et jeu commun 2.1.13. Activation distincte.
+
 ## 2.1.12 — Diagnostics de notification et refus avant admission
 
 - Dernier diagnostic HTTP/code reconnu conservé et exposé par le broker sous la lease de notification exacte ; champs distants arbitraires exclus, anciennes approbations compatibles.
