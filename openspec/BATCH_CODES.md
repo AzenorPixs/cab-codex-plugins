@@ -128,3 +128,9 @@ Ces annotations ne rouvrent aucune archive et ne revalident ni tâches, ni tests
 Lors du relevé ACL, le contrat exigeait deux à quatre chiffres et le moniteur ne reconnaissait pas L1/L2. Le [correctif source demandé ensuite](changes/archive/2026-10-28-fix-monitor-historical-lot-codes/proposal.md) admet exactement L1 et L2 en complément des formats existants, conformément au [contrat actualisé](specs/local-web-monitor/spec.md). Ces codes sont conservés à l’identique. Cette correction source ne prouve pas le chargement d’un moniteur installé.
 
 Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances documentées, l’avancement et les limites de réalisabilité.
+
+### Entrée provisoire SCM — 29 octobre 2026
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | fix-native-edit-and-supervisor-mandates | ARCHIVÉ ; sources 2.1.10 qualifiées, Node 502/28 ignorés, Python 75/75 et natif 1/1 ; activation distincte | [tâches](changes/archive/2026-10-29-fix-native-edit-and-supervisor-mandates/tasks.md) |

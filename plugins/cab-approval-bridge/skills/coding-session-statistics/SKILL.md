@@ -204,6 +204,24 @@ entre sessions. Publier un rapport par archive et vérifier ses six sections,
 UTF-8/LF et totaux avant la libération normale de la réservation. Une session
 SCM directe n'invoque pas cette compétence ni ses sondes.
 
-## Consultations et observations CAB 2.1.9
+## Consultations et observations CAB 2.1.10
 
 Les agrégats, fenêtres et imports filtrés sont décrits dans [la référence observations](references/observations.md). La consultation est ponctuelle et en lecture seule ; elle ne déclenche ni sondes, ni RUN d'observation, ni intervention sur les sessions. Les sources natives et importées restent séparées, les lacunes inconnues et les quotas partagés. Les durées de contention et d'exception peuvent se recouvrir. Cette capacité de consultation ne transforme pas SCM en session pilotée et n'autorise pas l'invocation de cette compétence pendant SCM.
+
+## Collecte native OpenCode V2
+
+Observer `session.text.delta` avec `data.sessionID` pour le premier et le
+dernier delta de texte. Ne pas confondre ces événements avec
+`session.reasoning.delta`. Corréler la sonde, sa session et son répertoire ;
+mesurer le TTMT depuis l’envoi observé jusqu’au premier delta de texte.
+Ne pas attendre exclusivement les événements historiques `message.part.*`.
+
+Lire les tokens natifs de la réponse assistant V2 (`tokens` au premier niveau,
+normalisé `info.tokens`) et le coût natif (`cost`, normalisé `info.cost`), ou
+l’événement corrélé `session.usage.updated` s’il est effectivement conservé.
+Ne pas additionner la réponse et l’événement qui décrivent le même usage.
+Le débit exige des tokens de sortie réels et une durée premier/dernier delta
+strictement positive ; une valeur absente reste N/A motivée. Les zéros natifs
+sont préservés. Aucune métrique d’une sonde ancienne ne se reconstruit à partir
+du texte ou des seules clés de sa réponse ; ne pas relancer une sonde pour
+combler rétrospectivement une mesure absente sans mandat propre.

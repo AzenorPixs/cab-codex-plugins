@@ -2,9 +2,9 @@ import { readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join } from "node:path";
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
-import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.9";
+export const VERSION = "2.1.10";
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
@@ -14,7 +14,7 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "2.1.9";
+const version = "2.1.10";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -115,12 +115,14 @@ function resumeAllowed(status, job) {
   if (!['READY', 'DEGRADED'].includes(status.brokerReadiness.status)) return "broker-not-resumable";
   if (Number(status.brokerReadiness.pending_count || 0) > 0) return "pending-validations";
   if (Number(status.activeValidationCount || 0) > 0) return "active-validations";
+  if (runId) return "orchestrator-mandate-required";
   return null;
 }
 
 function resumeMessage(job) {
   return [
     "REPRISE_CAB_SUPERVISEUR",
+    "Ce message technique ne crée aucun mandat ni permission. Respecte les outils interdits et attends l’orchestrateur si aucun mandat explicite n’autorise la suite.",
     `job_id: ${job.jobId}`,
     `change_id: ${job.changeId || "non-déclaré"}`,
     `dernier_jalon_prouvé: ${job.lastProvenMilestone || "non-déclaré"}`,
@@ -169,7 +171,7 @@ function observeSessionEvent(frame) {
     state.lastEventError = "invalid-sse-json";
     return "invalid-event";
   }
-  const event = envelope?.payload || envelope;
+  const event = normalizeOpenCodeEvent(envelope);
   if (!supervisedJob || typeof event?.type !== "string" ||
       !/^(session|message|permission)\./.test(event.type)) return null;
   const properties = event.properties;

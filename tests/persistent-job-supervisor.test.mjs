@@ -266,7 +266,11 @@ test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transpor
     targetedAt = (await status()).lastActivityAt;
     return targetedAt !== before;
   }, "L'activité ciblée n'a pas été observée.");
+  const oldTargetedAt = targetedAt;
+  stream.write(`data: ${JSON.stringify({ type: 'session.execution.started', location: { directory }, data: { sessionID: job.sessionId } })}\n\n`);
+  await waitFor(async () => { targetedAt = (await status()).lastActivityAt; return targetedAt !== oldTargetedAt; }, 'Activité V2 data non observée.');
   const foreign = [
+    { type: 'session.execution.started', location: { directory: '/foreign' }, data: { sessionID: job.sessionId } },
     { directory, payload: { type: "message.updated", properties: { info: { sessionID: "ses_foreign" } } } },
     { directory: "/other", payload: { type: "session.status", properties: { sessionID: job.sessionId } } },
     { type: "server.heartbeat", properties: { sessionID: job.sessionId } },

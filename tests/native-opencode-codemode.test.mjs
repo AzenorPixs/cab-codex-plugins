@@ -20,7 +20,7 @@ async function until(check, label, diagnostic) {
   throw Error('native Code Mode timeout: ' + label + (diagnostic ? ' ' + JSON.stringify(await diagnostic()) : ''));
 }
 
-test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery complete',
+test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus et recovery complete',
   { skip: !binary, timeout: 45000 }, async t => {
     const root = mkdtempSync(join(tmpdir(), 'cab-native-codemode-')), workspace = join(root, 'workspace');
     const brokerPidFile = join(root, 'broker-pid');
@@ -29,9 +29,11 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
     const nativePort = await port(), controllerPort = await port();
     const base = 'http://127.0.0.1:' + nativePort, control = 'http://127.0.0.1:' + controllerPort;
     const queue = []; let dispatched = 0, nativeLog = '', controlLog = '';
+    let nativeTools = [];
     const provider = createServer(async (request, response) => {
       let text = ''; for await (const chunk of request) text += chunk;
       const body = JSON.parse(text), main = body.tools?.some(tool => tool.function?.name === 'execute');
+      if (main) nativeTools = body.tools.map(tool => tool.function);
       const action = main ? queue.shift() : null;
       if (action) dispatched++;
       const delta = action ? { role: 'assistant', tool_calls: [{ index: 0, id: 'native_call_' + dispatched,
@@ -45,8 +47,11 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
       response.end('data: [DONE]\n\n');
     });
     await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
-    let native, controller;
+    let native, controller, eventReader, eventTask;
+    const eventSamples = new Map();
     t.after(async () => {
+      if (eventReader) await eventReader.cancel();
+      if (eventTask) await eventTask;
       for (const child of [controller, native]) if (child && child.exitCode === null && child.signalCode === null) {
         const done = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGTERM'); await done;
       }
@@ -60,7 +65,7 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
     });
     const source = fileURLToPath(new URL('../src/', import.meta.url));
     const wrapper = join(root, 'broker.py');
-    writeFileSync(wrapper, `import sys, os\nopen(${JSON.stringify(brokerPidFile)}, 'w').write(str(os.getpid()))\nsys.path.insert(0, ${JSON.stringify(source)})\nimport cgpt_approval_bridge_server as b\nraise SystemExit(b.main())\n`);
+    writeFileSync(wrapper, `import sys, os\nopen(${JSON.stringify(brokerPidFile)}, 'w').write(str(os.getpid()))\nsys.path.insert(0, ${JSON.stringify(source)})\nimport cgpt_approval_bridge_server as b\n# Reproduire le schema 2.1.9, sans affaiblir son validateur runtime.\nb.APPROVAL_REQUEST_PROPERTIES['access_id'] = {'type': 'string', 'maxLength': 100}\nraise SystemExit(b.main())\n`);
     const config = { autoupdate: false, share: 'disabled', providers: { fixture: {
       package: 'aisdk:@ai-sdk/openai-compatible', settings: { baseURL: 'http://127.0.0.1:' + provider.address().port + '/v1',
         apiKey: 'synthetic-local-key' }, models: { fixture: { name: 'fixture', limit: { context: 32000, output: 4096 },
@@ -79,6 +84,20 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
     const client = createOpenCodeV2Client({ baseUrl: base, directory: workspace, passwordFile });
     await until(async () => { if (native.exitCode !== null) throw Error('native startup: ' + nativeLog.replaceAll(password, '[synthetic]'));
       try { return (await client.info()).version.startsWith('2.2.'); } catch { return false; } }, 'native startup');
+    eventReader = (await client.events()).body.getReader();
+    eventTask = (async () => {
+      const decoder = new TextDecoder(); let buffer = '';
+      for (;;) {
+        const { done, value } = await eventReader.read(); if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+        const frames = buffer.split(/\r?\n\r?\n/); buffer = frames.pop();
+        for (const frame of frames) {
+          const line = frame.split('\n').find(line => line.startsWith('data:'));
+          if (!line) continue; const event = JSON.parse(line.slice(5));
+          if (!eventSamples.has(event.type)) eventSamples.set(event.type, event);
+        }
+      }
+    })();
     controller = spawn(process.execPath, [fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url))],
       { stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, OC_Codex_WORKSPACE: workspace,
         OC_Codex_OUTSIDE_SANDBOX: '1', OC_Codex_OPENCODE_URL: base, OC_Codex_OPENCODE_PASSWORD_FILE: passwordFile,
@@ -108,6 +127,22 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
       if (!catalogReady) await delay(100);
     }
     assert.equal(catalogReady, true, 'MCP catalog must advertise broker_readiness before preflight');
+    console.log('Version API privée :', (await client.info()).version);
+    const nativeEdit = nativeTools.find(tool => tool.name === 'edit');
+    assert.deepEqual(nativeEdit.parameters.required, ['path', 'oldString', 'newString']);
+    assert.equal(nativeEdit.parameters.properties.replaceAll.type, 'boolean');
+    console.log('Catalogue natif synthétique :', JSON.stringify({ names: nativeTools.map(tool => tool.name), edit: nativeEdit.parameters }));
+    const discoveryEnd = dispatched + 1;
+    queue.push({ tool: 'execute', input: { code: 'const r = search({query: "edit"}); return r;' } });
+    await client.prompt(warmup.id, 'Découverte MCP distincte des outils natifs.');
+    await until(async () => !(await client.activeSessions())[warmup.id] && dispatched === discoveryEnd, 'edit catalog discovery');
+    const searchRows = (await client.messages(warmup.id)).flatMap(m => m.parts.filter(p => p.tool === 'cab_codemode_discovery'));
+    assert.equal(searchRows.at(-1).state.input.query, 'edit');
+    const mcpItems = JSON.parse(searchRows.at(-1).state.output).items;
+    console.log('Résultat search edit :', JSON.stringify(mcpItems.map(item => item.path)));
+    assert.ok(mcpItems.every(item => /^tools(?:\.|\[)/.test(item.path)));
+    assert.equal(mcpItems.some(item => item.path === 'edit'), false);
+    console.log('Recherche MCP edit :', JSON.stringify(mcpItems.map(item => item.path)));
     const old = await makeSession('old'), candidate = await makeSession('candidate');
     const resource = 'resource:native-preflight';
     const run = await http('/runs/reserve', { runId: 'native-code', ownerId: 'synthetic-owner', sessionId: old.id,
@@ -150,7 +185,7 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
     const done = await http('/runs/native-code/job/recover', { ...recovery, phase: 'complete' });
     assert.equal(done.sessionId, candidate.id); assert.equal(done.recovery, null); assert.equal(done.terminalGate.status, 'OPEN');
     assert.equal((await client.permissions()).length, 0);
-    const current = (await http('/runs')).runs.find(r => r.runId === run.runId);
+    let current = (await http('/runs')).runs.find(r => r.runId === run.runId);
     const edit = { ...approval, reservation_version: current.version, requestId: 'edit-native', approval_id: 'approval-edit-native',
       operation_id: 'operation-edit-native', operation_digest: createHash('sha256').update('synthetic file content').digest('hex'),
       resources: [{ key: 'file:fixture.txt', mode: 'write' }], expected_revisions: { 'file:fixture.txt': 0 },
@@ -168,4 +203,116 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
       token: writeAccess.token, fencing: writeAccess.fencing, outcome: 'COMPLETED', evidence: ['native exact file after once'] });
     assert.equal((await http('/runs')).coordination.operations[edit.operation_id].native.onceAcknowledged, true);
     assert.equal((await client.permissions()).length, 0);
+    current = (await http('/runs')).runs.find(r => r.runId === run.runId);
+    const target = join(workspace, 'fixture.txt');
+    const partial = { ...edit, reservation_version: current.version, requestId: 'partial-native', approval_id: 'approval-partial-native',
+      operation_id: 'operation-partial-native', operation_digest: createHash('sha256').update('synthetic changed content').digest('hex'),
+      expected_revisions: { 'file:fixture.txt': (await http('/runs')).coordination.revisions['file:fixture.txt'] }, title: 'édition native partielle exacte' };
+    const partialEnd = dispatched + 2;
+    queue.push(mcp('request_validation', partial), { tool: 'edit', input: { path: target,
+      oldString: 'file', newString: 'changed' } });
+    await client.prompt(candidate.id, 'Exécuter uniquement le remplacement synthétique exact.');
+    await until(async () => (await http('/runs/native-code/status')).undecidedValidationCount === 1, 'partial admission', async () => ({ status: await http('/runs/native-code/status'), parts: (await client.messages(candidate.id)).slice(-3), controlLog: controlLog.slice(-1500) }));
+    await http('/runs/native-code/decision/' + partial.requestId, { decision: 'approved', rationale: 'remplacement exact examiné' });
+    const partialAccess = await http('/runs/native-code/locks/acquire', { version: current.version, operationId: partial.operation_id,
+      operationDigest: partial.operation_digest, resources: partial.resources, expectedRevisions: partial.expected_revisions });
+    await until(async () => !(await client.activeSessions())[candidate.id] && dispatched === partialEnd, 'partial completion');
+    assert.equal(readFileSync(target, 'utf8'), 'synthetic changed content');
+    const editParts = (await client.messages(candidate.id)).flatMap(m => m.parts.filter(p => p.tool === 'edit'));
+    assert.equal(editParts.at(-1).state.status, 'completed');
+    assert.equal(editParts.at(-1).nativeTool, 'edit');
+    assert.equal(editParts.at(-1).state.input.path, target);
+    await http('/runs/native-code/locks/release', { version: current.version, operationId: partial.operation_id,
+      token: partialAccess.token, fencing: partialAccess.fencing, outcome: 'COMPLETED', evidence: ['édition partielle native après once, contenu exact'] });
+    assert.equal((await http('/runs')).coordination.operations[partial.operation_id].native.onceAcknowledged, true);
+
+    // Sans décision CAB, une demande native reste sans effet jusqu’au refus explicite.
+    const negative = await makeSession('édition refusée et remplacement ambigu');
+    let negativeEnd = dispatched + 1;
+    queue.push({ tool: 'edit', input: { path: target, oldString: 'changed', newString: 'forbidden' } });
+    await client.prompt(negative.id, 'Demande synthétique destinée au refus.');
+    let denied;
+    await until(async () => { denied = (await client.permissions()).find(p => p.sessionID === negative.id); return Boolean(denied); }, 'partial denied permission');
+    assert.equal(denied.permission, 'edit'); assert.equal(denied.metadata.filepath, target);
+    assert.equal(denied.metadata.nativeSourceVerified, true);
+    assert.equal(readFileSync(target, 'utf8'), 'synthetic changed content');
+    await client.replyPermission(negative.id, denied.id, 'reject');
+    await until(async () => !(await client.activeSessions())[negative.id] && dispatched === negativeEnd, 'partial rejection');
+    assert.equal(readFileSync(target, 'utf8'), 'synthetic changed content');
+    writeFileSync(target, 'duplicate duplicate');
+    negativeEnd = dispatched + 1;
+    queue.push({ tool: 'edit', input: { path: target, oldString: 'duplicate', newString: 'ambiguous' } });
+    await client.prompt(negative.id, 'Remplacement ambigu synthétique, aucun replaceAll.');
+    let ambiguousPermission;
+    await until(async () => { ambiguousPermission = (await client.permissions()).find(p => p.sessionID === negative.id);
+      return Boolean(ambiguousPermission); }, 'ambiguous permission');
+    assert.equal(readFileSync(target, 'utf8'), 'duplicate duplicate');
+    await client.replyPermission(negative.id, ambiguousPermission.id, 'once');
+    await until(async () => !(await client.activeSessions())[negative.id] && dispatched === negativeEnd, 'ambiguous replacement');
+    assert.equal(readFileSync(target, 'utf8'), 'duplicate duplicate');
+    const ambiguous = (await client.messages(negative.id)).flatMap(m => m.parts.filter(p => p.tool === 'edit')).at(-1);
+    assert.equal(ambiguous.state.status, 'error');
+    assert.match(ambiguous.state.error, /multiple|matches|occurrences/i);
+    assert.equal((await client.permissions()).length, 0);
+    const retryCandidate = await makeSession('candidate après refus natif historique');
+    const retryRecovery = { jobId: 'job-code', expectedSessionId: candidate.id, sessionId: retryCandidate.id,
+      recoveryId: 'rec-native-invalid', preflightRequestId: 'invalid-native' };
+    await http('/runs/native-code/job/recover', { ...retryRecovery, phase: 'prepare' });
+    current = (await http('/runs')).runs.find(r => r.runId === run.runId);
+    const invalidEnd = dispatched + 1;
+    const invalid = { ...approval, reservation_version: current.version, session_id: retryCandidate.id,
+      requestId: 'invalid-native', approval_id: 'approval-invalid-native', operation_id: 'operation-invalid-native', access_id: '' };
+    queue.push(mcp('request_validation', invalid));
+    await client.prompt(retryCandidate.id, 'Refus synthétique avant enregistrement.');
+    await until(async () => !(await client.activeSessions())[retryCandidate.id] && dispatched === invalidEnd, 'MCP invalid request');
+    const invalidMessage = (await client.messages(retryCandidate.id)).find(message => message.parts.some(part => part.state?.input?.requestId === invalid.requestId || part.state?.input?.code?.includes('invalid-native')));
+    const invalidRows = await client.request('/api/session/' + retryCandidate.id + '/message/' + invalidMessage.info.id);
+    const invalidNative = invalidRows.data.content.filter(part => part.type === 'tool').at(-1);
+    console.log('Erreur native MCP synthétique :', JSON.stringify(invalidNative));
+    assert.deepEqual(invalidMessage.info.tokens, invalidRows.data.tokens);
+    assert.equal(invalidMessage.info.cost, invalidRows.data.cost);
+    assert.equal(invalidMessage.info.usageSource, 'opencode-v2');
+    console.log('Métriques natives synthétiques :', JSON.stringify({ tokens: invalidRows.data.tokens, cost: invalidRows.data.cost, native: invalidRows.data.native }));
+    const unknownEnd = dispatched + 1;
+    queue.push(mcp('get_approval', { approval_id: invalid.approval_id }));
+    await client.prompt(retryCandidate.id, 'Vérifier seulement l’absence de cette approbation synthétique.');
+    await until(async () => !(await client.activeSessions())[retryCandidate.id] && dispatched === unknownEnd, 'MCP unknown approval');
+    const unknownMessage = (await client.messages(retryCandidate.id)).find(message => message.parts.some(part => part.tool === 'cgpt-validation_get_approval' || part.state?.input?.code?.includes('get_approval')));
+    console.log('Lookup natif inconnu synthétique :', JSON.stringify((await client.request('/api/session/' + retryCandidate.id + '/message/' + unknownMessage.info.id)).data.content));
+    const retried = await http('/runs/native-code/job/recover', { ...retryRecovery, phase: 'retry',
+      previousPreflightRequestId: invalid.requestId, preflightRequestId: 'valid-native-retry' });
+    assert.equal(retried.recovery.sessionId, retryCandidate.id);
+    assert.equal(retried.recovery.attempts.at(-1).preflightRequestId, invalid.requestId);
+    assert.match(retried.recovery.attempts.at(-1).nativeToolHash, /^[a-f0-9]{64}$/);
+    const retryApproval = { ...invalid, requestId: 'valid-native-retry', approval_id: 'approval-valid-native-retry',
+      operation_id: 'operation-valid-native-retry' };
+    delete retryApproval.access_id;
+    const retryEnd = dispatched + 3;
+    queue.push(mcp('request_validation', retryApproval), { tool: 'shell', input: { command: '/usr/bin/true' } }, mcp('broker_readiness', { run_id: run.runId }));
+    await client.prompt(retryCandidate.id, 'Prévol neuf après refus réconcilié.');
+    await until(async () => (await http('/runs/native-code/status')).undecidedValidationCount === 1, 'retry admission');
+    await http('/runs/native-code/decision/' + retryApproval.requestId, { decision: 'approved', rationale: 'prévol neuf examiné' });
+    const retryAccess = await http('/runs/native-code/locks/acquire', { version: current.version, operationId: retryApproval.operation_id,
+      operationDigest: retryApproval.operation_digest, resources: retryApproval.resources, expectedRevisions: retryApproval.expected_revisions });
+    await until(async () => !(await client.activeSessions())[retryCandidate.id] && dispatched === retryEnd, 'retry native completion');
+    await http('/runs/native-code/locks/release', { version: current.version, operationId: retryApproval.operation_id,
+      token: retryAccess.token, fencing: retryAccess.fencing, outcome: 'COMPLETED', evidence: ['prévol corrigé, once propre et exit zéro'] });
+    const retryDone = await http('/runs/native-code/job/recover', { ...retryRecovery, preflightRequestId: retryApproval.requestId, phase: 'complete' });
+    assert.equal(retryDone.sessionId, retryCandidate.id); assert.equal(retryDone.recovery, null);
+    const readonly = await client.createSession({ title: 'analyse native protégée', model: { providerID: 'fixture', modelID: 'fixture' },
+      permissions: ['shell', 'edit', 'subagent', 'skill'].map(permission => ({ permission, pattern: '*', action: 'deny' })) });
+    const readonlyEnd = dispatched + 2, sentinel = join(workspace, 'forbidden.txt');
+    queue.push({ tool: 'edit', input: { path: target, oldString: 'duplicate', newString: 'forbidden', replaceAll: true } },
+      { tool: 'shell', input: { command: `echo forbidden > '${sentinel}'` } });
+    await client.prompt(readonly.id, 'Analyse en lecture seule, aucun outil d’écriture autorisé.');
+    await until(async () => !(await client.activeSessions())[readonly.id] && dispatched === readonlyEnd, 'readonly restrictions');
+    assert.equal(readFileSync(target, 'utf8'), 'duplicate duplicate'); assert.equal(existsSync(sentinel), false);
+    assert.equal((await client.permissions()).length, 0);
+    const rules = (await client.session(readonly.id)).permission;
+    assert.ok(eventSamples.has('session.execution.started'));
+    assert.ok(eventSamples.has('session.usage.updated'));
+    assert.ok(eventSamples.has('permission.asked'));
+    console.log('SSE natif synthétique :', JSON.stringify([...eventSamples].filter(([type]) => /session\.(execution|usage)|permission\./.test(type))));
+    assert.ok(['shell', 'edit'].every(name => rules.some(rule => rule.permission === name && rule.pattern === '*' && rule.action === 'deny')));
+
   });

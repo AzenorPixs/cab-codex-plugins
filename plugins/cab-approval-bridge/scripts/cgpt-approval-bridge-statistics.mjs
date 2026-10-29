@@ -1,10 +1,11 @@
+import { normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import { constants, closeSync, existsSync, fstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
 import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { ObservationStatistics, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = "2.1.9";
+export const VERSION = "2.1.10";
 if (OBSERVATION_VERSION !== VERSION) throw new Error('CAB statistics component version mismatch');
 const categories = ['reservation', 'changes', 'native', 'nativeChanges'];
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });
@@ -288,8 +289,9 @@ export class SessionStatistics {
     this.dirty = true;
   }
   nativeEvent(event) {
-    const value = event.payload || event;
-    const props = value.properties || {};
+    const value = normalizeOpenCodeEvent(event);
+    if (!value) return;
+    const props = value.properties;
     if (this.directory && [event.directory, value.directory, props.directory, props.info?.directory]
       .some((directory) => directory !== undefined && directory !== this.directory)) return;
     const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID;
@@ -298,7 +300,8 @@ export class SessionStatistics {
     this.advance(); const c = this.context(run);
     if (value.type === 'session.status' && ['busy', 'idle', 'retry'].includes(props.status?.type)) {
       this.nativeStates.set(session, props.status.type);
-    } else if (value.type === 'session.idle') this.nativeStates.set(session, 'idle');
+    } else if (['session.idle', 'session.execution.succeeded', 'session.execution.failed', 'session.execution.interrupted'].includes(value.type)) this.nativeStates.set(session, 'idle');
+    else if (value.type === 'session.execution.started') this.nativeStates.set(session, 'busy');
     else if (value.type === 'message.updated' && knownId(props.info?.id) &&
         ['user', 'assistant'].includes(props.info.role)) {
       c.messages[props.info.id] = props.info.role;

@@ -432,3 +432,14 @@ Attribution documentaire CAB-ACL-R5 : SUP10, sans modification des tâches ni de
 - **Livraison / activation :** distinctes du code, de la documentation, des validations et de l’archivage ; leur état actuel n’est pas vérifié par ACL.
 - **Entrée provisoire « code non attribué » :** repère sans code ni réservation, à séparer des correspondances vérifiées ; aucune au relevé ACL ; l’entrée archivée provisoire est remplacée par OBS09 après CAB-ACL-R2 ; l’entrée provisoire est remplacée par CT14 après CAB-ACL-R3, puis archivée ; l’entrée archivée provisoire de qualification historique est remplacée par MAI11 après CAB-ACL-R4 ; l’entrée active 2.1.6 est remplacée par SUP10 après CAB-ACL-R5 ; aucune entrée sans code dans le périmètre actuel.
 - **Flèche dirigée : A → B signifie que A dépend de B.** La flèche part du dépendant et pointe vers son prérequis. Les libellés précisent la phase ; les références et coordinations sans dépendance sont présentées en tableau séparé.
+
+### Actualisation SCM édition native et supervision — 29 octobre 2026
+
+`fix-native-edit-and-supervisor-mandates` : ARCHIVÉ, **code non attribué**, cible source commune 2.1.10. Périmètre validé par le développeur ; édition native, supervision, adaptations V2 et priorité medium/high qualifiées ; Node 502 réussis/28 ignorés, Python 75/75, natif 1/1 ; archive vérifiée. [Proposition](openspec/changes/archive/2026-10-29-fix-native-edit-and-supervisor-mandates/proposal.md), [tâches](openspec/changes/archive/2026-10-29-fix-native-edit-and-supervisor-mandates/tasks.md). Aucune activation effectuée. Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    nativeEditMandate["fix-native-edit-and-supervisor-mandates<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class nativeEditMandate provisional
+```
