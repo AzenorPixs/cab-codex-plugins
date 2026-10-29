@@ -15,8 +15,9 @@ import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function waitFor(check) {
-  for (let i = 0; i < 200; i++) { if (await check()) return; await delay(20); }
+async function waitFor(check, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
 async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false } = {}) {
@@ -87,11 +88,11 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     child.stderr.on('data', (data) => { stderr += data; });
     await waitFor(async () => { if (child.exitCode !== null) throw new Error(stderr);
       let status;
-      try { const response = await fetch(base + '/status'); if (!response.ok) return false; status = await response.json(); }
+      try { const response = await fetch(base + '/status', { headers: { connection: 'close' }, signal: AbortSignal.timeout(500) }); if (!response.ok) return false; status = await response.json(); }
       catch { return false; }
       assert.equal(status.pid, child.pid, 'fixture controller PID mismatch');
       assert.equal(status.workspace, directory, 'fixture controller workspace mismatch');
-      return true; });
+      return status.opencodeSse === 'connected'; }, 10000);
   }
   async function stop() {
     if (child.exitCode !== null) return;
@@ -925,7 +926,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.7');
+  assert.equal(initialized.result.serverInfo.version, '2.1.8');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

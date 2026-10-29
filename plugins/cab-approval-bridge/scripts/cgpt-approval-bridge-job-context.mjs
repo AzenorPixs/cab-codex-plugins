@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.7";
+export const VERSION = "2.1.8";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -250,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.7",
+    version: "2.1.8",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -467,6 +467,7 @@ function hasNativeAsk(session, kind, actions = ['ask']) {
       typeof rule.pattern !== "string" || !["ask", "allow", "deny"].includes(rule.action))) {
     return false;
   }
+  if (kind === 'bash' && session.permission.some(rule => rule.permission === 'shell')) kind = 'shell';
   const matches = (pattern) => new RegExp(`^${pattern.split("").map((character) =>
     character === "*" ? ".*" : character === "?" ? "." :
       character.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("")}$`).test(kind);
@@ -475,7 +476,7 @@ function hasNativeAsk(session, kind, actions = ['ask']) {
   return last?.pattern === "*" && actions.includes(last.action);
 }
 
-async function checkNativeAsk(operation) {
+async function checkNativeAsk(operation, nativeKind = operation?.kind) {
   if (!job?.armed) return;
   let session;
   try {
@@ -488,7 +489,7 @@ async function checkNativeAsk(operation) {
   if (session?.id !== operation.sessionId || session.directory !== operation.directory) {
     nativePermissionFailure("native-permission-context-divergent");
   }
-  if (!hasNativeAsk(session, operation.kind)) nativePermissionFailure("native-permission-ask-required");
+  if (!hasNativeAsk(session, nativeKind)) nativePermissionFailure("native-permission-ask-required");
 }
 
 async function nativeAskGuard(operation, response) {
@@ -528,6 +529,7 @@ function nativeParentHash(info) {
 
 function isPreparationDiagnostic(part, parts) {
   const tool = part.tool;
+  if (tool === 'cab_codemode_discovery' && part.state?.status === 'completed' && part.state.metadata?.cabCodeMode) return true;
   if (["cgpt-validation_broker_readiness", "cgpt-validation_broker_health",
     "cgpt-validation_list_pending", "cgpt-validation_broker_evaluate_remediation"].includes(tool)) return true;
   if (tool === "cgpt-validation_cancel_approval") {
@@ -603,6 +605,7 @@ async function inspectRejectedReconciliation(recovery, payload) {
   let submitted = false, rejected = false, approvalId;
   for (const part of current) {
     const state = part.state;
+    if (part.tool === 'cab_codemode_discovery' && state?.status === 'completed' && state.metadata?.cabCodeMode) continue;
     if (part.tool === 'cgpt-validation_broker_readiness' && state?.status === 'completed') continue;
     if (part.tool === 'cgpt-validation_request_validation') {
       const input = state?.input;
@@ -615,8 +618,13 @@ async function inspectRejectedReconciliation(recovery, payload) {
       approvalId = input.approval_id;
       if (state.status === 'error' && /^MCP error -32602:/.test(state.error || '')) continue;
       submitted = true;
-    } else if (!submitted || !['cgpt-validation_poll_approval', 'cgpt-validation_get_approval'].includes(part.tool) ||
+    } else if (!submitted || !['cgpt-validation_poll_approval', 'cgpt-validation_get_approval', 'cgpt-validation_reject'].includes(part.tool) ||
         state?.input?.approval_id !== approvalId) recoveryFailure('preflight-effect-not-excluded');
+    if (part.tool === 'cgpt-validation_reject' && (!state.metadata?.cabCodeMode || state.input.reviewer !== 'CGPT')) {
+      recoveryFailure('preflight-refusal-not-proved');
+    }
+    if (['cgpt-validation_poll_approval', 'cgpt-validation_get_approval'].includes(part.tool) &&
+        state?.status === 'error' && state.error === 'Tool execution interrupted' && state.metadata?.cabCodeMode) continue;
     let output;
     try { output = JSON.parse(state?.output); } catch { recoveryFailure('preflight-refusal-not-proved'); }
     if (state.status !== 'completed' || output.requestId !== recovery.preflightRequestId ||
@@ -655,6 +663,7 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
   let refused = false;
   for (const part of current) {
     const state = part.state;
+    if (part.tool === 'cab_codemode_discovery' && state?.status === 'completed' && state.metadata?.cabCodeMode) continue;
     if (part.tool === "cgpt-validation_broker_readiness" && state?.status === "completed") continue;
     let attempt;
     if (part.tool === "cgpt-validation_request_validation") {
@@ -1012,6 +1021,7 @@ async function checkRecoveryPreflight(recovery, restored = null) {
   let commandCount = 0;
   for (const part of parts) {
     const state = part.state;
+    if (part.tool === 'cab_codemode_discovery' && state?.status === 'completed' && state.metadata?.cabCodeMode) continue;
     const approvalTool = ["cgpt-validation_request_validation", "cgpt-validation_poll_approval",
       "cgpt-validation_get_approval"].includes(part.tool);
     if (part.tool === "cgpt-validation_request_validation") {
@@ -1394,7 +1404,7 @@ async function transmitApprovedOperation(validation) {
 
     if (permission && operationAllowed(validation.operation, validation.requestId, 'permission') &&
         !validation.operationInvalidated) {
-      await checkNativeAsk(validation.operation);
+      await checkNativeAsk(validation.operation, permission.nativeAction || validation.operation.kind);
       if (!operationAllowed(validation.operation, validation.requestId, 'permission') ||
           validation.operationInvalidated || validation.operationConsumed) return;
       nativeLifecycle.begin?.(validation.operation, validation.requestId, permission);
@@ -1693,7 +1703,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.7",
+      version: "2.1.8",
     },
   });
 

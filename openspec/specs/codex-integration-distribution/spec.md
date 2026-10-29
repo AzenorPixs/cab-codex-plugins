@@ -118,8 +118,8 @@ Le plugin CAB SHALL distribuer coding-session-statistics et ses métadonnées sa
 - **THEN** les skills CAB et coding-session-statistics sont présents et résolus depuis le manifeste
 
 #### Scenario: Release cohérente
-- **WHEN** le patch 2.1.7 est préparé
-- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.7
+- **WHEN** le patch 2.1.8 est préparé
+- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.8
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 
@@ -740,9 +740,9 @@ La marketplace MUST identifier les plugins par CAB et CABU. Leurs skills princip
 - **WHEN** une installation utilise encore cab-approval-bridge
 - **THEN** le gestionnaire installe et vérifie CAB avant retrait de l'ancienne entrée, sans édition manuelle du cache ni modification des données métier
 
-### Requirement: Distribution du cycle de vie CAB 2.1.7
-La distribution source MUST aligner ses composants versionnés sur 2.1.7 et inclure le module de cycle de vie dans les fermetures d’import du contrôleur, superviseur et moniteur. Les unités MUST empêcher le redémarrage automatique après un nettoyage incomplet identifié. La préparation MUST NOT installer, activer ou modifier les RUN réels.
+### Requirement: Distribution du cycle de vie CAB 2.1.8
+La distribution source MUST aligner ses composants versionnés sur 2.1.8 et inclure le module de cycle de vie dans les fermetures d’import du contrôleur, superviseur et moniteur. Les unités MUST empêcher le redémarrage automatique après un nettoyage incomplet identifié. La préparation MUST NOT installer, activer ou modifier les RUN réels.
 
 #### Scenario: Paquet source qualifié
-- **WHEN** CAB 2.1.7 est préparé
+- **WHEN** CAB 2.1.8 est préparé
 - **THEN** ses versions et imports sont cohérents et aucune activation réelle n’est déduite des tests
