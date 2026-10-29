@@ -125,7 +125,7 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
       files: [], commands: ['/usr/bin/true'], title: 'synthetic native proof', summary: 'local fixture', timeout_seconds: 30, interval_seconds: 1 };
     const mcp = (name, input) => ({ tool: 'execute', input: { code: `return await tools["cgpt-validation"].${name}(${JSON.stringify(input)});` } });
     const expectedDispatched = dispatched + 5;
-    queue.push(discovery,
+    queue.push({ tool: 'execute', input: { code: 'search({query: "broker_readiness"}); return "search done";' } },
       mcp('broker_readiness', { run_id: run.runId }), mcp('request_validation', approval),
       { tool: 'shell', input: { command: '/usr/bin/true' } }, mcp('broker_readiness', { run_id: run.runId }));
     await client.prompt(candidate.id, 'Execute only the queued synthetic preflight.');
@@ -139,7 +139,7 @@ test('OpenCode 2.2 réel : Code Mode MCP, shell ask/once, preuve et recovery com
     await until(async () => !(await client.activeSessions())[candidate.id] && dispatched === expectedDispatched, 'native completion');
     const parts = (await client.messages(candidate.id)).flatMap(message => message.parts.filter(part => part.type === 'tool'));
     assert.deepEqual(parts.map(part => part.tool), ['cab_codemode_discovery', 'cgpt-validation_broker_readiness', 'cgpt-validation_request_validation', 'bash', 'cgpt-validation_broker_readiness'], JSON.stringify(parts[1]));
-    assert.ok(JSON.parse(parts[0].state.output).items.some(item => item.path?.endsWith('.broker_readiness')), parts[0].state.output);
+    assert.equal(parts[0].state.output, 'search done');
     assert.equal(parts[3].executed, false); assert.equal(parts[3].nativeTool, 'shell'); assert.equal(parts[3].state.metadata.exit, 0);
     const status = await http('/runs/native-code/status'); assert.equal(status.unmatchedNativePermissionCount, 0);
     await http('/runs/native-code/locks/release', { version: run.version, operationId: approval.operation_id,

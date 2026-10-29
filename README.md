@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.8. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.9. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -14,7 +14,7 @@ des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche 
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
 
-CAB 2.1.8 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
+CAB 2.1.9 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
 sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
 fixe `opencode` et le mot de passe configuré par `OPENCODE_PASSWORD` ; CAB
 lit son mot de passe depuis `~/.config/cab-approval-bridge/opencode.password`
@@ -654,7 +654,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, du plugin CABU et des commandes
-est `2.1.8`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.9`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -775,7 +775,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.8.
+La distribution courante des quatre briques, plugins et commandes est 2.1.9.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -820,3 +820,13 @@ et le banc tests/native-opencode-codemode.test.mjs : serveur privé, fournisseur
 synthétique loopback, broker réel, prévol et écriture sous once, puis contrôle
 de disparition du broker et nettoyage. Aucune configuration ou credential
 réel n'est copié. Après archive et publication, CABU précède le recovery réel.
+
+## Découverte non autorisante — complément 2.1.9
+
+Le diagnostic Code Mode admet aussi un unique search à données littérales
+suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
+exacte, terminée, concordante et non tronquée. La projection reste
+cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
+Une variable, un appel ajouté ou une expression inconnue conserve le refus.
+Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
+La distribution commune est 2.1.9 ; les preuves 2.1.8 restent historiques.

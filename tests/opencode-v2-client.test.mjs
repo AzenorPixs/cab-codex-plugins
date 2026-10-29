@@ -53,6 +53,13 @@ test('Code Mode : projection littérale, provenance et découverte pure', async 
     [{tool:'search',status:'completed',input:search},{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:'fixture'}}]));
   assert.equal(identifiers.tool,'cgpt-validation_broker_readiness');
   assert.deepEqual(identifiers.state.input,{run_id:'fixture'});
+  const acknowledgement=await codeModeFixture(t,wrapped('search({query:"broker_readiness"}); return "APPROVED";',
+    [{tool:'search',status:'completed',input:{query:'broker_readiness'}}]));
+  assert.equal(acknowledgement.tool,'cab_codemode_discovery');
+  assert.deepEqual(acknowledgement.state.input,{query:'broker_readiness'});
+  for(const code of ['search({}); return other;', 'search({}); await tools["cgpt-validation"].reject({}); return "done";']) {
+    assert.equal((await codeModeFixture(t,wrapped(code,[{tool:'search',status:'completed',input:{}}]))).tool,'execute');
+  }
 });
 
 test('Code Mode : formes ambiguës conservées comme execute bloquant', async t => {
