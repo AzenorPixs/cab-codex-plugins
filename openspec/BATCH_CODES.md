@@ -134,3 +134,7 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 | Code | Change | État | Preuve |
 | --- | --- | --- | --- |
 | code non attribué | fix-native-edit-and-supervisor-mandates | ARCHIVÉ ; sources 2.1.10 qualifiées, Node 502/28 ignorés, Python 75/75 et natif 1/1 ; activation distincte | [tâches](changes/archive/2026-10-29-fix-native-edit-and-supervisor-mandates/tasks.md) |
+
+### Actualisation SCM directe — 29 octobre 2026
+
+`fix-direct-native-mcp-error-recovery` : ARCHIVÉ, **code non attribué**, source 2.1.11 ; provenance directe et retry qualifiés sur banc isolé, pagination adaptative testée ; Node519 réussis/28 ignorés, Python75/75 et natif1/1 ; archive vérifiée. [Proposition](changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/proposal.md), [tâches](changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/tasks.md). Aucune activation ; attribution ACL ultérieure.

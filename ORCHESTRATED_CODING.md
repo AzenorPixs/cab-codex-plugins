@@ -1,6 +1,6 @@
 # ORCHESTRATED_CODING.md — Sessions de codage pilotées
 
-Version : 0.1
+Version : 0.4
 
 Projet : identité à résoudre depuis la racine réelle et les cadrages applicables
 
@@ -21,6 +21,15 @@ L'orchestrateur définit le périmètre et les critères, arbitre les demandes e
 vérifie les preuves. L'agent de codage analyse et exécute seulement les
 opérations autorisées. Le développeur conserve le contrôle des décisions qui
 lui sont réservées. Aucun de ces rôles ne peut inventer une autorisation.
+
+Lorsque la demande ou le prompt l’autorise, l’agent orchestrateur réalise
+lui-même le commit dans le dépôt Git local et les publications vers les
+dépôts distants configurés, sans délégation à l’agent de codage. Il vérifie
+et rapporte séparément les résultats locaux et distants ; les autorisations
+propres aux opérations Git restent requises. L’agent de codage fournit les
+fichiers et preuves attendus, sans exécuter ces opérations. Elles ne constituent
+pas une propagation
+vers les projets consommateurs, qui exige une autorisation distincte.
 
 Le profil technique actuellement décrit utilise OpenCode comme agent de codage,
 l'agent orchestrateur désigné par le prompt et CAB comme transport neutre.
@@ -52,6 +61,56 @@ sinon la cause et l'URL attendue séparément du statut CAB. Préserver configur
 et port existants, sans activation au login. Un échec PLLM ou CAB ultérieur
 n'arrête pas le moniteur. Une divergence active ou un échec de monitoring ne
 permet aucun arrêt, redémarrage ou changement de RUN dans les autres briques.
+
+## Ordre de lecture et place de la Development Map
+
+Pour les seules sources nécessaires au périmètre autorisé, les deux agents
+appliquent l’ordre de lecture d’`AGENTS.md` :
+
+1. `AGENTS.md` ;
+2. `PROJECT.md` ;
+3. `TECHNICAL.md` ;
+4. `BUILD.md` ;
+5. `DEVOPS.md` ;
+6. `DEVELOPMENT_MAP.md` à la racine, pour les lots, changes et dépendances concernés ;
+7. la configuration, les spécifications et les changes OpenSpec applicables ;
+8. les conventions applicables du projet ;
+9. le code, les tests et la documentation concernés, dont `README.md` si nécessaire.
+
+`DEVELOPMENT_MAP.md` fait partie des cadrages du projet cible. Cette synthèse
+de navigation et d’aide à la décision relie les codes de lot, les changes actifs
+et archivés, leurs ensembles et sous-ensembles, dépendances et avancements.
+Sa lecture après `DEVOPS.md` et avant OpenSpec ne change pas la priorité des
+sources de vérité et des preuves. Revérifier les informations déterminantes
+contre les artefacts OpenSpec, les preuves accessibles et les `BLOCKERS.md`
+applicables ; signaler toute divergence et la résoudre avant d’utiliser
+l’information concernée. Distinguer avancement documentaire, réalisabilité,
+validation, livraison et activation.
+
+Lorsqu’un choix de change relève du prompt, respecter d’abord la cible,
+les priorités explicites, le périmètre et les réservations. Privilégier les
+travaux dont les prérequis sont vérifiés, puis un nombre et une difficulté
+faibles de dépendances non satisfaites, avant l’effet de déblocage documenté.
+La carte ne remplace ni l’inventaire des candidats ni les validations requises.
+
+Si la carte est absente, vide ou réduite à un squelette, y compris à son nom
+et au nom du projet, le signaler et recommander `ACL`, en mode direct,
+sans le lancer automatiquement. Poursuivre le travail autorisé à partir des
+sources et preuves accessibles, sans créer ni remplir la carte. Un fichier
+illisible reste `NON VÉRIFIABLE` ; il n’est pas assimilé à une absence.
+Une carte partielle exploitable conserve ses informations vérifiées, sans
+reconstruction globale. Sa création ou sa complétion globale attend la
+validation explicite prévue par ACL. Les amendements ciblés éventuels restent
+soumis aux autorisations du seul prompt applicable ; en pilotage, l’agent de
+codage les propose puis les réalise sous mandat CAB unitaire distinct après
+validation explicite de l’orchestrateur, dans les ressources autorisées.
+
+L’orchestrateur inclut cet ordre dans les mandats de lecture, au démarrage
+et lors des nouvelles lectures nécessaires à une reprise ou à un compactage.
+Il respecte le bootstrap prioritaire du monitoring et les préconditions CAB
+avant les lectures de l’agent de codage. La lecture préalable de ce protocole
+avant l’initialisation reste requise. Ces règles n’étendent ni le périmètre,
+ni les validations, ni les écritures autorisées et ne déclenchent aucun RUN.
 
 ## Étapes du cycle et observation web
 
@@ -227,6 +286,12 @@ Une réponse textuelle sans appel d'outil observé ne constitue jamais une
 preuve. Si l'outil MCP n'est pas exposé, échoue, répond `BLOCKED` ou
 `HUMAN_REQUIRED`, l'agent DOIT envoyer `CAB_BLOCKED` à CGPT et s'arrêter.
 
+Après ces contrôles, l’agent entre en analyse dans le seul périmètre autorisé
+et suit l’ordre de lecture ci-dessus : `DEVELOPMENT_MAP.md` après `DEVOPS.md`
+et avant les spécifications et changes OpenSpec. L’orchestrateur distingue les
+sources effectivement consultées, les limites et les informations revérifiées
+dans les preuves reçues.
+
 ### États de session
 
 L'agent suit exclusivement la séquence suivante :
@@ -359,6 +424,8 @@ l'ancienne cible et ne lui donne aucune priorité automatique.
 Choisir de manière argumentée, à partir des priorités validées, des exigences
 OpenSpec, des fondations documentées, des dépendances satisfaites, des unités
 réalisables et de leurs validations, ainsi que des ressources disponibles.
+Utiliser la cartographie lue préalablement comme repère, après revérification
+des informations déterminantes contre ces sources et les preuves actuelles.
 Examiner aussi la capacité d'un candidat à débloquer d'autres travaux, lorsque
 les liens de dépendance sont prouvés. Privilégier les changes existants cohérents
 et réalisables ; ne choisir ni au hasard ni selon le seul ordre des fichiers.
@@ -419,9 +486,10 @@ La restitution à l'écran indique son chemin. Un échec d'enregistrement est
 signalé explicitement avec le bilan disponible et l'état réel des ressources ;
 ne pas déclarer le rapport enregistré ni la clôture documentée sans preuve.
 
-À toute nouvelle sélection ou reprise, lire `BLOCKERS.md` lorsqu'il existe
-pour chaque change candidat examiné. Revérifier les dépendances sur l'état
-courant par des lectures ou contrôles ciblés autorisés sans effet de bord ;
+À toute nouvelle sélection ou reprise, respecter l’ordre de lecture ci-dessus,
+avec `DEVELOPMENT_MAP.md` avant OpenSpec. Lors de l’examen des changes, lire
+`BLOCKERS.md` lorsqu'il existe pour chaque candidat. Revérifier les dépendances
+sur l'état courant par des lectures ou contrôles ciblés autorisés sans effet de bord ;
 tout contrôle nécessitant une écriture, une réservation, une validation de
 périmètre ou un mandat attend ces autorisations. L'absence d'un rapport ancien
 ne prouve ni l'absence de blocage ni l'impossibilité de reprendre : reconstituer
@@ -738,8 +806,9 @@ dernier jalon conservé, nouvelle session, `strictCommands` préservé et gate
 OPEN. Les anciennes autorisations exécutables sont invalidées et l'historique
 non secret est conservé. Le superviseur suit désormais la session transférée.
 Un échec conserve le gel ; la récupération ordinaire ne purge pas le RUN et
-n'invente aucun gate terminal. La seule exception de purge est définie dans
-« Prévol de récupération divergent dans la même session » ci-dessous.
+n'invente aucun gate terminal. En cas de prévol divergent ou incomplet, appliquer la procédure
+« Prévol de récupération divergent dans la même session » ci-dessous,
+qui conserve la candidate, le job, le RUN et le runtime sans purge.
 Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
 locale du prévol : si elles sont perdues, la récupération reste refusée et
 nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
@@ -877,7 +946,7 @@ Un processus OpenCode, un broker MCP stdio, un contrôleur et un superviseur ser
 
 #### Réservation et périmètre
 
-Consulter GET /runs et OpenSpec avant sélection. Réserver exclusivement change et intention avant préparation par POST /runs/reserve : runId, ownerId, sessionId, directory, changeId, selectionKey, resources et dependsOn. Un RUN traite un change réservé à la fois ; les sous-jobs héritent du parent. Chaque change suivant emploie session, jobId et génération neufs.
+Consulter GET /runs et les sources du projet dans l’ordre d’`AGENTS.md`, avec `DEVELOPMENT_MAP.md` après `DEVOPS.md` et avant OpenSpec, avant sélection. Réserver exclusivement change et intention avant préparation par POST /runs/reserve : runId, ownerId, sessionId, directory, changeId, selectionKey, resources et dependsOn. Un RUN traite un change réservé à la fois ; les sous-jobs héritent du parent. Chaque change suivant emploie session, jobId et génération neufs.
 
 Les ressources déclarent la portée autorisée ; leur recouvrement ne bloque plus la réservation des changes compatibles. Examiner les dépendances sémantiques : fichiers distincts ne prouvent pas l'indépendance d'un contrat. Les clés file: sont relatives et canoniques ; un répertoire couvre ses descendants. Les ressources logiques couvrent contrats, bases, ports, sorties et index/références Git distinctement autorisés. Les alias physiques connus sont refusés.
 
@@ -969,7 +1038,7 @@ GET /statistics et /runs/<runId>/statistics conservent les agrégats et le broui
 
 POST /statistics/import accepte seulement un bundle filtré du projet exact avec provenance/empreinte, sans modifier permissions, décisions ou réservations. L'importeur distribué lit en flux borné les fichiers d'audit explicitement désignés, sans suivre les chemins du contenu ni réactiver le job arrêté. Sources natives/importées restent séparées. Les quotas sont partagés et comparés seulement à compte/fenêtre identiques. Contenu, commandes, chemins d'opérations, URL et secrets sont exclus.
 
-Sans candidat, distinguer dépendance, conflit et absence de travail restant prouvée. CISM, CAISM et prompts directs restent hors concurrence pilotée. La propagation vers les projets consommateurs exige son autorisation propre.
+Sans candidat, distinguer dépendance, conflit et absence de travail restant prouvée. CISM et les prompts directs restent hors concurrence pilotée. La propagation vers les projets consommateurs exige son autorisation propre.
 
 #### Maintenance d'une récupération gelée
 

@@ -15,6 +15,12 @@ Version : 0.5
 * Protocole des sessions de codage pilotées : `ORCHESTRATED_CODING.md`
   (facultatif, uniquement si le projet nécessite ce pilotage) ;
 
+`DEVOPS.md` est généré automatiquement. Son contenu dépend de l'environnement
+de développement local dans lequel il est généré et décrit l'état observé
+au moment de cette génération. Il est susceptible d'être régénéré en cours
+de session de codage. Après une régénération, l'agent DOIT relire les
+informations nécessaires à la poursuite du travail avant de s'y référer.
+
 `DEVELOPMENT_MAP.md` fait partie des fichiers de cadrage du projet.
 Il constitue une synthèse de navigation et d’aide à la décision reliant
 les codes de lot, les changes OpenSpec actifs et archivés, leurs ensembles

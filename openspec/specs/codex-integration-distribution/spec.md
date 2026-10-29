@@ -119,7 +119,7 @@ Le plugin CAB SHALL distribuer coding-session-statistics et ses métadonnées sa
 
 #### Scenario: Release cohérente
 - **WHEN** le patch 2.1.9 est préparé
-- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.10
+- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.11
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 
@@ -741,7 +741,7 @@ La marketplace MUST identifier les plugins par CAB et CABU. Leurs skills princip
 - **THEN** le gestionnaire installe et vérifie CAB avant retrait de l'ancienne entrée, sans édition manuelle du cache ni modification des données métier
 
 ### Requirement: Distribution du cycle de vie CAB 2.1.9
-La distribution source MUST aligner ses composants versionnés sur 2.1.10 et inclure le module de cycle de vie dans les fermetures d’import du contrôleur, superviseur et moniteur. Les unités MUST empêcher le redémarrage automatique après un nettoyage incomplet identifié. La préparation MUST NOT installer, activer ou modifier les RUN réels.
+La distribution source MUST aligner ses composants versionnés sur 2.1.11 et inclure le module de cycle de vie dans les fermetures d’import du contrôleur, superviseur et moniteur. Les unités MUST empêcher le redémarrage automatique après un nettoyage incomplet identifié. La préparation MUST NOT installer, activer ou modifier les RUN réels.
 
 #### Scenario: Paquet source qualifié
 - **WHEN** CAB 2.1.9 est préparé
@@ -754,3 +754,11 @@ La distribution source MUST aligner ses composants versionnés sur 2.1.10 et doc
 #### Scenario: Sources préparées sans activation
 - **WHEN** la qualification et les tests source réussissent
 - **THEN** les composants source partagent 2.1.10 et les preuves distinguent source, archivage, publication et activation
+
+### Requirement: Distribution de la récupération native directe 2.1.11
+
+Les composants versionnés CAB MUST partager la base 2.1.11 et documenter la récupération directe strictement qualifiée. Source, archivage, publication, activation et récupération réelle MUST rester distincts. La préparation source MUST NOT modifier les sessions, RUN ou services actifs.
+
+#### Scenario: Sources qualifiées
+- **WHEN** les tests et documents source sont validés
+- **THEN** les artefacts partagent 2.1.11 et une activation ultérieure reste coordonnée séparément

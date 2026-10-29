@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.10";
+export const VERSION = "2.1.11";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -250,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.10",
+    version: "2.1.11",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -648,9 +648,14 @@ async function inspectRejectedReconciliation(recovery, payload) {
     authorizationReference: payload.developerAuthorization, globalTransactionId: payload.globalTransactionId || null };
 }
 
+function qualifiedMcpError(part) {
+  return part.state?.metadata?.cabCodeMode?.nativeMcpError === true ||
+    Boolean(part.state?.metadata?.cabDirectMcpError?.itemId && part.state.metadata.cabDirectMcpError.envelopeHash);
+}
+
 function nativeUnregisteredRefusal(part, recovery) {
   const state = part.state, input = state?.input;
-  return run && state?.status === 'error' && state.metadata?.cabCodeMode?.nativeMcpError === true &&
+  return run && state?.status === 'error' && qualifiedMcpError(part) &&
     state.error === 'MCP tool "request_validation" on server "cgpt-validation" failed: protocole de coordination ou identite d operation invalide' &&
     input?.access_id === '' && input.requestId === recovery.preflightRequestId &&
     typeof input.approval_id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(input.approval_id) &&
@@ -662,7 +667,7 @@ function nativeUnregisteredRefusal(part, recovery) {
 
 function nativeUnknownApproval(part, approvalId) {
   return part.tool === 'cgpt-validation_get_approval' && part.state?.status === 'error' &&
-    part.state.metadata?.cabCodeMode?.nativeMcpError === true &&
+    qualifiedMcpError(part) &&
     Object.keys(part.state.input || {}).length === 1 && part.state.input.approval_id === approvalId &&
     part.state.error === `MCP tool "get_approval" on server "cgpt-validation" failed: approval_id '${approvalId}' inconnu`;
 }
@@ -1738,7 +1743,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.10",
+      version: "2.1.11",
     },
   });
 
