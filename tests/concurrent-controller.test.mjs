@@ -925,7 +925,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.6');
+  assert.equal(initialized.result.serverInfo.version, '2.1.7');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1010,6 +1010,48 @@ test('une réduction quiescente retire project:* sans accepter une génération 
     resources: reduced.body.resources, evidence: ['must wait for pending validation'] })).body.error, 'run-not-quiescent');
 });
 
+
+test('rejet réconcilié permet seulement la levée globale liée et quiescente', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
+  const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new',
+    recoveryId: 'recovery-rejected', preflightRequestId: 'preflight-rejected' };
+  assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const approval = h.approval({ ...a, sessionId: 'ses_a_new' }, recovery.preflightRequestId);
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
+  h.native.messages.ses_a_new[0].parts[0].state = { status: 'completed', input: approval,
+    output: JSON.stringify({ ...approval, status: 'REJECTED' }), time: { start: 1, end: 2 } };
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 0,
+    infrastructure_status: 'READY', coordination_protocol: 'resource-scoped-v1' });
+  const global = (await h.post('/coordination/global/request', { transactionId: 'rejected-global',
+    cause: 'GLOBAL_RECONCILIATION', scope: 'all', authorization: 'human test', evidence: ['test'] })).body;
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value;
+  const parts = h.native.messages.ses_a_new.flatMap(m => m.parts).map(v2NormalizedToolPart);
+  const payload = { ...recovery, phase: 'reconcile-rejected', previousPreflightRequestId: approval.requestId,
+    preflightRequestId: 'preflight-next', developerAuthorization: 'human test', globalTransactionId: global.transactionId,
+    rejectedPreflightProof: { nativeToolCount: parts.length,
+      nativeToolHash: createHash('sha256').update(JSON.stringify(canonical(parts))).digest('hex') } };
+  assert.equal((await h.post('/runs/a/job/recover', { ...payload, globalTransactionId: 'other' })).status, 409);
+  const reconciled = await h.post('/runs/a/job/recover', payload);
+  assert.equal(reconciled.status, 200, JSON.stringify(reconciled.body));
+  const attempt = reconciled.body.recovery.attempts.at(-1);
+  const release = { transactionId: global.transactionId, generation: global.generation,
+    authorization: 'human test', evidence: ['sealed rejection'], rejectedRecovery: { runId: 'a', jobId: 'job-a',
+      recoveryId: recovery.recoveryId, preflightRequestId: 'preflight-next', nativeToolHash: attempt.nativeToolHash } };
+  assert.equal((await h.post('/coordination/global/confirm', { ...release, authorization: '' })).status, 409);
+  h.native.busy.ses_b = { type: 'busy' };
+  assert.equal((await h.post('/coordination/global/confirm', release)).status, 409);
+  delete h.native.busy.ses_b;
+  assert.equal((await h.post('/coordination/global/confirm', release)).status, 200);
+  h.native.messages.ses_a_new[0].parts[0].state.output = 'changed';
+  assert.equal((await h.post('/coordination/global/release', release)).status, 409);
+  h.native.messages.ses_a_new[0].parts[0].state.output = JSON.stringify({ ...approval, status: 'REJECTED' });
+  assert.equal((await h.post('/coordination/global/release', release)).status, 200);
+  assert.equal((await h.get('/runs/a/job')).body.recovery.preflightRequestId, 'preflight-next');
+  assert.deepEqual(h.native.replies, []);
+});
 
 test('restauration humaine concurrente conserve propriétaire et digest sans nouvelle once', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');

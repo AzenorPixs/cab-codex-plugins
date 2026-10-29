@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.6. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.7. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -14,7 +14,7 @@ des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche 
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
 
-CAB 2.1.6 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
+CAB 2.1.7 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
 sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
 fixe `opencode` et le mot de passe configuré par `OPENCODE_PASSWORD` ; CAB
 lit son mot de passe depuis `~/.config/cab-approval-bridge/opencode.password`
@@ -654,7 +654,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, du plugin CABU et des commandes
-est `2.1.6`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.7`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -772,3 +772,18 @@ Lorsque le serveur `opencode serve` auquel CAB s’est rattaché termine, le con
 CAB peut démarrer avant OpenCode et attendre sa première connexion vérifiable. Après une fermeture complète, la remise en service est explicite : les RUN, jobs, réservations et gels sont conservés et leur reprise suit la réconciliation habituelle. Aucun gate de réussite ni libération métier n’est inventé. Le moniteur continue à afficher une panne isolée du contrôleur ; sa fermeture dépend de la disparition prouvée du serveur OpenCode.
 
 Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Les preuves et limites sont conservées avec le change OpenSpec de cycle de vie.
+
+## Réconciliation des prévols rejetés — 2.1.7
+
+La distribution courante des quatre briques, plugins et commandes est 2.1.7.
+Les preuves historiques conservent leur version. Après redémarrage,
+`reconcile-rejected` permet une réconciliation humaine du rejet natif sans
+effet et sans reconstruire de décision locale. Le retry ordinaire conserve
+ses contrôles. Le reçu lie l'historique natif et, si nécessaire, la transaction
+GLOBAL_RECONCILIATION exacte. Confirm/release exigent `authorization` et
+`rejectedRecovery` (runId, jobId, recoveryId, prochain preflightRequestId,
+nativeToolHash du reçu), puis recontrôlent l'historique et toute la cohorte.
+Une permission, un effet, une attente, un pair occupé ou une autre récupération
+non réconciliée conserve le gel. Le nouveau prévol exige décision et once
+propres avant complete. CABU intervient après archivage ; les tests source
+ne prouvent ni installation ni réconciliation réelle.

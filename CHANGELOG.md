@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.7 — Réconciliation explicite des prévols rejetés
+
+- Ajouter reconcile-rejected sous autorité humaine, avec empreinte native et exclusion de tout effet, sans reconstruction de décision exécutable.
+- Lier la confirmation et la levée du gel global au reçu du recovery et à la quiescence de la cohorte.
+- Conserver les refus du retry ordinaire et exiger un nouveau prévol avec décision et once propres ; aligner la distribution commune en 2.1.7.
+
 ## 2.1.6 — Fermeture de CAB avec le serveur OpenCode
 
 - Calculer le sceau de maintenance depuis un instant unique pour éviter un refus artificiel à 60 001 ms, sans relâcher la limite de 60 000 ms.

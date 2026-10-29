@@ -4,9 +4,9 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.1.6
+### Distribution courante 2.1.7
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.6. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.7. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
 
 OpenCode V2 est la seule version prise en charge. Les appels HTTP utilisent
 `/api/...` avec Basic Auth sous l'utilisateur fixe `opencode`. Configurer le
@@ -246,7 +246,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.1.6` pour le broker,
+artefacts distribués. La version de base actuelle est `2.1.7` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -548,7 +548,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.6 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.7 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -592,3 +592,18 @@ Le client n’envoie order que sur la première page et conserve les curseurs op
 Le module `cgpt-approval-bridge-process-lifecycle.mjs` est inclus dans les scripts communs et dans la fermeture d’import du moniteur installé dans son répertoire dédié. L’updater le considère obligatoire et conserve ses contrôles syntaxiques, de version et d’empreinte. Les trois unités distribuent `RestartPreventExitStatus=78` ; aucune activation au login ni nouvelle dépendance n’est ajoutée. Les contrôles utilisent Node/Python/OpenSpec de DEVOPS.md.
 
 Le banc de processus exige une terminaison sous cinq secondes, libération des verrous et conservation des RUN, jobs armés et gels synthétiques. Les scénarios de maintenance hérités sont réexécutés avec la cible source 2.1.6 ; les preuves antérieures 2.1.5 restent historiques. La préparation source et ses tests ne provisionnent, n’installent et n’activent aucun composant réel.
+
+## Réconciliation des prévols rejetés — 2.1.7
+
+La distribution courante des quatre briques, plugins et commandes est 2.1.7.
+Les preuves historiques conservent leur version. Après redémarrage,
+`reconcile-rejected` permet une réconciliation humaine du rejet natif sans
+effet et sans reconstruire de décision locale. Le retry ordinaire conserve
+ses contrôles. Le reçu lie l'historique natif et, si nécessaire, la transaction
+GLOBAL_RECONCILIATION exacte. Confirm/release exigent `authorization` et
+`rejectedRecovery` (runId, jobId, recoveryId, prochain preflightRequestId,
+nativeToolHash du reçu), puis recontrôlent l'historique et toute la cohorte.
+Une permission, un effet, une attente, un pair occupé ou une autre récupération
+non réconciliée conserve le gel. Le nouveau prévol exige décision et once
+propres avant complete. CABU intervient après archivage ; les tests source
+ne prouvent ni installation ni réconciliation réelle.

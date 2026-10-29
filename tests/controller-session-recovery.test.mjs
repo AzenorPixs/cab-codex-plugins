@@ -636,6 +636,60 @@ test("retry refuse chaque identité ou opération de polling divergente sans mut
   assert.equal((await h.post("/job/recover", retryPayload(h))).status, 200);
 });
 
+test('reconcile-rejected scelle un rejet après redémarrage sans restaurer de décision', async (context) => {
+  const h = await setup(context);
+  await h.post('/job/recover', { ...h.recovery, phase: 'prepare' });
+  const a = await refusedPreflight(h);
+  h.native.messages.unshift({ parts: [{ type: 'tool', tool: 'cgpt-validation_request_validation',
+    state: { status: 'error', input: a, error: 'MCP error -32602: mandat invalide' } }] });
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'resource-scoped-v1', pending_count: 0 });
+  assert.equal((await h.post('/job/recover', retryPayload(h))).status, 409);
+  const parts = h.native.messages.flatMap(m => m.parts);
+  const payload = { ...retryPayload(h), phase: 'reconcile-rejected', developerAuthorization: 'accord test',
+    rejectedPreflightProof: { nativeToolCount: parts.length, nativeToolHash: canonicalProofHash(parts) } };
+  const result = await h.post('/job/recover', payload);
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.equal(result.body.recovery.attempts.at(-1).outcome, 'REJECTED_WITHOUT_EFFECT');
+  assert.deepEqual(h.native.replies, []);
+  assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 404);
+  await h.stop(); await h.start();
+  assert.deepEqual((await h.get('/job')).recovery, result.body.recovery);
+  await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'resource-scoped-v1', pending_count: 0 });
+  h.recovery.preflightRequestId = 'preflight-2';
+  await h.preflight();
+  const completed = await h.post('/job/recover', { ...h.recovery, phase: 'complete' });
+  assert.equal(completed.status, 200, JSON.stringify(completed.body));
+  assert.equal(h.native.replies.length, 1);
+  assert.equal(h.native.replies[0].body.response, 'once');
+});
+
+test('reconcile-rejected refuse autorité, empreinte, approbation et outil divergents', async (context) => {
+  const h = await setup(context);
+  await h.post('/job/recover', { ...h.recovery, phase: 'prepare' });
+  await refusedPreflight(h);
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'resource-scoped-v1', pending_count: 0 });
+  const good = structuredClone(h.native.messages), before = await h.get('/job');
+  for (const variant of ['authority', 'hash', 'approved', 'tool', 'identity']) {
+    h.native.messages = structuredClone(good);
+    if (variant === 'approved') {
+      const part = h.native.messages[0].parts[0];
+      part.state.output = JSON.stringify({ ...JSON.parse(part.state.output), status: 'APPROVED' });
+    }
+    if (variant === 'tool') h.native.messages[0].parts.push({ type: 'tool', tool: 'bash', state: { status: 'completed' } });
+    if (variant === 'identity') h.native.messages[0].parts[0].state.input.session_id = 'ses_foreign';
+    const parts = h.native.messages.flatMap(m => m.parts);
+    const payload = { ...retryPayload(h), phase: 'reconcile-rejected',
+      developerAuthorization: variant === 'authority' ? '' : 'accord test',
+      rejectedPreflightProof: { nativeToolCount: parts.length,
+        nativeToolHash: variant === 'hash' ? '0'.repeat(64) : canonicalProofHash(parts) } };
+    assert.equal((await h.post('/job/recover', payload)).status, 409, variant);
+    assert.deepEqual((await h.get('/job')).recovery, before.recovery);
+    assert.deepEqual(h.native.replies, []);
+  }
+});
+
 test("retry refuse un refus de polling sans décision locale restaurée", async (context) => {
   const h = await setup(context);
   await h.post("/job/recover", { ...h.recovery, phase: "prepare" });

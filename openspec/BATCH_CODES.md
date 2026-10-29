@@ -109,9 +109,13 @@ Tous les chemins sont relatifs à openspec/. Pour les 70 nouveaux codes : **Attr
 
 ## Entrées provisoires sans code
 
-Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code. Aucune réservation supplémentaire de code.
+Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code à cette date. Aucune réservation supplémentaire de code à cette date.
 
-Aucune entrée sans code sur le périmètre actuel.
+Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des correspondances attribuées. Attribution ultérieure par ACL, sans réservation de code dans cette session.
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | fix-rejected-preflight-recovery-after-restart | ARCHIVÉ, source validée 5/5 ; activation non effectuée | [qualification](changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/QUALIFICATION.md) |
 
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
 
