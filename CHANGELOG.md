@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.12 — Diagnostics de notification et refus avant admission
+
+- Dernier diagnostic HTTP/code reconnu conservé et exposé par le broker sous la lease de notification exacte ; champs distants arbitraires exclus, anciennes approbations compatibles.
+- Refus locaux de validation comptés une fois par tentative dans le RUN connu, sans admission, décision ou permission implicite. Distribution2.1.12 et consignes alignées.
+
 ## 2.1.11 — Erreurs MCP directes et historiques volumineux
 
 - Provenance native directe qualifiée pour le retry historique access_id vide, sans retrait des gardes, altération du transcript ou rejeu once.

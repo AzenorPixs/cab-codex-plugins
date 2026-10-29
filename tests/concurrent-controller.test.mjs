@@ -926,7 +926,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.11');
+  assert.equal(initialized.result.serverInfo.version, '2.1.12');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1703,3 +1703,28 @@ for (const kind of ['type-libre', 'item-divergent', 'temps-absent', 'temps-inver
     assert.deepEqual(h.native.replies, []);
   });
 }
+
+test('notification stale avant admission : chaque tentative locale est comptée une fois pour son RUN sans décision', async t => {
+  const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
+  const stale = h.approval(a, 'diagnostic-stale', { [a.resources[0].key]: 1 });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const refused = await h.post('/validation/resource-request', { approval: stale });
+    assert.equal(refused.status, 409); assert.equal(refused.body.error, 'resource-revision-stale');
+    const stats = (await h.get('/runs/a/statistics')).body.contexts[0];
+    assert.equal(stats.httpFailures['resource-revision-stale'], attempt);
+    assert.equal(stats.decisions.pending, 0); assert.equal(stats.decisions.rejected, 0);
+    assert.equal(stats.decisions.approved, 0); assert.equal(stats.decisions.once, 0);
+    const status = (await h.get('/runs/a/status')).body;
+    assert.equal(status.undecidedValidationCount, 0); assert.equal(status.activeValidationCount, 0);
+  }
+  assert.equal((await h.get('/runs/b/statistics')).body.contexts[0].httpFailures['resource-revision-stale'], undefined);
+  const registry = (await h.get('/runs')).body;
+  assert.equal(registry.requestOwners[stale.requestId], undefined);
+  assert.equal(registry.coordination.operations[stale.operation_id], undefined);
+  assert.deepEqual(h.native.replies, []);
+  const valid = h.approval(a, 'diagnostic-valid');
+  assert.equal((await h.post('/validation/resource-request', { approval: valid })).status, 202);
+  assert.equal((await h.get('/runs/a/statistics')).body.contexts[0].httpFailures['resource-revision-stale'], 3);
+  assert.deepEqual(h.native.replies, []);
+});
+

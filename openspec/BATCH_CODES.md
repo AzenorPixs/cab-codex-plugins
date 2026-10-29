@@ -138,3 +138,7 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Actualisation SCM directe — 29 octobre 2026
 
 `fix-direct-native-mcp-error-recovery` : ARCHIVÉ, **code non attribué**, source 2.1.11 ; provenance directe et retry qualifiés sur banc isolé, pagination adaptative testée ; Node519 réussis/28 ignorés, Python75/75 et natif1/1 ; archive vérifiée. [Proposition](changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/proposal.md), [tâches](changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/tasks.md). Aucune activation ; attribution ACL ultérieure.
+
+### Actualisation SCM diagnostics — 29 octobre 2026
+
+`fix-notification-admission-diagnostics` : ARCHIVÉ, **code non attribué**, source2.1.12. Sources qualifiées : Node520 réussis/28 ignorés, Python80/80, natif1/1 ; archive vérifiée ; activation CABU à suivre séparément. [Proposition](changes/archive/2026-10-29-fix-notification-admission-diagnostics/proposal.md), [tâches](changes/archive/2026-10-29-fix-notification-admission-diagnostics/tasks.md). CABU explicitement autorisé après clôture source et coordination ; attribution ACL ultérieure.

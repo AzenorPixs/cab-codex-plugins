@@ -1,8 +1,10 @@
 # ORCHESTRATED_CODING.md — Sessions de codage pilotées
 
-Version : 0.4
+Version : 0.5
 
 Projet : identité à résoudre depuis la racine réelle et les cadrages applicables
+
+# Contrat général de pilotage
 
 ## Champ d'application et autorité
 
@@ -30,6 +32,70 @@ propres aux opérations Git restent requises. L’agent de codage fournit les
 fichiers et preuves attendus, sans exécuter ces opérations. Elles ne constituent
 pas une propagation
 vers les projets consommateurs, qui exige une autorisation distincte.
+
+## Répartition entre prompts et protocole
+
+Les prompts de session pilotée définissent le travail demandé, son périmètre,
+ses livrables, ses autorisations métier, ses validations et ses conditions
+terminales. Le présent protocole définit exclusivement les solutions de
+pilotage et de sélection des modèles, leurs préconditions, leurs interfaces,
+leurs autorisations techniques et leurs procédures de récupération. Ces
+règles techniques ne sont pas dupliquées dans les prompts ni dans leur index.
+
+Avant tout pilotage, les deux agents lisent intégralement le protocole à la
+racine réelle du projet cible et vérifient le profil applicable. Le référentiel
+modifiable est le projet cab ; les copies des projets consommateurs ne
+sont pas modifiées directement. Leur propagation est une opération distincte.
+Une copie absente, incompatible ou insuffisante est signalée avec les opérations
+empêchées ; ne pas inventer un profil ni contourner une précondition. La lecture
+seule ne lance ni session, ni évaluation, ni maintenance.
+
+Les prompts restent indépendants des fournisseurs, des modèles et des
+solutions de transport ou d'approbation. Ils conservent les décisions réservées
+au développeur et leurs limites métier. Un autre profil technique exige un
+contrat d'intégration explicitement validé et ses preuves de compatibilité ;
+la seule présence d'un outil ne rend pas ce profil disponible.
+
+## Contrat commun de session
+
+L'orchestrateur vérifie l'identité du projet, le mandat, les préconditions
+et les autorisations applicables avant les opérations concernées. Il conserve
+les décisions, les preuves, les ressources détenues et le premier jalon non
+prouvé dans le seul checkpoint autorisé par le prompt. Une reprise réconcilie
+l'état réel avant toute nouvelle opération ; elle ne rejoue aucune permission
+consommée et ne redemande pas un accord toujours applicable et non révoqué.
+
+Le développeur fixe les objectifs et conserve les arbitrages qui lui sont
+réservés. L'orchestrateur examine les demandes et les preuves ; l'agent de
+codage réalise les seuls mandats autorisés. Le transport ne décide jamais.
+Une permission technique ne constitue ni une validation métier ni une extension
+du périmètre. La concurrence protège les effets et les ressources concernés,
+sans imposer de gel global aux travaux indépendants.
+
+Une opération échouée ou interrompue doit être réconciliée avant reprise.
+Les états d'attente, de blocage, de préparation et de livraison sont distincts.
+Une fin de tour, une absence d'événement ou un délai ne prouve ni la fin des
+travaux ni une libération de ressource. Une clôture exige les critères du
+prompt et les preuves techniques du profil, sans inventer de résultat.
+
+## Finalité du contrat et critères techniques de clôture
+
+| Finalité du prompt | Résultat métier attendu | Limites du contrat technique |
+|---|---|---|
+| Diagnostic ou audit | Analyse et restitution, avec constats et décisions éventuellement en attente | Pas d'écriture métier ; seul le checkpoint déjà autorisé fait exception. Aucun test applicatif, correction, archivage ou rapport d'archive imposé pour obtenir le gate. |
+| Préparation, notamment GSCMP | Couverture démontrée et seuls changes ou compléments nécessaires préparés | Zéro création et aucune écriture OpenSpec sont possibles. Les tests de communication ne valent pas tests applicatifs. Aucune implémentation ni archivage requis. |
+| Implémentation | Réalisation et validations du périmètre autorisé | Les obligations de cohérence, de rapports et d'archivage éligible restent celles du prompt. Un change incomplet reste ouvert lors d'une clôture pour dépendances manquantes. |
+| Revalidation d'archive | Contrôles et rapports explicitement autorisés sur la cible résolue | Aucune réouverture, correction ou nouvelle livraison fonctionnelle déduite de l'audit. Préserver les preuves historiques. |
+
+Les nouvelles tâches de développement préparées restent non cochées. Les
+critères du job représentent le travail réel de la session, pas des tâches
+futures ni des tâches historiques à réaliser artificiellement. Le contrat
+technique doit représenter la finalité demandée ; une incompatibilité démontrée
+est rapportée sans création de change fictif, modification interdite ou faux gate.
+Les restrictions d'un audit ciblé priment sur les clauses génériques de tests,
+d'intégration, d'archivage ou de fin globale du projet.
+
+# Profil technique OpenCode, CAB et PLLM
 
 Le profil technique actuellement décrit utilise OpenCode comme agent de codage,
 l'agent orchestrateur désigné par le prompt et CAB comme transport neutre.
@@ -149,24 +215,39 @@ retenu diffère, appliquer les règles de nouvelle session et de nouveau job
 avec réservation, en conservant le bilan précédent. Ne pas renommer les
 anciennes sessions d'un autre RUN. Un titre lisible ne remplace jamais les identifiants natifs.
 
-### Coordination autorisée entre chats CISMP
+### Coordination autorisée entre sessions du même projet
 
-Le développeur autorise durablement l'envoi et la réception de messages
-strictement nécessaires à la coordination entre les chats du même projet
-identifiés comme participants « RUN CISMP<N> persistant ». Cette autorisation
-couvre les demandes et réponses concernant réservations, dépendances,
-ressources partagées, jalons stables et intégration. Avant un envoi, vérifier
-la correspondance du chat destinataire avec le projet, la racine et le RUN
-au moyen des identifiants accessibles et du registre CAB ; le titre seul ne
-prouve ni l'identité ni la propriété. Une correspondance incertaine exige la
-clarification indispensable, sans envoyer au chat supposé.
+Sur instruction explicite du développeur du 26 octobre 2026, la
+coordination nécessaire entre les différentes sessions de codage d'un même
+projet, pilotées par le même agent orchestrateur via le protocole CAB, est
+durablement autorisée sans approbation préalable ni confirmation
+supplémentaire du développeur pour envoyer un message ou y répondre.
+Cet accord couvre tous les types de RUN pilotés et leurs sous-jobs qui
+respectent ces trois conditions.
 
-Un message reçu fournit des informations à réconcilier ; il ne modifie pas
-les autorisations du développeur et ne vaut jamais décision CAB. Cette
-coordination n'autorise ni arrêt ou redémarrage d'un autre RUN, ni modification
-de son périmètre, ni décision à sa place. Elle n'autorise pas de message à un
-autre projet, à un chat non participant ou à un tiers. Les autres types de
-prompts conservent leurs autorisations de coordination explicitement données.
+Les échanges peuvent porter sur les diagnostics, blocages, demandes de
+correction dans le périmètre autorisé, preuves, réservations, ressources
+partagées, jalons, intégration et préparation d'une maintenance coordonnée.
+Un autre sigle de prompt ou une réponse entre sessions participantes ne
+justifie pas de redemander l'accord de communication. Cette autorisation
+remplace les clauses générales limitant ces échanges aux seuls chats CISMP ;
+une restriction explicite ultérieure du développeur reste prioritaire.
+
+Avant l'envoi, vérifier avec les métadonnées accessibles et le registre CAB
+l'identité de la session destinataire, son rattachement au même projet et
+son pilotage par le même orchestrateur ; le titre seul ne suffit pas.
+Transmettre seulement les informations nécessaires et autorisées, sans
+secret ni source exclue. Conserver les identifiants et références des
+échanges dans le checkpoint non secret déjà autorisé, lorsqu'il existe.
+
+Un message de coordination ne vaut ni décision CAB ni extension du
+périmètre de travail du destinataire. Chaque session vérifie ses propres
+autorisations avant d'exécuter une correction ou une maintenance. Les
+mandats unitaires, permissions natives, validations OpenSpec, opérations Git
+et règles de quiescence restent applicables. Cet accord ne couvre pas les
+échanges avec un autre projet, un autre orchestrateur ou un tiers ; il ne
+crée aucun nouveau chat ou RUN, ne lance aucun prompt et n'autorise aucun
+arrêt ou redémarrage d'une autre session ou d'un service partagé.
 
 ### Conservation et vérification des accords
 
@@ -179,9 +260,10 @@ restriction ou révocation plus récente prévaut. Ne pas redemander un accord
 explicite, toujours applicable et non révoqué. Un checkpoint seul ne crée ni
 n'étend une autorisation.
 
-Les préconditions techniques et les accords particuliers sont définis par le
-prompt invoqué et le contrat CAB effectivement en vigueur. Les choix de services
-externes, leurs évaluations et leurs replis relèvent de ces seules sources.
+Les préconditions techniques, les choix de services externes, leurs évaluations,
+leurs replis et les accords techniques sont définis par le présent profil et
+le contrat CAB effectivement en vigueur. Le prompt définit les autorisations
+métier et ses barrières propres, sans redéfinir ces procédures techniques.
 Vérifier les accords applicables avant les échanges, sans les réinventer ni
 les étendre. Transmettre seulement les éléments nécessaires dans les limites
 d'AGENTS.md, sans secret ni source exclue. Un accord ne s'étend pas implicitement
@@ -193,7 +275,8 @@ uniquement la décision nécessaire avant l'échange concerné.
 Le feu vert de démarrage et la validation du périmètre restent distincts.
 Lorsqu'un prompt définit son invocation comme feu vert conditionnel,
 l'orchestrateur vérifie les conditions puis démarre sans redemander cet
-accord. Sinon, sa barrière de démarrage demeure applicable. Un sous-job
+accord. Sinon, vérifier le feu vert explicite applicable avant le premier
+mandat, sans redemander un accord prouvé et non révoqué. Un sous-job
 hérite seulement du feu vert que son parent lui délègue effectivement.
 
 Ces règles ne déclenchent ni écriture ni implémentation dans un diagnostic.
@@ -203,57 +286,248 @@ d'OpenSpec, de Git, d'infrastructure et les mandats CAB restent applicables.
 La persistance suit les conditions terminales du prompt ; elle ne crée aucun
 réveil automatique après interruption de l'orchestrateur.
 
-## PLLM Automatique — fraîcheur initiale et conservation du choix
+## PLLM Automatique — sélection, fraîcheur initiale et continuité
 
-Pour les prompts imposant PLLM Automatique, le contrôle de fraîcheur de huit
-heures s'applique exclusivement au démarrage initial de la session de codage
-pilotée, portée par le RUN parent. À ce démarrage seulement, l'orchestrateur
-lit le catalogue public `data/pllm-current.json` du skill actif et son rapport.
-Il réutilise sans benchmark une sélection `Valide`, évaluée dans cette
-publication, si la publication et l'évaluation ont strictement moins de huit
-heures (28 800 secondes). Calculer les âges depuis les horodatages ISO 8601
-avec leurs fuseaux, jamais depuis la date du fichier ; ne renouveler aucune
-date à la lecture. Un rapport absent, inexploitable, sans horodatage vérifiable,
-futur ou atteignant le seuil à ce démarrage impose une évaluation automatique
-du skill actif, puis la relecture de sa publication achevée. Une évaluation
-interrompue ne vaut pas publication réussie. Un rapport récent sans politique
-valide impose l'attente définie ci-dessous, sans nouvel essai automatique.
+La sélection et l'application de la **PLLM Automatique sont obligatoires**
+au démarrage initial de la session de codage pilotée, portée par le RUN
+parent. L'orchestrateur applique le skill PLLM actif et ses priorités, sans
+figer un mode, un compte, un fournisseur ou un modèle dans le prompt.
+L'agent de codage, les reprises et les sous-jobs conservent le choix vérifié
+du RUN parent et ne le modifient pas de leur propre initiative.
 
-Pendant cette même session, le dépassement de huit heures ne déclenche aucune
-réévaluation, interruption ni nouveau prévol. Les tâches, changements de change
-dans le cycle, sous-jobs, pauses, reprises et compactages conservent le choix
-vérifié du RUN parent ; ils ne constituent pas un nouveau démarrage initial.
-Une publication ultérieure ne remplace pas spontanément ce choix. Conserver
-ses références et preuves dans le checkpoint non secret déjà autorisé,
-lorsqu'il existe. L'agent de codage ne modifie pas ce choix de sa propre initiative.
+Le contrôle de fraîcheur de huit heures s'applique exclusivement au
+**démarrage initial de la session de codage**. À ce démarrage uniquement,
+l'orchestrateur lit le catalogue public `data/pllm-current.json` du skill
+actif et son rapport horodaté. Si la publication et l'évaluation de la
+sélection en vigueur ont **strictement moins de 8 heures (28 800 secondes)**,
+il réutilise cette sélection et applique automatiquement la PLLM, sans
+relancer `scripts/evaluate.py active` ni le benchmark. L'âge se calcule avec
+les horodatages ISO 8601 et leurs fuseaux, jamais avec la date de modification
+du fichier. Une lecture ou une reprise ne renouvelle aucun horodatage.
 
-Seuls un dysfonctionnement réel du modèle appliqué ou une instruction explicite
-du développeur peuvent déclencher une réévaluation ou un basculement vers une
-politique PLLM de priorité inférieure dans l'ordre de repli du skill actif.
-Seul l'orchestrateur parent conduit cette opération, sans concurrence entre
-sous-jobs. Une panne réelle suspend le mandat concerné et impose une
-réévaluation immédiate, quel que soit l'âge du rapport. Après réconciliation
-des effets et permissions, appliquer la première politique disponible de
-priorité inférieure au choix défaillant, issue de cette évaluation et qualifiée
-par prévol natif. Écarter les candidates défaillantes sans boucle de réessais.
-Un échec de test métier ou un défaut CAB seul ne prouve pas une panne du modèle.
+À ce démarrage initial, utiliser uniquement une sélection `Valide`, évaluée
+dans cette publication (`evaluated_this_run=true` concerne la publication,
+pas le tour courant), avec les contrôles de ressources et performances
+applicables déjà prouvés. Un rapport récent concluant à l'absence de politique
+valide ne déclenche aucun nouvel essai : appliquer la règle d'indisponibilité
+ci-dessous. Si le rapport est absent, inexploitable, sans horodatage
+vérifiable, daté dans le futur, ou si la publication ou l'évaluation de la
+sélection atteint 8 heures, l'orchestrateur exécute une évaluation automatique
+du skill actif (`scripts/evaluate.py active`), puis relit sa publication
+achevée. Ne jamais confondre une évaluation interrompue avec une nouvelle
+publication réussie.
 
-Qualifier le fournisseur, le modèle et la variante natifs par une génération
-bornée sans outil ni accès au projet avant transmission métier, au démarrage
-initial et avant tout nouveau choix. Les prévols requis après maintenance
-du raccord restent applicables ; le seul âge du rapport ne les renouvelle pas.
-Respecter les priorités du skill, y compris ses modes gratuits, sans inventer
-de quota disponible ni de variante. Conserver les identités, sessions, jobs et
-preuves ; utiliser la frontière CAB de bascule sans réarmement implicite ni
-rejeu d'une permission consommée.
+Pendant cette même session, le dépassement de huit heures ne déclenche
+**aucune réévaluation, interruption ni nouveau prévol**. Les tâches,
+changements de change au sein du cycle, sous-jobs, pauses, reprises et
+compactages conservent le choix vérifié du RUN parent. Ces événements ne
+constituent pas un nouveau démarrage initial. Une publication PLLM ultérieure
+ne remplace pas spontanément ce choix. Conserver sa référence et ses preuves
+dans le checkpoint non secret déjà autorisé, lorsqu'il existe ; ne pas
+réévaluer au seul motif de l'âge du rapport à la reprise.
 
-Si aucune PLLM admissible n'est disponible, ne démarrer ni poursuivre aucun
-travail, mandat, écriture métier, test, maintenance ou sonde. Avertir le
-développeur avec le constat daté et attendre son instruction, sans évaluation
-ni benchmark relancé automatiquement. Conserver l'état et les preuves ;
-ne pas déclarer de clôture réussie ni arrêter ou redémarrer les processus
-partagés. Les validations CAB, permissions natives et accords du prompt
-restent requis. Cette section ne déclenche aucun RUN ni évaluation par sa lecture.
+Respecter l'ordre des politiques et les replis du skill, y compris les
+modes gratuits ; ne pas limiter la sélection aux seuls modes 1 et 2.
+Un quota inconnu n'est pas un quota disponible ; les politiques sans
+contrôle de quota restent régies par leur propre contrat.
+
+Vérifier le fournisseur natif, l'identifiant API du modèle et les variantes
+réellement exposées. Appliquer `medium`, puis `high` si `medium` est indisponible,
+puis le repli automatique admissible de priorité suivante selon les preuves
+et le contrat PLLM/CAB. Qualifier le choix exact par une génération native
+bornée, sans outil ni accès au projet, au démarrage initial puis avant
+utilisation d'un nouveau choix. Ce prévol natif ne relance pas l'évaluation
+PLLM complète ; le seul dépassement de huit heures ne le renouvelle pas.
+Les contrôles requis après une maintenance du raccord restent applicables.
+Ne pas inventer une correspondance fournisseur, une variante ou une réussite.
+
+Seuls un dysfonctionnement réel du modèle appliqué ou une instruction
+explicite du développeur peuvent déclencher, en cours de session, un
+basculement vers une politique PLLM de priorité inférieure dans l'ordre de
+repli du skill actif, ou une réévaluation. Seul l'orchestrateur parent conduit
+cette opération, sans concurrence entre sous-jobs.
+
+Si la PLLM appliquée est réellement non fonctionnelle, au prévol ou pendant
+le travail, suspendre le mandat concerné et relancer **immédiatement** une
+évaluation PLLM automatique, quel que soit l'âge du rapport. Après
+réconciliation des effets et permissions du mandat interrompu, basculer
+automatiquement sur la première politique disponible de priorité inférieure
+au choix défaillant dans l'ordre de repli du skill, issue de la nouvelle
+évaluation et qualifiée par son prévol natif. Une candidate qui échoue reste
+écartée de cette bascule tant qu'une nouvelle preuve de fonctionnement n'est
+pas obtenue ; examiner la suivante selon le skill sans boucle sur la
+candidate défaillante. Un échec de test métier ou un défaut CAB seul ne
+prouve pas une panne du modèle. Conserver les identités, sessions, jobs et
+preuves ; utiliser la frontière CAB prévue pour la bascule, sans réarmer
+implicitement un job ni rejouer une permission. Tout nouveau choix, y compris
+après une réévaluation explicitement demandée, est qualifié par son prévol
+natif avant transmission métier.
+
+**Si aucune PLLM admissible n'est disponible, ne rien faire.** Ne démarrer ni
+poursuivre aucun travail, mandat, écriture métier, test, maintenance ou sonde ;
+ne relancer ni évaluation ni benchmark automatiquement. Avertir le développeur
+avec la cause et l'horodatage du constat, puis attendre son instruction.
+Conserver l'état et les preuves existants, sans clôture réussie inventée ni
+arrêt ou redémarrage des processus partagés. Cette règle, le contrôle de
+fraîcheur limité au démarrage initial et la conservation du choix pendant
+la session prévalent sur toute consigne générale d'évaluation à chaque
+reprise ou de réessais périodiques indéfinis des skills PLLM/CAB.
+
+L'invocation explicite de ce prompt vaut autorisation durable d'appliquer
+PLLM Automatique et ses changements de sélection. Ne demander ni choix de
+mode ou de modèle, ni confirmation de son application, de son repli ou de
+son raccord technique. Les anciennes valeurs figées et autorisations
+limitées à un seul modèle sont remplacées, pour ce RUN, par ce contrat ; une
+restriction explicite ultérieure du développeur reste prioritaire.
+
+Cet accord couvre la transmission aux fournisseurs et modèles retenus par
+PLLM Automatique des seuls cadrages, spécifications, extraits de code et
+tests nécessaires au périmètre demandé, après prévol réussi. Il s'applique
+au projet réel vérifié et à ses sous-jobs pilotés, sans secret ni source
+exclue. Un changement de fournisseur ou de modèle dans cette sélection ne
+déclenche pas une nouvelle demande d'accord de transmission. L'accès aux
+secrets nécessaires suit exclusivement le processus sécurisé prévu : aucune
+valeur secrète n'est transmise au modèle, aux sorties ou aux artefacts.
+
+## Maintenance autorisée du raccord PLLM/CAB
+
+L'accord couvre les corrections minimales du raccord PLLM/CAB :
+configuration du chemin du catalogue public dans le contrôleur, adaptation
+vérifiée des identifiants logiques aux fournisseurs natifs, budget borné de
+lecture des capacités, configuration et scripts locaux de pilotage,
+authentification native et rechargement des seules briques nécessaires.
+Ces opérations techniques sont autorisées dans ce profil de pilotage ; ne pas redemander une autorisation de maintenance distincte du RUN.
+L'orchestrateur examine le correctif, ses validations et ses effets avant
+application ; les mandats CAB unitaires et les permissions natives `ask` et
+`once` restent requis pour les opérations qui y sont soumises. L'agent de
+codage produit les correctifs de code, l'orchestrateur les valide.
+
+Avant un rechargement partagé, coordonner les RUN affectés, terminer ou
+réconcilier les effets et demandes, atteindre la quiescence et utiliser la
+maintenance CAB prévue. Conserver identités, sessions, jobs, réservations,
+preuves et permissions consommées ; préserver la pause des autres RUN.
+Ne fermer ni redémarrer le processus OpenCode. Vérifier ensuite contexte,
+santé, MCP, prévol modèle, readiness réelle et test CAB complet avant reprise.
+Cette maintenance ne permet aucune écriture métier dans un diagnostic,
+extension fonctionnelle, opération Git ou modification d'infrastructure
+étrangère au raccord. Elle ne contourne aucun contrôle de la plateforme.
+
+Consigner la source de cet accord, la sélection, les corrections et les
+preuves dans le checkpoint non secret déjà autorisé. Les échecs réels
+restent signalés et les récupérations sûres sont exécutées sans nouvelle
+confirmation de principe ; aucune autorisation automatique ne transforme
+un échec, un secret exposé ou un effet inconnu en validation réussie.
+
+### Délégation opérationnelle sur les composants du profil
+
+Dans le périmètre autorisé du RUN, l'orchestrateur dispose de la délégation
+opérationnelle sur le broker et le contrôleur : démarrage, arrêt, pilotage,
+supervision, diagnostic, récupération et reconfiguration des seules ressources
+de session et configurations directement nécessaires. Cette délégation reste
+soumise aux permissions, à la propriété des ressources, à la coordination
+partagée et aux interdictions d'arrêt des agents ou services d'autres RUN.
+
+Les corrections minimales du raccord décrites ci-dessus conservent leur
+autorisation durable et leurs validations. Les autres modifications,
+ajustements ou suppressions de sources du broker ou du contrôleur exigent
+une validation explicite distincte du développeur. Une autorisation de
+fonctionnement ne constitue pas une autorisation générale de développement.
+
+## Secrets nécessaires au profil PLLM
+
+Le feu vert initial autorise l'accès aux seuls secrets strictement nécessaires
+à la mise en place de toute PLLM retenue pour un agent de codage. Cette exception vaut autorisation durable de vérifier les
+quotas et la disponibilité, de récupérer le secret auprès de son gestionnaire
+sécurisé et de l'injecter par l'API native du fournisseur ou de l'agent, ainsi
+que de paramétrer les agents de codage conformément à la PLLM Automatique. Cet
+accord ne doit pas être redemandé à chaque RUN, reprise ou changement de PLLM.
+
+Seul le processus sécurisé réalisant cette opération peut utiliser la valeur
+du secret. Elle ne doit jamais être transmise au modèle, affichée, journalisée,
+analysée par un agent, copiée dans un prompt, un état de reprise, un rapport ou
+les sources. La persistance éventuelle se limite au stockage d'authentification
+natif nécessaire à l'agent de codage. Aucun autre accès ou usage de secret n'est
+autorisé par cette exception ; les règles générales continuent de s'appliquer.
+
+L'orchestrateur conserve cette autorisation dans l'état de reprise non secret
+et la transmet au pilotage sans sa valeur. Les mandats CAB unitaires et les
+permissions techniques applicables restent requis pour les opérations qui
+y sont soumises.
+
+## Contexte natif et conflit de broker
+
+Cette procédure précise les préconditions et récupérations CAB de ce prompt,
+y compris avant le premier mandat. Elle s'applique aussi aux jobs en lecture
+seule pour leurs seules communications CAB ; elle n'autorise aucune écriture
+sur les sources métier ou OpenSpec. Les seules corrections de configuration
+et de scripts de pilotage nécessaires au raccord PLLM/CAB relèvent de
+l'autorisation technique de la section « PLLM Automatique obligatoire et
+raccord autorisé ».
+
+Avant `/cab start`, CGPT résout la racine réelle du projet dans l'environnement
+OpenCode. Il passe explicitement cette racine, encodée dans le paramètre
+`directory`, à chaque requête liée au contexte : `GET /path`, `GET /mcp`,
+configuration et agents, création et lecture de session, messages,
+permissions, connexion MCP et `POST /instance/dispose`. Il vérifie que
+`GET /path?directory=<racine encodée>` et les métadonnées de la session
+désignent ce même répertoire. Un contrôle global de santé ne prouve pas cette
+égalité. Le contrôleur, la réconciliation HTTP et le suivi SSE doivent viser
+ce même contexte ; les événements globaux sont corrélés au répertoire et à
+la session. Un état CAB reçu d'un autre contexte ne valide jamais ce RUN.
+
+Un `GET /mcp` sans répertoire explicite peut concerner le contexte par défaut
+d'OpenCode, distinct du projet. Un broker démarré ou `connected` dans ce
+contexte ne prouve pas sa disponibilité dans le projet. CGPT exige
+`cgpt-validation: connected` dans le contexte cible avant de créer ou reprendre
+la session maîtresse, puis l'appel réel à `broker_readiness` dans cette session.
+
+Si le projet renvoie `Connection closed`, `failed` ou
+`MCP_TOOLS_NOT_INJECTED`, CGPT gèle le mandat et vérifie d'abord les contextes :
+répertoire par défaut observé via `GET /path`, répertoire cible, état MCP de
+chacun et commande de lancement non sensible. Il ne charge ni secret, ni
+environnement complet, ni journal exclu. Il recherche un conflit de verrou
+exclusif à partir des seules métadonnées accessibles et autorisées du processus
+et du verrou. `Connection closed` seul ne prouve pas un conflit ; une sortie
+`73` prévue par le code mais non observée ne devient jamais une preuve.
+CGPT distingue la cause confirmée, l'hypothèse et les contrôles impossibles.
+
+Si le contexte détenteur du broker est identifié, relève du RUN ou d'une
+autorisation explicite et peut être libéré sans interrompre un autre travail,
+CGPT effectue la récupération par l'API native OpenCode, après vérification du
+contrat de la version installée :
+
+1. vérifier l'absence de session en cours d'exécution, de mandat CAB actif ou
+   en attente et de permission native non résolue dans le contexte détenteur ;
+   une simple absence de permission ne prouve pas son inactivité ;
+2. déconnecter uniquement `cgpt-validation` dans ce contexte avec
+   `POST /mcp/cgpt-validation/disconnect?directory=<contexte détenteur encodé>`,
+   puis vérifier la déconnexion et la libération effective du verrou ;
+3. connecter le broker dans le projet avec
+   `POST /mcp/cgpt-validation/connect?directory=<racine encodée>`, puis vérifier
+   `GET /mcp?directory=<racine encodée>` ; ne pas réinterroger sans contexte
+   explicite ni réactiver le broker du contexte précédent pendant le RUN ;
+4. si nécessaire, appliquer la récupération CAB par `POST /instance/dispose`
+   uniquement au contexte cible, revalider sa santé et son MCP, puis recréer
+   la session maîtresse ; recréer seulement une session ne libère pas un
+   verrou détenu par un autre contexte ;
+5. réconcilier contrôleur, SSE, sessions et permissions, puis rejouer
+   `/cab test` avec un `requestId` inédit : appels MCP réels, décision unique
+   de CGPT, réponse corrélée, exécution unique de l'opération inoffensive et
+   `broker_readiness = READY` final, sans mandat en attente.
+
+CGPT ne tue ni ne lance directement le broker, ne supprime ni ne contourne son
+verrou et ne crée pas de seconde instance OpenCode. Il ne déconnecte jamais un
+autre RUN ou un contexte dont la propriété ou l'inactivité reste incertaine.
+Dans ce cas, ou si la récupération ciblée échoue, il signale `CAB_BLOCKED`
+avec les preuves et la décision indispensable. Il ne répète pas les
+réinitialisations sans élément nouveau.
+
+La récupération sûre relève du pilotage autorisé et précède toute conclusion
+terminale de blocage. CGPT trace dans l'état du RUN les contextes observés,
+le détenteur du verrou lorsqu'il est établi, les opérations, leurs résultats
+et la nouvelle session, sans secret. Après réussite, il reprend le premier
+jalon non prouvé, sans rejouer une permission consommée. Cette procédure ne
+remplace ni le feu vert, ni la PLLM requise, ni le verrou terminal du prompt.
 
 ## Protocole de communication OpenCode ↔ CGPT via CAB
 
@@ -635,8 +909,8 @@ Le SSE et les états HTTP ne remplacent pas un appel MCP réel de
    de nouvelle session : propriété et inactivité prouvées, arrêt des seules
    ressources CAB, déconnexion native, purge bornée, puis reconnexion.
    Une reprise ordinaire du même RUN conserve ses preuves et son runtime.
-4. Appliquer les préconditions techniques et prévols prescrits par le prompt
-   invoqué et le contrat CAB en vigueur. Vérifier leurs preuves observables
+4. Appliquer les préconditions techniques et prévols du présent profil et du
+   contrat CAB en vigueur, après les barrières métier du prompt. Vérifier leurs preuves observables
    avant le démarrage métier. Une divergence suspend ce démarrage ; ne pas
    inventer de réussite ni substituer une autre configuration.
 5. Créer la session persistante visible dans OpenCode pour le nouveau RUN,
@@ -753,6 +1027,47 @@ Le fichier reste intact. Ni l'orchestrateur, ni le superviseur ne fabriquent
 un contrat vide ou une clôture pour contourner cet échec.
 
 
+## Instrumentation technique et compte rendu des incidents
+
+Les cadences, sondes natives et formats techniques appartiennent à ce profil.
+Lorsque le prompt autorise une collecte statistique, appliquer le skill
+`coding-session-statistics` disponible et son contrat réel. Réaliser le relevé
+initial `/cgpt 7u` avant les mandats et les sondes, puis le relevé final avant
+le rapport. Les sondes de performance sont initiale, toutes les trente minutes
+pendant l'activité et finale, dans des sessions jetables sans outil, fichier
+ni réseau, avec la configuration réelle de l'agent mesuré et le même prompt
+déterministe. Une mesure manquée ou absente reste absente, sans estimation
+ni reconstruction rétroactive. Ces opérations ne donnent aucun droit de
+lecture supplémentaire ni autorisation de rapport hors du périmètre du prompt.
+
+Avant tout outil natif, l'agent vérifie la corrélation du mandat, de sa cible,
+de l'identité de session et de sa permission. Le verrou technique de lecture
+seule interdit les mutations et les outils désactivés ; une commande native,
+même diagnostique, conserve son mandat exact. Ne pas transformer une demande
+ou utiliser un autre exécutable que celui approuvé. Un écart détecté avant
+effet est rapporté sans tentative d'exécution, avec session, mandat, opération
+non exécutée, raison et absence d'effet. L'agent attend l'orchestrateur.
+
+Une commande dont l'exécutable est introuvable peut être qualifiée
+`ENV_RECOVERABLE` seulement si l'absence d'écriture, de test commencé, d'effet
+externe et de permission non corrélée est prouvée. Rapporter l'identité de
+session, le `requestId`, la commande, l'erreur sans secret, les effets et
+le chemin candidat déclaré dans `DEVOPS.md`. Geler et clôturer le mandat
+échoué, réconcilier les effets et préparer une nouvelle demande exacte avec
+un identifiant inédit. Une autre erreur conserve sa qualification réelle ;
+aucune substitution ou réexécution automatique n'est autorisée.
+
+## Compatibilité des checkpoints des prompts
+
+Conserver les chemins de checkpoint autorisés par les prompts et le RUN
+parent. Le champ métier générique `mandat_courant` remplace la désignation
+historique `mandat_cab_courant`. À la reprise d'un ancien checkpoint, lire
+l'ancien champ sans perte, réconcilier ses demandes et conserver leurs
+identifiants et preuves avant toute mise à jour du seul état autorisé.
+Ne pas supprimer ni réinitialiser un état, migrer le runtime ou remplacer
+une permission consommée pour adapter ce nom de champ. Une préparation
+documentaire n'exécute aucune migration d'une session active.
+
 ## Cadences de pilotage
 
 Traite les événements SSE OpenCode en temps réel et contrôle les demandes et
@@ -764,7 +1079,7 @@ techniques du superviseur, des heartbeats et des rappels du broker restent
 distinctes.
 
 Les conditions de disponibilité des services externes et les suites à donner
-à leur indisponibilité relèvent du prompt invoqué et du contrat CAB applicable.
+à leur indisponibilité relèvent du présent profil et du contrat CAB applicable.
 Leurs éventuels réessais suivent ces seules règles. Consigner les résultats et
 les causes observées dans le checkpoint non secret ; toute reprise exige la
 réconciliation des effets, de la santé OpenCode, de MCP, de la readiness CAB et
@@ -906,8 +1221,8 @@ Ce cycle ne ferme ni ne redémarre les agents et ne rejoue aucune opération.
 
 ## Clôture et bilan documentaire
 
-L'orchestrateur vérifie les critères, les tâches, les tests, la cohérence
-documentaire et les rapports d'archive avant de demander une clôture normale.
+L'orchestrateur vérifie les critères, les tâches, les tests et les rapports
+applicables à la finalité métier du prompt avant une clôture normale.
 Une clôture pour dépendances manquantes relève de la clôture différée : le
 bilan est enregistré dans `BLOCKERS.md` et référencé depuis `tasks.md` et le
 checkpoint lorsqu'ils existent, avec preuve de relecture. Il distingue les
@@ -917,6 +1232,16 @@ ressources du seul RUN sont libérées après désarmement et réconciliation.
 La présence de STATISTICS.md, ses six sections, UTF-8/LF et les totaux
 doivent être prouvés pour chaque archive ; les mesures absentes sont N/A
 motivées. Un rapport échoué est repris sans réarchiver.
+
+Pour un diagnostic ou une préparation sans écriture métier nécessaire, le
+job et son gate portent sur les preuves d'analyse et de restitution. Ne pas
+inventer une publication de changes ni attribuer `delivered=true` sans preuve
+compatible avec la finalité réelle. Si aucune réservation de change ou aucun
+job d'écriture n'est requis, réconcilier et libérer seulement les ressources
+effectivement acquises et justifier les étapes non applicables. Un contrat
+installé incapable de représenter cette clôture doit être signalé, sans faux
+change ni réussite technique fabriquée. Les seules écritures de rapport ou de
+checkpoint ne deviennent pas une livraison fonctionnelle.
 
 Le gate local est demandé par `POST /runs/<run_id>/job/terminal-gate` avec un état explicite
 TERMINÉ ou BLOQUÉ. Un refus laisse le job ouvert avec sa cause. Un gate validé
@@ -941,6 +1266,13 @@ contrôle au parent ; aucune libération ciblée n'arrête l'infrastructure comm
 ## Pilotage concurrent CAB 1.10.4
 
 ### CAB 1.10.4 — coordination atomique par ressource
+
+Ce profil est la référence du pilotage concurrent. Les anciens blocs techniques
+copiés dans les prompts ne font plus autorité. Les barrières ordinaires `/ready`,
+`/integration` et `/reconcile` issues de ces blocs ne sont pas utilisées à leur
+place : appliquer les accès, révisions, reçus et publications par ressources
+ci-dessous. Une migration historique suit uniquement la procédure de compatibilité
+prouvée ; elle ne réactive aucune permission consommée.
 
 Un processus OpenCode, un broker MCP stdio, un contrôleur et un superviseur servent plusieurs RUN dans un répertoire commun. Chaque RUN conserve session, job, décisions, preuves et checkpoint. Le contrat courant est `resource-scoped-v1` ; l'ancienne barrière ordinaire d'intégration n'est plus admise.
 
@@ -1008,7 +1340,7 @@ POST /runs/<runId>/publish porte version, transactionId, operationId, token, fen
 
 Synchronisation et archivage OpenSpec restent des mandats distincts autorisés décrivant sources, destinations et parents utiles. Ils attendent les seuls accès incompatibles. Git reste distinctement autorisé ; son index/référence est une ressource logique sans gel des éditions indépendantes.
 
-Le passage atomique en REPORT, ou /closing après publication, limite irréversiblement le contexte au STATISTICS.md de sa propre archive. Écrire et vérifier ce rapport sous son seul accès. Rapport à six sections, preuves, gate individuel, désarmement puis /release restent obligatoires avant livraison. Une archive seule ne prouve pas la fin du change ou du parent.
+Lorsqu'un archivage autorisé a effectivement réussi et qu'un rapport d'archive est requis, le passage atomique en REPORT, ou /closing après publication, limite irréversiblement le contexte au STATISTICS.md de cette archive. Cette procédure d'archive ne s'applique pas à un diagnostic, à une préparation ou à une revalidation sans nouvel archivage ; employer le contrat correspondant à sa finalité. Écrire et vérifier ce rapport sous son seul accès. Rapport à six sections, preuves, gate individuel, désarmement puis /release restent obligatoires avant livraison. Une archive seule ne prouve pas la fin du change ou du parent.
 
 #### Pause, arrêt et exceptions communes
 
