@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.6";
+export const VERSION = "2.1.7";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -250,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.6",
+    version: "2.1.7",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -590,6 +590,56 @@ function currentRecoveryTools(recovery, parts, messages = []) {
   return parts.slice(previous.nativeToolCount);
 }
 
+async function inspectRejectedReconciliation(recovery, payload) {
+  if (typeof payload.developerAuthorization !== 'string' || !payload.developerAuthorization.trim() ||
+      payload.developerAuthorization.length > 500) recoveryFailure('developer-authorization-required');
+  if (unmatchedNativePermissions.size) recoveryFailure('native-permissions-unresolved');
+  const messages = await openCode.messages(recovery.sessionId, job.directory);
+  const parts = recoveryTools(messages), proof = payload.rejectedPreflightProof;
+  if (proof?.nativeToolCount !== parts.length || proof.nativeToolHash !== canonicalRecoveryHash(parts)) {
+    recoveryFailure('preflight-history-divergent');
+  }
+  const current = currentRecoveryTools(recovery, parts, messages);
+  let submitted = false, rejected = false, approvalId;
+  for (const part of current) {
+    const state = part.state;
+    if (part.tool === 'cgpt-validation_broker_readiness' && state?.status === 'completed') continue;
+    if (part.tool === 'cgpt-validation_request_validation') {
+      const input = state?.input;
+      if (submitted || input?.requestId !== recovery.preflightRequestId ||
+          input.session_id !== recovery.sessionId || input.directory !== job.directory ||
+          input.change_id !== job.changeId || (run && input.run_id !== run.runId) ||
+          typeof input.approval_id !== 'string' || !input.approval_id ||
+          JSON.stringify(input.files) !== '[]' || JSON.stringify(input.commands) !== '["/usr/bin/true"]' ||
+          (approvalId && input.approval_id !== approvalId)) recoveryFailure('preflight-request-divergent');
+      approvalId = input.approval_id;
+      if (state.status === 'error' && /^MCP error -32602:/.test(state.error || '')) continue;
+      submitted = true;
+    } else if (!submitted || !['cgpt-validation_poll_approval', 'cgpt-validation_get_approval'].includes(part.tool) ||
+        state?.input?.approval_id !== approvalId) recoveryFailure('preflight-effect-not-excluded');
+    let output;
+    try { output = JSON.parse(state?.output); } catch { recoveryFailure('preflight-refusal-not-proved'); }
+    if (state.status !== 'completed' || output.requestId !== recovery.preflightRequestId ||
+        output.approval_id !== approvalId || output.session_id !== recovery.sessionId ||
+        output.directory !== job.directory || output.change_id !== job.changeId || (run && output.run_id !== run.runId) ||
+        JSON.stringify(output.files) !== '[]' || JSON.stringify(output.commands) !== '["/usr/bin/true"]' ||
+        !['PENDING', 'REJECTED'].includes(output.status) || (rejected && output.status !== 'REJECTED')) {
+      recoveryFailure('preflight-refusal-not-proved');
+    }
+    rejected ||= output.status === 'REJECTED';
+  }
+  const known = validations.get(recovery.preflightRequestId), decision = httpDecisions.get(recovery.preflightRequestId);
+  if (!submitted || !rejected || (decision && decision.decision !== 'rejected') ||
+      (known && (known.operationConsumed || known.approvalId !== approvalId)) ||
+      canonicalRecoveryHash(recoveryTools(await openCode.messages(recovery.sessionId, job.directory))) !== proof.nativeToolHash) {
+    recoveryFailure('preflight-refusal-not-proved');
+  }
+  return { preflightRequestId: recovery.preflightRequestId, requestIds: [recovery.preflightRequestId],
+    approvalIds: [approvalId], nativeToolCount: parts.length, nativeToolHash: recoveryToolsHash(parts),
+    refusedAt: new Date().toISOString(), outcome: 'REJECTED_WITHOUT_EFFECT',
+    authorizationReference: payload.developerAuthorization, globalTransactionId: payload.globalTransactionId || null };
+}
+
 async function checkRecoveryRetry(recovery, nextRequestId) {
   const validation = validations.get(recovery.preflightRequestId);
   const decision = httpDecisions.get(recovery.preflightRequestId);
@@ -672,6 +722,21 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
   return { preflightRequestId: recovery.preflightRequestId, requestIds: [...requestIds],
     approvalIds: [...approvalIds], nativeToolCount: parts.length,
     nativeToolHash: recoveryToolsHash(parts), refusedAt: new Date().toISOString() };
+}
+
+async function verifyRejectedRecoveryRelease(payload) {
+  const recovery = job?.recovery, reference = payload.rejectedRecovery;
+  const attempt = recovery?.attempts?.at(-1);
+  if (!reference || reference.runId !== run?.runId || reference.jobId !== job?.jobId ||
+      reference.recoveryId !== recovery?.recoveryId || reference.preflightRequestId !== recovery?.preflightRequestId ||
+      attempt?.outcome !== 'REJECTED_WITHOUT_EFFECT' || !attempt.authorizationReference ||
+      attempt.globalTransactionId !== payload.transactionId || reference.nativeToolHash !== attempt.nativeToolHash) {
+    recoveryFailure('rejected-recovery-release-divergent');
+  }
+  await checkRecoveryContext(recovery);
+  const parts = recoveryTools(await openCode.messages(recovery.sessionId, job.directory));
+  if (parts.length !== attempt.nativeToolCount || recoveryToolsHash(parts) !== attempt.nativeToolHash ||
+      job.recovery !== recovery || recovery.attempts.at(-1) !== attempt) recoveryFailure('preflight-history-divergent');
 }
 
 async function inspectNotificationReconciliation(payload, matchesApproval) {
@@ -1090,7 +1155,7 @@ async function checkedBlockedPreflightRestore(payload) {
 
 async function recoverJob(payload) {
   const keys = ["jobId", "expectedSessionId", "sessionId", "recoveryId", "preflightRequestId"];
-  if (!payload || !["prepare", "retry", "reconcile", "complete"].includes(payload.phase) ||
+  if (!payload || !["prepare", "retry", "reconcile", "reconcile-rejected", "complete"].includes(payload.phase) ||
       keys.some((key) => typeof payload[key] !== "string" || !payload[key]) ||
       !payload.sessionId.startsWith("ses_") ||
       payload.sessionId === payload.expectedSessionId) recoveryFailure("recovery-contract-invalid");
@@ -1105,10 +1170,10 @@ async function recoverJob(payload) {
       recoveryFailure("recovery-identity-reused");
     }
   } else if (!job.recovery || keys.some((key) =>
-      !(["retry", "reconcile"].includes(payload.phase) && key === "preflightRequestId") && job.recovery[key] !== payload[key])) {
+      !(["retry", "reconcile", "reconcile-rejected"].includes(payload.phase) && key === "preflightRequestId") && job.recovery[key] !== payload[key])) {
     recoveryFailure("recovery-not-prepared");
   }
-  if (["retry", "reconcile"].includes(payload.phase) &&
+  if (["retry", "reconcile", "reconcile-rejected"].includes(payload.phase) &&
       (payload.previousPreflightRequestId !== job.recovery.preflightRequestId ||
        payload.preflightRequestId === job.recovery.preflightRequestId ||
        validations.has(payload.preflightRequestId) || httpDecisions.has(payload.preflightRequestId) ||
@@ -1120,7 +1185,8 @@ async function recoverJob(payload) {
   await checkRecoveryContext(payload, Boolean(restored));
   const previousAttempt = payload.phase === "retry"
     ? await checkRecoveryRetry(job.recovery, payload.preflightRequestId)
-    : payload.phase === "reconcile" ? await checkExecutedPreflight(job.recovery, payload) : null;
+    : payload.phase === "reconcile" ? await checkExecutedPreflight(job.recovery, payload)
+    : payload.phase === "reconcile-rejected" ? await inspectRejectedReconciliation(job.recovery, payload) : null;
   if (payload.phase === "complete") await checkRecoveryPreflight(job.recovery, restored);
   if (status.brokerReadiness?.status !== "READY" ||
       Number(status.brokerReadiness.pending_count) !== 0) recoveryFailure("broker-not-ready");
@@ -1139,7 +1205,7 @@ async function recoverJob(payload) {
     snapshot.recovery.invalidatedRequestIds = [...validations.values()]
       .filter((validation) => validation.operation?.sessionId === job.sessionId)
       .map((validation) => validation.requestId);
-  } else if (["retry", "reconcile"].includes(payload.phase)) {
+  } else if (["retry", "reconcile", "reconcile-rejected"].includes(payload.phase)) {
     snapshot.recovery.attempts = [...(snapshot.recovery.attempts || []), previousAttempt];
     snapshot.recovery.preflightRequestId = payload.preflightRequestId;
   } else {
@@ -1627,7 +1693,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.6",
+      version: "2.1.7",
     },
   });
 
@@ -2711,6 +2777,7 @@ const handle = async (request, response, url) => {
 
 return {
   handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
+  verifyRejectedRecoveryRelease,
   close: () => {
     if (closePromise) return closePromise;
     closed = true; transportAbort.abort(); clearInterval(permissionTimer);

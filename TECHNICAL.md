@@ -60,7 +60,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.6` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.7` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -371,6 +371,19 @@ de ce lot source. L'update forcé 2.1.6 ne consulte pas l'état de récupératio
 pour décider de remplacer les fichiers ou redémarrer systemd ; le profil
 frozen-recovery-controller conserve ses contrôles spécifiques lorsqu'il est
 explicitement sélectionné.
+
+#### Réconciliation explicite du rejet après redémarrage — préparation 2.1.7
+
+La phase `reconcile-rejected` conserve le RUN/job et la candidate. Elle exige
+`developerAuthorization`, les identités recovery, `previousPreflightRequestId`,
+un `preflightRequestId` inédit et `rejectedPreflightProof` (nombre de parties
+outils et SHA-256 JSON canonique). Elle relit l'historique et scelle uniquement
+un rejet terminal sans effet. Les erreurs request_validation MCP -32602 sont
+admises seulement avant l'unique soumission enregistrée avec les mêmes
+identifiants et `/usr/bin/true` exact. Aucun autre outil ou effet n'est admis.
+Le reçu conserve l'autorité et l'empreinte ; aucune décision locale n'est
+reconstruite. Un nouveau prévol reste obligatoire. Ce travail source ne
+prouve pas son installation réelle.
 
 #### Retry ordinaire préservé
 
@@ -886,7 +899,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.6. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.7. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -1017,7 +1030,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 2.1.6 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 2.1.7 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1147,7 +1160,7 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.6 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.7 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1262,7 +1275,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.6 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.7 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1324,3 +1337,18 @@ Le nettoyage est borné à quatre secondes après détection, avec une cible de 
 Ni gate, ni job, ni réservation ou gel n’est libéré par cette fermeture. Les décisions consommées et les protections d’effets inconnus restent conservées ; aucune permission once n’est rejouée. Les écritures de déconnexion et statistiques ne valent pas clôture métier. La remise en service est explicite et soumise à réconciliation. Le banc utilise ses propres processus, RUN et gel ; aucune installation ni activation réelle n’est effectuée.
 
 Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de l’instant de création ; expiresAt est calculé en ajoutant exactement 60000 ms à createdAt. Cette correction évite une durée artificielle de 60001 ms à une frontière d’horloge, sans modifier les contrôles de durée maximale, d’expiration, de preuve ou d’identité.
+
+## Réconciliation des prévols rejetés — 2.1.7
+
+La distribution courante des quatre briques, plugins et commandes est 2.1.7.
+Les preuves historiques conservent leur version. Après redémarrage,
+`reconcile-rejected` permet une réconciliation humaine du rejet natif sans
+effet et sans reconstruire de décision locale. Le retry ordinaire conserve
+ses contrôles. Le reçu lie l'historique natif et, si nécessaire, la transaction
+GLOBAL_RECONCILIATION exacte. Confirm/release exigent `authorization` et
+`rejectedRecovery` (runId, jobId, recoveryId, prochain preflightRequestId,
+nativeToolHash du reçu), puis recontrôlent l'historique et toute la cohorte.
+Une permission, un effet, une attente, un pair occupé ou une autre récupération
+non réconciliée conserve le gel. Le nouveau prévol exige décision et once
+propres avant complete. CABU intervient après archivage ; les tests source
+ne prouvent ni installation ni réconciliation réelle.

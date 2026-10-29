@@ -300,6 +300,17 @@ Sources : [CT13 — proposal.md](openspec/changes/archive/2026-10-28-support-ope
 
 ## 6. Orientation de la progression
 
+### Actualisation SCM — 29 octobre 2026
+
+Le change `fix-rejected-preflight-recovery-after-restart` est ARCHIVÉ, **code non attribué** : 5/5 tâches source validées, distribution 2.1.7, Node 481 réussis/27 ignorés/0 échec et Python 74/74. Archivage natif réussi ; CABU et réconciliation réelle restent distincts. Sources : [proposition](openspec/changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/proposal.md), [tâches](openspec/changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/tasks.md), [qualification](openspec/changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/QUALIFICATION.md). Aucune dépendance nouvelle entre codes n'est déduite. L'attribution d'un code relève ultérieurement d'ACL.
+
+```mermaid
+flowchart TB
+    rejectedRecovery["fix-rejected-preflight-recovery-after-restart<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff4cc,stroke:#866400,stroke-dasharray:5 5
+    class rejectedRecovery provisional
+```
+
 Le change [fix-monitor-historical-lot-codes](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/proposal.md) est **ARCHIVÉ**, avec le code **OBS09**, attribué rétrospectivement par CAB-ACL-R2. Il appartient à l’observation du moniteur, d’après sa proposition et la capacité local-web-monitor. Cette attribution ne crée aucune dépendance nouvelle. Les 72 archives antérieures conservent leurs codes et leur état.
 
 Le nœud OBS09 figure dans la vue « Observation et statistiques » ; il remplace le repère provisoire, sans doublonner le change.
@@ -308,7 +319,7 @@ Le nœud OBS09 figure dans la vue « Observation et statistiques » ; il remplac
 |---|---|---|---|
 | OBS09 — fix-monitor-historical-lot-codes | Sans objet après archivage ; correctif source réalisé et validé, sans prérequis externe pour les fixtures locales | Réalisation et validation source achevées : 4/4 tâches, 14/14 tests ciblés, OpenSpec cible valide et global standard/strict 16/16 ; archivage vérifié, déploiement et activation NON EFFECTUÉS | [proposition](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/proposal.md), [tâches](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/tasks.md), [tests](tests/web-monitor.test.mjs) ; tout engagement runtime exige un périmètre et des preuves distincts |
 
-Aucun change actif à sélectionner ; la clôture de CT14 est consignée ci-dessous. Le correctif source est réalisé, validé et archivé sur demande explicite du développeur. Aucun déploiement ni activation effectué. [STATISTICS.md](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/STATISTICS.md) conserve le bilan du change. Contrôles après archivage : OpenSpec global standard et strict **15/15** chacun ; tâches des archives **73/73**.
+Au constat historique de clôture CT14, aucun change actif ne restait à sélectionner ; la clôture de CT14 est consignée ci-dessous. Le correctif source est réalisé, validé et archivé sur demande explicite du développeur. Aucun déploiement ni activation effectué. [STATISTICS.md](openspec/changes/archive/2026-10-28-fix-monitor-historical-lot-codes/STATISTICS.md) conserve le bilan du change. Contrôles après archivage : OpenSpec global standard et strict **15/15** chacun ; tâches des archives **73/73**.
 
 Pour une prochaine demande explicitement autorisée : revérifier l’inventaire, le mandat, les sources de vérité, les BLOCKERS.md éventuels et les preuves des prérequis. Examiner d’abord la réalisabilité immédiate des unités visées, puis le nombre et la difficulté des dépendances manquantes, l’effet de déblocage direct et transitif, la progression vérifiable et enfin l’effort et l’incertitude documentés. Aucun score numérique ou ordre de release n’est utilisé comme priorité.
 

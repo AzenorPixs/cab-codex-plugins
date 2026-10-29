@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.6";
+const version = "2.1.7";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -234,6 +234,27 @@ async function checkCohort() {
   if (blockers.length) throw new CoordinationError('native-session-not-quiescent');
 }
 async function maintenanceCohort(payload) {
+  if (payload.rejectedRecovery !== undefined) {
+    const revision = registryRevision, generation = nativeGeneration;
+    const global = registry.resourceState.global;
+    const target = activeContexts().find(([id]) => id === payload.rejectedRecovery?.runId);
+    if (!global || global.cause !== 'GLOBAL_RECONCILIATION' || global.transactionId !== payload.transactionId ||
+        !['DRAINING', 'HELD'].includes(global.state) || typeof payload.authorization !== 'string' ||
+        !payload.authorization.trim() || payload.authorization.length > 500 || !target || transitions.size ||
+        legacy.pendingEffects() || activeContexts().some(([id, c]) => c.pendingEffects() ||
+          (id !== target[0] && c.publicJob()?.recovery) || registry.unresolvedAccess(id) ||
+          registry.testReservations(id).some(r => ['HELD', 'WAITING'].includes(r.state)))) {
+      throw new CoordinationError('rejected-recovery-release-divergent');
+    }
+    await target[1].verifyRejectedRecoveryRelease(payload);
+    if ((await nativeCohort()).length) throw new CoordinationError('native-session-not-quiescent');
+    await target[1].verifyRejectedRecoveryRelease(payload);
+    if (registryRevision !== revision || nativeGeneration !== generation || transitions.size ||
+        activeContexts().some(([id, c]) => c.pendingEffects() || (id !== target[0] && c.publicJob()?.recovery))) {
+      throw new CoordinationError('native-observation-changed');
+    }
+    return;
+  }
   if (!activeContexts().some(([, context]) => context.publicJob()?.recovery)) return checkCohort();
   if (!transactionValid(payload.transactionId) ||
       !existsSync(join(maintenanceDirectory(), payload.transactionId + '.json'))) return checkCohort();
@@ -865,6 +886,16 @@ async function handleRequest(request, response) {
       if (request.method === 'POST' && url.pathname === '/job/recover' &&
           activeContexts().some(([id, c]) => id !== runId && c.sessions().includes(payload.sessionId))) {
         throw new CoordinationError('recovery-session-already-owned');
+      }
+      if (request.method === 'POST' && url.pathname === '/job/recover' && payload.phase === 'reconcile-rejected') {
+        if (registry.requestOwners[payload.preflightRequestId]) throw new CoordinationError('recovery-identity-reused');
+        const global = registry.resourceState.global;
+        if ((global && global.state !== 'RELEASED' &&
+            (global.cause !== 'GLOBAL_RECONCILIATION' || payload.globalTransactionId !== global.transactionId)) ||
+            ((!global || global.state === 'RELEASED') && payload.globalTransactionId)) {
+          throw new CoordinationError('rejected-recovery-global-divergent');
+        }
+        if (registry.unresolvedAccess(runId)) throw new CoordinationError('run-accesses-unresolved');
       }
     }
     const oldSession = context.publicJob()?.sessionId;
