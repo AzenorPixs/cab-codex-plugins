@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, openSync, readSync, realpathSync } fro
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const VERSION = '2.1.9';
+export const VERSION = '2.1.10';
 export const MODEL_SELECTION_PROTOCOL = 'pllm-auto-v1';
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -101,7 +101,7 @@ export function selectCodingModel({ catalog, providers, model, reasoning, unavai
     if (!providers.connected.includes(providerID)) fail(model === undefined ? 'model-provider-unavailable' : 'explicit-model-unavailable');
     if (!candidate || !object(candidate.variants)) fail(model === undefined ? 'model-capabilities-unavailable' : 'explicit-model-unavailable');
     const variants = candidate?.variants;
-    const effort = (reasoning ? [reasoning] : ['medium']).find((name) => object(variants) &&
+    const effort = (reasoning ? [reasoning] : ['medium', 'high']).find((name) => object(variants) &&
       Object.hasOwn(variants,name) && object(variants[name]) && variants[name].disabled !== true &&
       !unavailable.some((proof) => proof.providerID === providerID && proof.modelID === modelID && proof.reasoning === name));
     if (candidate.disabled === true || !effort) {

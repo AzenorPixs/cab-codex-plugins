@@ -44,7 +44,7 @@ CAB MAY écarter une variante exposée mais rejetée uniquement après preuve na
 
 #### Scenario: medium refusé par le fournisseur
 - **WHEN** un prévol natif prouve le rejet de medium pour la candidate automatique
-- **THEN** CAB examine la politique de priorité inférieure et exige son prévol réussi
+- **THEN** CAB examine high sur le même modèle si aucun niveau explicite contraire n’est imposé, puis la politique inférieure seulement si medium et high sont indisponibles ; chaque nouveau choix exige son prévol réussi
 
 #### Scenario: Quota épuisé pendant un prévol
 - **WHEN** le fournisseur renvoie 429 plutôt qu'une incompatibilité de raisonnement
@@ -110,7 +110,7 @@ Le prévol MUST corréler session, utilisateur, réponse, modèle, variante et d
 
 #### Scenario: Rejet natif de medium
 - **WHEN** une erreur de paramètre reconnue et corrélée prouve l'indisponibilité de medium pour la candidate automatique
-- **THEN** CAB examine la politique de priorité suivante et exige son prévol réussi, sans considérer auth, quota ou réseau comme preuve
+- **THEN** CAB examine high sur le même modèle avant la politique suivante et exige le prévol du nouveau choix, sans considérer auth, quota ou réseau comme preuve
 
 #### Scenario: Utilisateur natif sans modèle dans un échange unique
 - **WHEN** le transcript complet contient un utilisateur précédant un seul assistant dont le modèle et la variante exacts sont observés, sans outil et aux dates admissibles
@@ -125,12 +125,8 @@ Le prévol MUST corréler session, utilisateur, réponse, modèle, variante et d
 - **THEN** CAB refuse le prévol malgré une réponse assistant antérieure conforme
 
 ### Requirement: Raisonnement medium par défaut et niveau explicite prioritaire
-Un niveau de raisonnement explicitement donné par le prompt MUST prévaloir.
-Sans niveau explicite, CAB MUST choisir medium si disponible. Si medium est
-indisponible ou rejeté par preuve native, une candidate automatique suivante
-MUST être examinée selon la priorité PLLM. CAB MUST vérifier les variantes
-réellement publiées. Une erreur d'authentification, quota ou réseau MUST NOT
-être assimilée à une incompatibilité de raisonnement.
+
+Le raisonnement explicite du prompt MUST prévaloir. Sinon CAB MUST choisir medium, puis high si medium est indisponible ou rejeté par preuve native, puis la candidate PLLM suivante si les deux sont indisponibles. CAB MUST vérifier les variantes réellement publiées. Authentification, quota et réseau MUST NOT prouver une incompatibilité de raisonnement.
 
 #### Scenario: Défaut medium
 - **WHEN** une candidate automatique expose medium et aucun niveau n'est fixé par le prompt
@@ -142,7 +138,7 @@ réellement publiées. Une erreur d'authentification, quota ou réseau MUST NOT
 
 #### Scenario: Medium indisponible
 - **WHEN** une candidate automatique ne prend pas en charge medium
-- **THEN** CAB examine la candidate suivante selon la priorité PLLM sans sélectionner une autre variante sur la candidate courante
+- **THEN** CAB choisit high si disponible sur cette candidate, sinon examine la candidate suivante selon la priorité PLLM
 
 #### Scenario: Modèle imposé incompatible
 - **WHEN** un modèle explicite ne prend pas en charge le niveau de raisonnement requis
@@ -176,3 +172,23 @@ CAB MUST accepter le catalogue schéma 2 avec exactement six politiques et le sc
 #### Scenario: Sélection ou dates non admissibles
 - **WHEN** une sélection est historique, ambiguë, invalide ou ses dates sont incohérentes
 - **THEN** les refus actuels restent applicables aux deux formats sans modèle inventé
+
+### Requirement: Convergence du raisonnement aux entrées et reprises
+
+Le protocole CAB distribué MUST viser medium en priorité pour une nouvelle session ou une reprise autorisée, puis high seulement si medium n’est pas disponible sur le modèle retenu. Il MUST vérifier les variantes réellement publiées et respecter un niveau explicitement imposé par le développeur.
+
+#### Scenario: Reprise historique en high et medium disponible
+- **WHEN** une reprise autorisée réexamine un ancien choix high et que medium est disponible sans niveau contraire imposé
+- **THEN** l’orchestrateur prépare la convergence vers medium avec prévol et réconciliation, sans changement aveugle ni rejeu de permission
+
+#### Scenario: Repli high
+- **WHEN** medium est indisponible et high est publié sur le modèle retenu
+- **THEN** high est choisi puis prévolé sans sélectionner un autre modèle pour cette seule raison
+
+### Requirement: Transition de raisonnement conservant les preuves
+
+Une transition de raisonnement en reprise MUST préserver RUN, job, preuves et mandats et exiger un prévol natif du nouveau choix ainsi qu’une réconciliation du contrat conservé. Elle MUST NOT modifier une session active sans frontière autorisée ni déclencher un benchmark du seul fait d’une reprise. Une transition non représentable ou non prouvée MUST être signalée sans faux succès.
+
+#### Scenario: Transition non prouvée
+- **WHEN** le prévol ou la réconciliation du contrat conservé ne permet pas une transition sûre
+- **THEN** l’orchestrateur signale la limite et conserve le contexte sans prétendre medium appliqué

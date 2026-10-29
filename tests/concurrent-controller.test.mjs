@@ -926,7 +926,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.9');
+  assert.equal(initialized.result.serverInfo.version, '2.1.10');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1449,12 +1449,12 @@ test('PLLM HTTP : défaut medium, prévol exact, choix persisté et modèle du j
  assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
 });
 
-test('PLLM HTTP : absence de medium examine la politique inférieure, modèle explicite incompatible bloqué',async(t)=>{
+test('PLLM HTTP : medium absent choisit high avant la politique inférieure, modèle incompatible bloqué',async(t)=>{
  const h=await setup(t,{codingPolicy:true});
  h.native.providers.all[0].models.model1.variants={high:{},xhigh:{}};
  const resolved=await h.post('/model-policy/resolve',{});
  assert.equal(resolved.status,200,JSON.stringify(resolved));
- assert.equal(resolved.body.mode,'mode2');
+ assert.equal(resolved.body.mode,'mode1');assert.equal(resolved.body.reasoning,'high');
  h.native.providers.all[0].models.model1.variants={low:{}};
  assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1'})).body.error,'explicit-model-unavailable');
@@ -1462,7 +1462,7 @@ test('PLLM HTTP : absence de medium examine la politique inférieure, modèle ex
 });
 
 
-test('PLLM HTTP : refus natif corrélé de medium autorise la politique suivante mais 429 bloque',async(t)=>{
+test('PLLM HTTP : refus natif corrélé de medium autorise high mais 429 bloque',async(t)=>{
  const h=await setup(t,{codingPolicy:true});
  const reject=(reasoning,status=400)=>{
   const name=reasoning+'-'+status;const user=structuredClone(h.native.messages.ses_probe[0]);
@@ -1474,9 +1474,9 @@ test('PLLM HTTP : refus natif corrélé de medium autorise la politique suivante
  };
  const medium=reject('medium');
  const next=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});
- assert.equal(next.body.mode,'mode2',JSON.stringify(next));assert.equal(next.body.unavailabilityProofs.length,1);
+ assert.equal(next.body.mode,'mode1',JSON.stringify(next));assert.equal(next.body.reasoning,'high');assert.equal(next.body.unavailabilityProofs.length,1);
  assert.equal(JSON.stringify(next.body).includes('diagnostic privé fictif'),false);
- assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[medium]})).body.error,'explicit-model-unavailable');
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',reasoning:'medium',unavailablePreflights:[medium]})).body.error,'explicit-model-unavailable');
  assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('medium',429)]})).body.error,'model-unavailability-not-proved');
 });
 
@@ -1546,6 +1546,93 @@ test('Raccord HTTP : indisponibilités imbriquées rattachées au catalogue logi
   response.parts=[];h.native.messages.ses_probe.push(user,response);return {sessionId:'ses_probe',messageId:response.info.id};
  };
  const medium=reject('medium');
- const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode2');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
+ const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode1');assert.equal(lower.body.reasoning,'high');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
  for(const reference of [reject('medium',429),reject('medium',401),reject('medium',400,true)])assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reference]})).body.error,'model-unavailability-not-proved');
 });
+
+test('recovery du RUN : permission étrangère ignorée avant lecture de cible, permission propre toujours bloquante', async t => {
+  const h = await setup(t); await h.reserve('scoped');
+  const permission = { id: 'per_foreign_shell', sessionID: 'ses_foreign', permission: 'shell', metadata: { command: '/usr/bin/true' } };
+  h.native.permissions.push(permission);
+  const recovery = { jobId: 'job-scoped', expectedSessionId: 'ses_scoped', sessionId: 'ses_scoped_new',
+    recoveryId: 'recovery-scoped', preflightRequestId: 'preflight-scoped', phase: 'prepare' };
+  const prepared = await h.post('/runs/scoped/job/recover', recovery);
+  assert.equal(prepared.status, 200, JSON.stringify(prepared));
+  assert.equal(prepared.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(h.native.permissions[0], permission);
+  assert.deepEqual(h.native.replies, []);
+  permission.sessionID = recovery.sessionId;
+  const retried = await h.post('/runs/scoped/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-scoped-next' });
+  assert.equal(retried.status, 409);
+  assert.equal(retried.body.error, 'opencode-control-unavailable');
+  assert.deepEqual(h.native.replies, []);
+});
+
+async function unregisteredNativeRefusal(t) {
+  const h = await setup(t); const run = await h.reserve('refusal');
+  const recovery = { jobId: 'job-refusal', expectedSessionId: 'ses_refusal', sessionId: 'ses_refusal_new',
+    recoveryId: 'recovery-refusal', preflightRequestId: 'preflight-refusal' };
+  assert.equal((await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const input = { ...h.approval({ ...run, sessionId: recovery.sessionId }, recovery.preflightRequestId), access_id: '' };
+  const envelope = (name, args, output, id) => ({ type: 'tool', id, callID: id, tool: 'execute', executed: false,
+    state: { status: 'completed', input: { code: `return await tools["cgpt-validation"].${name}(${JSON.stringify(args)});` },
+      output, time: { start: Date.now(), end: Date.now() + 1 }, metadata: { error: true, truncated: false,
+        toolCalls: [{ tool: 'cgpt-validation.' + name, status: 'error', input: structuredClone(args) }] } } });
+  const refusal = envelope('request_validation', input,
+    'MCP tool "request_validation" on server "cgpt-validation" failed: protocole de coordination ou identite d operation invalide', 'call_refusal');
+  const lookup = envelope('get_approval', { approval_id: input.approval_id },
+    `MCP tool "get_approval" on server "cgpt-validation" failed: approval_id '${input.approval_id}' inconnu`, 'call_lookup');
+  h.native.messages[recovery.sessionId] = [{ parts: [refusal, lookup] }];
+  return { h, recovery, input, refusal, lookup };
+}
+
+test('retry V2 : refus natif avant enregistrement et lookup inconnu corrélés conservent la candidate', async t => {
+  const { h, recovery } = await unregisteredNativeRefusal(t);
+  const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-refusal-next' });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal(result.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(result.body.recovery.attempts[0].preflightRequestId, recovery.preflightRequestId);
+  assert.match(result.body.recovery.attempts[0].nativeToolHash, /^[a-f0-9]{64}$/);
+  assert.deepEqual(h.native.replies, []);
+});
+
+for (const kind of ['texte-seul', 'lookup-absent', 'lookup-divergent', 'arguments-divergents', 'appel-supplémentaire', 'troncature', 'refus-non-déterministe']) {
+  test('retry V2 refuse la preuve ambiguë : ' + kind, async t => {
+    const { h, recovery, refusal, lookup, input } = await unregisteredNativeRefusal(t);
+    if (kind === 'texte-seul') refusal.state.metadata.error = false;
+    if (kind === 'lookup-absent') h.native.messages[recovery.sessionId][0].parts.pop();
+    if (kind === 'lookup-divergent') lookup.state.output = 'approval inconnue';
+    if (kind === 'arguments-divergents') refusal.state.metadata.toolCalls[0].input.requestId = 'foreign';
+    if (kind === 'appel-supplémentaire') h.native.messages[recovery.sessionId][0].parts.push({ type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: '/usr/bin/true' } } });
+    if (kind === 'troncature') refusal.state.metadata.truncated = true;
+    if (kind === 'refus-non-déterministe') {
+      input.access_id = 'valid-access';
+      refusal.state.input.code = `return await tools["cgpt-validation"].request_validation(${JSON.stringify(input)});`;
+      refusal.state.metadata.toolCalls[0].input = input;
+    }
+    const before = (await h.get('/runs/refusal/job')).body;
+    const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+      previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-refusal-next' });
+    assert.equal(result.status, 409, JSON.stringify(result));
+    assert.deepEqual((await h.get('/runs/refusal/job')).body.recovery, before.recovery);
+    assert.deepEqual(h.native.replies, []);
+  });
+}
+
+
+for (const type of ['session.execution.started', 'session.execution.succeeded', 'permission.asked']) {
+  test('un événement SSE V2 data invalide la cohorte : ' + type, async t => {
+    const h = await setup(t); await h.reserve('a');
+    const g = (await h.post('/coordination/global/request', { cause: 'GLOBAL_PAUSE', scope: 'all',
+      transactionId: 'pause-v2', authorization: 'explicit pause all', evidence: ['authorized'] })).body;
+    let fired = false; h.native.onRequest = async path => {
+      if (path !== '/session/status' || fired) return; fired = true;
+      h.native.emit({ type, location: { directory: h.directory }, data: { sessionID: 'ses_a' } }); await delay(50);
+    };
+    const result = await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] });
+    assert.equal(result.body.error, 'native-observation-changed');
+    assert.deepEqual(h.native.replies, []);
+  });
+}

@@ -17,10 +17,11 @@ test('PLLM automatique choisit medium même lorsque le modèle expose high et xh
  const selected=choose(); assert.equal(selected.providerID,'provider1');assert.equal(selected.modelID,'model1');
  assert.equal(selected.reasoning,'medium');assert.equal(selected.mode,'mode1');assert.equal(selected.source,'pllm-automatic');
 });
-test('medium absent ou désactivé examine la politique PLLM suivante',()=>{
+test('medium absent ou désactivé choisit high sur la même candidate',()=>{
  const p=providers();p.all[0].models.model1.variants.medium.disabled=true;
- assert.equal(choose({providers:p}).mode,'mode2');
- delete p.all[0].models.model1.variants.medium;assert.equal(choose({providers:p}).mode,'mode2');
+ assert.equal(choose({providers:p}).mode,'mode1');assert.equal(choose({providers:p}).reasoning,'high');
+ delete p.all[0].models.model1.variants.medium;assert.equal(choose({providers:p}).reasoning,'high');
+ p.all[0].models.model1.variants.high.disabled=true;assert.equal(choose({providers:p}).mode,'mode2');
 });
 test('medium absent impose la priorité PLLM suivante',()=>{
  const p=providers();p.all[0].models.model1.variants={low:{}};
@@ -78,11 +79,12 @@ function unavailableProof(reasoning='medium',statusCode=400,param='reasoning_eff
  response:{info:{role:'assistant',id:'msg_error',sessionID:'ses_probe',parentID:'msg_user',providerID:'provider1',modelID:'model1',
  time:{completed:now-10},error:{name:'APIError',data:{statusCode,responseBody:JSON.stringify({error:{code:'unsupported_value',param,message:'diagnostic privé fictif'}})}}},parts:[]}};
 }
-test('une incompatibilité native prouvée de medium permet la politique suivante sans corps brut',()=>{
+test('une incompatibilité native prouvée de medium permet high avant la politique suivante sans corps brut',()=>{
  const medium=reasoningUnavailability(unavailableProof());
- const next=choose({unavailable:[medium]});assert.equal(next.mode,'mode2');
+ const next=choose({unavailable:[medium]});assert.equal(next.mode,'mode1');assert.equal(next.reasoning,'high');
  assert.equal(JSON.stringify(next).includes('diagnostic privé fictif'),false);
- assert.throws(()=>choose({model:'provider1/model1',unavailable:[medium]}),/explicit-model-unavailable/);
+ assert.equal(choose({model:'provider1/model1',unavailable:[medium]}).reasoning,'high');
+ assert.throws(()=>choose({model:'provider1/model1',reasoning:'medium',unavailable:[medium]}),/explicit-model-unavailable/);
 });
 test('authentification, quotas, paramètre étranger et ancien échec ne prouvent pas une incompatibilité',()=>{
  for(const status of [401,403,429,500])assert.throws(()=>reasoningUnavailability(unavailableProof('medium',status)),/model-unavailability-not-proved/);
@@ -162,7 +164,7 @@ test('prévol natif : contradictions, champs invalides, absence parent, troncatu
 test('indisponibilité native imbriquée de medium et refus des variantes contradictoires',()=>{
  const {c,p}=goFixtures();const input=unavailableProof();input.parent.info.model={providerID:'opencode-go',modelID:'model1',variant:'medium'};delete input.parent.info.variant;
  input.response.info.providerID='opencode-go';input.response.info.variant='medium';const medium=reasoningUnavailability(input);
- assert.equal(choose({catalog:c,providers:p,unavailable:[medium]}).mode,'mode2');
+ assert.equal(choose({catalog:c,providers:p,unavailable:[medium]}).reasoning,'high');
  for(const change of [q=>q.parent.info.variant='low',q=>q.response.info.variant='low',q=>delete q.parent.info.model.variant]){
   const q=structuredClone(input);change(q);assert.throws(()=>reasoningUnavailability(q),/model-unavailability-not-proved/);
  }

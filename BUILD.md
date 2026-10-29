@@ -4,9 +4,9 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.1.9
+### Distribution courante 2.1.10
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.9. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.10. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
 
 OpenCode V2 est la seule version prise en charge. Les appels HTTP utilisent
 `/api/...` avec Basic Auth sous l'utilisateur fixe `opencode`. Configurer le
@@ -246,7 +246,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.1.9` pour le broker,
+artefacts distribués. La version de base actuelle est `2.1.10` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -548,7 +548,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.9 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.10 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -595,7 +595,7 @@ Le banc de processus exige une terminaison sous cinq secondes, libération des v
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.9.
+La distribution courante des quatre briques, plugins et commandes est 2.1.10.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -649,4 +649,48 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.9 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.10 ; les preuves 2.1.8 restent historiques.
+
+## Édition native et attente de mandat — source 2.1.10
+
+Le banc `tests/native-opencode-codemode.test.mjs` capture les outils transmis
+au fournisseur synthétique et qualifie `edit({path, oldString, newString,
+replaceAll?})` comme outil natif direct d’OpenCode 2.2. `search` décrit le
+catalogue Code Mode (MCP et helpers internes annoncés) ; il ne suffit pas pour déterminer les outils natifs disponibles.
+Le remplacement exact conserve décision CAB, cible unique, accès, `ask`,
+`once` et contrôle du contenu final. Refus et ambiguïté sont vérifiés sans
+écriture. Voir le skill CAB et la commande CAB pour les permissions V2 de
+lecture seule et la séquence PATCH, lecture de contrôle, prompt.
+
+Le superviseur d’un RUN sans mandat publie `WAITING` et
+`orchestrator-mandate-required`, sans prompt au codeur. Récupération achevée,
+gate ouvert et disponibilité technique ne créent aucun mandat. Le mode
+historique sans RUN garde sa relance technique bornée, sans droit nouveau.
+Ces résultats source ne prouvent ni activation 2.1.10, ni qualification du
+choix d’outil d’un modèle réel ; CABU reste distinct et coordonné.
+
+## Adaptations natives V2 — source 2.1.10
+
+Le retry historique après `access_id` vide exige l’enveloppe native exacte
+Code Mode, un seul appel et ses arguments concordants, `metadata.error=true`,
+`truncated=false`, le refus de validation déterministe, puis un `get_approval`
+natif corrélé prouvant l’absence de cette approbation. Session, RUN, génération,
+commande `/usr/bin/true`, absence d’effet et nouvelle identité de prévol restent
+contrôlés. Le texte libre ou le timeout seuls restent insuffisants. Le schéma
+MCP refuse désormais `access_id` vide : omettre cette clé si aucun accès
+existant n’est référencé. Le banc reproduit explicitement l’ancien schéma
+2.1.9 pour qualifier cette récupération, avec le validateur réel inchangé.
+
+Les vérifications d’un RUN filtrent les permissions par leurs identités de
+session avant de valider leurs cibles. Une permission étrangère n’est ni
+répondue ni autorisée ; une identité manquante ou une cible propre invalide
+reste bloquante. Les contrôles globaux conservent leur validation stricte.
+
+Le client expose les `tokens` et le `cost` natifs valides dans `info`, avec
+`usageSource=opencode-v2`. Absence reste inconnue, zéro reste zéro ; les
+métadonnées libres ne fabriquent pas ces mesures. Les événements SSE V2
+`data` et `location` sont normalisés avec vérification des identités et
+répertoires. Les débuts/fins d’exécution et permissions corrélés invalident
+les observations de génération ; les états statistiques suivent l’activité
+sans créer de décision CAB. Les mesures historiques manquantes ne sont pas
+reconstruites.

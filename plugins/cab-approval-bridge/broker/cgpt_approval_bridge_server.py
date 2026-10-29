@@ -69,7 +69,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.9"
+SERVER_VERSION = "2.1.10"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -8401,7 +8401,9 @@ APPROVAL_REQUEST_PROPERTIES = {
     "operation_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "expected_revisions": {"type": "object", "maxProperties": 256,
         "additionalProperties": {"type": "integer", "minimum": 0}},
-    "access_id": {"type": "string", "maxLength": 100},
+    "access_id": {"type": "string", "minLength": 1, "maxLength": 100,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+        "description": "Identifiant optionnel d un acces existant ; omettre la cle si absent, jamais une chaine vide."},
     "resources": {"type": "array", "items": {"type": "object",
         "properties": {"key": {"type": "string"}, "mode": {"enum": ["read", "write"]}},
         "required": ["key", "mode"], "additionalProperties": False}},

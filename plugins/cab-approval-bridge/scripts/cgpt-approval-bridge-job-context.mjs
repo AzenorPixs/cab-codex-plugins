@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.9";
+export const VERSION = "2.1.10";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -250,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.9",
+    version: "2.1.10",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -648,6 +648,25 @@ async function inspectRejectedReconciliation(recovery, payload) {
     authorizationReference: payload.developerAuthorization, globalTransactionId: payload.globalTransactionId || null };
 }
 
+function nativeUnregisteredRefusal(part, recovery) {
+  const state = part.state, input = state?.input;
+  return run && state?.status === 'error' && state.metadata?.cabCodeMode?.nativeMcpError === true &&
+    state.error === 'MCP tool "request_validation" on server "cgpt-validation" failed: protocole de coordination ou identite d operation invalide' &&
+    input?.access_id === '' && input.requestId === recovery.preflightRequestId &&
+    typeof input.approval_id === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(input.approval_id) &&
+    input.session_id === recovery.sessionId && input.directory === job.directory && input.change_id === job.changeId &&
+    input.run_id === run.runId && input.reservation_version === currentRun()?.version &&
+    input.coordination_protocol === 'resource-scoped-v1' &&
+    JSON.stringify(input.files) === '[]' && JSON.stringify(input.commands) === '["/usr/bin/true"]';
+}
+
+function nativeUnknownApproval(part, approvalId) {
+  return part.tool === 'cgpt-validation_get_approval' && part.state?.status === 'error' &&
+    part.state.metadata?.cabCodeMode?.nativeMcpError === true &&
+    Object.keys(part.state.input || {}).length === 1 && part.state.input.approval_id === approvalId &&
+    part.state.error === `MCP tool "get_approval" on server "cgpt-validation" failed: approval_id '${approvalId}' inconnu`;
+}
+
 async function checkRecoveryRetry(recovery, nextRequestId) {
   const validation = validations.get(recovery.preflightRequestId);
   const decision = httpDecisions.get(recovery.preflightRequestId);
@@ -694,6 +713,12 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
           continue;
         }
       } else {
+        if (nativeUnregisteredRefusal(part, recovery)) {
+          if (submitted.has(input.approval_id)) recoveryFailure('preflight-refusal-not-proved');
+          submitted.set(input.approval_id, { input, rejected: true, unregistered: true, notFound: false });
+          requestIds.add(input.requestId); approvalIds.add(input.approval_id); refused = true;
+          continue;
+        }
         if (state?.status !== "error" || typeof state.error !== "string" ||
             !/^MCP error -32602:/.test(state.error)) {
           recoveryFailure("preflight-refusal-not-proved");
@@ -708,6 +733,11 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
       if (!attempt) recoveryFailure("preflight-refusal-not-proved");
     } else {
       recoveryFailure("preflight-effect-not-excluded");
+    }
+    if (attempt.unregistered) {
+      if (!nativeUnknownApproval(part, attempt.input.approval_id)) recoveryFailure('preflight-refusal-not-proved');
+      attempt.notFound = true;
+      continue;
     }
     let output;
     try { output = JSON.parse(state?.output); } catch { recoveryFailure("preflight-refusal-not-proved"); }
@@ -724,7 +754,7 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
       refused = true;
     }
   }
-  if (!refused || [...submitted.values()].some((attempt) => !attempt.rejected) ||
+  if (!refused || [...submitted.values()].some((attempt) => !attempt.rejected || (attempt.unregistered && !attempt.notFound)) ||
       (validation && !submitted.has(validation.approvalId)) || requestIds.has(nextRequestId)) {
     recoveryFailure("preflight-refusal-not-proved");
   }
@@ -799,7 +829,7 @@ async function inspectNotificationReconciliation(payload, matchesApproval) {
   }
   if (!submitted) recoveryFailure('notification-reconciliation-proof-divergent');
   const busy = await openCode.sessionStatus(job.directory);
-  const permissions = await openCode.permissions(job.directory);
+  const permissions = await openCode.permissions(job.directory, permissionScope());
   if (!busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
       permissions.some((permission) => ownsSession(permission.sessionID))) {
     recoveryFailure('notification-reconciliation-native-not-quiescent');
@@ -852,7 +882,7 @@ async function inspectPausedOrphan(payload, matchesApproval) {
     pending = true;
   }
   if (!pending) fail('proof-divergent');
-  const busy = await openCode.sessionStatus(job.directory), permissions = await openCode.permissions(job.directory),
+  const busy = await openCode.sessionStatus(job.directory), permissions = await openCode.permissions(job.directory, permissionScope()),
     session = await openCode.session(job.sessionId, job.directory);
   if (!busy || typeof busy !== 'object' || Array.isArray(busy) || !Array.isArray(permissions) ||
       permissions.some((p) => ownsSession(p.sessionID)) || session.id !== job.sessionId || session.directory !== job.directory ||
@@ -981,7 +1011,7 @@ async function checkRecoveryContext(candidate, blockedRestore = false) {
   }
   let health, path, mcp, busy, permissions;
   try { [health, path, mcp, busy, permissions] = await Promise.all([openCode.info(), openCode.location(job.directory),
-    openCode.mcp(job.directory), openCode.sessionStatus(job.directory), openCode.permissions(job.directory)]); }
+    openCode.mcp(job.directory), openCode.sessionStatus(job.directory), openCode.permissions(job.directory, permissionScope(candidate.sessionId))]); }
   catch { recoveryFailure('opencode-control-unavailable'); }
   if (!health.version.startsWith('2.') || path.directory !== job.directory ||
       mcp["cgpt-validation"]?.status !== "connected") {
@@ -1345,8 +1375,13 @@ function hasSameNativePermissions(next) {
   return true;
 }
 
+function permissionScope(extraSessionId) {
+  return run ? { sessionIds: [...new Set([job?.sessionId || run.sessionId,
+    job?.recovery?.sessionId, extraSessionId].filter(Boolean))] } : {};
+}
+
 async function reconcileNativePermissions() {
-  const permissions = await openCode.permissions(workspace);
+  const permissions = await openCode.permissions(workspace, permissionScope());
 
   const next = new Map();
 
@@ -1396,7 +1431,7 @@ async function transmitApprovedOperation(validation) {
 
   try {
 
-    const permissions = await openCode.permissions(validation.operation.directory);
+    const permissions = await openCode.permissions(validation.operation.directory, permissionScope(validation.operation.sessionId));
 
     const permission = permissions.find((candidate) =>
       matchesApprovedOperation(candidate, validation.operation)
@@ -1703,7 +1738,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.9",
+      version: "2.1.10",
     },
   });
 

@@ -85,6 +85,16 @@ class ConcurrentBrokerTest(unittest.TestCase):
         with self.assertRaises(bridge.ValidationError):
             bridge.do_propose({**self.args(), "expected_revisions": {"resource:a": True}})
 
+    def test_empty_access_id_is_refused_before_registration_and_schema_matches(self):
+        schema = bridge.APPROVAL_REQUEST_PROPERTIES["access_id"]
+        self.assertEqual(schema["minLength"], 1)
+        self.assertRegex("access-valid", schema["pattern"])
+        for value in ("", "bad value", "/absolute"):
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose({**self.args(), "access_id": value})
+            self.assertEqual(bridge.load_store(bridge.store_path())["approvals"], {})
+        self.assertEqual(bridge.do_propose(self.args())["status"], "PENDING")
+
     def test_old_controller_cannot_receive_new_run_through_legacy_route(self):
         item = bridge.do_propose(self.args())
         with patch.object(bridge.request, "urlopen") as transport:

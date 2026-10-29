@@ -18,7 +18,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 2.1.9 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 2.1.10 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -26,7 +26,7 @@ et port existants, sans activation au login. Un échec PLLM ou CAB ultérieur
 n'arrête pas le moniteur. Une divergence active ou un échec de monitoring ne
 permet aucun arrêt, redémarrage ou changement de RUN dans les autres briques.
 
-## RUN concurrents CAB 2.1.9
+## RUN concurrents CAB 2.1.10
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -38,7 +38,7 @@ Valider et publier sur les ressources utiles avec /publish, sans /ready de cohor
 
 Installer ensemble les scripts controller, job-context, model-policy, prepare-model-policy, run-steps, monitor-events, monitor-management, runs, resource-coordination, supervisor, supervisor-context, statistics, observation-statistics, statistics-maintenance, import-observations, registry-lock, SSE, healthcheck, client OpenCode V2, reset, update et prompts, avec leurs noms complets cgpt-approval-bridge-*. Le manifeste doit référencer le répertoire skills distribué ; approval-bridge doit porter `references/component-update.md`, la référence utilisée par l'updater. Un jeu mixte est refusé avant permission.
 
-## Mise à jour forcée CAB 2.1.9
+## Mise à jour forcée CAB 2.1.10
 
 `/CAB update` est la procédure unique. `/CABU` sans argument charge le fichier
 frère `CAB.md` de même version et lui transmet exactement `update` ; ne duplique
@@ -484,43 +484,79 @@ sans purge ni suppression des historiques. Une nouvelle session ou un nouveau
 job exige une autorisation explicite de reprise ; ne fermer ni redémarrer
 OpenCode, le broker ou les services communs des autres RUN.
 
-## Mandats d'inventaire ou d'analyse en lecture seule
+## Mandats d’inventaire ou d’analyse en lecture seule — OpenCode V2
 
-Dans le corps de messagerie OpenCode, désactiver explicitement les outils :
+Attendre l’inactivité de la seule session ciblée, puis utiliser
+`PATCH /api/session/{sessionID}` avec ses règles `permissions`. Interdire les
+actions natives `shell` et `edit` (cette dernière protège aussi `write`), ainsi
+que les délégations et skills non autorisés. Exemple de règles de refus à
+intégrer sans perdre les restrictions existantes :
 
 ```json
-{"tools":{"bash":false,"edit":false,"write":false,"apply_patch":false,"task":false,"skill":false}}
+{"permissions":[{"action":"shell","resource":"*","effect":"deny"},{"action":"edit","resource":"*","effect":"deny"},{"action":"subagent","resource":"*","effect":"deny"},{"action":"skill","resource":"*","effect":"deny"}]}
 ```
 
-Conserver seulement les outils de lecture et recherche autorisés. Le texte
-« lecture seule » ne remplace pas ce verrou. Aucune configuration persistante
-OpenCode n'est modifiée. Au mandat exécutable suivant, réactiver explicitement
-les seuls outils nécessaires ; leurs permissions natives restent `ask` et
-chaque opération conserve son mandat CAB unitaire, sans autorisation générale.
+Relire `GET /api/session/{sessionID}` et vérifier les dernières règles
+applicables avant le prompt. Conserver uniquement les lectures et recherches
+autorisées par le mandat. Le texte « lecture seule » ne remplace pas les
+permissions ; ne pas reprendre un exemple V1 `tools`/`noReply` dans un prompt V2.
+Aucune configuration persistante OpenCode n’est modifiée.
 
-## Réactivation sûre des outils — CAB 1.0.1
+## Réactivation sûre des outils — OpenCode V2
 
-OpenCode peut convertir `tools: true` en permission native `allow`. Avant
-un mandat exécutable, attendre l'inactivité de la session ciblée, réactiver
-uniquement les outils nécessaires dans un message avec `noReply: true`, puis
-rétablir les règles `ask` par PATCH de cette seule session. Relire la session
-et vérifier pour chaque type natif nécessaire (`bash` ou `edit`) une dernière
-règle applicable de pattern `*` et d'action `ask`, y compris les noms à jokers.
-Une règle spécifique ultérieure ou une preuve absente suspend le mandat.
+Avant une opération, attendre l’inactivité puis rétablir par PATCH les seules
+actions nécessaires à `ask`, de portée `*`, en conservant les autres refus.
+Relire la session et vérifier la dernière règle applicable pour `shell`
+(normalisé `bash` par CAB) ou `edit`, y compris les noms à jokers. Une règle
+spécifique ultérieure ou une preuve absente suspend le mandat.
 
-Ensuite seulement, envoyer le message de génération sans champ `tools` qui
-réécrirait ces règles. Un `tools: true` dans ce message peut annuler le PATCH.
-La séquence `noReply`, PATCH, lecture native, génération est requise aussi
-pour le prévol de récupération. Elle ne constitue aucune approbation CAB.
+Envoyer ensuite le prompt V2 `{text, resume: true}` sans champ `tools` ni
+réécriture de permission. L’activation d’un outil ne constitue aucune décision
+CAB : chaque opération exige sa demande corrélée, son accès et sa permission
+`once`. Le contrôleur recontrôle `ask` avant admission, décision `approved` et
+transmission de `once`. Les diagnostics `native-permission-ask-required`,
+`native-permission-control-unavailable`, `native-permission-context-divergent`
+et `preflight-native-ask-required` restent bloquants. Une modification externe
+des règles après contrôle n’est pas atomique avec l’exécution native.
 
-Pour les jobs armés, le contrôleur vérifie les règles avant admission et avant
-une décision `approved`, ainsi qu'avant transmission de `once`. Les refus
-`native-permission-ask-required`, `native-permission-control-unavailable` et
-`native-permission-context-divergent` imposent une réconciliation. prepare
-refuse une candidate sans Bash `ask` par `preflight-native-ask-required`.
-Ces contrôles ne modifient aucune permission ; les règles doivent rester
-stables pendant le mandat. Une modification externe après contrôle n'est
-pas atomique avec l'exécution native et reste hors garantie du contrôleur.
+## Édition partielle native OpenCode 2.2
+
+Le banc privé CAB qualifie un outil natif direct `edit`, présenté au modèle
+avec cette signature :
+
+```json
+{"path":"/chemin/absolu/du/fichier","oldString":"texte exact et unique","newString":"texte de remplacement","replaceAll":false}
+```
+
+`path`, `oldString` et `newString` sont requis ; `replaceAll` est facultatif,
+faux par défaut. `oldString` et `newString` doivent différer. Si le texte
+ancien apparaît plusieurs fois, ajouter le contexte permettant un match unique ;
+ne pas activer `replaceAll` sans revue explicite de toutes les occurrences.
+Lire le fichier dans le périmètre autorisé et revoir le remplacement exact,
+son empreinte avant/après et sa cible unique avant la décision CAB.
+
+Appeler `edit` directement comme outil natif exposé au modèle. `search` dans
+Code Mode explore le catalogue Code Mode (MCP et helpers internes annoncés) ; son résultat, même vide, ne démontre pas
+l’absence d’un outil natif. Ne pas inventer `tools.edit` ou un outil `apply_patch`
+non exposé. Distinguer catalogue natif réellement transmis au modèle, catalogue
+MCP, règles de permissions et texte du prompt. Si le modèle n’appelle pas
+l’outil exposé, corriger le mandat ou qualifier le modèle avant de conclure à
+une absence runtime ; un repli shell exige sa propre commande et décision CAB.
+
+La preuve positive qualifiée lie demande CAB d’un fichier, décision explicite,
+accès d’écriture, permission native `edit` de source vérifiée, `once`, fin native
+et contenu exact. Le refus natif et le remplacement ambigu sont qualifiés sans
+écriture. Cette qualification utilise OpenCode privé et fournisseur synthétique ;
+elle ne prouve pas le choix d’outil d’un modèle réel ni une activation CABU.
+
+## Supervision entre deux mandats
+
+Pour un RUN piloté sans `currentCabMandate`, le superviseur publie `WAITING`
+avec `orchestrator-mandate-required`. L’orchestrateur examine cet état puis
+prépare le mandat suivant ; aucun prompt automatique n’est envoyé au codeur.
+Un gate `OPEN`, une récupération achevée ou une échéance de 60 secondes
+n’autorisent ni commande, ni lecture, ni édition. Un mandat déjà déclaré et
+les gardes de pause, récupération, permissions et accès restent prioritaires.
 
 
 ## Remédiation humaine du prévol exécuté sans once
@@ -553,13 +589,13 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 2.1.9, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, examiner la politique PLLM suivante. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve ce choix sans bascule ni sélection implicite d'un autre niveau. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 2.1.10, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, demander high sur le même modèle ; examiner la politique PLLM suivante seulement si les deux niveaux sont indisponibles. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve le contexte et réexamine la priorité medium puis high selon la section de convergence ; aucun changement actif implicite n’est autorisé. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
-Pour le raccord 2.1.9, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+Pour le raccord 2.1.10, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
 
-Contrat courant CABU 2.1.9 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.10 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -567,11 +603,11 @@ de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
 
 ### Permissions réappliquées par DIU
 
-DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.9, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
+DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.10, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
 
 Le provisionnement d’un credential absent exige en revanche un répertoire détenu par l’utilisateur et non modifiable par le groupe ou les autres. Si DIU a remis `0770` et que le fichier manque, rétablir les permissions sûres du seul répertoire CAB, par exemple `0700`, avant le raccord explicitement autorisé à OPENCODE_PASSWORD. Préserver le credential et son mode lors des mises à jour DIU ; ne jamais afficher sa valeur. La variable reste facultative pour les projets qui n’utilisent pas OpenCode.
 
-## Réconciliation humaine du rejet après redémarrage — 2.1.9
+## Réconciliation humaine du rejet après redémarrage — 2.1.10
 
 Après accord humain spécifique, utiliser la phase `reconcile-rejected` de
 `POST /runs/<run_id>/job/recover` avec les mêmes jobId, expectedSessionId,
@@ -591,7 +627,7 @@ récupération non réconciliée ou effet inconnu interdit la levée. Le nouveau
 prévol normal exige ensuite ask, décision, once, exit 0 et READY avant
 complete. Cette voie ne remplace ni retry ni la procédure CABU.
 
-## Raccord Code Mode OpenCode 2.2 — 2.1.9
+## Raccord Code Mode OpenCode 2.2 — 2.1.10
 
 Le client reconnaît seulement le retour direct d'un appel MCP cgpt-validation
 avec objet de données littérales. Les clés peuvent être des identifiants
@@ -624,7 +660,7 @@ synthétique loopback, broker réel, prévol et écriture sous once, puis contr�
 de disparition du broker et nettoyage. Aucune configuration ou credential
 réel n'est copié. Après archive et publication, CABU précède le recovery réel.
 
-## Découverte non autorisante — complément 2.1.9
+## Découverte non autorisante — complément 2.1.10
 
 Le diagnostic Code Mode admet aussi un unique search à données littérales
 suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
@@ -632,4 +668,55 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.9 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.10 ; les preuves 2.1.8 restent historiques.
+
+## Priorité medium puis high — nouvelles sessions et reprises
+
+Pour une nouvelle session ou une reprise autorisée, converger vers `medium`
+lorsqu’il est réellement publié et disponible sur le modèle retenu. Se
+replier sur `high` seulement si `medium` est absent, désactivé ou rejeté par
+une preuve native d’incompatibilité. Une erreur réseau, de quota ou
+d’authentification ne prouve pas cette indisponibilité. Un niveau explicitement
+imposé par le développeur reste prioritaire. Prévoler exactement le choix
+avant de générer un mandat.
+
+Une reprise historique en `high` réexamine donc `medium`, sans conserver
+`high` par simple habitude. Préserver fournisseur/modèle, RUN, job, réservations,
+mandats et preuves ; préparer la transition à une frontière autorisée, vérifier
+la variante native et réconcilier le choix durable du contrat. Ne pas réarmer
+un job ni écrire manuellement son état pour forcer la convergence. Si le contrat
+courant ne permet pas une transition sûre ou si son prévol manque, signaler
+la limite et conserver le contexte sans annoncer `medium` appliqué.
+
+Cette règle de protocole ne déclenche ni benchmark PLLM de reprise, ni
+changement des sessions actives lors d’une mise à jour des sources. La sélection
+par défaut essaie `medium`, puis `high` sur la même candidate ; seulement en
+cas d’indisponibilité des deux, la sélection automatique examine la politique
+PLLM suivante. Un modèle imposé reste conservé si les niveaux admissibles ne
+sont pas disponibles.
+
+## Adaptations natives V2 — source 2.1.10
+
+Le retry historique après `access_id` vide exige l’enveloppe native exacte
+Code Mode, un seul appel et ses arguments concordants, `metadata.error=true`,
+`truncated=false`, le refus de validation déterministe, puis un `get_approval`
+natif corrélé prouvant l’absence de cette approbation. Session, RUN, génération,
+commande `/usr/bin/true`, absence d’effet et nouvelle identité de prévol restent
+contrôlés. Le texte libre ou le timeout seuls restent insuffisants. Le schéma
+MCP refuse désormais `access_id` vide : omettre cette clé si aucun accès
+existant n’est référencé. Le banc reproduit explicitement l’ancien schéma
+2.1.9 pour qualifier cette récupération, avec le validateur réel inchangé.
+
+Les vérifications d’un RUN filtrent les permissions par leurs identités de
+session avant de valider leurs cibles. Une permission étrangère n’est ni
+répondue ni autorisée ; une identité manquante ou une cible propre invalide
+reste bloquante. Les contrôles globaux conservent leur validation stricte.
+
+Le client expose les `tokens` et le `cost` natifs valides dans `info`, avec
+`usageSource=opencode-v2`. Absence reste inconnue, zéro reste zéro ; les
+métadonnées libres ne fabriquent pas ces mesures. Les événements SSE V2
+`data` et `location` sont normalisés avec vérification des identités et
+répertoires. Les débuts/fins d’exécution et permissions corrélés invalident
+les observations de génération ; les états statistiques suivent l’activité
+sans créer de décision CAB. Les mesures historiques manquantes ne sont pas
+reconstruites.

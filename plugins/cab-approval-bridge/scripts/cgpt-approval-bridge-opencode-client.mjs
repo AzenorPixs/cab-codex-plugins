@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.9';
+export const VERSION = '2.1.10';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -198,6 +198,9 @@ function codeModePart(content, part) {
     call = { tool: 'cgpt-validation.' + match[2], input: literal.value };
   } else if (code || !discovery) return null;
   const expected = [discovery, call].filter(Boolean), observed = part.state.metadata?.toolCalls;
+  const nativeFailure = part.state.status === 'completed' && part.state.metadata?.error === true &&
+    !discovery && ['cgpt-validation.request_validation', 'cgpt-validation.get_approval'].includes(call?.tool) &&
+    Array.isArray(observed) && observed.length === 1 && observed[0]?.status === 'error';
   if ((observed !== undefined && !Array.isArray(observed)) ||
       (part.state.status === 'completed' && part.state.metadata?.truncated !== false)) return null;
   if (part.state.status !== 'running' || (Array.isArray(observed) && observed.length)) {
@@ -205,12 +208,44 @@ function codeModePart(content, part) {
         !record(entry) || entry.tool !== expected[i].tool || canonical(entry.input) !== canonical(expected[i].input) ||
         !(['completed', 'error'].includes(entry.status) || part.state.status === 'running' &&
           entry.tool === 'cgpt-validation.request_validation' && i === expected.length - 1 && entry.status === 'running')) ||
-        (part.state.status === 'completed' && observed.some(entry => entry.status !== 'completed'))) return null;
+        (part.state.status === 'completed' && observed.some(entry => entry.status !== 'completed') && !nativeFailure)) return null;
   } else if (!call || call.tool !== 'cgpt-validation.request_validation') return null;
   return { ...part, tool: call ? call.tool.replace('cgpt-validation.', 'cgpt-validation_') : 'cab_codemode_discovery',
     state: { ...part.state, input: call?.input || discovery.input,
+      ...(nativeFailure ? { status: 'error', error: part.state.output } : {}),
       metadata: { ...part.state.metadata, cabCodeMode: {
-        wrapperId: content.id, envelopeHash: createHash('sha256').update(canonical(content)).digest('hex') } } } };
+        wrapperId: content.id, ...(nativeFailure ? { nativeMcpError: true } : {}), envelopeHash: createHash('sha256').update(canonical(content)).digest('hex') } } } };
+}
+
+function nativeUsage(message) {
+  const usage = {};
+  if (message.tokens != null) {
+    const tokens = message.tokens;
+    if (!record(tokens)) fail('opencode-message-usage-invalid');
+    const count = value => Number.isSafeInteger(value) && value >= 0;
+    const selected = {};
+    for (const key of ['input', 'output', 'reasoning', 'total']) {
+      if (tokens[key] !== undefined) {
+        if (!count(tokens[key])) fail('opencode-message-usage-invalid');
+        selected[key] = tokens[key];
+      }
+    }
+    if (tokens.cache !== undefined) {
+      if (!record(tokens.cache)) fail('opencode-message-usage-invalid');
+      selected.cache = {};
+      for (const key of ['read', 'write']) if (tokens.cache[key] !== undefined) {
+        if (!count(tokens.cache[key])) fail('opencode-message-usage-invalid');
+        selected.cache[key] = tokens.cache[key];
+      }
+    }
+    if (!Object.keys(selected).length) fail('opencode-message-usage-invalid');
+    usage.tokens = selected;
+  }
+  if (message.cost != null) {
+    if (typeof message.cost !== 'number' || !Number.isFinite(message.cost) || message.cost < 0) fail('opencode-message-usage-invalid');
+    usage.cost = message.cost;
+  }
+  return Object.keys(usage).length ? { ...usage, usageSource: 'opencode-v2' } : usage;
 }
 
 function normalizeMessage(message, sessionId) {
@@ -218,9 +253,9 @@ function normalizeMessage(message, sessionId) {
   const model = record(message.model) ? { providerID: message.model.providerID, modelID: message.model.id,
     ...(typeof message.model.variant === 'string' ? { variant: message.model.variant } : {}) } : undefined;
   const metadata = record(message.metadata) ? { ...message.metadata } : {};
-  delete metadata.tools;
+  for (const key of ['tools', 'tokens', 'cost', 'usage', 'usageSource']) delete metadata[key];
   const normalized = { info: { ...metadata, id: message.id,
-    sessionID: sessionId, role: message.type, nativeSingleExchange: false, parentID: message.metadata?.parentID,
+    ...nativeUsage(message), sessionID: sessionId, role: message.type, nativeSingleExchange: false, parentID: message.metadata?.parentID,
     time: message.time, providerID: model?.providerID, modelID: model?.modelID,
     ...(model ? { model, variant: model.variant } : {}),
     ...(typeof message.finish === 'string' ? { finish: message.finish } : {}),
@@ -257,6 +292,21 @@ function normalizeMessage(message, sessionId) {
     normalized.parts.push(content.name === 'execute' ? codeModePart(content, part) || part : part);
   }
   return normalized;
+}
+
+export function normalizeOpenCodeEvent(envelope) {
+  if (!record(envelope)) return null;
+  const event = record(envelope.payload) ? envelope.payload : envelope;
+  if (typeof event.type !== 'string') return null;
+  const properties = event.data !== undefined ? event.data : event.properties ?? {};
+  if (!record(properties)) return null;
+  if (event.data !== undefined && event.properties !== undefined && canonical(event.data) !== canonical(event.properties)) return null;
+  const directories = [envelope.directory, event.directory, envelope.location?.directory,
+    event.location?.directory, properties.directory, properties.info?.directory].filter(value => value !== undefined);
+  if (directories.some(value => typeof value !== 'string' || !value || value !== directories[0])) return null;
+  const session = properties.sessionID || properties.sessionId || properties.part?.sessionID || properties.info?.sessionID;
+  if (event.durable?.aggregateID !== undefined && session && event.durable.aggregateID !== session) return null;
+  return { type: event.type, properties, ...(directories.length ? { directory: directories[0] } : {}) };
 }
 
 export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, fetchImpl = fetch, timeoutMs = 10000, signal }) {
@@ -446,12 +496,18 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     fail('opencode-messages-pagination-limit');
   }
 
-  async function permissions(directoryValue = directory) {
+  async function permissions(directoryValue = directory, { sessionIds } = {}) {
+    if (sessionIds !== undefined && (!Array.isArray(sessionIds) || !sessionIds.length ||
+        sessionIds.some(id => typeof id !== 'string' || !id.trim()))) fail('opencode-permission-scope-invalid');
     const response = await json('/api/permission/request', { query: { directory: directoryValue } });
     if (!record(response) || !record(response.location) || response.location.directory !== directoryValue || !Array.isArray(response.data)) {
       fail('opencode-permissions-invalid');
     }
-    return Promise.all(response.data.map(async raw => {
+    const selected = response.data.filter(raw => {
+      if (!record(raw) || typeof raw.sessionID !== 'string' || !raw.sessionID.trim()) fail('opencode-permission-invalid');
+      return sessionIds === undefined || sessionIds.includes(raw.sessionID);
+    });
+    return Promise.all(selected.map(async raw => {
       const permission = normalizePermission(raw);
       if (raw.action !== 'shell' && !(raw.action === 'edit' &&
           raw.resources.length === 1 && !isAbsolute(raw.resources[0]))) return permission;

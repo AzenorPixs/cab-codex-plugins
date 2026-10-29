@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.10 — Édition native, récupération et protocole V2
+
+- Qualification isolée de `edit` natif OpenCode 2.2 : signature, remplacement partiel sous CAB ask/once, refus et ambiguïté sans écriture. Consignes V2 dans le skill et la commande CAB ; distinction avec la découverte MCP.
+- Un RUN sans mandat attend l’orchestrateur sans prompt automatique du superviseur. Les gardes existantes restent prioritaires ; aucune activation réelle ne découle de cette préparation source.
+
+- Récupération bornée d’un refus MCP V2 avant enregistrement ; schéma access_id non vide, permissions isolées par session sans assouplir les contrôles globaux.
+- Métriques natives tokens/coût validées et événements SSE data/location reconnus ; aucune mesure historique reconstruite.
+- Priorité de raisonnement medium puis high sur le même modèle, documentée aux nouvelles sessions et reprises avec prévol et réconciliation ; aucun changement des sessions actives par la préparation source.
+
 ## 2.1.9 — Acquittement littéral de découverte Code Mode
 
 - Reconnaître un unique search suivi du retour d’une chaîne littérale, avec liste native concordante et non tronquée.

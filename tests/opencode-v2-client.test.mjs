@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { verifyModelPreflight } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
-import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2Client, normalizeOpenCodeEvent } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'cab-opencode-v2-'));
@@ -91,7 +91,7 @@ test('Code Mode : formes ambiguës conservées comme execute bloquant', async t 
 
 test('permissions shell et écriture relative : source native et cible vérifiées', async t => {
   const f=fixture();t.after(f.close);
-  for(const kind of ['shell','write']) {
+  for(const kind of ['shell','write','edit']) {
     let corrupt=false, wrongMessage=false;
     const input=kind==='shell'?{command:'/usr/bin/true'}:{path:'/workspace/fixture.txt',content:'fixture'};
     const action=kind==='shell'?'shell':'edit',resources=kind==='shell'?['/usr/bin/true']:['fixture.txt'];
@@ -332,4 +332,83 @@ test('pagination native : curseur répété ou malformé refusé avant tout rés
   await assert.rejects(c.messages('ses_1'),/opencode-messages-pagination-invalid/);
   await assert.rejects(c.listSessions(),/opencode-sessions-pagination-invalid/);
  }
+});
+
+test('permissions ciblées : une permission étrangère multirésource reste isolée, les identités et cibles propres restent strictes', async t => {
+  const f = fixture(); t.after(f.close);
+  let owner = 'ses_foreign', missingIdentity = false, sourceReads = 0;
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
+    fetchImpl: async u => {
+      const path = new URL(u).pathname;
+      if (path === '/api/info') return json(info);
+      if (path === '/api/permission/request') return json({ location, data: [{ id: 'per_multi',
+        ...(missingIdentity ? {} : { sessionID: owner }), action: 'shell', resources: ['a', 'b', 'c', 'd'],
+        source: { type: 'tool', messageID: 'msg_multi', id: 'call_multi' } }] });
+      sourceReads++;
+      return json({ data: { id: 'msg_multi', type: 'assistant', content: [{ type: 'tool', id: 'call_multi', name: 'shell',
+        executed: false, time: { created: 1, ran: 2 }, state: { status: 'running', input: { command: 'a' }, metadata: {} } }] } });
+    } });
+  assert.deepEqual(await client.permissions('/workspace', { sessionIds: ['ses_owned'] }), []);
+  assert.equal(sourceReads, 0);
+  await assert.rejects(client.permissions(), { code: 'opencode-permission-target-invalid' });
+  owner = 'ses_owned';
+  await assert.rejects(client.permissions('/workspace', { sessionIds: ['ses_owned'] }), { code: 'opencode-permission-target-invalid' });
+  missingIdentity = true;
+  await assert.rejects(client.permissions('/workspace', { sessionIds: ['ses_owned'] }), { code: 'opencode-permission-invalid' });
+  await assert.rejects(client.permissions('/workspace', { sessionIds: [] }), { code: 'opencode-permission-scope-invalid' });
+});
+
+test('usage V2 : tokens et coût natifs validés, métadonnées libres et absences sans métrique fabriquée', async t => {
+  const f = fixture(); t.after(f.close);
+  const row = { id: 'msg_usage', type: 'assistant', content: [], tokens: { input: 11, output: 7, reasoning: 3, cache: { read: 2, write: 1 } },
+    cost: 0, metadata: { tokens: { output: 999 }, cost: 999, usageSource: 'fake', usage: { output: 999 } } };
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
+    fetchImpl: async u => new URL(u).pathname === '/api/info' ? json(info)
+      : json({ data: [row], cursor: { next: null, previous: null } }) });
+  let normalized = (await client.messages('ses_usage'))[0].info;
+  assert.deepEqual(normalized.tokens, row.tokens); assert.equal(normalized.cost, 0);
+  assert.equal(normalized.usageSource, 'opencode-v2'); assert.equal(normalized.usage, undefined);
+  delete row.tokens; delete row.cost;
+  normalized = (await client.messages('ses_usage'))[0].info;
+  for (const key of ['tokens', 'cost', 'usage', 'usageSource']) assert.equal(normalized[key], undefined);
+  row.tokens = { output: 0 };
+  normalized = (await client.messages('ses_usage'))[0].info;
+  assert.deepEqual(normalized.tokens, { output: 0 }); assert.equal(normalized.cost, undefined);
+  for (const tokens of [{ output: -1 }, { input: '3' }, { output: Number.MAX_SAFE_INTEGER + 1 }, {}, { cache: [] }]) {
+    row.tokens = tokens; await assert.rejects(client.messages('ses_usage'), { code: 'opencode-message-usage-invalid' });
+  }
+  delete row.tokens;
+  for (const cost of [-1, '0.1', {}]) {
+    row.cost = cost; await assert.rejects(client.messages('ses_usage'), { code: 'opencode-message-usage-invalid' });
+  }
+});
+
+
+test('SSE V2 : data/location normalisés, identités et enveloppes contradictoires refusées', () => {
+  const native = { type: 'session.execution.started', location: { directory: '/workspace' },
+    data: { sessionID: 'ses_a' }, durable: { aggregateID: 'ses_a', seq: 1, version: 1 } };
+  assert.deepEqual(normalizeOpenCodeEvent(native), { type: native.type, directory: '/workspace', properties: native.data });
+  assert.equal(normalizeOpenCodeEvent({ ...native, directory: '/other' }), null);
+  assert.equal(normalizeOpenCodeEvent({ ...native, durable: { aggregateID: 'ses_b' } }), null);
+  assert.equal(normalizeOpenCodeEvent({ ...native, properties: { sessionID: 'ses_b' } }), null);
+  assert.equal(normalizeOpenCodeEvent({ ...native, data: [] }), null);
+  const legacy = { directory: '/workspace', payload: { type: 'session.idle', properties: { sessionID: 'ses_a' } } };
+  assert.equal(normalizeOpenCodeEvent(legacy).properties.sessionID, 'ses_a');
+});
+
+test('erreur MCP V2 : provenance structurée stricte et texte libre sans preuve native', async t => {
+  const input = { requestId: 'request', access_id: '' };
+  const raw = wrapped('return await tools["cgpt-validation"].request_validation(' + JSON.stringify(input) + ');',
+    [{ tool: 'cgpt-validation.request_validation', status: 'error', input }]);
+  raw.state.metadata.error = true;
+  raw.state.content = [{ type: 'text', text: 'synthetic native error' }];
+  const part = await codeModeFixture(t, raw);
+  assert.equal(part.tool, 'cgpt-validation_request_validation'); assert.equal(part.state.status, 'error');
+  assert.equal(part.state.metadata.cabCodeMode.nativeMcpError, true);
+  for (const mutate of [p => delete p.state.metadata.error, p => p.state.metadata.truncated = true,
+    p => p.state.metadata.toolCalls[0].input = {}, p => p.state.metadata.toolCalls.push(p.state.metadata.toolCalls[0]),
+    p => p.state.input.code = 'return "synthetic native error";']) {
+    const changed = structuredClone(raw); mutate(changed);
+    assert.equal((await codeModeFixture(t, changed)).tool, 'execute');
+  }
 });

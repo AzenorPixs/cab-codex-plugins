@@ -59,29 +59,47 @@ async function checkSupervision(t, coordinationReason = null, codingModel = fals
     for (const server of [controller, opencode]) { server.closeAllConnections(); await new Promise((r) => server.close(r)); }
     rmSync(directory, { recursive: true, force: true });
   });
-  for (let i = 0; i < 100 && !sent.length; i++) await new Promise((r) => setTimeout(r, 50));
-  assert.equal(sent.length, 1); assert.equal(sent[0].sessionId, 'ses_b');
-  if(codingModel){
-    assert.deepEqual(modelSwitches, [{ sessionId: 'ses_b', body: { model: { id: 'model1', providerID: 'provider1', variant: 'medium' } } }]);
-    assert.equal(sent[0].body.model, undefined); assert.equal(sent[0].body.variant, undefined);
-  }
   let state;
-  for (let i = 0; i < 50; i++) {
-    state = await (await fetch('http://127.0.0.1:' + port + '/status')).json();
-    assert.equal(sent.length, 1);
-    if (state.runs.b.reason === 'session-not-idle') break;
-    await new Promise((r) => setTimeout(r, 50));
+  async function awaitState(reason) {
+    for (let i = 0; i < 100; i++) {
+      try {
+        state = await (await fetch('http://127.0.0.1:' + port + '/status')).json();
+        if (state.runs?.b?.reason === reason) return;
+      } catch (cause) { if (!(cause instanceof TypeError)) throw cause; }
+      await new Promise(r => setTimeout(r, 25));
+    }
+    assert.fail('État de supervision absent : ' + reason);
   }
-  assert.equal(state.runs.a.resumeAttemptCount, 0); assert.equal(state.runs.b.resumeAttemptCount, 1);
+  await awaitState('orchestrator-mandate-required');
   assert.equal(state.runs.a.reason, coordinationReason || 'pending-validations');
-  assert.equal(state.runs.b.reason, 'session-not-idle');
+  assert.equal(state.runs.b.state, 'WAITING');
+  assert.equal(state.runs.b.resumeAttemptCount, 0);
+  assert.equal(state.runs.a.resumeAttemptCount, 0);
+  assert.deepEqual(sent, []); assert.deepEqual(modelSwitches, []);
+  assert.equal(jobs.b.armed, true); assert.equal(jobs.b.terminalGate.status, 'OPEN');
+  jobs.b.recovery = { sessionId: 'candidate-b', phase: 'prepare' };
+  await awaitState('session-recovery-pending');
+  jobs.b.recovery = null; jobs.b.sessionId = 'candidate-b';
+  await awaitState('orchestrator-mandate-required');
+  assert.equal(state.runs.b.sessionId, 'candidate-b');
+  jobs.b.currentCabMandate = 'analyse en lecture seule';
+  await awaitState('native-effect-unresolved');
+  jobs.b.currentCabMandate = null; statuses.b.unmatchedNativePermissionCount = 1;
+  await awaitState('native-effect-unresolved');
+  statuses.b.unmatchedNativePermissionCount = 0;
+  statuses.b.hasUnresolvedOperation = true;
+  await awaitState('resource-access-active');
+  statuses.b.hasUnresolvedOperation = false;
+  await awaitState('orchestrator-mandate-required');
+  assert.deepEqual(sent, []); assert.deepEqual(modelSwitches, []);
+  assert.equal(state.runs.b.resumeAttemptCount, 0);
 
 }
 
-test('supervision partagée : attente de A, reprise unique de B et compteurs séparés', { timeout: 10000 }, (t) => checkSupervision(t));
-test('un conflit de ressource de A ne provoque aucune relance et préserve B', { timeout: 10000 }, (t) => checkSupervision(t, 'resource-conflict'));
+test('supervision partagée : attente de l’orchestrateur, aucun prompt sans mandat', { timeout: 10000 }, (t) => checkSupervision(t));
+test('un conflit de ressource de A ne provoque aucune relance et préserve l’attente indépendante de B', { timeout: 10000 }, (t) => checkSupervision(t, 'resource-conflict'));
 test('une pause ciblée reste prioritaire sur le réveil du superviseur', { timeout: 10000 }, (t) => checkSupervision(t, 'run-pause'));
 
-test('une attente Docker/LXC ne provoque aucune relance et préserve les pairs', { timeout: 10000 }, (t) => checkSupervision(t, 'test-resource-conflict'));
+test('une attente Docker/LXC ne provoque aucune relance et préserve les pairs en attente', { timeout: 10000 }, (t) => checkSupervision(t, 'test-resource-conflict'));
 
-test('le superviseur réutilise explicitement le modèle et le raisonnement medium validés', { timeout: 10000 }, (t) => checkSupervision(t, null, true));
+test('le superviseur ne génère ni appel modèle ni prompt pour un RUN sans mandat', { timeout: 10000 }, (t) => checkSupervision(t, null, true));

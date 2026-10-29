@@ -13,9 +13,9 @@ import { StatisticsMaintenance, statisticsDashboard, guardStatisticsPost, VERSIO
 import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.mjs';
 import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
-import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.9";
+const version = "2.1.10";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -948,13 +948,14 @@ async function consumeEvents() {
         const data = frame.match(/^data:\s*(.+)$/m)?.[1];
         if (!data) continue;
         let event;
-        try { event = JSON.parse(data); } catch { continue; }
+        try { event = normalizeOpenCodeEvent(JSON.parse(data)); } catch { continue; }
+        if (!event) continue;
         observeStatistics(() => statistics.nativeEvent(event));
         legacy.onEvent(event);
         const props = event.payload?.properties || event.properties || {};
         const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID || props.info?.id;
         const type = event.payload?.type || event.type;
-        if (['session.status', 'session.idle', 'session.updated', 'session.deleted', 'permission.asked', 'permission.replied'].includes(type) &&
+        if (['session.status', 'session.idle', 'session.updated', 'session.deleted', 'session.inbox.enqueued', 'session.execution.started', 'session.execution.succeeded', 'session.execution.failed', 'session.execution.interrupted', 'permission.asked', 'permission.replied'].includes(type) &&
             (legacy.sessions().includes(session) || registry.resourceState.legacySources.some((source) => source.sessionId === session) ||
               activeContexts().some(([, context]) => context.sessions().includes(session)))) nativeGeneration++;
         for (const [, context] of activeContexts()) {

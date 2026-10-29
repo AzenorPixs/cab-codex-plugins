@@ -185,3 +185,16 @@ test('coordination par ressources et gels exceptionnels restent séparés et san
   assert.equal(readFileSync(h.stats.path,'utf8').includes('SECRET'), false);
   assert.equal(JSON.stringify(h.stats.observations.data).includes('SECRET'), false);
 });
+
+
+test('activité SSE V2 : exécution corrélée, fin native et événements étrangers sans décision', async t => {
+  const h = fixture(t); h.registry([h.run('a')]); h.stats.connection(true);
+  const event = (type, sessionID = 'ses_a', directory = h.directory) => ({ type, location: { directory }, data: { sessionID } });
+  h.stats.nativeEvent(event('session.execution.started')); h.step(1000);
+  h.stats.nativeEvent(event('session.execution.succeeded', 'ses_foreign')); h.step(1000);
+  h.stats.nativeEvent(event('session.execution.failed', 'ses_a', '/foreign')); h.step(1000);
+  h.stats.nativeEvent(event('session.execution.succeeded')); h.step(1000);
+  const summary = h.stats.summary();
+  assert.equal(summary.categories.native.monoMs, 3000); assert.equal(summary.categories.native.zeroMs, 1000);
+  assert.equal(summary.contexts[0].decisions.approved, 0); assert.equal(summary.contexts[0].decisions.once, 0);
+});

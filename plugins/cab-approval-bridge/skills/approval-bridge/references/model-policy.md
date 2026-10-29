@@ -2,7 +2,7 @@
 
 ## Priorité du prompt
 
-Un modèle concret spécifié dans le prompt conserve sa priorité. Sinon utiliser la PLLM en mode automatique, dans les priorités publiées (1 à 6 pour le schéma 2, 1 à 7 pour le schéma 3), sans figer un fournisseur ou un nom de modèle. Distinguer l'identifiant API model_id du nom commercial model. Le raisonnement explicitement spécifié reste prioritaire. Sans niveau explicite, demander medium. Si medium n'est pas disponible, examiner la politique PLLM de priorité inférieure. Ne pas choisir automatiquement un autre niveau pour la même candidate.
+Un modèle concret spécifié dans le prompt conserve sa priorité. Sinon utiliser la PLLM en mode automatique, dans les priorités publiées (1 à 6 pour le schéma 2, 1 à 7 pour le schéma 3), sans figer un fournisseur ou un nom de modèle. Distinguer l'identifiant API model_id du nom commercial model. Le raisonnement explicitement spécifié reste prioritaire. Sans niveau explicite, demander medium. Si medium n'est pas disponible, examiner high sur le même modèle. Examiner la politique PLLM de priorité inférieure seulement si medium et high sont indisponibles ; ne pas choisir implicitement un autre niveau.
 
 Un modèle explicitement imposé qui ne prend pas en charge le niveau de raisonnement requis reste conservé et bloque. Aucun repli automatique vers un autre modèle n'est autorisé dans ce cas. Un niveau explicitement imposé indisponible bloque aussi pour ce modèle. Dans la sélection automatique, examiner les politiques suivantes qui satisfont ce niveau exact.
 
@@ -16,7 +16,7 @@ La sélection publiée low ne prouve pas la disponibilité ou les performances d
 
 ## Résolution, prévol puis armement
 
-1. Après bootstrap du monitoring, résoudre les exigences du prompt. POST /model-policy/resolve reçoit un objet contenant model et reasoning seulement si explicitement fixés ; model est providerID/modelID. Avec {}, le défaut est PLLM automatique avec medium. Si medium est indisponible, la sélection passe à la politique PLLM suivante. La réponse est un choix proposé avec preflightRequired=true, jamais une autorisation ni une preuve de génération.
+1. Après bootstrap du monitoring, résoudre les exigences du prompt. POST /model-policy/resolve reçoit un objet contenant model et reasoning seulement si explicitement fixés ; model est providerID/modelID. Avec {}, le défaut est PLLM automatique avec medium. Si medium est indisponible, la sélection essaie high sur le même modèle avant la politique PLLM suivante. La réponse est un choix proposé avec preflightRequired=true, jamais une autorisation ni une preuve de génération.
 2. Selon les accords de transmission applicables, préparer le fournisseur par la voie standard permise, sans exposer de secret, puis exécuter un prévol borné sans outil sur le fournisseur, modèle et variante exacts. Préserver OpenCode et les pairs ; toute maintenance commune demeure distinctement autorisée. Une réponse tronquée, une erreur ou une autre variante ne réussit pas ce contrôle. Ne pas assimiler le benchmark low à ce prévol. Aucune nouvelle évaluation fournisseur n'est déclenchée par le serveur CAB lui-même.
 3. Avant de supprimer la seule session temporaire du prévol, armer le job avec modelSelectionProtocol=pllm-auto-v1, modelSelection={model?,reasoning?} et modelPreflight={sessionId,messageId}, en plus du contrat de job. Le contrôleur relit le catalogue et les capacités ; il corrèle la session au workspace, le message assistant terminé avec finish=stop, son parent utilisateur, le fournisseur, modèle et variant exacts, ainsi qu'une réponse texte sans outil. Une preuve divergente refuse l'armement.
 4. Vérifier GET /runs/<runId>/job : codingModel conserve fournisseur, modèle, raisonnement, provenance, priorité, empreinte de catalogue et référence du prévol. Ensuite seulement effectuer les prévols et mandats CAB ordinaires. Le catalogue ne remplace ni permission once ni gate.
@@ -61,8 +61,33 @@ Le prévol et l'indisponibilité lisent parent.info.model.variant (schéma natif
 
 Les anciens jobs sans logicalProviderID restent valides. Après armement d'un nouveau job portant ce champ, un lecteur strict 1.10.2 n'est pas qualifié pour ce contrat : conserver le lecteur compatible et les preuves plutôt que restaurer une sauvegarde métier. La préparation et le paquet source n'activent aucune configuration ou reprise.
 
-## Preuve native V2 à échange unique — 2.1.9
+## Preuve native V2 à échange unique — 2.1.10
 
 La lecture paginée fixe order sur la première page uniquement. Le curseur opaque porte ensuite son ordre ; les limites et refus de pages invalides ou répétées restent appliqués.
 
 Pour le prévol natif, le client marque sa provenance seulement après lecture complète d’un transcript contenant exactement un utilisateur précédant un assistant. Si le parent omet modèle et variante, le vérificateur peut employer le modèle et la variante exacts de la réponse native, avec identités, dates, texte, fin stop et absence d’outil contrôlés. Aucun champ n’est ajouté au parent. Une métadonnée entrante ne peut pas établir cette provenance. Plusieurs échanges, un modèle parent partiel ou contradictoire et les preuves incomplètes restent refusés. Les preuves héritées et leur cohérence parent/assistant restent vérifiées ; les erreurs de raisonnement sans preuve native suffisante n’autorisent aucun repli.
+
+## Priorité medium puis high — nouvelles sessions et reprises
+
+Pour une nouvelle session ou une reprise autorisée, converger vers `medium`
+lorsqu’il est réellement publié et disponible sur le modèle retenu. Se
+replier sur `high` seulement si `medium` est absent, désactivé ou rejeté par
+une preuve native d’incompatibilité. Une erreur réseau, de quota ou
+d’authentification ne prouve pas cette indisponibilité. Un niveau explicitement
+imposé par le développeur reste prioritaire. Prévoler exactement le choix
+avant de générer un mandat.
+
+Une reprise historique en `high` réexamine donc `medium`, sans conserver
+`high` par simple habitude. Préserver fournisseur/modèle, RUN, job, réservations,
+mandats et preuves ; préparer la transition à une frontière autorisée, vérifier
+la variante native et réconcilier le choix durable du contrat. Ne pas réarmer
+un job ni écrire manuellement son état pour forcer la convergence. Si le contrat
+courant ne permet pas une transition sûre ou si son prévol manque, signaler
+la limite et conserver le contexte sans annoncer `medium` appliqué.
+
+Cette règle de protocole ne déclenche ni benchmark PLLM de reprise, ni
+changement des sessions actives lors d’une mise à jour des sources. La sélection
+par défaut essaie `medium`, puis `high` sur la même candidate ; seulement en
+cas d’indisponibilité des deux, la sélection automatique examine la politique
+PLLM suivante. Un modèle imposé reste conservé si les niveaux admissibles ne
+sont pas disponibles.
