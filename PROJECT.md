@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.8`.
+Version de référence des briques CAB : `2.1.9`.
 
-CAB 2.1.8 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.9 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -587,3 +587,13 @@ et le banc tests/native-opencode-codemode.test.mjs : serveur privé, fournisseur
 synthétique loopback, broker réel, prévol et écriture sous once, puis contrôle
 de disparition du broker et nettoyage. Aucune configuration ou credential
 réel n'est copié. Après archive et publication, CABU précède le recovery réel.
+
+## Découverte non autorisante — complément 2.1.9
+
+Le diagnostic Code Mode admet aussi un unique search à données littérales
+suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
+exacte, terminée, concordante et non tronquée. La projection reste
+cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
+Une variable, un appel ajouté ou une expression inconnue conserve le refus.
+Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
+La distribution commune est 2.1.9 ; les preuves 2.1.8 restent historiques.

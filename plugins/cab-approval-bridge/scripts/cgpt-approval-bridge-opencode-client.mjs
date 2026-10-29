@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.8';
+export const VERSION = '2.1.9';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -172,6 +172,14 @@ function literalObject(source) {
 function codeModePart(content, part) {
   if (typeof part.state.input?.code !== 'string' || part.state.metadata?.truncated === true) return null;
   let code = part.state.input.code.trim(), discovery;
+  const diagnostic = /^search\s*\(\s*/.exec(code);
+  if (diagnostic) {
+    const literal = literalObject(code.slice(diagnostic[0].length));
+    const acknowledgement = literal && /^\)\s*;\s*return\s+("(?:[^"\\]|\\.)*")\s*;?$/.exec(literal.rest);
+    if (!acknowledgement) return null;
+    try { if (typeof JSON.parse(acknowledgement[1]) !== 'string') return null; } catch { return null; }
+    discovery = { tool: 'search', input: literal.value }; code = '';
+  }
   const prefix = /^const\s+([A-Za-z_$][\w$]*)\s*=\s*search\s*\(\s*/.exec(code);
   if (prefix) {
     if (['tools', 'search'].includes(prefix[1])) return null;

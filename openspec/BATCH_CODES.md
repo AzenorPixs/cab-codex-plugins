@@ -115,7 +115,8 @@ Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des 
 
 | Code | Change | État | Preuve |
 | --- | --- | --- | --- |
-| code non attribué | fix-opencode-codemode-native-proof-correlation | ARCHIVÉ, source 5/5 lots validés ; cible 2.1.8, activation non effectuée | [tâches](changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/tasks.md) |
+| code non attribué | fix-codemode-discovery-literal-ack | ARCHIVÉ, source 4/4 validée ; cible 2.1.9 | [qualification](changes/archive/2026-10-29-fix-codemode-discovery-literal-ack/QUALIFICATION.md) |
+| code non attribué | fix-opencode-codemode-native-proof-correlation | ARCHIVÉ, source 5/5 lots validés ; CABU 2.1.8 vérifié ; complément diagnostique en cours | [tâches](changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/tasks.md) |
 | code non attribué | fix-rejected-preflight-recovery-after-restart | ARCHIVÉ, source validée 5/5 ; CABU 2.1.7 vérifié le 29 octobre ; PA01 suspendu au raccord Code Mode | [qualification](changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/QUALIFICATION.md) |
 
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.

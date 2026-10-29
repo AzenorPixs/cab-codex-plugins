@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.9 — Acquittement littéral de découverte Code Mode
+
+- Reconnaître un unique search suivi du retour d’une chaîne littérale, avec liste native concordante et non tronquée.
+- Conserver une projection diagnostique sans autorité et tous les contrôles MCP/ask/once ; qualifier la forme sur OpenCode 2.2 puis aligner la distribution en 2.1.9.
+
 ## 2.1.8 — Preuves natives Code Mode OpenCode 2.2
 
 - Corréler les enveloppes execute strictes avec leurs appels MCP et leur provenance native, en refusant programmes ambigus, résultats transformés et sorties tronquées.

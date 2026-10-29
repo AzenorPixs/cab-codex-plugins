@@ -300,9 +300,20 @@ Sources : [CT13 — proposal.md](openspec/changes/archive/2026-10-28-support-ope
 
 ## 6. Orientation de la progression
 
+### Complément SCM découverte — 29 octobre 2026
+
+`fix-codemode-discovery-literal-ack` : ARCHIVÉ, **code non attribué**, cible 2.1.9 ; 4/4 lots source validés, Node 487 réussis/26 ignorés/0 échec, Python 74/74. Aucun droit nouveau du diagnostic. [Qualification](openspec/changes/archive/2026-10-29-fix-codemode-discovery-literal-ack/QUALIFICATION.md). Activation 2.1.9 non effectuée ; attribution ultérieure par ACL.
+
+```mermaid
+flowchart TB
+ discoveryAck["fix-codemode-discovery-literal-ack<br/>code non attribué — ARCHIVÉ"]
+ classDef provisional fill:#fff4cc,stroke:#866400,stroke-dasharray:5 5
+ class discoveryAck provisional
+```
+
 ### Actualisation SCM Code Mode — 29 octobre 2026
 
-`fix-opencode-codemode-native-proof-correlation` : ARCHIVÉ, **code non attribué**, cible source commune 2.1.8. Les cinq lots source sont validés : projection stricte, refus, chaîne native MCP/shell/écriture sous once, recovery complete et cohérence documentaire. Global final : Node 487 réussis, 26 ignorés, 0 échec ; Python 74/74. Archivage natif réussi. [Proposition](openspec/changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/proposal.md), [conception](openspec/changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/design.md), [tâches](openspec/changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/tasks.md). Aucune activation 2.1.8 effectuée à ce stade. Attribution ultérieure par ACL.
+`fix-opencode-codemode-native-proof-correlation` : ARCHIVÉ, **code non attribué**, cible source commune 2.1.8. Les cinq lots source sont validés : projection stricte, refus, chaîne native MCP/shell/écriture sous once, recovery complete et cohérence documentaire. Global final : Node 487 réussis, 26 ignorés, 0 échec ; Python 74/74. Archivage natif réussi. [Proposition](openspec/changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/proposal.md), [conception](openspec/changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/design.md), [tâches](openspec/changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/tasks.md). CABU 2.1.8 vérifié le 29 octobre ; reprise en cours, complément diagnostique ci-dessus requis. Attribution ultérieure par ACL.
 
 ```mermaid
 flowchart TB
