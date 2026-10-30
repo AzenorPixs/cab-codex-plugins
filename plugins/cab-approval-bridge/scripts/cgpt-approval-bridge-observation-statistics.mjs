@@ -3,7 +3,7 @@ import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 
-export const VERSION = "2.1.16";
+export const VERSION = "2.1.17";
 export const CATEGORIES = ['reservation', 'changes', 'native', 'nativeChanges'];
 const DAY = 86400000;
 const LIMIT = 64 * 1024 * 1024;

@@ -1,0 +1,32 @@
+{
+  "version": "2.1.17",
+  "node": {
+    "total": 588,
+    "passed": 560,
+    "skipped": 28,
+    "failed": 0,
+    "durationMs": 33512.519277
+  },
+  "pythonPassed": 80,
+  "targetedDistributionPassed": 32,
+  "syntax": {
+    "javascript": 59,
+    "python": 16
+  },
+  "algorithmFilesVersionOnly": 36,
+  "privateNative": "not rerun; algorithms unchanged",
+  "openspecBefore": {
+    "standard": 17,
+    "strict": 17
+  },
+  "addedRequirements": 2,
+  "currentTargetChatObserved": true,
+  "newChatCreated": false,
+  "templateAndProtocolUnchanged": true,
+  "openspecAfter": {
+    "standard": 17,
+    "strict": 17
+  },
+  "archiveRequirementsVerified": 2,
+  "statisticsSectionsVerified": 6
+}

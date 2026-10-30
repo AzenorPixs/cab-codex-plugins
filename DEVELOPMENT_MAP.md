@@ -520,3 +520,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class decisionDiagnostics provisional
 ```
+
+### Coordination des incidents — SCM2.1.17
+
+`coordinate-cab-coding-incidents` : ARCHIVÉ, **code non attribué**, règle documentaire de signalement au chat « Correctif CAB - OC » et suivi jusqu’à CABU ; source qualifiée : Node560/28 ignorés, Python80/80, distribution32/32 ; activation vérifiée séparément. [Proposition](openspec/changes/archive/2026-10-30-coordinate-cab-coding-incidents/proposal.md), [tâches](openspec/changes/archive/2026-10-30-coordinate-cab-coding-incidents/tasks.md). Attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    incidentCoordination["coordinate-cab-coding-incidents<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class incidentCoordination provisional
+```
