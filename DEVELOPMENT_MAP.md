@@ -564,3 +564,15 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class historyContinuity provisional
 ```
+
+
+### Projection portable du contexte — SCM2.1.21
+
+`project-stale-context-on-model-transition` : ARCHIVÉ — source2.1.21 qualifiée ; activation non déduite, **code non attribué**, hook natif de projection après transition PLLM/compte. [Proposition](openspec/changes/archive/2026-10-30-project-stale-context-on-model-transition/proposal.md), [tâches](openspec/changes/archive/2026-10-30-project-stale-context-on-model-transition/tasks.md). Qualification source et reprise réelle distinctes ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    portableContext["project-stale-context-on-model-transition<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class portableContext provisional
+```

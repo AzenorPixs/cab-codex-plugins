@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.21 — Projection portable du contexte
+
+- Hook natif ciblé à chaud pour écarter les anciens raisonnements et métadonnées fournisseur de la seule requête après transition PLLM/compte, sans changer modèle, SID, PID ou histoire enregistrée.
+- Connexion opaque vérifiée à chaque génération, portée fermée par messages/session, réponses nouvelles et sessions étrangères conservées.
+- Procédure de continuité historique avant reprise, mode2 conservé, qualification synthétique et application réelle séparées.
+
 ## 2.1.20 — Lanceur et preuve de continuité
 
 - Helper fournisseur exécutable par son lien installé ; chemins canonique/lié vérifiés avec canal secret privé et effet unique.
