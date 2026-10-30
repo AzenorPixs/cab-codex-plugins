@@ -43,7 +43,11 @@ ne répare pas non plus : le retour réintroduit les anciennes métadonnées.
 Aucun dispose, nouveau SID, compactage, édition de stockage ou suppression de
 raisonnement n’est proposé comme réparation implicite.
 
-## Choix explicite distinct et conditions de reprise
+## Projection native qualifiée et conditions de reprise
+
+En CAB2.1.21, appliquer prioritairement [portable-context.md](portable-context.md) : un hook natif ciblé retire les anciens blocs et métadonnées de la seule requête, sans changer modèle/SID/PID ni historique enregistré. Le banc exact qualifie ce parcours ; la preuve historique réelle reste obligatoire. La limite précédente concerne le contrat HTTP seul, avant cette extension. Un autre modèle n’est pas nécessaire pour résoudre ce cas.
+
+## Choix explicite distinct
 
 Sur ce banc SANS outils, un autre modèle explicitement choisi fonctionne dans
 le même SID, conserve les enregistrements historiques et reçoit le checkpoint

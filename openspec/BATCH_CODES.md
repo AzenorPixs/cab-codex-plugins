@@ -178,3 +178,8 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Continuité liée au compte — SCM2.1.20
 
 `qualify-account-bound-history-continuity` : ARCHIVÉ — source2.1.20 qualifiée ; activation non déduite, **code non attribué**, lanceur par lien et qualification de la continuité historique Responses ; une limite native démontrée fait partie du livrable, sans réparation fictive. [Proposition](changes/archive/2026-10-30-qualify-account-bound-history-continuity/proposal.md), [tâches](changes/archive/2026-10-30-qualify-account-bound-history-continuity/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+
+### Projection portable du contexte — SCM2.1.21
+
+`project-stale-context-on-model-transition` : ARCHIVÉ — source2.1.21 qualifiée ; activation non déduite, **code non attribué**, hook natif de projection après transition PLLM/compte. [Proposition](changes/archive/2026-10-30-project-stale-context-on-model-transition/proposal.md), [tâches](changes/archive/2026-10-30-project-stale-context-on-model-transition/tasks.md). Qualification source et reprise réelle distinctes ; attribution ACL ultérieure.
