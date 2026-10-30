@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.22 — Arguments d’écriture vérifiés avant once
+
+- tool_input_sha256 lie les arguments write/edit approuvés à la demande, au retry et à la décision corrélée.
+- Le client dérive la preuve de la partie native ; une entrée divergente ou non prouvée invalide le mandat protégé avant once, avec diagnostic filtré et fichier conservé.
+- Les anciens mandats restent compatibles sans protection nouvelle revendiquée ; le protocole exige l’empreinte pour les prochains write/edit et conserve la vérification après effet.
+
 ## 2.1.21 — Projection portable du contexte
 
 - Hook natif ciblé à chaud pour écarter les anciens raisonnements et métadonnées fournisseur de la seule requête après transition PLLM/compte, sans changer modèle, SID, PID ou histoire enregistrée.

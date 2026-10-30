@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.21';
+export const VERSION = '2.1.22';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -536,14 +536,16 @@ export class ResourceRunRegistry extends RunRegistry {
     const { run, resources } = this.scope(runId, approval.reservation_version, approval.resources);
     if (approval.coordination_protocol !== COORDINATION_PROTOCOL || !id(approval.operation_id) ||
         !hash(approval.operation_digest) || !id(approval.requestId) ||
-        (approval.access_id !== undefined && !id(approval.access_id))) {
+        (approval.access_id !== undefined && !id(approval.access_id)) ||
+        (approval.tool_input_sha256 !== undefined && !hash(approval.tool_input_sha256))) {
       throw new CoordinationError('coordination-upgrade-required');
     }
     this.validateExpected(approval.expected_revisions, resources);
     if (approval.session_id !== run.sessionId && approval.session_id !== candidateSession) throw new CoordinationError('operation-session-divergent');
     const identityDigest = digest(Object.fromEntries(['run_id', 'reservation_version', 'requestId', 'approval_id',
       'change_id', 'session_id', 'directory', 'title', 'summary', 'files', 'commands', 'resources',
-      'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol']
+      'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol',
+      ...(Object.hasOwn(approval,'tool_input_sha256') ? ['tool_input_sha256'] : [])]
       .map((key) => [key, approval[key] ?? null])));
     const prior = this.resourceState.operations[approval.operation_id];
     if (prior) {

@@ -69,7 +69,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.21"
+SERVER_VERSION = "2.1.22"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -2864,6 +2864,9 @@ def validate_controller_decision(
     ):
         return False
 
+    if item.get("tool_input_sha256") != decision.get("tool_input_sha256"):
+        return False
+
     if item.get("run_id") and (decision.get("run_id") != item["run_id"] or
             decision.get("reservation_version") != item.get("reservation_version")):
         return False
@@ -3544,7 +3547,10 @@ def validate_existing_approval(
     directory,
     commands,
     run_identity=None,
+    tool_input_sha256=None,
 ):
+    if item.get("tool_input_sha256") != tool_input_sha256:
+        return False
     if bool(item.get("run_id")) != bool(run_identity):
         return False
     if run_identity and any(item.get(k) != v for k, v in run_identity.items()):
@@ -3631,6 +3637,14 @@ def do_propose(args):
         "directory",
         500,
     )
+
+    tool_input_sha256 = args.get("tool_input_sha256")
+    if "tool_input_sha256" in args and (
+        not isinstance(tool_input_sha256, str)
+        or not re.fullmatch(r"[a-f0-9]{64}", tool_input_sha256)
+        or len(files) != 1 or commands or not session_id or not directory
+    ):
+        raise ValidationError("tool_input_sha256 exige un mandat fichier natif et une empreinte SHA256")
 
     run_id = optional_str(args, "run_id", 100)
     run_identity = {}
@@ -3807,6 +3821,7 @@ def do_propose(args):
                 directory,
                 commands,
                 run_identity,
+                tool_input_sha256,
             ):
                 raise ValidationError(
                     "retry incompatible avec "
@@ -3867,6 +3882,7 @@ def do_propose(args):
 
             item = {
                 **run_identity,
+                **({"tool_input_sha256": tool_input_sha256} if tool_input_sha256 is not None else {}),
                 "approval_id": approval_id,
                 "requestId": request_id,
                 "legacy_requestIds": [],
@@ -8445,6 +8461,8 @@ def start_background_reconciliation():
 
 
 APPROVAL_REQUEST_PROPERTIES = {
+    "tool_input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$",
+        "description": "Empreinte canonique SHA256 des arguments natifs write/edit exacts approuves ; verifiee avant once."},
     "run_id": {"type": "string"},
     "reservation_version": {"type": "integer", "minimum": 1},
     "coordination_protocol": {"const": "resource-scoped-v1"},

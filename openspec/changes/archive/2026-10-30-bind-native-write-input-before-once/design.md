@@ -1,0 +1,7 @@
+# Conception
+
+SHA256 du JSON UTF-8 des arguments avec clés d’objets triées récursivement ; ordre des tableaux et chaînes conservés, aucune normalisation Unicode/fin de ligne. L’orchestrateur calcule cette empreinte sur les arguments exacts proposés et vérifie le champ reçu avant APPROVED. Le broker interdit sa modification ou suppression lors d’un retry et corrèle la décision à la même valeur.
+
+Pour une permission edit issue de write/edit, le client lit le message/call natif exact, vérifie la cible puis dérive nativeToolInputSha256 ; une métadonnée libre du même nom est éliminée avant dérivation. Une source absente n’a aucune autorité. Le contrôleur compare immédiatement avant replyPermission once et invalide le mandat protégé divergent, sans effet déclaré inconnu ni décision CAB reconstruite. La permission reste en attente d’un rejet natif explicite par le propriétaire ; une nouvelle proposition exige une nouvelle identité et nouvelle once. Aucune ancienne approbation n’est rejouée.
+
+La protection est bornée aux appels natifs write/edit et arguments attestés, pas aux mutations via shell ni à un formatter après écriture. Le contrôle du résultat exact après effet reste obligatoire. Le chemin historique sans empreinte n’est pas annoncé protégé. Les RUN et décisions actifs sont conservés ; l’adoption du nouveau champ se fait par les propriétaires sur les nouveaux mandats après CABU.
