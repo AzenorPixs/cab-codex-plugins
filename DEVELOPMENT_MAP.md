@@ -531,3 +531,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class incidentCoordination provisional
 ```
+
+### Entrées modèle explicites — SCM2.1.18
+
+`reject-native-variant-model-input` : ARCHIVÉ, **code non attribué**, refus du champ natif variant dans les écritures client ; reasoning et lecture native conservés. [Proposition](openspec/changes/archive/2026-10-30-reject-native-variant-model-input/proposal.md), [tâches](openspec/changes/archive/2026-10-30-reject-native-variant-model-input/tasks.md). Source qualifiée : Node568/28 ignorés en deux groupes, Python80/80 et natif1/1 ; activation distincte. Attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    modelInput["reject-native-variant-model-input<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class modelInput provisional
+```

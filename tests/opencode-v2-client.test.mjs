@@ -580,3 +580,87 @@ test('isolation MCP : découverte forcée partage une requête info déjà en vo
   await new Promise(resolve=>setTimeout(resolve,5));assert.equal(reads,1);finish();
   assert.deepEqual(await first,await second);
 });
+
+test('entrée modèle : variant refusé sans réseau pour les quatre méthodes publiques', async t => {
+  const f = fixture(); t.after(f.close);
+  const invocations = {
+    createSession: (client, model) => client.createSession({ model }),
+    createProbeSession: (client, model) => client.createProbeSession({ model }),
+    prompt: (client, model) => client.prompt('ses_model', 'texte sans outil', { model }),
+    switchModel: (client, model) => client.switchModel('ses_model', model),
+  };
+  for (const [name, invoke] of Object.entries(invocations)) {
+    await t.test(name, async () => {
+      let calls = 0;
+      const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace',
+        passwordFile: f.passwordFile, fetchImpl: async () => { calls++; throw Error('unexpected network'); } });
+      for (const extra of [{ variant: 'medium' }, { variant: undefined }, { variant: null },
+        { variant: 'medium', reasoning: 'medium' }, { variant: 'high', reasoning: 'medium' }]) {
+        await assert.rejects(invoke(client, { providerID: 'sensitive-provider', modelID: 'sensitive-model', ...extra }), {
+          code: 'opencode-model-variant-unsupported',
+          message: 'Le champ model.variant est réservé aux lectures natives ; utiliser model.reasoning en entrée.',
+        });
+      }
+      assert.equal(calls, 0);
+    });
+  }
+});
+
+function modelInputFixture(t) {
+  const f = fixture(); t.after(f.close); const calls = [];
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace',
+    passwordFile: f.passwordFile, fetchImpl: async (input, options) => {
+      const path = new URL(input).pathname;
+      const body = options.body ? JSON.parse(options.body) : undefined;
+      calls.push({ path, method: options.method, body });
+      if (path === '/api/info') return json(info);
+      if (path === '/api/location') return json({ directory: '/workspace' });
+      if (path === '/api/mcp') return json({ location, data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] });
+      if (path === '/api/session' && options.method === 'POST') {
+        return json({ data: { id: 'ses_model', directory: '/workspace', permissions: body.permissions || [],
+          model: body.model || { providerID: 'p', id: 'm' } } });
+      }
+      if (path === '/api/session/ses_model' && options.method === 'GET') {
+        return json({ data: { id: 'ses_model', directory: '/workspace', model: { providerID: 'p', id: 'm', variant: 'medium' } } });
+      }
+      if (path === '/api/session/ses_model/model') return json({ data: {} });
+      if (path === '/api/session/ses_model/prompt') return json({ data: { id: 'msg_model' } });
+      throw Error('unexpected model fixture route');
+    } });
+  return { client, calls };
+}
+
+test('entrée modèle : reasoning sérialisé comme variante native pour tous les envois', async t => {
+  const { client, calls } = modelInputFixture(t);
+  const model = { providerID: 'p', modelID: 'm', reasoning: 'medium' };
+  const session = await client.createSession({ model });
+  const probe = await client.createProbeSession({ model });
+  await client.switchModel('ses_model', { ...model, reasoning: 'high' });
+  await client.prompt('ses_model', 'texte sans outil', { model });
+  assert.deepEqual(session.model, { providerID: 'p', modelID: 'm', variant: 'medium' });
+  assert.deepEqual(probe.model, session.model);
+  const sent = calls.filter(call => call.method === 'POST' && call.body?.model).map(call => call.body.model);
+  assert.deepEqual(sent, ['medium', 'medium', 'high', 'medium'].map(variant => ({ id: 'm', providerID: 'p', variant })));
+});
+
+test('entrée modèle : lecture inchangée, refus de recopie puis conversion explicite', async t => {
+  const { client, calls } = modelInputFixture(t);
+  const read = await client.session('ses_model');
+  assert.deepEqual(read.model, { providerID: 'p', modelID: 'm', variant: 'medium' });
+  const before = calls.length;
+  await assert.rejects(client.createSession({ model: read.model }), { code: 'opencode-model-variant-unsupported' });
+  assert.equal(calls.length, before);
+  const { providerID, modelID, variant } = read.model;
+  const created = await client.createSession({ model: { providerID, modelID, reasoning: variant } });
+  assert.deepEqual(created.model, read.model);
+});
+
+test('entrée modèle : absence intentionnelle du niveau conservée', async t => {
+  const { client, calls } = modelInputFixture(t);
+  const model = { providerID: 'p', modelID: 'm' };
+  await client.createSession({ model });
+  await client.switchModel('ses_model', model);
+  await client.prompt('ses_model', 'texte sans outil', { model });
+  const sent = calls.filter(call => call.method === 'POST' && call.body?.model).map(call => call.body.model);
+  assert.deepEqual(sent, Array.from({ length: 3 }, () => ({ id: 'm', providerID: 'p' })));
+});

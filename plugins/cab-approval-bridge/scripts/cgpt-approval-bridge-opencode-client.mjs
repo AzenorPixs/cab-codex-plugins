@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.17';
+export const VERSION = '2.1.18';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -77,6 +77,10 @@ function record(value) {
 
 function modelReference(model) {
   if (!record(model) || typeof model.providerID !== 'string' || typeof model.modelID !== 'string') fail('opencode-model-invalid');
+  if (Object.hasOwn(model, 'variant')) {
+    throw Object.assign(new Error('Le champ model.variant est réservé aux lectures natives ; utiliser model.reasoning en entrée.'),
+      { code: 'opencode-model-variant-unsupported' });
+  }
   return { id: model.modelID, providerID: model.providerID,
     ...(typeof model.reasoning === 'string' ? { variant: model.reasoning } : {}) };
 }
@@ -616,6 +620,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
 
   async function createSession({ directory: directoryValue = directory, id, title, agent, model, permissions: permissionRules } = {}) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
+    const modelValue = model ? modelReference(model) : undefined;
     const locationValue = await location(directoryValue);
     const permissions = permissionRules?.map((rule) => {
       if (!record(rule) || typeof rule.permission !== 'string' || typeof rule.pattern !== 'string' ||
@@ -623,7 +628,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       return { action: rule.permission, resource: rule.pattern, effect: rule.action };
     });
     const body = { location: { directory: locationValue.directory }, ...(id ? { id } : {}), ...(title ? { title } : {}),
-      ...(agent ? { agent } : {}), ...(model ? { model: modelReference(model) } : {}), ...(permissions ? { permissions } : {}) };
+      ...(agent ? { agent } : {}), ...(model ? { model: modelValue } : {}), ...(permissions ? { permissions } : {}) };
     const response = await request('/api/session', { method: 'POST', query: { directory: directoryValue }, body });
     const sessionValue = normalizeSession(unwrapData(response.data, 'opencode-session-invalid'));
     if (sessionValue.directory !== directoryValue) fail('opencode-session-divergent');
@@ -646,10 +651,10 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
 
   async function prompt(sessionId, text, { directory: directoryValue = directory, model, resume = true } = {}) {
     if (typeof text !== 'string' || !text || typeof resume !== 'boolean') fail('opencode-prompt-invalid');
+    if (model !== undefined) modelReference(model);
     await info();
     const body = { text, resume };
     if (model !== undefined) {
-      if (!record(model) || typeof model.providerID !== 'string' || typeof model.modelID !== 'string') fail('opencode-model-invalid');
       await switchModel(sessionId, model, directoryValue);
     }
     const response = await request(`/api/session/${encodeURIComponent(sessionId)}/prompt`, { method: 'POST', body });
@@ -660,9 +665,10 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
 
   async function switchModel(sessionId, model, directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
+    const modelValue = modelReference(model);
     await info();
     return request(`/api/session/${encodeURIComponent(sessionId)}/model`, { method: 'POST',
-      body: { model: modelReference(model) } });
+      body: { model: modelValue } });
   }
 
   async function replyPermission(sessionId, permissionId, decision, directoryValue = directory) {

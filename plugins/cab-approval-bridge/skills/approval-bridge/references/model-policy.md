@@ -61,7 +61,7 @@ Le prévol et l'indisponibilité lisent parent.info.model.variant (schéma natif
 
 Les anciens jobs sans logicalProviderID restent valides. Après armement d'un nouveau job portant ce champ, un lecteur strict 1.10.2 n'est pas qualifié pour ce contrat : conserver le lecteur compatible et les preuves plutôt que restaurer une sauvegarde métier. La préparation et le paquet source n'activent aucune configuration ou reprise.
 
-## Preuve native V2 à échange unique — 2.1.17
+## Preuve native V2 à échange unique — 2.1.18
 
 La lecture paginée fixe order sur la première page uniquement. Le curseur opaque porte ensuite son ordre ; les limites et refus de pages invalides ou répétées restent appliqués.
 
@@ -91,3 +91,41 @@ par défaut essaie `medium`, puis `high` sur la même candidate ; seulement en
 cas d’indisponibilité des deux, la sélection automatique examine la politique
 PLLM suivante. Un modèle imposé reste conservé si les niveaux admissibles ne
 sont pas disponibles.
+
+
+## Contrat des modèles du client V2 — CAB2.1.18
+
+Les méthodes createSession, createProbeSession, prompt et switchModel attendent
+`model = { providerID, modelID, reasoning: 'medium' }`. Le client sérialise
+reasoning en variant pour l’API native. Une session relue expose en revanche
+`session.model = { providerID, modelID, variant }` ; cet objet ne constitue pas
+une entrée directement réutilisable.
+
+Tout champ propre model.variant, même nul, indéfini ou accompagné de reasoning,
+est refusé AVANT tout appel HTTP avec opencode-model-variant-unsupported :
+« Le champ model.variant est réservé aux lectures natives ; utiliser
+model.reasoning en entrée. » Le message ne recopie aucune valeur du modèle.
+Il n’existe aucun alias ni choix de niveau implicite pour réparer cet appel.
+
+Pour réutiliser explicitement la variante observée, préparer un nouvel objet :
+
+```javascript
+const { providerID, modelID, variant } = session.model;
+const model = {
+  providerID,
+  modelID,
+  ...(variant !== undefined ? { reasoning: variant } : {}),
+};
+await client.createProbeSession({ model });
+```
+
+Une entrée valide qui omet intentionnellement le niveau reste compatible avec
+le client ; le protocole de choix de modèle continue à exiger ses propres
+niveaux et prévols. Ne pas confondre cette compatibilité du transport avec une
+autorisation de choisir default à la place du medium requis.
+
+Après ce refus local, vérifier l’absence d’effet et préparer un appel conforme
+dans son mandat. Ne pas changer implicitement le modèle du codeur, réarmer un
+job ou rejouer une once. Une ancienne mesure obtenue en default lorsque medium
+était demandé reste INVALID_CONFIGURATION, exclue des moyennes medium ; ne pas
+réécrire ses preuves comme si elle avait utilisé le niveau attendu.
