@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.30 — Distribution complète du garde de permissions
+
+- permission-policy ajouté au groupe déployé du moniteur par CABU.
+- Vérification des imports relatifs par source et destination réelle avant coupure ; un autre groupe ne masque plus une dépendance manquante.
+- Import du client réellement installé et refus de paquet incomplet qualifiés ; politique de permissions inchangée.
+
 ## 2.1.29 — Permissions avant prévol
 
 - Origine des gels de revue distinguée de CABU ; contrôle structuré requiredNativeAsk avant prompt/MCP et inspection filtrée de politique.

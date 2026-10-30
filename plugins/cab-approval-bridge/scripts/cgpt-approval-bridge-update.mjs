@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.29';
+export const VERSION = '2.1.30';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -876,13 +876,13 @@ export async function updateComponents(input, options = {}) {
       if (scripts.length > 64 || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
       const artifacts = [
         ...scripts.map((name) => ({ group: 'scripts', name, source: join(c.pluginRoot, 'scripts', name) })),
-        ...['monitor', 'monitor-data', 'monitor-events', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'process-lifecycle']
+        ...['monitor', 'monitor-data', 'monitor-events', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'permission-policy', 'process-lifecycle']
           .map((name) => ({ group: 'monitorScripts', name: 'cgpt-approval-bridge-' + name + '.mjs', source: join(c.pluginRoot, 'scripts/cgpt-approval-bridge-' + name + '.mjs') })),
         ...(readonlyBroker ? [] : brokerFiles.map((name) => ({ group: 'broker', name, source: join(c.pluginRoot, 'broker', name) }))),
         ...['index.html', 'app.mjs', 'stats.mjs', 'style.css'].map((name) => ({ group: 'web', name, source: join(c.pluginRoot, 'web-monitor', name) })),
         ...['controller', 'supervisor', 'monitor'].map((name) => ({ group: 'units', name: unit(name), source: join(c.pluginRoot, 'systemd', unit(name)) })),
       ];
-      const byPath = new Map(artifacts.map((artifact) => [artifact.source, artifact]));
+      const byDestination = new Map(artifacts.map(artifact => [target(artifact),artifact.source]));
       if (new Set(artifacts.map(target)).size !== artifacts.length) throw error('update-overlapping-destinations');
       for (let i = 0; i < artifacts.length; i++) {
         const artifact = artifacts[i], content = await regular(artifact.source);
@@ -890,8 +890,10 @@ export async function updateComponents(input, options = {}) {
         if (/\.(py|mjs)$/.test(artifact.name)) {
           if (artifact.group !== 'web' && sourceVersion(content.data) !== version) throw error('update-package-version-invalid');
           if (before && baseVersion(sourceVersion(before.data)) && newer(baseVersion(sourceVersion(before.data)), version)) throw error('update-downgrade-refused');
-          for (const match of content.data.toString('utf8').matchAll(/(?:from\s+|import\s*)['"](\.\/[^'"]+)['"]/g)) {
-            if (!byPath.has(resolve(dirname(artifact.source), match[1]))) throw error('update-package-import-missing');
+          for (const match of content.data.toString('utf8').matchAll(/(?:from\s+|import\s*)['"](\.\.?\/[^'"]+)['"]/g)) {
+            const dependencySource=resolve(dirname(artifact.source),match[1]);
+            const dependencyTarget=resolve(dirname(target(artifact)),match[1]);
+            if (byDestination.get(dependencyTarget)!==dependencySource) throw error('update-package-import-missing');
           }
           await validateCached(artifact.source, content.data);
         }
