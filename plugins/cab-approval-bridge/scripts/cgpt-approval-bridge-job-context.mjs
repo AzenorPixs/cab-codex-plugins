@@ -11,7 +11,7 @@ import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-c
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.21";
+export const VERSION = "2.1.22";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -318,7 +318,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.21",
+    version: "2.1.22",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -341,6 +341,8 @@ function publicStatus() {
     terminalGate: { ...terminalGate },
     job: publicJob(),
     lastEvent: status.lastEvent,
+    blockedNativeInputs: [...validations.values()].filter(v => v.nativeInputGuardFailure)
+      .map(v => ({requestId:v.requestId,error:v.nativeInputGuardFailure})),
   };
 }
 
@@ -480,9 +482,17 @@ function approvedOperation(approval) {
   if (!files.every(validFile) || !commands.every(validCommand)) {
     throw new Error("Mandat de validation invalide.");
   }
+  if (approval.tool_input_sha256 !== undefined && !(files.length === 1 && commands.length === 0)) {
+    throw new Error('native-tool-input-digest-invalid');
+  }
 
   if (files.length === 1 && commands.length === 0) {
+    if (approval.tool_input_sha256 !== undefined &&
+        (typeof approval.tool_input_sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(approval.tool_input_sha256))) {
+      throw new Error('native-tool-input-digest-invalid');
+    }
     return { sessionId, directory, kind: "edit", target: files[0], runId: approval.run_id,
+      toolInputSha256: approval.tool_input_sha256,
       reservationVersion: approval.reservation_version, resources: approval.resources,
       operationId: approval.operation_id, operationDigest: approval.operation_digest,
       expectedRevisions: approval.expected_revisions, accessId: approval.access_id,
@@ -1515,7 +1525,8 @@ async function transmitApprovedOperation(validation) {
 
   try {
 
-    const permissions = await openCode.permissions(validation.operation.directory, permissionScope(validation.operation.sessionId));
+    const permissions = await openCode.permissions(validation.operation.directory,
+      {...permissionScope(validation.operation.sessionId), verifyInputs:validation.operation.toolInputSha256 !== undefined});
 
     const permission = permissions.find((candidate) =>
       matchesApprovedOperation(candidate, validation.operation)
@@ -1523,6 +1534,15 @@ async function transmitApprovedOperation(validation) {
 
     if (permission && operationAllowed(validation.operation, validation.requestId, 'permission') &&
         !validation.operationInvalidated) {
+      if (validation.operation.toolInputSha256 !== undefined &&
+          (permission.metadata?.nativeSourceVerified !== true ||
+           permission.metadata?.nativeToolInputSha256 !== validation.operation.toolInputSha256)) {
+        validation.operationInvalidated = true;
+        validation.nativeInputGuardFailure = 'native-tool-input-digest-mismatch';
+        const cause = new Error('native-tool-input-digest-mismatch');
+        cause.code = 'NATIVE_TOOL_INPUT_GUARD';
+        throw cause;
+      }
       await checkNativeAsk(validation.operation, permission.nativeAction || validation.operation.kind);
       if (!operationAllowed(validation.operation, validation.requestId, 'permission') ||
           validation.operationInvalidated || validation.operationConsumed) return;
@@ -1538,7 +1558,7 @@ async function transmitApprovedOperation(validation) {
       });
     }
   } catch (cause) {
-    nativeLifecycle.unknown?.(validation.operation, validation.requestId);
+    if (cause.code !== 'NATIVE_TOOL_INPUT_GUARD') nativeLifecycle.unknown?.(validation.operation, validation.requestId);
     throw cause;
   } finally {
     reconcilingPermissions.delete(validation.requestId);
@@ -1822,7 +1842,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.21",
+      version: "2.1.22",
     },
   });
 
@@ -2048,6 +2068,7 @@ async function handleValidation(request) {
             directory: request.operation.directory,
             kind: request.operation.kind,
             target: request.operation.target,
+            toolInputSha256: request.operation.toolInputSha256,
           }
         : null,
     });
@@ -2085,6 +2106,7 @@ async function handleValidation(request) {
       requestId: request.requestId,
       approval_id: request.approvalId,
       change_id: request.changeId,
+      ...(request.operation?.toolInputSha256 ? {tool_input_sha256:request.operation.toolInputSha256} : {}),
       ...(run ? { run_id: run.runId, reservation_version: request.operation?.reservationVersion,
         operation_id: request.operation?.operationId, operation_digest: request.operation?.operationDigest,
         expected_revisions: request.operation?.expectedRevisions,
@@ -2840,6 +2862,7 @@ const handle = async (request, response, url) => {
               validation.approvalId,
             change_id:
               validation.changeId,
+            ...(validation.operation?.toolInputSha256 ? {tool_input_sha256:validation.operation.toolInputSha256} : {}),
             ...(run ? { run_id: run.runId, reservation_version: validation.operation?.reservationVersion,
               operation_id: validation.operation?.operationId, operation_digest: validation.operation?.operationDigest,
               expected_revisions: validation.operation?.expectedRevisions,

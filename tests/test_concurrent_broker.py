@@ -41,6 +41,28 @@ class ConcurrentBrokerTest(unittest.TestCase):
                 "title": "Synthetic command", "files": [], "commands": ["/usr/bin/true"],
                 "resources": [{"key": f"resource:{run}", "mode": "read"}]}
 
+    def test_native_tool_input_digest_is_immutable_and_correlated(self):
+        args = {**self.args(), "files": ["one.py"], "commands": [], "tool_input_sha256": "a" * 64}
+        item = bridge.do_propose(args)
+        self.assertEqual(item["tool_input_sha256"], "a" * 64)
+        self.assertEqual(bridge.do_propose(args)["approval_id"], item["approval_id"])
+        for replacement in [None, "b" * 64]:
+            changed = {**args}
+            if replacement is None:
+                changed.pop("tool_input_sha256")
+            else:
+                changed["tool_input_sha256"] = replacement
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose(changed)
+        decision = {"requestId": item["requestId"], "approval_id": item["approval_id"],
+                    "change_id": item["change_id"], "decision": "approved"}
+        self.assertFalse(bridge.validate_controller_decision(item, decision))
+        for invalid in [None, "", "z" * 64, "a" * 63]:
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose({**args, "tool_input_sha256": invalid})
+        with self.assertRaises(bridge.ValidationError):
+            bridge.do_propose({**self.args("command"), "tool_input_sha256": "a" * 64})
+
     def test_three_parallel_calls_preserve_each_run_identity(self):
         with ThreadPoolExecutor(max_workers=3) as executor:
             items = list(executor.map(lambda run: bridge.do_propose(self.args(run)), ("a", "b", "c")))

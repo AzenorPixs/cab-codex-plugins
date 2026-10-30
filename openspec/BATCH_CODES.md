@@ -183,3 +183,8 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Projection portable du contexte — SCM2.1.21
 
 `project-stale-context-on-model-transition` : ARCHIVÉ — source2.1.21 qualifiée ; activation non déduite, **code non attribué**, hook natif de projection après transition PLLM/compte. [Proposition](changes/archive/2026-10-30-project-stale-context-on-model-transition/proposal.md), [tâches](changes/archive/2026-10-30-project-stale-context-on-model-transition/tasks.md). Qualification source et reprise réelle distinctes ; attribution ACL ultérieure.
+
+
+### Entrée native exacte — SCM2.1.22
+
+`bind-native-write-input-before-once` : ARCHIVÉ — source2.1.22 qualifiée ; activation non déduite, **code non attribué**, empreinte des arguments write/edit et garde avant once. [Proposition](changes/archive/2026-10-30-bind-native-write-input-before-once/proposal.md), [tâches](changes/archive/2026-10-30-bind-native-write-input-before-once/tasks.md). Qualification, publication et activation distinctes ; attribution ACL ultérieure.

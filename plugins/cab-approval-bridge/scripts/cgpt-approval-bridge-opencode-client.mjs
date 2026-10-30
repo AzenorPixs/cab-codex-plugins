@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.21';
+export const VERSION = '2.1.22';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -113,6 +113,8 @@ function normalizePermission(permission) {
     fail('opencode-permission-invalid');
   }
   const metadata = record(permission.metadata) ? { ...permission.metadata } : {};
+  delete metadata.nativeToolInputSha256;
+  delete metadata.nativeSourceVerified;
   if (permission.action === 'edit' && typeof metadata.filepath !== 'string' && permission.resources.length === 1) {
     metadata.filepath = permission.resources[0];
   }
@@ -131,6 +133,11 @@ function canonical(value) {
     return Array.isArray(v) ? v.map(ordered) : record(v)
       ? Object.fromEntries(Object.keys(v).sort().map(k => [k, ordered(v[k])])) : v;
   })(value));
+}
+
+export function nativeToolInputDigest(input) {
+  if (!record(input)) fail('opencode-tool-input-invalid');
+  return createHash('sha256').update(canonical(input),'utf8').digest('hex');
 }
 
 // Une grammaire de données, jamais un interpréteur JavaScript.
@@ -532,7 +539,8 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     fail('opencode-messages-pagination-limit');
   }
 
-  async function permissions(directoryValue = directory, { sessionIds } = {}) {
+  async function permissions(directoryValue = directory, { sessionIds, verifyInputs = false } = {}) {
+    if (typeof verifyInputs !== 'boolean') fail('opencode-permission-scope-invalid');
     if (sessionIds !== undefined && (!Array.isArray(sessionIds) || !sessionIds.length ||
         sessionIds.some(id => typeof id !== 'string' || !id.trim()))) fail('opencode-permission-scope-invalid');
     const response = await json('/api/permission/request', { query: { directory: directoryValue } });
@@ -545,8 +553,8 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     });
     return Promise.all(selected.map(async raw => {
       const permission = normalizePermission(raw);
-      if (raw.action !== 'shell' && !(raw.action === 'edit' &&
-          raw.resources.length === 1 && !isAbsolute(raw.resources[0]))) return permission;
+      if (raw.action !== 'shell' && !(raw.action === 'edit' && raw.resources.length === 1 &&
+          (!isAbsolute(raw.resources[0]) || verifyInputs && raw.source?.type === 'tool'))) return permission;
       if (raw.source?.type !== 'tool' || typeof raw.source.id !== 'string' || typeof raw.source.messageID !== 'string') {
         fail('opencode-permission-source-invalid');
       }
@@ -570,6 +578,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
         if (!['edit', 'write'].includes(part.nativeTool) || !target.startsWith(directoryValue + '/') ||
             resolve(directoryValue, raw.resources[0]) !== target) fail('opencode-permission-target-invalid');
         permission.metadata.filepath = target;
+        permission.metadata.nativeToolInputSha256 = nativeToolInputDigest(input);
       }
       permission.metadata.nativeSourceVerified = true;
       return permission;

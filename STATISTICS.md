@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 80**
+**NCA — Nombre de changes analysés : 81**
 
 ## Périmètre et durée
 
@@ -8,8 +8,8 @@
 |---|---|---|
 | DGCT — Temps total de développement du projet via l’IA | 10 | 0,098763 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 80 | 9,326364 |
-| NCMA — Changes achevés par jour (NCA / NJT) | 80 | 8,577833 |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 81 | 9,326364 |
+| NCMA — Changes achevés par jour (NCA / NJT) | 81 | 8,685056 |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
@@ -24,8 +24,8 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 78 | N/A | N/A | 97,50 % |
-| 2 | gpt-6.1-sol | N/A | 2,50 % |
+| 79 | N/A | N/A | 97,53 % |
+| 2 | gpt-6.1-sol | N/A | 2,47 % |
 
 ## Performances des LLM de codage OpenCode
 
@@ -101,7 +101,7 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 | Périmètre | Lignes de code | Lignes de commentaires |
 |---|---|---|
 | Global | N/A | N/A |
-| Broker | 10266 | 334 |
+| Broker | 10282 | 334 |
 | Commun | N/A | N/A |
 | Contrôleur | N/A | N/A |
 | Moniteur | 1561 | 8 |
@@ -144,13 +144,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 27117 | 410,864 |
-| Fichiers ayant passé un contrôle syntaxique | 1267 | 45,250 |
+| Tests exécutés dans les bilans finaux | 27810 | 415,075 |
+| Fichiers ayant passé un contrôle syntaxique | 1349 | 46,517 |
 | Tâches OpenSpec prouvées et terminées | 38 | 7,600 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 27109 | 99,97 % |
+| Tests finaux réussis | 27802 | 99,97 % |
 | Tests finaux échoués | 8 | 0,03 % |
 
 | Catégorie de tests | Nombre |

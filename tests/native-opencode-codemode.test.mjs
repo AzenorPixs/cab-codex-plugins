@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2Client, nativeToolInputDigest } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 
 const binary = process.env.CAB_TEST_OPENCODE;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -241,7 +241,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const edit = { ...approval, reservation_version: current.version, requestId: 'edit-native', approval_id: 'approval-edit-native',
       operation_id: 'operation-edit-native', operation_digest: createHash('sha256').update('synthetic file content').digest('hex'),
       resources: [{ key: 'file:fixture.txt', mode: 'write' }], expected_revisions: { 'file:fixture.txt': 0 },
-      files: ['fixture.txt'], commands: [], title: 'synthetic native write' };
+      files: ['fixture.txt'], commands: [], tool_input_sha256:nativeToolInputDigest({path:join(workspace,'fixture.txt'),content:'synthetic file content'}), title: 'synthetic native write' };
     const end = dispatched + 2;
     queue.push(mcp('request_validation', edit), { tool: 'write', input: { path: join(workspace, 'fixture.txt'), content: 'synthetic file content' } });
     await client.prompt(candidate.id, 'Execute only the queued synthetic file operation.');
@@ -259,7 +259,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const target = join(workspace, 'fixture.txt');
     const partial = { ...edit, reservation_version: current.version, requestId: 'partial-native', approval_id: 'approval-partial-native',
       operation_id: 'operation-partial-native', operation_digest: createHash('sha256').update('synthetic changed content').digest('hex'),
-      expected_revisions: { 'file:fixture.txt': (await http('/runs')).coordination.revisions['file:fixture.txt'] }, title: 'édition native partielle exacte' };
+      expected_revisions: { 'file:fixture.txt': (await http('/runs')).coordination.revisions['file:fixture.txt'] }, tool_input_sha256:nativeToolInputDigest({path:target,oldString:'file',newString:'changed'}), title: 'édition native partielle exacte' };
     const partialEnd = dispatched + 2;
     queue.push(mcp('request_validation', partial), { tool: 'edit', input: { path: target,
       oldString: 'file', newString: 'changed' } });
@@ -366,5 +366,27 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.ok(eventSamples.has('permission.asked'));
     console.log('SSE natif synthétique :', JSON.stringify([...eventSamples].filter(([type]) => /session\.(execution|usage)|permission\./.test(type))));
     assert.ok(['shell', 'edit'].every(name => rules.some(rule => rule.permission === name && rule.pattern === '*' && rule.action === 'deny')));
+
+    // Même cible et APPROVED, mais arguments divergents : aucune once ni écriture.
+    current=(await http('/runs')).runs.find(r=>r.runId===run.runId);
+    const mismatch={...partial,reservation_version:current.version,session_id:retryCandidate.id,requestId:'input-mismatch',approval_id:'approval-input-mismatch',operation_id:'operation-input-mismatch',
+      operation_digest:createHash('sha256').update('mismatch').digest('hex'),expected_revisions:{'file:fixture.txt':(await http('/runs')).coordination.revisions['file:fixture.txt']},
+      tool_input_sha256:nativeToolInputDigest({path:target,content:'approved replacement'})};
+    const mismatchEnd=dispatched+2;
+    queue.push(mcp('request_validation',mismatch),{tool:'write',input:{path:target,content:'UNAPPROVED replacement'}});
+    await client.prompt(retryCandidate.id,'Execute only the queued synthetic mismatch.');
+    await until(async()=>(await http('/runs/native-code/status')).undecidedValidationCount===1,'mismatch admission');
+    await http('/runs/native-code/decision/'+mismatch.requestId,{decision:'approved'});
+    await http('/runs/native-code/locks/acquire',{version:current.version,operationId:mismatch.operation_id,operationDigest:mismatch.operation_digest,resources:mismatch.resources,expectedRevisions:mismatch.expected_revisions});
+    await until(async()=>(await http('/runs/native-code/status')).blockedNativeInputs.some(x=>x.requestId===mismatch.requestId),'digest guard');
+    const blocked=(await client.permissions(workspace,{verifyInputs:true})).find(p=>p.sessionID===retryCandidate.id);assert.ok(blocked);
+    assert.notEqual(blocked.metadata.nativeToolInputSha256,mismatch.tool_input_sha256);
+    assert.equal(readFileSync(target,'utf8'),'duplicate duplicate');
+    assert.notEqual((await http('/runs')).coordination.operations[mismatch.operation_id].native?.onceAcknowledged,true);
+    await client.replyPermission(retryCandidate.id,blocked.id,'reject');
+    await until(async()=>!(await client.activeSessions())[retryCandidate.id]&&dispatched===mismatchEnd,'mismatch explicit rejection');
+    assert.equal(readFileSync(target,'utf8'),'duplicate duplicate');
+    console.log(JSON.stringify({nativeInputGuard:true,exactWrite:true,exactEdit:true,mismatchBeforeOnce:true,filePreserved:true}));
+
 
   });

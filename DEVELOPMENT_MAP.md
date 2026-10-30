@@ -576,3 +576,15 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class portableContext provisional
 ```
+
+
+### Entrée native exacte — SCM2.1.22
+
+`bind-native-write-input-before-once` : ARCHIVÉ — source2.1.22 qualifiée ; activation non déduite, **code non attribué**, empreinte des arguments write/edit et garde avant once. [Proposition](openspec/changes/archive/2026-10-30-bind-native-write-input-before-once/proposal.md), [tâches](openspec/changes/archive/2026-10-30-bind-native-write-input-before-once/tasks.md). Qualification, publication et activation distinctes ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    nativeInput["bind-native-write-input-before-once<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class nativeInput provisional
+```

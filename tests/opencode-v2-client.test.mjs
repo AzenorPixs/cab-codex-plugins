@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { verifyModelPreflight } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
-import { createOpenCodeV2Client, normalizeOpenCodeEvent } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2Client, normalizeOpenCodeEvent, nativeToolInputDigest } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'cab-opencode-v2-'));
@@ -663,4 +663,25 @@ test('entrée modèle : absence intentionnelle du niveau conservée', async t =>
   await client.prompt('ses_model', 'texte sans outil', { model });
   const sent = calls.filter(call => call.method === 'POST' && call.body?.model).map(call => call.body.model);
   assert.deepEqual(sent, Array.from({ length: 3 }, () => ({ id: 'm', providerID: 'p' })));
+});
+
+
+test('empreinte native : clés triées, chaînes et Unicode exacts, métadonnées libres exclues',async t=>{
+ const input={path:'/workspace/one.py',content:'é\n'};
+ assert.equal(nativeToolInputDigest(input),nativeToolInputDigest({content:'é\n',path:input.path}));
+ assert.notEqual(nativeToolInputDigest(input),nativeToolInputDigest({...input,content:'e\u0301\n'}));
+ assert.notEqual(nativeToolInputDigest(input),nativeToolInputDigest({...input,content:'é\r\n'}));
+ const f=fixture();t.after(f.close);
+ const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+  fetchImpl:async u=>new URL(u).pathname==='/api/info'?json(info):new URL(u).pathname==='/api/permission/request'
+   ?json({location,data:[{id:'p',sessionID:'ses_code',action:'edit',resources:[input.path],metadata:{nativeSourceVerified:true,nativeToolInputSha256:'f'.repeat(64)},source:{type:'tool',messageID:'msg_native',id:'call_native'}}]})
+   :json({data:{id:'msg_native',type:'assistant',content:[{type:'tool',id:'call_native',name:'write',executed:false,time:{created:1,ran:2},state:{status:'running',input}}]}})});
+ assert.equal((await client.permissions('/workspace',{verifyInputs:true}))[0].metadata.nativeToolInputSha256,nativeToolInputDigest(input));
+});
+
+
+test('permission historique : aucune empreinte libre ne devient preuve native',async t=>{
+ const f=fixture();t.after(f.close);const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+  fetchImpl:async u=>new URL(u).pathname==='/api/info'?json(info):json({location,data:[{id:'p',sessionID:'ses_code',action:'edit',resources:['/workspace/one.py'],metadata:{nativeSourceVerified:true,nativeToolInputSha256:'a'.repeat(64)}}]})});
+ const p=(await client.permissions())[0];assert.equal(p.metadata.nativeSourceVerified,undefined);assert.equal(p.metadata.nativeToolInputSha256,undefined);
 });
