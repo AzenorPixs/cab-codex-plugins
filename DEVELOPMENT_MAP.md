@@ -542,3 +542,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class modelInput provisional
 ```
+
+### Transitions à chaud — SCM2.1.19
+
+`support-hot-model-transitions` : ARCHIVÉ, **code non attribué**, raccord fournisseur V2 et transition du même job ; choix explicite libre, PLLM en son absence. [Proposition](openspec/changes/archive/2026-10-30-support-hot-model-transitions/proposal.md), [tâches](openspec/changes/archive/2026-10-30-support-hot-model-transitions/tasks.md). Source qualifiée : Node601/29 ignorés, Python80/80, natif2.2.0 exact2/2 ; activation distincte ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    hotModel["support-hot-model-transitions<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class hotModel provisional
+```

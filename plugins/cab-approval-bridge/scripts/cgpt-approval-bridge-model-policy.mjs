@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, openSync, readSync, realpathSync } fro
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const VERSION = '2.1.18';
+export const VERSION = '2.1.19';
 export const MODEL_SELECTION_PROTOCOL = 'pllm-auto-v1';
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -74,7 +74,7 @@ function observedReasoning(user, info) {
   return values.every(value=>identifier(value)&&value===parent[0])?parent[0]:null;
 }
 
-export function selectCodingModel({ catalog, providers, model, reasoning, unavailable = [], now = Date.now() }) {
+export function selectCodingModel({ catalog, providers, model, reasoning, unavailable = [], now = Date.now(), explicitUnrestricted = false }) {
   if (!object(providers) || !Array.isArray(providers.all) || !Array.isArray(providers.connected)) fail('model-provider-observation-invalid');
   if (reasoning !== undefined && !identifier(reasoning)) fail('model-reasoning-invalid', 400);
   let candidates;
@@ -101,7 +101,9 @@ export function selectCodingModel({ catalog, providers, model, reasoning, unavai
     if (!providers.connected.includes(providerID)) fail(model === undefined ? 'model-provider-unavailable' : 'explicit-model-unavailable');
     if (!candidate || !object(candidate.variants)) fail(model === undefined ? 'model-capabilities-unavailable' : 'explicit-model-unavailable');
     const variants = candidate?.variants;
-    const effort = (reasoning ? [reasoning] : ['medium', 'high']).find((name) => object(variants) &&
+    const defaults = model !== undefined && explicitUnrestricted
+      ? [...new Set(['medium','high','default',...Object.keys(variants || {})])] : ['medium','high'];
+    const effort = (reasoning ? [reasoning] : defaults).find((name) => identifier(name) && object(variants) &&
       Object.hasOwn(variants,name) && object(variants[name]) && variants[name].disabled !== true &&
       !unavailable.some((proof) => proof.providerID === providerID && proof.modelID === modelID && proof.reasoning === name));
     if (candidate.disabled === true || !effort) {
@@ -118,7 +120,7 @@ export function selectCodingModel({ catalog, providers, model, reasoning, unavai
   fail(historical ? 'pllm-lower-policy-evaluation-required' : 'pllm-no-compatible-model');
 }
 
-export function validCodingModel(value) {
+export function validModelSelection(value) {
   return object(value) && Object.keys(value).every((key) => ['protocol','source','providerID','modelID','reasoning','mode',
     'priority','evaluatedAt','selectedAt','catalogDigest','preflight','unavailabilityProofs','logicalProviderID'].includes(key)) &&
     value.protocol === MODEL_SELECTION_PROTOCOL && ['prompt','pllm-automatic'].includes(value.source) &&
@@ -130,7 +132,11 @@ export function validCodingModel(value) {
     (value.unavailabilityProofs === undefined || (Array.isArray(value.unavailabilityProofs) && value.unavailabilityProofs.length <= 12 &&
       value.unavailabilityProofs.every((proof) => object(proof) && Object.keys(proof).every((key) =>
         ['providerID','modelID','reasoning','sessionId','messageId','observedAt'].includes(key)) && identifier(proof.providerID) &&
-        modelId(proof.modelID) && identifier(proof.reasoning) && identifier(proof.sessionId) && identifier(proof.messageId) && stamp(proof.observedAt)))) &&
+        modelId(proof.modelID) && identifier(proof.reasoning) && identifier(proof.sessionId) && identifier(proof.messageId) && stamp(proof.observedAt))));
+}
+
+export function validCodingModel(value) {
+  return validModelSelection(value) &&
     object(value.preflight) && Object.keys(value.preflight).every((key) => ['sessionId','messageId','verifiedAt'].includes(key)) &&
     identifier(value.preflight.sessionId) && identifier(value.preflight.messageId) && stamp(value.preflight.verifiedAt);
 }
@@ -158,7 +164,7 @@ export function reasoningUnavailability({ session, response, parent, workspace, 
     sessionId: session.id, messageId: info.id, observedAt: new Date(info.time.completed).toISOString() };
 }
 
-export function verifyModelPreflight(selection, { session, response, parent, workspace, now = Date.now() }) {
+export function verifyModelPreflight(selection, { session, response, parent, workspace, now = Date.now(), notBefore = null }) {
   const info = response?.info; const user = parent?.info;
   const legacyParent = user?.model?.providerID === selection.providerID &&
     user.model.modelID === selection.modelID && observedReasoning(user, info) === selection.reasoning;
@@ -173,6 +179,8 @@ export function verifyModelPreflight(selection, { session, response, parent, wor
       !identifier(info.id) || info.sessionID !== session.id || info.providerID !== selection.providerID || info.modelID !== selection.modelID ||
       info.error || info.finish !== 'stop' || !Number.isFinite(info.time?.completed) || info.time.completed < 0 || info.time.completed > now ||
       (selection.evaluatedAt && info.time.completed < Date.parse(selection.evaluatedAt)) ||
+      (notBefore !== null && (!stamp(notBefore) || !Number.isFinite(user?.time?.created) ||
+        user.time.created < Date.parse(notBefore) || info.time.completed < Date.parse(notBefore))) ||
       !user || user.role !== 'user' || user.id !== info.parentID || user.sessionID !== session.id ||
       !sessionModelMatches || (!legacyParent && !nativeParent) ||
       !Array.isArray(response.parts) || response.parts.some((part) => part.type === 'tool') ||

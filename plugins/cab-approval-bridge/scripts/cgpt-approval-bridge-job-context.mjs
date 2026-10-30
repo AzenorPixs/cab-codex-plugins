@@ -8,9 +8,11 @@ import readline from "node:readline";
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
+  VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.18";
-if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
+export const VERSION = "2.1.19";
+if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
   const name = Object.hasOwn(environment, 'OC_Codex_MAX_COMMAND_LENGTH')
@@ -78,7 +80,7 @@ const decisionError = (code) => Object.assign(new Error(code), { code });
 export function createJobContext({ workspace, stateDirectory, run = null,
   currentRun = () => run,
   admitOperation = () => true, inspectOperationAdmission = null, ownsSession = () => true, observe = () => {},
-  nativeLifecycle = {}, openCodeClient = null,
+  nativeLifecycle = {}, openCodeClient = null, modelPolicy = {},
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
   const transportAbort = new AbortController();
@@ -199,6 +201,29 @@ const terminalGate = {
   validatedAt: job?.terminalGate?.validatedAt || null,
 };
 
+const modelTransitions = createModelTransition({
+  getJob: () => job, setJob: candidate => { job = candidate; }, persist: candidate => persistJob(candidate), client: openCode,
+  resolveSelection: input => {
+    if (typeof modelPolicy.resolve !== 'function') throw Object.assign(new Error('model-transition-unsupported'), { code: 'model-transition-unsupported' });
+    return modelPolicy.resolve(input);
+  },
+  proveSelection: (selection, proof, notBefore) => {
+    if (typeof modelPolicy.prove !== 'function') throw Object.assign(new Error('model-transition-unsupported'), { code: 'model-transition-unsupported' });
+    return modelPolicy.prove(selection, proof, notBefore);
+  },
+  observeConnection: (selection,input) => typeof modelPolicy.connection === 'function' ? modelPolicy.connection(selection,input) : null,
+  assertBoundary: () => {
+    if (!run || typeof modelPolicy.assertBoundary !== 'function') throw Object.assign(new Error('model-transition-run-required'), { code: 'model-transition-run-required' });
+    if (closed || terminalGate.status !== 'OPEN' || Number(status.brokerReadiness?.pending_count || 0) > 0 ||
+        job?.currentCabMandate || reconcilingPermissions.size || unmatchedNativePermissions.size ||
+        status.activeValidations.length || [...validations.values()].some(v => !httpDecisions.has(v.requestId) ||
+          httpDecisions.get(v.requestId)?.decision === 'approved' && !v.operationConsumed && !v.operationInvalidated)) {
+      throw Object.assign(new Error('model-transition-not-quiescent'), { code: 'model-transition-not-quiescent' });
+    }
+    return modelPolicy.assertBoundary();
+  },
+});
+
 function publicJob() {
   if (!job) return null;
 
@@ -211,6 +236,10 @@ function publicJob() {
     criteria: job.criteria,
     strictCommands: job.strictCommands === true,
     ...(job.codingModel ? { codingModel: structuredClone(job.codingModel) } : {}),
+    modelTransitionProtocol: MODEL_TRANSITION_PROTOCOL,
+    modelContractHash: modelContractHash(job.codingModel),
+    modelTransition: job.modelTransition ? structuredClone(job.modelTransition) : null,
+    modelTransitionHistory: structuredClone(job.modelTransitionHistory || []),
     lifecycle: publicLifecycle(job.lifecycle),
     lastProvenMilestone: job.lastProvenMilestone,
     currentCabMandate: job.currentCabMandate,
@@ -243,6 +272,7 @@ function persistJob(candidate = job) {
 }
 
 function rememberJob() {
+  if (modelTransitions.inFlight) return;
   void persistJob().catch(() => {
     updateStatus("job-persistence-failed");
   });
@@ -259,6 +289,7 @@ function resetTerminalGate(reason, persist = true) {
 }
 
 function terminalGateFailure(declaredState) {
+  if (job?.modelTransition) return 'model-transition-pending';
   if (run && unmatchedNativePermissions.size) return "native-permissions-unresolved";
   if (run && job?.currentCabMandate) return "current-mandate-not-closed";
   if (run && [...validations.values()].some((v) => httpDecisions.get(v.requestId)?.decision === "approved" &&
@@ -287,7 +318,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.18",
+    version: "2.1.19",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -355,6 +386,7 @@ function validJobContract(payload) {
 }
 
 function validPersistedJob(payload) {
+  if (!validModelTransitionState(payload)) return false;
   if (payload?.codingModel !== undefined && !validCodingModel(payload.codingModel)) return false;
   const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
   const text = (value) => typeof value === "string" && value.length > 0;
@@ -476,6 +508,7 @@ function operationAllowed(operation, requestId, stage = 'prepare') {
 
 function operationContextFailure(operation, requestId) {
   if (closed) return 'decision-context-closed';
+  if (job?.modelTransition || modelTransitions.inFlight) return 'decision-recovery-transition';
   if (recoveryTransitionInFlight) return 'decision-recovery-transition';
   if (job?.revokedSessions?.includes(operation?.sessionId)) return 'decision-session-revoked';
   if (!job?.armed) return null;
@@ -1789,7 +1822,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.18",
+      version: "2.1.19",
     },
   });
 
@@ -2132,6 +2165,23 @@ async function readJson(request) {
 }
 
 const handle = async (request, response, url) => {
+  if (request.method === 'POST' && url.pathname === '/job/model-transition') {
+    try {
+      const result = await modelTransitions.handle(await readJson(request));
+      await persistJob();
+      response.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      response.end(JSON.stringify(result));
+    } catch (cause) {
+      response.writeHead(409, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      response.end(JSON.stringify({ error: /^[a-z][a-z0-9-]{1,90}$/.test(cause.code || '') ? cause.code : 'model-transition-failed' }));
+    }
+    return;
+  }
+  if (request.method === 'POST' && (modelTransitions.inFlight || job?.modelTransition) &&
+      ['/job/arm','/job/recover','/job/disarm','/job/progress','/job/terminal-gate'].includes(url.pathname)) {
+    response.writeHead(409, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ error: 'model-transition-pending' })); return;
+  }
 
     if (
       request.method === "GET" &&
@@ -2231,6 +2281,7 @@ const handle = async (request, response, url) => {
           return;
         }
         if (job?.jobId === candidate.jobId) {
+          if (job.modelTransitionHistory) candidate.modelTransitionHistory = structuredClone(job.modelTransitionHistory);
           if (job.codingModel) {
             if (candidate.codingModel && ['providerID','modelID','reasoning','source','mode','priority'].some((key) =>
               job.codingModel[key] !== candidate.codingModel[key])) throw new Error('job-coding-model-immutable');

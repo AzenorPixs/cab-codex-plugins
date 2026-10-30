@@ -70,7 +70,10 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       ...native.sessions[url.pathname.split('/')[2]] };
     else { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'content-type': 'application/json', connection: 'close' }); response.end(JSON.stringify(payload));
-  }, { directory }));
+  }, { directory, onModelSwitch: ({sessionId,body}) => {
+    native.sessions[sessionId] = { ...native.sessions[sessionId], model: { providerID: body.model.providerID,
+      modelID: body.model.id, ...(body.model.variant ? { variant: body.model.variant } : {}) } };
+  } }));
   await new Promise((resolve) => opencode.listen(0, '127.0.0.1', resolve));
   const listener = createServer();
   await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
@@ -930,7 +933,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.18');
+  assert.equal(initialized.result.serverInfo.version, '2.1.19');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1910,4 +1913,50 @@ test('diagnostic décision HTTP : transition de reminder tardive signalée sans 
  assert.equal(result.status,400);assert.equal(result.body.error,'run-transition-in-flight');assert.equal(result.body.decision_recorded,false);
  assert.equal((await reminder).status,202);assert.equal((await h.get('/runs/a/decision/decision-reminder-race')).status,404);
  assert.equal(h.native.replies.length,0);
+});
+
+test('transition modèle HTTP : choix explicite libre, même job historique et reprise durable',async t=>{
+ const h=await setup(t,{codingPolicy:true});const run=await h.reserve('hot');
+ h.native.sessions.ses_hot={id:'ses_hot',directory:h.directory,model:{providerID:'provider1',modelID:'model1',variant:'medium'}};
+ const paused=await h.post('/runs/hot/suspend',{version:run.version,action:'PAUSE',evidence:['explicit-human-boundary']});assert.equal(paused.status,200,JSON.stringify(paused));
+ const before=(await h.get('/runs/hot/job')).body;assert.equal(before.codingModel,undefined);
+ const base={transactionId:'hot-switch',developerAuthorization:'human-transition-ref',jobId:before.jobId,sessionId:before.sessionId,runVersion:paused.body.version};
+ // Un choix explicite doit fonctionner même sans catalogue PLLM valide.
+ writeFileSync(h.native.catalogPath,JSON.stringify({invalid:true}));
+ const prepared=await h.post('/runs/hot/job/model-transition',{...base,phase:'prepare',expectedModelHash:before.modelContractHash,
+  selection:{model:'provider2/model2',reasoning:'low'}});assert.equal(prepared.status,200,JSON.stringify(prepared));
+ assert.equal(prepared.body.transition.before,null);
+ const rearm=await h.post('/runs/hot/job/arm',{jobId:before.jobId,sessionId:before.sessionId,directory:h.directory,changeId:before.changeId,criteria:['unrelated']});
+ assert.equal(rearm.body.error,'model-transition-pending');
+ const stamp=Date.now();h.native.sessions.ses_probe.model={providerID:'provider2',modelID:'model2',variant:'low'};
+ h.native.messages.ses_probe=[{info:{id:'msg_hot_user',sessionID:'ses_probe',role:'user',time:{created:stamp}},parts:[{type:'text',text:'probe'}]},
+  {info:{id:'msg_hot_reply',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_hot_user',providerID:'provider2',modelID:'model2',variant:'low',time:{created:stamp,completed:stamp}},parts:[{type:'text',text:'probe ok'}]}];
+ const committed=await h.post('/runs/hot/job/model-transition',{...base,phase:'commit',preflight:{sessionId:'ses_probe',messageId:'msg_hot_reply'}});
+ assert.equal(committed.status,200,JSON.stringify(committed));assert.equal(committed.body.codingModel.providerID,'provider2');assert.equal(committed.body.codingModel.reasoning,'low');
+ const after=(await h.get('/runs/hot/job')).body;assert.equal(after.jobId,before.jobId);assert.equal(after.sessionId,before.sessionId);
+ assert.deepEqual(after.criteria,before.criteria);assert.equal(after.modelTransitionHistory[0].before,null);assert.equal(after.modelTransition,null);
+ assert.equal(h.native.replies.length,0);assert.equal((await h.get('/runs/hot/status')).body.coordination.suspension.action,'PAUSE');
+ await h.stop();await h.start();assert.deepEqual((await h.get('/runs/hot/job')).body.modelTransitionHistory,after.modelTransitionHistory);
+});
+
+test('transition modèle HTTP : sans choix explicite adopte la PLLM actuelle et conserve source prompt antérieure',async t=>{
+ const h=await setup(t,{codingPolicy:true});const run=(await h.post('/runs/reserve',h.candidate('hot-auto'))).body;
+ h.native.sessions['ses_hot-auto']={id:'ses_hot-auto',directory:h.directory,model:{providerID:'provider1',modelID:'model1',variant:'medium'}};
+ const arm=await h.post('/runs/hot-auto/job/arm',{jobId:'job-hot-auto',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,
+  strictCommands:true,criteria:['preserve-known-write'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{model:'provider1/model1'},
+  modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}});assert.equal(arm.status,201,JSON.stringify(arm));
+ const old=arm.body.codingModel;assert.equal(old.source,'prompt');assert.equal(old.mode,null);
+ await h.post('/runs/hot-auto/suspend',{version:run.version,action:'PAUSE',evidence:['human-auto-boundary']});
+ const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.selected_mode='mode2';catalog.models[0].state='Invalide';catalog.models[0].selected=false;catalog.models[1].selected=true;writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
+ const before=(await h.get('/runs/hot-auto/job')).body;
+ const base={transactionId:'hot-auto-switch',developerAuthorization:'human-auto-ref',jobId:before.jobId,sessionId:before.sessionId,runVersion:run.version};
+ const p=await h.post('/runs/hot-auto/job/model-transition',{...base,phase:'prepare',expectedModelHash:before.modelContractHash});assert.equal(p.status,200,JSON.stringify(p));
+ assert.equal(p.body.transition.candidate.mode,'mode2');
+ const resume=await h.post('/runs/hot-auto/suspend',{version:run.version,action:'RESUME',evidence:['too-early']});assert.equal(resume.body.error,'model-transition-pending');
+ const stamp=Date.now();h.native.sessions.ses_probe.model={providerID:'provider2',modelID:'model2',variant:'medium'};
+ h.native.messages.ses_probe=[{info:{id:'msg_auto_user',sessionID:'ses_probe',role:'user',time:{created:stamp}},parts:[{type:'text',text:'probe'}]},
+  {info:{id:'msg_auto_reply',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_auto_user',providerID:'provider2',modelID:'model2',variant:'medium',time:{created:stamp,completed:stamp}},parts:[{type:'text',text:'probe ok'}]}];
+ const result=await h.post('/runs/hot-auto/job/model-transition',{...base,phase:'commit',preflight:{sessionId:'ses_probe',messageId:'msg_auto_reply'}});assert.equal(result.status,200,JSON.stringify(result));
+ const after=(await h.get('/runs/hot-auto/job')).body;assert.equal(after.codingModel.source,'pllm-automatic');assert.equal(after.codingModel.mode,'mode2');
+ assert.deepEqual(after.modelTransitionHistory[0].before,old);assert.deepEqual(after.criteria,before.criteria);assert.equal(h.native.replies.length,0);
 });

@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.18";
+const version = "2.1.19";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -137,6 +137,29 @@ function contextFor(run) {
     },
     inspectOperationAdmission: inspectAdmission,
     admitOperation: (...args) => { try { return inspectAdmission(...args); } catch { return false; } },
+    modelPolicy: {
+      resolve: input => resolveCodingModel(input, { explicitUnrestricted: true }),
+      prove: async (selection, proof, notBefore) => verifyModelPreflight(selection,
+        { ...(await modelPreflightObservation(proof)), workspace, notBefore }),
+      connection: async (selection,input = {}) => {
+        const providers = await openCode.providerList(workspace,input.providerMaxBytes);
+        const provider = providers.all.find(entry => entry.id === selection.providerID);
+        if (!provider) throw new CoordinationError('model-transition-provider-unavailable');
+        const integrationID = provider?.integrationID;
+        const active = typeof integrationID === 'string' ? (await openCode.integrationConnection(integrationID)).active : null;
+        return { providerID: selection.providerID, serverPid: (await openCode.info(true)).pid,
+          integrationID: integrationID || null, credentialId: active?.id || null,
+          type: active?.type || (integrationID ? 'none' : 'unmanaged'), method: active?.method || null };
+      },
+      assertBoundary: () => {
+        const entry = registry.runs.get(run.runId);
+        if (context.pendingEffects() || context.publicJob()?.recovery || registry.accesses(run.runId)
+          .some(access => ['HELD','WAITING','EXECUTING','UNKNOWN','STALE'].includes(access.state))) {
+          throw new CoordinationError('model-transition-not-quiescent');
+        }
+        return entry;
+      },
+    },
   });
   contexts.set(run.runId, context);
   context.start();
@@ -442,7 +465,7 @@ async function verifyUnusedTestHistory(runId, context, entry, payload) {
   quiescent();
   return proof;
 }
-async function resolveCodingModel(input) {
+async function resolveCodingModel(input, { explicitUnrestricted = false } = {}) {
   if (!input || typeof input !== 'object' || Array.isArray(input) || Object.keys(input).some((key) => !['model','reasoning','unavailablePreflights','providerMaxBytes'].includes(key)) ||
       (input.providerMaxBytes !== undefined && (!Number.isSafeInteger(input.providerMaxBytes) || input.providerMaxBytes <= 0))) {
     throw new CoordinationError('model-selection-input-invalid',400);
@@ -465,7 +488,7 @@ async function resolveCodingModel(input) {
     } else if (input.model !== rejected.providerID+'/'+rejected.modelID) throw new CoordinationError('model-unavailability-not-proved');
     unavailable.push(rejected);
   }
-  return selectCodingModel({ catalog, providers, model: input.model, reasoning: input.reasoning, unavailable });
+  return selectCodingModel({ catalog, providers, model: input.model, reasoning: input.reasoning, unavailable, explicitUnrestricted });
 }
 async function modelPreflightObservation(proof) {
   if (!proof || Object.keys(proof).length !== 2 || !['sessionId','messageId'].every((key) =>
@@ -751,7 +774,7 @@ async function handleRequest(request, response) {
       if (!run || run.state !== 'RESERVED') throw new CoordinationError('run-not-reserved');
       observedRun = run;
       if (request.method === 'POST' && transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -839,6 +862,7 @@ async function handleRequest(request, response) {
         json(response, 200, result); return;
       }
       if (request.method === 'POST' && url.pathname === '/suspend') {
+        if (payload.action === 'RESUME' && context.publicJob()?.modelTransition) throw new CoordinationError('model-transition-pending');
         json(response, 200, registry.suspend(runId, payload)); return;
       }
       if (request.method === 'GET' && url.pathname === '/integration-status') {

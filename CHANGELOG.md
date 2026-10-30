@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.19 — Fournisseur et modèle à chaud
+
+- Transition explicite du choix dans le même job/session avec historique, préparation, prévol natif et reprise sans rejeu ; choix explicite libre de l’ancienne politique, PLLM par défaut.
+- Raccord fournisseur V2 par canal secret privé, verrou/reçu non secret et confirmation de connexion ; comportement qualifié sur OpenCode2.2.0 sans reload/dispose ni interruption des pairs.
+- SCM réussi suivi de CABU et notification de l’activation ; clés et choix des jobs restent des opérations corrélées des propriétaires.
+
 ## 2.1.18 — Entrées modèle explicites
 
 - Refus de model.variant avant tout HTTP dans les créations, sondes, prompts et changements de modèle ; erreur fixe indiquant model.reasoning, sans repli silencieux vers default.

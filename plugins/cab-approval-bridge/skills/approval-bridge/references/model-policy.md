@@ -2,7 +2,7 @@
 
 ## Priorité du prompt
 
-Un modèle concret spécifié dans le prompt conserve sa priorité. Sinon utiliser la PLLM en mode automatique, dans les priorités publiées (1 à 6 pour le schéma 2, 1 à 7 pour le schéma 3), sans figer un fournisseur ou un nom de modèle. Distinguer l'identifiant API model_id du nom commercial model. Le raisonnement explicitement spécifié reste prioritaire. Sans niveau explicite, demander medium. Si medium n'est pas disponible, examiner high sur le même modèle. Examiner la politique PLLM de priorité inférieure seulement si medium et high sont indisponibles ; ne pas choisir implicitement un autre niveau.
+Le dernier choix concret explicitement autorisé conserve sa priorité et peut remplacer à chaud le choix précédent via la transition dédiée. Sinon utiliser la PLLM en mode automatique, dans les priorités publiées (1 à 6 pour le schéma 2, 1 à 7 pour le schéma 3), sans figer un fournisseur ou un nom de modèle. Distinguer l'identifiant API model_id du nom commercial model. Le raisonnement explicitement spécifié reste prioritaire. Sans niveau explicite, demander medium. Si medium n'est pas disponible, examiner high sur le même modèle. Examiner la politique PLLM de priorité inférieure seulement si medium et high sont indisponibles ; ne pas choisir implicitement un autre niveau.
 
 Un modèle explicitement imposé qui ne prend pas en charge le niveau de raisonnement requis reste conservé et bloque. Aucun repli automatique vers un autre modèle n'est autorisé dans ce cas. Un niveau explicitement imposé indisponible bloque aussi pour ce modèle. Dans la sélection automatique, examiner les politiques suivantes qui satisfont ce niveau exact.
 
@@ -27,7 +27,7 @@ Tout nouveau job piloté par le protocole 1.10.7 négocie pllm-auto-v1, même si
 
 Appliquer la section « PLLM Automatique — fraîcheur initiale et conservation du choix » du protocole commun : fraîcheur de huit heures au seul démarrage initial, conservation du choix du RUN pendant la session et réévaluation sur panne réelle ou instruction explicite. Sans politique admissible, conserver état et preuves et attendre l'instruction du développeur, sans benchmark ni réessai automatique. Les sondes statistiques ne renouvellent jamais ce choix.
 
-Un job conserve son choix après redémarrage. Son réarmement ne peut changer fournisseur, modèle, raisonnement ou politique ; une répétition identique conserve la preuve initiale. Le superviseur transmet explicitement model={providerID,modelID} et variant=reasoning dans ses messages de reprise, et recontrôle que le choix n'a pas changé pendant ses lectures. Il ne sélectionne pas un nouveau modèle en attente d'une décision, d'une ressource ou d'un effet inconnu.
+Hors transition explicite qualifiée, un job conserve son choix après redémarrage. Son réarmement ne peut changer fournisseur, modèle, raisonnement ou politique ; une répétition identique conserve la preuve initiale. Le superviseur transmet explicitement model={providerID,modelID} et variant=reasoning dans ses messages de reprise, et recontrôle que le choix n'a pas changé pendant ses lectures. Il ne sélectionne pas un nouveau modèle en attente d'une décision, d'une ressource ou d'un effet inconnu.
 
 Un changement de choix exige une nouvelle frontière autorisée et un contrat cohérent, sans rejouer une permission. Le broker transporte les décisions sans choisir de LLM. Le moniteur reste sans LLM. Le validateur Codex conserve son moteur et son rôle distincts du modèle de codage OpenCode. Aucune propagation aux prompts consommateurs, configuration de fournisseur ou activation runtime n'est déduite du travail source.
 
@@ -61,7 +61,7 @@ Le prévol et l'indisponibilité lisent parent.info.model.variant (schéma natif
 
 Les anciens jobs sans logicalProviderID restent valides. Après armement d'un nouveau job portant ce champ, un lecteur strict 1.10.2 n'est pas qualifié pour ce contrat : conserver le lecteur compatible et les preuves plutôt que restaurer une sauvegarde métier. La préparation et le paquet source n'activent aucune configuration ou reprise.
 
-## Preuve native V2 à échange unique — 2.1.18
+## Preuve native V2 à échange unique — 2.1.19
 
 La lecture paginée fixe order sur la première page uniquement. Le curseur opaque porte ensuite son ordre ; les limites et refus de pages invalides ou répétées restent appliqués.
 
@@ -93,7 +93,7 @@ PLLM suivante. Un modèle imposé reste conservé si les niveaux admissibles ne
 sont pas disponibles.
 
 
-## Contrat des modèles du client V2 — CAB2.1.18
+## Contrat des modèles du client V2 — CAB2.1.19
 
 Les méthodes createSession, createProbeSession, prompt et switchModel attendent
 `model = { providerID, modelID, reasoning: 'medium' }`. Le client sérialise
@@ -129,3 +129,8 @@ dans son mandat. Ne pas changer implicitement le modèle du codeur, réarmer un
 job ou rejouer une once. Une ancienne mesure obtenue en default lorsque medium
 était demandé reste INVALID_CONFIGURATION, exclue des moyennes medium ; ne pas
 réécrire ses preuves comme si elle avait utilisé le niveau attendu.
+
+
+## Transition explicite ou retour à la PLLM
+
+Lire [hot-model-switch.md](hot-model-switch.md). Le choix courant peut être remplacé dans le même job par POST /runs/<run_id>/job/model-transition, sans réarmement ni contrainte de la politique antérieure pour un choix explicite. Sans modèle explicite, la préparation suit la PLLM actuelle. L’historique conserve le choix réel précédent ou son absence ; aucune provenance passée n’est inventée. Le raccord du compte partagé et l’adoption de chaque job restent des opérations corrélées distinctes de CABU.

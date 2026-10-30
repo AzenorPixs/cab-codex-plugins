@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.18";
+export const VERSION = "2.1.19";
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
@@ -14,7 +14,7 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "2.1.18";
+const version = "2.1.19";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -108,6 +108,7 @@ function resumeAllowed(status, job) {
     ['WAITING', 'HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state)))) return 'resource-access-active';
   if (runId && (job?.currentCabMandate || status.unmatchedNativePermissionCount)) return "native-effect-unresolved";
   if (!job || !job.armed) return "job-unarmed";
+  if (job.modelTransition) return 'model-transition-pending';
   if (job.recovery) return "session-recovery-pending";
   if (job.terminalGate?.status === "VALIDATED") return "terminal-gate-validated";
   if (status.opencodeSse !== "connected") return "opencode-sse-unavailable";
