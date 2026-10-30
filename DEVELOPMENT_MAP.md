@@ -509,3 +509,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class cabuStatus provisional
 ```
+
+### Diagnostics de décision — SCM2.1.16
+
+`explain-decision-http-refusals` : ARCHIVÉ, **code non attribué**, 4/4 unités qualifiées ; Node560/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation suivie séparément. [Proposition](openspec/changes/archive/2026-10-30-explain-decision-http-refusals/proposal.md), [tâches](openspec/changes/archive/2026-10-30-explain-decision-http-refusals/tasks.md). Attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    decisionDiagnostics["explain-decision-http-refusals<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class decisionDiagnostics provisional
+```

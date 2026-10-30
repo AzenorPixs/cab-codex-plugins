@@ -930,7 +930,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.15');
+  assert.equal(initialized.result.serverInfo.version, '2.1.16');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1852,4 +1852,62 @@ test('release-unused HTTP : course de permission et indisponibilité native refu
   h.native.permissions=[];h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message')h.native.messages.ses_a=[{nativeV2:{id:'msg_bad',type:'assistant',content:'invalid',time:{created:Date.now()}}}];};
   assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-unavailable');
   assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');assert.equal(h.native.replies.length,0);
+});
+
+
+test('diagnostic décision HTTP : trois ressources, révision périmée et rejet sans once supplémentaire',async t=>{
+ const h=await setup(t);const shared={key:'file:shared.txt',mode:'read'};
+ const a=await h.reserve('a',{resources:[shared,{key:'file:config.yaml',mode:'read'},{key:'resource:cli',mode:'read'}]});
+ const b=await h.reserve('b',{resources:[{...shared,mode:'write'}]});
+ const approval=h.approval(a,'decision-stale');assert.equal((await h.post('/validation/request',{approval})).status,202);
+ const writer=await h.approvedAccess(b,'concurrent-writer');await h.execute(writer.approval);await h.completeTool(writer.approval);await h.releaseOperation(b,writer.approval,writer.access);
+ const replies=h.native.replies.length;
+ const result=await h.post('/runs/a/decision/decision-stale',{decision:'approved'});
+ assert.equal(result.status,400);assert.equal(result.body.error,'resource-revision-stale');assert.equal(result.body.decision_recorded,false);
+ assert.equal((await h.get('/runs/a/decision/decision-stale')).status,404);
+ assert.equal((await h.get('/runs/a/status')).body.undecidedValidationCount,1);assert.equal(h.native.replies.length,replies);
+ assert.equal((await h.post('/runs/a/decision/decision-stale',{decision:'rejected'})).status,201);
+ assert.equal(h.native.replies.length,replies);
+});
+
+test('diagnostic décision HTTP : succès inchangé, doublon explicite et garde native409 préservée',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');const approval=h.approval(a,'decision-success');
+ await h.post('/validation/request',{approval});
+ assert.equal((await h.post('/runs/a/decision/decision-success',{decision:'invalid'})).body.error,'decision-invalid');
+ h.native.rules.ses_a=[{permission:'shell',pattern:'*',action:'deny'}];
+ const denied=await h.post('/runs/a/decision/decision-success',{decision:'approved'});assert.equal(denied.status,409);assert.equal(denied.body.error,'native-permission-ask-required');
+ h.native.rules.ses_a=[{permission:'*',pattern:'*',action:'ask'}];
+ assert.equal((await h.post('/runs/a/decision/decision-success',{decision:'approved'})).status,201);
+ const first=(await h.get('/runs/a/decision/decision-success')).body;
+ const duplicate=await h.post('/runs/a/decision/decision-success',{decision:'rejected'});
+ assert.equal(duplicate.status,400);assert.equal(duplicate.body.error,'decision-already-recorded');assert.equal(duplicate.body.decision_recorded,true);
+ assert.deepEqual((await h.get('/runs/a/decision/decision-success')).body,first);assert.equal(h.native.replies.length,0);
+});
+
+test('diagnostic décision HTTP : révision modifiée pendant la vérification native reste bloquante',async t=>{
+ const h=await setup(t);const resource={key:'file:race.txt',mode:'read'};
+ const a=await h.reserve('a',{resources:[resource]});const b=await h.reserve('b',{resources:[{...resource,mode:'write'}]});
+ const approval=h.approval(a,'decision-race');await h.post('/validation/request',{approval});let changed=false;
+ h.native.onRequest=async path=>{if(path==='/session/ses_a'&&!changed){changed=true;const writer=await h.approvedAccess(b,'writer-during-guard');await h.execute(writer.approval);await h.completeTool(writer.approval);await h.releaseOperation(b,writer.approval,writer.access);}};
+ const result=await h.post('/runs/a/decision/decision-race',{decision:'approved'});
+ assert.equal(result.status,400);assert.equal(result.body.error,'resource-revision-stale');assert.equal(result.body.decision_recorded,false);
+ assert.equal((await h.get('/runs/a/decision/decision-race')).status,404);assert.equal(h.native.replies.length,1);
+});
+
+
+test('diagnostic décision HTTP : transition de reminder tardive signalée sans décision',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');const approval=h.approval(a,'decision-reminder-race');
+ await h.post('/validation/request',{approval});let count=0,release,entered,reminder;
+ const parked=new Promise(resolve=>{release=resolve;});const waiting=new Promise(resolve=>{entered=resolve;});
+ h.native.onRequest=async path=>{
+  if(path!=='/session/ses_a')return;
+  if(++count===1){reminder=h.post('/runs/a/validation/reminder',{approval});await waiting;}
+  else if(count===2){entered();await parked;}
+ };
+ let result;
+ try{result=await h.post('/runs/a/decision/decision-reminder-race',{decision:'approved'});}
+ finally{release();}
+ assert.equal(result.status,400);assert.equal(result.body.error,'run-transition-in-flight');assert.equal(result.body.decision_recorded,false);
+ assert.equal((await reminder).status,202);assert.equal((await h.get('/runs/a/decision/decision-reminder-race')).status,404);
+ assert.equal(h.native.replies.length,0);
 });

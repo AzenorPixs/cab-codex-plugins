@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.16 — Motifs des refus de décision HTTP
+
+- Les400 vides des décisions deviennent JSON filtrés : code précis, message français fixe et indicateur local decision_recorded.
+- Causes de révision/admission conservées avant et après contrôle natif ; gardes,409 et201 de succès inchangés, aucune décision/once implicite.
+
 ## 2.1.15 — Démarrage CABU et récupération durable
 
 - Build corrigé : GET /status de maintenance borné16Mio, erreur de taille explicite, autres limites inchangées ; reprise du journal avant nouvelle installation.

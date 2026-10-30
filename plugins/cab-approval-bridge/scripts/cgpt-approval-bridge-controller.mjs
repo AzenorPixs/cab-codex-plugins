@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.15";
+const version = "2.1.16";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -77,15 +77,17 @@ let sseState = 'connecting';
 let reconnectTimer;
 let closing = false;
 let sseGeneration = 0;
+function inspectLegacyAdmission(operation) {
+  registry.admission();
+  if (activeContexts().length) throw new CoordinationError('run-target-required');
+  if (operation) registry.markLegacyUse(operation);
+  return true;
+}
 const legacy = createJobContext({ workspace, stateDirectory, maxCommandLength,
-  observe: (type, details) => observations.record(type, details), admitOperation: (operation, requestId, stage) => {
-  try {
-    registry.admission();
-    if (activeContexts().length) return false;
-    if (operation) registry.markLegacyUse(operation);
-    return true;
-  } catch { return false; }
-} });
+  observe: (type, details) => observations.record(type, details),
+  inspectOperationAdmission: inspectLegacyAdmission,
+  admitOperation: (...args) => { try { return inspectLegacyAdmission(...args); } catch { return false; } },
+});
 
 function json(response, status, payload) {
   response.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
@@ -103,6 +105,15 @@ async function readJson(request, maxBytes = 256 * 1024) {
 function contextFor(run) {
   if (contexts.has(run.runId)) return contexts.get(run.runId);
   let context;
+  const inspectAdmission = (operation, requestId, stage) => {
+    if (transitions.has(run.runId)) throw new CoordinationError('run-transition-in-flight');
+    if (!operation || operation.runId !== run.runId || operation.directory !== workspace ||
+        !context.sessions().includes(operation.sessionId)) throw new CoordinationError('operation-identity-divergent');
+    if (broker?.coordination_protocol !== COORDINATION_PROTOCOL) throw new CoordinationError('coordination-upgrade-required');
+    if (['STORE_UNHEALTHY', 'JOURNAL_UNHEALTHY', 'JOURNAL_INTEGRITY_FAILURE', 'STORE_JOURNAL_DIVERGENCE']
+      .includes(broker?.root_cause)) throw new CoordinationError('broker-integrity-unavailable');
+    return registry.operationAdmission(run.runId, operation, requestId, stage);
+  };
   context = createJobContext({
     workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run, maxCommandLength,
     currentRun: () => registry.runs.get(run.runId),
@@ -124,17 +135,8 @@ function contextFor(run) {
       issued: (operation) => registry.nativeIssued(operation.operationId),
       unknown: (operation) => registry.nativeUnknown(operation?.operationId),
     },
-    admitOperation: (operation, requestId, stage) => {
-      try {
-        if (transitions.has(run.runId) || !operation || operation.runId !== run.runId || operation.directory !== workspace ||
-            !context.sessions().includes(operation.sessionId)) return false;
-        if (broker?.coordination_protocol !== COORDINATION_PROTOCOL) return false;
-        if (['STORE_UNHEALTHY', 'JOURNAL_UNHEALTHY', 'JOURNAL_INTEGRITY_FAILURE', 'STORE_JOURNAL_DIVERGENCE']
-          .includes(broker?.root_cause)) return false;
-        // A candidate session is admitted only by the existing recovery preflight.
-        return registry.operationAdmission(run.runId, operation, requestId, stage);
-      } catch { return false; }
-    },
+    inspectOperationAdmission: inspectAdmission,
+    admitOperation: (...args) => { try { return inspectAdmission(...args); } catch { return false; } },
   });
   contexts.set(run.runId, context);
   context.start();

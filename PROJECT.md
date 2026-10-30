@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.15`.
+Version de référence des briques CAB : `2.1.16`.
 
-CAB 2.1.15 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.16 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -632,7 +632,7 @@ Les tests et lectures filtrées qualifient les sources. L’activation CABU et
 la récupération réelle du RUN restent des étapes distinctes, coordonnées
 séparément ; les services actifs ne sont pas modifiés par cette préparation.
 
-## Diagnostics de notification et refus avant admission — source 2.1.15
+## Diagnostics de notification et refus avant admission — source 2.1.16
 
 Une approbation peut rester `PENDING` alors que sa notification au contrôleur
 est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
@@ -661,7 +661,7 @@ La préparation source n’active rien. L’activation CABU coordonnée est rapp
 avec les versions des processus réels avant notification aux sessions.
 
 
-## Restitution des réservations sans effet — source 2.1.15
+## Restitution des réservations sans effet — source 2.1.16
 
 La route explicite release-unused permet de restituer une réservation de test
 HELD sans nettoyage fictif, uniquement sur autorisation humaine spécifique,
@@ -675,7 +675,7 @@ un état ancien pour supprimer une preuve. La préparation source ne modifie
 aucun RUN ni composant actif.
 
 
-## Isolation des sondes et du broker partagé — source 2.1.15
+## Isolation des sondes et du broker partagé — source 2.1.16
 
 La découverte serveur est envoyée sans scope de workspace. Les contrôles MCP
 visent la location partagée et refusent une cible explicite divergente.
@@ -687,7 +687,7 @@ autorisée et contrôlée. Les workspaces des exemples sont génériques.
 Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-location-isolation.md).
 
 
-## Attente du contrôleur et échec de récupération — CAB2.1.15
+## Attente du contrôleur et échec de récupération — CAB2.1.16
 
 L’attente de la version réelle du contrôleur utilise le budget --wait-ms
 existant (120000ms par défaut, borne maximale900000ms), y compris au rollback.
@@ -703,3 +703,13 @@ par une version antérieure restent conservés comme preuves ; observer les
 artefacts et processus effectivement restaurés séparément, sans réécrire
 leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
 une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
+
+
+## Diagnostics des décisions — source2.1.16
+
+Les refus de décision auparavant400 vides rendent un JSON filtré avec code,
+message français fixe et decision_recorded. Révision périmée, contexte,
+doublon et validation inconnue sont distingués sans exposer les données du
+mandat. Les gardes et succès existants restent inchangés. Le champ indique
+la présence locale d’une décision, pas son application native. Procédure :
+[diagnostics distribués](plugins/cab-approval-bridge/skills/approval-bridge/references/decision-http-diagnostics.md).

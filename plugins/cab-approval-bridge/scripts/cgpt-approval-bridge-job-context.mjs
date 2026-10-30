@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.15";
+export const VERSION = "2.1.16";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -37,10 +37,47 @@ export function checkCommandLength(approval, maxLength) {
   }
 }
 
+const DECISION_ERRORS = new Map(Object.entries({
+  'decision-invalid': 'La décision doit être approved, rejected ou needs_clarification.',
+  'decision-invalid-json': 'Le corps de décision n’est pas un JSON valide.',
+  'decision-validation-unknown': 'Aucune validation admise ne correspond à cette demande.',
+  'decision-already-recorded': 'Une décision est déjà enregistrée pour cette demande.',
+  'notification-reconciliation-rejection-only': 'Cette demande réconciliée accepte uniquement un rejet.',
+  'decision-operation-invalidated': 'L’opération de cette demande a été invalidée.',
+  'decision-context-closed': 'Le contexte de décision est fermé.',
+  'decision-recovery-transition': 'Une transition de récupération est en cours.',
+  'decision-session-revoked': 'La session du mandat est révoquée.',
+  'decision-context-divergent': 'Le mandat ne correspond pas au contexte du job.',
+  'decision-recovery-mismatch': 'Le mandat ne correspond pas au prévol de récupération courant.',
+  'decision-session-mismatch': 'La session du mandat ne correspond pas à celle du job.',
+  'decision-operation-not-admitted': 'L’opération n’est plus admise pour cette décision.',
+  'resource-revision-stale': 'La révision d’une ressource a changé depuis la demande.',
+  'reservation-version-stale': 'La version de réservation de la demande est périmée.',
+  'operation-identity-divergent': 'L’identité de l’opération ne correspond pas au registre.',
+  'operation-outside-reservation': 'Une ressource du mandat est hors de la réservation.',
+  'expected-revisions-invalid': 'Les révisions attendues du mandat sont invalides.',
+  'resources-invalid': 'Le manifeste de ressources du mandat est invalide.',
+  'resource-physical-alias-refused': 'Une ressource possède un alias physique non admis.',
+  'run-not-reserved': 'Le RUN ne possède plus de réservation active.',
+  'run-target-required': 'Un RUN doit être ciblé explicitement.',
+  'run-transition-in-flight': 'Une transition du RUN est en cours.',
+  'global-coordination-suspended': 'La coordination globale suspend l’admission de cette opération.',
+  'run-pause': 'Le RUN est en pause.',
+  'run-stop': 'Le RUN est arrêté.',
+  'maintenance-preflight-required': 'Un prévol de maintenance reste requis pour ce RUN.',
+  'coordination-upgrade-required': 'Le protocole de coordination requis n’est pas disponible.',
+  'registry-unavailable': 'L’autorité du registre n’est pas disponible.',
+  'broker-integrity-unavailable': 'L’intégrité du broker ne permet pas cette opération.',
+  'test-resource-not-held': 'La réservation de l’environnement de test n’est pas détenue.',
+  'test-reconciliation-required': 'La réservation de test restaurée doit être réconciliée.',
+  'decision-processing-failed': 'La décision n’a pas pu être traitée ; vérifier son état enregistré.'
+}));
+const decisionError = (code) => Object.assign(new Error(code), { code });
+
 // A context owns its decisions, gates and recovery; OpenCode and MCP stay shared.
 export function createJobContext({ workspace, stateDirectory, run = null,
   currentRun = () => run,
-  admitOperation = () => true, ownsSession = () => true, observe = () => {},
+  admitOperation = () => true, inspectOperationAdmission = null, ownsSession = () => true, observe = () => {},
   nativeLifecycle = {}, openCodeClient = null,
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
@@ -250,7 +287,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.15",
+    version: "2.1.16",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -437,18 +474,26 @@ function operationAllowed(operation, requestId, stage = 'prepare') {
   return operationContextAllowed(operation, requestId) && admitOperation(operation, requestId, stage);
 }
 
-function operationContextAllowed(operation, requestId) {
-  if (closed) return false;
-  if (recoveryTransitionInFlight) return false;
-  if (job?.revokedSessions?.includes(operation?.sessionId)) return false;
-  if (!job?.armed) return true;
-  if (!operation || operation.directory !== job.directory) return false;
+function operationContextFailure(operation, requestId) {
+  if (closed) return 'decision-context-closed';
+  if (recoveryTransitionInFlight) return 'decision-recovery-transition';
+  if (job?.revokedSessions?.includes(operation?.sessionId)) return 'decision-session-revoked';
+  if (!job?.armed) return null;
+  if (!operation || operation.directory !== job.directory) return 'decision-context-divergent';
   if (job.recovery) {
-    return operation.sessionId === job.recovery.sessionId &&
-      requestId === job.recovery.preflightRequestId &&
-      operation.kind === "bash" && operation.target === "/usr/bin/true";
+    return operation.sessionId === job.recovery.sessionId && requestId === job.recovery.preflightRequestId &&
+      operation.kind === 'bash' && operation.target === '/usr/bin/true' ? null : 'decision-recovery-mismatch';
   }
-  return operation.sessionId === job.sessionId;
+  return operation.sessionId === job.sessionId ? null : 'decision-session-mismatch';
+}
+function operationContextAllowed(operation, requestId) {
+  return operationContextFailure(operation, requestId) === null;
+}
+function assertDecisionOperation(operation, requestId) {
+  const contextFailure = operationContextFailure(operation, requestId);
+  if (contextFailure) throw decisionError(contextFailure);
+  const inspect = inspectOperationAdmission || admitOperation;
+  if (inspect(operation, requestId, 'prepare') !== true) throw decisionError('decision-operation-not-admitted');
 }
 
 function recoveryFailure(reason) {
@@ -1744,7 +1789,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.15",
+      version: "2.1.16",
     },
   });
 
@@ -2691,11 +2736,12 @@ const handle = async (request, response, url) => {
         request.method === "POST"
       ) {
         try {
-          const decision =
-            await readJson(request);
+          let decision;
+          try { decision = await readJson(request); }
+          catch (cause) { if (cause instanceof SyntaxError) throw decisionError('decision-invalid-json'); throw cause; }
 
           if (
-            ![
+            !decision || typeof decision !== 'object' || Array.isArray(decision) || ![
               "approved",
               "rejected",
               "needs_clarification",
@@ -2703,9 +2749,7 @@ const handle = async (request, response, url) => {
               decision.decision
             )
           ) {
-            throw new Error(
-              "Décision invalide."
-            );
+            throw decisionError('decision-invalid');
           }
 
           if (
@@ -2713,32 +2757,29 @@ const handle = async (request, response, url) => {
               requestId
             )
           ) {
-            throw new Error(
-              "Décision déjà enregistrée."
-            );
+            throw decisionError('decision-already-recorded');
           }
 
           const validation =
             validations.get(requestId);
 
           if (!validation) {
-            throw new Error(
-              "Validation inconnue."
-            );
+            throw decisionError('decision-validation-unknown');
           }
           if (validation.rejectionOnly && decision.decision !== 'rejected') {
-            throw new Error('notification-reconciliation-rejection-only');
+            throw decisionError('notification-reconciliation-rejection-only');
           }
-          if (decision.decision === 'approved' && (validation.operationInvalidated ||
-              !operationAllowed(validation.operation, requestId))) {
-            throw new Error("Validation hors session admise.");
+          if (decision.decision === 'approved') {
+            if (validation.operationInvalidated) throw decisionError('decision-operation-invalidated');
+            assertDecisionOperation(validation.operation, requestId);
           }
 
           if (decision.decision === "approved" &&
               !(await nativeAskGuard(validation.operation, response, request))) return;
-          if (httpDecisions.has(requestId) || (decision.decision === 'approved' && (validation.operationInvalidated ||
-              !operationAllowed(validation.operation, requestId)))) {
-            throw new Error("Validation déjà décidée ou hors session admise.");
+          if (httpDecisions.has(requestId)) throw decisionError('decision-already-recorded');
+          if (decision.decision === 'approved') {
+            if (validation.operationInvalidated) throw decisionError('decision-operation-invalidated');
+            assertDecisionOperation(validation.operation, requestId);
           }
 
           httpDecisions.set(requestId, {
@@ -2809,10 +2850,12 @@ const handle = async (request, response, url) => {
               status: "DECIDED",
             })
           );
-        } catch {
-          response
-            .writeHead(400)
-            .end();
+        } catch (cause) {
+          const code = typeof cause?.code === 'string' && DECISION_ERRORS.has(cause.code)
+            ? cause.code : 'decision-processing-failed';
+          response.writeHead(400, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+          response.end(JSON.stringify({ error: code, message: DECISION_ERRORS.get(code),
+            decision_recorded: httpDecisions.has(requestId) }));
         }
 
         return;

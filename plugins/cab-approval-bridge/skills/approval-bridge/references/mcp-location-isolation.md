@@ -1,4 +1,4 @@
-# Isolation des locations MCP — CAB 2.1.15
+# Isolation des locations MCP — CAB 2.1.16
 
 ## Contrat
 
@@ -87,6 +87,6 @@ longue inactivité sur toutes les versions OpenCode. La prévention est
 qualifiée par l’absence de ciblage du workspace technique. Aucun scénario
 nommant un projet consommateur n’est nécessaire.
 
-La publication de 2.1.15 précède CABU. Les versions actives et la readiness
+La publication de 2.1.16 précède CABU. Les versions actives et la readiness
 réelle sont vérifiées avant l’information des sessions ; aucune réparation
 d’un RUN actif n’est déduite des tests ou de la mise à jour.

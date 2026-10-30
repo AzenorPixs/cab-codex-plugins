@@ -158,3 +158,7 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Lecture du statut CABU — complément2.1.15
 
 `fix-cabu-large-controller-status` : ARCHIVÉ, **code non attribué**, 3/3 unités qualifiées, Node548/28 ignorés, updater48/48 ; archive vérifiée. [Proposition](changes/archive/2026-10-30-fix-cabu-large-controller-status/proposal.md), [tâches](changes/archive/2026-10-30-fix-cabu-large-controller-status/tasks.md). Build2.1.15 corrigé, activation non confirmée ; attribution ACL ultérieure.
+
+### Diagnostics de décision — SCM2.1.16
+
+`explain-decision-http-refusals` : ARCHIVÉ, **code non attribué**, 4/4 unités qualifiées ; Node560/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation suivie séparément. [Proposition](changes/archive/2026-10-30-explain-decision-http-refusals/proposal.md), [tâches](changes/archive/2026-10-30-explain-decision-http-refusals/tasks.md). Attribution ACL ultérieure.
