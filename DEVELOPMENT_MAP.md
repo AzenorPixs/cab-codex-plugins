@@ -622,3 +622,8 @@ flowchart LR
 ### Incidents natifs et moniteur — SCM 2.1.26
 
 `remediate-native-coding-and-monitor-incidents` : ARCHIVÉ — source 2.1.26 qualifiée, **code non attribué**. Projection compacte du registre, pannes de source explicites, helpers natifs et protocole de reprise sans assouplir les gardes. [Proposition](openspec/changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/proposal.md), [tâches](openspec/changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/tasks.md), [qualification](openspec/changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Rangement et couleurs Web — SCM2.1.27
+
+`fix-monitor-catalog-feedback-and-state-colors` : ARCHIVÉ — source2.1.27 qualifiée, **code non attribué**. Vue catalogue immédiate en Manuel sans rollback par lecture ancienne ; lignes BLOCKED bleues, DONE vertes, STOPPED orange. [Proposition](openspec/changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/proposal.md), [tâches](openspec/changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/tasks.md), [qualification](openspec/changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.

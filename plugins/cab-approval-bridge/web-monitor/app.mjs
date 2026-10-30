@@ -57,6 +57,17 @@ async function manage(route, body) {
       body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
+    if (route === 'catalog') {
+      if (!validSnapshot(result.snapshot)) {
+        $('#management-status').textContent = 'Rangement enregistré ; affichage non confirmé. Actualisez la vue avant une autre action.';
+        return;
+      }
+      refreshGeneration++;
+      pendingSnapshot = null;
+      model = result.snapshot;
+      lastWebSuccessAt = Date.now();
+      $('#refresh-status').textContent = '';
+    }
     if (result.deferred) {
       webRestart = { startedAt: result.startedAt, deadline: Date.now() + 30000 };
       $('#management-status').textContent = 'Redémarrage du Web demandé. Attente de la reconnexion…';
@@ -185,6 +196,8 @@ function renderWork() {
       row.dataset.state = runState(value)[0];
       if (row.dataset.state === 'WAITING') row.classList.add('run-waiting');
       if (row.dataset.state === 'BLOCKED') row.classList.add('run-blocked');
+      if (row.dataset.state === 'DONE') row.classList.add('run-done');
+      if (row.dataset.state === 'STOPPED') row.classList.add('run-stopped');
     }
     const identity = node('td'); const button = node('button', isRun ? 'run-button' : 'change-button', isRun ? value.runId : value.changeId);
     button.dataset[isRun ? 'run' : 'change'] = isRun ? value.runId : value.changeId;
@@ -385,10 +398,11 @@ async function refreshView(explicit = true) {
       if (!validSnapshot(value)) throw new Error('invalid snapshot');
       snapshot = { value, receivedAt: Date.now() }; pendingSnapshot = null;
     }
-    if (!explicit && generation !== refreshGeneration) return;
+    if (generation !== refreshGeneration) return;
     model = snapshot.value; lastWebSuccessAt = snapshot.receivedAt;
     $('#refresh-status').textContent = ''; render();
   } catch {
+    if (generation !== refreshGeneration) return;
     model = previous.model; lastWebSuccessAt = previous.lastWebSuccessAt;
     if (model) render();
     $('#refresh-status').textContent = 'Actualisation impossible ; dernière vue conservée.';
