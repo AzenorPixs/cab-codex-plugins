@@ -78,6 +78,20 @@ Une fin de tour, une absence d'événement ou un délai ne prouve ni la fin des
 travaux ni une libération de ressource. Une clôture exige les critères du
 prompt et les preuves techniques du profil, sans inventer de résultat.
 
+## Absence de limite temporelle de session
+
+Le protocole ne fixe aucune durée maximale de session ou de mandat. Le temps
+écoulé, une absence de sortie ou un délai d'attente technique ne déclenche,
+à lui seul, ni arrêt, ni suspension, ni gel, ni clôture partielle du RUN.
+Contrôler l'état réel et les preuves pour qualifier une anomalie ; poursuivre
+le travail autorisé lorsqu'aucun blocage prouvé ne l'empêche.
+
+Les protections liées à des effets inconnus, aux permissions ou aux ressources
+détenues restent applicables jusqu'à réconciliation. Un délai ne les lève pas
+et ne vaut jamais autorisation de rejouer une opération. La fraîcheur PLLM au
+seul démarrage initial, les cadences de suivi, les sondes et le compactage
+restent distincts d'une limite d'exécution de la session.
+
 ## Finalité du contrat et critères techniques de clôture
 
 | Finalité du prompt | Résultat métier attendu | Limites du contrat technique |
@@ -1342,9 +1356,12 @@ Depuis CAB 1.0.2, après timeout de `request_validation`, `poll_approval` ou
 l'ordre natif `requestId`, `approval_id`, `session_id`, `directory`, `change_id`,
 `files` et `commands` ; toutes les demandes enregistrées doivent être refusées.
 Un `PENDING` corrélé reste non terminal ; aucune nouvelle demande n'est admise
-avant retry. Une erreur générique, un timeout seul, un polling divergent,
-une commande ou un autre outil natif laisse le gel conservé et exige la
-réconciliation ou l'autorité indispensable.
+avant retry. Un timeout seul ne prouve ni divergence ni refus et ne déclenche
+aucun gel supplémentaire : rechercher la décision sur le même `approval_id`.
+Le gel déjà établi par un prévol divergent ou incomplet reste soumis aux
+preuves exigées pour retry et complete. Une erreur générique, un polling
+divergent, une commande ou un autre outil natif exige la réconciliation ou
+l'autorité indispensable, sans lever ce gel existant.
 
 Le contrôleur conserve les identifiants antérieurs et l'empreinte du préfixe
 des parties natives, sans contenu de message. Il vérifie ce préfixe à chaque
@@ -1502,7 +1519,7 @@ Avant toute préparation, déclarer les environnements dans le manifeste du chan
 3. Vérifier la fin native de tous les tests, y compris processus détachés et ressources temporaires. Exécuter un nettoyage puis une commande distincte vérifiant la restitution de chaque environnement, avec des identités d'opérations neuves et exit 0. L'orchestrateur examine les commandes et preuves : CAB contrôle leur corrélation et leur ordre durable, sans interpréter leurs sorties ni deviner l'état Docker/LXC. Ne jamais utiliser un simple `/usr/bin/true` comme preuve d'un nettoyage réel.
 4. Après libération des accès temporaires, appeler `POST /runs/<runId>/test-resources/release` avec `version`, `transactionId`, `token`, `fencing`, `evidence` et `cleanup`. Ce tableau contient une entrée par clé : `resourceKey`, `cleanupOperationId`, `verificationOperationId`, `restored: true`. Les opérations appartiennent au même cycle ; nettoyage et vérification sont postérieurs à tous les autres tests de leur environnement. Un booléen seul, un nettoyage échoué, une fin inconnue ou une opération encore active refuse la libération. Un test échoué peut libérer un environnement restitué sans devenir un succès. Le reçu est idempotent.
 
-`GET /runs/<runId>/test-resources` expose réservations, attentes, propriétaire et besoin de réconciliation. `/test-resources/cancel` avec version, transactionId et evidence annule uniquement une attente. Après crash, PAUSE, STOP ou délai dépassé, conserver les protections. `/test-resources/reconcile` exige l'ancien jeton/fencing, la génération, un `reconciliationId` neuf et les preuves ; après recontrôle natif, il renouvelle jeton/fencing sans libérer l'environnement. Réconcilier séparément les accès de commande restaurés et ne jamais rejouer une once consommée. Publication, réduction de portée, changement de génération et gate normal restent bloqués jusqu'à restitution.
+`GET /runs/<runId>/test-resources` expose réservations, attentes, propriétaire et besoin de réconciliation. `/test-resources/cancel` avec version, transactionId et evidence annule uniquement une attente. Après crash, PAUSE ou STOP, conserver les protections. Un délai dépassé seul ne suspend pas le RUN et ne clôture pas la transaction ; vérifier l'état natif en conservant les protections déjà acquises. `/test-resources/reconcile` exige l'ancien jeton/fencing, la génération, un `reconciliationId` neuf et les preuves ; après recontrôle natif, il renouvelle jeton/fencing sans libérer l'environnement. Réconcilier séparément les accès de commande restaurés et ne jamais rejouer une once consommée. Publication, réduction de portée, changement de génération et gate normal restent bloqués jusqu'à restitution.
 
 Le registre 4 n'ajoute `testReservations` qu'au premier usage. Les anciens lecteurs stricts refusent cet état enrichi ; revenir à un ancien lecteur après utilisation demande une réconciliation/conversion autorisée, sans effacer les protections. Cette préparation 1.10.4 n'installe ni ne migre aucun runtime et ne propage aucun prompt consommateur.
 

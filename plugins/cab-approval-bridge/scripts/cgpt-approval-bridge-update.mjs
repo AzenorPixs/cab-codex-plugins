@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.18';
+export const VERSION = '2.1.19';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -762,7 +762,7 @@ export async function updateComponents(input, options = {}) {
         for (const name of brokerFiles) await validate(join(c.pluginRoot,'broker',name),transaction());
       }
       const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
-      const required = ['controller.mjs', 'job-context.mjs', 'model-policy.mjs', 'runs.mjs', 'resource-coordination.mjs',
+      const required = ['controller.mjs', 'job-context.mjs', 'model-policy.mjs', 'model-transition.mjs', 'provider-connect.mjs', 'runs.mjs', 'resource-coordination.mjs',
         'statistics.mjs', 'observation-statistics.mjs', 'statistics-maintenance.mjs', 'import-observations.mjs',
         'registry-lock.py', 'supervisor.mjs', 'supervisor-context.mjs', 'opencode-sse-client.mjs', 'healthcheck.mjs',
         'reset.py', 'prompts.py', 'monitor.mjs', 'monitor-data.mjs', 'monitor-events.mjs', 'monitor-management.mjs',

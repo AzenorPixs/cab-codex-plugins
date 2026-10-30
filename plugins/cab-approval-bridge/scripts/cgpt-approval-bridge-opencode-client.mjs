@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.18';
+export const VERSION = '2.1.19';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -343,9 +343,10 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   async function request(path, { method = 'GET', query = {}, body, accept = 'application/json', timeout = timeoutMs,
-    maxResponseBytes = RESPONSE_LIMIT, scoped = true } = {}) {
+    maxResponseBytes = RESPONSE_LIMIT, scoped = true } = {}, schemaRead = false) {
     if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) fail('opencode-response-limit-invalid');
-    if (typeof path !== 'string' || !path.startsWith('/api/') || path.startsWith('//') || path.includes('..')) {
+    if (typeof path !== 'string' || (!path.startsWith('/api/') &&
+        !(schemaRead && method === 'GET' && path === '/openapi.json')) || path.startsWith('//') || path.includes('..')) {
       fail('opencode-v2-route-invalid');
     }
     const url = new URL(path, origin);
@@ -671,6 +672,101 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       body: { model: modelValue } });
   }
 
+  async function providerKeyContract() {
+    const server = await info(true);
+    const { data: schema } = await request('/openapi.json', { scoped: false, maxResponseBytes: 16 * 1024 * 1024 }, true);
+    const connect = schema?.paths?.['/api/integration/{integrationID}/connect/key']?.post;
+    const read = schema?.paths?.['/api/integration/{integrationID}']?.get;
+    if (connect?.operationId !== 'integration.connect.key' ||
+        connect.requestBody?.content?.['application/json']?.schema?.properties?.key?.type !== 'string' ||
+        !Object.hasOwn(connect.responses || {}, '204') || read?.operationId !== 'integration.get') {
+      fail('opencode-provider-contract-unavailable');
+    }
+    return { version: server.version, pid: server.pid,
+      schemaDigest: createHash('sha256').update(JSON.stringify(schema)).digest('hex'),
+      operation: connect.operationId, credentialStorage: 'native', scope: 'shared' };
+  }
+
+  async function integrationConnection(integrationID) {
+    if (typeof integrationID !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(integrationID)) {
+      fail('opencode-integration-invalid');
+    }
+    if (await mcpLocation() !== directory) fail('opencode-provider-location-divergent');
+    await location(directory);
+    await json('/api/integration');
+    const response = await json(`/api/integration/${encodeURIComponent(integrationID)}`);
+    const value = unwrapData(response, 'opencode-integration-invalid');
+    if (value.id !== integrationID || !Array.isArray(value.connections) || !Array.isArray(value.methods)) {
+      fail('opencode-integration-invalid');
+    }
+    const active = value.connections[0];
+    if (active && (typeof active.id !== 'string' && active.type === 'credential')) fail('opencode-integration-invalid');
+    return { integrationID, keySupported: value.methods.some(method => method.type === 'key'),
+      active: active ? { type: active.type, id: active.id || null, method: active.method || null,
+        label: typeof active.label === 'string' ? active.label : null } : null };
+  }
+
+  async function connectProviderKey(integrationID, { secretSource, assertBoundary, transactionId, expectedPid } = {}) {
+    if (typeof secretSource !== 'function' || typeof assertBoundary !== 'function' ||
+        !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(transactionId || '') || !Number.isSafeInteger(expectedPid)) {
+      fail('opencode-provider-input-invalid');
+    }
+    let effectPossible = false, key, source, stage = 'contract';
+    try {
+      const contract = await providerKeyContract();
+      if (contract.pid !== expectedPid) fail('opencode-provider-server-changed');
+      stage = 'integration';
+      const previous = await integrationConnection(integrationID);
+      if (!previous.keySupported) fail('opencode-provider-key-unsupported');
+      const boundary = async () => {
+        await assertBoundary();
+        if ((await info(true)).pid !== expectedPid) fail('opencode-provider-server-changed');
+        if (Object.keys(await activeSessions()).length || (await permissions(directory)).length) {
+          fail('opencode-provider-not-quiescent');
+        }
+      };
+      stage = 'boundary';
+      await boundary();
+      stage = 'secret';
+      source = await secretSource();
+      const bytes = Buffer.isBuffer(source) ? source : typeof source === 'string' ? Buffer.from(source) : null;
+      if (!bytes || !bytes.length || bytes.length > CREDENTIAL_LIMIT) fail('opencode-provider-secret-invalid');
+      key = bytes.toString('utf8');
+      if (!Buffer.from(key).equals(bytes)) fail('opencode-provider-secret-invalid');
+      if (key.endsWith('\n')) key = key.slice(0, -1);
+      if (!key || /[\r\n\0]/.test(key)) fail('opencode-provider-secret-invalid');
+      stage = 'boundary';
+      await boundary();
+      effectPossible = true;
+      stage = 'post';
+      const response = await request(`/api/integration/${encodeURIComponent(integrationID)}/connect/key`,
+        { method: 'POST', body: { key, label: `CAB-${transactionId}` } });
+      if (response.status !== 204) fail('opencode-provider-connection-unconfirmed');
+      stage = 'confirmation';
+      const active = (await integrationConnection(integrationID)).active;
+      if ((await info(true)).pid !== expectedPid || active?.type !== 'credential' || active.method !== 'key' ||
+          active.label !== `CAB-${transactionId}` || !active.id || active.id === previous.active?.id) {
+        fail('opencode-provider-connection-unconfirmed');
+      }
+      return { status: 'connected', transactionId, integrationID, credentialId: active.id,
+        serverPid: expectedPid, serverVersion: contract.version, schemaDigest: contract.schemaDigest,
+        requiresPreflight: true };
+    } catch (cause) {
+      const allowed = ['opencode-provider-input-invalid','opencode-provider-contract-unavailable',
+        'opencode-provider-server-changed','opencode-provider-key-unsupported','opencode-provider-not-quiescent',
+        'opencode-provider-secret-invalid','opencode-provider-connection-unconfirmed','opencode-integration-invalid',
+        'opencode-auth-required','opencode-session-status-invalid','opencode-permissions-invalid',
+        'opencode-v2-response-invalid','opencode-provider-location-divergent','provider-cohort-not-quiescent','provider-cohort-changed'];
+      const code = allowed.includes(cause?.code) || /^opencode-http-[45][0-9]{2}$/.test(cause?.code || '')
+        ? cause.code : 'opencode-provider-connect-failed';
+      throw Object.assign(new Error(code), { code, effectPossible, stage });
+    } finally {
+      key = null;
+      if (Buffer.isBuffer(source)) source.fill(0);
+      source = null;
+    }
+  }
+
   async function replyPermission(sessionId, permissionId, decision, directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     if (decision !== 'once' && decision !== 'always' && decision !== 'reject') fail('opencode-permission-decision-invalid');
@@ -709,7 +805,9 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions,
-    providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel, replyPermission, connectMcp, disconnectMcp, events, request: json });
+    providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
+    providerKeyContract, integrationConnection, connectProviderKey,
+    replyPermission, connectMcp, disconnectMcp, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {

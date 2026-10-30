@@ -204,3 +204,10 @@ test('format 3/7 : dates, sélection unique et preuve courante restent exigées'
  const c=catalog3();c.models[0].evaluated_this_run=false;c.models[0].selected=false;c.models[6].selected=true;c.selected_mode='mode7';
  assert.equal(choose({catalog:c,providers:providers7()}).mode,'mode2');
 });
+
+test('transition explicite libre : un niveau natif hors medium/high reste sélectionnable sans catalogue',()=>{
+ const providers={connected:['other'],all:[{id:'other',models:{model:{variants:{low:{}}}}}]};
+ assert.throws(()=>selectCodingModel({providers,model:'other/model'}),{code:'explicit-model-unavailable'});
+ const selected=selectCodingModel({providers,model:'other/model',explicitUnrestricted:true});
+ assert.equal(selected.reasoning,'low');assert.equal(selected.source,'prompt');assert.equal(selected.catalogDigest,null);
+});

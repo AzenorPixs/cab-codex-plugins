@@ -1,0 +1,78 @@
+{
+  "version": "2.1.19",
+  "nodeGroups": [
+    {
+      "total": 132,
+      "passed": 132,
+      "failed": 0,
+      "skipped": 0,
+      "log": "concurrent-global.log"
+    },
+    {
+      "total": 498,
+      "passed": 469,
+      "failed": 0,
+      "skipped": 29,
+      "log": "other-global.log"
+    }
+  ],
+  "nodeUniqueCoverage": {
+    "total": 630,
+    "passed": 601,
+    "failed": 0,
+    "skipped": 29
+  },
+  "pythonPassed": 80,
+  "native20Tests": {
+    "total": 2,
+    "passed": 2,
+    "failed": 0,
+    "skipped": 0,
+    "log": "native20-final.log"
+  },
+  "native20Proof": {
+    "nativeVersion": "2.2.0",
+    "samePid": true,
+    "sameSessions": true,
+    "sameJob": true,
+    "historyPersisted": true,
+    "controllerNativeTransition": true,
+    "schemaDigest": "b1f2a83ae35e8d00dd9dd366bda0b3785459e465432f8c887570ac3acb87aaf9",
+    "warmAccountSwitch": true,
+    "hotProviderSwitch": true,
+    "peerProviderPreserved": true,
+    "reload": false,
+    "tools": 0,
+    "secretInLogs": false
+  },
+  "liveContract": {
+    "checkedAt": "2026-10-30T08:47:46.851Z",
+    "version": "2.2.0",
+    "pid": 1576588,
+    "schemaDigest": "b1f2a83ae35e8d00dd9dd366bda0b3785459e465432f8c887570ac3acb87aaf9",
+    "operation": "integration.connect.key",
+    "credentialStorage": "native",
+    "scope": "shared",
+    "operationExecuted": false
+  },
+  "syntax": {
+    "javascript": 64,
+    "python": 16
+  },
+  "rootProtocolEdited": false,
+  "realProviderCredentialChanged": false,
+  "realJobModelChanged": false,
+  "explicitChoice": "unrestricted by former policy; observed native levels",
+  "withoutExplicitChoice": "current PLLM",
+  "archive": "openspec/changes/archive/2026-10-30-support-hot-model-transitions",
+  "statisticsSections": 6,
+  "requirements": {
+    "added": 6,
+    "modified": 1
+  },
+  "openspecAfter": {
+    "standard": 16,
+    "strict": 16
+  },
+  "syncedRequirementsVerified": 7
+}
