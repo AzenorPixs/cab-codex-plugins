@@ -487,3 +487,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class mcpIsolation provisional
 ```
+
+### Récupération CABU — SCM2.1.15
+
+`fix-cabu-startup-recovery` : ARCHIVÉ, **code non attribué**, 4/4 unités qualifiées, Node545/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation non confirmée. [Proposition](openspec/changes/archive/2026-10-30-fix-cabu-startup-recovery/proposal.md), [tâches](openspec/changes/archive/2026-10-30-fix-cabu-startup-recovery/tasks.md). Attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    cabuStartup["fix-cabu-startup-recovery<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class cabuStartup provisional
+```
