@@ -933,7 +933,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.25');
+  assert.equal(initialized.result.serverInfo.version, '2.1.26');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -2014,4 +2014,12 @@ test('porte-mandat HTTP : staging sans décision/accès, substitution et livrais
  h.native.rules[a.sessionId]=[{permission:'shell',pattern:'*',action:'allow'}];assert.equal((await h.post('/runs/a/shell-stage',input)).body.error,'native-permission-ask-required');h.native.rules[a.sessionId]=[{permission:'*',pattern:'*',action:'ask'}];
  await h.stop();await h.start();assert.deepEqual((await h.get('/runs/a/shell-stage/stage-http')).body,created.body);
  assert.equal((await h.get('/runs/a/shell-stage/stage-http/payload')).status,409);
+});
+
+
+test('projection moniteur HTTP : navigation exacte sans registre privé ni mutation',async t=>{
+ const h=await setup(t);await h.reserve('a');await h.reserve('b');const before=(await h.get('/runs')).body;
+ const {status,body}=await h.get('/monitor/runs');assert.equal(status,200);assert.equal(body.snapshot_only,true);assert.equal(body.totalRuns,2);assert.equal(body.truncated,false);
+ for(const run of before.runs){const row=body.runs.find(r=>r.runId===run.runId);for(const k of ['runId','changeId','sessionId','version','state','phase'])assert.equal(row[k],run[k]??null);}
+ assert.equal(body.coordination,undefined);assert.equal(body.requestOwners,undefined);assert.equal(body.history,undefined);assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
 });

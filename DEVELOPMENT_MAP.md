@@ -617,3 +617,8 @@ flowchart LR
 ### Transport shell scellé — SCM 2.1.25
 
 `stage-exact-shell-payloads` : ARCHIVÉ — source 2.1.25 qualifiée, **code non attribué**. Corps Bash privé immuable, invocation courte, contrôle SHA256 et revue du corps ; décision, accès et once natifs conservés. [Proposition](openspec/changes/archive/2026-10-30-stage-exact-shell-payloads/proposal.md), [tâches](openspec/changes/archive/2026-10-30-stage-exact-shell-payloads/tasks.md), [qualification](openspec/changes/archive/2026-10-30-stage-exact-shell-payloads/QUALIFICATION.md). Publication et activation restent distinctes ; attribution ACL ultérieure.
+
+
+### Incidents natifs et moniteur — SCM 2.1.26
+
+`remediate-native-coding-and-monitor-incidents` : ARCHIVÉ — source 2.1.26 qualifiée, **code non attribué**. Projection compacte du registre, pannes de source explicites, helpers natifs et protocole de reprise sans assouplir les gardes. [Proposition](openspec/changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/proposal.md), [tâches](openspec/changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/tasks.md), [qualification](openspec/changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.

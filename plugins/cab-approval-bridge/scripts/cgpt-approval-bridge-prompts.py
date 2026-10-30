@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Review or apply CAB 2.1.25 protocol updates to explicitly selected projects."""
+"""Review or apply CAB 2.1.26 protocol updates to explicitly selected projects."""
 
 import argparse
 import hashlib
@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import tempfile
 
-VERSION = "2.1.25"
+VERSION = "2.1.26"
 PILOTED = ("ACSP", "ACSMP", "CISMP", "DOPP", "ISMP", "PPSCP", "RSMP", "SCMP", "SPCMP")
 MARKER = "## CAB 1.10.4 — réservations et accès par ressource"
 LEGACY_MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"

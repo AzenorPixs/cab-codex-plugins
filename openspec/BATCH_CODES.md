@@ -203,3 +203,8 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Transport shell scellé — SCM 2.1.25
 
 `stage-exact-shell-payloads` : ARCHIVÉ — source 2.1.25 qualifiée, **code non attribué**. Corps Bash privé immuable, invocation courte, contrôle SHA256 et revue du corps ; décision, accès et once natifs conservés. [Proposition](changes/archive/2026-10-30-stage-exact-shell-payloads/proposal.md), [tâches](changes/archive/2026-10-30-stage-exact-shell-payloads/tasks.md), [qualification](changes/archive/2026-10-30-stage-exact-shell-payloads/QUALIFICATION.md). Publication et activation restent distinctes ; attribution ACL ultérieure.
+
+
+### Incidents natifs et moniteur — SCM 2.1.26
+
+`remediate-native-coding-and-monitor-incidents` : ARCHIVÉ — source 2.1.26 qualifiée, **code non attribué**. Projection compacte du registre, pannes de source explicites, helpers natifs et protocole de reprise sans assouplir les gardes. [Proposition](changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/proposal.md), [tâches](changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/tasks.md), [qualification](changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.

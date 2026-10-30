@@ -7,7 +7,7 @@ import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-mo
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.25';
+export const VERSION = '2.1.26';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -55,18 +55,22 @@ export function monitorConfiguration(environment = process.env) {
 }
 
 export async function fetchJson(url, timeoutMs, fetcher = fetch) {
+  const fail = code => { throw Object.assign(new Error(code), { code }); };
   const response = await fetcher(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'error',
     headers: { accept: 'application/json' } });
-  if (!response.ok || !response.body) throw new Error('source-unavailable');
+  if (!response.ok) fail('source-http-error');
+  if (!response.body) fail('source-invalid');
   const chunks = [];
   let bytes = 0;
   for await (const chunk of response.body) {
     bytes += chunk.length;
-    if (bytes > 2 * 1024 * 1024) throw new Error('source-too-large');
+    if (bytes > 2 * 1024 * 1024) fail('source-too-large');
     chunks.push(chunk);
   }
-  const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('source-invalid');
+  let result;
+  try { result = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))); }
+  catch { fail('source-invalid'); }
+  if (!result || typeof result !== 'object' || Array.isArray(result)) fail('source-invalid');
   return result;
 }
 
@@ -256,12 +260,13 @@ export class MonitorState {
         await fetchJson(urlOrLoader, this.configuration.timeoutMs, this.fetcher);
       if ((name === 'registry' && !Array.isArray(value.runs)) ||
           (name === 'opencode' && (typeof value.version !== 'string' || !/^2\./.test(value.version) || !Number.isSafeInteger(value.pid))) ||
-          (name === 'observations' && (!id(value.instanceId) || !Array.isArray(value.events)))) throw new Error('source-invalid');
+          (name === 'observations' && (!id(value.instanceId) || !Array.isArray(value.events)))) throw Object.assign(new Error('source-invalid'), { code: 'source-invalid' });
       this.sources[name] = { available: true, attemptedAt, lastSuccessAt: new Date(this.now()).toISOString(), value };
     } catch (cause) {
       this.sources[name] = { ...previous, available: false, attemptedAt, lastSuccessAt: previous.lastSuccessAt || null,
-        error: ['opencode-auth-required', 'opencode-v2-required', 'opencode-credential-unavailable']
-          .includes(cause.code) ? cause.code : 'source-unavailable' };
+        error: ['opencode-auth-required', 'opencode-v2-required', 'opencode-credential-unavailable',
+          'source-too-large', 'source-invalid', 'source-http-error'].includes(cause.code) ? cause.code :
+          ['TimeoutError', 'AbortError'].includes(cause.name) ? 'source-timeout' : 'source-unavailable' };
     }
   }
   async collect() {
@@ -275,7 +280,7 @@ export class MonitorState {
     const c = this.configuration;
     try {
       await Promise.all([this.source('controller', c.controllerUrl + '/status'),
-        this.source('registry', c.controllerUrl + '/runs'), this.source('supervisor', c.supervisorUrl + '/status'),
+        this.source('registry', c.controllerUrl + '/monitor/runs'), this.source('supervisor', c.supervisorUrl + '/status'),
         this.source('opencode', () => this.openCode.info()),
         this.source('mcp', () => this.openCode.mcp()),
         this.source('sessions', () => this.openCode.sessionStatus(c.workspace)),

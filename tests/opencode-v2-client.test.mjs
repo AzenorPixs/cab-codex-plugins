@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { verifyModelPreflight } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
-import { createOpenCodeV2Client, normalizeOpenCodeEvent, nativeToolInputDigest } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2Client, normalizeOpenCodeEvent, nativeToolInputDigest, nativeCodingMandate, diagnoseCodingTurn } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), 'cab-opencode-v2-'));
@@ -728,4 +728,33 @@ test('Code Mode : omission input readiness ne généralise aucune valeur implici
  ]){const raw=structuredClone(base);change(raw);assert.equal((await codeModeFixture(t,raw)).tool,'execute');}
  for(const method of ['request_validation','get_approval','poll_approval','reject']){
   assert.equal((await codeModeFixture(t,wrapped('return await tools["cgpt-validation"].'+method+'({});',[{tool:'cgpt-validation.'+method,status:'completed'}]))).tool,'execute');}
+});
+
+
+test('mandat natif : instruction explicite sans recopie ni modification du mandat', () => {
+ const text='é\nwrite exact "{}"\n';const value=nativeCodingMandate(text);
+ assert.ok(value.endsWith('\n\n'+text));assert.match(value,/recherche MCP vide/);assert.match(value,/réconciliation/);
+ assert.throws(()=>nativeCodingMandate(''),/mandate-invalid/);
+});
+
+const codingMessages = parts => [{info:{id:'msg_request',sessionID:'ses_coding',role:'user'},parts:[]},
+ {info:{id:'msg_answer',sessionID:'ses_coding',parentID:'msg_request',role:'assistant',finish:'stop'},parts}];
+const codingOptions={sessionId:'ses_coding',promptId:'msg_request'};
+test('diagnostic : erreur fournisseur et continuation divergente sans corps ni autorité', () => {
+ const input={path:'target.py',content:'reviewed'},expected=nativeToolInputDigest(input);
+ const messages=codingMessages([{type:'tool',tool:'write',state:{input:{}}},{type:'tool',tool:'write',state:{input:{path:'target.py',content:'fragment-private'}}}]);
+ messages[1].info.error={type:'provider.internal',message:'PRIVATE-ERROR'};messages[1].info.finish='error';
+ const d=diagnoseCodingTurn(messages,{...codingOptions,toolInputSha256:expected});
+ assert.equal(d.providerFailure,true);assert.equal(d.nativeTurnFailed,true);assert.equal(d.invalidWriteInputCount,1);assert.equal(d.inputMismatchCount,2);
+ assert.equal(d.requiresReconciliation,true);assert.equal(d.effectStatus,'unverified');assert.equal(d.nextAction,'reconcile-before-new-mandate');
+ assert.ok(!JSON.stringify(d).includes('private'));assert.ok(!JSON.stringify(d).includes('PRIVATE-ERROR'));
+ assert.equal(d.decision,undefined);assert.equal(d.once,undefined);assert.equal(messages[1].parts[1].state.input.content,'fragment-private');
+});
+test('diagnostic : catalogue MCP seul ne prouve pas absence native, corrélation stricte', () => {
+ const discovery=codingMessages([{type:'tool',tool:'cab_codemode_discovery',state:{output:'{"items":[]}'}}]);
+ const d=diagnoseCodingTurn(discovery,codingOptions);assert.equal(d.discoveryOnly,true);assert.equal(d.nativeWriteCount,0);assert.equal(d.effectStatus,'unverified');
+ const valid=codingMessages([{type:'tool',tool:'write',state:{input:{path:'a',content:''}}}]);
+ const ok=diagnoseCodingTurn(valid,{...codingOptions,toolInputSha256:nativeToolInputDigest({path:'a',content:''})});assert.equal(ok.inputMismatchCount,0);assert.equal(ok.requiresReconciliation,false);assert.equal(ok.effectStatus,'unverified');
+ for(const change of [m=>m[0].info.sessionID='ses_foreign',m=>m[1].info.parentID='msg_other',m=>m.push(structuredClone(m[0]))]){const m=structuredClone(valid);change(m);assert.equal(diagnoseCodingTurn(m,codingOptions).available,false)}
+ assert.throws(()=>diagnoseCodingTurn(valid,{...codingOptions,toolInputSha256:'invalid'}),/diagnostic-invalid/);
 });
