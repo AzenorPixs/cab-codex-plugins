@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.28 — Pending MCP et récupération CABU
+
+- Attente bornée des transitions MCP sans répétition de connect/disconnect ; intention native durable.
+- Reçu MCP_RECOVERY_REQUIRED et reprise vérifiée du même journal, sans boucle de repli ou nouvelle installation implicite.
+- Récupération globale explicitement liée au reçu, intention unique non rejouable et contrôles PID/sessions/frontière ; OpenCode, demandes, once et modèles préservés.
+
 ## 2.1.27 — Rangement immédiat et couleurs du moniteur
 
 - Vue confirmée appliquée dès la réponse archive/delete/restore, même en mode Manuel ; les anciennes lectures ne réaffichent plus les lignes.

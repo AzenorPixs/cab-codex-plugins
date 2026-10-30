@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.27';
+export const VERSION = '2.1.28';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -22,6 +22,15 @@ const safeCauseCode = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,
 const brokerFiles = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
 const unit = (name) => 'cgpt-approval-bridge-' + name + '.service';
 const complete = new Set(['COMPLETED', 'ROLLED_BACK', 'PREPARATION_FAILED']);
+const recoveryPhases = ['PREPARED', 'STOPPING', 'RESTARTING', 'VERIFYING', 'ROLLING_BACK'];
+const recoverySnapshotKeys = ['pid','version','sharedDirectory','sessionCount','sessionIdsSha256','activeSessionCount','sharedPermissionCount'];
+const validRecoverySnapshot = value => value && typeof value === 'object' &&
+  Object.keys(value).length === recoverySnapshotKeys.length && recoverySnapshotKeys.every(key => Object.hasOwn(value,key)) &&
+  Number.isSafeInteger(value.pid) && value.pid > 0 && typeof value.version === 'string' && /^2\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(value.version) &&
+  typeof value.sharedDirectory === 'string' && isAbsolute(value.sharedDirectory) &&
+  ['sessionCount','activeSessionCount','sharedPermissionCount'].every(key => Number.isSafeInteger(value[key]) && value[key] >= 0) &&
+  /^[a-f0-9]{64}$/.test(value.sessionIdsSha256 || '');
+const sameRecoveryIdentity = (a,b) => ['pid','version','sharedDirectory','sessionCount','sessionIdsSha256'].every(key => a[key] === b[key]);
 const within = (root, target) => { const path = relative(root, target); return !path || (!path.startsWith('../') && path !== '..' && !isAbsolute(path)); };
 const baseVersion = (value) => typeof value === 'string' && /^\d+\.\d+\.\d+(?:\+codex\.\d{14})?$/.test(value) ? value.split('+')[0] : null;
 const newer = (a, b) => {
@@ -162,6 +171,7 @@ const runIdentity = (registry) => hash(JSON.stringify({
   requestOwners: Object.entries(registry.requestOwners || {}).sort(([a], [b]) => a.localeCompare(b)) }));
 
 export async function updateComponents(input, options = {}) {
+  if (input.recoverMcp !== undefined && (!/^update-[a-f0-9-]{36}$/.test(input.recoverMcp) || input.profile !== undefined || input.brokerPolicy === 'reuse-readonly')) throw error('update-mcp-recovery-authorization-invalid');
   if (input.profile === FROZEN_PROFILE) {
     if (input.brokerPolicy !== undefined || input.brokerProof !== undefined) throw error('update-broker-policy-profile-invalid');
     return maintainFrozenController(input, options);
@@ -227,6 +237,7 @@ export async function updateComponents(input, options = {}) {
   let receiptTrusted = false;
   let recovered = false;
   let forwardRecovery = false;
+  let preparedMcpResume = false;
   const currentFile = join(c.state, 'current.json');
   const target = (file) => {
     if (!file || typeof file !== 'object' || !Object.hasOwn(c.roots, file.group) ||
@@ -238,6 +249,9 @@ export async function updateComponents(input, options = {}) {
     return join(c.roots[file.group], file.name);
   };
   const transaction = () => join(c.state, receipt.id);
+  const saveDeployment = () => atomic(join(c.state,'last-deployment.json'),JSON.stringify(Object.fromEntries(
+    ['home','workspace','serviceWorkspace','brokerDirectory','brokerPolicy','layout','controllerUrl','supervisorUrl','monitorUrl','opencodeUrl']
+      .filter(key=>c[key]!==undefined).map(key=>[key,c[key]])),null,2)+'\n');
   const desiredVersions = () => Object.fromEntries(['controller','supervisor','monitor','broker'].map((name)=>[name,receipt.version]));
   const targetActive = () => receipt.targetActive || receipt.active;
   const jobsIdentity = (status) => proofHash(Object.entries(status.mode === 'concurrent' ? status.runs || {} : { single:status })
@@ -297,7 +311,7 @@ export async function updateComponents(input, options = {}) {
     if (readonlyBroker) return { brokerArtifactPolicy:'reuse-readonly',brokerArtifactVersion:VERSION,
       brokerLoadedBefore:receipt.externalBroker.beforeLoadedVersion,brokerLoadedAfter:VERSION,
       brokerProcess:receipt.externalBroker.afterProcess,opencodeProcess:input.brokerProof.opencodeProcess };
-    return { timings: receipt.timings || {}, brokerArtifactVersion:VERSION, brokerRuntimeVersion:receipt.brokerConnected ? VERSION : null,
+    return { timings: receipt.timings || {}, brokerArtifactVersion:receipt.version, brokerRuntimeVersion:receipt.brokerConnected ? receipt.version : null,
       brokerRuntimeStatus:receipt.openCodeAvailable === false ? 'INDISPONIBLE' :
         receipt.brokerConnected ? 'VERIFIE' : 'NON_VERIFIE' };
   }
@@ -463,10 +477,82 @@ export async function updateComponents(input, options = {}) {
     return { openCode, broker, unknown };
   }
   async function nativeBroker(action) {
-    if (action === 'connect') await openCode.connectMcp('cgpt-validation');
-    else if (action === 'disconnect') await openCode.disconnectMcp('cgpt-validation');
-    else throw error('update-broker-action-invalid');
-    if (await brokerState() !== (action === 'connect' ? 'connected' : 'disabled')) throw error('update-broker-state-unconfirmed');
+    if (!['connect','disconnect'].includes(action)) throw error('update-broker-action-invalid');
+    const targetState = action === 'connect' ? 'connected' : 'disabled', deadline = now() + c.waitMs;
+    let state = await brokerState();
+    while (state === 'pending' && now() < deadline) { await sleep(Math.min(50,deadline-now())); state = await brokerState(); }
+    if (state === 'pending') throw error('update-broker-pending-timeout');
+    if (state === targetState) return;
+    if (receipt.mcpTransition?.state === 'INTENT') throw error('update-broker-pending-timeout');
+    receipt.mcpTransition = { action, state:'INTENT', at:now() }; await save(receipt.phase);
+    try {
+      const timeout = Math.max(1,Math.min(10000,deadline-now()));
+      if (action === 'connect') await openCode.connectMcp('cgpt-validation',undefined,{timeout});
+      else await openCode.disconnectMcp('cgpt-validation',undefined,{timeout});
+    } catch (cause) {
+      if (!['opencode-unavailable','update-source-unavailable'].includes(cause.code)) throw cause;
+      // Une réponse perdue ne permet pas de renvoyer une opération native.
+      throw error('update-broker-pending-timeout');
+    }
+    state = await brokerState();
+    while (state === 'pending' && now() < deadline) { await sleep(Math.min(50,deadline-now())); state = await brokerState(); }
+    if (state === 'pending') throw error('update-broker-pending-timeout');
+    if (state !== targetState) {
+      receipt.mcpTransition.state = 'FAILED'; await save(receipt.phase);
+      throw error(state === 'needs_auth' ? 'update-broker-needs-auth' : 'update-broker-state-unconfirmed');
+    }
+    receipt.mcpTransition.state = 'CONFIRMED'; await save(receipt.phase);
+  }
+
+  async function recoveryObservation() {
+    const value = await openCode.mcpRecoverySnapshot();
+    if (!validRecoverySnapshot(value)) throw error('update-mcp-recovery-observation-invalid');
+    return value;
+  }
+  async function recoverMcp() {
+    if (receipt.nativeIdentity) {
+      const info = await openCode.info(true), directory = await openCode.sharedMcpDirectory();
+      if (info.pid !== receipt.nativeIdentity.pid || info.version !== receipt.nativeIdentity.version || directory !== receipt.nativeIdentity.sharedDirectory) throw error('update-mcp-recovery-identity-changed');
+    }
+    let state = await brokerState();
+    const recovery = receipt.mcpRecovery;
+    if (state === 'needs_auth') throw error('update-broker-needs-auth');
+    if (state === 'failed') throw error('update-broker-state-unconfirmed');
+    if (input.recoverMcp !== undefined && state !== 'connected' && !recovery.reload) {
+      const before = await recoveryObservation();
+      if (before.activeSessionCount || before.sharedPermissionCount) throw error('update-mcp-recovery-native-busy');
+      recovery.reload = { state:'INTENT', before, at:now() };
+      receipt.brokerReconnectedAt = now();
+      await save('MCP_RECOVERY_REQUIRED');
+      try {
+        await openCode.request('/api/location/reload',{method:'POST',scoped:false,timeout:Math.max(1,c.waitMs)});
+        recovery.reload.state = 'HTTP_COMPLETED';
+      } catch (cause) {
+        recovery.reload.state = 'UNKNOWN'; recovery.reload.error = safeCauseCode(cause.code);
+      }
+      await save('MCP_RECOVERY_REQUIRED');
+    }
+    if (state !== 'connected' && !await wait(async () => await brokerState() === 'connected',c.waitMs)) throw error('update-mcp-recovery-required');
+    if (recovery.reload) {
+      const after = await recoveryObservation();
+      if (!sameRecoveryIdentity(recovery.reload.before,after)) throw error('update-mcp-recovery-identity-changed');
+      if (after.activeSessionCount || after.sharedPermissionCount) throw error('update-mcp-recovery-native-busy');
+      recovery.reload.after = after; recovery.reload.state = 'VERIFIED'; await save('MCP_RECOVERY_REQUIRED');
+    }
+    receipt.brokerConnected = true;
+    if (receipt.mcpTransition?.state === 'INTENT') receipt.mcpTransition.state = 'RECONCILED';
+    if (options.rollbackOnly) { await rollback(); return {status:'rolled-back',transactionId:receipt.id,recoveredMcp:true}; }
+    if (['RESTARTING','VERIFYING'].includes(recovery.resumePhase)) {
+      for (const file of receipt.files) { const actual = await deployed(file); if (!actual || hash(actual.data) !== file.afterHash) throw error('update-installed-artifact-changed'); }
+      if (!await wait(() => verified(desiredVersions(),targetActive()),c.waitMs)) throw error('update-active-version-unconfirmed');
+      receipt.timings ||= {}; receipt.timings.totalMs = now()-(receipt.startedAtMs || now());
+      await save('COMPLETED');
+      await saveDeployment();
+      return {status:'completed',version:receipt.version,transactionId:receipt.id,recoveredMcp:true,
+        active:targetActive(),deployedVersions:desiredVersions(),activeVersions:desiredVersions(),...brokerResult()};
+    }
+    if (recovery.resumePhase === 'PREPARED') { await save('PREPARED'); preparedMcpResume = true; return null; }
+    await rollback(); return {status:'rolled-back',transactionId:receipt.id,recoveredMcp:true};
   }
   async function registry() {
     const value = await request(c.controllerUrl, '/runs');
@@ -544,7 +630,7 @@ export async function updateComponents(input, options = {}) {
           receipt.brokerConnected = true;
         } catch (cause) {
           receipt.brokerConnected = false;
-          if (['update-controller-start-unconfirmed', 'update-response-too-large'].includes(cause.code)) throw cause;
+          if (['update-controller-start-unconfirmed', 'update-response-too-large', 'update-broker-pending-timeout', 'update-broker-needs-auth'].includes(cause.code)) throw cause;
           throw error('update-broker-reload-unconfirmed');
         }
       }
@@ -647,12 +733,14 @@ export async function updateComponents(input, options = {}) {
     const existing = await optional(currentFile);
     if (existing) {
       try { receipt = JSON.parse(existing.data.toString('utf8')); } catch { throw error('update-journal-invalid'); }
+      if (input.recoverMcp !== undefined && (receipt.id !== input.recoverMcp || complete.has(receipt.phase) ||
+          !['MCP_RECOVERY_REQUIRED','ROLLBACK_FAILED'].includes(receipt.phase))) throw error('update-mcp-recovery-authorization-invalid');
       if (complete.has(receipt.phase)) receipt = null;
       else {
       if (receipt.schema !== 1 || (!complete.has(receipt.phase) && receipt.contextKey !== contextKey) || !/^update-[a-f0-9-]{36}$/.test(receipt.id) ||
           !Array.isArray(receipt.files) || receipt.files.length > 128 || !receipt.active ||
           !['PREPARING', 'PREPARED', 'FREEZING', 'WAITING', 'STOPPING', 'INSTALLING', 'RESTARTING', 'VERIFYING',
-            'RELEASING', 'ROLLING_BACK', 'ROLLBACK_RELEASING', 'ROLLBACK_FAILED', 'READONLY_RECOVERY_REQUIRED', ...complete].includes(receipt.phase) ||
+            'RELEASING', 'ROLLING_BACK', 'ROLLBACK_RELEASING', 'ROLLBACK_FAILED', 'MCP_RECOVERY_REQUIRED', 'READONLY_RECOVERY_REQUIRED', ...complete].includes(receipt.phase) ||
           !['controller', 'supervisor', 'monitor'].every((component) => typeof receipt.active[component] === 'boolean') ||
           (receipt.targetActive && !['controller','supervisor','monitor'].every((component) => typeof receipt.targetActive[component] === 'boolean')) ||
           (receipt.servicesObserved !== undefined && typeof receipt.servicesObserved !== 'boolean') ||
@@ -680,7 +768,24 @@ export async function updateComponents(input, options = {}) {
              receipt.files.some((file)=>file.group==='broker') ||
              (receipt.externalBroker.disconnectIntentAt !== null && !Number.isFinite(receipt.externalBroker.disconnectIntentAt))))) throw error('update-journal-invalid');
       }
+      if (receipt.mcpTransition && (!['connect','disconnect'].includes(receipt.mcpTransition.action) ||
+          !['INTENT','CONFIRMED','RECONCILED','FAILED'].includes(receipt.mcpTransition.state) || !Number.isFinite(receipt.mcpTransition.at))) throw error('update-journal-invalid');
+      if (receipt.nativeIdentity && (Object.keys(receipt.nativeIdentity).length !== 3 || !Number.isSafeInteger(receipt.nativeIdentity.pid) || receipt.nativeIdentity.pid <= 0 ||
+          typeof receipt.nativeIdentity.version !== 'string' || !/^2\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(receipt.nativeIdentity.version) ||
+          typeof receipt.nativeIdentity.sharedDirectory !== 'string' || !isAbsolute(receipt.nativeIdentity.sharedDirectory))) throw error('update-journal-invalid');
+      if (receipt.mcpRecovery && (!recoveryPhases.includes(receipt.mcpRecovery.resumePhase) ||
+          receipt.mcpRecovery.reload && (!['INTENT','UNKNOWN','HTTP_COMPLETED','VERIFIED'].includes(receipt.mcpRecovery.reload.state) ||
+            !validRecoverySnapshot(receipt.mcpRecovery.reload.before) || !Number.isFinite(receipt.mcpRecovery.reload.at)))) throw error('update-journal-invalid');
+      if (receipt.phase === 'MCP_RECOVERY_REQUIRED' && !receipt.mcpRecovery) throw error('update-journal-invalid');
       receiptTrusted = true;
+      if (!readonlyBroker && (receipt.phase === 'MCP_RECOVERY_REQUIRED' || input.recoverMcp !== undefined ||
+          receipt.mcpTransition?.state === 'INTENT' && recoveryPhases.includes(receipt.phase))) {
+        receipt.mcpRecovery ||= { resumePhase: receipt.phase === 'ROLLBACK_FAILED' ? 'ROLLING_BACK' : receipt.phase };
+        if (!recoveryPhases.includes(receipt.mcpRecovery.resumePhase)) throw error('update-journal-invalid');
+        await save('MCP_RECOVERY_REQUIRED');
+        const recoveredResult = await recoverMcp();
+        if (recoveredResult) return recoveredResult;
+      }
       if (readonlyBroker && receipt.externalBroker && receipt.contextKey === contextKey) {
         await brokerArtifactsUnchanged();
         if (receipt.phase === 'COMPLETED') {
@@ -711,7 +816,7 @@ export async function updateComponents(input, options = {}) {
         if (maintenance.transactionId !== receipt.id || !Number.isSafeInteger(maintenance.generation)) throw error('update-maintenance-unconfirmed');
         receipt.maintenance = { transactionId: receipt.id, generation: maintenance.generation }; await save('WAITING');
       }
-      if (!complete.has(receipt.phase) && receipt.phase !== 'WAITING') {
+      if (!preparedMcpResume && !complete.has(receipt.phase) && receipt.phase !== 'WAITING') {
         if (['PREPARING', 'PREPARED'].includes(receipt.phase) && !receipt.maintenance) await save('PREPARATION_FAILED');
         else if (readonlyBroker && receipt.externalBroker.disconnectIntentAt !== null) {
           await requireStoredHeld(); forwardRecovery = true;
@@ -721,6 +826,7 @@ export async function updateComponents(input, options = {}) {
       }
       }
     }
+    if (input.recoverMcp !== undefined && !receipt) throw error('update-mcp-recovery-authorization-invalid');
     if (options.rollbackOnly) {
       if (readonlyBroker && receipt?.externalBroker?.disconnectIntentAt !== null && receipt?.externalBroker) throw error('update-broker-forward-recovery-required');
       if (!receipt || complete.has(receipt.phase)) return { status: recovered ? 'rolled-back' : 'nothing-to-recover' };
@@ -730,7 +836,7 @@ export async function updateComponents(input, options = {}) {
       } else await rollback();
       return { status: 'rolled-back', transactionId: receipt.id };
     }
-    if (receipt?.phase !== 'WAITING' && !forwardRecovery) {
+    if (receipt?.phase !== 'WAITING' && !forwardRecovery && !preparedMcpResume) {
       const manifest = JSON.parse((await regular(join(c.pluginRoot, '.codex-plugin/plugin.json'))).data.toString('utf8'));
       const version = baseVersion(manifest.version);
       if (version !== VERSION) throw error('update-package-version-invalid');
@@ -862,8 +968,15 @@ export async function updateComponents(input, options = {}) {
     }
     await prepareUpdateCredential(c);
     if (!readonlyBroker) {
-      try { receipt.brokerWasConnected = await brokerState() !== 'disabled'; }
-      catch {
+      try {
+        const info = await openCode.info(true), sharedDirectory = await openCode.sharedMcpDirectory();
+        receipt.nativeIdentity ||= {pid:info.pid,version:info.version,sharedDirectory};
+        let initialState = await brokerState();
+        if (initialState === 'pending' && !await wait(async () => { initialState = await brokerState(); return initialState !== 'pending'; },c.waitMs)) throw error('update-broker-pending-timeout');
+        receipt.brokerWasConnected = initialState !== 'disabled';
+      }
+      catch (cause) {
+        if (cause.code === 'update-broker-pending-timeout') throw cause;
         const presence = processProbe ? await processProbe(c.brokerDirectory) : await processPresence(c.brokerDirectory);
         if (presence.openCode || presence.unknown) throw error('update-opencode-active-unavailable');
         receipt.openCodeAvailable = false; receipt.brokerWasConnected = false;
@@ -906,9 +1019,7 @@ export async function updateComponents(input, options = {}) {
     receipt.timings.unavailableMs = now() - receipt.cutoverAtMs;
     receipt.timings.totalMs = now() - (receipt.startedAtMs || receipt.cutoverAtMs);
     await save('RELEASING'); await release(); await save('COMPLETED');
-    await atomic(join(c.state, 'last-deployment.json'), JSON.stringify(Object.fromEntries(
-      ['home','workspace','serviceWorkspace','brokerDirectory','brokerPolicy','layout','controllerUrl','supervisorUrl','monitorUrl','opencodeUrl']
-        .filter((key) => c[key] !== undefined).map((key) => [key, c[key]])), null, 2) + '\n');
+    await saveDeployment();
     return { status: 'completed', version: receipt.version, transactionId: receipt.id, active: targetActive(),
       brokerConnected: receipt.brokerConnected, deployedVersions: desired,
       ...brokerResult(),
@@ -916,6 +1027,17 @@ export async function updateComponents(input, options = {}) {
         (name === 'broker' ? receipt.brokerConnected : targetActive()[name]) ? desired[name] : null])) };
   } catch (cause) {
     if (options.onPhase && cause.code === 'SIMULATED_CRASH') throw cause;
+    if (receiptTrusted && !readonlyBroker && cause.code === 'update-broker-pending-timeout' && recoveryPhases.includes(receipt.phase)) {
+      receipt.failureCode ||= cause.code;
+      receipt.mcpRecovery ||= {resumePhase:receipt.phase};
+      await save('MCP_RECOVERY_REQUIRED');
+      if (receipt.mcpRecovery.resumePhase !== 'PREPARED') {
+        try { await service(['start',...['controller','supervisor','monitor'].map(unit)]); }
+        catch { await captureServiceFailures(); await save('MCP_RECOVERY_REQUIRED'); }
+      }
+      throw reported(error('update-mcp-recovery-required'));
+    }
+    if (receiptTrusted && receipt?.phase === 'MCP_RECOVERY_REQUIRED') throw reported(cause);
     if (receiptTrusted && receipt && ['STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
       receipt.failureCode = safeCauseCode(cause.code);
       await captureServiceFailures();
@@ -1247,7 +1369,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
     const keys = { '--plugin-root': 'pluginRoot', '--workspace': 'workspace', '--broker-directory': 'brokerDirectory', '--home': 'home',
       '--controller-url': 'controllerUrl', '--supervisor-url': 'supervisorUrl', '--monitor-url': 'monitorUrl', '--opencode-url': 'opencodeUrl', '--wait-ms': 'waitMs',
       '--profile': 'profile', '--frozen-proof-file': 'frozenProofFile', '--layout':'layout',
-      '--opencode-password-env-file':'passwordEnvFile','--service-workspace':'serviceWorkspace','--broker-policy':'brokerPolicy','--broker-proof-file':'brokerProofFile' };
+      '--opencode-password-env-file':'passwordEnvFile','--service-workspace':'serviceWorkspace','--broker-policy':'brokerPolicy','--broker-proof-file':'brokerProofFile',
+      '--recover-mcp':'recoverMcp' };
     const input = {}; let rollbackOnly = false;
     for (let i = 2; i < process.argv.length; i++) {
       const argument = process.argv[i];

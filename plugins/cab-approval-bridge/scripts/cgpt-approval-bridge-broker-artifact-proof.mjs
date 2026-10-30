@@ -4,7 +4,7 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { processIdentity, proofHash } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-export const VERSION = '2.1.27';
+export const VERSION = '2.1.28';
 export const BROKER_ARTIFACT_FILES = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value);

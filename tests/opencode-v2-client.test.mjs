@@ -758,3 +758,20 @@ test('diagnostic : catalogue MCP seul ne prouve pas absence native, corrélation
  for(const change of [m=>m[0].info.sessionID='ses_foreign',m=>m[1].info.parentID='msg_other',m=>m.push(structuredClone(m[0]))]){const m=structuredClone(valid);change(m);assert.equal(diagnoseCodingTurn(m,codingOptions).available,false)}
  assert.throws(()=>diagnoseCodingTurn(valid,{...codingOptions,toolInputSha256:'invalid'}),/diagnostic-invalid/);
 });
+
+test('frontière de récupération : sessions/activité globales, permissions partagées et sortie filtrée',async t=>{
+ const f=fixture();t.after(f.close);const calls=[];let duplicate=false;
+ const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/coding-workspace',passwordFile:f.passwordFile,fetchImpl:async(u,o)=>{
+  const url=new URL(u);calls.push({path:url.pathname,query:url.search,scoped:o.headers['x-opencode-directory']});
+  if(url.pathname==='/api/info')return json(info);
+  if(url.pathname==='/api/location')return json({directory:'/shared'});
+  if(url.pathname==='/api/session')return json({data:[{id:duplicate?'invalid':'ses_global',private:'PRIVATE-SOURCE'}],cursor:{next:null}});
+  if(url.pathname==='/api/session/active')return json({data:{}});
+  if(url.pathname==='/api/permission/request')return json({location:{directory:'/shared'},data:[]});
+  throw Error('unexpected '+url.pathname);
+ }});
+ const observed=await client.mcpRecoverySnapshot();assert.equal(observed.pid,42);assert.equal(observed.sessionCount,1);assert.equal(observed.activeSessionCount,0);assert.equal(observed.sharedPermissionCount,0);assert.equal(observed.sharedDirectory,'/shared');assert.match(observed.sessionIdsSha256,/^[a-f0-9]{64}$/);assert.ok(!JSON.stringify(observed).includes('PRIVATE'));
+ assert.ok(calls.filter(c=>['/api/session','/api/session/active','/api/location'].includes(c.path)).every(c=>c.scoped===undefined&&!c.query.includes('directory=')));
+ assert.ok(calls.filter(c=>c.path==='/api/permission/request').every(c=>c.scoped==='/shared'&&c.query.includes('directory=%2Fshared')));
+ duplicate=true;await assert.rejects(client.mcpRecoverySnapshot(),{code:'opencode-recovery-observation-invalid'});
+});
