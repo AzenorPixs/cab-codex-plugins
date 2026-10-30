@@ -1,4 +1,4 @@
-# Changement à chaud du fournisseur et du modèle — CAB2.1.28
+# Changement à chaud du fournisseur et du modèle — CAB2.1.29
 
 Lire aussi [la continuité historique liée au compte](account-bound-history.md). Une adoption completed ne certifie pas cette continuité ; effectuer le contrôle historique sans outil avant RESUME.
 

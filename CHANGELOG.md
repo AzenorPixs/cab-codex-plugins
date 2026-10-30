@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.29 — Permissions avant prévol
+
+- Origine des gels de revue distinguée de CABU ; contrôle structuré requiredNativeAsk avant prompt/MCP et inspection filtrée de politique.
+- Prédicat client/contrôleur partagé sans changement de résolution ; refus deny/allow/contexte préservés.
+- Sortie de revue minimale explicite par le propriétaire, preuve avant/après et autres deny conservés ; aucun rétablissement automatique.
+
 ## 2.1.28 — Pending MCP et récupération CABU
 
 - Attente bornée des transitions MCP sans répétition de connect/disconnect ; intention native durable.

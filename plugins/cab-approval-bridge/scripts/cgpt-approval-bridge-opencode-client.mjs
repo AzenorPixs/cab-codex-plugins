@@ -3,8 +3,10 @@ import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
+import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.28';
+export const VERSION = '2.1.29';
+if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -701,15 +703,33 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       permissions: [{ permission: '*', pattern: '*', action: 'deny' }] });
   }
 
-  async function prompt(sessionId, text, { directory: directoryValue = directory, model, resume = true } = {}) {
+  async function nativePermissionPolicy(sessionId, { directory: directoryValue = directory, requiredNativeAsk = ['shell'] } = {}) {
+    if (!Array.isArray(requiredNativeAsk) || !requiredNativeAsk.length || new Set(requiredNativeAsk).size !== requiredNativeAsk.length ||
+        requiredNativeAsk.some(kind => !['shell','edit'].includes(kind))) fail('opencode-native-ask-requirement-invalid');
+    const observed = await session(sessionId,directoryValue);
+    const effective = Object.fromEntries(requiredNativeAsk.map(kind=>[kind,nativeAskState(observed,kind)]));
+    const missing = requiredNativeAsk.filter(kind=>!hasNativeAsk(observed,kind));
+    return {sessionId,directory:directoryValue,snapshot_only:true,requiredNativeAsk:[...requiredNativeAsk],
+      policySha256:Object.values(effective).every(state=>state.valid)?createHash('sha256').update(canonical(observed.permission)).digest('hex'):null,
+      effective,missing,ready:missing.length===0};
+  }
+
+  async function prompt(sessionId, text, { directory: directoryValue = directory, model, resume = true, requiredNativeAsk } = {}) {
     if (typeof text !== 'string' || !text || typeof resume !== 'boolean') fail('opencode-prompt-invalid');
     if (model !== undefined) modelReference(model);
+    const inspectRequired = async () => {
+      const policy = await nativePermissionPolicy(sessionId,{directory:directoryValue,requiredNativeAsk});
+      if (!policy.ready) throw Object.assign(new Error('opencode-native-permission-ask-required'),{code:'opencode-native-permission-ask-required',policy});
+    };
+    if (requiredNativeAsk !== undefined) await inspectRequired();
     await info();
     const body = { text, resume };
     if (model !== undefined) {
       await switchModel(sessionId, model, directoryValue);
+      if (requiredNativeAsk !== undefined) await inspectRequired();
     }
-    const response = await request(`/api/session/${encodeURIComponent(sessionId)}/prompt`, { method: 'POST', body });
+    const response = await request(`/api/session/${encodeURIComponent(sessionId)}/prompt`, { method: 'POST', body,
+      ...(requiredNativeAsk !== undefined ? {query:{directory:directoryValue}} : {}) });
     const value = unwrapData(response.data, 'opencode-prompt-invalid');
     if (!record(value) || typeof value.id !== 'string') fail('opencode-prompt-invalid');
     return value;
@@ -887,7 +907,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,
-    replyPermission, connectMcp, disconnectMcp, mcpRecoverySnapshot, events, request: json });
+    replyPermission, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {

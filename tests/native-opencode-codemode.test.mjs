@@ -189,6 +189,19 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.deepEqual(nativeEdit.parameters.required, ['path', 'oldString', 'newString']);
     assert.equal(nativeEdit.parameters.properties.replaceAll.type, 'boolean');
     console.log('Catalogue natif synthétique :', JSON.stringify({ names: nativeTools.map(tool => tool.name), edit: nativeEdit.parameters }));
+    const reviewed = await client.createSession({title:'lecture deny puis prévol contrôlé',model:{providerID:'fixture',modelID:'fixture'},permissions:['shell','edit','subagent','skill'].map(permission=>({permission,pattern:'*',action:'deny'}))});
+    const policyBefore=await client.nativePermissionPolicy(reviewed.id,{requiredNativeAsk:['shell']});assert.equal(policyBefore.ready,false);assert.equal(policyBefore.effective.shell.action,'deny');
+    const providerBefore=providerRequests.length,messagesBefore=(await client.messages(reviewed.id)).length;
+    await assert.rejects(client.prompt(reviewed.id,'Prévol bloqué avant demande MCP',{requiredNativeAsk:['shell']}),{code:'opencode-native-permission-ask-required'});
+    assert.equal(providerRequests.length,providerBefore);assert.equal((await client.messages(reviewed.id)).length,messagesBefore);assert.equal((await client.permissions()).filter(p=>p.sessionID===reviewed.id).length,0);
+    // Transition explicite du propriétaire de la fixture : seul shell est rétabli en ask.
+    await client.request('/api/session/'+reviewed.id,{method:'PATCH',body:{permissions:['shell','edit','subagent','skill'].map(action=>({action,resource:'*',effect:action==='shell'?'ask':'deny'}))}});
+    const afterRules=(await client.session(reviewed.id)).permission;assert.equal(afterRules.find(r=>r.permission==='edit').action,'deny');assert.equal(afterRules.find(r=>r.permission==='subagent').action,'deny');
+    assert.equal((await client.nativePermissionPolicy(reviewed.id,{requiredNativeAsk:['shell']})).ready,true);
+    await client.prompt(reviewed.id,'Texte de contrôle après transition explicite, sans outil.',{requiredNativeAsk:['shell']});
+    await until(async()=>!(await client.activeSessions())[reviewed.id],'guarded prompt completion');
+    assert.equal((await client.messages(reviewed.id)).flatMap(m=>m.parts).filter(p=>p.type==='tool').length,0);assert.deepEqual((await client.session(reviewed.id)).permission,afterRules);
+    console.log(JSON.stringify({nativeAskPreflight:true,denyBeforePrompt:true,noMcpRequestUnderDeny:true,explicitShellOnlyAsk:true,editStillDeny:true,noAutomaticRuleWrite:true}));
     const discoveryEnd = dispatched + 1;
     queue.push({ tool: 'execute', input: { code: 'const r = search({query: "edit"}); return r;' } });
     await client.prompt(warmup.id, 'Découverte MCP distincte des outils natifs.');
@@ -244,7 +257,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     queue.push({ tool: 'execute', input: { code: 'search({query: "broker_readiness"}); return "search done";' } },
       mcp('broker_readiness', { run_id: run.runId }), mcp('request_validation', approval),
       { tool: 'shell', input: { command: '/usr/bin/true' } }, mcp('broker_readiness', { run_id: run.runId }));
-    await client.prompt(candidate.id, 'Execute only the queued synthetic preflight.');
+    await client.prompt(candidate.id, 'Execute only the queued synthetic preflight.', {requiredNativeAsk:['shell']});
     await until(async () => (await http('/runs/native-code/status')).undecidedValidationCount === 1, 'native admission', async () => ({
       dispatched, remaining: queue.length, permissions: await client.permissions(), messages: (await client.messages(candidate.id)).slice(-3),
       controller: controlLog.slice(-1000).replaceAll(password, '[synthetic]'), native: nativeLog.slice(-1000).replaceAll(password, '[synthetic]') }));

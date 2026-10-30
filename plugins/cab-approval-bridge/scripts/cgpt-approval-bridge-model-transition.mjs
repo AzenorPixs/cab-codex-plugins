@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { validCodingModel, validModelSelection, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
-export const VERSION = '2.1.28';
+export const VERSION = '2.1.29';
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model transition component version mismatch');
 export const MODEL_TRANSITION_PROTOCOL = 'model-transition-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);

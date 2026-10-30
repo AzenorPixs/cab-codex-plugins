@@ -8,11 +8,12 @@ import readline from "node:readline";
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.28";
-if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
+export const VERSION = "2.1.29";
+if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
   const name = Object.hasOwn(environment, 'OC_Codex_MAX_COMMAND_LENGTH')
@@ -318,7 +319,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.28",
+    version: "2.1.29",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -549,20 +550,6 @@ function nativePermissionFailure(reason) {
   throw error;
 }
 
-function hasNativeAsk(session, kind, actions = ['ask']) {
-  if (!Array.isArray(session.permission) || session.permission.some((rule) =>
-      !rule || typeof rule.permission !== "string" || !rule.permission ||
-      typeof rule.pattern !== "string" || !["ask", "allow", "deny"].includes(rule.action))) {
-    return false;
-  }
-  if (kind === 'bash' && session.permission.some(rule => rule.permission === 'shell')) kind = 'shell';
-  const matches = (pattern) => new RegExp(`^${pattern.split("").map((character) =>
-    character === "*" ? ".*" : character === "?" ? "." :
-      character.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("")}$`).test(kind);
-  const last = session.permission.findLast((rule) => matches(rule.permission));
-  // Une règle finale globale ask couvre aussi les cibles spécifiques antérieures.
-  return last?.pattern === "*" && actions.includes(last.action);
-}
 
 async function checkNativeAsk(operation, nativeKind = operation?.kind) {
   if (!job?.armed) return;
@@ -1842,7 +1829,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.28",
+      version: "2.1.29",
     },
   });
 

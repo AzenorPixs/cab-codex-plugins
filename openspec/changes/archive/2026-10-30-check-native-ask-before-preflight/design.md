@@ -1,0 +1,9 @@
+# Conception
+
+Le module permission-policy partage exactement la résolution actuelle : structure complète validée, dernier nom d’action correspondant (glob * et ?), alias bash vers shell lorsqu’il existe et ressource finale universelle requise ; actions par défaut ask, usage historique ask/deny conservé dans la réconciliation. Aucune règle n’est modifiée. L’inspection retourne empreinte de politique, actions effectives, portée universelle, indices et exigences manquantes, sans corps ou source sensible.
+
+client.prompt(sid,text,{requiredNativeAsk:['shell']}) contrôle le SID/répertoire natifs et les règles avant tout POST. Seuls shell/edit, liste nonvide sans doublon ; write utilise edit. Après un changement de modèle explicitement demandé dans ce même appel, revérifier les règles avant prompt. Le POST cible le même répertoire contrôlé. Sans option, comportement historique inchangé ; les revues sans outil restent sous deny. L’observation n’autorise aucun effet et n’élimine pas la course : le contrôleur conserve sa garde au moment de l’admission et de once.
+
+La correction documentaire distingue revue sous deny, prévol shell ask, écriture edit ask et autres protections. La levée minimale appartient au propriétaire, sous son mandat et à frontière vérifiée ; aucune restauration automatique depuis une sauvegarde ou par CABU. Échec de contrôle avant envoi : aucune demande nouvelle à annuler. Une ancienne demande déjà soumise suit sa réconciliation exacte avant une nouvelle identité.
+
+Tests : équivalence du prédicat, deny/allow/missing/règles spécifiques ou contradictoires/malformées, option invalide et SID étranger, absence de POST/PATCH/modèle lors du refus, prompt historique sous deny et refus après changement concurrent. Banc natif privé : deny persistant après revue, refus avant prompt/MCP, levée minimale explicite de shell en ask avec edit toujours deny ; prévol ask/once existant conservé.
