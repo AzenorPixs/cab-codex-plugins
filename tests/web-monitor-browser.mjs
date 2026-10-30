@@ -30,7 +30,7 @@ let upstream;
 let browserClose;
 const results = [];
 const unit = process.env.CAB_MONITOR_BROWSER_UNIT;
-if (unit && !['header', 'manual', 'order'].includes(unit)) throw new Error('Unité navigateur inconnue');
+if (unit && !['header', 'manual', 'order', 'catalog'].includes(unit)) throw new Error('Unité navigateur inconnue');
 async function finishUnit(browser, passed) {
   results.push({ browser: browser.name, version: browser.version, passed });
   await browser.close(); browserClose = null;
@@ -43,6 +43,7 @@ let failed = false;
 let lifecycle = nextLifecycle(undefined, 'REVIEW', undefined, 0);
 let recoveryBlocked = false;
 let managementMode = false;
+let stopped = false;
 let managementGeneration = 10;
 let brokerConnection = 'connected';
 const serviceCalls = [];
@@ -173,8 +174,8 @@ try {
         lastProvenMilestone: ['Contrat d’observation validé', 'Reprise préparée', 'Événements corrélés'][i], currentCabMandate: 'mandat-' + i },
       terminalGate: { status: 'OPEN' }, undecidedValidationCount: i === 1 ? 1 : 0,
       coordination: { phase: ['WORK', 'WORK', 'REPORT'][i], ...(i === 1 ? { reason: recoveryBlocked ? 'resource-effects-unknown' : 'resource-conflict', blockers: [{ runId: 'RUN-WEB' }] }
-        : i === 2 ? { reason: 'resource-effects-unknown' } : {}) } }])) }
-      : request.url === '/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
+        : i === 2 ? { reason: stopped ? 'run-stop' : 'resource-effects-unknown' } : {}) } }])) }
+      : request.url === '/monitor/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
         : target.pathname === '/api/info' ? { version: '2.2.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
           : target.pathname === '/api/location' ? { directory: root }
           : target.pathname === '/api/mcp' ? { location: { directory: root }, data: [{ name: 'cgpt-validation', status: { status: brokerConnection } }] }
@@ -218,7 +219,7 @@ try {
     assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.5') && document.querySelector('#health').textContent.includes('v2.2.0')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
-    assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(255, 232, 235)');
+    assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(229, 239, 255)');
     await browser.evaluate("document.querySelector('#detail details summary').click(); true");
     assert.equal(await browser.evaluate("document.querySelectorAll('.cycle-list li').length"), 11);
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-desktop.png');
@@ -233,6 +234,55 @@ try {
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-lot-codes-mobile.png');
     await browser.evaluate("document.querySelector('#runs-tab').click(); true");
     await browser.viewport(1440, 1100);
+    if (unit === 'catalog') {
+      await browser.evaluate("document.querySelector('#work-content [data-run=RUN-AUDIT]').click(); true");
+      assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED].selected')).backgroundColor"),'rgb(229, 239, 255)');
+      stopped=true;await monitor.state.collect();await browser.evaluate("document.querySelector('#monitor-refresh').click(); true");
+      await wait(()=>browser.evaluate("!!document.querySelector('tr[data-state=STOPPED]')"),browser.name+' STOPPED');
+      assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=STOPPED]')).backgroundColor"),'rgb(255, 235, 214)');
+      failed=true;await monitor.state.collect();await browser.evaluate("document.querySelector('#monitor-refresh').click(); true");
+      await wait(()=>browser.evaluate("document.querySelectorAll('tr[data-state=UNKNOWN]').length===3"),browser.name+' UNKNOWN');
+      assert.equal(await browser.evaluate("document.querySelectorAll('.run-blocked,.run-done,.run-stopped').length"),0);
+      failed=false;stopped=false;managementMode=true;completed=14;await tasks();await monitor.state.collect();
+      await browser.evaluate("document.querySelector('#monitor-refresh').click(); true");
+      await wait(()=>browser.evaluate("document.querySelectorAll('tr[data-state=DONE]').length===3"),browser.name+' DONE');
+      assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=DONE]')).backgroundColor"),'rgb(228, 244, 233)');
+      await browser.evaluate("document.querySelector('#refresh-interval').value='0';document.querySelector('#refresh-interval').dispatchEvent(new Event('change'));window.fixtureFetch=window.fetch;window.fetch=(...a)=>{if(a[0]==='/api/snapshot'&&window.holdSnapshot){window.holdSnapshot=false;return window.fixtureFetch(...a).then(r=>new Promise((resolve,reject)=>{window.finishSnapshot=fail=>fail?reject(new Error('synthetic delayed failure')):resolve(r)}))}return window.fixtureFetch(...a)};true");
+      async function holdSnapshot(){await browser.evaluate("window.finishSnapshot=null;window.holdSnapshot=true;document.querySelector('#monitor-refresh').click();true");await wait(()=>browser.evaluate("typeof window.finishSnapshot==='function'"),browser.name+' lecture retenue')}
+      managementMode=false;await monitor.state.collect();
+      await browser.evaluate("document.querySelector('#work-content button[aria-label=\"Archiver RUN-AUDIT\"]').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#management-status').textContent.includes('n’est plus admissible')"),browser.name+' refus serveur');
+      assert.equal(await browser.evaluate("!!document.querySelector('#work-content [data-run=RUN-AUDIT]')"),true);
+      managementMode=true;await monitor.state.collect();
+      await holdSnapshot();
+      await browser.evaluate("document.querySelector('#work-content button[aria-label=\"Archiver RUN-WEB\"]').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#management-status').textContent.includes('Élément archivé')&&!document.querySelector('#work-content [data-run=RUN-WEB]')"),browser.name+' archive manuelle immédiate');
+      assert.equal(await browser.evaluate("document.querySelector('#refresh-interval').value"),'0');
+      await browser.evaluate("window.finishSnapshot(false);true");await wait(()=>browser.evaluate("!document.querySelector('#monitor-refresh').disabled"),browser.name+' ancienne lecture finie');
+      assert.equal(await browser.evaluate("!document.querySelector('#work-content [data-run=RUN-WEB]')"),true);
+      await browser.evaluate("document.querySelector('#archives-nav').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#archives-runs').textContent.includes('RUN-WEB')"),browser.name+' archive visible');
+      await browser.evaluate("document.querySelector('#archives-runs button[aria-label=\"Désarchiver RUN-WEB\"]').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#management-status').textContent.includes('RUN désarchivé')"),browser.name+' restauration manuelle');
+      await browser.evaluate("document.querySelector('#monitor-nav').click();true");assert.equal(await browser.evaluate("!!document.querySelector('#work-content [data-run=RUN-WEB]')"),true);
+      await holdSnapshot();await browser.evaluate("document.querySelector('#work-content button[aria-label=\"Archiver RUN-RECOVERY\"]').click();true");
+      await wait(()=>browser.evaluate("!document.querySelector('#work-content [data-run=RUN-RECOVERY]')"),browser.name+' seconde archive');
+      await browser.evaluate("window.finishSnapshot(true);true");await wait(()=>browser.evaluate("!document.querySelector('#monitor-refresh').disabled"),browser.name+' ancienne erreur finie');
+      assert.equal(await browser.evaluate("!document.querySelector('#work-content [data-run=RUN-RECOVERY]')"),true);
+      await browser.evaluate("document.querySelector('#work-content button[aria-label=\"Supprimer RUN-WEB du moniteur\"]').click();document.querySelector('#management-confirm').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#management-status').textContent.includes('Ligne supprimée')&&!document.querySelector('#work-content [data-run=RUN-WEB]')"),browser.name+' suppression manuelle');
+      await browser.evaluate("document.querySelector('#changes-tab').click();document.querySelector('#work-content button[aria-label=\"Archiver add-local-web-monitor\"]').click();true");
+      await wait(()=>browser.evaluate("!document.querySelector('#work-content [data-change=add-local-web-monitor]')"),browser.name+' change archivé manuel');
+      await browser.evaluate("document.querySelector('#runs-tab').click();window.catalogPosts=0;window.fetch=(...a)=>{if(a[0]==='/api/manage/catalog'){window.catalogPosts++;return window.fixtureFetch(...a).then(async r=>{const d=await r.json();delete d.snapshot;return new Response(JSON.stringify(d),{status:r.status,headers:{'content-type':'application/json'}})})}return window.fixtureFetch(...a)};document.querySelector('#work-content button[aria-label=\"Archiver RUN-AUDIT\"]').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#management-status').textContent.includes('affichage non confirmé')"),browser.name+' reçu incomplet');
+
+      assert.equal(await browser.evaluate("!!document.querySelector('#work-content [data-run=RUN-AUDIT]')&&window.catalogPosts===1"),true);
+      await browser.evaluate("window.fetch=window.fixtureFetch;document.querySelector('#monitor-refresh').click();true");
+      await wait(()=>browser.evaluate("!document.querySelector('#work-content [data-run=RUN-AUDIT]')"),browser.name+' reprise par GET sans POST');
+      await browser.viewport(390,844);assert.equal(await browser.evaluate('document.documentElement.scrollWidth<=window.innerWidth'),true);
+      await browser.screenshot('web-catalog-'+browser.name.toLowerCase()+'-mobile.png');
+      await finishUnit(browser,['BLOCKED bleu sélectionné','DONE vert','STOPPED orange','UNKNOWN sans couleur courante','archive/restauration/suppression immédiates en Manuel','ancienne réponse et erreur HTTP sans rollback','cadence Manuel conservée','archives RUN et change sans reload','refus serveur sans masquage','reçu incomplet sans masquage ni POST rejoué','mobile']);continue;
+    }
     if (unit === 'header') { await finishUnit(browser, ['métadonnées alignées après workspace', 'ligne mobile défilable sans débordement']); continue; }
     const orderedSnapshot = await (await fetch(url + '/api/snapshot')).json();
     const changeTemplate = orderedSnapshot.changes.changes[0];
@@ -421,7 +471,7 @@ try {
     assert.equal(await browser.evaluate("!document.querySelector('#work-content [data-run=RUN-RECOVERY]')"), true);
     results.push({ browser: browser.name, version: browser.version, passed: ['rendu', 'limite effective', 'RUN et changes', '3/14 puis 4/14',
       'ETAT et ÉTAPE distincts', 'versions des briques', 'cycle de onze étapes', 'retour Revue 8/11 vers Implémentation 6/11',
-      'historique conservé', 'WAITING jaune et BLOCKED rouge sur les lignes des jobs', 'filtres', 'SSE', 'panne UNKNOWN', 'reconnexion', 'mobile sans débordement',
+      'historique conservé', 'WAITING jaune et BLOCKED bleu sur les lignes des jobs', 'filtres', 'SSE', 'panne UNKNOWN', 'reconnexion', 'mobile sans débordement',
       'navigation STATS/MONITOR', 'fenêtre 7 jours et filtre RUN', 'cumul distinct', 'prévisualisation et annulation', 'purge et protection active', 'statistiques anciennes', 'STATS mobile sans débordement',
       'réponse automatique tardive écartée après passage Manuel', 'neuf choix de cadence', 'cadence effective 3s', 'préférence mémorisée', 'Manuel sans mise à jour SSE', 'clic Actualiser',
       'Web disponible malgré perte SSE', 'Web expiré après 30 minutes', 'échecs HTTP et snapshot invalide sans renouvellement',

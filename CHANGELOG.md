@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.27 — Rangement immédiat et couleurs du moniteur
+
+- Vue confirmée appliquée dès la réponse archive/delete/restore, même en mode Manuel ; les anciennes lectures ne réaffichent plus les lignes.
+- BLOCKED bleu, DONE vert, STOPPED orange ; sélection, état textuel et WAITING jaune conservés.
+- Aucun assouplissement de l’éligibilité ni rangement de sources OpenSpec réelles.
+
 ## 2.1.26 — Remédiation des incidents natifs et du moniteur
 
 - Projection GET compacte du registre pour le moniteur, sans relever le plafond de collecte ; causes HTTP/taille/format/délai explicites.

@@ -181,3 +181,15 @@ test('API : origine, JSON, champs, routes et état serveur protégés', async (t
   assert.equal((await fetch(route, { method: 'POST', headers, body: 'x'.repeat(5000) })).status, 413);
   assert.equal((await fetch(route, { method: 'POST', headers, body: JSON.stringify(body('runs', snapshot().runs[0], 'archive')) })).status, 409);
 });
+
+
+test('API catalogue : réponse projetée confirmée, refus sans masquage et restauration sans reprise',async t=>{
+ const root=await directory(t),data={...snapshot(),version:'fixture',generatedAt:new Date().toISOString(),configuration:{staleMs:10000}};
+ const server=await createMonitorServer({...monitorConfiguration({OC_Codex_WORKSPACE:root,OC_Codex_MONITOR_STATE_DIR:join(root,'catalogs')}),port:0},{fetcher:async()=>Response.json({}),serviceCommand:async()=>{throw Error('forbidden service')}});
+ server.state.collect=async()=>{};server.state.snapshot=()=>structuredClone(data);await server.start();t.after(()=>server.close());
+ const base='http://127.0.0.1:'+server.server.address().port;
+ const post=async input=>fetch(base+'/api/manage/catalog',{method:'POST',headers:{origin:base,'content-type':'application/json','x-cab-monitor':'1'},body:JSON.stringify(input)});
+ const original=structuredClone(data);let result=await post(body('runs',data.runs[0],'archive'));assert.equal(result.status,200);let receipt=await result.json();assert.equal(receipt.snapshot.runs.length,0);assert.equal(receipt.snapshot.archives.runs.length,1);assert.deepEqual(data,original);
+ result=await post(body('runs',data.runs[0],'restore'));receipt=await result.json();assert.equal(receipt.snapshot.runs.length,1);assert.equal(receipt.snapshot.archives.runs.length,0);
+ data.runs[0].state='RESERVED';data.runs[0].armed=true;result=await post(body('runs',data.runs[0],'archive'));assert.equal(result.status,409);receipt=await result.json();assert.equal(receipt.snapshot,undefined);assert.equal(receipt.error,'monitor-item-protected');
+});

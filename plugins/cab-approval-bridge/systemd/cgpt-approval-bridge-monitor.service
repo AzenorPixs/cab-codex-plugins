@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 2.1.26 — Supervision web locale indépendante
+Description=CAB 2.1.27 — Supervision web locale indépendante
 
 [Service]
 Type=simple
