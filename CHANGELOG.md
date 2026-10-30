@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.15 — Démarrage CABU et récupération durable
+
+- Attente de la version contrôleur dans le budget configuré, au démarrage et au rollback ; diagnostic de démarrage conservé.
+- Une reprise de rollback échouée reste non terminale et conserve son journal ; les données métier et permissions ne sont jamais rejouées.
+
 ## 2.1.14 — Isolation de la location MCP et des sondes
 
 - Découverte serveur sans scope implicite, contrôles MCP à cible vérifiée et refus des arguments divergents ; appelants internes clarifiés.

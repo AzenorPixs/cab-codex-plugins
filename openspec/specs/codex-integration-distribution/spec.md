@@ -791,3 +791,10 @@ La distribution MUST aligner les composants et commandes sur 2.1.14, documenter 
 #### Scenario: Distribution et activation distinctes
 - **WHEN** les sources et tests isolés sont validés et archivés
 - **THEN** CABU vérifie séparément les versions actives avant notification aux sessions
+
+### Requirement: Distribution du rétablissement CABU 2.1.15
+La distribution MUST aligner ses composants et commandes sur2.1.15 et documenter le budget de démarrage et les phases non terminales de rollback. Les tests MUST couvrir échecs, reprise et invariants métier. L’activation MUST rester séparée de la qualification source et être annoncée seulement après versions actives et readiness vérifiées.
+
+#### Scenario: Reprise après activation échouée
+- **WHEN** les sources corrigées sont publiées et CABU est autorisé
+- **THEN** la procédure conserve les journaux antérieurs et vérifie l’état effectif avant d’informer les sessions

@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.14';
+export const VERSION = '2.1.15';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -539,11 +539,12 @@ export async function updateComponents(input, options = {}) {
       await service(['start', ...['controller', 'supervisor', 'monitor'].map(unit)]);
       if (receipt.openCodeAvailable) {
         try {
-          if (!await wait(async () => (await request(c.controllerUrl, '/status')).version === expectedVersion, 10000)) throw error('update-controller-start-unconfirmed');
+          if (!await wait(async () => (await request(c.controllerUrl, '/status')).version === expectedVersion, c.waitMs)) throw error('update-controller-start-unconfirmed');
           await nativeBroker('connect');
           receipt.brokerConnected = true;
-        } catch {
+        } catch (cause) {
           receipt.brokerConnected = false;
+          if (cause.code === 'update-controller-start-unconfirmed') throw cause;
           throw error('update-broker-reload-unconfirmed');
         }
       }
@@ -937,7 +938,7 @@ export async function updateComponents(input, options = {}) {
       try { await rollback(); } catch { await save('ROLLBACK_FAILED'); throw reported(error('update-recovery-required')); }
       throw reported(error('update-failed-rolled-back'));
     }
-    if (receipt && !receipt.maintenance && !complete.has(receipt.phase)) {
+    if (receipt && !receipt.maintenance && ['PREPARING', 'PREPARED'].includes(receipt.phase)) {
       try { await restoreInitialServices(); }
       catch { await save('ROLLBACK_FAILED'); throw error('update-controller-restore-required'); }
       receipt.failureCode = safeCauseCode(cause.code);

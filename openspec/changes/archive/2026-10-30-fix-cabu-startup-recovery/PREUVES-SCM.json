@@ -1,0 +1,31 @@
+{
+  "version": "2.1.15",
+  "change": "fix-cabu-startup-recovery",
+  "node": {
+    "total": 573,
+    "passed": 545,
+    "skipped": 28,
+    "failed": 0
+  },
+  "python": {
+    "passed": 80
+  },
+  "native": {
+    "passed": 1,
+    "private": true
+  },
+  "targeted_updater": 45,
+  "openspec_before": {
+    "standard": 17,
+    "strict": 17
+  },
+  "archive": "2026-10-30-fix-cabu-startup-recovery",
+  "historical_activation_journal_preserved": "update-0f1b36d2-bfce-4a15-818a-e4d4330c4531",
+  "business_state_restored_from_backup": false,
+  "activation_confirmed": false,
+  "openspec_after": {
+    "standard": 16,
+    "strict": 16
+  },
+  "requirements_synchronized": 3
+}
