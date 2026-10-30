@@ -612,3 +612,8 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class admissionState provisional
 ```
+
+
+### Transport shell scellé — SCM 2.1.25
+
+`stage-exact-shell-payloads` : ARCHIVÉ — source 2.1.25 qualifiée, **code non attribué**. Corps Bash privé immuable, invocation courte, contrôle SHA256 et revue du corps ; décision, accès et once natifs conservés. [Proposition](openspec/changes/archive/2026-10-30-stage-exact-shell-payloads/proposal.md), [tâches](openspec/changes/archive/2026-10-30-stage-exact-shell-payloads/tasks.md), [qualification](openspec/changes/archive/2026-10-30-stage-exact-shell-payloads/QUALIFICATION.md). Publication et activation restent distinctes ; attribution ACL ultérieure.

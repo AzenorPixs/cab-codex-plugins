@@ -933,7 +933,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.24');
+  assert.equal(initialized.result.serverInfo.version, '2.1.25');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1999,4 +1999,19 @@ test('admission ciblée : inconnue explicite, propriétaire étranger refusé et
  assert.equal((await h.get('/runs/a/decision/'+approval.requestId+'/admission')).status,200);
  const foreign=await h.get('/runs/b/decision/'+approval.requestId+'/admission');assert.equal(foreign.status,409);assert.equal(foreign.body.error,'decision-run-divergent');
  assert.equal(foreign.body.decision_recorded,undefined);assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
+});
+
+test('porte-mandat HTTP : staging sans décision/accès, substitution et livraison anticipée refusées',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');await h.reserve('b');
+ const payload='printf "reviewed\\n"\n';const input={stageId:'stage-http',jobId:'job-a',sessionId:a.sessionId,reservationVersion:a.version,requestId:'request-carrier',approvalId:'approval-carrier',operationId:'op-carrier',payload,payloadSha256:createHash('sha256').update(payload).digest('hex')};
+ const before=(await h.get('/runs')).body;const created=await h.post('/runs/a/shell-stage',input);assert.equal(created.status,201,JSON.stringify(created));
+ assert.equal(created.body.payload,undefined);assert.ok(created.body.command.includes(input.payloadSha256));assert.deepEqual((await h.get('/runs')).body,before);
+ assert.equal((await h.get('/runs/a/shell-stage/stage-http/payload')).status,409);assert.equal((await h.get('/runs/b/shell-stage/stage-http')).status,409);
+ assert.deepEqual((await h.post('/runs/a/shell-stage',Object.fromEntries(Object.entries(input).reverse()))).body,created.body);
+ const changed={...input,payload:payload+'#different',payloadSha256:createHash('sha256').update(payload+'#different').digest('hex')};
+ assert.equal((await h.post('/runs/a/shell-stage',changed)).body.error,'shell-stage-identity-divergent');
+ assert.equal((await h.post('/runs/a/shell-stage',{...input,jobId:'foreign'})).status,409);assert.equal(h.native.replies.length,0);
+ h.native.rules[a.sessionId]=[{permission:'shell',pattern:'*',action:'allow'}];assert.equal((await h.post('/runs/a/shell-stage',input)).body.error,'native-permission-ask-required');h.native.rules[a.sessionId]=[{permission:'*',pattern:'*',action:'ask'}];
+ await h.stop();await h.start();assert.deepEqual((await h.get('/runs/a/shell-stage/stage-http')).body,created.body);
+ assert.equal((await h.get('/runs/a/shell-stage/stage-http/payload')).status,409);
 });
