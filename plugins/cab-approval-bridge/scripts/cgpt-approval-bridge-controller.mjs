@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.23";
+const version = "2.1.24";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -169,6 +169,9 @@ function contextFor(run) {
 function activeContexts() {
   return [...contexts.entries()].filter(([id]) => registry.runs.get(id)?.state === 'RESERVED');
 }
+function admissionSnapshot(runId) {
+  return {state:transitions.has(runId) ? 'BUSY' : 'STABLE',snapshot_only:true};
+}
 function statusFor(runId, context) {
   const status = context.publicStatus();
   const run = registry.runs.get(runId);
@@ -186,7 +189,7 @@ function statusFor(runId, context) {
             : accesses.some((a) => ['HELD','EXECUTING'].includes(a.state) && registry.restoredAccesses.has(a.accessId))
               ? 'access-reconciliation-required'
               : accesses.some((a) => a.state === 'STALE' && a.version === run.version) ? 'resource-revision-stale' : null;
-  return { ...status, frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
+  return { ...status, admission:admissionSnapshot(runId), frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
     notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation(), coordination: { reason, integrationReady: run.integrationReady,
     referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion,
     phase: run.phase, protocol: registry.snapshot().coordinationProtocol, global, suspension: run.suspension || null,
@@ -773,12 +776,33 @@ async function handleRequest(request, response) {
       const run = registry.runs.get(runId);
       if (!run || run.state !== 'RESERVED') throw new CoordinationError('run-not-reserved');
       observedRun = run;
-      if (request.method === 'POST' && transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
+      if (request.method === 'POST' && transitions.has(runId)) {
+        const cause = new CoordinationError('run-transition-in-flight');
+        const decisionPath = /^\/decision\/([^/]+)$/.exec(url.pathname);
+        if (decisionPath) {
+          const id = decisionPath[1], recorded = context.decision(id) !== undefined;
+          const known = registry.requestOwners[id]?.runId === runId || context.hasRequest(id) || recorded;
+          cause.diagnostic = {error:cause.code,message:'Une transition du RUN est en cours ; cette tentative ne prend aucune nouvelle décision.',
+            decision_recorded:known ? recorded : null,admission:admissionSnapshot(runId)};
+        }
+        throw cause;
+      }
       if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      const admissionPath = /^\/decision\/([^/]+)\/admission$/.exec(url.pathname);
+      if (request.method === 'GET' && admissionPath) {
+        const id = admissionPath[1], owner = registry.requestOwners[id];
+        if (owner && owner.runId !== runId) throw new CoordinationError('decision-run-divergent');
+        const registered = context.hasRequest(id), recorded = context.decision(id) !== undefined;
+        const known = Boolean(owner || registered || recorded);
+        json(response,known ? 200 : 404,{...(known ? {} : {error:'decision-validation-unknown'}),runId,requestId:id,
+          admission:admissionSnapshot(runId),owner_registered:Boolean(owner),validation_registered:registered,
+          decision_recorded:known ? recorded : null});
+        return;
+      }
       if (request.method === 'GET' && url.pathname === '/test-resources') {
         json(response, 200, { runId, protocol: TEST_RESOURCE_PROTOCOL, reservations: registry.testReservations(runId) }); return;
       }
@@ -1020,7 +1044,8 @@ async function handleRequest(request, response) {
     request.cabObserveHttpFailure(cause.code);
     observeStatistics(() => statistics.admissionFailure(attemptedReservation, cause.code));
     if (!response.headersSent) json(response, cause.status || 409,
-      cause.code === 'command-too-long' ? cause.diagnostic : { error: cause.code || cause.message });
+      cause.code === 'command-too-long' || cause.code === 'run-transition-in-flight' && cause.diagnostic
+        ? cause.diagnostic : { error: cause.code || cause.message });
     else response.destroy();
   } finally {
     if (transitionRun) transitions.delete(transitionRun);

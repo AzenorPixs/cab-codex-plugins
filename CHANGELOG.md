@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.24 — Admission observée et refus de transition
+
+- Instantané BUSY/STABLE du RUN et lecture ciblée de propriétaire/validation/décision locale pour une demande.
+- Refus409 précoce et400 tardif enrichis sans changer leurs gardes, statut, unicité ou absence d’effet ; aucune attente/reprise automatique côté serveur.
+- STABLE reste une observation, sans réservation ni autorisation ; les pilotes conservent les identités et relisent la décision avant poursuite explicite.
+
 ## 2.1.23 — Readiness vide en Code Mode
 
 - Reconnaissance ciblée de broker_readiness({}) lorsque l’unique métadonnée native achevée omet input ; aucun défaut générique d’arguments ajouté.

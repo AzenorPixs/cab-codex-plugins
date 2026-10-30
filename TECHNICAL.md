@@ -60,7 +60,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.23` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.24` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -1160,7 +1160,7 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.23 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.24 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1275,7 +1275,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.23 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.24 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1340,7 +1340,7 @@ Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de 
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.23.
+La distribution courante des quatre briques, plugins et commandes est 2.1.24.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -1466,7 +1466,7 @@ Les tests et lectures filtrées qualifient les sources. L’activation CABU et
 la récupération réelle du RUN restent des étapes distinctes, coordonnées
 séparément ; les services actifs ne sont pas modifiés par cette préparation.
 
-## Diagnostics de notification et refus avant admission — source 2.1.23
+## Diagnostics de notification et refus avant admission — source 2.1.24
 
 Une approbation peut rester `PENDING` alors que sa notification au contrôleur
 est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
@@ -1495,7 +1495,7 @@ La préparation source n’active rien. L’activation CABU coordonnée est rapp
 avec les versions des processus réels avant notification aux sessions.
 
 
-## Restitution des réservations sans effet — source 2.1.23
+## Restitution des réservations sans effet — source 2.1.24
 
 La route explicite release-unused permet de restituer une réservation de test
 HELD sans nettoyage fictif, uniquement sur autorisation humaine spécifique,
@@ -1509,7 +1509,7 @@ un état ancien pour supprimer une preuve. La préparation source ne modifie
 aucun RUN ni composant actif.
 
 
-## Isolation des sondes et du broker partagé — source 2.1.23
+## Isolation des sondes et du broker partagé — source 2.1.24
 
 La découverte serveur est envoyée sans scope de workspace. Les contrôles MCP
 visent la location partagée et refusent une cible explicite divergente.
@@ -1521,7 +1521,7 @@ autorisée et contrôlée. Les workspaces des exemples sont génériques.
 Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-location-isolation.md).
 
 
-## Attente du contrôleur et échec de récupération — CAB2.1.23
+## Attente du contrôleur et échec de récupération — CAB2.1.24
 
 L’attente de la version réelle du contrôleur utilise le budget --wait-ms
 existant (120000ms par défaut, borne maximale900000ms), y compris au rollback.
@@ -1539,7 +1539,7 @@ leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
 une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
 
 
-### Complément de lecture de maintenance2.1.23
+### Complément de lecture de maintenance2.1.24
 
 GET /status et GET /runs des services CAB acceptent jusqu’à16Mio sous contrôle
 des octets reçus avant parsing. Cette exception ciblée ne modifie ni les
@@ -1548,7 +1548,7 @@ est vérifié sans troncature ou purge ; un dépassement conserve son diagnostic
 et le journal de récupération non terminal.
 
 
-## Diagnostics des décisions — source2.1.23
+## Diagnostics des décisions — source2.1.24
 
 Les refus de décision auparavant400 vides rendent un JSON filtré avec code,
 message français fixe et decision_recorded. Révision périmée, contexte,
@@ -1565,29 +1565,34 @@ Le skill et la commande distribuent la procédure [coding-incidents.md](plugins/
 
 ## Entrées modèle du client V2
 
-CAB2.1.23 refuse le champ natif model.variant dans les écritures du client avant HTTP et indique model.reasoning. Les lectures natives conservent variant ; la conversion est explicite. Contrat, exemples et compatibilité : [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md). Cette livraison source ne prouve aucune activation.
+CAB2.1.24 refuse le champ natif model.variant dans les écritures du client avant HTTP et indique model.reasoning. Les lectures natives conservent variant ; la conversion est explicite. Contrat, exemples et compatibilité : [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md). Cette livraison source ne prouve aucune activation.
 
 
 ## Changement à chaud du fournisseur et du modèle
 
-CAB2.1.23 accepte un nouveau choix explicite indépendant de l’ancienne politique ; en son absence, la session suit la PLLM. La transition conserve RUN/job/session et historique, sans réarmement. Le raccord natif des clés et la nouvelle politique restent explicitement coordonnés, sans fermeture d’OpenCode ni copie de secret dans CAB. Procédure, limites et reprise : [hot-model-switch.md](plugins/cab-approval-bridge/skills/approval-bridge/references/hot-model-switch.md). Après SCM réussi, CABU puis information des sessions sur activation vérifiée sont obligatoires ; aucune application implicite aux jobs réels.
+CAB2.1.24 accepte un nouveau choix explicite indépendant de l’ancienne politique ; en son absence, la session suit la PLLM. La transition conserve RUN/job/session et historique, sans réarmement. Le raccord natif des clés et la nouvelle politique restent explicitement coordonnés, sans fermeture d’OpenCode ni copie de secret dans CAB. Procédure, limites et reprise : [hot-model-switch.md](plugins/cab-approval-bridge/skills/approval-bridge/references/hot-model-switch.md). Après SCM réussi, CABU puis information des sessions sur activation vérifiée sont obligatoires ; aucune application implicite aux jobs réels.
 
 
 ## Continuité historique après raccord
 
-CAB2.1.23 corrige l’entrée CLI par lien et distingue adoption du modèle et continuité historique. Une preuve native texte seul sous deny dans la session existante est requise avant reprise ; la sonde fraîche ne suffit pas. La limite Responses inter-comptes2.2.0 est explicitée sans réparation fictive, purge ou mise à niveau implicite. Voir [account-bound-history.md](plugins/cab-approval-bridge/skills/approval-bridge/references/account-bound-history.md).
+CAB2.1.24 corrige l’entrée CLI par lien et distingue adoption du modèle et continuité historique. Une preuve native texte seul sous deny dans la session existante est requise avant reprise ; la sonde fraîche ne suffit pas. La limite Responses inter-comptes2.2.0 est explicitée sans réparation fictive, purge ou mise à niveau implicite. Voir [account-bound-history.md](plugins/cab-approval-bridge/skills/approval-bridge/references/account-bound-history.md).
 
 
-### Projection portable du contexte — CAB2.1.23
+### Projection portable du contexte — CAB2.1.24
 
 Le module context-portability distribué prépare un hook natif ciblé sur session, modèle, connexion opaque et anciens messages. Après transition PLLM/compte, les anciens raisonnements et métadonnées fournisseur ne sont plus renvoyés ; historique enregistré, textes et contrats d’outils restent préservés. Le banc exact2.2.0 qualifie chargement à chaud, même modèle/SID/PID et isolation du pair. L’application réelle exige la frontière du propriétaire et un échange historique sans outil avant prévol CAB et reprise ; voir portable-context.md du skill. Aucune clé, nouvelle session ou bascule de politique n’est déduite de CABU.
 
 
-### Empreinte des arguments avant once — CAB2.1.23
+### Empreinte des arguments avant once — CAB2.1.24
 
 Les nouveaux mandats write/edit portent tool_input_sha256, lié au retry et à la décision. Le client dérive la preuve depuis le call natif vérifié ; le contrôleur bloque une divergence avant once, sans reconstruire de décision ni effacer une preuve. Les historiques sans champ restent compatibles et non protégés par cette extension ; le contrôle du fichier après effet reste nécessaire. Procédure : native-input-guard.md du skill. Source, CABU et adoption des nouveaux mandats sont distincts.
 
 
-### Diagnostic readiness vide — CAB2.1.23
+### Diagnostic readiness vide — CAB2.1.24
 
 Le client reconnaît la seule omission native input dans l’unique broker_readiness({}) littéral achevé et non tronqué, sans erreur. Provenance et empreinte brute restent intactes ; autres outils, formes ambiguës, arguments non vides ou divergents restent bloquants. Aucune décision ou permission n’est déduite de ce diagnostic ; voir empty-readiness-input.md du skill.
+
+
+### Admission observée — CAB2.1.24
+
+Le statut du RUN expose BUSY/STABLE et le GET ciblé /runs/<run>/decision/<request>/admission distingue propriétaire, validation et décision locale. Les refus de transition restent inchangés dans leur statut et effet ; les diagnostics rendent l’état explicite. STABLE n’est ni réservation ni autorisation ; chaque POST réexamine toutes les gardes. Procédure : admission-state.md du skill.

@@ -600,3 +600,15 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class emptyReadiness provisional
 ```
+
+
+### Admission observée — SCM2.1.24
+
+`expose-run-admission-state` : ARCHIVÉ — source2.1.24 qualifiée ; activation non déduite, **code non attribué**, instantanés d’admission et refus de transition explicites sans contournement. [Proposition](openspec/changes/archive/2026-10-30-expose-run-admission-state/proposal.md), [tâches](openspec/changes/archive/2026-10-30-expose-run-admission-state/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    admissionState["expose-run-admission-state<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class admissionState provisional
+```

@@ -11,7 +11,7 @@ import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-c
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.23";
+export const VERSION = "2.1.24";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -318,7 +318,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.23",
+    version: "2.1.24",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1842,7 +1842,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.23",
+      version: "2.1.24",
     },
   });
 
@@ -2929,7 +2929,8 @@ const handle = async (request, response, url) => {
             ? cause.code : 'decision-processing-failed';
           response.writeHead(400, { 'content-type': 'application/json', 'cache-control': 'no-store' });
           response.end(JSON.stringify({ error: code, message: DECISION_ERRORS.get(code),
-            decision_recorded: httpDecisions.has(requestId) }));
+            decision_recorded: httpDecisions.has(requestId),
+            ...(code === 'run-transition-in-flight' ? {admission:{state:'BUSY',snapshot_only:true}} : {}) }));
         }
 
         return;
