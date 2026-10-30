@@ -588,3 +588,15 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class nativeInput provisional
 ```
+
+
+### Readiness vide — SCM2.1.23
+
+`qualify-empty-readiness-metadata-input` : ARCHIVÉ — source2.1.23 qualifiée ; activation non déduite, **code non attribué**, projection native de l’omission input du seul diagnostic readiness vide. [Proposition](openspec/changes/archive/2026-10-30-qualify-empty-readiness-metadata-input/proposal.md), [tâches](openspec/changes/archive/2026-10-30-qualify-empty-readiness-metadata-input/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    emptyReadiness["qualify-empty-readiness-metadata-input<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class emptyReadiness provisional
+```

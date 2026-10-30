@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.22';
+export const VERSION = '2.1.23';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -214,9 +214,15 @@ function codeModePart(content, part) {
     Array.isArray(observed) && observed.length === 1 && observed[0]?.status === 'error';
   if ((observed !== undefined && !Array.isArray(observed)) ||
       (part.state.status === 'completed' && part.state.metadata?.truncated !== false)) return null;
+  const omittedEmptyReadinessInput = entry => !discovery && expected.length === 1 &&
+    part.state.status === 'completed' && part.executed === false &&
+    (part.state.metadata?.error === undefined || part.state.metadata.error === false) &&
+    call?.tool === 'cgpt-validation.broker_readiness' && Object.keys(call.input).length === 0 &&
+    entry.tool === call.tool && entry.status === 'completed' && !Object.hasOwn(entry,'input');
   if (part.state.status !== 'running' || (Array.isArray(observed) && observed.length)) {
     if (!Array.isArray(observed) || observed.length !== expected.length || observed.some((entry, i) =>
-        !record(entry) || entry.tool !== expected[i].tool || canonical(entry.input) !== canonical(expected[i].input) ||
+        !record(entry) || entry.tool !== expected[i].tool ||
+        (canonical(entry.input) !== canonical(expected[i].input) && !omittedEmptyReadinessInput(entry)) ||
         !(['completed', 'error'].includes(entry.status) || part.state.status === 'running' &&
           entry.tool === 'cgpt-validation.request_validation' && i === expected.length - 1 && entry.status === 'running')) ||
         (part.state.status === 'completed' && observed.some(entry => entry.status !== 'completed') && !nativeFailure)) return null;

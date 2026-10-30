@@ -2,7 +2,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { prepareControllerModelPolicy, VERSION as POLICY_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 
-export const VERSION = '2.1.22';
+export const VERSION = '2.1.23';
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   try {

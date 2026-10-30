@@ -61,7 +61,7 @@ Le prévol et l'indisponibilité lisent parent.info.model.variant (schéma natif
 
 Les anciens jobs sans logicalProviderID restent valides. Après armement d'un nouveau job portant ce champ, un lecteur strict 1.10.2 n'est pas qualifié pour ce contrat : conserver le lecteur compatible et les preuves plutôt que restaurer une sauvegarde métier. La préparation et le paquet source n'activent aucune configuration ou reprise.
 
-## Preuve native V2 à échange unique — 2.1.22
+## Preuve native V2 à échange unique — 2.1.23
 
 La lecture paginée fixe order sur la première page uniquement. Le curseur opaque porte ensuite son ordre ; les limites et refus de pages invalides ou répétées restent appliqués.
 
@@ -93,7 +93,7 @@ PLLM suivante. Un modèle imposé reste conservé si les niveaux admissibles ne
 sont pas disponibles.
 
 
-## Contrat des modèles du client V2 — CAB2.1.22
+## Contrat des modèles du client V2 — CAB2.1.23
 
 Les méthodes createSession, createProbeSession, prompt et switchModel attendent
 `model = { providerID, modelID, reasoning: 'medium' }`. Le client sérialise
