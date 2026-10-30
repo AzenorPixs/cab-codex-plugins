@@ -632,3 +632,8 @@ flowchart LR
 ### MCP pending et récupération — SCM2.1.28
 
 `recover-cabu-pending-mcp` : ARCHIVÉ — source2.1.28 qualifiée, **code non attribué**. Attente bornée, reçuMCP_RECOVERY_REQUIRED et récupération globale explicitement liée avec intention durable unique ; PID/sessions/versions contrôlés. [Proposition](openspec/changes/archive/2026-10-30-recover-cabu-pending-mcp/proposal.md), [tâches](openspec/changes/archive/2026-10-30-recover-cabu-pending-mcp/tasks.md), [qualification](openspec/changes/archive/2026-10-30-recover-cabu-pending-mcp/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Permissions avant prévol — SCM2.1.29
+
+`check-native-ask-before-preflight` : ARCHIVÉ — source2.1.29 qualifiée, **code non attribué**. Garde client requiredNativeAsk avant prompt, politique partagée sans changement et sortie explicite des deny de revue ; aucune restauration automatique. [Proposition](openspec/changes/archive/2026-10-30-check-native-ask-before-preflight/proposal.md), [tâches](openspec/changes/archive/2026-10-30-check-native-ask-before-preflight/tasks.md), [qualification](openspec/changes/archive/2026-10-30-check-native-ask-before-preflight/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.

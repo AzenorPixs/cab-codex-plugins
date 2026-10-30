@@ -1,0 +1,32 @@
+{
+  "version": "2.1.29",
+  "node": {
+    "cases": 682,
+    "passed": 651,
+    "failed": 0,
+    "skipped": 31
+  },
+  "python": {
+    "passed": 81,
+    "failed": 0
+  },
+  "native": {
+    "version": "2.2.0",
+    "passed": 4,
+    "failed": 0,
+    "denyRejectedBeforePrompt": true,
+    "minimalExplicitShellAsk": true,
+    "editDenyPreserved": true
+  },
+  "syntax": {
+    "js": 72,
+    "py": 16
+  },
+  "predicateComparisons": 8000,
+  "predicateEquivalentTo": "2.1.28",
+  "openspecBefore": {
+    "standard": 17,
+    "strict": 17
+  },
+  "requirementsAdded": 3
+}

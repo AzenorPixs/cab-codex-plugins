@@ -775,3 +775,40 @@ test('frontière de récupération : sessions/activité globales, permissions pa
  assert.ok(calls.filter(c=>c.path==='/api/permission/request').every(c=>c.scoped==='/shared'&&c.query.includes('directory=%2Fshared')));
  duplicate=true;await assert.rejects(client.mcpRecoverySnapshot(),{code:'opencode-recovery-observation-invalid'});
 });
+
+async function permissionPromptFixture(t) {
+ const f=fixture();t.after(f.close);const calls=[];let rules=[{action:'shell',resource:'*',effect:'deny'},{action:'edit',resource:'*',effect:'deny'},{action:'subagent',resource:'*',effect:'deny'},{action:'skill',resource:'*',effect:'deny'}];let returnedId='ses_policy',modelChangesDeny=false;
+ const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/default',passwordFile:f.passwordFile,fetchImpl:async(u,o)=>{
+  const path=new URL(u).pathname;calls.push({path,method:o.method,scope:o.headers['x-opencode-directory']});
+  if(path==='/api/info')return json(info);
+  if(path==='/api/session/ses_policy')return json({data:{id:returnedId,directory:'/target',permissions:rules}});
+  if(path==='/api/session/ses_policy/model'){if(modelChangesDeny)rules[0].effect='deny';return json({data:{}})}
+  if(path==='/api/session/ses_policy/prompt')return json({data:{id:'msg_prompt'}});
+  throw Error('unexpected '+path);
+ }});
+ return {client,calls,setRules:v=>rules=v,setForeign:()=>returnedId='ses_foreign',changeDenyWithModel:()=>modelChangesDeny=true};
+}
+test('prompt protégé : deny refuse avant prompt/MCP/PATCH/modèle, inspection sans corps',async t=>{
+ const h=await permissionPromptFixture(t),options={directory:'/target',requiredNativeAsk:['shell']};
+ const policy=await h.client.nativePermissionPolicy('ses_policy',options);assert.equal(policy.ready,false);assert.deepEqual(policy.missing,['shell']);assert.equal(policy.effective.shell.action,'deny');assert.equal(policy.snapshot_only,true);assert.match(policy.policySha256,/^[a-f0-9]{64}$/);assert.equal(policy.permissions,undefined);
+ await assert.rejects(h.client.prompt('ses_policy','prévol', {...options,model:{providerID:'fixture',modelID:'fixture'}}),{code:'opencode-native-permission-ask-required'});
+ assert.ok(h.calls.every(c=>c.method==='GET'));assert.ok(!h.calls.some(c=>c.path.endsWith('/prompt')||c.path.endsWith('/model')));
+});
+test('prompt protégé : shell ask seul suffit au prévol, edit deny et contexte restent préservés',async t=>{
+ const h=await permissionPromptFixture(t);h.setRules([{action:'shell',resource:'*',effect:'ask'},{action:'edit',resource:'*',effect:'deny'}]);
+ const r=await h.client.prompt('ses_policy','prévol',{directory:'/target',requiredNativeAsk:['shell']});assert.equal(r.id,'msg_prompt');assert.equal(h.calls.find(c=>c.path.endsWith('/prompt')).scope,'/target');
+ await assert.rejects(h.client.prompt('ses_policy','écriture',{directory:'/target',requiredNativeAsk:['edit']}),{code:'opencode-native-permission-ask-required'});
+ assert.equal(h.calls.filter(c=>c.path.endsWith('/prompt')).length,1);assert.equal(h.calls.filter(c=>c.method==='PATCH').length,0);
+});
+test('prompt protégé : allow/spécifique/alias seul, option invalide et SID divergent refusés',async t=>{
+ const h=await permissionPromptFixture(t);
+ for(const rules of [[{action:'shell',resource:'*',effect:'allow'}],[{action:'shell',resource:'specific',effect:'ask'}],[{action:'bash',resource:'*',effect:'ask'}]]){h.setRules(rules);await assert.rejects(h.client.prompt('ses_policy','prévol',{directory:'/target',requiredNativeAsk:['shell']}),{code:'opencode-native-permission-ask-required'})}
+ for(const value of [[],null,['bash'],['shell','shell'],'shell'])await assert.rejects(h.client.prompt('ses_policy','prévol',{directory:'/target',requiredNativeAsk:value}),{code:'opencode-native-ask-requirement-invalid'});
+ h.setForeign();await assert.rejects(h.client.prompt('ses_policy','prévol',{directory:'/target',requiredNativeAsk:['shell']}),{code:'opencode-session-divergent'});assert.ok(h.calls.every(c=>c.method==='GET'));
+});
+test('prompt historique deny inchangé et nouveau contrôle après changement explicite de modèle',async t=>{
+ const h=await permissionPromptFixture(t);await h.client.prompt('ses_policy','lecture/proposition',{directory:'/target'});assert.equal(h.calls.filter(c=>c.path.endsWith('/prompt')).length,1);
+ h.setRules([{action:'shell',resource:'*',effect:'ask'},{action:'edit',resource:'*',effect:'deny'}]);h.changeDenyWithModel();
+ await assert.rejects(h.client.prompt('ses_policy','prévol',{directory:'/target',model:{providerID:'fixture',modelID:'fixture'},requiredNativeAsk:['shell']}),{code:'opencode-native-permission-ask-required'});
+ assert.equal(h.calls.filter(c=>c.path.endsWith('/model')).length,1);assert.equal(h.calls.filter(c=>c.path.endsWith('/prompt')).length,1);assert.equal(h.calls.filter(c=>c.method==='PATCH').length,0);
+});

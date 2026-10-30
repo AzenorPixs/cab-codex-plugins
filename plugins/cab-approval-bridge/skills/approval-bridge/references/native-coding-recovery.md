@@ -23,3 +23,7 @@ Refuser avant écriture un conducteur qui ne contient pas l’exécution complè
 Le moniteur lit GET /monitor/runs : projection GET non autorisante de 200 réservations au plus, actives d’abord, avec champs runId/changeId/sessionId/version/state/phase, totalRuns, truncated et snapshot_only. Le registre complet GET /runs reste intact et peut dépasser 2 Mio ; le moniteur n’y fait aucun repli et ne charge pas son historique ou ses ressources. Le plafond de collecte reste 2 Mio. Si plus de 200 réservations existent, la troncature est explicite.
 
 Les codes publics source-too-large, source-invalid, source-http-error et source-timeout distinguent les pannes sans exposer de corps ou d’erreur libre. Les dernières observations restent datées et périmées ; une nouvelle réussite rétablit la fraîcheur. Cette projection ne réserve aucune ressource et ne remplace ni admission, décision ni réconciliation.
+
+## Permissions de la session après revue
+
+Appliquer [native-permission-resume.md](native-permission-resume.md) avant nouveau prévol : requiredNativeAsk est une exigence structurée avant prompt, indépendante de nativeCodingMandate et de l’inactivité. Aucun deny n’est levé automatiquement.
