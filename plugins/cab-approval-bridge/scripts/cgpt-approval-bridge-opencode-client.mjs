@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.27';
+export const VERSION = '2.1.28';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -827,18 +827,47 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     if (response.status !== 204) fail('opencode-permission-reply-invalid');
   }
 
-  async function connectMcp(serverId, explicitDirectory) {
+  async function mcpRecoverySnapshot() {
+    const initial = await info(true), sharedDirectory = await mcpLocation();
+    const sessions = [], cursors = new Set(); let cursor;
+    for (let page = 0; page < 100; page++) {
+      const value = await json('/api/session', { scoped: false, query: { limit: '200', order: cursor === undefined ? 'asc' : undefined, cursor } });
+      if (!record(value) || !Array.isArray(value.data) || value.data.length > 200 || !record(value.cursor)) fail('opencode-recovery-observation-invalid');
+      for (const item of value.data) {
+        if (!record(item) || !/^ses_[A-Za-z0-9_.-]{1,100}$/.test(item.id || '') || sessions.includes(item.id)) fail('opencode-recovery-observation-invalid');
+        sessions.push(item.id);
+      }
+      const next = value.cursor.next;
+      if (next === null) break;
+      if (page === 99 || typeof next !== 'string' || !next || cursors.has(next)) fail('opencode-recovery-observation-invalid');
+      cursors.add(next); cursor = next;
+    }
+    const active = unwrapData(await json('/api/session/active', { scoped: false }), 'opencode-recovery-observation-invalid');
+    const permissions = await json('/api/permission/request', { query: { directory: sharedDirectory } });
+    if (!record(active) || Object.entries(active).some(([id, value]) => !/^ses_[A-Za-z0-9_.-]{1,100}$/.test(id) || !record(value) || value.type !== 'running') ||
+        !record(permissions) || permissions.location?.directory !== sharedDirectory || !Array.isArray(permissions.data)) fail('opencode-recovery-observation-invalid');
+    const final = await info(true);
+    if (initial.pid !== final.pid || initial.version !== final.version || await mcpLocation() !== sharedDirectory) fail('opencode-recovery-identity-changed');
+    sessions.sort();
+    return { pid: initial.pid, version: initial.version, sharedDirectory, sessionCount: sessions.length,
+      sessionIdsSha256: createHash('sha256').update(JSON.stringify(sessions)).digest('hex'),
+      activeSessionCount: Object.keys(active).length, sharedPermissionCount: permissions.data.length };
+  }
+
+  async function connectMcp(serverId, explicitDirectory, { timeout = timeoutMs } = {}) {
+    if (!Number.isSafeInteger(timeout) || timeout <= 0) fail('opencode-timeout-invalid');
     if (typeof serverId !== 'string' || !/^[A-Za-z0-9_.-]{1,100}$/.test(serverId)) fail('opencode-mcp-id-invalid');
     const directoryValue = await mcpTarget(explicitDirectory);
     return request(`/api/experimental/mcp/${encodeURIComponent(serverId)}/connect`,
-      { method: 'POST', query: { directory: directoryValue } });
+      { method: 'POST', query: { directory: directoryValue }, timeout });
   }
 
-  async function disconnectMcp(serverId, explicitDirectory) {
+  async function disconnectMcp(serverId, explicitDirectory, { timeout = timeoutMs } = {}) {
+    if (!Number.isSafeInteger(timeout) || timeout <= 0) fail('opencode-timeout-invalid');
     if (typeof serverId !== 'string' || !/^[A-Za-z0-9_.-]{1,100}$/.test(serverId)) fail('opencode-mcp-id-invalid');
     const directoryValue = await mcpTarget(explicitDirectory);
     return request(`/api/experimental/mcp/${encodeURIComponent(serverId)}/disconnect`,
-      { method: 'POST', query: { directory: directoryValue } });
+      { method: 'POST', query: { directory: directoryValue }, timeout });
   }
 
   async function events() {
@@ -858,7 +887,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,
-    replyPermission, connectMcp, disconnectMcp, events, request: json });
+    replyPermission, connectMcp, disconnectMcp, mcpRecoverySnapshot, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {

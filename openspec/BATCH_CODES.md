@@ -213,3 +213,8 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Rangement et couleurs Web — SCM2.1.27
 
 `fix-monitor-catalog-feedback-and-state-colors` : ARCHIVÉ — source2.1.27 qualifiée, **code non attribué**. Vue catalogue immédiate en Manuel sans rollback par lecture ancienne ; lignes BLOCKED bleues, DONE vertes, STOPPED orange. [Proposition](changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/proposal.md), [tâches](changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/tasks.md), [qualification](changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### MCP pending et récupération — SCM2.1.28
+
+`recover-cabu-pending-mcp` : ARCHIVÉ — source2.1.28 qualifiée, **code non attribué**. Attente bornée, reçuMCP_RECOVERY_REQUIRED et récupération globale explicitement liée avec intention durable unique ; PID/sessions/versions contrôlés. [Proposition](changes/archive/2026-10-30-recover-cabu-pending-mcp/proposal.md), [tâches](changes/archive/2026-10-30-recover-cabu-pending-mcp/tasks.md), [qualification](changes/archive/2026-10-30-recover-cabu-pending-mcp/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.

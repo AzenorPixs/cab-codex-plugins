@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { digest, safeRead } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = '2.1.27';
+export const VERSION = '2.1.28';
 export const RETENTION_DAYS = [1, 3, 7, 30, 365];
 const selections = ['current', 'last', '24h', '7d', '30d'];
 const key = (c) => JSON.stringify([c.runId, c.contextId, c.changeId]);
