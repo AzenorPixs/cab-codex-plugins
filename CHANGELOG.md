@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.17 — Coordination des incidents de codage CAB
+
+- Signalement au chat « Correctif CAB - OC », réutilisé ou créé si absent ; suivi corrélé jusqu’au correctif qualifié et à son activation CABU vérifiée.
+- Procédure unique distribuée dans le plugin, le skill et la commande ; retour aux sessions concernées avec preuves, sans transfert de mandat ni rejeu de permission.
+
 ## 2.1.16 — Motifs des refus de décision HTTP
 
 - Les400 vides des décisions deviennent JSON filtrés : code précis, message français fixe et indicateur local decision_recorded.

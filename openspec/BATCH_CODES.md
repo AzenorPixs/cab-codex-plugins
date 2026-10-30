@@ -162,3 +162,7 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Diagnostics de décision — SCM2.1.16
 
 `explain-decision-http-refusals` : ARCHIVÉ, **code non attribué**, 4/4 unités qualifiées ; Node560/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation suivie séparément. [Proposition](changes/archive/2026-10-30-explain-decision-http-refusals/proposal.md), [tâches](changes/archive/2026-10-30-explain-decision-http-refusals/tasks.md). Attribution ACL ultérieure.
+
+### Coordination des incidents — SCM2.1.17
+
+`coordinate-cab-coding-incidents` : ARCHIVÉ, **code non attribué**, règle documentaire de signalement au chat « Correctif CAB - OC » et suivi jusqu’à CABU ; source qualifiée : Node560/28 ignorés, Python80/80, distribution32/32 ; activation vérifiée séparément. [Proposition](changes/archive/2026-10-30-coordinate-cab-coding-incidents/proposal.md), [tâches](changes/archive/2026-10-30-coordinate-cab-coding-incidents/tasks.md). Attribution ACL ultérieure.

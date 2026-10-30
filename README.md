@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.16. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.17. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -775,7 +775,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.16.
+La distribution courante des quatre briques, plugins et commandes est 2.1.17.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -901,7 +901,7 @@ Les tests et lectures filtrées qualifient les sources. L’activation CABU et
 la récupération réelle du RUN restent des étapes distinctes, coordonnées
 séparément ; les services actifs ne sont pas modifiés par cette préparation.
 
-## Diagnostics de notification et refus avant admission — source 2.1.16
+## Diagnostics de notification et refus avant admission — source 2.1.17
 
 Une approbation peut rester `PENDING` alors que sa notification au contrôleur
 est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
@@ -930,7 +930,7 @@ La préparation source n’active rien. L’activation CABU coordonnée est rapp
 avec les versions des processus réels avant notification aux sessions.
 
 
-## Restitution des réservations sans effet — source 2.1.16
+## Restitution des réservations sans effet — source 2.1.17
 
 La route explicite release-unused permet de restituer une réservation de test
 HELD sans nettoyage fictif, uniquement sur autorisation humaine spécifique,
@@ -944,7 +944,7 @@ un état ancien pour supprimer une preuve. La préparation source ne modifie
 aucun RUN ni composant actif.
 
 
-## Isolation des sondes et du broker partagé — source 2.1.16
+## Isolation des sondes et du broker partagé — source 2.1.17
 
 La découverte serveur est envoyée sans scope de workspace. Les contrôles MCP
 visent la location partagée et refusent une cible explicite divergente.
@@ -956,7 +956,7 @@ autorisée et contrôlée. Les workspaces des exemples sont génériques.
 Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-location-isolation.md).
 
 
-## Attente du contrôleur et échec de récupération — CAB2.1.16
+## Attente du contrôleur et échec de récupération — CAB2.1.17
 
 L’attente de la version réelle du contrôleur utilise le budget --wait-ms
 existant (120000ms par défaut, borne maximale900000ms), y compris au rollback.
@@ -974,7 +974,7 @@ leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
 une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
 
 
-### Complément de lecture de maintenance2.1.16
+### Complément de lecture de maintenance2.1.17
 
 GET /status et GET /runs des services CAB acceptent jusqu’à16Mio sous contrôle
 des octets reçus avant parsing. Cette exception ciblée ne modifie ni les
@@ -983,7 +983,7 @@ est vérifié sans troncature ou purge ; un dépassement conserve son diagnostic
 et le journal de récupération non terminal.
 
 
-## Diagnostics des décisions — source2.1.16
+## Diagnostics des décisions — source2.1.17
 
 Les refus de décision auparavant400 vides rendent un JSON filtré avec code,
 message français fixe et decision_recorded. Révision périmée, contexte,
@@ -991,3 +991,8 @@ doublon et validation inconnue sont distingués sans exposer les données du
 mandat. Les gardes et succès existants restent inchangés. Le champ indique
 la présence locale d’une décision, pas son application native. Procédure :
 [diagnostics distribués](plugins/cab-approval-bridge/skills/approval-bridge/references/decision-http-diagnostics.md).
+
+
+## Coordination des incidents CAB
+
+Le skill et la commande distribuent la procédure [coding-incidents.md](plugins/cab-approval-bridge/skills/approval-bridge/references/coding-incidents.md) : signalement au chat « Correctif CAB - OC », réutilisation ou création conditionnelle et suivi jusqu’au correctif puis à son activation CABU vérifiée. Les propriétaires des sessions conservent leurs mandats et preuves ; la livraison source et l’activation restent distinctes.
