@@ -933,7 +933,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.23');
+  assert.equal(initialized.result.serverInfo.version, '2.1.24');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1865,6 +1865,7 @@ test('diagnostic décision HTTP : trois ressources, révision périmée et rejet
  const approval=h.approval(a,'decision-stale');assert.equal((await h.post('/validation/request',{approval})).status,202);
  const writer=await h.approvedAccess(b,'concurrent-writer');await h.execute(writer.approval);await h.completeTool(writer.approval);await h.releaseOperation(b,writer.approval,writer.access);
  const replies=h.native.replies.length;
+ assert.equal((await h.get('/runs/a/decision/decision-stale/admission')).body.admission.state,'STABLE');
  const result=await h.post('/runs/a/decision/decision-stale',{decision:'approved'});
  assert.equal(result.status,400);assert.equal(result.body.error,'resource-revision-stale');assert.equal(result.body.decision_recorded,false);
  assert.equal((await h.get('/runs/a/decision/decision-stale')).status,404);
@@ -1900,7 +1901,7 @@ test('diagnostic décision HTTP : révision modifiée pendant la vérification n
 
 test('diagnostic décision HTTP : transition de reminder tardive signalée sans décision',async t=>{
  const h=await setup(t);const a=await h.reserve('a');const approval=h.approval(a,'decision-reminder-race');
- await h.post('/validation/request',{approval});let count=0,release,entered,reminder;
+ await h.post('/validation/request',{approval});assert.equal((await h.get('/runs/a/decision/'+approval.requestId+'/admission')).body.admission.state,'STABLE');let count=0,release,entered,reminder;
  const parked=new Promise(resolve=>{release=resolve;});const waiting=new Promise(resolve=>{entered=resolve;});
  h.native.onRequest=async path=>{
   if(path!=='/session/ses_a')return;
@@ -1910,7 +1911,7 @@ test('diagnostic décision HTTP : transition de reminder tardive signalée sans 
  let result;
  try{result=await h.post('/runs/a/decision/decision-reminder-race',{decision:'approved'});}
  finally{release();}
- assert.equal(result.status,400);assert.equal(result.body.error,'run-transition-in-flight');assert.equal(result.body.decision_recorded,false);
+ assert.equal(result.status,400);assert.equal(result.body.error,'run-transition-in-flight');assert.equal(result.body.decision_recorded,false);assert.deepEqual(result.body.admission,{state:'BUSY',snapshot_only:true});
  assert.equal((await reminder).status,202);assert.equal((await h.get('/runs/a/decision/decision-reminder-race')).status,404);
  assert.equal(h.native.replies.length,0);
 });
@@ -1959,4 +1960,43 @@ test('transition modèle HTTP : sans choix explicite adopte la PLLM actuelle et 
  const result=await h.post('/runs/hot-auto/job/model-transition',{...base,phase:'commit',preflight:{sessionId:'ses_probe',messageId:'msg_auto_reply'}});assert.equal(result.status,200,JSON.stringify(result));
  const after=(await h.get('/runs/hot-auto/job')).body;assert.equal(after.codingModel.source,'pllm-automatic');assert.equal(after.codingModel.mode,'mode2');
  assert.deepEqual(after.modelTransitionHistory[0].before,old);assert.deepEqual(after.criteria,before.criteria);assert.equal(h.native.replies.length,0);
+});
+
+test('admission observée : BUSY refuse la décision, pair isolé puis même demande STABLE',async t=>{
+ const h=await setup(t);const a=await h.reserve('a'),b=await h.reserve('b');
+ const approval=h.approval(a,'admission-busy');await h.post('/validation/request',{approval});
+ let release,entered;const parked=new Promise(r=>{release=r}),waiting=new Promise(r=>{entered=r});
+ h.native.onRequest=async path=>{if(path==='/session/ses_a'){entered();await parked;}};
+ const reminder=h.post('/runs/a/validation/reminder',{approval});await waiting;
+ try{
+  const observed=await h.get('/runs/a/decision/'+approval.requestId+'/admission');
+  assert.equal(observed.status,200);assert.deepEqual(observed.body.admission,{state:'BUSY',snapshot_only:true});
+  assert.equal(observed.body.owner_registered,true);assert.equal(observed.body.validation_registered,true);assert.equal(observed.body.decision_recorded,false);
+  assert.equal((await h.get('/runs/a/status')).body.admission.state,'BUSY');
+  assert.equal((await h.get('/runs/b/status')).body.admission.state,'STABLE');
+  const refused=await h.post('/runs/a/decision/'+approval.requestId,{decision:'approved'});
+  assert.equal(refused.status,409);assert.equal(refused.body.error,'run-transition-in-flight');assert.equal(refused.body.decision_recorded,false);assert.equal(refused.body.admission.state,'BUSY');
+  assert.equal((await h.get('/runs/a/decision/'+approval.requestId)).status,404);assert.equal(h.native.replies.length,0);
+  const unknown=await h.post('/runs/a/decision/unknown-request',{decision:'approved'});assert.equal(unknown.status,409);assert.equal(unknown.body.decision_recorded,null);
+  const peer=h.approval(b,'admission-peer');assert.equal((await h.post('/validation/request',{approval:peer})).status,202);
+  assert.equal((await h.post('/runs/b/decision/'+peer.requestId,{decision:'approved'})).status,201);
+ }finally{release();}
+ assert.equal((await reminder).status,202);h.native.onRequest=undefined;
+ const stable=await h.get('/runs/a/decision/'+approval.requestId+'/admission');assert.equal(stable.body.admission.state,'STABLE');assert.equal(stable.body.decision_recorded,false);
+ assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const decided=await h.get('/runs/a/decision/'+approval.requestId+'/admission');assert.equal(decided.body.decision_recorded,true);
+ const before=(await h.get('/runs/a/decision/'+approval.requestId)).body;
+ assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,400);
+ assert.deepEqual((await h.get('/runs/a/decision/'+approval.requestId)).body,before);assert.equal(h.native.replies.length,0);
+});
+
+test('admission ciblée : inconnue explicite, propriétaire étranger refusé et lectures sans mutation',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');await h.reserve('b');
+ const unknown=await h.get('/runs/a/decision/unknown/admission');assert.equal(unknown.status,404);assert.equal(unknown.body.owner_registered,false);
+ assert.equal(unknown.body.validation_registered,false);assert.equal(unknown.body.decision_recorded,null);assert.deepEqual(unknown.body.admission,{state:'STABLE',snapshot_only:true});
+ const approval=h.approval(a,'admission-owned');await h.post('/validation/request',{approval});
+ const before=(await h.get('/runs')).body;
+ assert.equal((await h.get('/runs/a/decision/'+approval.requestId+'/admission')).status,200);
+ const foreign=await h.get('/runs/b/decision/'+approval.requestId+'/admission');assert.equal(foreign.status,409);assert.equal(foreign.body.error,'decision-run-divergent');
+ assert.equal(foreign.body.decision_recorded,undefined);assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
 });
