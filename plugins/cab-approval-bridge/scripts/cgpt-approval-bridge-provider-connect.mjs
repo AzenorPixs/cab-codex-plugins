@@ -1,12 +1,12 @@
-import { constants } from 'node:fs';
+import { constants, realpathSync } from 'node:fs';
 import { mkdir, open, realpath, rename, rm, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { createOpenCodeV2Client, VERSION as CLIENT_VERSION } from './cgpt-approval-bridge-opencode-client.mjs';
-export const VERSION = '2.1.19';
+export const VERSION = '2.1.20';
 if (CLIENT_VERSION !== VERSION) throw new Error('CAB provider component version mismatch');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -156,6 +156,9 @@ async function main() {
     stateDirectory: values['state-directory'] || join(homedir(), '.local/state/cab-provider-connect'), reconcile });
   process.stdout.write(JSON.stringify(receipt) + '\n');
 }
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+let directEntry = false;
+try { directEntry = Boolean(process.argv[1]) && realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]); }
+catch (cause) { if (!['ENOENT','ENOTDIR'].includes(cause.code)) throw cause; }
+if (directEntry) {
   main().catch(cause => { process.stderr.write(JSON.stringify({ error: /^[a-z][a-z0-9-]{1,90}$/.test(cause.code || '') ? cause.code : 'provider-connect-failed', effectPossible: cause.effectPossible === true }) + '\n');process.exitCode = 1; });
 }

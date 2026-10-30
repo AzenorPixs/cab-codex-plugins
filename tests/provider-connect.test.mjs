@@ -133,15 +133,21 @@ test('raccord CLI : gestionnaire simulé par pipe privé, aucune clé dans stdou
   res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify(value));
  });await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>new Promise(r=>server.close(r)));
  const base='http://127.0.0.1:'+server.address().port;
- const child=spawn(process.execPath,[fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-provider-connect.mjs',import.meta.url)),
-  '--opencode-url',base,'--controller-url',base,'--directory','/workspace','--integration','fixture','--transaction','cli-tx',
+ const {symlink}=await import('node:fs/promises');
+ const canonical=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-provider-connect.mjs',import.meta.url));
+ const linked=join(root,'installed-provider-connect.mjs');await symlink(canonical,linked);
+ for(const [layout,entry]of [['canonical',canonical],['linked',linked]]){
+ active=null;posts=0;const transaction='cli-'+layout;
+ const child=spawn(process.execPath,[entry,
+  '--opencode-url',base,'--controller-url',base,'--directory','/workspace','--integration','fixture','--transaction',transaction,
   '--authorization-reference','human-cli-ref','--expected-pid','4242','--secret-fd','0','--state-directory',join(root,'state')],
   {env:{...process.env,OC_Codex_OPENCODE_PASSWORD_FILE:passwordFile},stdio:['pipe','pipe','pipe']});
  let stdout='',stderr='';child.stdout.on('data',b=>stdout+=b);child.stderr.on('data',b=>stderr+=b);const exited=new Promise(r=>child.once('exit',r));
  child.stdin.end(key+'\n');assert.equal(await exited,0,stderr);assert.equal(posts,1);
  const result=JSON.parse(stdout);assert.equal(result.phase,'COMPLETED');
- const bytes=await readFile(join(root,'state/cli-tx.json'),'utf8');for(const text of [stdout,stderr,bytes]){
+ const bytes=await readFile(join(root,'state',transaction+'.json'),'utf8');for(const text of [stdout,stderr,bytes]){
   assert.equal(text.includes(key),false);assert.equal(text.includes('synthetic-cli-basic'),false);
+ }
  }
 });
 

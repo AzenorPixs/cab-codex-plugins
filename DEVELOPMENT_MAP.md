@@ -553,3 +553,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class hotModel provisional
 ```
+
+### Continuité liée au compte — SCM2.1.20
+
+`qualify-account-bound-history-continuity` : ARCHIVÉ — source2.1.20 qualifiée ; activation non déduite, **code non attribué**, lanceur par lien et qualification de la continuité historique Responses ; une limite native démontrée fait partie du livrable, sans réparation fictive. [Proposition](openspec/changes/archive/2026-10-30-qualify-account-bound-history-continuity/proposal.md), [tâches](openspec/changes/archive/2026-10-30-qualify-account-bound-history-continuity/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    historyContinuity["qualify-account-bound-history-continuity<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class historyContinuity provisional
+```

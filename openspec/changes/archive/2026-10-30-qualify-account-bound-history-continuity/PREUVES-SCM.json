@@ -1,0 +1,37 @@
+{
+  "version": "2.1.20",
+  "sourceQualified": true,
+  "archive": "2026-10-30-qualify-account-bound-history-continuity",
+  "node": {
+    "cases": 632,
+    "passed": 602,
+    "skipped": 30,
+    "failed": 0
+  },
+  "python": {
+    "passed": 80,
+    "failed": 0
+  },
+  "native": {
+    "version": "2.2.0",
+    "passed": 3,
+    "failed": 0,
+    "historicalSameModelLimitDemonstrated": true
+  },
+  "syntax": {
+    "javascript": 65,
+    "python": 16
+  },
+  "openspec": {
+    "before": {
+      "standard": 17,
+      "strict": 17
+    },
+    "after": {
+      "standard": 16,
+      "strict": 16
+    }
+  },
+  "publicationProvenHere": false,
+  "activationProvenHere": false
+}
