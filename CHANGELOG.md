@@ -2,6 +2,8 @@
 
 ## 2.1.15 — Démarrage CABU et récupération durable
 
+- Build corrigé : GET /status de maintenance borné16Mio, erreur de taille explicite, autres limites inchangées ; reprise du journal avant nouvelle installation.
+
 - Attente de la version contrôleur dans le budget configuré, au démarrage et au rollback ; diagnostic de démarrage conservé.
 - Une reprise de rollback échouée reste non terminale et conserve son journal ; les données métier et permissions ne sont jamais rejouées.
 

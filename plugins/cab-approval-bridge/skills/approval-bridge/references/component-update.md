@@ -263,7 +263,7 @@ Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0
 
 ## Registre de maintenance volumineux — 1.10.9
 
-Dans le profil ordinaire, seul GET /runs sans suffixe et le lecteur privé de controller-runs.json acceptent jusqu'à 16 Mio. Les autres réponses HTTP gardent 2 Mio et les autres fichiers 4 Mio. La lecture reste intégrale et bornée ; un dépassement est refusé, sans troncature ni purge. Identités, schéma, permissions, génération, PAUSE, HELD et preuves restent recontrôlés. Le banc grand registre vérifie les deux UID réels, les deux issues et le refus d'écriture au broker.
+Dans le profil ordinaire, seuls GET /runs et GET /status sans suffixe et le lecteur privé de controller-runs.json acceptent jusqu'à 16 Mio. Les autres réponses HTTP gardent 2 Mio et les autres fichiers 4 Mio. La lecture reste intégrale et bornée ; un dépassement est refusé, sans troncature ni purge. Identités, schéma, permissions, génération, PAUSE, HELD et preuves restent recontrôlés. Le banc grand registre vérifie les deux UID réels, les deux issues et le refus d'écriture au broker.
 
 Une mise à jour locale explicitement demandée utilise le jeu local qualifié et conserve sa provenance et ses sauvegardes. Le plugin est installé par le mécanisme pris en charge ; son cache n'est pas édité manuellement. Une publication distante antérieure ne doit pas remplacer implicitement le jeu local plus récent. Le bilan distingue cet état de la publication GitHub et conserve les informations nécessaires pour rétablir l'origine distante après sa publication autorisée. Aucun commit ou push n'est déduit d'une installation locale.
 
@@ -474,3 +474,15 @@ par une version antérieure restent conservés comme preuves ; observer les
 artefacts et processus effectivement restaurés séparément, sans réécrire
 leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
 une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
+
+
+## Statut contrôleur volumineux — build corrigé2.1.15
+
+Les seuls GET exacts /runs et /status des services CAB acceptent16Mio,
+comptés avant parsing. Les POST, /api/snapshot et autres réponses gardent2Mio.
+Le client OpenCode, ses messages et catalogues gardent leurs plafonds propres.
+Un statut contrôleur complet supérieur2Mio doit pouvoir être vérifié sans
+tronquer ses contextes ni purger des RUN. Au-delà16Mio, conserver
+update-response-too-large sans le masquer comme une absence de démarrage.
+Le rollback non confirmé reste non terminal et est repris avant installation
+du build corrigé ; aucun journal n’est édité manuellement.

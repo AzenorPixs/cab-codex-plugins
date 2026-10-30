@@ -75,7 +75,7 @@ async function http(base, path, body) {
     response = await fetch(base + path, { method: body === undefined ? 'GET' : 'POST',
       redirect: 'error', signal: AbortSignal.timeout(5000), headers: { 'content-type': 'application/json' },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-    const limit = path === '/runs' && body === undefined ? REGISTRY_MAX_BYTES : 2 * 1024 * 1024;
+    const limit = body === undefined && ['/runs', '/status'].includes(path) ? REGISTRY_MAX_BYTES : 2 * 1024 * 1024;
     const chunks = []; let bytes = 0;
     for await (const chunk of response.body) {
       bytes += chunk.length; if (bytes > limit) throw error('update-response-too-large'); chunks.push(chunk);
@@ -478,7 +478,7 @@ export async function updateComponents(input, options = {}) {
   async function wait(check, duration = c.waitMs) {
     const deadline = now() + duration;
     do {
-      try { if (await check()) return true; } catch (cause) { if (cause.code === 'update-runtime-incompatible') throw cause; }
+      try { if (await check()) return true; } catch (cause) { if (['update-runtime-incompatible', 'update-response-too-large'].includes(cause.code)) throw cause; }
       if (now() >= deadline) return false;
       await sleep(Math.min(50, deadline - now()));
     } while (true);
@@ -544,7 +544,7 @@ export async function updateComponents(input, options = {}) {
           receipt.brokerConnected = true;
         } catch (cause) {
           receipt.brokerConnected = false;
-          if (cause.code === 'update-controller-start-unconfirmed') throw cause;
+          if (['update-controller-start-unconfirmed', 'update-response-too-large'].includes(cause.code)) throw cause;
           throw error('update-broker-reload-unconfirmed');
         }
       }
