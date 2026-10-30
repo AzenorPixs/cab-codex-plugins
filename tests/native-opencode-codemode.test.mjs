@@ -112,6 +112,58 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const version = readFileSync(new URL('../pyproject.toml', import.meta.url), 'utf8').match(/^version = "([^"]+)"/m)[1];
     await until(async () => { if (controller.exitCode !== null) throw Error('controller startup: ' + controlLog);
       try { return (await http('/status')).brokerReadiness?.server_version === version; } catch { return false; } }, 'broker readiness');
+    // Une session temporaire partage le contexte MCP existant, même depuis un client technique.
+    const probeClient = createOpenCodeV2Client({ baseUrl: base, directory: join(root, 'technical-probe'), passwordFile });
+    const serverPidBeforeProbe = (await client.info(true)).pid;
+    const brokerPidBeforeProbe = readFileSync(brokerPidFile, 'utf8');
+    const probe = await probeClient.createProbeSession({ title: 'shared-context text-only probe',
+      model: { providerID: 'fixture', modelID: 'fixture' } });
+    assert.equal(probe.directory, workspace);
+    assert.deepEqual(probe.permission, [{ permission: '*', pattern: '*', action: 'deny' }]);
+    await probeClient.prompt(probe.id, 'Répondre par un texte bref, aucun outil.', { directory: probe.directory });
+    await until(async () => !(await probeClient.activeSessions(probe.directory))[probe.id], 'shared-context probe');
+    const probeRows = await probeClient.messages(probe.id, probe.directory);
+    assert.ok(probeRows.some(row => row.info.role === 'assistant'));
+    assert.equal(probeRows.flatMap(row => row.parts.filter(part => part.type === 'tool')).length, 0);
+    await probeClient.request('/api/session/' + encodeURIComponent(probe.id), { method: 'DELETE', query: { directory: probe.directory } });
+    await assert.rejects(probeClient.session(probe.id, probe.directory), { code: 'opencode-http-404' });
+    assert.equal((await client.info(true)).pid, serverPidBeforeProbe);
+    assert.equal(readFileSync(brokerPidFile, 'utf8'), brokerPidBeforeProbe);
+    assert.equal((await client.mcp())['cgpt-validation'].status, 'connected');
+    console.log('Sonde native isolée : location partagée, deny global, aucun outil, PID et broker conservés, session supprimée.');
+    // Reproduire et réparer un détenteur concurrent seulement sur ce serveur privé.
+    const foreignDirectory = join(root, 'foreign-context'); mkdirSync(foreignDirectory);
+    const mcpRoute = '/api/experimental/mcp/cgpt-validation/';
+    const foreignStatus = async () => {
+      const value = await client.request('/api/mcp', { query: { directory: foreignDirectory } });
+      assert.equal(value.location.directory, foreignDirectory);
+      return value.data.find(server => server.name === 'cgpt-validation').status.status;
+    };
+    const globalBrokerPid = Number(readFileSync(brokerPidFile, 'utf8'));
+    await client.disconnectMcp('cgpt-validation');
+    await until(async () => !existsSync('/proc/' + globalBrokerPid), 'initial private broker disconnected');
+    const legacyProbe = await client.createSession({ directory: foreignDirectory, title: 'legacy foreign-context probe',
+      model: { providerID: 'fixture', modelID: 'fixture' }, permissions: [{ permission: '*', pattern: '*', action: 'deny' }] });
+    await client.prompt(legacyProbe.id, 'Texte seulement, aucun outil.', { directory: foreignDirectory });
+    await until(async () => !(await client.activeSessions(foreignDirectory))[legacyProbe.id], 'legacy foreign-context probe');
+    await until(async () => (await foreignStatus()) === 'connected', 'foreign private broker connected');
+    const foreignBrokerPid = Number(readFileSync(brokerPidFile, 'utf8'));
+    assert.notEqual(foreignBrokerPid, globalBrokerPid);
+    try { await client.connectMcp('cgpt-validation'); }
+    catch (cause) { assert.match(cause.code || '', /^opencode-http-5[0-9]{2}$/); }
+    assert.equal((await client.mcp())['cgpt-validation'].status, 'failed');
+    assert.equal(await foreignStatus(), 'connected');
+    await client.request(mcpRoute + 'disconnect', { method: 'POST', query: { directory: foreignDirectory } });
+    assert.equal(await foreignStatus(), 'disabled');
+    await client.request('/api/session/' + encodeURIComponent(legacyProbe.id), { method: 'DELETE', query: { directory: foreignDirectory } });
+    await assert.rejects(client.session(legacyProbe.id, foreignDirectory), { code: 'opencode-http-404' });
+    await until(async () => !existsSync('/proc/' + foreignBrokerPid), 'foreign private broker disconnected');
+    await client.connectMcp('cgpt-validation');
+    assert.equal((await client.mcp())['cgpt-validation'].status, 'connected');
+    assert.equal(await foreignStatus(), 'disabled');
+    assert.equal((await client.info(true)).pid, serverPidBeforeProbe);
+    await until(async () => (await http('/status')).brokerReadiness?.server_version === version, 'fresh private broker readiness');
+    console.log('Conflit MCP natif privé reproduit : contexte concurrent connected, partagé failed ; récupération ciblée : concurrent disabled, partagé connected, même PID serveur.');
     const makeSession = title => client.createSession({ title, model: { providerID: 'fixture', modelID: 'fixture' },
       permissions: ['shell', 'bash', 'edit'].map(permission => ({ permission, pattern: '*', action: 'ask' })) });
     const discovery = { tool: 'execute', input: { code: 'const r = search({"query":"broker_readiness","namespace":"cgpt-validation"}); return r;' } };

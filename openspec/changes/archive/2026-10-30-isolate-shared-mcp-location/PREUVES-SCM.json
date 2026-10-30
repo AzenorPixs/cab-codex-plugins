@@ -1,0 +1,40 @@
+{
+  "change": "isolate-shared-mcp-location",
+  "version": "2.1.14",
+  "node": {
+    "total": 571,
+    "passed": 543,
+    "skipped": 28,
+    "failed": 0
+  },
+  "python": {
+    "total": 80,
+    "passed": 80
+  },
+  "native": {
+    "total": 1,
+    "passed": 1,
+    "private": true,
+    "conflict_reproduced": true,
+    "recovery_observed": true,
+    "server_pid_preserved": true,
+    "safe_probe_without_tools": true,
+    "probe_deletion_404": true
+  },
+  "targeted": 99,
+  "syntax": {
+    "javascript": 56,
+    "python": 16
+  },
+  "openspec_before": {
+    "standard": 17,
+    "strict": 17
+  },
+  "archive": "2026-10-30-isolate-shared-mcp-location",
+  "activation_proof": "étape distincte après publication",
+  "openspec_after": {
+    "standard": 16,
+    "strict": 16
+  },
+  "requirements_synchronized": 5
+}

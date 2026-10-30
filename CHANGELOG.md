@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.14 — Isolation de la location MCP et des sondes
+
+- Découverte serveur sans scope implicite, contrôles MCP à cible vérifiée et refus des arguments divergents ; appelants internes clarifiés.
+- Sonde jetable au workspace partagé avec deny global et modèle explicite ; aucune reconnexion automatique. Documentation et exemples courants génériques ; activation distincte après qualification.
+
 ## 2.1.13 — Restitution des réservations sans effet
 
 - Route release-unused explicite avec autorisation humaine, attestation exhaustive, relecture native et reçu durable ; aucun nettoyage fictif ni libération sur timeout.
@@ -220,7 +225,7 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
   réponse ambiguë, sans faux rollback vers un processus ancien disparu.
 - Qualification isolée de deux UID réels et régressions des modes existants.
 - Incrément mineur demandé de 1.8.0 vers 1.9.0 pour les sources, distribution
-  et supports ; aucune installation, relance réelle, mutation Pixs ou Git.
+  et supports ; aucune installation, relance réelle, mutation du projet piloté ou Git.
 
 ## 1.8.0 — préparation source
 

@@ -9,7 +9,7 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.1.13";
+export const VERSION = "2.1.14";
 if ([STEP_VERSION, MODEL_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -250,7 +250,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.13",
+    version: "2.1.14",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -806,7 +806,7 @@ async function inspectNotificationReconciliation(payload, matchesApproval) {
   }
   const health = await openCode.info();
   const path = await openCode.location(job.directory);
-  const mcp = await openCode.mcp(job.directory);
+  const mcp = await openCode.mcp();
   if (!health.version.startsWith('2.') || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') {
     recoveryFailure('opencode-context-divergent');
   }
@@ -869,7 +869,7 @@ async function inspectPausedOrphan(payload, matchesApproval) {
   if (validations.has(approval.requestId) || httpDecisions.has(approval.requestId) || active.size ||
       reconcilingPermissions.size || unmatchedNativePermissions.size || reminderNotifications.size ||
       [...validations.values()].some((v) => !httpDecisions.has(v.requestId))) fail('validation-exists');
-  const health = await openCode.info(), path = await openCode.location(job.directory), mcp = await openCode.mcp(job.directory);
+  const health = await openCode.info(), path = await openCode.location(job.directory), mcp = await openCode.mcp();
   if (!health.version.startsWith('2.') || path.directory !== job.directory || mcp['cgpt-validation']?.status !== 'connected') fail('context-divergent');
   const parts = recoveryTools(await openCode.messages(job.sessionId, job.directory));
   const submissions = parts.filter((p) => p.tool === 'cgpt-validation_request_validation' && p.state?.input?.requestId === approval.requestId);
@@ -1017,7 +1017,7 @@ async function checkRecoveryContext(candidate, blockedRestore = false) {
   }
   let health, path, mcp, busy, permissions;
   try { [health, path, mcp, busy, permissions] = await Promise.all([openCode.info(), openCode.location(job.directory),
-    openCode.mcp(job.directory), openCode.sessionStatus(job.directory), openCode.permissions(job.directory, permissionScope(candidate.sessionId))]); }
+    openCode.mcp(), openCode.sessionStatus(job.directory), openCode.permissions(job.directory, permissionScope(candidate.sessionId))]); }
   catch { recoveryFailure('opencode-control-unavailable'); }
   if (!health.version.startsWith('2.') || path.directory !== job.directory ||
       mcp["cgpt-validation"]?.status !== "connected") {
@@ -1744,7 +1744,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.13",
+      version: "2.1.14",
     },
   });
 

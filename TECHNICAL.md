@@ -60,7 +60,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.13` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.14` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -1144,7 +1144,7 @@ Le profil qualifie temporairement contrôleur 1.10.10 avec broker, superviseur
 et Web 1.7.1 conservés. packageVersion, runtimeVersions, maintenanceBuildDigest
 et frozenRecoveryMaintenance distinguent paquet et processus. La preuve
 isolée va jusqu'au prévol neuf once/exit 0 et complete avec le même broker
-original. Elle ne vaut pas déploiement global 1.10.10 ni test produit Pixs.
+original. Elle ne vaut pas déploiement global 1.10.10 ni test du produit consommateur.
 Une version préservée inconnue ou différente est refusée. Le mode ordinaire
 update conserve ses contrôles et ses opérations de cycle de vie propres.
 
@@ -1160,7 +1160,7 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.13 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.14 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1275,7 +1275,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.13 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.14 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1340,7 +1340,7 @@ Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de 
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.13.
+La distribution courante des quatre briques, plugins et commandes est 2.1.14.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -1466,7 +1466,7 @@ Les tests et lectures filtrées qualifient les sources. L’activation CABU et
 la récupération réelle du RUN restent des étapes distinctes, coordonnées
 séparément ; les services actifs ne sont pas modifiés par cette préparation.
 
-## Diagnostics de notification et refus avant admission — source 2.1.13
+## Diagnostics de notification et refus avant admission — source 2.1.14
 
 Une approbation peut rester `PENDING` alors que sa notification au contrôleur
 est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
@@ -1495,7 +1495,7 @@ La préparation source n’active rien. L’activation CABU coordonnée est rapp
 avec les versions des processus réels avant notification aux sessions.
 
 
-## Restitution des réservations sans effet — source 2.1.13
+## Restitution des réservations sans effet — source 2.1.14
 
 La route explicite release-unused permet de restituer une réservation de test
 HELD sans nettoyage fictif, uniquement sur autorisation humaine spécifique,
@@ -1507,3 +1507,15 @@ ordinaire. Procédure et limites :
 Le reçu enrichi est refusé par les anciens lecteurs stricts ; ne pas restaurer
 un état ancien pour supprimer une preuve. La préparation source ne modifie
 aucun RUN ni composant actif.
+
+
+## Isolation des sondes et du broker partagé — source 2.1.14
+
+La découverte serveur est envoyée sans scope de workspace. Les contrôles MCP
+visent la location partagée et refusent une cible explicite divergente.
+createProbeSession prépare la sonde jetable dans cette location avec deny
+global et modèle explicite ; sa suppression ne touche que sa session.
+Aucune panne ne déclenche de reconnexion automatique ni de redémarrage
+OpenCode. La récupération d’un contexte concurrent reste explicitement
+autorisée et contrôlée. Les workspaces des exemples sont génériques.
+Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-location-isolation.md).

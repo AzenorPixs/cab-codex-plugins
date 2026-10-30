@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.13. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.14. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -775,7 +775,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.13.
+La distribution courante des quatre briques, plugins et commandes est 2.1.14.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -901,7 +901,7 @@ Les tests et lectures filtrées qualifient les sources. L’activation CABU et
 la récupération réelle du RUN restent des étapes distinctes, coordonnées
 séparément ; les services actifs ne sont pas modifiés par cette préparation.
 
-## Diagnostics de notification et refus avant admission — source 2.1.13
+## Diagnostics de notification et refus avant admission — source 2.1.14
 
 Une approbation peut rester `PENDING` alors que sa notification au contrôleur
 est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
@@ -930,7 +930,7 @@ La préparation source n’active rien. L’activation CABU coordonnée est rapp
 avec les versions des processus réels avant notification aux sessions.
 
 
-## Restitution des réservations sans effet — source 2.1.13
+## Restitution des réservations sans effet — source 2.1.14
 
 La route explicite release-unused permet de restituer une réservation de test
 HELD sans nettoyage fictif, uniquement sur autorisation humaine spécifique,
@@ -942,3 +942,15 @@ ordinaire. Procédure et limites :
 Le reçu enrichi est refusé par les anciens lecteurs stricts ; ne pas restaurer
 un état ancien pour supprimer une preuve. La préparation source ne modifie
 aucun RUN ni composant actif.
+
+
+## Isolation des sondes et du broker partagé — source 2.1.14
+
+La découverte serveur est envoyée sans scope de workspace. Les contrôles MCP
+visent la location partagée et refusent une cible explicite divergente.
+createProbeSession prépare la sonde jetable dans cette location avec deny
+global et modèle explicite ; sa suppression ne touche que sa session.
+Aucune panne ne déclenche de reconnexion automatique ni de redémarrage
+OpenCode. La récupération d’un contexte concurrent reste explicitement
+autorisée et contrôlée. Les workspaces des exemples sont génériques.
+Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-location-isolation.md).
