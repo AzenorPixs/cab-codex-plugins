@@ -685,3 +685,47 @@ test('permission historique : aucune empreinte libre ne devient preuve native',a
   fetchImpl:async u=>new URL(u).pathname==='/api/info'?json(info):json({location,data:[{id:'p',sessionID:'ses_code',action:'edit',resources:['/workspace/one.py'],metadata:{nativeSourceVerified:true,nativeToolInputSha256:'a'.repeat(64)}}]})});
  const p=(await client.permissions())[0];assert.equal(p.metadata.nativeSourceVerified,undefined);assert.equal(p.metadata.nativeToolInputSha256,undefined);
 });
+
+
+test('Code Mode : readiness vide unique, input absent attesté et empreinte brute conservée',async t=>{
+ const code='return await tools["cgpt-validation"].broker_readiness({});';
+ const omitted=wrapped(code,[{tool:'cgpt-validation.broker_readiness',status:'completed'}]);
+ const before=structuredClone(omitted),part=await codeModeFixture(t,omitted);
+ assert.equal(part.tool,'cgpt-validation_broker_readiness');assert.deepEqual(part.state.input,{});
+ assert.deepEqual(omitted,before);assert.equal(Object.hasOwn(part.state.metadata.toolCalls[0],'input'),false);
+ const explicit=wrapped(code,[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{}}]);
+ assert.notEqual(part.state.metadata.cabCodeMode.envelopeHash,(await codeModeFixture(t,explicit)).state.metadata.cabCodeMode.envelopeHash);
+ for(const spelling of ['return await tools["cgpt-validation"].broker_readiness( { } );',"return await tools['cgpt-validation'].broker_readiness({});"]){
+  assert.equal((await codeModeFixture(t,wrapped(spelling,[{tool:'cgpt-validation.broker_readiness',status:'completed'}]))).tool,'cgpt-validation_broker_readiness');}
+});
+
+test('Code Mode : omission input readiness ne généralise aucune valeur implicite',async t=>{
+ const base=wrapped('return await tools["cgpt-validation"].broker_readiness({});',[{tool:'cgpt-validation.broker_readiness',status:'completed'}]);
+ for(const change of [
+  p=>p.state.metadata.toolCalls[0].input=null,
+  p=>p.state.metadata.toolCalls[0].input=[],
+  p=>p.state.metadata.toolCalls[0].input={run_id:'foreign'},
+  p=>p.state.input.code='return await tools["cgpt-validation"].broker_readiness({run_id:"a"});',
+  p=>p.state.input.code='return await tools["cgpt-validation"].broker_readiness(arguments);',
+  p=>p.state.input.code='const r = await tools["cgpt-validation"].broker_readiness({}); return r;',
+  p=>p.state.input.code+=' await tools["cgpt-validation"].reject({});',
+  p=>p.state.input.code='const s=search({query:"broker_readiness"}); return await tools["cgpt-validation"].broker_readiness({});',
+  p=>p.state.metadata.toolCalls.push({tool:'shell',status:'completed',input:{}}),
+  p=>p.state.metadata.toolCalls[0].tool='cgpt-validation.get_approval',
+  p=>p.state.metadata.toolCalls[0].status='error',
+  p=>p.state.metadata.toolCalls[0].status='running',
+  p=>p.state.status='running',
+  p=>p.state.status='error',
+  p=>p.executed=true,
+  p=>delete p.executed,
+  p=>p.state.metadata.error=true,
+  p=>p.state.metadata.error=null,
+  p=>p.state.metadata.error="false",
+  p=>p.state.metadata.truncated=true,
+  p=>delete p.state.metadata.truncated,
+  p=>delete p.state.metadata.toolCalls,
+  p=>p.state.metadata.toolCalls=[null],
+ ]){const raw=structuredClone(base);change(raw);assert.equal((await codeModeFixture(t,raw)).tool,'execute');}
+ for(const method of ['request_validation','get_approval','poll_approval','reject']){
+  assert.equal((await codeModeFixture(t,wrapped('return await tools["cgpt-validation"].'+method+'({});',[{tool:'cgpt-validation.'+method,status:'completed'}]))).tool,'execute');}
+});

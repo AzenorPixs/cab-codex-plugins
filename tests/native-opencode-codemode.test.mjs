@@ -195,6 +195,19 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.ok(mcpItems.every(item => /^tools(?:\.|\[)/.test(item.path)));
     assert.equal(mcpItems.some(item => item.path === 'edit'), false);
     console.log('Recherche MCP edit :', JSON.stringify(mcpItems.map(item => item.path)));
+    const emptyReadyEnd=dispatched+1;
+    queue.push({tool:'execute',input:{code:'return await tools["cgpt-validation"].broker_readiness({});'}});
+    await client.prompt(warmup.id,'Diagnostic natif readiness vide uniquement, aucune permission.');
+    await until(async()=>!(await client.activeSessions())[warmup.id]&&dispatched===emptyReadyEnd,'empty readiness');
+    const readinessPart=(await client.messages(warmup.id)).flatMap(m=>m.parts).findLast(p=>p.tool==='cgpt-validation_broker_readiness');
+    assert.ok(readinessPart);assert.deepEqual(readinessPart.state.input,{});
+    assert.equal(readinessPart.state.metadata.truncated,false);
+    assert.equal(readinessPart.state.metadata.toolCalls.length,1);
+    assert.equal(readinessPart.state.metadata.toolCalls[0].tool,'cgpt-validation.broker_readiness');
+    assert.equal(Object.hasOwn(readinessPart.state.metadata.toolCalls[0],'input'),false);
+    assert.match(readinessPart.state.metadata.cabCodeMode.envelopeHash,/^[a-f0-9]{64}$/);
+    assert.equal((await client.permissions()).length,0);
+    console.log(JSON.stringify({emptyReadinessNative:true,inputOmitted:true,literalEmptyInputProjected:true,rawEnvelopeSealed:true,permissionCount:0}));
     const old = await makeSession('old'), candidate = await makeSession('candidate');
     const resource = 'resource:native-preflight';
     const run = await http('/runs/reserve', { runId: 'native-code', ownerId: 'synthetic-owner', sessionId: old.id,

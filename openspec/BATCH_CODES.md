@@ -188,3 +188,8 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Entrée native exacte — SCM2.1.22
 
 `bind-native-write-input-before-once` : ARCHIVÉ — source2.1.22 qualifiée ; activation non déduite, **code non attribué**, empreinte des arguments write/edit et garde avant once. [Proposition](changes/archive/2026-10-30-bind-native-write-input-before-once/proposal.md), [tâches](changes/archive/2026-10-30-bind-native-write-input-before-once/tasks.md). Qualification, publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Readiness vide — SCM2.1.23
+
+`qualify-empty-readiness-metadata-input` : ARCHIVÉ — source2.1.23 qualifiée ; activation non déduite, **code non attribué**, projection native de l’omission input du seul diagnostic readiness vide. [Proposition](changes/archive/2026-10-30-qualify-empty-readiness-metadata-input/proposal.md), [tâches](changes/archive/2026-10-30-qualify-empty-readiness-metadata-input/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.

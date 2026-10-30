@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.23 — Readiness vide en Code Mode
+
+- Reconnaissance ciblée de broker_readiness({}) lorsque l’unique métadonnée native achevée omet input ; aucun défaut générique d’arguments ajouté.
+- Métadonnées et empreinte brute conservées ; formes voisines, erreurs, autres outils et appels ajoutés restent bloquants, sans autorité de décision/permission nouvelle.
+
 ## 2.1.22 — Arguments d’écriture vérifiés avant once
 
 - tool_input_sha256 lie les arguments write/edit approuvés à la demande, au retry et à la décision corrélée.

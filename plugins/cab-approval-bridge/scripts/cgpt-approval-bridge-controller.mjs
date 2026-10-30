@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.22";
+const version = "2.1.23";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
