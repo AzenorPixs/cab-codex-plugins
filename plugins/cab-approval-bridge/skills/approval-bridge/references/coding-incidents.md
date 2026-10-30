@@ -75,3 +75,7 @@ prévols requis avant de reprendre uniquement ses mandats autorisés. Une sessio
 clôturée reçoit une information, sans réactivation. Clore le suivi seulement
 après correction qualifiée, activation vérifiée et retour aux sessions
 concernées ; conserver la référence durable de l’incident et de sa résolution.
+
+## Diagnostic et reprise qualifiés
+
+Pour catalogue MCP/natif, erreur fournisseur avec fragment refusé, conducteur incomplet et registry indisponible, appliquer [native-coding-recovery.md](native-coding-recovery.md). Conserver chaque incident séparé, son origine externe ou CAB démontrée, ses preuves et la portée réelle du correctif.

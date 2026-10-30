@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.25';
+export const VERSION = '2.1.26';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -209,6 +209,14 @@ export class ResourceRunRegistry extends RunRegistry {
           entry.scope !== 'all' || !Number.isSafeInteger(entry.generation) || entry.generation > state.sequence ||
           !Number.isFinite(Date.parse(entry.requestedAt)) || typeof entry.authorization !== 'string' || !entry.authorization) fail();
     }
+  }
+
+  monitorRuns() {
+    const values = [...this.runs.values()].sort((a, b) =>
+      Number(b.state === 'RESERVED') - Number(a.state === 'RESERVED') || a.runId.localeCompare(b.runId));
+    return { version: VERSION, snapshot_only: true, totalRuns: values.length, truncated: values.length > 200,
+      runs: values.slice(0, 200).map(run => Object.fromEntries(
+        ['runId', 'changeId', 'sessionId', 'version', 'state', 'phase'].map(key => [key, run[key] ?? null]))) };
   }
 
   snapshot() {

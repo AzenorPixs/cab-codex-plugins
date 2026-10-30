@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.26 — Remédiation des incidents natifs et du moniteur
+
+- Projection GET compacte du registre pour le moniteur, sans relever le plafond de collecte ; causes HTTP/taille/format/délai explicites.
+- Helpers explicites de préparation native et diagnostic corrélé des erreurs fournisseur/découverte seule/entrées divergentes, sans retry ou permission.
+- Procédure de réconciliation, conservation du choix LLM et revue complète des conducteurs ; les gardes exactes et preuves de tests restent requises.
+
 ## 2.1.25 — Porte-mandat Bash exact
 
 - Payload Bash revu et scellé dans le contrôleur, invocation courte liée au SHA256 : le modèle ne recopie plus le corps long.

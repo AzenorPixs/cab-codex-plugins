@@ -69,7 +69,7 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '2.1.25');
+  assert.equal(snapshot.version, '2.1.26');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
   assert.equal((await fetch(base)).status, 200);
   for (const route of ['/app.mjs', '/stats.mjs', '/style.css']) assert.equal((await fetch(base + route)).status, 200);

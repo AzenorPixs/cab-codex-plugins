@@ -136,7 +136,7 @@ test('collecte : limite effective, RUN isolés, aucune décision ou mutation et 
       runs: { a: { job: { changeId: 'change-a', sessionId: 'ses_a', armed: true }, terminalGate: { status: 'OPEN' },
         coordination: { reason: 'resource-conflict', blockers: [{ runId: 'b' }] } },
       b: { job: { changeId: 'change-b', sessionId: 'ses_b', armed: true }, terminalGate: { status: 'OPEN' } } } });
-    if (request.url === '/runs') return json(response, { runs: [{ runId: 'a', state: 'RESERVED' }, { runId: 'b', state: 'RESERVED' }], privateToken: 'PRIVATE-SENTINEL' });
+    if (request.url === '/monitor/runs') return json(response, { runs: [{ runId: 'a', state: 'RESERVED' }, { runId: 'b', state: 'RESERVED' }], privateToken: 'PRIVATE-SENTINEL' });
     if (request.url === '/monitor/events') return json(response, journal.snapshot());
     if (request.url.startsWith('/api/info')) return json(response, { version: '2.2.0', pid: 42,
       hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } });
@@ -179,10 +179,10 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.1.25', mode: 'concurrent', brokerReadiness: { server_version: '2.1.25' },
+    else if (target.pathname === '/status') value = { version: '2.1.26', mode: 'concurrent', brokerReadiness: { server_version: '2.1.26' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
-    else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
+    else if (target.pathname === '/monitor/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
     else if (target.pathname === '/monitor/events') value = createObservationJournal().snapshot();
     else value = {};
     return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
@@ -190,7 +190,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.1.25', supervisor: '1.4.0', broker: '2.1.25', opencode: '2.2.0', monitor: '2.1.25' });
+  assert.deepEqual(result.componentVersions, { controller: '2.1.26', supervisor: '1.4.0', broker: '2.1.26', opencode: '2.2.0', monitor: '2.1.26' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -291,4 +291,16 @@ test('relais STATS : routes fixes, origine obligatoire, corps borné et panne', 
   assert.equal((await fetch(base + '/api/statistics/retention/arbitrary', { method: 'POST', headers })).status, 404);
   failed = true;
   assert.equal((await fetch(base + '/api/statistics?selection=7d')).status, 503);
+});
+
+
+test('registre compact : collecte indépendante de l’historique complet et refus détaillés bornés',async t=>{
+ const workspace=await fixture(t);let fullReads=0;const base=await listen(t,(req,res)=>{if(req.url==='/runs'){fullReads++;return json(res,{history:'x'.repeat(3*1024*1024),runs:[]})}if(req.url==='/monitor/runs')return json(res,{snapshot_only:true,totalRuns:1,truncated:false,runs:[{runId:'a',changeId:'change-a',sessionId:'ses_a',state:'RESERVED',version:1}]});res.writeHead(503).end()});
+ const state=new MonitorState({...config(),workspace,controllerUrl:base,supervisorUrl:base,opencodeUrl:base});await state.collect();assert.equal(fullReads,0);assert.equal(state.snapshot().sources.registry.available,true);assert.equal(state.snapshot().runs[0].runId,'a');
+ const old=state.sources.registry.value;
+ for(const [body,status,expected] of [['x'.repeat(2*1024*1024+1),200,'source-too-large'],['PRIVATE-BAD-JSON',200,'source-invalid'],['[]',200,'source-invalid'],['PRIVATE-HTTP',503,'source-http-error']]){
+  state.fetcher=async()=>new Response(body,{status});await state.source('registry',base+'/monitor/runs');assert.equal(state.snapshot().sources.registry.error,expected);assert.equal(state.snapshot().sources.registry.stale,true);assert.deepEqual(state.sources.registry.value,old);assert.ok(!JSON.stringify(state.snapshot()).includes('PRIVATE-'));
+ }
+ state.fetcher=async()=>{throw Object.assign(new Error('PRIVATE-TIMEOUT'),{name:'TimeoutError'})};await state.source('registry',base+'/monitor/runs');assert.equal(state.snapshot().sources.registry.error,'source-timeout');
+ state.fetcher=async()=>new Response('{"runs":[]}');await state.source('registry',base+'/monitor/runs');assert.equal(state.snapshot().sources.registry.available,true);assert.equal(state.snapshot().sources.registry.error,null);
 });

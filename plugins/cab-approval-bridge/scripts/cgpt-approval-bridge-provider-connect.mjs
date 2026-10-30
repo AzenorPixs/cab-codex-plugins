@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createOpenCodeV2Client, VERSION as CLIENT_VERSION } from './cgpt-approval-bridge-opencode-client.mjs';
-export const VERSION = '2.1.25';
+export const VERSION = '2.1.26';
 if (CLIENT_VERSION !== VERSION) throw new Error('CAB provider component version mismatch');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);

@@ -605,3 +605,11 @@ test('restitution sans effet : opération annulée sans exécution et intégrit�
   assert.throws(()=>h.r.validateResourceState(state),/registry-restoration-invalid/);
   assert.equal(h.r.resourceState.testReservations[entry.transactionId].state,'RELEASED');
 });
+
+
+test('projection moniteur : historique volumineux exclu, actives prioritaires et limite explicite', () => {
+ const runs=new Map(Array.from({length:205},(_,i)=>['run-'+i,{runId:'run-'+i,changeId:'change-'+i,sessionId:'ses_'+i,version:i+1,state:i===204?'RESERVED':'DELIVERED',phase:'IMPLEMENTATION',history:'PRIVATE-HISTORY-'+'x'.repeat(16000),resources:[{key:'PRIVATE-RESOURCE'}]}]));
+ const source={runs,snapshot(){throw Error('full snapshot forbidden')}};const before=JSON.stringify([...runs]);assert.ok(before.length>2*1024*1024);
+ const view=ResourceRunRegistry.prototype.monitorRuns.call(source);assert.equal(view.runs.length,200);assert.equal(view.totalRuns,205);assert.equal(view.truncated,true);assert.equal(view.snapshot_only,true);assert.equal(view.runs[0].runId,'run-204');
+ assert.ok(JSON.stringify(view).length<100000);assert.ok(!JSON.stringify(view).includes('PRIVATE-'));assert.equal(JSON.stringify([...runs]),before);
+});

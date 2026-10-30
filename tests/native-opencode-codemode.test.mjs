@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
-import { createOpenCodeV2Client, nativeToolInputDigest } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2Client, nativeToolInputDigest, nativeCodingMandate, diagnoseCodingTurn } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 
 const binary = process.env.CAB_TEST_OPENCODE;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -36,6 +36,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       if (main) nativeTools = body.tools.map(tool => tool.function);
       const action = main ? queue.shift() : null;
       if (action) dispatched++;
+      if(action?.providerError){response.writeHead(400,{'content-type':'application/json'});response.end(JSON.stringify({error:{type:'invalid_request_error',message:'SYNTHETIC_PROVIDER_FAILURE'}}));return;}
       const delta = action ? { role: 'assistant', tool_calls: [{ index: 0, id: 'native_call_' + dispatched,
         type: 'function', function: { name: action.tool, arguments: JSON.stringify(action.input) } }] }
         : { role: 'assistant', content: 'synthetic fixture done' };
@@ -199,6 +200,17 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.ok(mcpItems.every(item => /^tools(?:\.|\[)/.test(item.path)));
     assert.equal(mcpItems.some(item => item.path === 'edit'), false);
     console.log('Recherche MCP edit :', JSON.stringify(mcpItems.map(item => item.path)));
+    const discoveryMessages=await client.messages(warmup.id),discoveryUser=discoveryMessages.findLast(m=>m.info.role==='user');
+    assert.equal(diagnoseCodingTurn(discoveryMessages,{sessionId:warmup.id,promptId:discoveryUser.info.id}).discoveryOnly,true);
+    const failureSession=await makeSession('diagnostic erreur fournisseur privé'),failureEnd=dispatched+1;
+    queue.push({providerError:true});const failurePrompt=await client.prompt(failureSession.id,nativeCodingMandate('Diagnostic synthétique sans outil.'));
+    await until(async()=>!(await client.activeSessions())[failureSession.id]&&dispatched===failureEnd,'provider failure diagnostic');
+    const failureMessages=await client.messages(failureSession.id),failureUser=failureMessages.findLast(m=>m.info.role==='user');
+    const failureDiagnostic=diagnoseCodingTurn(failureMessages,{sessionId:failureSession.id,promptId:failureUser.info.id});
+    assert.equal(failureDiagnostic.available,true);assert.equal(failureDiagnostic.nativeTurnFailed,true);assert.equal(failureDiagnostic.requiresReconciliation,true);assert.equal(failureDiagnostic.effectStatus,'unverified');assert.equal(failureDiagnostic.nativeWriteCount,0);
+    assert.equal((await client.permissions()).filter(p=>p.sessionID===failureSession.id).length,0);
+    assert.equal(providerRequests.filter(raw=>raw.includes('Diagnostic synthétique sans outil.')).length,1,'aucun retry natif de cette erreur400');
+    assert.ok(failurePrompt.id);console.log(JSON.stringify({nativeCodingDiagnostic:true,providerErrorObserved:true,noDiagnosticRetry:true,noPermission:true,discoveryNotAbsence:true}));
     const emptyReadyEnd=dispatched+1;
     queue.push({tool:'execute',input:{code:'return await tools["cgpt-validation"].broker_readiness({});'}});
     await client.prompt(warmup.id,'Diagnostic natif readiness vide uniquement, aucune permission.');
@@ -426,7 +438,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       tool_input_sha256:nativeToolInputDigest({path:target,content:'approved replacement'})};
     const mismatchEnd=dispatched+2;
     queue.push(mcp('request_validation',mismatch),{tool:'write',input:{path:target,content:'UNAPPROVED replacement'}});
-    await client.prompt(retryCandidate.id,'Execute only the queued synthetic mismatch.');
+    await client.prompt(retryCandidate.id,nativeCodingMandate('Execute only the queued synthetic mismatch.'));
     await until(async()=>(await http('/runs/native-code/status')).undecidedValidationCount===1,'mismatch admission');
     await http('/runs/native-code/decision/'+mismatch.requestId,{decision:'approved'});
     await http('/runs/native-code/locks/acquire',{version:current.version,operationId:mismatch.operation_id,operationDigest:mismatch.operation_digest,resources:mismatch.resources,expectedRevisions:mismatch.expected_revisions});
@@ -438,6 +450,9 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     await client.replyPermission(retryCandidate.id,blocked.id,'reject');
     await until(async()=>!(await client.activeSessions())[retryCandidate.id]&&dispatched===mismatchEnd,'mismatch explicit rejection');
     assert.equal(readFileSync(target,'utf8'),'duplicate duplicate');
+    const mismatchMessages=await client.messages(retryCandidate.id),mismatchUser=mismatchMessages.findLast(m=>m.info.role==='user');
+    const mismatchDiagnostic=diagnoseCodingTurn(mismatchMessages,{sessionId:retryCandidate.id,promptId:mismatchUser.info.id,toolInputSha256:mismatch.tool_input_sha256});
+    assert.equal(mismatchDiagnostic.available,true);assert.equal(mismatchDiagnostic.inputMismatchCount,1);assert.equal(mismatchDiagnostic.requiresReconciliation,true);assert.equal(mismatchDiagnostic.effectStatus,'unverified');
     console.log(JSON.stringify({nativeInputGuard:true,exactWrite:true,exactEdit:true,mismatchBeforeOnce:true,filePreserved:true}));
 
 

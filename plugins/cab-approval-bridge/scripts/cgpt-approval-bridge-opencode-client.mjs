@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.25';
+export const VERSION = '2.1.26';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -138,6 +138,42 @@ function canonical(value) {
 export function nativeToolInputDigest(input) {
   if (!record(input)) fail('opencode-tool-input-invalid');
   return createHash('sha256').update(canonical(input),'utf8').digest('hex');
+}
+
+export function nativeCodingMandate(instruction) {
+  if (typeof instruction !== 'string' || !instruction.trim()) fail('opencode-coding-mandate-invalid');
+  return 'CAB — outils natifs : write, edit et shell sont distincts du catalogue MCP search/execute. ' +
+    'Une recherche MCP vide ne prouve pas leur absence. Utiliser directement l’outil natif disponible prescrit, ' +
+    'avec les arguments exacts approuvés, seulement après les étapes CAB requises. ' +
+    'Si cet outil est réellement absent, signaler le blocage sans substitution ni opération supplémentaire. ' +
+    'Après erreur fournisseur ou arguments incomplets, ne pas compléter un fragment ni relancer un outil : ' +
+    'attendre la réconciliation et un nouveau mandat. Une proposition doit être complète ; READY ne prouve aucun test.\n\n' + instruction;
+}
+
+// Observation seulement : les permissions et les effets sont vérifiés séparément.
+export function diagnoseCodingTurn(messages, { sessionId, promptId, toolInputSha256 } = {}) {
+  if (!Array.isArray(messages) || typeof sessionId !== 'string' || !/^ses_[A-Za-z0-9_-]+$/.test(sessionId) ||
+      typeof promptId !== 'string' || !/^msg_[A-Za-z0-9_-]+$/.test(promptId) ||
+      toolInputSha256 !== undefined && !/^[a-f0-9]{64}$/.test(toolInputSha256)) fail('opencode-coding-diagnostic-invalid');
+  const users = messages.filter(m => m?.info?.sessionID === sessionId && m.info.id === promptId && m.info.role === 'user');
+  const assistants = messages.filter(m => m?.info?.sessionID === sessionId && m.info.role === 'assistant' && m.info.parentID === promptId);
+  const base = { sessionId, promptId, snapshot_only: true, effectStatus: 'unverified' };
+  if (users.length !== 1 || !assistants.length) return { ...base, available: false,
+    reason: 'native-turn-evidence-unavailable', requiresReconciliation: true };
+  const tools = assistants.flatMap(m => Array.isArray(m.parts) ? m.parts.filter(p => p?.type === 'tool') : []);
+  const writes = tools.filter(p => ['write', 'edit'].includes(p.tool));
+  const invalidWriteInputCount = writes.filter(p => !record(p.state?.input) || typeof p.state.input.path !== 'string' ||
+    !p.state.input.path || (p.tool === 'write' ? typeof p.state.input.content !== 'string' :
+      typeof p.state.input.oldString !== 'string' || typeof p.state.input.newString !== 'string')).length;
+  const inputMismatchCount = toolInputSha256 === undefined ? null : writes.filter(p =>
+    !record(p.state?.input) || nativeToolInputDigest(p.state.input) !== toolInputSha256).length;
+  const providerFailure = assistants.some(m => /^provider\./.test(m.info.error?.type || ''));
+  const nativeTurnFailed = assistants.some(m => m.info.finish === 'error' || Boolean(m.info.error));
+  const discoveryOnly = tools.length > 0 && tools.every(p => p.tool === 'cab_codemode_discovery');
+  const requiresReconciliation = nativeTurnFailed || invalidWriteInputCount > 0 || inputMismatchCount > 0;
+  return { ...base, available: true, assistantCount: assistants.length, nativeWriteCount: writes.length,
+    invalidWriteInputCount, inputMismatchCount, providerFailure, nativeTurnFailed, discoveryOnly, requiresReconciliation,
+    nextAction: requiresReconciliation ? 'reconcile-before-new-mandate' : discoveryOnly ? 'verify-native-tool-selection' : 'review-native-result' };
 }
 
 // Une grammaire de données, jamais un interpréteur JavaScript.
