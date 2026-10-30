@@ -260,7 +260,7 @@ test('la location V2 est transmise par en-tête et une divergence est refusée',
         assert.equal(options.headers['x-opencode-directory'], undefined);
         return json({ directory: '/shared-server' });
       }
-      assert.equal(options.headers['x-opencode-directory'], new URL(url).pathname === '/api/info' ? directory : '/shared-server');
+      assert.equal(options.headers['x-opencode-directory'], new URL(url).pathname === '/api/info' ? undefined : '/shared-server');
       if (new URL(url).pathname === '/api/info') return json(info);
       return json({ location: { directory: divergent ? '/other' : '/shared-server' }, data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] });
     } });
@@ -479,4 +479,104 @@ test('pagination adaptative : une erreur HTTP étrangère ne déclenche aucun r�
   const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
     fetchImpl: async u => { if (new URL(u).pathname === '/api/info') return json(info); calls++; return json({ error: 'unavailable' }, 503); } });
   await assert.rejects(client.messages('ses_large')); assert.equal(calls, 1);
+});
+
+
+function isolatedMcpFixture(t) {
+  const f=fixture();t.after(f.close);const calls=[];
+  const state={pid:42,shared:'/workspace/shared',status:'connected',badLocation:false};
+  const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace/technical',passwordFile:f.passwordFile,
+    fetchImpl:async(input,options)=>{
+      const url=new URL(input);const body=options.body?JSON.parse(options.body):undefined;
+      calls.push({path:url.pathname,query:Object.fromEntries(url.searchParams),directory:options.headers['x-opencode-directory'],method:options.method,body});
+      if(url.pathname==='/api/info'){state.onInfo?.();return json({...info,pid:state.pid});}
+      if(url.pathname==='/api/location')return json({directory:options.headers['x-opencode-directory']||state.shared});
+      if(url.pathname==='/api/mcp')return json({location:{directory:state.badLocation?'/workspace/other':state.shared},data:[{name:'cgpt-validation',status:{status:state.status}}]});
+      if(url.pathname.startsWith('/api/experimental/mcp/'))return new Response(null,{status:204});
+      if(url.pathname==='/api/session')return json({data:{id:'ses_probe',directory:body.location.directory,
+        permissions:body.permissions,model:body.model}});
+      throw Error('unexpected fixture route '+url.pathname);
+    }});
+  return {client,calls,state};
+}
+
+test('isolation MCP : découverte globale et contrôle partagé sans initialiser le workspace technique',async t=>{
+  const {client,calls}=isolatedMcpFixture(t);
+  await client.info();await client.mcp();await client.connectMcp('cgpt-validation');await client.disconnectMcp('cgpt-validation');
+  for(const call of calls){
+    if(['/api/info','/api/location'].includes(call.path)){
+      assert.equal(call.directory,undefined);assert.equal(call.query.directory,undefined);
+    }else{assert.equal(call.directory,'/workspace/shared');assert.equal(call.query.directory,'/workspace/shared');}
+  }
+  assert.equal(calls.some(c=>c.directory==='/workspace/technical'),false);
+});
+
+test('isolation MCP : argument divergent refusé avant toute requête MCP et cible égale compatible',async t=>{
+  const {client,calls}=isolatedMcpFixture(t);
+  for(const invoke of [()=>client.mcp('/workspace/technical'),()=>client.connectMcp('cgpt-validation','/workspace/technical'),
+    ()=>client.disconnectMcp('cgpt-validation','/workspace/technical')]){
+    await assert.rejects(invoke,{code:'opencode-mcp-location-override-refused'});
+  }
+  assert.equal(calls.some(c=>c.path.includes('/mcp')),false);
+  assert.equal((await client.mcp('/workspace/shared'))['cgpt-validation'].status,'connected');
+});
+
+test('isolation MCP : location revérifiée, dérive même PID bloquée, nouveau PID redécouvert',async t=>{
+  const {client,calls,state}=isolatedMcpFixture(t);assert.equal(await client.sharedMcpDirectory(),'/workspace/shared');
+  state.shared='/workspace/replaced';
+  await assert.rejects(client.connectMcp('cgpt-validation'),{code:'opencode-mcp-location-changed'});
+  assert.equal(calls.some(c=>c.method==='POST'),false);
+  state.pid++;assert.equal(await client.sharedMcpDirectory(),'/workspace/replaced');
+  state.badLocation=true;await assert.rejects(client.mcp(),{code:'opencode-mcp-invalid'});
+});
+
+test('isolation MCP : sonde jetable au workspace partagé, permissions deny et POST correctement ciblé',async t=>{
+  const {client,calls}=isolatedMcpFixture(t);
+  const probe=await client.createProbeSession({title:'performance sans outil',model:{providerID:'fixture',modelID:'fixture',reasoning:'medium'}});
+  assert.equal(probe.directory,'/workspace/shared');
+  const post=calls.find(c=>c.path==='/api/session'&&c.method==='POST');
+  assert.equal(post.directory,'/workspace/shared');assert.equal(post.query.directory,'/workspace/shared');
+  assert.equal(post.body.location.directory,'/workspace/shared');
+  assert.deepEqual(post.body.permissions,[{action:'*',resource:'*',effect:'deny'}]);
+  assert.equal(post.body.model.variant,'medium');assert.equal(calls.some(c=>c.directory==='/workspace/technical'),false);
+});
+
+test('isolation MCP : broker indisponible ou options élargies refusent la sonde sans réparation',async t=>{
+  const {client,calls,state}=isolatedMcpFixture(t);
+  for(const options of [{directory:'/workspace/technical'},{permissions:[]},{agent:'build'},{title:''}]){
+    await assert.rejects(client.createProbeSession(options),{code:'opencode-probe-options-invalid'});
+  }
+  await assert.rejects(client.createProbeSession({}),{code:'opencode-model-invalid'});
+  state.status='failed';await assert.rejects(client.createProbeSession({model:{providerID:'fixture',modelID:'fixture'}}),{code:'opencode-probe-mcp-not-ready'});
+  assert.equal(calls.some(c=>c.method==='POST'),false);
+});
+
+
+test('isolation MCP : une session de codage ordinaire conserve son propre workspace explicite',async t=>{
+  const {client,calls}=isolatedMcpFixture(t);
+  const session=await client.createSession({directory:'/workspace/coding',title:'codage ordinaire',
+    permissions:[{permission:'shell',pattern:'*',action:'ask'}]});
+  assert.equal(session.directory,'/workspace/coding');
+  const post=calls.find(call=>call.path==='/api/session'&&call.method==='POST');
+  assert.equal(post.directory,'/workspace/coding');assert.equal(post.query.directory,'/workspace/coding');
+  assert.deepEqual(post.body.permissions,[{action:'shell',resource:'*',effect:'ask'}]);
+  assert.equal(await client.sharedMcpDirectory(),'/workspace/shared');
+});
+
+
+test('isolation MCP : remplacement serveur pendant préparation refuse la sonde avant POST',async t=>{
+  const {client,calls,state}=isolatedMcpFixture(t);let reads=0;
+  state.onInfo=()=>{if(++reads===2){state.pid++;state.shared='/workspace/new-server';}};
+  await assert.rejects(client.createProbeSession({model:{providerID:'fixture',modelID:'fixture'}}),{code:'opencode-probe-server-changed'});
+  assert.equal(calls.some(call=>call.method==='POST'),false);
+});
+
+test('isolation MCP : découverte forcée partage une requête info déjà en vol',async t=>{
+  const f=fixture();t.after(f.close);let finish;let reads=0;
+  const pending=new Promise(resolve=>{finish=resolve;});
+  const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace/technical',passwordFile:f.passwordFile,
+    fetchImpl:async(input,options)=>{reads++;assert.equal(options.headers['x-opencode-directory'],undefined);await pending;return json(info);}});
+  const first=client.info();const second=client.info(true);
+  await new Promise(resolve=>setTimeout(resolve,5));assert.equal(reads,1);finish();
+  assert.deepEqual(await first,await second);
 });

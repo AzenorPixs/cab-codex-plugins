@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.13';
+export const VERSION = '2.1.14';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -436,7 +436,7 @@ export async function updateComponents(input, options = {}) {
       serviceFailures: receipt?.serviceFailures || [], recoveryPhase: receipt?.phase });
   }
   async function brokerState() {
-    const value = await openCode.mcp(c.serviceWorkspace);
+    const value = await openCode.mcp();
     const status = value?.['cgpt-validation']?.status;
     if (!['connected', 'disabled', 'failed', 'pending', 'needs_auth'].includes(status)) throw error('update-broker-state-unknown');
     if (receipt) receipt.openCodeAvailable = true;
@@ -463,8 +463,8 @@ export async function updateComponents(input, options = {}) {
     return { openCode, broker, unknown };
   }
   async function nativeBroker(action) {
-    if (action === 'connect') await openCode.connectMcp('cgpt-validation', c.serviceWorkspace);
-    else if (action === 'disconnect') await openCode.disconnectMcp('cgpt-validation', c.serviceWorkspace);
+    if (action === 'connect') await openCode.connectMcp('cgpt-validation');
+    else if (action === 'disconnect') await openCode.disconnectMcp('cgpt-validation');
     else throw error('update-broker-action-invalid');
     if (await brokerState() !== (action === 'connect' ? 'connected' : 'disabled')) throw error('update-broker-state-unconfirmed');
   }
@@ -1009,7 +1009,7 @@ export async function maintainFrozenController(input, options = {}) {
   async function nativeUnchanged() {
     await preserved();
     const [health,path,mcp,busy,permissions] = await Promise.all([
-      openCode.info(),openCode.location(c.workspace),openCode.mcp(c.workspace),openCode.sessionStatus(c.workspace),openCode.permissions(c.workspace)]);
+      openCode.info(),openCode.location(c.workspace),openCode.mcp(),openCode.sessionStatus(c.workspace),openCode.permissions(c.workspace)]);
     if (!health.version.startsWith('2.') || path.directory !== c.workspace || mcp['cgpt-validation']?.status !== 'connected' ||
         !busy || Object.values(busy).some((s) => s?.type !== 'idle') || !Array.isArray(permissions) || permissions.length) {
       throw error('update-native-boundary-changed');

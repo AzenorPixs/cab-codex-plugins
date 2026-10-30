@@ -476,3 +476,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class unusedTests provisional
 ```
+
+### Isolation MCP — SCM 2.1.14
+
+`isolate-shared-mcp-location` : ARCHIVÉ, **code non attribué**, 5/5 unités qualifiées ; Node543/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation non réalisée. [Proposition](openspec/changes/archive/2026-10-30-isolate-shared-mcp-location/proposal.md), [tâches](openspec/changes/archive/2026-10-30-isolate-shared-mcp-location/tasks.md). Attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    mcpIsolation["isolate-shared-mcp-location<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class mcpIsolation provisional
+```

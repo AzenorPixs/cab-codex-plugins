@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.13';
+export const VERSION = '2.1.14';
 const execute = promisify(execFile);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, status = 409) => Object.assign(new Error(code), { status });
@@ -232,9 +232,9 @@ export class MonitorServices {
         if (identity.workspace !== c.workspace || Number(identity.pid) !== Number(service.MainPID)) throw fail('monitor-service-unmanaged');
       }
       if (body.component === 'broker') {
-        if (body.action !== 'start') await this.openCode.disconnectMcp('cgpt-validation', c.workspace);
-        if (body.action !== 'stop') await this.openCode.connectMcp('cgpt-validation', c.workspace);
-        const status = await this.openCode.mcp(c.workspace);
+        if (body.action !== 'start') await this.openCode.disconnectMcp('cgpt-validation');
+        if (body.action !== 'stop') await this.openCode.connectMcp('cgpt-validation');
+        const status = await this.openCode.mcp();
         if (status['cgpt-validation']?.status !== (body.action === 'stop' ? 'disabled' : 'connected')) {
           throw fail('monitor-broker-state-unconfirmed');
         }

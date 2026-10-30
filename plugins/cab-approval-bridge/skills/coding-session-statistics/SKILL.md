@@ -204,7 +204,7 @@ entre sessions. Publier un rapport par archive et vérifier ses six sections,
 UTF-8/LF et totaux avant la libération normale de la réservation. Une session
 SCM directe n'invoque pas cette compétence ni ses sondes.
 
-## Consultations et observations CAB 2.1.13
+## Consultations et observations CAB 2.1.14
 
 Les agrégats, fenêtres et imports filtrés sont décrits dans [la référence observations](references/observations.md). La consultation est ponctuelle et en lecture seule ; elle ne déclenche ni sondes, ni RUN d'observation, ni intervention sur les sessions. Les sources natives et importées restent séparées, les lacunes inconnues et les quotas partagés. Les durées de contention et d'exception peuvent se recouvrir. Cette capacité de consultation ne transforme pas SCM en session pilotée et n'autorise pas l'invocation de cette compétence pendant SCM.
 
@@ -225,3 +225,15 @@ strictement positive ; une valeur absente reste N/A motivée. Les zéros natifs
 sont préservés. Aucune métrique d’une sonde ancienne ne se reconstruit à partir
 du texte ou des seules clés de sa réponse ; ne pas relancer une sonde pour
 combler rétrospectivement une mesure absente sans mandat propre.
+
+
+## Isolation de la sonde — CAB 2.1.14
+
+Créer la session jetable avec createProbeSession({title,model}) du client CAB
+courant, dans la location MCP partagée et avec tous les outils interdits.
+Utiliser son directory retourné pour prompt, messages et suppression de sa
+seule session ; conserver exactement le modèle et le raisonnement du codeur.
+Un workspace technique distinct peut initialiser un contexte MCP concurrent :
+ne pas l’utiliser pour cette sonde. En cas d’échec, rapporter INCOMPLETE sans
+reconnexion automatique ni reconstruction des créneaux manqués. Voir
+[la procédure CAB](../approval-bridge/references/mcp-location-isolation.md).

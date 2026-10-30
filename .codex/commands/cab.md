@@ -1,6 +1,6 @@
 ---
 description: Alias de compatibilité de /CAB ; transmet les arguments inchangés
-version: 2.1.13
+version: 2.1.14
 ---
 
 Réponds en français.
@@ -9,7 +9,7 @@ Argument reçu : `$ARGUMENTS`
 
 Charge intégralement le fichier frère `CAB.md` depuis le même répertoire de
 commandes que ce fichier. Utilise uniquement ce fichier local, sans recherche
-globale ni téléchargement. Vérifie son frontmatter : `version: 2.1.13`.
+globale ni téléchargement. Vérifie son frontmatter : `version: 2.1.14`.
 S'il est absent, illisible ou d'une version différente, affiche
 `CAB_COMMANDE_ALIAS_INDISPONIBLE` avec la cause et termine avant toute
 opération réseau, installation ou maintenance.
@@ -18,7 +18,7 @@ Exécute réellement la commande canonique `/CAB` dans ce même tour, en lui
 transmettant `$ARGUMENTS` inchangé. Applique toutes ses validations et ses
 résultats. Ne te limite pas à afficher la commande ou à proposer de la lancer.
 
-## Réconciliation humaine du rejet après redémarrage — 2.1.13
+## Réconciliation humaine du rejet après redémarrage — 2.1.14
 
 Après accord humain spécifique, utiliser la phase `reconcile-rejected` de
 `POST /runs/<run_id>/job/recover` avec les mêmes jobId, expectedSessionId,
@@ -38,7 +38,7 @@ récupération non réconciliée ou effet inconnu interdit la levée. Le nouveau
 prévol normal exige ensuite ask, décision, once, exit 0 et READY avant
 complete. Cette voie ne remplace ni retry ni la procédure CABU.
 
-## Raccord Code Mode OpenCode 2.2 — 2.1.13
+## Raccord Code Mode OpenCode 2.2 — 2.1.14
 
 Le client reconnaît seulement le retour direct d'un appel MCP cgpt-validation
 avec objet de données littérales. Les clés peuvent être des identifiants
@@ -71,7 +71,7 @@ synthétique loopback, broker réel, prévol et écriture sous once, puis contr�
 de disparition du broker et nettoyage. Aucune configuration ou credential
 réel n'est copié. Après archive et publication, CABU précède le recovery réel.
 
-## Découverte non autorisante — complément 2.1.13
+## Découverte non autorisante — complément 2.1.14
 
 Le diagnostic Code Mode admet aussi un unique search à données littérales
 suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
@@ -79,4 +79,4 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.13 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.14 ; les preuves 2.1.8 restent historiques.

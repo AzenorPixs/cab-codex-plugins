@@ -4,7 +4,7 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.1.13';
+export const VERSION = '2.1.14';
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -331,6 +331,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   if (user !== 'opencode') fail('opencode-username-invalid');
   let infoPromise;
   let infoCheckedAt = 0;
+  let infoInFlight = false;
 
   async function authorization() {
     const password = await readPassword(credentialPath);
@@ -377,8 +378,9 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   async function info(force = false) {
-    if (!force && infoPromise && (!infoCheckedAt || Date.now() - infoCheckedAt < 10000)) return infoPromise;
-    infoPromise = request('/api/info').then(({ data }) => {
+    if (infoInFlight || (!force && infoPromise && (!infoCheckedAt || Date.now() - infoCheckedAt < 10000))) return infoPromise;
+    infoInFlight = true;
+    infoPromise = request('/api/info', { scoped: false }).then(({ data }) => {
       if (!record(data) || typeof data.version !== 'string' || !/^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?$/.test(data.version) ||
           !data.version.startsWith('2.') || !Number.isSafeInteger(data.pid) || data.pid <= 0 || !Array.isArray(data.urls) || !record(data.paths)) {
         fail('opencode-v2-required');
@@ -391,7 +393,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
         fail('opencode-v2-required');
       }
       throw cause;
-    });
+    }).finally(() => { infoInFlight = false; });
     return infoPromise;
   }
 
@@ -409,16 +411,22 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
 
   let sharedMcp;
   async function mcpLocation() {
-    const server = await info();
-    if (sharedMcp?.pid === server.pid) return sharedMcp.directory;
+    const server = await info(true);
     const { data } = await request('/api/location', { scoped: false });
     if (!record(data) || typeof data.directory !== 'string' || !isAbsolute(data.directory)) fail('opencode-location-invalid');
+    if (sharedMcp?.pid === server.pid && sharedMcp.directory !== data.directory) fail('opencode-mcp-location-changed');
     sharedMcp = { pid: server.pid, directory: data.directory };
     return data.directory;
   }
 
-  async function mcp(directoryValue = directory) {
-    directoryValue = await mcpLocation();
+  async function mcpTarget(explicitDirectory) {
+    const target = await mcpLocation();
+    if (explicitDirectory !== undefined && explicitDirectory !== target) fail('opencode-mcp-location-override-refused');
+    return target;
+  }
+
+  async function mcp(explicitDirectory) {
+    const directoryValue = await mcpTarget(explicitDirectory);
     const response = await json('/api/mcp', { query: { directory: directoryValue } });
     if (!record(response) || !record(response.location) || response.location.directory !== directoryValue || !Array.isArray(response.data)) {
       fail('opencode-mcp-invalid');
@@ -616,10 +624,24 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     });
     const body = { location: { directory: locationValue.directory }, ...(id ? { id } : {}), ...(title ? { title } : {}),
       ...(agent ? { agent } : {}), ...(model ? { model: modelReference(model) } : {}), ...(permissions ? { permissions } : {}) };
-    const response = await request('/api/session', { method: 'POST', body });
+    const response = await request('/api/session', { method: 'POST', query: { directory: directoryValue }, body });
     const sessionValue = normalizeSession(unwrapData(response.data, 'opencode-session-invalid'));
     if (sessionValue.directory !== directoryValue) fail('opencode-session-divergent');
     return sessionValue;
+  }
+
+  async function createProbeSession(options = {}) {
+    if (!record(options) || Object.keys(options).some((key) => !['title','model'].includes(key)) ||
+        (options.title !== undefined && (typeof options.title !== 'string' || !options.title.trim()))) {
+      fail('opencode-probe-options-invalid');
+    }
+    modelReference(options.model);
+    const directoryValue = await mcpLocation();
+    const expectedServer = { ...sharedMcp };
+    if ((await mcp())['cgpt-validation']?.status !== 'connected') fail('opencode-probe-mcp-not-ready');
+    if (sharedMcp.pid !== expectedServer.pid || sharedMcp.directory !== expectedServer.directory) fail('opencode-probe-server-changed');
+    return createSession({ directory: directoryValue, title: options.title || 'CAB model probe', model: options.model,
+      permissions: [{ permission: '*', pattern: '*', action: 'deny' }] });
   }
 
   async function prompt(sessionId, text, { directory: directoryValue = directory, model, resume = true } = {}) {
@@ -652,16 +674,16 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     if (response.status !== 204) fail('opencode-permission-reply-invalid');
   }
 
-  async function connectMcp(serverId, directoryValue = directory) {
+  async function connectMcp(serverId, explicitDirectory) {
     if (typeof serverId !== 'string' || !/^[A-Za-z0-9_.-]{1,100}$/.test(serverId)) fail('opencode-mcp-id-invalid');
-    directoryValue = await mcpLocation();
+    const directoryValue = await mcpTarget(explicitDirectory);
     return request(`/api/experimental/mcp/${encodeURIComponent(serverId)}/connect`,
       { method: 'POST', query: { directory: directoryValue } });
   }
 
-  async function disconnectMcp(serverId, directoryValue = directory) {
+  async function disconnectMcp(serverId, explicitDirectory) {
     if (typeof serverId !== 'string' || !/^[A-Za-z0-9_.-]{1,100}$/.test(serverId)) fail('opencode-mcp-id-invalid');
-    directoryValue = await mcpLocation();
+    const directoryValue = await mcpTarget(explicitDirectory);
     return request(`/api/experimental/mcp/${encodeURIComponent(serverId)}/disconnect`,
       { method: 'POST', query: { directory: directoryValue } });
   }
@@ -681,7 +703,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions,
-    providerList, modelList, createSession, prompt, switchModel, replyPermission, connectMcp, disconnectMcp, events, request: json });
+    providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel, replyPermission, connectMcp, disconnectMcp, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {
