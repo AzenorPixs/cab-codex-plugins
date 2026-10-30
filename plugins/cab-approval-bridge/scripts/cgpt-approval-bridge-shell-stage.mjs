@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {constants,openSync,closeSync,fstatSync,readFileSync,writeFileSync,fsyncSync,renameSync,unlinkSync} from 'node:fs';
 import {dirname} from 'node:path';
 
-export const VERSION = '2.1.29';
+export const VERSION = '2.1.30';
 export const MAX_SHELL_PAYLOAD_BYTES = 65536;
 const MAX_STAGES = 128, MAX_STORE_BYTES = 16*1024*1024;
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);

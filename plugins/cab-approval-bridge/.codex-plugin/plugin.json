@@ -1,6 +1,6 @@
 {
   "name": "CAB",
-  "version": "2.1.29+codex.20261030204128",
+  "version": "2.1.30+codex.20261030205743",
   "description": "Pilote et vérifie le pont de validation OpenCode–Codex.",
   "author": {
     "name": "CAB"
