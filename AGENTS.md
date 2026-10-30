@@ -624,7 +624,7 @@ Les vérifications minimales comprennent les tests et la construction applicable
 
 Lorsqu'une application web nécessite des tests unitaires pour sa partie frontend, ces tests DOIVENT être exécutés dans les navigateurs web déclarés dans `DEVOPS.md`, en mode headless.
 
-Pour un projet dont le frontend utilise cette structure :
+Pour le frontend Pixs actuel :
 
 ```bash
 npm --prefix frontend test

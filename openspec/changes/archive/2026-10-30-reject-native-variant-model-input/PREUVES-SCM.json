@@ -1,0 +1,54 @@
+{
+  "version": "2.1.18",
+  "nodeQualifiedGroups": [
+    {
+      "total": 130,
+      "passed": 130,
+      "failed": 0,
+      "skipped": 0,
+      "log": "concurrent-global-final.log"
+    },
+    {
+      "total": 466,
+      "passed": 438,
+      "failed": 0,
+      "skipped": 28,
+      "log": "other-global-final.log"
+    }
+  ],
+  "nodeUniqueCoverage": {
+    "total": 596,
+    "passed": 568,
+    "failed": 0,
+    "skipped": 28
+  },
+  "monolithicAttempts": [
+    {
+      "log": "node-global.log",
+      "failed": 3
+    },
+    {
+      "log": "node-global-final.log",
+      "failed": 1
+    }
+  ],
+  "targetedClient": 41,
+  "targetedClientAndDistribution": 73,
+  "isolatedRegressions": 3,
+  "pythonPassed": 80,
+  "nativePrivatePassed": 1,
+  "nativePrivateVersion": "2.2.2",
+  "openspecBefore": {
+    "standard": 17,
+    "strict": 17
+  },
+  "runtimeActivationByThisScm": false,
+  "runtimeObservedVersion": "2.1.17",
+  "archive": "openspec/changes/archive/2026-10-30-reject-native-variant-model-input",
+  "addedRequirements": 2,
+  "statisticsSections": 6,
+  "openspecAfter": {
+    "standard": 16,
+    "strict": 16
+  }
+}

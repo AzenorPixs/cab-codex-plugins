@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 2.1.17
+version: 2.1.18
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -41,7 +41,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 2.1.17
+## RUN concurrents CAB 2.1.18
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -353,7 +353,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 2.1.17 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 2.1.18 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -556,7 +556,7 @@ redémarrer et servir leur nouvelle version. La procédure détaillée et les
 mesures preparationMs/unavailableMs/totalMs figurent dans
 `references/component-update.md` du plugin installé.
 
-### Prévol 2.1.17 du credential et du layout
+### Prévol 2.1.18 du credential et du layout
 
 Avant la coupure, l’updater valide le credential privé systemd. Si le DEVOPS.md du projet désigne OPENCODE_PASSWORD dans project.env et que le développeur autorise ce raccord, passer explicitement `--opencode-password-env-file <workspace>/project.env` (source CAB ou workspace des services). Ne jamais lire ou afficher sa valeur dans les outils du modèle : seul le processus local traite le fichier. Sans cette option, utiliser le credential privé existant ; ne pas exiger de variable des projets sans OpenCode. Un conflit avec un credential existant reste refusé. Un credential nouvellement provisionné est conservé après échec sans copie dans les sauvegardes.
 
@@ -967,7 +967,7 @@ n’autorisent ni commande, ni lecture, ni édition. Un mandat déjà déclaré 
 les gardes de pause, récupération, permissions et accès restent prioritaires.
 
 
-## Environnements de test et rafraîchissement — 2.1.17
+## Environnements de test et rafraîchissement — 2.1.18
 
 Pour les RUN coordonnés, consulter le protocole `test-resources-v1` et la référence concurrent-runs avant tout usage Docker/LXC. Acquérir l'environnement avant préparation et le conserver entre commandes jusqu'aux preuves de fin, nettoyage et restitution. Le moniteur affiche les attentes de test et propose une cadence locale Manuel/1s/3s/7s/30s/1m/5m/10m/30m avec Actualiser ; sa carte Web conserve Disponible pendant 30 minutes après un rafraîchissement réussi. Ces fonctions ne déclenchent aucune mise à jour de service par leur présence dans les sources.
 
@@ -975,7 +975,7 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 2.1.17, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, demander high sur le même modèle ; examiner la politique PLLM suivante seulement si les deux niveaux sont indisponibles. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve le contexte et réexamine la priorité medium puis high selon la section de convergence ; aucun changement actif implicite n’est autorisé. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 2.1.18, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, demander high sur le même modèle ; examiner la politique PLLM suivante seulement si les deux niveaux sont indisponibles. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve le contexte et réexamine la priorité medium puis high selon la section de convergence ; aucun changement actif implicite n’est autorisé. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
@@ -989,7 +989,7 @@ Le script valide le fichier public régulier et borné ainsi que la publication,
 
 Après démarrage ou rechargement coordonné, appeler /model-policy/resolve avec les exigences du prompt et providerMaxBytes choisi par la session. Exiger une résolution réussie du contrôleur avant prévol et nouvel armement ; la simple réussite du CLI ne prouve pas la transmission au service. pllm-catalog-unconfigured indique un raccord absent dans le processus chargé ; les autres diagnostics de catalogue, fournisseur ou prévol restent distincts. Ne pas contourner par un modèle manuel. Une erreur conserve le job non armé et exige la récupération autorisée.
 
-Pour le raccord 2.1.17, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+Pour le raccord 2.1.18, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
 
 Pour `cab-source`, si les services sont configurés pour un autre projet, fournir
 `--service-workspace <workspace-absolu-observé>` : les contrôles de version et
@@ -998,7 +998,7 @@ La récupération conserve le même journal et les mêmes destinations. Le jeu W
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs et
 cgpt-approval-bridge-process-lifecycle.mjs.
 
-Contrat courant CABU 2.1.17 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.18 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -1006,15 +1006,15 @@ de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
 
 ### Permissions réappliquées par DIU
 
-DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.17, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
+DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.18, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
 
 Le provisionnement d’un credential absent exige en revanche un répertoire détenu par l’utilisateur et non modifiable par le groupe ou les autres. Si DIU a remis `0770` et que le fichier manque, rétablir les permissions sûres du seul répertoire CAB, par exemple `0700`, avant le raccord explicitement autorisé à OPENCODE_PASSWORD. Préserver le credential et son mode lors des mises à jour DIU ; ne jamais afficher sa valeur. La variable reste facultative pour les projets qui n’utilisent pas OpenCode.
 
-### Fermeture liée au serveur OpenCode — 2.1.17
+### Fermeture liée au serveur OpenCode — 2.1.18
 
 Les trois services se ferment après disparition locale prouvée du serveur OpenCode auquel ils se sont rattachés. Une panne HTTP/SSE, la fermeture d’un simple client ou une identité non vérifiable ne suffisent pas. Le démarrage sans OpenCode attend le premier rattachement. Cet arrêt technique conserve RUN, jobs, réservations et gels ; il ne constitue ni gate terminal ni purge. La remise en service est explicite et la reprise suit la réconciliation normale. Le statut 78 signale un nettoyage incomplet sans relance automatique. Aucune installation ni activation n’est déduite du seul changement de version source.
 
-## Réconciliation humaine du rejet après redémarrage — 2.1.17
+## Réconciliation humaine du rejet après redémarrage — 2.1.18
 
 Après accord humain spécifique, utiliser la phase `reconcile-rejected` de
 `POST /runs/<run_id>/job/recover` avec les mêmes jobId, expectedSessionId,
@@ -1034,7 +1034,7 @@ récupération non réconciliée ou effet inconnu interdit la levée. Le nouveau
 prévol normal exige ensuite ask, décision, once, exit 0 et READY avant
 complete. Cette voie ne remplace ni retry ni la procédure CABU.
 
-## Raccord Code Mode OpenCode 2.2 — 2.1.17
+## Raccord Code Mode OpenCode 2.2 — 2.1.18
 
 Le client reconnaît seulement le retour direct d'un appel MCP cgpt-validation
 avec objet de données littérales. Les clés peuvent être des identifiants
@@ -1067,7 +1067,7 @@ synthétique loopback, broker réel, prévol et écriture sous once, puis contr�
 de disparition du broker et nettoyage. Aucune configuration ou credential
 réel n'est copié. Après archive et publication, CABU précède le recovery réel.
 
-## Découverte non autorisante — complément 2.1.17
+## Découverte non autorisante — complément 2.1.18
 
 Le diagnostic Code Mode admet aussi un unique search à données littérales
 suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
@@ -1075,7 +1075,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.17 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.18 ; les preuves 2.1.8 restent historiques.
 
 ## Priorité medium puis high — nouvelles sessions et reprises
 
@@ -1102,7 +1102,7 @@ cas d’indisponibilité des deux, la sélection automatique examine la politiqu
 PLLM suivante. Un modèle imposé reste conservé si les niveaux admissibles ne
 sont pas disponibles.
 
-## Adaptations natives V2 — source 2.1.17
+## Adaptations natives V2 — source 2.1.18
 
 Le retry historique après `access_id` vide exige l’enveloppe native exacte
 Code Mode, un seul appel et ses arguments concordants, `metadata.error=true`,
@@ -1128,7 +1128,7 @@ les observations de génération ; les états statistiques suivent l’activité
 sans créer de décision CAB. Les mesures historiques manquantes ne sont pas
 reconstruites.
 
-## Récupération directe et pagination — source 2.1.17
+## Récupération directe et pagination — source 2.1.18
 
 Le retry historique du refus `access_id` vide reconnaît aussi les erreurs MCP
 natives directes qualifiées, en plus de Code Mode : partie assistant tool pour
@@ -1154,7 +1154,7 @@ Les tests et lectures filtrées qualifient les sources. L’activation CABU et
 la récupération réelle du RUN restent des étapes distinctes, coordonnées
 séparément ; les services actifs ne sont pas modifiés par cette préparation.
 
-## Diagnostics de notification et refus avant admission — source 2.1.17
+## Diagnostics de notification et refus avant admission — source 2.1.18
 
 Une approbation peut rester `PENDING` alors que sa notification au contrôleur
 est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
@@ -1183,7 +1183,7 @@ La préparation source n’active rien. L’activation CABU coordonnée est rapp
 avec les versions des processus réels avant notification aux sessions.
 
 
-## Restitution sans effet — source 2.1.17
+## Restitution sans effet — source 2.1.18
 
 Pour une réservation de test HELD acquise mais jamais utilisée pour une
 mutation, appliquer [la procédure spécifique](references/unused-test-reservations.md)
@@ -1194,7 +1194,7 @@ libère l’environnement. Après mutation ou incertitude, conserver la restitut
 ordinaire avec nettoyage et vérification ; aucune once n’est rejouée.
 
 
-## Isolation de la location MCP et sondes — source 2.1.17
+## Isolation de la location MCP et sondes — source 2.1.18
 
 Appliquer [la référence d’isolation MCP](references/mcp-location-isolation.md).
 La découverte serveur est globale ; les contrôles MCP visent la location
@@ -1206,7 +1206,7 @@ Une panne reste INCOMPLETE sans réparation MCP automatique ; la récupération
 d’un contexte concurrent est distincte, explicitement autorisée et prouvée.
 
 
-## Attente du contrôleur et échec de récupération — CAB2.1.17
+## Attente du contrôleur et échec de récupération — CAB2.1.18
 
 L’attente de la version réelle du contrôleur utilise le budget --wait-ms
 existant (120000ms par défaut, borne maximale900000ms), y compris au rollback.
@@ -1224,7 +1224,7 @@ leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
 une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
 
 
-## Refus de décision HTTP explicites — CAB2.1.17
+## Refus de décision HTTP explicites — CAB2.1.18
 
 Appliquer [les diagnostics de décision](references/decision-http-diagnostics.md).
 Les anciens400 vides deviennent JSON {error,message,decision_recorded}, avec
@@ -1232,3 +1232,14 @@ codes fermés et messages filtrés. Conserver statut et corps avant parsing ;
 GETdecision404 peut coexister avec une demande indécise. decision_recorded
 reflète la table locale, pas une décision native ni une persistance durable.
 Aucun diagnostic ne valide, ne rejoue ou ne reconstruit une décision/once.
+
+
+## Modèle du client : reasoning en entrée
+
+Lire references/model-policy.md avant création de session ou sonde, changement
+de modèle ou prompt avec modèle explicite. Le client attend model.reasoning ;
+les lectures exposent model.variant. En2.1.18, réinjecter ce champ natif est
+refusé avant HTTP avec opencode-model-variant-unsupported, même si reasoning
+est aussi présent. Convertir explicitement le modèle relu en un nouvel objet
+{providerID,modelID,reasoning}, sans alias ni repli silencieux vers default.
+Conserver le choix du codeur et les permissions existantes.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.18 — Entrées modèle explicites
+
+- Refus de model.variant avant tout HTTP dans les créations, sondes, prompts et changements de modèle ; erreur fixe indiquant model.reasoning, sans repli silencieux vers default.
+- Lecture native conservée, conversion explicite documentée ; reasoning valide et omission intentionnelle du niveau restent compatibles. Aucun modèle actif modifié par ce correctif source.
+
 ## 2.1.17 — Coordination des incidents de codage CAB
 
 - Signalement au chat « Correctif CAB - OC », réutilisé ou créé si absent ; suivi corrélé jusqu’au correctif qualifié et à son activation CABU vérifiée.

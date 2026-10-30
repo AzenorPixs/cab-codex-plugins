@@ -1,4 +1,4 @@
-# Diagnostics HTTP des décisions — CAB2.1.17
+# Diagnostics HTTP des décisions — CAB2.1.18
 
 ## Réponse et sens
 
