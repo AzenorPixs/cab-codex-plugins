@@ -972,3 +972,12 @@ par une version antérieure restent conservés comme preuves ; observer les
 artefacts et processus effectivement restaurés séparément, sans réécrire
 leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
 une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
+
+
+### Complément de lecture de maintenance2.1.15
+
+GET /status et GET /runs des services CAB acceptent jusqu’à16Mio sous contrôle
+des octets reçus avant parsing. Cette exception ciblée ne modifie ni les
+limites OpenCode, ni celles des autres réponses HTTP (2Mio). Le statut complet
+est vérifié sans troncature ou purge ; un dépassement conserve son diagnostic
+et le journal de récupération non terminal.

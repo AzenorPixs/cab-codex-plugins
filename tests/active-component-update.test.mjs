@@ -568,9 +568,9 @@ test('broker 1.9.0 chargé vers artefacts 2.1.15 : admission fermée sans mutati
 });
 
 
-async function networkFixture(t, { registryPadding = 0, statusPadding = 0 } = {}) {
+async function networkFixture(t, { registryPadding = 0, statusPadding = 0, statusBytes = 0, monitorPadding = 0 } = {}) {
   const h=await fixture(t);const bases={controller:'http://127.0.0.1:8788',supervisor:'http://127.0.0.1:8789',monitor:'http://127.0.0.1:8790',opencode:'http://127.0.0.1:4096'};
-  const c={...h.c};const servers=[];let registrySize=0;
+  const c={...h.c};const servers=[];let registrySize=0,statusSize=0;
   for(const name of Object.keys(bases)){
     const server=createServer(async(req,res)=>{
       try {
@@ -579,7 +579,9 @@ async function networkFixture(t, { registryPadding = 0, statusPadding = 0 } = {}
         const value=await h.options.http(bases[name],req.url,text?JSON.parse(text):undefined);
         if(name==='controller'&&route==='/runs'&&registryPadding)value.transportFixtureHistory='x'.repeat(registryPadding);
         if(name==='controller'&&route==='/status'&&statusPadding)value.transportFixtureHistory='x'.repeat(statusPadding);
-        const data=JSON.stringify(value);if(name==='controller'&&route==='/runs')registrySize=Buffer.byteLength(data);
+        if(name==='controller'&&route==='/status'&&statusBytes){value.transportFixtureHistory='';value.transportFixtureHistory='x'.repeat(statusBytes-Buffer.byteLength(JSON.stringify(value)));}
+        if(name==='monitor'&&route==='/api/snapshot'&&monitorPadding)value.transportFixtureHistory='x'.repeat(monitorPadding);
+        const data=JSON.stringify(value);if(name==='controller'&&route==='/runs')registrySize=Buffer.byteLength(data);if(name==='controller'&&route==='/status')statusSize=Buffer.byteLength(data);
         res.writeHead(200,{'content-type':'application/json'});res.end(data);
       } catch {res.writeHead(503,{'content-type':'application/json'}).end('{"error":"fixture unavailable"}');}
     });
@@ -587,7 +589,7 @@ async function networkFixture(t, { registryPadding = 0, statusPadding = 0 } = {}
   }
   t.after(async()=>{for(const server of servers){server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}});
   const {http,...options}=h.options;
-  return {...h,c,options,registrySize:()=>registrySize};
+  return {...h,c,options,registrySize:()=>registrySize,statusSize:()=>statusSize};
 }
 
 test('registre HTTP volumineux ignoré par le processus de mise à jour',async(t)=>{
@@ -606,15 +608,31 @@ test('registre HTTP supérieur à 16 Mio non lu avant mise à jour',async(t)=>{
   assert.equal(h.state.global,null);assert.equal(h.state.broker,true);
 });
 
-test('un rapport contrôleur trop volumineux conserve le journal de récupération',async(t)=>{
-  const h=await networkFixture(t,{statusPadding:2*1024*1024+1});
-  await assert.rejects(updateComponents(h.c,h.options),/update-recovery-required/);
-  // An unverified controller must not receive a freshly connected broker.
-  assert.equal(h.state.broker,false);
+test('statut contrôleur supérieur2Mio lu intégralement sous la borne16Mio',async t=>{
+  const h=await networkFixture(t,{statusPadding:3*1024*1024});const runtime=await readFile(h.runtime);
+  const result=await updateComponents(h.c,h.options);assert.equal(result.status,'completed');
+  assert.ok(h.statusSize()>2*1024*1024&&h.statusSize()<16*1024*1024);
+  assert.deepEqual(await readFile(h.runtime),runtime);assert.equal(h.state.global,null);
+});
+
+test('statut contrôleur à exactement16Mio accepté sans augmentation globale',async t=>{
+  const h=await networkFixture(t,{statusBytes:16*1024*1024});
+  assert.equal((await updateComponents(h.c,h.options)).status,'completed');assert.equal(h.statusSize(),16*1024*1024);
+});
+
+test('statut contrôleur au-delà16Mio : erreur explicite et rollback non terminal conservé',async t=>{
+  const h=await networkFixture(t,{statusPadding:16*1024*1024+1});
+  await assert.rejects(updateComponents(h.c,h.options),error=>error.code==='update-recovery-required'&&error.failureCode==='update-response-too-large');
+  assert.equal(h.state.broker,false);assert.equal((await h.receipt()).phase,'ROLLBACK_FAILED');
   assert.deepEqual(h.state.versions,{controller:'1.7.0',supervisor:'1.7.0',monitor:'1.7.0'});
-  assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
+});
+
+test('autre réponse HTTP : snapshot moniteur au-delà2Mio reste refusé',async t=>{
+  const h=await networkFixture(t,{monitorPadding:2*1024*1024+1});
+  await assert.rejects(updateComponents(h.c,h.options),error=>error.code==='update-recovery-required'&&error.failureCode==='update-response-too-large');
   assert.equal((await h.receipt()).phase,'ROLLBACK_FAILED');
 });
+
 
 test('CABU chronométré : coupure courte, cache exact et redémarrage à chaud', async (t) => {
   const h = await fixture(t, { realSyntax: true });

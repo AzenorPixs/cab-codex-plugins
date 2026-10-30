@@ -498,3 +498,14 @@ flowchart LR
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class cabuStartup provisional
 ```
+
+### Lecture du statut CABU — complément2.1.15
+
+`fix-cabu-large-controller-status` : ARCHIVÉ, **code non attribué**, 3/3 unités qualifiées, Node548/28 ignorés, updater48/48 ; archive vérifiée. [Proposition](openspec/changes/archive/2026-10-30-fix-cabu-large-controller-status/proposal.md), [tâches](openspec/changes/archive/2026-10-30-fix-cabu-large-controller-status/tasks.md). Build2.1.15 corrigé, activation non confirmée ; attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    cabuStatus["fix-cabu-large-controller-status<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class cabuStatus provisional
+```
