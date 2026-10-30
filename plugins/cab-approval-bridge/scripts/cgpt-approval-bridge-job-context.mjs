@@ -11,7 +11,7 @@ import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-c
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.24";
+export const VERSION = "2.1.25";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -80,7 +80,7 @@ const decisionError = (code) => Object.assign(new Error(code), { code });
 export function createJobContext({ workspace, stateDirectory, run = null,
   currentRun = () => run,
   admitOperation = () => true, inspectOperationAdmission = null, ownsSession = () => true, observe = () => {},
-  nativeLifecycle = {}, openCodeClient = null, modelPolicy = {},
+  nativeLifecycle = {}, openCodeClient = null, modelPolicy = {}, reviewOperation = () => null,
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
   const transportAbort = new AbortController();
@@ -318,7 +318,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.24",
+    version: "2.1.25",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1842,7 +1842,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.24",
+      version: "2.1.25",
     },
   });
 
@@ -2069,6 +2069,7 @@ async function handleValidation(request) {
             kind: request.operation.kind,
             target: request.operation.target,
             toolInputSha256: request.operation.toolInputSha256,
+            shellPayload: reviewOperation(request.operation,request.requestId),
           }
         : null,
     });
@@ -2975,6 +2976,7 @@ return {
       !httpDecisions.has(v.requestId) || (httpDecisions.get(v.requestId)?.decision === "approved" &&
         !v.operationConsumed && !v.operationInvalidated))),
   operation: (requestId) => validations.get(requestId)?.operation,
+  assertNativeShellAsk: () => checkNativeAsk({sessionId:job?.sessionId,directory:workspace,kind:'bash'},'shell'),
   decision: (requestId) => httpDecisions.get(requestId),
   invalidateOperation: (requestId) => {
     const validation = validations.get(requestId);

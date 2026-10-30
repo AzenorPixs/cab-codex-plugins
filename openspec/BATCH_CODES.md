@@ -198,3 +198,8 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Admission observée — SCM2.1.24
 
 `expose-run-admission-state` : ARCHIVÉ — source2.1.24 qualifiée ; activation non déduite, **code non attribué**, instantanés d’admission et refus de transition explicites sans contournement. [Proposition](changes/archive/2026-10-30-expose-run-admission-state/proposal.md), [tâches](changes/archive/2026-10-30-expose-run-admission-state/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+
+### Transport shell scellé — SCM 2.1.25
+
+`stage-exact-shell-payloads` : ARCHIVÉ — source 2.1.25 qualifiée, **code non attribué**. Corps Bash privé immuable, invocation courte, contrôle SHA256 et revue du corps ; décision, accès et once natifs conservés. [Proposition](changes/archive/2026-10-30-stage-exact-shell-payloads/proposal.md), [tâches](changes/archive/2026-10-30-stage-exact-shell-payloads/tasks.md), [qualification](changes/archive/2026-10-30-stage-exact-shell-payloads/QUALIFICATION.md). Publication et activation restent distinctes ; attribution ACL ultérieure.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.25 — Porte-mandat Bash exact
+
+- Payload Bash revu et scellé dans le contrôleur, invocation courte liée au SHA256 : le modèle ne recopie plus le corps long.
+- Décision, révisions, accès exclusif et once natifs conservés ; longueur/hash/CWD/UTF-8 vérifiés avant payload, sans fichier mutable ni retry.
+- Stages privés immuables, idempotence limitée aux métadonnées et refus après restauration/fin ou contexte divergent ; anciens mandats inchangés.
+
 ## 2.1.24 — Admission observée et refus de transition
 
 - Instantané BUSY/STABLE du RUN et lecture ciblée de propriétaire/validation/décision locale pour une demande.

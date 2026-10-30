@@ -28,11 +28,11 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const passwordFile = join(root, 'password'); writeFileSync(passwordFile, password, { mode: 0o600 });
     const nativePort = await port(), controllerPort = await port();
     const base = 'http://127.0.0.1:' + nativePort, control = 'http://127.0.0.1:' + controllerPort;
-    const queue = []; let dispatched = 0, nativeLog = '', controlLog = '';
+    const queue = []; const providerRequests=[]; let dispatched = 0, nativeLog = '', controlLog = '';
     let nativeTools = [];
     const provider = createServer(async (request, response) => {
       let text = ''; for await (const chunk of request) text += chunk;
-      const body = JSON.parse(text), main = body.tools?.some(tool => tool.function?.name === 'execute');
+      providerRequests.push(text);const body = JSON.parse(text), main = body.tools?.some(tool => tool.function?.name === 'execute');
       if (main) nativeTools = body.tools.map(tool => tool.function);
       const action = main ? queue.shift() : null;
       if (action) dispatched++;
@@ -98,7 +98,11 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
         }
       }
     })();
-    controller = spawn(process.execPath, [fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url))],
+    const controllerEntry=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs',import.meta.url));
+    const stageEntry=new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-shell-stage.mjs',import.meta.url).href;
+    const controllerWrapper=join(root,'controller-wrapper.mjs');
+    writeFileSync(controllerWrapper,`import {ShellStageStore} from ${JSON.stringify(stageEntry)};const original=ShellStageStore.prototype.get;ShellStageStore.prototype.get=function(id){const s=original.call(this,id);return id==='stage-corrupt-fixture'&&s?{...s,payload:s.payload.replace('CAB_LONG_EXACT_OK','CAB_LONG_WRONG_OK')}:s};await import(${JSON.stringify(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs',import.meta.url).href)});`);
+    controller = spawn(process.execPath, [controllerWrapper],
       { stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, OC_Codex_WORKSPACE: workspace,
         OC_Codex_OUTSIDE_SANDBOX: '1', OC_Codex_OPENCODE_URL: base, OC_Codex_OPENCODE_PASSWORD_FILE: passwordFile,
         OC_Codex_STATUS_PORT: String(controllerPort), OC_Codex_DECISION_MODE: 'manual', CODEX_COMMAND: 'cab-test-unused' } });
@@ -379,6 +383,41 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.ok(eventSamples.has('permission.asked'));
     console.log('SSE natif synthétique :', JSON.stringify([...eventSamples].filter(([type]) => /session\.(execution|usage)|permission\./.test(type))));
     assert.ok(['shell', 'edit'].every(name => rules.some(rule => rule.permission === name && rule.pattern === '*' && rule.action === 'deny')));
+
+    // Le corps long est transmis au contrôleur, jamais recopié dans les appels du modèle.
+    const padding='CAB_PAYLOAD_PRIVATE_'+ 'x'.repeat(9600);
+    const longPayload='# '+padding+'\n/usr/bin/python3 -I -S - <<\'PY\'\nimport json,pathlib\nx={"inventory":[{"symbol":"é","braces":"{}[]"}]}\nassert x["inventory"][0]["braces"]=="{}[]"\npathlib.Path("fixture.txt").write_text("duplicate duplicate")\nprint("CAB_LONG_EXACT_OK")\nPY\n';
+    assert.ok(longPayload.length>9300);
+    for(const corrupt of [false,true]){
+      current=(await http('/runs')).runs.find(r=>r.runId===run.runId);
+      const suffix=corrupt?'corrupt-fixture':'exact-fixture';
+      const stageInput={stageId:'stage-'+suffix,jobId:'job-code',sessionId:retryCandidate.id,reservationVersion:current.version,requestId:'request-'+suffix,
+        approvalId:'approval-'+suffix,operationId:'operation-'+suffix,payload:longPayload,payloadSha256:createHash('sha256').update(longPayload).digest('hex')};
+      const stage=await http('/runs/native-code/shell-stage',stageInput);assert.equal(stage.payload,undefined);assert.ok(stage.command.length<1200);
+      const locked=await fetch(control+'/runs/native-code/shell-stage/'+stageInput.stageId+'/payload');assert.equal(locked.status,409);
+      const carrierApproval={...approval,reservation_version:current.version,session_id:retryCandidate.id,requestId:stageInput.requestId,approval_id:stageInput.approvalId,
+        operation_id:stageInput.operationId,operation_digest:createHash('sha256').update(stage.command).digest('hex'),commands:[stage.command],files:[],
+        resources:[{key:'file:fixture.txt',mode:'write'}],expected_revisions:{'file:fixture.txt':(await http('/runs')).coordination.revisions['file:fixture.txt']||0},title:'payload Bash exact revu'};
+      const end=dispatched+2;queue.push(mcp('request_validation',carrierApproval),{tool:'shell',input:{command:stage.command}});
+      await client.prompt(retryCandidate.id,'Exécuter uniquement le transport court en file, sans recopier le payload.');
+      await until(async()=>(await http('/runs/native-code/status')).undecidedValidationCount===1,'carrier admission');
+      assert.equal(readFileSync(target,'utf8'),'duplicate duplicate');
+      await http('/runs/native-code/decision/'+carrierApproval.requestId,{decision:'approved'});
+      assert.equal((await fetch(control+'/runs/native-code/shell-stage/'+stageInput.stageId+'/payload')).status,409);
+      assert.notEqual((await http('/runs')).coordination.operations[carrierApproval.operation_id].native?.onceAcknowledged,true);
+      const access=await http('/runs/native-code/locks/acquire',{version:current.version,operationId:carrierApproval.operation_id,operationDigest:carrierApproval.operation_digest,
+        resources:carrierApproval.resources,expectedRevisions:carrierApproval.expected_revisions});
+      await until(async()=>!(await client.activeSessions())[retryCandidate.id]&&dispatched===end,'carrier native completion');
+      const shell=(await client.messages(retryCandidate.id)).flatMap(m=>m.parts).findLast(p=>p.tool==='bash');
+      assert.equal(shell.state.input.command,stage.command);assert.equal(shell.state.metadata.exit,corrupt?125:0);
+      assert.ok(shell.state.output.includes(corrupt?'CAB_SHELL_PAYLOAD_REFUSED':'CAB_LONG_EXACT_OK'));if(corrupt){assert.equal(shell.state.output.includes('CAB_LONG_EXACT_OK'),false);assert.equal(shell.state.output.includes('CAB_LONG_WRONG_OK'),false);}
+      assert.equal(readFileSync(target,'utf8'),'duplicate duplicate');
+      assert.equal(providerRequests.some(raw=>raw.includes(padding)),false);
+      await http('/runs/native-code/locks/release',{version:current.version,operationId:carrierApproval.operation_id,token:access.token,fencing:access.fencing,outcome:'COMPLETED',evidence:['native carrier result reviewed']});
+      assert.equal((await http('/runs')).coordination.operations[carrierApproval.operation_id].native.onceAcknowledged,true);
+      assert.equal((await fetch(control+'/runs/native-code/shell-stage/'+stageInput.stageId+'/payload')).status,409);
+    }
+    console.log(JSON.stringify({exactShellCarrier:true,payloadBytes:Buffer.byteLength(longPayload),modelRecopiedPayload:false,exactNativeOnce:true,alteredBodyRefusedBeforePayload:true,sameLengthCorruption:true}));
 
     // Même cible et APPROVED, mais arguments divergents : aucune once ni écriture.
     current=(await http('/runs')).runs.find(r=>r.runId===run.runId);

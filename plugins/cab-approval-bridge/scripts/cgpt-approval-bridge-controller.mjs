@@ -14,9 +14,10 @@ import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.m
 import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
+import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.24";
-if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
+const version = "2.1.25";
+if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspaceInput = envValue('OC_Codex_WORKSPACE');
@@ -68,6 +69,7 @@ const registry = new ResourceRunRegistry(workspace, stateDirectory, {
   },
 });
 await registry.acquireAuthority();
+const shellStages=new ShellStageStore(join(stateDirectory,'shell-stages.json'));
 statistics.registry(registry.snapshot());
 const statisticsMaintenance = new StatisticsMaintenance(statistics, { referenced: () => registry.snapshot().runs });
 const contexts = new Map();
@@ -116,6 +118,7 @@ function contextFor(run) {
   };
   context = createJobContext({
     workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run, maxCommandLength,
+    reviewOperation:(operation,requestId)=>shellStages.review(operation,requestId),
     currentRun: () => registry.runs.get(run.runId),
     observe: (type, details) => {
       observations.record(type, { runId: run.runId, changeId: run.changeId, sessionId: run.sessionId, ...details });
@@ -787,11 +790,45 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      if(request.method==='POST' && url.pathname==='/shell-stage') {
+        registry.admission(runId);
+        const job=context.publicJob();
+        if(!job?.armed || job.strictCommands!==true || job.jobId!==payload.jobId || job.sessionId!==payload.sessionId ||
+           job.directory!==run.directory || job.recovery || job.modelTransition || context.hasUnresolvedValidation() || context.pendingEffects())throw new CoordinationError('shell-stage-boundary-invalid');
+        registry.owned(runId,payload.reservationVersion);
+        checkCommandLength({commands:[payload.payload]},maxCommandLength);
+        await checkNative(payload.sessionId,true);
+        try{await context.assertNativeShellAsk()}catch(cause){if(cause.code==='NATIVE_PERMISSION_GUARD')throw new CoordinationError(cause.message);throw cause}
+        registry.admission(runId);registry.owned(runId,payload.reservationVersion);
+        const binding={runId,contextId:run.contextId,directory:run.directory,host,port:server.address().port,opencodePid:(await openCode.info(true)).pid};
+        const preview=shellStages.preview(payload,binding);checkCommandLength({commands:[preview.command]},maxCommandLength);
+        json(response,201,shellStages.create(payload,binding));return;
+      }
+      const shellStagePath=/^\/shell-stage\/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})(\/payload)?$/.exec(url.pathname);
+      if(request.method==='GET' && shellStagePath) {
+        const stage=shellStages.get(shellStagePath[1]);
+        if(!stage)throw new CoordinationError('shell-stage-unknown',404);
+        if(stage.runId!==runId)throw new CoordinationError('shell-stage-context-divergent');
+        if(!shellStagePath[2]){json(response,200,shellStages.describe(stage.stageId));return;}
+        // Only an already-issued native call may receive its immutable body.
+        const deadline=Date.now()+1000;
+        while(registry.resourceState.operations[stage.operationId]?.state==='ISSUING' && Date.now()<deadline && !closing)
+          await new Promise(resolve=>setTimeout(resolve,10));
+        const pid=(await openCode.info(true)).pid;
+        registry.admission(runId);
+        const operation=registry.resourceState.operations[stage.operationId],access=registry.resourceState.accesses[operation?.accessId];
+        assertShellDelivery(stage,{run:registry.runs.get(runId),job:context.publicJob(),operation:context.operation(stage.requestId),
+          decision:context.decision(stage.requestId),registered:operation,access,restored:registry.restoredAccesses.has(access?.accessId),
+          pid,host,port:server.address().port});
+        registry.testsForOperation(runId,operation.resources);
+        if(closing)throw new CoordinationError('cab-stopping',503);
+        const bytes=Buffer.from(stage.payload,'utf8');response.writeHead(200,{'content-type':'text/plain; charset=utf-8','content-length':bytes.length,'cache-control':'no-store'});response.end(bytes);return;
+      }
       const admissionPath = /^\/decision\/([^/]+)\/admission$/.exec(url.pathname);
       if (request.method === 'GET' && admissionPath) {
         const id = admissionPath[1], owner = registry.requestOwners[id];
