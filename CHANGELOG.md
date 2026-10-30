@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.20 — Lanceur et preuve de continuité
+
+- Helper fournisseur exécutable par son lien installé ; chemins canonique/lié vérifiés avec canal secret privé et effet unique.
+- Adoption du modèle explicitement distincte de la continuité historique : nouveaux marqueurs de réponse et contrôle du SID historique avant reprise.
+- Cas Responses inter-comptes reproduit sur2.2.0 ; limite de reprise au même modèle documentée, sans effacement, nouveau SID ou réparation native prétendue.
+
 ## 2.1.19 — Fournisseur et modèle à chaud
 
 - Transition explicite du choix dans le même job/session avec historique, préparation, prévol natif et reprise sans rejeu ; choix explicite libre de l’ancienne politique, PLLM par défaut.

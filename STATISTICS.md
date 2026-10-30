@@ -1,19 +1,19 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 37**
+**NCA — Nombre de changes analysés : 79**
 
 ## Périmètre et durée
 
 | Indicateur | Nombre de changes | Valeur (jours décimaux ; NCMA en changes achevés/jour) |
 |---|---|---|
-| DGCT — Temps total de développement du projet via l’IA | 11 | 0,114978 |
+| DGCT — Temps total de développement du projet via l’IA | 10 | 0,098763 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 37 | 9,326364 |
-| NCMA — Changes achevés par jour (NCA / NJT) | 37 | 3,967248 |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 79 | 9,326364 |
+| NCMA — Changes achevés par jour (NCA / NJT) | 79 | 8,470610 |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
-| DGCTM — Durée globale moyenne pour 11 changes | 11 | 0,250862 |
+| DGCTM — Durée globale moyenne pour 10 changes | 10 | 0,237031 |
 | DGCTSPAM — Durée moyenne par change hors pauses et attentes pour 0 changes | 0 | N/A |
 
 ## Agents intervenants et LLM
@@ -24,7 +24,8 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 37 | N/A | N/A | 100,00 % |
+| 77 | N/A | N/A | 97,47 % |
+| 2 | gpt-6.1-sol | N/A | 2,53 % |
 
 ## Performances des LLM de codage OpenCode
 
@@ -95,16 +96,16 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 | Mesure | Cumul | Moyenne par change |
 |---|---|---|
 | Écritures exécutées | 73 | 24,333 |
-| Fichiers distincts touchés par change | 629 | 20,290 |
+| Fichiers distincts touchés par change | 675 | 18,243 |
 
 | Périmètre | Lignes de code | Lignes de commentaires |
 |---|---|---|
-| Global | 18766 | 377 |
-| Broker | 10224 | 333 |
-| Commun | 2301 | 19 |
-| Contrôleur | 4469 | 17 |
-| Moniteur | 1421 | 7 |
-| Superviseur | 351 | 1 |
+| Global | N/A | N/A |
+| Broker | 10266 | 334 |
+| Commun | N/A | N/A |
+| Contrôleur | N/A | N/A |
+| Moniteur | 1561 | 8 |
+| Superviseur | 386 | 1 |
 
 ## Commandes des codeurs
 
@@ -143,14 +144,14 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 5883 | 196,100 |
-| Fichiers ayant passé un contrôle syntaxique | 304 | 27,636 |
-| Tâches OpenSpec prouvées et terminées | 34 | 8,500 |
+| Tests exécutés dans les bilans finaux | 26427 | 406,569 |
+| Fichiers ayant passé un contrôle syntaxique | 1185 | 43,889 |
+| Tâches OpenSpec prouvées et terminées | 38 | 7,600 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 5883 | 100,00 % |
-| Tests finaux échoués | 0 | 0,00 % |
+| Tests finaux réussis | 26419 | 99,97 % |
+| Tests finaux échoués | 8 | 0,03 % |
 
 | Catégorie de tests | Nombre |
 |---|---|

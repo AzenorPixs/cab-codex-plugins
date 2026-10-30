@@ -1,4 +1,6 @@
-# Changement à chaud du fournisseur et du modèle — CAB2.1.19
+# Changement à chaud du fournisseur et du modèle — CAB2.1.20
+
+Lire aussi [la continuité historique liée au compte](account-bound-history.md). Une adoption completed ne certifie pas cette continuité ; effectuer le contrôle historique sans outil avant RESUME.
 
 ## Choix de la session
 
@@ -107,11 +109,11 @@ permission ou accès actif. Ne pas utiliser /job/arm pour modifier le choix.
    relit la sélection, la preuve postérieure et la connexion opaque, persiste
    sa phase avant effet, change le modèle de la MÊME session et vérifie le
    résultat natif avant adoption atomique du nouveau choix et de l’historique.
-5. Lire le job : codingModel courant, modelTransition:null, historique avant/
+5. Vérifier historicalContinuity:not-verified / requiresHistoricalContinuityCheck:true : ces marqueurs distinguent configuration et continuité. Lire le job : codingModel courant, modelTransition:null, historique avant/
    après et modelContractHash. Vérifier les identités et la session native.
    L’ancien source:prompt/mode:null reste historique ; le nouveau choix est
    explicite ou pllm-automatic selon la demande réelle, sans réétiquetage passé.
-6. Seul le propriétaire décide ensuite RESUME et les prévols/permissions neufs
+6. Effectuer/vérifier une preuve de continuité dans la session historique sous deny, distincte de la sonde neuve, selon account-bound-history.md. Seul le propriétaire décide ensuite RESUME et les prévols/permissions neufs
    requis. L’API ne lève aucune PAUSE et ne rejoue aucune once. Conserver les
    sondes et preuves nécessaires jusqu’à résolution, puis appliquer le protocole
    de nettoyage final ; ne pas supprimer la session métier à reprendre.

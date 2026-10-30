@@ -211,3 +211,9 @@ test('transition explicite libre : un niveau natif hors medium/high reste sélec
  const selected=selectCodingModel({providers,model:'other/model',explicitUnrestricted:true});
  assert.equal(selected.reasoning,'low');assert.equal(selected.source,'prompt');assert.equal(selected.catalogDigest,null);
 });
+
+test('contexte Responses chiffré lié au compte : jamais une preuve d’indisponibilité de medium',()=>{
+ const proof=unavailableProof('medium',400);
+ proof.response.info.error.data.responseBody=JSON.stringify({error:{code:'invalid_request_error',param:null,message:'reasoning encrypted_content was not issued to this caller'}});
+ assert.throws(()=>reasoningUnavailability(proof),{code:'model-unavailability-not-proved'});
+});

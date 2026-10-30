@@ -42,7 +42,8 @@ test('transition explicite : autre fournisseur/modèle/raisonnement sans contrai
  assert.deepEqual(h.state.resolveCalls,[{model:'new/new-model',reasoning:'low'},{model:'new/new-model',reasoning:'low'}]);
  assert.equal(h.job().codingModel.reasoning,'low');assert.equal(h.job().codingModel.source,'prompt');assert.equal(h.job().codingModel.catalogDigest,null);
  assert.deepEqual(h.job().modelTransitionHistory[0].before,h.old);assert.ok(validModelTransitionState(h.job()));
- const calls=h.state.calls;await h.call({phase:'commit'});assert.equal(h.state.calls,calls);
+ const calls=h.state.calls;const receipt=await h.call({phase:'commit'});assert.equal(h.state.calls,calls);
+ assert.equal(receipt.historicalContinuity,'not-verified');assert.equal(receipt.requiresHistoricalContinuityCheck,true);
 });
 
 test('transition : versions, choix courant, pause et activité empêchent toute préparation',async t=>{

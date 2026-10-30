@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { validCodingModel, validModelSelection, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
-export const VERSION = '2.1.19';
+export const VERSION = '2.1.20';
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model transition component version mismatch');
 export const MODEL_TRANSITION_PROTOCOL = 'model-transition-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -86,7 +86,8 @@ export function createModelTransition({ getJob, setJob, persist, assertBoundary,
       ...(pending.retryAuthorizations ? { retryAuthorizations: pending.retryAuthorizations } : {}), reconciled };
     await write({ ...job, codingModel: copy(selected), modelTransition: null,
       modelTransitionHistory: [...(job.modelTransitionHistory || []),entry] });
-    return { status: 'completed', transactionId: pending.transactionId, modelContractHash: modelContractHash(selected), codingModel: copy(selected) };
+    return { status: 'completed', transactionId: pending.transactionId, modelContractHash: modelContractHash(selected), codingModel: copy(selected),
+      historicalContinuity: 'not-verified', requiresHistoricalContinuityCheck: true };
   };
   return {
     get inFlight() { return inFlight; },
@@ -107,7 +108,8 @@ export function createModelTransition({ getJob, setJob, persist, assertBoundary,
           if (initial.jobId!==payload.jobId || initial.sessionId!==payload.sessionId || previous.developerAuthorization!==payload.developerAuthorization ||
               !['commit','reconcile'].includes(payload.phase) || previous.outcome!=='applied') fail('model-transition-identity-reused');
           if (modelContractHash(initial.codingModel)!==modelContractHash(previous.after)) fail('model-transition-choice-divergent');
-          return { status:'completed',transactionId:payload.transactionId,modelContractHash:modelContractHash(initial.codingModel),codingModel:copy(initial.codingModel) };
+          return { status:'completed',transactionId:payload.transactionId,modelContractHash:modelContractHash(initial.codingModel),codingModel:copy(initial.codingModel),
+            historicalContinuity:'not-verified',requiresHistoricalContinuityCheck:true };
         }
         if (payload.phase==='prepare') {
           if (pending) {
