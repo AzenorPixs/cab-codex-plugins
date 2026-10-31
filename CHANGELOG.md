@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.31 — Fin native avant rattachement
+
+- Réconciliation de la fin native prouvée avant rattachement à un accès conservé ; gardes, jeton et fencing inchangés.
+- Après redémarrage, preuve native APPROVED strictement corrélée utilisable sur demande pour rattachement en vue de l’annulation ; aucune permission exécutable restaurée.
+- Libération réconciliée existante : annulation et invalidation d’un diagnostic rattaché non exécuté.
+
 ## 2.1.30 — Distribution complète du garde de permissions
 
 - permission-policy ajouté au groupe déployé du moniteur par CABU.

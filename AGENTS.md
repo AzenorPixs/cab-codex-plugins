@@ -620,16 +620,9 @@ Les types TypeScript NE remplacent PAS la validation des données reçues à l'e
 
 En TypeScript, l'utilisation de `any` ou d'une suppression de diagnostic DOIT être limitée et justifiée.
 
-Les vérifications minimales comprennent les tests et la construction applicables définis dans `package.json`.
+Avant de déclarer une modification valide, l’agent DOIT exécuter les tests et les constructions applicables au périmètre modifié, avec les commandes et configurations définies par le projet.
 
 Lorsqu'une application web nécessite des tests unitaires pour sa partie frontend, ces tests DOIVENT être exécutés dans les navigateurs web déclarés dans `DEVOPS.md`, en mode headless.
-
-Pour le frontend Pixs actuel :
-
-```bash
-npm --prefix frontend test
-npm --prefix frontend run build
-```
 
 Les contrôles de lint et de types DOIVENT également être exécutés lorsqu'ils sont configurés.
 
