@@ -215,9 +215,43 @@ test('scoped publication is idempotent, enters REPORT and does not stale indepen
   const receipt = h.r.publish('a', payload);
   assert.equal(h.r.runs.get('a').phase, 'REPORT'); assert.equal(h.r.runs.get('b').version, b.version);
   assert.equal(h.r.resourceState.accesses[other.operationId].state, 'EXECUTING');
+  assert.equal(Object.hasOwn(h.r.resourceState.accesses[access.accessId], 'token'), false);
   assert.deepEqual(h.r.publish('a', payload), receipt);
   assert.throws(() => h.r.publish('a', { ...payload, evidence: ['different'] }), /publication-transaction-divergent/);
   await h.restart(); assert.deepEqual(h.r.publish('a', payload), receipt);
+});
+
+test('released access removes bearer token but preserves exact replay by digest', async (t) => {
+  const h = await fixture(t); const run = h.reserve('released-token', [file('preflight', 'read')]);
+  const op = h.prepare(run, 'released-token-op', [file('preflight', 'read')]);
+  const access = h.acquire(run, op); h.start(run, op); h.complete(run, op);
+  const payload = { version: run.version, operationId: access.accessId, token: access.token,
+    fencing: access.fencing, outcome: 'COMPLETED', evidence: ['native result reviewed'] };
+  const released = h.r.releaseAccess(run.runId, payload);
+  assert.equal(released.state, 'RELEASED'); assert.equal(Object.hasOwn(released, 'token'), false);
+  assert.equal(Object.hasOwn(h.r.resourceState.accesses[access.accessId], 'token'), false);
+  assert.deepEqual(h.r.releaseAccess(run.runId, payload), released);
+  await h.restart();
+  assert.equal(Object.hasOwn(h.r.resourceState.accesses[access.accessId], 'token'), false);
+  assert.deepEqual(h.r.releaseAccess(run.runId, payload), released);
+  assert.throws(() => h.r.releaseAccess(run.runId, { ...payload, evidence: ['different request'] }),
+    /access-token-invalid/);
+});
+
+test('restoration scrubs a legacy token only from an already RELEASED access', async (t) => {
+  const h = await fixture(t); const run = h.reserve('legacy-released-token', [file('preflight', 'read')]);
+  const op = h.prepare(run, 'legacy-released-token-op', [file('preflight', 'read')]);
+  const access = h.acquire(run, op); h.start(run, op); h.complete(run, op);
+  const payload = { version: run.version, operationId: access.accessId, token: access.token,
+    fencing: access.fencing, outcome: 'COMPLETED', evidence: ['native result reviewed'] };
+  h.r.releaseAccess(run.runId, payload);
+  h.r.resourceState.accesses[access.accessId].token = access.token;
+  h.r.persist();
+  await h.restart();
+  const restored = h.r.resourceState.accesses[access.accessId];
+  assert.equal(restored.state, 'RELEASED'); assert.equal(Object.hasOwn(restored, 'token'), false);
+  assert.equal(Object.hasOwn(JSON.parse(readFileSync(h.r.path, 'utf8')).coordination.accesses[access.accessId], 'token'), false);
+  assert.equal(Object.hasOwn(h.r.releaseAccess(run.runId, payload), 'token'), false);
 });
 
 test('pause is targeted, global exceptions drain explicitly and timeout never releases', async (t) => {

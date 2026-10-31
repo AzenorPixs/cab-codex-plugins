@@ -458,7 +458,12 @@ test('une fin native inconnue garde les protections et interdit le gate', async 
   assert.equal(refused.body.error, 'native-completion-not-proved');
   assert.equal((await h.post('/runs/a/job/terminal-gate', { state: 'TERMINÉ' })).body.error, 'run-accesses-unresolved');
   assert.equal((await h.get('/runs/a/locks')).body.accesses[0].state, 'EXECUTING');
-  await h.completeTool(approval); assert.equal((await h.releaseOperation(a, approval, access)).status, 200);
+  await h.completeTool(approval);
+  const released = await h.releaseOperation(a, approval, access);
+  assert.equal(released.status, 200); assert.equal(Object.hasOwn(released.body, 'token'), false);
+  assert.equal(Object.hasOwn((await h.get('/runs/a/locks')).body.accesses[0], 'token'), false);
+  const replay = await h.releaseOperation(a, approval, access);
+  assert.equal(replay.status, 200); assert.equal(Object.hasOwn(replay.body, 'token'), false);
 });
 
 test('attach réconcilie la fin native prouvée avant rattachement sans libérer les protections', async (t) => {
@@ -1045,7 +1050,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.34');
+  assert.equal(initialized.result.serverInfo.version, '2.1.35');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

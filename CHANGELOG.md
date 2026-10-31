@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.35 — Retrait des jetons d’accès libérés
+
+- Les accès libérés par `locks/release` ou publication ne conservent plus le
+  jeton brut ; le rejeu exact reste vérifié par l’empreinte de la requête.
+- Les réponses de libération et les lectures de registre ne retournent plus
+  de jeton pour un accès `RELEASED`.
+- CAB/CABU et les briques communes sont alignées en 2.1.35.
+
 ## 2.1.34 — Identité minimale du bootstrap moniteur
 
 - `/CAB start` vérifie version et workspace par `GET /api/identity` sans lire

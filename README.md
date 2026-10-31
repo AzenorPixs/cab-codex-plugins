@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.34. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.35. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -652,7 +652,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, des plugins CAB/CABU et des commandes
-est `2.1.34`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.35`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -773,7 +773,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.34.
+La distribution courante des quatre briques, plugins et commandes est 2.1.35.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

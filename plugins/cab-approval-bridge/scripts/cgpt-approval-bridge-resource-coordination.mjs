@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.34';
+export const VERSION = '2.1.35';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -54,9 +54,17 @@ export class ResourceRunRegistry extends RunRegistry {
     if (this.schemaVersion === 4) this.validateResourceState(this.resourceState);
     else this.resourceState = emptyState();
     if (!this.migrationRequired) this.schemaVersion = 4;
+    let scrubbedReleasedAccessToken = false;
+    if (this.lock) for (const access of Object.values(this.resourceState.accesses)) {
+      if (access.state === 'RELEASED' && Object.hasOwn(access, 'token')) {
+        delete access.token;
+        scrubbedReleasedAccessToken = true;
+      }
+    }
     // Restored executions keep their protection but cannot issue a fresh once.
     this.restoredAccesses = new Set(Object.values(this.resourceState.accesses).filter(active).map((a) => a.accessId));
     this.restoredTests = new Set(Object.values(this.resourceState.testReservations || {}).filter((r) => r.state === 'HELD').map((r) => r.transactionId));
+    if (scrubbedReleasedAccessToken) this.persist();
   }
 
   validateResourceState(state) {
@@ -842,12 +850,13 @@ export class ResourceRunRegistry extends RunRegistry {
       delete this.runs.get(access.runId).maintenancePreflightRequired;
     }
     access.state = 'RELEASED'; access.finishedAt = now(); access.outcome = outcome;
+    delete access.token;
     this.restoredAccesses.delete(access.accessId);
   }
   releaseAccess(runId, payload) {
     evidence(payload.evidence);
     const prior = this.resourceState.accesses[payload.operationId];
-    if (prior?.state === 'RELEASED' && prior.runId === runId && prior.token === payload.token &&
+    if (prior?.state === 'RELEASED' && prior.runId === runId &&
         prior.fencing === payload.fencing && prior.releaseDigest === digest(payload)) return copy(prior);
     const access = this.held(runId, payload);
     this.finishAccess(access, payload.outcome); access.releaseDigest = digest(payload);

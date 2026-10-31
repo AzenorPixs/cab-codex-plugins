@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.34`.
+Version de référence des briques CAB : `2.1.35`.
 
-CAB 2.1.34 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.35 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
