@@ -2,7 +2,7 @@
 
 Actualisation SCM du 28 octobre 2026 : **76 changes archivés, 0 change actif**, **618/618 tâches cochées**. Attribution ACL du 28 octobre 2026, plan CAB-ACL-R5 : SUP10 pour la fermeture technique CAB ; 76 correspondances vérifiées, dont les 75 codes antérieurs conservés. MAI11 conserve son attribution rétrospective CAB-ACL-R4. Le suivi de CT14, correctif 2.1.5 archivé avec six tâches validées, est consigné ci-dessous ; les relevés ACL antérieurs restent historiques.
 
-Actualisation SCM du 31 octobre 2026 : OpenSpec dénombre **105 archives et 0 change actif** ; la cartographie documente 76 entrées archivées codées et deux archives sans code : [retire-lowercase-cab-command](openspec/changes/archive/2026-10-31-retire-lowercase-cab-command/) et [add-monitor-bootstrap-identity](openspec/changes/archive/2026-10-31-add-monitor-bootstrap-identity/). Le graphe et le registre détaillé couvrent 78 des 105 dossiers observés ; 27 archives restent à réconcilier. Aucun total global de tâches n’est revendiqué. Les 76 codes attestés demeurent inchangés. Exécuter ultérieurement ACL pour réconcilier la cartographie et le registre ; aucune reconstruction globale n’est faite ici.
+Actualisation SCM du 31 octobre 2026 : OpenSpec dénombre **106 archives et 0 change actif** ; la cartographie documente 76 entrées archivées codées et trois archives sans code : [retire-lowercase-cab-command](openspec/changes/archive/2026-10-31-retire-lowercase-cab-command/), [add-monitor-bootstrap-identity](openspec/changes/archive/2026-10-31-add-monitor-bootstrap-identity/) et [discard-released-access-tokens](openspec/changes/archive/2026-10-31-discard-released-access-tokens/). Le graphe et le registre détaillé couvrent 79 des 106 dossiers observés ; 27 archives restent à réconcilier. Aucun total global de tâches n’est revendiqué. Les 76 codes attestés demeurent inchangés. Exécuter ultérieurement ACL pour réconcilier la cartographie et le registre ; aucune reconstruction globale n’est faite ici.
 
 ## 1. Périmètre et fraîcheur
 
@@ -33,7 +33,7 @@ La seule lecture du classement ne démontre ni succession chronologique ni effet
 
 ## 3. Vues détaillées
 
-Le graphe ci-dessous représente les 76 changes **ARCHIVÉS avec code attribué** déjà cartographiés, dont CT14, MAI11 et SUP10. Les deux archives sans code sont répertoriées séparément en section 4. Le contrôle OpenSpec dénombre 105 dossiers d’archive ; la cartographie détaillée reste partielle dans l’attente d’ACL. Le suivi documentaire reste séparé des preuves opérationnelles. Les titres complets, identifiants techniques et sources figurent en section 4. Les intitulés génériques historiques Proposal et Proposition sont conservés dans les propositions ; les libellés courts des nœuds explicitent leur objet à partir de leurs artefacts.
+Le graphe ci-dessous représente les 76 changes **ARCHIVÉS avec code attribué** déjà cartographiés, dont CT14, MAI11 et SUP10. Les trois archives sans code sont répertoriées séparément en section 4. Le contrôle OpenSpec dénombre 106 dossiers d’archive ; la cartographie détaillée reste partielle dans l’attente d’ACL. Le suivi documentaire reste séparé des preuves opérationnelles. Les titres complets, identifiants techniques et sources figurent en section 4. Les intitulés génériques historiques Proposal et Proposition sont conservés dans les propositions ; les libellés courts des nœuds explicitent leur objet à partir de leurs artefacts.
 
 ### 3.1 Broker
 
@@ -173,9 +173,11 @@ Archive sans code de lot attribué : [add-monitor-bootstrap-identity](openspec/c
 
 Les ratios ci-dessous comptent les cases cochées du fichier tasks.md, sans assimiler une case à une validation actuelle ou à un pourcentage de réalisation fonctionnelle. Les preuves de réalisation et de validation historique sont celles rapportées par les tâches et, lorsqu’ils existent, les documents de qualification et statistiques liés. Leur présence et leur lecture ne constituent pas une réexécution.
 
-Le contrôle OpenSpec a validé les tâches cochées dans 105 dossiers d’archive. La cartographie détaillée et le registre de codes ne réconcilient que les 76 entrées codées et les deux archives sans code listées ci-dessous. SUP10 est archivé avec 7/7 tâches et qualification source finale acquise ; aucune installation ni activation. CT14 est clôturé avec 6/6 tâches ; l’archivage ne vaut ni déploiement ni activation. Réalisabilité d’une nouvelle session : **sans objet pour les entrées cartographiées**. Validations, intégrations ou qualifications nouvelles nécessaires avant réutilisation : **À VÉRIFIER selon le futur périmètre**. Livraison et activation actuelles restent **NON VÉRIFIÉES par ACL**.
+Le contrôle OpenSpec a validé les tâches cochées dans 106 dossiers d’archive. La cartographie détaillée et le registre de codes ne réconcilient que les 76 entrées codées et les trois archives sans code listées ci-dessous. SUP10 est archivé avec 7/7 tâches et qualification source finale acquise ; aucune installation ni activation. CT14 est clôturé avec 6/6 tâches ; l’archivage ne vaut ni déploiement ni activation. Réalisabilité d’une nouvelle session : **sans objet pour les entrées cartographiées**. Validations, intégrations ou qualifications nouvelles nécessaires avant réutilisation : **À VÉRIFIER selon le futur périmètre**. Livraison et activation actuelles restent **NON VÉRIFIÉES par ACL**.
 
 Archive sans code de lot attribué : [retire-lowercase-cab-command](openspec/changes/archive/2026-10-31-retire-lowercase-cab-command/), « Retirer l’alias minuscule de la commande CAB », **ARCHIVÉ**, 5/5 tâches. L’attribution reste en attente d’ACL ; aucune ligne ni réservation n’est ajoutée à `openspec/BATCH_CODES.md`.
+
+Archive sans code de lot attribué : [discard-released-access-tokens](openspec/changes/archive/2026-10-31-discard-released-access-tokens/), « Retirer les jetons d’accès libérés », **ARCHIVÉ**, 5/5 tâches. Attribution ACL ultérieure ; aucune ligne ni réservation de code.
 
 | Code | Identifiant technique et dossier | Titre | Ensemble | État | Cases cochées / total | Sources de réalisation et validation historique |
 |---|---|---|---|---|---|---|
