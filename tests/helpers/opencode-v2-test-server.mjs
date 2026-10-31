@@ -17,7 +17,7 @@ function v2Message(message) {
     ...(model ? { model } : {}), finish: info.finish || 'stop', ...(info.error ? { error: info.error } : {}),
     metadata: { parentID: info.parentID },
     content: (message.parts || []).map((part) => part.type === 'tool' ? ({ type: 'tool', id: part.callID || 'call_fixture',
-      name: part.tool, executed: true, time: { created: part.state?.time?.start || 1,
+      name: part.tool, executed: part.executed ?? true, time: { created: part.state?.time?.start || 1,
         ...(Number.isFinite(part.state?.time?.start) ? { ran: part.state.time.start } : {}),
         ...(Number.isFinite(part.state?.time?.end) ? { completed: part.state.time.end } : {}) },
       state: { status: part.state?.status, input: part.state?.input || {},

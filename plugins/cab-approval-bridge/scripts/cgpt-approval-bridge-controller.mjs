@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.30";
+const version = "2.1.31";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -405,6 +405,64 @@ async function proveNativeCompletions(runId, access) {
       .map((part) => nativePartProof(op, part, op.sessionId)).find(Boolean);
     if (!proof) throw new CoordinationError('native-completion-not-proved');
     registry.completeNative(runId, op.operationId, proof);
+  }
+}
+
+// Une décision perdue au redémarrage ne vaut que pour rattacher l'opération
+// préparée en vue de son annulation ; aucune permission n'est reconstruite.
+async function proveRestoredApprovalForCancellation(runId, context, access, operationId) {
+  const op = registry.resourceState.operations[operationId];
+  const run = registry.runs.get(runId);
+  if (!registry.restoredAccesses.has(access.accessId) || !op || op.runId !== runId ||
+      op.accessId !== access.accessId || op.state !== 'PREPARED' || op.native !== undefined ||
+      op.sessionId !== run.sessionId || context.publicJob()?.currentCabMandate || context.publicJob()?.recovery) {
+    throw new CoordinationError('restored-approval-boundary-invalid');
+  }
+  const generation = nativeSessionGenerations.get(op.sessionId);
+  await checkNative(op.sessionId, true);
+  let messages;
+  try { messages = await openCode.messages(op.sessionId, workspace); }
+  catch { throw new CoordinationError('restored-approval-history-unavailable'); }
+  if (!Array.isArray(messages)) throw new CoordinationError('restored-approval-history-invalid');
+  const requests = messages.filter((m) => m.info?.role === 'assistant' && Array.isArray(m.parts))
+    .flatMap((m) => m.parts).filter((part) => part.type === 'tool' &&
+      part.tool === 'cgpt-validation_request_validation' && part.state?.input?.requestId === op.requestId);
+  if (requests.length !== 1 || requests[0].state?.status !== 'completed') {
+    throw new CoordinationError('restored-approval-not-proved');
+  }
+  const request = requests[0], input = request.state.input;
+  const owner = registry.requestOwners[op.requestId];
+  const digest = createHash('sha256').update(JSON.stringify(nativeIdentity(input))).digest('hex');
+  const fields = ['run_id','reservation_version','requestId','approval_id','change_id','session_id',
+    'directory','title','summary','files','commands','resources','operation_id','operation_digest',
+    'expected_revisions','access_id','coordination_protocol',
+    ...(Object.hasOwn(input, 'tool_input_sha256') ? ['tool_input_sha256'] : [])];
+  const operationIdentity = Object.fromEntries(fields.map((key) => [key, input[key] ?? null]));
+  let result;
+  try { result = JSON.parse(request.state.output); } catch { throw new CoordinationError('restored-approval-not-proved'); }
+  if (owner?.runId !== runId || owner.digest !== digest || input.operation_id !== operationId ||
+      input.access_id !== access.accessId || input.session_id !== op.sessionId || input.directory !== workspace ||
+      proofHash(operationIdentity) !== op.identityDigest || typeof request.callID !== 'string' || !request.callID ||
+      typeof request.executed !== 'boolean' || !Number.isFinite(request.state.time?.start) ||
+      !Number.isFinite(request.state.time?.end) || request.state.time.end < request.state.time.start ||
+      result?.status !== 'APPROVED' || result.reviewer !== 'CGPT' ||
+      result.requestId !== op.requestId || result.approval_id !== input.approval_id ||
+      result.change_id !== run.changeId || result.session_id !== op.sessionId || result.directory !== workspace ||
+      ['coordination_protocol','run_id','reservation_version','operation_id','operation_digest',
+        'expected_revisions','resources','access_id','files','commands',
+        ...(Object.hasOwn(input, 'tool_input_sha256') ? ['tool_input_sha256'] : [])].some((key) => !Object.hasOwn(result, key) ||
+          !Object.hasOwn(input, key) || proofHash(result[key]) !== proofHash(input[key])) ||
+      !Number.isFinite(Date.parse(result.decision_applied_at)) ||
+      Date.parse(result.decision_applied_at) < request.state.time.start ||
+      Date.parse(result.decision_applied_at) > request.state.time.end) {
+    throw new CoordinationError('restored-approval-not-proved');
+  }
+  await checkNative(op.sessionId, true);
+  let again;
+  try { again = await openCode.messages(op.sessionId, workspace); }
+  catch { throw new CoordinationError('restored-approval-history-unavailable'); }
+  if (generation !== nativeSessionGenerations.get(op.sessionId) || proofHash(messages) !== proofHash(again)) {
+    throw new CoordinationError('restored-approval-history-changed');
   }
 }
 // This path verifies provenance and completeness; the orchestrator owns the no-effect review.
@@ -889,10 +947,17 @@ async function handleRequest(request, response) {
         json(response, access.state === 'WAITING' ? 202 : 200, access); return;
       }
       if (request.method === 'POST' && url.pathname === '/locks/attach') {
-        if (!Array.isArray(payload.operationIds) || payload.operationIds.some((id) =>
-          context.decision(registry.resourceState.operations[id]?.requestId)?.decision !== 'approved')) {
+        if (!Array.isArray(payload.operationIds) || !payload.operationIds.length) {
           throw new CoordinationError('access-operation-not-approved');
         }
+        const access = registry.held(runId, payload);
+        for (const id of payload.operationIds) {
+          const decision = context.decision(registry.resourceState.operations[id]?.requestId);
+          if (decision?.decision === 'approved') continue;
+          if (decision || payload.restoreApprovedForCancellation !== true) throw new CoordinationError('access-operation-not-approved');
+          await proveRestoredApprovalForCancellation(runId, context, access, id);
+        }
+        await proveNativeCompletions(runId, access);
         json(response, 200, registry.attachOperations(runId, payload)); return;
       }
       if (request.method === 'POST' && url.pathname === '/locks/reconcile') {

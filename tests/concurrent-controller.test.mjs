@@ -461,6 +461,118 @@ test('une fin native inconnue garde les protections et interdit le gate', async 
   await h.completeTool(approval); assert.equal((await h.releaseOperation(a, approval, access)).status, 200);
 });
 
+test('attach réconcilie la fin native prouvée avant rattachement sans libérer les protections', async (t) => {
+  const h = await setup(t); const a = await h.reserve('attach-refresh');
+  const { approval, access } = await h.approvedAccess(a, 'attach-parent'); await h.execute(approval);
+  const diagnostic = h.approval(a, 'attach-diagnostic'); diagnostic.access_id = access.accessId;
+  h.native.messages[a.sessionId].at(-1).parts[0].state.input.access_id = access.accessId;
+  assert.equal((await h.post('/validation/request', { approval: diagnostic })).status, 202);
+  assert.equal((await h.post('/runs/' + a.runId + '/decision/' + diagnostic.requestId, { decision: 'approved' })).status, 201);
+  const payload = { version: a.version, operationId: access.accessId, token: access.token, fencing: access.fencing,
+    operationIds: [diagnostic.operation_id], evidence: ['diagnostic exact approuvé'] };
+  const route = '/runs/' + a.runId + '/locks/attach';
+  assert.equal((await h.post(route, { ...payload, token: 'incorrect' })).body.error, 'access-token-invalid');
+  assert.equal((await h.post(route, payload)).body.error, 'native-completion-not-proved');
+  const op = (await h.get('/runs')).body.coordination.operations[approval.operation_id];
+  const part = { type: 'tool', tool: 'bash', callID: 'incorrect', state: { status: 'completed',
+    input: { command: '/usr/bin/true' }, time: { start: op.native.startedAt, end: Date.now() + 10 }, metadata: { exit: 1 } } };
+  h.native.messages[a.sessionId].push({ parts: [part] });
+  assert.equal((await h.post(route, payload)).body.error, 'native-completion-not-proved');
+  assert.equal((await h.get('/runs/' + a.runId + '/locks')).body.accesses[0].state, 'EXECUTING');
+  part.callID = 'call-' + approval.requestId;
+  const attached = await h.post(route, payload); assert.equal(attached.status, 200, JSON.stringify(attached));
+  assert.equal(attached.body.state, 'HELD'); assert.equal(attached.body.token, access.token);
+  assert.equal(attached.body.fencing, access.fencing); assert.ok(attached.body.operationIds.includes(diagnostic.operation_id));
+  const released = await h.post('/runs/' + a.runId + '/locks/release', { ...payload, operationIds: undefined,
+    outcome: 'RECONCILED', evidence: ['fin et absence de diagnostic exécuté vérifiées'] });
+  assert.equal(released.status, 200, JSON.stringify(released));
+  assert.equal((await h.get('/runs')).body.coordination.operations[diagnostic.operation_id].state, 'CANCELLED');
+  assert.equal((await h.get('/runs/' + a.runId + '/status')).body.hasUnresolvedOperation, false);
+  assert.equal(h.native.replies.length, 1);
+});
+
+test('attach sérialise la libération concurrente pendant la lecture native', async (t) => {
+  const h = await setup(t); const a = await h.reserve('attach-race');
+  const { approval, access } = await h.approvedAccess(a, 'race-parent'); await h.execute(approval);
+  const diagnostic = h.approval(a, 'race-diagnostic'); diagnostic.access_id = access.accessId;
+  h.native.messages[a.sessionId].at(-1).parts[0].state.input.access_id = access.accessId;
+  assert.equal((await h.post('/validation/request', { approval: diagnostic })).status, 202);
+  assert.equal((await h.post('/runs/' + a.runId + '/decision/' + diagnostic.requestId, { decision: 'approved' })).status, 201);
+  let resume, entered; const paused = new Promise((resolve) => { resume = resolve; });
+  const waiting = new Promise((resolve) => { entered = resolve; }); let first = true;
+  h.native.onRequest = async (path) => { if (path === '/session/' + a.sessionId + '/message' && first) {
+    first = false; entered(); await paused;
+  } };
+  const attach = h.post('/runs/' + a.runId + '/locks/attach', { version: a.version, operationId: access.accessId,
+    token: access.token, fencing: access.fencing, operationIds: [diagnostic.operation_id], evidence: ['approuvé'] });
+  await waiting; await h.completeTool(approval, 1);
+  const released = await h.post('/runs/' + a.runId + '/locks/release', { version: a.version, operationId: access.accessId,
+    token: access.token, fencing: access.fencing, outcome: 'RECONCILED', evidence: ['fin vérifiée'] });
+  assert.equal(released.body.error, 'run-transition-in-flight'); resume();
+  assert.equal((await attach).status, 200);
+  assert.equal(h.native.replies.length, 1);
+});
+
+test('une décision approuvée perdue après redémarrage ne sert qu’au rattachement pour annulation', async (t) => {
+  const h = await setup(t); const a = await h.reserve('attach-restart');
+  const { approval, access } = await h.approvedAccess(a, 'restart-parent'); await h.execute(approval);
+  const diagnostic = h.approval(a, 'restart-diagnostic'); diagnostic.access_id = access.accessId;
+  h.native.messages[a.sessionId].at(-1).parts[0].state.input.access_id = access.accessId;
+  assert.equal((await h.post('/validation/request', { approval: diagnostic })).status, 202);
+  assert.equal((await h.post('/runs/' + a.runId + '/decision/' + diagnostic.requestId, { decision: 'approved' })).status, 201);
+  const request = h.native.messages[a.sessionId].at(-1).parts[0];
+  request.executed = false;
+  request.state.status = 'completed'; request.state.time = { start: Date.now(), end: Date.now() + 1 };
+  request.state.output = JSON.stringify({ ...diagnostic, status: 'APPROVED', reviewer: 'CGPT',
+    decision_applied_at: new Date().toISOString() });
+  await h.stop(); await h.start();
+  const decision = await h.get('/runs/' + a.runId + '/decision/' + diagnostic.requestId);
+  assert.equal(decision.body, null, JSON.stringify(decision));
+  const payload = { version: a.version,
+    operationId: access.accessId, token: access.token, fencing: access.fencing,
+    operationIds: [diagnostic.operation_id], evidence: ['diagnostic approuvé avant redémarrage'] };
+  const route = '/runs/' + a.runId + '/locks/attach';
+  assert.equal((await h.post(route, payload)).body.error, 'access-operation-not-approved');
+  const original = request.state.output;
+  for (const alteration of [
+    (out) => { out.status = 'REJECTED'; },
+    (out) => { out.operation_digest = '0'.repeat(64); },
+    (out) => { out.access_id = 'wrong-access'; },
+    (out) => { out.resources = []; },
+    (out) => { delete out.decision_applied_at; },
+  ]) {
+    const out = JSON.parse(original); alteration(out); request.state.output = JSON.stringify(out);
+    assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-not-proved');
+  }
+  request.state.output = original;
+  h.native.messages[a.sessionId].push({ parts: [structuredClone(request)] });
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-not-proved');
+  h.native.messages[a.sessionId].pop();
+  assert.equal((await h.post(route, { ...payload, token: 'stale', restoreApprovedForCancellation: true })).body.error, 'access-token-invalid');
+  h.native.permissions.push({ id: 'other', sessionID: a.sessionId, permission: 'bash', metadata: { command: 'synthetic' } });
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'native-session-not-quiescent');
+  h.native.permissions = [];
+  request.state.input.operation_digest = '0'.repeat(64);
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-not-proved');
+  request.state.input.operation_digest = diagnostic.operation_digest;
+  let reads = 0; h.native.onRequest = async (path) => {
+    if (path === '/session/' + a.sessionId + '/message' && ++reads === 2) request.state.output += ' ';
+  };
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-history-changed');
+  h.native.onRequest = null; request.state.output = original;
+  assert.equal((await h.get('/runs/' + a.runId + '/locks')).body.accesses[0].state, 'EXECUTING');
+  await h.completeTool(approval, 1);
+  const attach = await h.post(route, { ...payload, restoreApprovedForCancellation: true });
+  assert.equal(attach.status, 200, JSON.stringify(attach));
+  assert.equal((await h.get('/runs/' + a.runId + '/decision/' + diagnostic.requestId)).body, null);
+  const released = await h.post('/runs/' + a.runId + '/locks/release', { version: a.version,
+    operationId: access.accessId, token: access.token, fencing: access.fencing,
+    outcome: 'RECONCILED', evidence: ['fin et diagnostic non exécuté vérifiés'] });
+  assert.equal(released.status, 200, JSON.stringify(released));
+  assert.equal((await h.get('/runs')).body.coordination.operations[diagnostic.operation_id].state, 'CANCELLED');
+  assert.equal(h.native.replies.length, 1);
+});
+
 test('sélection simultanée : un seul propriétaire du change et aucun écrasement', async (t) => {
   const h = await setup(t);
   const results = await Promise.all(['a', 'b'].map((id) => h.post('/runs/reserve',
@@ -933,7 +1045,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.30');
+  assert.equal(initialized.result.serverInfo.version, '2.1.31');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

@@ -642,3 +642,8 @@ flowchart LR
 ### Distribution du garde de permissions — SCM2.1.30
 
 `close-monitor-permission-policy-distribution` : ARCHIVÉ — source2.1.30 qualifiée, **code non attribué**. Dépendance permission-policy incluse dans le moniteur et imports relatifs vérifiés par destination ; correction de livraison liée au29, sans changement de permissions. [Proposition](openspec/changes/archive/2026-10-30-close-monitor-permission-policy-distribution/proposal.md), [tâches](openspec/changes/archive/2026-10-30-close-monitor-permission-policy-distribution/tasks.md), [qualification](openspec/changes/archive/2026-10-30-close-monitor-permission-policy-distribution/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Rattachement après fin native — SCM 2.1.31
+
+`fix-native-completion-before-attach` : ARCHIVÉ — source 2.1.31 qualifiée, **code non attribué**, attribution ACL ultérieure. [Proposition](openspec/changes/archive/2026-10-31-fix-native-completion-before-attach/proposal.md), [tâches](openspec/changes/archive/2026-10-31-fix-native-completion-before-attach/tasks.md). Validation source acquise ; publication et activation distinctes.
