@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.33 — Retrait de l’alias minuscule `/cab`
+
+- `/CAB` devient l’unique commande canonique de pilotage ; le fichier `cab.md`
+  et les invocations `/cab` sont retirés des commandes actives et distribuées.
+- `/CAB update` synchronise atomiquement `CAB.md` et `CABU.md`, retire l’ancien
+  fichier global `cab.md` et restaure le jeu précédent en cas d’échec.
+- Les références actives, tests de distribution et briques CAB/CABU sont
+  alignés sur la version commune 2.1.33 ; les mentions historiques restent intactes.
+
 ## 2.1.32 — Réattachement sûr du plugin de contexte
 
 - Après redémarrage OpenCode, le plugin peut reprendre son PID courant uniquement si l’ancien PID est prouvé mort ; ancien PID vivant ou contrôle indéterminé restent refusés.

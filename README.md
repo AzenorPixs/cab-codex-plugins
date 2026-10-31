@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.32. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.33. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -364,13 +364,11 @@ commune du projet ; elle n'autorise pas un commit ou un déploiement.
 
 ## Commande `/CAB`
 
-La commande canonique utilise les majuscules : `/CAB`. `/CABU` sans argument
-exécute exactement `/CAB update` jusqu'au rapport complet. L'ancienne entrée
-`/cab` reste compatible et transmet ses
-arguments inchangés. Les fichiers `CAB.md`, `CABU.md` et `cab.md` sont livrés
-ensemble ; les alias exigent leur fichier frère canonique de même version.
-Leur installation dans le profil reste une opération distincte de cette
-préparation source.
+La commande unique de pilotage utilise les majuscules : `/CAB`. `/CABU` sans
+argument exécute exactement `/CAB update` jusqu'au rapport complet. Les fichiers
+`CAB.md` et `CABU.md` sont livrés ensemble et chargent leur fichier frère de même
+version. `/cab` et `cab.md` ne sont pas pris en charge. Leur installation dans
+le profil reste une opération distincte de cette préparation source.
 
 
 `/CAB` est une commande de l'agent Codex versionnée avec CAB. Elle orchestre
@@ -456,7 +454,7 @@ installées mais inactives jusqu'au prochain
 `/CAB start`.
 
 `/CAB update` vérifie le plugin installé, le skill `CAB`, sa
-référence de maintenance et les commandes `CAB.md`, `CABU.md` et `cab.md`.
+référence de maintenance et les commandes `CAB.md` et `CABU.md`.
 CABU délègue à la procédure canonique et attend son rapport complet. Après
 staging et sauvegardes, l'update arrête systématiquement les trois unités
 systemd CAB, remplace les fichiers des quatre briques, recharge systemd puis
@@ -653,8 +651,8 @@ Pour une marketplace GitHub privée, publiez le dépôt avec ce catalogue à sa
 racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
-La version de base actuelle des briques CAB, du plugin CABU et des commandes
-est `2.1.10`. Chaque plugin ajoute un cachebuster Codex pour les installations
+La version de base actuelle des briques CAB, des plugins CAB/CABU et des commandes
+est `2.1.33`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -743,7 +741,7 @@ TECHNICAL.md, section « CABU 2.1.6 : coupure courte et reprise ».
 Le skill de statistiques garde son nom `coding-session-statistics`, sous le
 namespace `CAB`. Les chemins `plugins/cab-approval-bridge/`,
 `skills/approval-bridge/` et `plugins/cabu/` restent stables. L'alias historique
-`/cab` conserve la compatibilité. Les noms des services, routes et données
+`/cab` n'est plus pris en charge. Les noms des services, routes et données
 persistantes ne sont pas renommés.
 
 ## Codes de lot dans le moniteur
@@ -775,7 +773,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.32.
+La distribution courante des quatre briques, plugins et commandes est 2.1.33.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

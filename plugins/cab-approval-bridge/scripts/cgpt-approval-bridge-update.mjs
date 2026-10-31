@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.32';
+export const VERSION = '2.1.33';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -589,7 +589,7 @@ export async function updateComponents(input, options = {}) {
     if (!receipt.maintenance) return;
     const value = await request(c.controllerUrl, '/coordination/global/release', {
       transactionId: receipt.maintenance.transactionId, generation: receipt.maintenance.generation,
-      authorization: '/cab update verified release', evidence: ['cab-update-components-and-runs-verified'] });
+      authorization: '/CAB update verified release', evidence: ['cab-update-components-and-runs-verified'] });
     if (value.state !== 'RELEASED') throw error('update-maintenance-release-unconfirmed');
   }
   async function stopAll() {
@@ -811,7 +811,7 @@ export async function updateComponents(input, options = {}) {
       }
       if (receipt.phase === 'FREEZING') {
         const maintenance = await request(c.controllerUrl, '/coordination/global/request', {
-          transactionId: receipt.id, cause: 'SHARED_MAINTENANCE', scope: 'all', authorization: '/cab update active components',
+          transactionId: receipt.id, cause: 'SHARED_MAINTENANCE', scope: 'all', authorization: '/CAB update active components',
           evidence: ['cab-update-package-validated-and-backed-up'] });
         if (maintenance.transactionId !== receipt.id || !Number.isSafeInteger(maintenance.generation)) throw error('update-maintenance-unconfirmed');
         receipt.maintenance = { transactionId: receipt.id, generation: maintenance.generation }; await save('WAITING');

@@ -4,9 +4,9 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.1.32
+### Distribution courante 2.1.33
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.32. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.33. Seules `/CAB` et `/CABU` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
 
 OpenCode V2 est la seule version prise en charge. Les appels HTTP utilisent
 `/api/...` avec Basic Auth sous l'utilisateur fixe `opencode`. Configurer le
@@ -22,7 +22,7 @@ bind du serveur.
 
 CAB est actuellement un dépôt source autonome comprenant le broker Python, les
 plugins Codex `CAB` et `CABU`, leurs skills, les commandes
-versionnées `/CAB`, `/CABU` et `/cab`, ainsi que les scripts Node.js de contrôle
+versionnées `/CAB` et `/CABU`, ainsi que les scripts Node.js de contrôle
 et de supervision.
 
 Aucun Dockerfile ni format de paquet système n'est actuellement défini dans les sources CAB. Une image Docker ou un paquet Debian ne constitue donc pas encore un mode de distribution du projet.
@@ -61,7 +61,7 @@ CAB/
 │   └── skills/cabu/SKILL.md
 ├── src/                 # bridge Python
 ├── .codex/
-│   └── commands/        # commandes /CAB, /CABU et /cab
+│   └── commands/        # commandes /CAB et /CABU
 ├── PROJECT.md
 ├── TECHNICAL.md
 ├── BUILD.md
@@ -174,13 +174,13 @@ du workspace, recharge systemd puis démarre explicitement le service. Elle ne
 doit jamais appeler `systemctl --user enable`. `/CAB stop` arrête le service
 mais conserve son unité inactive pour un démarrage ultérieur.
 
-Les commandes `/CAB`, `/CABU` et `/cab` sont distribuées ensemble : `CAB.md` porte la procédure
-canonique `/CAB`, `CABU.md` fournit `/CABU` sans argument et `cab.md` conserve
-l'ancienne entrée avec transmission inchangée. Tous les fichiers ont le même
-frontmatter de version. `/CABU` délègue à `/CAB update`, qui mène le déploiement
-jusqu'au rapport terminal. Les commandes du profil sont remplacées atomiquement
-depuis une source validée et toute copie locale plus récente ou divergente est
-préservée.
+Les seules commandes distribuées sont `/CAB` et `/CABU` : `CAB.md` porte la
+procédure canonique et `CABU.md` fournit l’entrée de mise à jour sans argument.
+Le fichier `cab.md` et la commande `/cab` sont retirés. Les deux commandes ont
+le même frontmatter de version. `/CABU` délègue à `/CAB update`, qui mène le
+déploiement jusqu'au rapport terminal. Les commandes du profil sont remplacées
+atomiquement depuis une source validée ; le retrait de l’ancienne entrée est
+sauvegardé et annulé si la publication du jeu canonique échoue.
 
 Les commandes Codex sont maintenues séparément dans :
 
@@ -246,7 +246,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.1.32` pour le broker,
+artefacts distribués. La version de base actuelle est `2.1.33` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -548,7 +548,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.32 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.33 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -595,7 +595,7 @@ Le banc de processus exige une terminaison sous cinq secondes, libération des v
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.32.
+La distribution courante des quatre briques, plugins et commandes est 2.1.33.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

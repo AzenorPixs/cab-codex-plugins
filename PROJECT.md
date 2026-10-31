@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.32`.
+Version de référence des briques CAB : `2.1.33`.
 
-CAB 2.1.32 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.33 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -317,11 +317,10 @@ une publication échouée laisse le cycle incomplet, sans réarchivage.
 
 ### 5.5 Commande `/CAB`
 
-La forme canonique est `/CAB`, définie dans `.codex/commands/CAB.md`.
-`/CABU` sans argument équivaut exactement à `/CAB update`. L'ancienne entrée
-`/cab` reste un alias de compatibilité et transmet ses arguments inchangés.
-Les alias chargent le fichier frère canonique de même version, sans dupliquer
-la procédure ni télécharger une dépendance implicite.
+La commande unique de pilotage est `/CAB`, définie dans
+`.codex/commands/CAB.md`. `/CABU` sans argument équivaut exactement à
+`/CAB update` et charge le fichier frère canonique de même version. `/cab`
+n’est pas pris en charge ; aucun fichier `cab.md` n’est distribué.
 
 
 `/CAB` est une commande destinée à l'agent Codex et versionnée avec CAB dans
