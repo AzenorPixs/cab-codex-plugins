@@ -2,6 +2,8 @@
 
 Actualisation SCM du 28 octobre 2026 : **76 changes archivés, 0 change actif**, **618/618 tâches cochées**. Attribution ACL du 28 octobre 2026, plan CAB-ACL-R5 : SUP10 pour la fermeture technique CAB ; 76 correspondances vérifiées, dont les 75 codes antérieurs conservés. MAI11 conserve son attribution rétrospective CAB-ACL-R4. Le suivi de CT14, correctif 2.1.5 archivé avec six tâches validées, est consigné ci-dessous ; les relevés ACL antérieurs restent historiques.
 
+Actualisation SCM du 31 octobre 2026 : OpenSpec dénombre **104 archives et 0 change actif** ; la cartographie documente 76 entrées codées et le nouvel archivage [retire-lowercase-cab-command](openspec/changes/archive/2026-10-31-retire-lowercase-cab-command/) sans code attribué. Le graphe et le registre détaillé ne couvrent donc que 77 des 104 dossiers observés ; 27 restent à réconcilier. Aucun total global de tâches n’est revendiqué. Le code du nouvel archivage reste non attribué et les 76 codes attestés ne changent pas. Exécuter ultérieurement ACL pour réconcilier la cartographie et le registre ; aucune reconstruction globale n’est faite ici.
+
 ## 1. Périmètre et fraîcheur
 
 Relevé et application : **28 octobre 2026, Europe/Paris**. Plan **CAB-ACL-R1**, validé explicitement par le développeur pour les 72 annotations, le registre et cette cartographie. Le document était un squelette limité à son titre ; le registre était absent.
@@ -31,7 +33,7 @@ La seule lecture du classement ne démontre ni succession chronologique ni effet
 
 ## 3. Vues détaillées
 
-Les nœuds ci-dessous désignent 76 changes **ARCHIVÉS**, dont CT14, MAI11 et SUP10. Le suivi documentaire reste séparé des preuves opérationnelles. Les titres complets, identifiants techniques et sources figurent en section 4. Les intitulés génériques historiques Proposal et Proposition sont conservés dans les propositions ; les libellés courts des nœuds explicitent leur objet à partir de leurs artefacts.
+Le graphe ci-dessous représente les 76 changes **ARCHIVÉS avec code attribué** déjà cartographiés, dont CT14, MAI11 et SUP10. Le nouvel archivage, sans code attribué, est répertorié séparément en section 4. Le contrôle OpenSpec dénombre 104 dossiers d’archive ; la cartographie détaillée reste partielle dans l’attente d’ACL. Le suivi documentaire reste séparé des preuves opérationnelles. Les titres complets, identifiants techniques et sources figurent en section 4. Les intitulés génériques historiques Proposal et Proposition sont conservés dans les propositions ; les libellés courts des nœuds explicitent leur objet à partir de leurs artefacts.
 
 ### 3.1 Broker
 
@@ -169,7 +171,9 @@ flowchart TB
 
 Les ratios ci-dessous comptent les cases cochées du fichier tasks.md, sans assimiler une case à une validation actuelle ou à un pourcentage de réalisation fonctionnelle. Les preuves de réalisation et de validation historique sont celles rapportées par les tâches et, lorsqu’ils existent, les documents de qualification et statistiques liés. Leur présence et leur lecture ne constituent pas une réexécution.
 
-État des 76 archives : **ARCHIVÉ**. SUP10 est archivé avec 7/7 tâches et qualification source finale acquise ; aucune installation ni activation. CT14 est clôturé avec 6/6 tâches ; l’archivage ne vaut ni déploiement ni activation. Réalisabilité d’une nouvelle session : **sans objet pour ces archives**, aucune de ces archives à classer comme change actif. Validations, intégrations ou qualifications nouvelles nécessaires avant réutilisation : **À VÉRIFIER selon le futur périmètre**. Livraison et activation actuelles : **NON VÉRIFIÉES par ACL**, pour chacune des 72 lignes.
+Le contrôle OpenSpec a validé les tâches cochées dans 104 dossiers d’archive. La cartographie détaillée et le registre de codes ne réconcilient que les 76 entrées déjà documentées et l’archivage ciblé ci-dessous. SUP10 est archivé avec 7/7 tâches et qualification source finale acquise ; aucune installation ni activation. CT14 est clôturé avec 6/6 tâches ; l’archivage ne vaut ni déploiement ni activation. Réalisabilité d’une nouvelle session : **sans objet pour les entrées cartographiées**. Validations, intégrations ou qualifications nouvelles nécessaires avant réutilisation : **À VÉRIFIER selon le futur périmètre**. Livraison et activation actuelles restent **NON VÉRIFIÉES par ACL**.
+
+Archive sans code de lot attribué : [retire-lowercase-cab-command](openspec/changes/archive/2026-10-31-retire-lowercase-cab-command/), « Retirer l’alias minuscule de la commande CAB », **ARCHIVÉ**, 5/5 tâches. L’attribution reste en attente d’ACL ; aucune ligne ni réservation n’est ajoutée à `openspec/BATCH_CODES.md`.
 
 | Code | Identifiant technique et dossier | Titre | Ensemble | État | Cases cochées / total | Sources de réalisation et validation historique |
 |---|---|---|---|---|---|---|
@@ -250,7 +254,7 @@ Les ratios ci-dessous comptent les cases cochées du fichier tasks.md, sans assi
 | SUP09 | [fix-recovery-retry-after-mcp-timeout](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/) | Autoriser le retry réconcilié après timeout MCP | Contrôle et supervision | ARCHIVÉ | 8/8 | [proposition](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/proposal.md) ; [tâches](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/tasks.md) ; [STATISTICS.md](openspec/changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/STATISTICS.md) |
 | SUP10 | [fix-cab-shutdown-on-opencode-exit](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/) | Fermeture propre de CAB avec OpenCode — 2.1.6 | Contrôle et supervision | ARCHIVÉ | 7/7 | [proposition](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/proposal.md) ; [tâches](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/tasks.md) ; [design](openspec/changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/design.md) |
 
-**Total courant du registre des archives : 76 archives, 618/618 cases cochées et 76 codes attestés**, après clôture de la qualification historique et de SUP10 ; attributions CAB-ACL-R4 et CAB-ACL-R5 conservées. Le relevé ACL initial portait sur 72 archives et 597 tâches ; il reste historique. Le suivi SCM distinct conserve la clôture de CT14, avec 6/6 tâches cochées ; les 75 codes attribués, dont OBS09, CT14 et MAI11, sont préservés. Le change SUP10 (2.1.6) archivé conserve son suivi séparé ; le registre complet compte 76 codes attestés. Aucune tâche n’est modifiée par cette cartographie. Le [registre](openspec/BATCH_CODES.md) conserve les preuves d’attribution, y compris les annotations rétrospectives.
+**État vérifié : 104 dossiers d’archive OpenSpec ; 76 codes attestés et 77 entrées documentées ici**, dont le nouvel archivage sans code attribué. Les 27 autres dossiers restent hors cartographie détaillée jusqu’à ACL ; le total de leurs tâches et codes n’est pas inféré. Les attributions CAB-ACL-R4 et CAB-ACL-R5 et les 76 codes connus sont conservés. Le relevé ACL initial portait sur 72 archives et 597 tâches ; il reste historique. Les suivis distincts de CT14 et SUP10 restent consignés. Aucune attribution n’est déduite de cette cartographie. Le [registre](openspec/BATCH_CODES.md) conserve les preuves d’attribution, y compris les annotations rétrospectives.
 
 ## 5. Registre des dépendances
 

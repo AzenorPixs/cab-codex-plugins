@@ -1,16 +1,16 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 2.1.32
+version: 2.1.33
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
 
 Le développeur accorde une autorisation permanente pour le cycle de vie et les vérifications propres à `/CAB`. Ne sollicite donc pas de validation applicative supplémentaire pour lancer, initialiser, superviser, tester ou clôturer le pilotage. Respecte néanmoins toute autorisation technique que l’environnement impose lui-même pour une exécution hors sandbox.
 
-Commande canonique : `/CAB`, portée par `CAB.md`. L'alias historique `/cab`
-transmet ses arguments inchangés ; `/CABU` sans argument équivaut exactement à
-`/CAB update`. Les alias chargent ce fichier frère de même version, puis
-exécutent la procédure dans le même tour. Aucune logique de maintenance n'est dupliquée.
+Commande canonique et unique : `/CAB`, portée par `CAB.md`. `/cab` n'est pas
+pris en charge. `/CABU` sans argument équivaut exactement à `/CAB update` et
+charge ce fichier frère de même version avant d'exécuter la procédure dans le
+même tour. Aucune logique de maintenance n'est dupliquée.
 
 Argument reçu : `$ARGUMENTS`
 
@@ -41,7 +41,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 2.1.32
+## RUN concurrents CAB 2.1.33
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -353,7 +353,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/snapshot avec version 2.1.32 et identity.workspace
+Vérifier service actif, GET /api/snapshot avec version 2.1.33 et identity.workspace
 attendus, puis GET / ; terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
 sinon la cause et l'URL attendue séparément du statut CAB. Préserver configuration
@@ -528,9 +528,9 @@ permissions ; aucun signalement ne vaut décision ni relance automatique.
 ## `/CAB update`
 
 Met à jour le plugin, son skill `approval-bridge`, les quatre briques CAB
-(broker, contrôleur, superviseur, Web) et les commandes du profil. `/CABU`
-reste un alias strict qui charge CAB.md et délègue ici ; il ne contient aucune
-logique de maintenance. La procédure utilise la référence
+(broker, contrôleur, superviseur, Web) et les deux commandes du profil.
+`/CABU` est l’entrée dédiée sans argument qui charge CAB.md et délègue ici ;
+il ne contient aucune logique de maintenance. La procédure utilise la référence
 `skills/approval-bridge/references/component-update.md` du plugin installé et
 vérifie que le manifeste, le skill, sa référence et le script updater sont bien
 associés avant toute mutation.
@@ -556,7 +556,7 @@ redémarrer et servir leur nouvelle version. La procédure détaillée et les
 mesures preparationMs/unavailableMs/totalMs figurent dans
 `references/component-update.md` du plugin installé.
 
-### Prévol 2.1.32 du credential et du layout
+### Prévol 2.1.33 du credential et du layout
 
 Avant la coupure, l’updater valide le credential privé systemd. Si le DEVOPS.md du projet désigne OPENCODE_PASSWORD dans project.env et que le développeur autorise ce raccord, passer explicitement `--opencode-password-env-file <workspace>/project.env` (source CAB ou workspace des services). Ne jamais lire ou afficher sa valeur dans les outils du modèle : seul le processus local traite le fichier. Sans cette option, utiliser le credential privé existant ; ne pas exiger de variable des projets sans OpenCode. Un conflit avec un credential existant reste refusé. Un credential nouvellement provisionné est conservé après échec sans copie dans les sauvegardes.
 
@@ -567,7 +567,7 @@ Pour des services installés par liens gérés, combiner `--broker-policy cab-so
 Pour `/CAB update` et `$CABU`, appliquer les étapes distantes 1 à 14 depuis
 `AzenorPixs/cab-codex-plugins`, branche `main`, même si `cab_codex_plugins`
 est une marketplace locale. GitHub fournit les versions cibles des plugins
-CAB/CABU, du broker, du contrôleur, du superviseur, du Web et des trois commandes.
+CAB/CABU, du broker, du contrôleur, du superviseur, du Web et des deux commandes.
 La présence d'un paquet local ou de fichiers déjà installés n'autorise jamais
 à sauter la vérification distante ni l'actualisation de la marketplace Git.
 Une source GitHub indisponible ou un jeu distant incohérent arrête la
@@ -602,19 +602,21 @@ revenir au dépôt Git seulement quand sa version atteint ou dépasse le paquet
 local.
 
 Pour les commandes du profil dans ce chemin local, prendre exclusivement
-`CAB_ROOT/.codex/commands/{CAB,CABU,cab}.md`, vérifier leurs trois frontmatters
+`CAB_ROOT/.codex/commands/{CAB,CABU}.md`, vérifier leurs deux frontmatters
 identiques à la version du plugin local et appliquer la même préparation privée,
 comparaison, sauvegarde, remplacement atomique et relecture définis aux étapes
-10 à 14. Le rapport conserve les provenances locale et GitHub séparées. Le
-commit ou la publication du dépôt ne découlent pas de cette installation locale.
+10 à 14. Retirer `cab.md` comme entrée obsolète après validation du nouveau jeu,
+en conservant une sauvegarde réversible jusqu’à la vérification finale. Le rapport
+conserve les provenances locale et GitHub séparées. Le commit ou la publication
+du dépôt ne découlent pas de cette installation locale.
 
 Uniquement dans cette installation locale explicitement demandée, lorsque
 le manifeste du paquet CAB local est plus récent que GitHub, applique
 la branche locale ci-dessus, saute les étapes distantes 1 à 7, puis résous le
 plugin local installé à l'étape 8. Pour ce cas, les étapes 9 et 10 sont
-remplacées par la préparation des trois fichiers depuis
-`CAB_ROOT/.codex/commands/` ; conserve les contrôles d'atomicité, de sauvegarde
-et de relecture des étapes 11 à 13.
+remplacées par la préparation des deux fichiers canoniques depuis
+`CAB_ROOT/.codex/commands/` ; conserve les contrôles d'atomicité, de sauvegarde,
+de retrait de l'ancienne entrée minuscule et de relecture des étapes 11 à 13.
 
 1. Vérifie avec `codex plugin marketplace list` que la marketplace
    `cab_codex_plugins` est configurée depuis
@@ -638,7 +640,7 @@ et de relecture des étapes 11 à 13.
    `+codex`, à celle renvoyée par `codex plugin list --marketplace cab_codex_plugins --available --json`.
    Vérifie aussi le manifeste `plugins/cabu/.codex-plugin/plugin.json` et
    les versions distribuées du contrôleur, du superviseur, du Web, du broker
-   et des trois commandes sur cette même révision GitHub. Le jeu doit partager
+   et des deux commandes sur cette même révision GitHub. Le jeu doit partager
    la même version de base. Un accès manquant ou une divergence arrête la
    préparation avant l'updater. Ne déduis aucune version GitHub d'un fichier
    local, du cache installé ou du reçu de déploiement.
@@ -711,48 +713,55 @@ et de relecture des étapes 11 à 13.
    CAB_SUPERVISEUR_INSTALLÉ et CAB_SUPERVISEUR_MIS_À_JOUR sont remplacés par
    le bilan des quatre briques ; le bilan indique le statut des trois unités
    après la mise à jour.
-9. Utilise exclusivement la référence GitHub suivante pour le jeu de commandes :
+9. Utilise exclusivement la référence GitHub suivante pour préparer les deux
+   fichiers canoniques de commande :
    `https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`, chemins
-   `.codex/commands/CAB.md`, `.codex/commands/CABU.md` et `.codex/commands/cab.md`.
-   Construis les URL brutes HTTPS correspondantes sans accepter de redirection
-   vers un autre hôte. La procédure complète réside uniquement dans CAB.md.
-10. Prépare les trois téléchargements dans un répertoire temporaire privé du
+   `.codex/commands/CAB.md` et `.codex/commands/CABU.md`. Construis leurs URL
+   brutes HTTPS sans accepter de redirection vers un autre hôte. La procédure
+   complète réside uniquement dans CAB.md.
+10. Prépare les deux téléchargements dans un répertoire temporaire privé du
     profil Codex avec `curl --fail --silent --show-error`, sans écrire les cibles.
-    Exige trois frontmatters avec une version SemVer valide identique, et les
-    alias référençant le fichier frère CAB.md, avec transmission inchangée pour
-    cab.md et argument fixe update pour CABU.md. Un fichier absent, une source
-    ou une version divergente arrête toute publication des commandes.
-11. Examine seulement les trois cibles nommées sous
-    `${CODEX_HOME:-$HOME/.codex}/commands/`. Pour une installation héritée sans
-    CAB.md, prends cab.md comme référence de version. Une copie sans version
-    est antérieure à une source distante valide ; une version invalide est une
-    erreur explicite. Préserve une copie locale plus récente. À version égale,
-    compare le contenu de chaque fichier présent au téléchargement : un contenu
-    divergent est préservé et signalé, sans remplacement ni ajout d'alias.
-12. Si les trois copies sont conformes à version égale, affiche
-    `CAB_COMMANDE_DÉJÀ_À_JOUR`, sans écriture. Si seules des copies manquent à
-    version égale et que les copies présentes concordent, installe seulement
-    les fichiers absents après validation complète du jeu. Si la source est
-    plus ancienne que l'une des copies locales, conserve le jeu local et
-    rapporte sa provenance, sans installation partielle.
-13. Pour un jeu strictement plus récent ou les fichiers absents admis à
-    l'étape 12, sauvegarde les seuls fichiers nommés à remplacer et mémorise
-    ceux qui étaient absents. Revérifie leurs empreintes avant publication
-    pour détecter une modification concurrente ; en cas de divergence, arrête.
-    Remplace chaque cible atomiquement par son fichier temporaire validé, puis
-    relis les trois versions, contenus et références locales avant d'afficher
-    `CAB_COMMANDE_MISE_À_JOUR`. Si une étape échoue, restaure les seules copies
-    sauvegardées et retire les seuls nouveaux fichiers de cette tentative.
-    Un échec de restauration conserve les sauvegardes et reste explicitement
-    bloqué. Affiche `CAB_COMMANDE_MISE_À_JOUR_ÉCHOUÉE` avec la cause observée ;
-    n'annonce jamais un succès global après un échec de préparation ou publication.
+    Exige deux frontmatters avec une version SemVer valide identique et vérifie
+    que CABU charge le fichier frère CAB.md, refuse les arguments et fixe son
+    argument à `update`. Un fichier absent, une source ou une version divergente
+    arrête toute publication des commandes.
+11. Examine les deux cibles canoniques sous
+    `${CODEX_HOME:-$HOME/.codex}/commands/`. Une copie sans version est
+    antérieure à une source distante valide ; une version invalide est une
+    erreur explicite. Préserve une copie canonique locale plus récente. À
+    version égale, compare le contenu de chaque commande présente au
+    téléchargement : une commande divergente est préservée et signalée sans
+    publication partielle. Examine aussi `cab.md` uniquement comme une ancienne
+    entrée à retirer ; ne l’utilise jamais comme commande canonique ou référence
+    de version et sauvegarde-la pour pouvoir la restaurer en cas d’échec.
+12. Si les deux commandes canoniques sont conformes à version égale et
+    `cab.md` est absent, affiche `CAB_COMMANDE_DÉJÀ_À_JOUR`, sans écriture. Si
+    seules des commandes canoniques manquent à version égale et que les copies
+    présentes concordent, installe seulement les fichiers absents après
+    validation complète du jeu. Si la source est plus ancienne que l'une des
+    copies canoniques locales, conserve le jeu local et rapporte sa provenance,
+    sans installation partielle.
+13. Pour un jeu strictement plus récent ou les fichiers canoniques absents admis
+    à l'étape 12, sauvegarde les seules copies à remplacer et mémorise celles
+    qui étaient absentes. Revérifie leurs empreintes avant publication pour
+    détecter une modification concurrente ; en cas de divergence, arrête.
+    Remplace atomiquement CAB.md et CABU.md par leurs copies validées, puis
+    retire `cab.md`. Relis les deux versions, contenus et références locales et
+    vérifie l'absence de `cab.md` avant d'afficher `CAB_COMMANDE_MISE_À_JOUR`.
+    Si une étape échoue, restaure les seules copies sauvegardées, y compris
+    l'ancienne entrée `cab.md`, et retire les seuls nouveaux fichiers de cette
+    tentative. Un échec de restauration conserve les sauvegardes et reste
+    explicitement bloqué. Affiche `CAB_COMMANDE_MISE_À_JOUR_ÉCHOUÉE` avec la
+    cause observée ; n'annonce jamais un succès global après un échec de
+    préparation ou publication.
 14. Affiche toujours `CAB_RÉSUMÉ_VERSIONS`, y compris après échec ou attente,
     avec des colonnes distinctes GitHub, plugin installé, fichiers déployés,
     processus réellement actif et résultat de transaction. Inclure plugin,
-    contrôleur, superviseur, broker, Web et commande :
+    contrôleur, superviseur, broker, Web, CAB.md, CABU.md et le statut de retrait
+    de l'ancienne entrée `cab.md` :
     - GitHub : manifeste, scripts controller/supervisor/monitor, broker
-      distribué dans plugins/cab-approval-bridge/broker/ et frontmatters des trois fichiers
-      .codex/commands/{CAB,CABU,cab}.md ;
+      distribué dans plugins/cab-approval-bridge/broker/ et frontmatters des deux fichiers
+      .codex/commands/{CAB,CABU}.md ;
     - fichiers : versions du cache installé et des artefacts effectivement
       déployés, dont la version du superviseur déployé extraite du script ;
    - processus : GET /status du contrôleur et du superviseur, readiness
@@ -1001,7 +1010,7 @@ La récupération conserve le même journal et les mêmes destinations. Le jeu W
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs,
 cgpt-approval-bridge-permission-policy.mjs et cgpt-approval-bridge-process-lifecycle.mjs.
 
-Contrat courant CABU 2.1.32 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.33 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -1078,7 +1087,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.32 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.33 ; les preuves 2.1.8 restent historiques.
 
 ## Priorité medium puis high — nouvelles sessions et reprises
 

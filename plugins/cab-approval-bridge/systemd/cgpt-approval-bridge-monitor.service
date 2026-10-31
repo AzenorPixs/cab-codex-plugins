@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 2.1.32 — Supervision web locale indépendante
+Description=CAB 2.1.33 — Supervision web locale indépendante
 
 [Service]
 Type=simple
@@ -12,4 +12,4 @@ RestartSec=3
 UMask=0077
 NoNewPrivileges=true
 
-# Installation et démarrage explicites par /cab start ; aucune activation au login.
+# Installation et démarrage explicites par /CAB start ; aucune activation au login.

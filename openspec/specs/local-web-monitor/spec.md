@@ -171,11 +171,15 @@ La ligne du job dans Espace de travail MUST présenter un fond jaune pour WAITIN
 - **THEN** la ligne devient respectivement verte ou orange et sa sélection reste distincte
 
 ### Requirement: Identité publique du workspace observé
-GET /api/snapshot MUST exposer identity.workspace avec le workspace absolu configuré, canonique au lancement CLI. Cette identité MUST rester disponible sans contrôleur ni superviseur. Elle MUST NOT exposer de variable secrète et sa lecture MUST rester sans effet métier.
+GET /api/snapshot MUST exposer identity.workspace avec le workspace absolu
+configuré, canonique au lancement CLI. Cette identité MUST rester disponible
+sans contrôleur ni superviseur. Elle MUST NOT exposer de variable secrète et
+sa lecture MUST rester sans effet métier.
 
 #### Scenario: Vérification avant réutilisation
-- **WHEN** /cab start interroge une instance déjà active
-- **THEN** il peut comparer son workspace et sa version attendus sans lire de fichier runtime privé
+- **WHEN** `/CAB start` interroge une instance déjà active
+- **THEN** il peut comparer son workspace et sa version attendus sans lire de
+  fichier runtime privé
 
 ### Requirement: En-tête et navigation de gestion
 MONITOR MUST afficher CENTRE D’OBSERVATION en grand et gras. Dernière vue et Collecte/vue MUST suivre CAB / Supervision et WORKSPACE LOCAL sur une ligne sans élargir le document. Actualisation MUST rester disponible. ARCHIVES MUST suivre MONITOR et STATS. Navigation MUST rester accessible au clavier et responsive sans interrompre SSE ni statistiques. Tout le travail., Une vue commune. et leur paragraphe MUST être absents.
