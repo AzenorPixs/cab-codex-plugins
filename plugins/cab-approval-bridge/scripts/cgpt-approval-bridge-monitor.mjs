@@ -6,7 +6,7 @@ import { MonitorState, monitorConfiguration, VERSION as DATA_VERSION } from './c
 import { guardStatisticsPost, statisticsSelection, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
 import { MonitorCatalog, MonitorServices, guardManagementPost, managementBody, VERSION as MANAGEMENT_VERSION } from './cgpt-approval-bridge-monitor-management.mjs';
 
-export const VERSION = '2.1.33';
+export const VERSION = '2.1.34';
 if ([DATA_VERSION, MAINTENANCE_VERSION, MANAGEMENT_VERSION, LIFECYCLE_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/stats.mjs', ['stats.mjs', 'text/javascript; charset=utf-8']],
@@ -154,6 +154,11 @@ export async function createMonitorServer(configuration, options = {}) {
       return;
     }
     if (request.method !== 'GET') { response.writeHead(405, { allow: 'GET' }).end(); return; }
+    if (url.pathname === '/api/identity') {
+      if (url.search) { response.writeHead(400).end(); return; }
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ version: VERSION, identity: { workspace: configuration.workspace } })); return;
+    }
     if (url.pathname === '/api/snapshot') {
       response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(snapshot())); return;
     }

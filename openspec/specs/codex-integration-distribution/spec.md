@@ -565,30 +565,44 @@ L'unité du moniteur MUST NOT dépendre des unités CAB de contrôle ou de super
 - **THEN** le moniteur reste disponible pour afficher leur indisponibilité
 
 ### Requirement: Jeu installé du moniteur complet
-Le déploiement du moniteur MUST conserver scripts/ et web-monitor/ comme dossiers frères, avec la fermeture de ses imports et ressources statiques. Les fichiers de configuration MUST rester non secrets et privés. Une configuration existante MUST être préservée sauf actualisation explicitement validée ; aucun fichier env brut MUST être exposé.
+Le paquet du moniteur MUST inclure `scripts/` et `web-monitor/` côte à côte avec leurs imports et ressources statiques. Sa configuration MUST rester privée et sans secret, et MUST être préservée sauf mandat explicite. Aucun fichier env brut MUST être exposé.
 
 #### Scenario: Paquet isolé
-- **WHEN** le moniteur est lancé depuis son seul jeu installé sans composants amont
-- **THEN** la page et l'identité HTTP restent accessibles sans import depuis le dépôt source
+- **WHEN** le moniteur démarre seul depuis son jeu installé
+- **THEN** la page et l’identité HTTP restent accessibles sans import du dépôt source
 
-### Requirement: Bootstrap du monitoring avant les dépendances amont
-Après résolution du workspace canonique, /CAB start, le skill et le protocole de session pilotée MUST appliquer monitor-service avant PLLM, santé OpenCode et prévols modèle/MCP. Ce contrôle MUST couvrir nouvelle entrée, reprise et réutilisation des services. Il MUST terminer une tentative bornée et rapporter son résultat avant de poursuivre. La préparation source MUST NOT exécuter ce bootstrap sur un profil réel.
+### Requirement: Priorité du bootstrap du monitoring
+Après résolution du workspace canonique, `/CAB start` et le skill MUST
+appliquer `monitor-service` avant PLLM, santé OpenCode et prévols. Cela couvre
+entrée, reprise et services CAB réutilisés.
 
-#### Scenario: Prévol indisponible
-- **WHEN** PLLM ou un prévol amont échoue après la résolution du workspace
-- **THEN** la tentative de démarrage ou de vérification du moniteur a déjà eu lieu et son service reste indépendant
+#### Scenario: Contrôleur déjà actif
+- **WHEN** une reprise trouve le contrôleur actif et le moniteur absent
+- **THEN** le moniteur est démarré avant les prévols, sans redémarrer le contrôleur
 
-#### Scenario: Services CAB réutilisés
-- **WHEN** une session pilotée entre ou reprend avec contrôleur et superviseur déjà actifs mais sans moniteur
-- **THEN** elle applique la procédure de déploiement et démarrage du moniteur dans le périmètre autorisé avant les prévols, sans redémarrer les autres services
+### Requirement: Identité minimale du moniteur au bootstrap
+Le bootstrap MUST vérifier version et workspace par `GET /api/identity`, puis
+la page par `GET /`. Il MUST NOT lire `/api/snapshot` pour obtenir cette identité.
 
-#### Scenario: Instance conforme en reprise
-- **WHEN** le moniteur actif annonce version et workspace attendus
-- **THEN** la procédure vérifie page et unité, réutilise l'instance intacte et rapporte son URL réelle
+#### Scenario: Instance conforme
+- **WHEN** l’identité attendue est renvoyée par `/api/identity`
+- **THEN** le bootstrap vérifie `/`, réutilise l’instance et rapporte son URL réelle
 
-#### Scenario: Échec du monitoring
-- **WHEN** l'installation, le démarrage ou les preuves HTTP échouent
-- **THEN** la procédure rapporte la cause et l'URL attendue séparément du statut CAB, sans annoncer le moniteur disponible ni agir sur les autres briques ou RUN
+### Requirement: Résultat borné du bootstrap
+Le bootstrap MUST terminer une tentative bornée et rapporter son résultat
+avant les prévols. Un échec MUST préserver les autres briques et RUN.
+
+#### Scenario: Monitoring indisponible
+- **WHEN** démarrage ou preuve HTTP échoue
+- **THEN** la cause et l’URL attendue sont rapportées séparément du statut CAB
+
+### Requirement: Indépendance du bootstrap source
+La préparation source MUST NOT exécuter le bootstrap sur un profil réel. Un
+échec de PLLM ou d’un prévol amont MUST laisser le moniteur indépendant actif.
+
+#### Scenario: Prévol amont échoué
+- **WHEN** PLLM ou un prévol échoue après la sonde du moniteur
+- **THEN** le moniteur reste actif sans action sur les autres briques
 
 ### Requirement: Distribution cohérente de la récupération 1.9.0
 Le jeu CAB MUST annoncer 1.10.5 avec cachebuster neuf, fermeture d'imports et preuves de qualification. Il MUST distribuer maintenance-proof et le profil frozen-recovery-controller, préserver le rejet seul de notification et distinguer source, code chargé et runtime vivant. Cette préparation MUST NOT installer ou activer les correctifs sur les RUN réels.

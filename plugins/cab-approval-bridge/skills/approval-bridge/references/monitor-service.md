@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 2.1.33
+# Service web de monitoring — CAB 2.1.34
 
 Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace
@@ -37,7 +37,7 @@ attendue dans le profil utilisateur et son appartenance à cette installation.
 
 Si elle est active, interroger uniquement l'URL loopback attendue :
 
-- GET /api/snapshot doit réussir et annoncer version 2.1.33 ainsi que
+- GET /api/identity doit réussir et annoncer version 2.1.34 ainsi que
   identity.workspace exactement égal au workspace canonique attendu ;
 - GET / doit servir la page CAB Monitor ;
 - l'unité doit utiliser Restart=on-failure.
@@ -74,7 +74,7 @@ web-monitor/
 ```
 
 Conserver ces deux dossiers frères : les imports et ressources sont résolus
-relativement aux modules. Vérifier la version 2.1.33 et la présence de chaque
+relativement aux modules. Vérifier la version 2.1.34 et la présence de chaque
 fichier avant publication du jeu. Provisionner le credential OpenCode partagé
 dans `~/.config/cab-approval-bridge/opencode.password` avec les permissions
 `0600`; l'unité le charge via `LoadCredential`. Aucune dépendance tierce n'est installée.
@@ -115,7 +115,7 @@ systemctl --user is-active cgpt-approval-bridge-monitor.service
 ```
 
 Ne jamais utiliser systemctl --user enable : aucune activation au login.
-Vérifier ensuite GET /api/snapshot et GET / comme dans la section 2, avec
+Vérifier ensuite GET /api/identity et GET / comme dans la section 2, avec
 requêtes bornées selon le timeout configuré et au plus cinq tentatives. Un
 HTTP 200 d'un autre processus ou un fichier installé ne prouve pas le succès.
 Afficher l'URL réelle uniquement comme disponible après preuve conjointe du

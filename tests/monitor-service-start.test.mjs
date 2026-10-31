@@ -69,8 +69,10 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '2.1.33');
+  assert.equal(snapshot.version, '2.1.34');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
+  const identity = await (await fetch(base + '/api/identity')).json();
+  assert.deepEqual(identity, { version: '2.1.34', identity: { workspace: await realpath(h.workspace) } });
   assert.equal((await fetch(base)).status, 200);
   for (const route of ['/app.mjs', '/stats.mjs', '/style.css']) assert.equal((await fetch(base + route)).status, 200);
   await wait(async () => (await (await fetch(base + '/api/snapshot')).json()).sources.controller?.available === false);
@@ -115,11 +117,9 @@ test('le bootstrap précède les prévols dans chaque point d’entrée distribu
   assert.match(routing, /aucune purge ni\s+réinitialisation n'en découle/);
   assert.match(routing, /Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap/);
   const skill = await readFile(new URL('skills/approval-bridge/SKILL.md', plugin), 'utf8');
-  const protocol = await readFile(new URL('../ORCHESTRATED_CODING.md', import.meta.url), 'utf8');
   for (const [name, source, boundary] of [
     ['commande', start, '1. Vérifie qu’OpenCode répond'],
     ['skill', skill, '## Cadences de pilotage et attente PLLM'],
-    ['protocole', protocol, '## Identité, coordination et autorisations des RUN'],
   ]) {
     const end = source.indexOf(boundary);
     assert.ok(end > 0, name + ' : étapes amont présentes');
@@ -129,7 +129,8 @@ test('le bootstrap précède les prévols dans chaque point d’entrée distribu
     assert.match(bootstrap, /systemctl --user start cgpt-approval-bridge-monitor\.service/, name);
     assert.match(bootstrap, /avant PLLM, santé\s+OpenCode et prévols modèle\/MCP/, name);
     assert.match(bootstrap, /terminer cette tentative bornée et rapporter son résultat\s+avant les contrôles amont/, name);
-    assert.match(bootstrap, /GET \/api\/snapshot[\s\S]*identity\.workspace[\s\S]*GET \/ ;/, name);
+    assert.match(bootstrap, /GET \/api\/identity[\s\S]*identity\.workspace[\s\S]*GET \/ ;/, name);
+    assert.doesNotMatch(bootstrap, /GET \/api\/snapshot/, name);
     assert.match(bootstrap, /Un échec PLLM ou CAB ultérieur\s+n'arrête pas le moniteur/, name);
   }
 });

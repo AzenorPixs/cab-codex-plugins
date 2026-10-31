@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.33`.
+Version de référence des briques CAB : `2.1.34`.
 
-CAB 2.1.33 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.34 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -274,7 +274,10 @@ défaut est 8790, configurable, avec écoute loopback uniquement.
 L'avancement X/Y correspond aux tâches cochées dans le change OpenSpec. La
 phase observée, le jalon prouvé et le gate du RUN restent distincts de ce
 compteur. La page expose aussi la limite effective de commande du contrôleur.
-Le moniteur ne décide, ne relance et ne modifie aucun RUN.
+`GET /api/identity` expose uniquement version et workspace pour le bootstrap
+CAB ; `GET /api/snapshot` reste la vue multi-RUN du tableau de bord. Le
+bootstrap n’en lit pas le contenu. Le moniteur ne décide, ne relance et ne
+modifie aucun RUN.
 Depuis 1.7.1, il propose des commandes explicites de cycle de vie des briques,
 protégées par leur propriété et la quiescence CAB, ainsi qu'un rangement privé
 des lignes. Les archives et suppressions du moniteur ne touchent pas les
