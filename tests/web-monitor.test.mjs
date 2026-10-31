@@ -8,7 +8,7 @@ import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { createObservationJournal } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
 import { monitorConfiguration, parseTasks, parseChangeTitle, readChanges, MonitorState, fetchJson, normalizeRuns, operationalState } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs';
 import { nextLifecycle } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs';
-import { createMonitorServer } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
+import { createMonitorServer, VERSION as monitorVersion } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
 
 const config = () => monitorConfiguration({ OC_Codex_WORKSPACE: process.cwd(), OC_Codex_MONITOR_STATE_DIR: join(tmpdir(), 'catalogs') });
 async function fixture(t) {
@@ -179,7 +179,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.1.33', mode: 'concurrent', brokerReadiness: { server_version: '2.1.33' },
+    else if (target.pathname === '/status') value = { version: '2.1.34', mode: 'concurrent', brokerReadiness: { server_version: '2.1.34' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/monitor/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -190,7 +190,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.1.33', supervisor: '1.4.0', broker: '2.1.33', opencode: '2.2.0', monitor: '2.1.33' });
+  assert.deepEqual(result.componentVersions, { controller: '2.1.34', supervisor: '1.4.0', broker: '2.1.34', opencode: '2.2.0', monitor: '2.1.34' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -241,7 +241,21 @@ test('collectes non chevauchantes et réponses amont bornées', async () => {
   await assert.rejects(fetchJson('http://127.0.0.1/', 1000, async () => new Response(' '.repeat(2 * 1024 * 1024 + 1))), /source-too-large/);
 });
 
-test('serveur indépendant : page, CSP, SSE initial et méthodes de mutation refusées', async (t) => {
+test('bootstrap identité minimale : version/workspace seulement, sans données RUN', async (t) => {
+  const workspace = await fixture(t);
+  const upstream = await listen(t, (_request, response) => { response.writeHead(503).end(); });
+  const monitor = await createMonitorServer({ ...config(), workspace, port: 0, controllerUrl: upstream, supervisorUrl: upstream, opencodeUrl: upstream });
+  const address = await monitor.start(); t.after(() => monitor.close());
+  const base = 'http://127.0.0.1:' + address.port;
+  const response = await fetch(base + '/api/identity'); assert.equal(response.status, 200);
+  const identity = await response.json();
+  assert.deepEqual(identity, { version: monitorVersion, identity: { workspace } });
+  assert.equal((await fetch(base + '/api/identity?fields=runs')).status, 400);
+  assert.equal((await fetch(base + '/api/identity', { method: 'POST' })).status, 405);
+  assert.equal((await fetch(base + '/api/identity', { headers: { origin: 'http://foreign.invalid' } })).status, 403);
+});
+
+test('serveur indépendant : page, snapshot multi-RUN, CSP, SSE initial et mutations refusées', async (t) => {
   const workspace = await fixture(t);
   const upstream = await listen(t, (request, response) => { response.writeHead(503).end(); });
   const monitor = await createMonitorServer({ ...config(), workspace, port: 0, controllerUrl: upstream, supervisorUrl: upstream, opencodeUrl: upstream });
@@ -250,6 +264,8 @@ test('serveur indépendant : page, CSP, SSE initial et méthodes de mutation ref
   const page = await fetch(base); assert.equal(page.status, 200); assert.match(await page.text(), /CAB Monitor/);
   assert.match(page.headers.get('content-security-policy'), /default-src 'none'/);
   for (const path of ['/app.mjs', '/style.css', '/api/snapshot']) assert.equal((await fetch(base + path)).status, 200);
+  const snapshot = await (await fetch(base + '/api/snapshot')).json();
+  assert.ok(Array.isArray(snapshot.runs)); assert.ok(Array.isArray(snapshot.changes.changes));
   assert.equal((await fetch(base + '/api/snapshot', { method: 'POST' })).status, 405);
   assert.equal((await fetch(base + '/api/snapshot', { headers: { origin: 'http://foreign.invalid' } })).status, 403);
   assert.equal((await fetch(base + '/../../project.env')).status, 404);

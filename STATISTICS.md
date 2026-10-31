@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 92**
+**NCA — Nombre de changes analysés : 93**
 
 ## Périmètre et durée
 
@@ -24,8 +24,8 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 88 | N/A | N/A | 95,65 % |
-| 4 | gpt-6.1-sol | N/A | 4,35 % |
+| 89 | N/A | N/A | 95,70 % |
+| 4 | gpt-6.1-sol | N/A | 4,30 % |
 
 ## Performances des LLM de codage OpenCode
 
@@ -144,13 +144,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 35752 | 458,359 |
-| Fichiers ayant passé un contrôle syntaxique | 2039 | 53,658 |
-| Tâches OpenSpec prouvées et terminées | 43 | 7,167 |
+| Tests exécutés dans les bilans finaux | 36491 | 462,165 |
+| Fichiers ayant passé un contrôle syntaxique | 2048 | 52,513 |
+| Tâches OpenSpec prouvées et terminées | 48 | 6,857 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 35744 | 99,98 % |
+| Tests finaux réussis | 36483 | 99,98 % |
 | Tests finaux échoués | 8 | 0,02 % |
 
 | Catégorie de tests | Nombre |
@@ -160,7 +160,7 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 | Validations OpenSpec | Réussies | Échouées | Réussite | Échec |
 |---|---|---|---|---|
 | Standard | N/A | N/A | N/A | N/A |
-| Strict | 4 | 2 | 66,67 % | 33,33 % |
+| Strict | 5 | 2 | 71,43 % | 28,57 % |
 
 ## Synthèse transversale des codeurs
 

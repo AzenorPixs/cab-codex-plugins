@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.1.34 — Identité minimale du bootstrap moniteur
+
+- `/CAB start` vérifie version et workspace par `GET /api/identity` sans lire
+  le snapshot multi-RUN destiné au tableau de bord.
+- L’endpoint d’identité est en lecture seule, local et ne retourne aucun RUN,
+  change, session ou événement. `/api/snapshot` et SSE conservent leur contrat.
+- CAB/CABU et les briques communes sont alignées en 2.1.34.
+
 ## 2.1.33 — Retrait de l’alias minuscule `/cab`
 
 - `/CAB` devient l’unique commande canonique de pilotage ; le fichier `cab.md`

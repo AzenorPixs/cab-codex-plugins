@@ -62,7 +62,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.33` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.34` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -849,8 +849,11 @@ Les URLs refusent identifiants, redirections, requêtes et chemins arbitraires.
 La configuration invalide refuse le démarrage avant collecte. Les adresses
 loopback `127.0.0.1`, `::1` et `localhost` sont admises comme sources.
 
-Le moniteur fournit `GET /`, `/app.mjs`, `/stats.mjs`, `/style.css`, `/api/snapshot` et
-`/api/events`. Ce dernier diffuse un snapshot initial puis les vues actuelles
+Le moniteur fournit `GET /`, `/app.mjs`, `/stats.mjs`, `/style.css`, `/api/identity`,
+`/api/snapshot` et `/api/events`. `/api/identity` retourne uniquement sa version
+et le workspace canonique pour le bootstrap sans transmettre les vues multi-RUN.
+`/api/snapshot` reste la vue complète du tableau de bord ; `/api/events` diffuse
+un snapshot initial puis les vues actuelles
 par SSE. La reconnexion reçoit une vue complète. Les autres méthodes sont
 refusées sauf les POST fermés de maintenance statistique et de gestion décrits ci-dessous ; aucun proxy générique, bouton d'approbation ou accès au runtime
 privé n'est proposé. Les vues sont servies sans cache, avec CSP locale et
@@ -1162,7 +1165,7 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.33 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.34 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1277,7 +1280,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.33 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.34 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1342,7 +1345,7 @@ Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de 
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.33.
+La distribution courante des quatre briques, plugins et commandes est 2.1.34.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
