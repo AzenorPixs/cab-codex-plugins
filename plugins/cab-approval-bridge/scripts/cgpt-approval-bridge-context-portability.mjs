@@ -1,8 +1,22 @@
-export const VERSION = '2.1.31';
+export const VERSION = '2.1.32';
 export const CONTEXT_PORTABILITY_ID = 'cab-context-portability';
 const fail = code => { throw Object.assign(new Error(code), {code}); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(value);
+
+export function resolveRuntimePid(expectedPid, {pid = process.pid, probe = process.kill} = {}) {
+  if (!Number.isSafeInteger(expectedPid) || expectedPid < 1 || !Number.isSafeInteger(pid) || pid < 1 ||
+      typeof probe !== 'function') fail('cab-context-process-invalid');
+  if (expectedPid === pid) return pid;
+  try {
+    probe(expectedPid, 0);
+    fail('cab-context-process-changed');
+  } catch (cause) {
+    if (cause?.code === 'cab-context-process-changed') throw cause;
+    if (cause?.code !== 'ESRCH') fail('cab-context-process-state-unavailable');
+  }
+  return pid;
+}
 
 export function validatePortabilityRules(input) {
   if (!object(input) || input.schemaVersion !== 1 || !Number.isSafeInteger(input.expectedPid) || input.expectedPid < 1 ||
@@ -41,8 +55,9 @@ export function projectPortableContext(event, rule) {
 
 export function createContextPortabilityPlugin(configuration) {
   const config = validatePortabilityRules(configuration);
+  const runtimePid = resolveRuntimePid(config.expectedPid);
   return {id:CONTEXT_PORTABILITY_ID,async setup(context) {
-    if (process.pid !== config.expectedPid) fail('cab-context-process-changed');
+    if (process.pid !== runtimePid) fail('cab-context-process-changed');
     const registrations = [];
     const hook = async event => {
       const rule = config.rules.find(rule => event.sessionID === rule.sessionId &&

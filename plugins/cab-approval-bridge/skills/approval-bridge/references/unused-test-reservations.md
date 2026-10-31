@@ -1,4 +1,4 @@
-# Restitution explicite d’une réservation de test sans effet — CAB 2.1.31
+# Restitution explicite d’une réservation de test sans effet — CAB 2.1.32
 
 ## Choisir le parcours
 

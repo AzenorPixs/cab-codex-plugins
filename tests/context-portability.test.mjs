@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {validatePortabilityRules,projectPortableContext,createContextPortabilityPlugin} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-context-portability.mjs';
+import {validatePortabilityRules,projectPortableContext,createContextPortabilityPlugin,resolveRuntimePid} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-context-portability.mjs';
 
 const configuration=()=>({schemaVersion:1,expectedPid:process.pid,rules:[{sessionId:'ses_old',providerID:'fixture',modelID:'same',connectionId:'cred_B',staleMessageIds:['msg_old']}]});
 const event=()=>({sessionID:'ses_old',model:{providerID:'fixture',id:'same',variant:'medium'},messages:[
@@ -42,7 +42,15 @@ test('plugin : connexion cible vérifiée sans résolution du secret, autre sess
   await dispose();assert.equal(hooks.size,0);
 });
 
-test('plugin : processus différent refusé, inscription partielle nettoyée',async()=>{
-  const config=configuration();config.expectedPid++;await assert.rejects(createContextPortabilityPlugin(config).setup({}),/cab-context-process-changed/);
+test('plugin : PID ancien mort se rattache au processus courant sans modifier les règles',()=>{
+  const config=configuration();config.expectedPid=process.pid+1000000;
+  const pid=resolveRuntimePid(config.expectedPid,{pid:process.pid,probe:()=>{const e=Error('absent');e.code='ESRCH';throw e;}});
+  assert.equal(pid,process.pid);assert.equal(config.expectedPid,process.pid+1000000);
+});
+
+test('plugin : PID encore actif ou état impossible reste refusé, inscription partielle nettoyée',async()=>{
+  const config=configuration();config.expectedPid=process.ppid;
+  assert.throws(()=>resolveRuntimePid(config.expectedPid,{pid:process.pid,probe:()=>{}}),/cab-context-process-changed/);
+  assert.throws(()=>resolveRuntimePid(process.pid+1,{pid:process.pid,probe:()=>{throw Error('unknown');}}),/cab-context-process-state-unavailable/);
   let disposed=0,calls=0;await assert.rejects(createContextPortabilityPlugin(configuration()).setup({session:{hook:async()=>{if(++calls===2)throw Error('fixture');return{dispose:async()=>disposed++}}}}),/fixture/);assert.equal(disposed,1);
 });
