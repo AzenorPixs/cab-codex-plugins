@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.1.32 — Réattachement sûr du plugin de contexte
+
+- Après redémarrage OpenCode, le plugin peut reprendre son PID courant uniquement si l’ancien PID est prouvé mort ; ancien PID vivant ou contrôle indéterminé restent refusés.
+- Les règles ciblées de session, modèle, connexion et messages sont conservées sans réécriture.
+
 ## 2.1.31 — Fin native avant rattachement
 
 - Réconciliation de la fin native prouvée avant rattachement à un accès conservé ; gardes, jeton et fencing inchangés.

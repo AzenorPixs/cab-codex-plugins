@@ -233,3 +233,8 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 ### Rattachement après fin native — SCM 2.1.31
 
 `fix-native-completion-before-attach` : ARCHIVÉ — source 2.1.31 qualifiée, **code non attribué**, attribution ACL ultérieure. [Proposition](changes/archive/2026-10-31-fix-native-completion-before-attach/proposal.md), [tâches](changes/archive/2026-10-31-fix-native-completion-before-attach/tasks.md). Validation source acquise ; publication et activation distinctes.
+
+
+### Réattachement du plugin de contexte après arrêt — CAB 2.1.32
+
+`rebind-portability-plugin-after-dead-pid` : ARCHIVÉ — CAB 2.1.32 qualifié, code non attribué, attribution ACL ultérieure. Un PID préparé mort permet le rattachement au processus courant en mémoire ; PID actif ou état inconnu restent bloquants. Tests ciblés, globaux et OpenCode privé réussis ; activation distincte selon CABU. [Proposition](changes/archive/2026-10-31-rebind-portability-plugin-after-dead-pid/proposal.md), [tâches](changes/archive/2026-10-31-rebind-portability-plugin-after-dead-pid/tasks.md).

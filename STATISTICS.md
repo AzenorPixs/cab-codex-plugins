@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 90**
+**NCA — Nombre de changes analysés : 91**
 
 ## Périmètre et durée
 
@@ -8,8 +8,8 @@
 |---|---|---|
 | DGCT — Temps total de développement du projet via l’IA | 10 | 0,098763 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 90 | 9,326364 |
-| NCMA — Changes achevés par jour (NCA / NJT) | 90 | 9,650063 |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 91 | 9,326364 |
+| NCMA — Changes achevés par jour (NCA / NJT) | 91 | 9,757285 |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
@@ -24,8 +24,8 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 88 | N/A | N/A | 97,78 % |
-| 2 | gpt-6.1-sol | N/A | 2,22 % |
+| 89 | N/A | N/A | 97,80 % |
+| 2 | gpt-6.1-sol | N/A | 2,20 % |
 
 ## Performances des LLM de codage OpenCode
 
@@ -144,13 +144,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 34272 | 450,947 |
+| Tests exécutés dans les bilans finaux | 35014 | 454,727 |
 | Fichiers ayant passé un contrôle syntaxique | 2030 | 54,865 |
 | Tâches OpenSpec prouvées et terminées | 38 | 7,600 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 34264 | 99,98 % |
+| Tests finaux réussis | 35006 | 99,98 % |
 | Tests finaux échoués | 8 | 0,02 % |
 
 | Catégorie de tests | Nombre |
