@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { realpath } from 'node:fs/promises';
 
-export const VERSION = '2.1.48';
+export const VERSION = '2.1.49';
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 
 function loopback(value) {

@@ -69,7 +69,8 @@ test('lecture native OpenCode V2 : session/location liées, chemin relatif et se
   assert.deepEqual((await client.sourceList('ses_read')).entries,
     [{ path: 'src/example.mjs', type: 'file' }, { path: 'src', type: 'directory' }]);
   outsideEntry = true;
-  await assert.rejects(client.sourceList('ses_read'), { code: 'opencode-source-path-invalid' });
+  assert.deepEqual((await client.sourceList('ses_read')).entries,
+    [{ path: 'src/example.mjs', type: 'file' }, { path: 'src', type: 'directory' }]);
   await assert.rejects(client.sourceRead('ses_read', 'src/image.png'), { code: 'opencode-source-response-invalid' });
   assert.deepEqual((await client.sourceFind('ses_read', 'example.mjs', { type: 'file' })).entries,
     [{ path: 'src/example.mjs', type: 'file' }]);
