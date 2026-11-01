@@ -2,7 +2,7 @@
 
 ## Attente et reçu
 
-Le chemin ordinaire observe pending avec le budget --wait-ms existant (défaut120000ms, maximum900000ms), sans nouvelle variable ni plafond relevé. Chaque requête HTTP reste bornée ; une requête d’observation en cours peut terminer après la borne de boucle. Une commande connect/disconnect est précédée d’une intention durable ; elle n’est jamais renvoyée à la suite d’un timeout. Les GET seuls attendent la transition. Un auth requis ou failed reste une erreur explicite, pas une preuve de pending réparable.
+Le chemin ordinaire observe pending avec le budget --wait-ms existant (défaut120000ms, maximum900000ms), sans nouvelle variable ni plafond relevé. Chaque requête HTTP reste bornée ; une requête d’observation en cours peut terminer après la borne de boucle. Une commande connect/disconnect est précédée d’une intention durable ; elle n’est jamais renvoyée à la suite d’un timeout. Les GET seuls attendent la transition. `needs_auth` reste une erreur explicite. `failed` ne prouve pas à lui seul qu’un rechargement est sûr : sans `--recover-mcp` exact, l’updater refuse avant toute requête globale.
 
 Un pending initial persistant avant coupure conserve le staging, les services intacts et MCP_RECOVERY_REQUIRED. Après coupure, les services CAB existants sont remis disponibles sans boucle de reconnexion native ou de rollback. Le même reçu conserve phase d’origine, failureCode et intention de transition. Aucun nouveau reçu d’installation n’est ouvert tant que cet état n’est pas réconcilié. Un état pending ne vaut ni autorisation ni exécution métier.
 
@@ -18,11 +18,11 @@ Après cet accord seulement, reprendre les mêmes chemins/URLs/paquet et ajouter
 --recover-mcp update-<identifiant-exact-du-reçu-nonterminal>
 ```
 
-Le flag lie le consentement au reçu MCP_RECOVERY_REQUIRED ou ancienROLLBACK_FAILED exact. Reçu absent, étranger, terminal ou profil frozen-recovery-controller/reuse-readonly : refus sans rechargement. Aucune option globale n’est implicite dans /CAB update ordinaire. --recover-mcp n’autorise aucune décision, permission ou reprise métier.
+Le flag lie le consentement au reçu MCP_RECOVERY_REQUIRED ou ancienROLLBACK_FAILED exact. `failed` peut utiliser ce chemin uniquement après que l’utilisateur a autorisé le reçu exact ; `needs_auth` reste refusé. Reçu absent, étranger, terminal ou profil frozen-recovery-controller/reuse-readonly : refus sans rechargement. Aucune option globale n’est implicite dans /CAB update ordinaire. --recover-mcp n’autorise aucune décision, permission ou reprise métier.
 
 ## Contrôles et intention unique
 
-Le client mcpRecoverySnapshot observe le PID/version et la location MCP canonique, une empreinte des IDs globaux des sessions (pagination bornée), le nombre de sessions actives globales et de permissions du raccord partagé. Il ne retourne ni corps, secret, modèle ou message libre. Les autres locations ne sont pas sondées ni initialisées ; leur coordination et leurs formulaires restent dans le périmètre de l’autorisation explicite. La frontière doit être inactive et sans permission partagée. Cette observation ne prouve pas l’absence d’effet métier.
+Le client mcpRecoverySnapshot observe le PID/version et la location MCP canonique, une empreinte des IDs globaux des sessions (pagination bornée), le nombre de sessions actives globales et de permissions du raccord partagé. Il ne retourne ni corps, secret, modèle ou message libre. Les autres locations ne sont pas sondées ni initialisées ; leur coordination et leurs formulaires restent dans le périmètre de l’autorisation explicite. La frontière doit être inactive et sans permission partagée. En failed, ces contrôles précèdent l’intention durable ; l’état failed seul ne dispense jamais du consentement ni de la snapshot.
 
 Le reçu écrit l’intention de rechargement AVANT l’unique POSTglobal. Un crash après intention peut avoir précédé l’envoi : son résultat reste inconnu et le POST n’est quand même pas rejoué. Après réponse perdue ou délai expiré, seules des observations peuvent réconcilier le résultat. Une intention déjà présente ne permet jamais un second rechargement, même avec le même flag. Si le raccord ne revient pas, conserver le même reçu ouvert et diagnostiquer ; ne pas purger le verrou ni bricoler le journal.
 
