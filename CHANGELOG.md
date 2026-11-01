@@ -1,3 +1,10 @@
+## 2.1.45 — Refus d’admission terminal sans décision
+
+- Un HTTP 400/409 déterministe du contrôleur ferme l’approval en `NOT_ADMITTED`, distinct de `REJECTED` et sans `decision_id`, accès ou permission.
+- Les anciens approvals `PENDING` avec diagnostic filtré sont clôturés au prochain poll/GET ou à la réconciliation périodique ; leur diagnostic et l’historique restent conservés.
+- Les timeouts, 5xx et diagnostics inconnus restent `PENDING` selon les retries bornés existants. Aucun retry ou nouvel identifiant n’est créé automatiquement.
+- CAB/CABU, broker, contrôleur, superviseur, Web et commandes passent à 2.1.45.
+
 ## 2.1.44 — Réconciliation des reçus CABU dépassés par le source
 
 - Un reçu historique `RESTARTING` peut être clos `SUPERSEDED` seulement si la récupération MCP autorisée est déjà vérifiée, les artefacts non broker correspondent encore au reçu, et les trois fichiers broker installés sont identiques au paquet CAB plus récent.

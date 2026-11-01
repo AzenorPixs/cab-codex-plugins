@@ -9,7 +9,7 @@
 
 ## Archivage et livraison
 
-- [ ] Archiver le change et produire `STATISTICS.md` vérifié.
+- [x] Archiver le change et produire `STATISTICS.md` vérifié.
 - [x] Mettre à jour la documentation CAB générique et la cartographie.
-- [ ] Committer et publier sous SCM.
-- [ ] Réconcilier le reçu exact, terminer CABU 2.1.44, puis vérifier les versions des fichiers et processus.
+- [x] Committer et publier CAB 2.1.44 sous SCM.
+- [x] Réconcilier le reçu exact, terminer CABU 2.1.44 et vérifier les versions des fichiers et processus.
