@@ -1,6 +1,7 @@
 import { pathToFileURL } from 'node:url';
+import { realpath } from 'node:fs/promises';
 
-export const VERSION = '2.1.46';
+export const VERSION = '2.1.47';
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 
 function loopback(value) {
@@ -64,7 +65,11 @@ export async function readSource(input, fetchImpl = fetch) {
   if (input.limit !== undefined) url.searchParams.set('limit',String(input.limit));
   let response;
   try { response = await fetchImpl(url,{headers:{accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(10000)}); }
-  catch (cause) { throw Object.assign(new Error('source-read-controller-unavailable'),{code:'source-read-controller-unavailable',cause}); }
+  catch (cause) {
+    const causeCode=typeof cause?.code==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(cause.code)?cause.code:
+      typeof cause?.name==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(cause.name)?cause.name:'unknown-error';
+    throw Object.assign(new Error('source-read-controller-unavailable'),{code:'source-read-controller-unavailable',causeCode});
+  }
   if (!(response.headers.get('content-type')||'').toLowerCase().includes('application/json')) {
     await response.body?.cancel(); fail('source-read-response-invalid');
   }
@@ -89,12 +94,13 @@ export async function readSource(input, fetchImpl = fetch) {
   return result;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.argv[1])).href) {
   try {
     const result=await readSource(parseArguments(process.argv.slice(2)));
     process.stdout.write(JSON.stringify(result)+'\n');
   } catch (cause) {
-    process.stderr.write(JSON.stringify({error:/^source-read-/.test(cause?.code||'')?cause.code:'source-read-unavailable'})+'\n');
+    process.stderr.write(JSON.stringify({error:/^source-read-/.test(cause?.code||'')?cause.code:'source-read-unavailable',
+      ...(cause?.causeCode?{cause:cause.causeCode}:{})})+'\n');
     process.exitCode=1;
   }
 }

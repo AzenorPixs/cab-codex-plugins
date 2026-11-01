@@ -1,3 +1,11 @@
+## 2.1.47 — Stabilisation du helper de lecture source
+
+- Le helper distribué démarre correctement via son lien stable, et les échecs
+  du contrôleur restituent une cause filtrée plutôt qu’une erreur vide.
+- La lecture source reste liée au RUN/session OpenCode, read-only et bornée ;
+  aucun fallback shell/execute n’est ajouté.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.47.
+
 ## 2.1.46 — Accès source read-only via OpenCode V2
 
 - Le contrôleur expose la lecture, la liste et la recherche de chemins via les routes filesystem OpenCode V2, bornées au RUN, à sa session et à sa location.
