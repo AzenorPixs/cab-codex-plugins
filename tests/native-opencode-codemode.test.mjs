@@ -398,6 +398,11 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const retryCandidate = await makeSession('candidate après refus natif historique');
     const retryRecovery = { jobId: 'job-code', expectedSessionId: candidate.id, sessionId: retryCandidate.id,
       recoveryId: 'rec-native-invalid', preflightRequestId: 'invalid-native' };
+    const retrySignatureEnd = dispatched + 1;
+    queue.push({ tool: 'execute', input: { code: 'return await search(' + JSON.stringify(requestSchemaQuery) + ');' } });
+    await client.prompt(retryCandidate.id, 'Inspecter la signature native avant de préparer la reprise.');
+    await until(async () => !(await client.activeSessions())[retryCandidate.id] && dispatched === retrySignatureEnd,
+      'retry candidate signature discovery');
     await http('/runs/native-code/job/recover', { ...retryRecovery, phase: 'prepare' });
     current = (await http('/runs')).runs.find(r => r.runId === run.runId);
     const invalidEnd = dispatched + 1;
