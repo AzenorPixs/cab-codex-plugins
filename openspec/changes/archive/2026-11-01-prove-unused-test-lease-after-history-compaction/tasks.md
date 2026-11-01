@@ -9,5 +9,5 @@
 
 - [x] Archiver le change et produire `STATISTICS.md` vérifié.
 - [x] Mettre à jour la documentation CAB générique et la cartographie.
-- [ ] Committer et publier sous SCM.
-- [ ] Exécuter CABU et vérifier les versions et processus réels.
+- [x] Committer et publier sous SCM.
+- [x] Exécuter CABU et vérifier les versions et processus réels.
