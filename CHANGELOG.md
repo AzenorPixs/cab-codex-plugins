@@ -1,3 +1,9 @@
+## 2.1.53 — Clôture de la restitution NO_EFFECT native
+
+- Archive le correctif générique du ledger d’accès après la restitution C12 confirmée, sans replay ni effet métier nouveau.
+- Ajoute le delta OpenSpec et le rapport statistique à six sections ; les RUN restent hors des changements SCM.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.53.
+
 ## 2.1.52 — NO_EFFECT après échec natif d’édition
 
 - Le ledger conserve séparément fin technique et issue native, et relit les opérations héritées sans issue avant restitution.

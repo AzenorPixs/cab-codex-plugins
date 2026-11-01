@@ -10,7 +10,7 @@
 
 ## Archivage et livraison
 
-- [ ] Archiver le change et produire un `STATISTICS.md` vérifié.
-- [ ] Committer et publier sous SCM avec incrément de version.
-- [ ] Exécuter CABU et vérifier versions/runtime.
-- [ ] Informer le propriétaire du RUN concerné de la disponibilité de la restitution après ses vérifications, sans rejouer l'édition.
+- [x] Archiver le change et produire un `STATISTICS.md` vérifié.
+- [x] Committer et publier sous SCM avec incrément de version.
+- [x] Exécuter CABU et vérifier versions/runtime.
+- [x] Informer le propriétaire du RUN concerné de la disponibilité de la restitution après ses vérifications, sans rejouer l'édition.
