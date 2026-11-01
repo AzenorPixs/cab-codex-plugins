@@ -1,3 +1,9 @@
+## 2.1.52 — NO_EFFECT après échec natif d’édition
+
+- Le ledger conserve séparément fin technique et issue native, et relit les opérations héritées sans issue avant restitution.
+- NO_EFFECT exige un edit natif en erreur corrélé et des révisions inchangées ; les écritures réussies, commandes échouées et preuves inconnues restent bloquantes.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.52.
+
 ## 2.1.51 — Clôture du fallback filesystem OpenCode V2
 
 - Archive le change `read-only-opencode-fs-fallback` après preuve de lecture et de listing natifs liés au RUN.
