@@ -9,7 +9,7 @@
 
 ## Archivage et livraison
 
-- [ ] Archiver le change et produire un `STATISTICS.md` vérifié.
-- [ ] Committer et publier sous SCM avec incrément de version.
-- [ ] Exécuter CABU et vérifier versions/runtime.
-- [ ] Informer PA01 qu'une demande neuve peut être préparée après vérification de son état ; ne pas rejouer la demande terminale.
+- [x] Archiver le change et produire un `STATISTICS.md` vérifié.
+- [x] Committer et publier sous SCM avec incrément de version.
+- [x] Exécuter CABU et vérifier versions/runtime.
+- [x] Informer PA01 qu'une demande neuve peut être préparée après vérification de son état ; ne pas rejouer la demande terminale.
