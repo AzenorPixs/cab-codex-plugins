@@ -1,3 +1,9 @@
+## 2.1.60 — Instructions MCP persistantes pour le routage Code Mode
+
+- Le broker transmet au handshake MCP et aux descriptions d'outils une consigne OpenCode Code Mode : utiliser `execute` et le nom exact découvert par `search`.
+- Aucun appel direct, shell de repli, décision ou permission supplémentaire n'est demandé ; les autres clients MCP gardent leur contrat.
+- CAB/CABU et les quatre briques partagent la version 2.1.60.
+
 ## 2.1.59 — Routage explicite des méthodes MCP par Code Mode
 
 - `nativeCodingMandate` distingue les outils natifs write/edit/shell des méthodes MCP CAB, appelées via l’hôte Code Mode `execute` et le nom exact découvert.

@@ -70,8 +70,19 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.59"
+SERVER_VERSION = "2.1.60"
 MCP_PROTOCOL_VERSION = "2024-11-05"
+MCP_SERVER_INSTRUCTIONS = (
+    "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
+    "methodes de ce serveur. Faites d'abord une discovery search complete, puis "
+    "appelez uniquement le nom exact decouvert, par exemple "
+    'tools["cgpt-validation"].request_validation(...). '
+    "Ne lancez pas les methodes de ce serveur comme outils MCP natifs directs, "
+    "ne devinez pas leur nom et ne remplacez pas par shell. Si execute ou la "
+    "discovery exacte manque, arretez-vous et signalez le blocage. Les autres "
+    "clients MCP suivent leur propre contrat. Les decisions CAB et permissions "
+    "natives requises restent obligatoires."
+)
 
 STORE_SCHEMA_VERSION = 2
 
@@ -8886,6 +8897,14 @@ TOOLS = [
     },
 ]
 
+MCP_CODEMODE_TOOL_HINT = (
+    "OpenCode Code Mode : utilisez execute apres search, avec le nom exact "
+    "decouvert ; ne lancez pas cette methode directement depuis le catalogue "
+    "natif. Les autres clients MCP suivent leur propre contrat. "
+)
+for _tool in TOOLS:
+    _tool["description"] = MCP_CODEMODE_TOOL_HINT + _tool["description"]
+
 
 def ok_result(
     request_id,
@@ -9284,6 +9303,7 @@ def handle_request(
                         "name": SERVER_NAME,
                         "version": SERVER_VERSION,
                     },
+                    "instructions": MCP_SERVER_INSTRUCTIONS,
                 },
             )
 
