@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.41";
+const version = "2.1.42";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -592,6 +592,9 @@ async function verifyUnusedTestHistory(runId, context, entry, payload, { preview
   const messages = await read();
   const parts = messages.flatMap((message) => message.parts.filter((part) => part.type === 'tool'));
   const proof = { messageCount: messages.length, toolCount: parts.length, historyHash: proofHash(messages) };
+  const acquiredAt = Date.parse(entry.grantedAt);
+  const postGrantCompactions = messages.filter((message) => message.info?.role === 'compaction' &&
+    Number.isFinite(message.info?.time?.created) && message.info.time.created >= acquiredAt);
   const ops = registry.unusedTestOperations(entry);
   const rejectedRequests = rejectedNativeRequests(parts);
   proof.operationClassifications = [];
@@ -610,15 +613,26 @@ async function verifyUnusedTestHistory(runId, context, entry, payload, { preview
       throw new CoordinationError('test-unused-native-completion-divergent');
     }
   }
+  const noNativeClassifications = new Set(['rejected-validation-no-native-effect',
+    'cancelled-validation-no-native-effect','cancelled-without-execution']);
+  const postGrantNativeStart = Object.values(registry.resourceState.operations).some((op) =>
+    op.runId === runId && op.contextId === entry.contextId && op.native &&
+    Number.isFinite(op.native.startedAt) && op.native.startedAt >= acquiredAt);
+  const ledgerOnly = postGrantCompactions.length > 0 && ops.length > 0 && !postGrantNativeStart &&
+    !registry.unresolvedAccess(runId,false) && ops.every((op) => !op.native &&
+      noNativeClassifications.has(registry.unusedTestOperationClassification(op,
+        context.decision(op.requestId)?.decision === 'rejected' || rejectedRequests.has(op.requestId) ? 'rejected' :
+          context.decision(op.requestId)?.decision)));
+  if (postGrantCompactions.length && !ledgerOnly) throw new CoordinationError('test-unused-history-incomplete');
+  proof.coverage = ledgerOnly ? 'operation-ledger-after-compaction' : 'complete-native-transcript';
   if (payload.nativeProof === undefined) {
     if (!previewOnly) throw new CoordinationError('test-unused-history-divergent');
   } else if (!payload.nativeProof || proofHash(proof) !== proofHash(payload.nativeProof)) {
     throw new CoordinationError('test-unused-history-divergent');
   }
-  const acquiredAt = Date.parse(entry.grantedAt);
   for (const message of messages) {
     if (!Number.isFinite(message.info?.time?.created)) throw new CoordinationError('test-unused-history-invalid');
-    if (message.info.role === 'compaction' && message.info.time.created >= acquiredAt) {
+    if (message.info.role === 'compaction' && message.info.time.created >= acquiredAt && !ledgerOnly) {
       throw new CoordinationError('test-unused-history-incomplete');
     }
     for (const part of message.parts.filter((part) => part.type === 'tool')) {

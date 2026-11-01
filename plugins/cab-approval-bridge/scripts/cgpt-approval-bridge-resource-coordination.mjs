@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.41';
+export const VERSION = '2.1.42';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -33,9 +33,10 @@ function evidence(value) {
   }
 }
 function validUnusedNativeProof(proof) {
-  if (!onlyKeys(proof, ['messageCount','toolCount','historyHash','operationClassifications']) ||
+  if (!onlyKeys(proof, ['messageCount','toolCount','historyHash','operationClassifications','coverage']) ||
       !Number.isSafeInteger(proof.messageCount) || proof.messageCount < 0 ||
       !Number.isSafeInteger(proof.toolCount) || proof.toolCount < 0 || !hash(proof.historyHash)) return false;
+  if (proof.coverage !== undefined && !['complete-native-transcript','operation-ledger-after-compaction'].includes(proof.coverage)) return false;
   if (proof.operationClassifications === undefined) return true;
   const allowed = new Set(['cancelled-without-execution','rejected-validation-no-native-effect','cancelled-validation-no-native-effect','read-only-no-effect']);
   return Array.isArray(proof.operationClassifications) &&
@@ -456,6 +457,13 @@ export class ResourceRunRegistry extends RunRegistry {
       [item.operationId, item.classification]));
     if (proofClassifications.size !== ops.length || ops.some((op) =>
         !proofClassifications.has(op.operationId))) throw new CoordinationError('test-unused-operations-divergent');
+    if (payload.nativeProof.coverage === 'operation-ledger-after-compaction' &&
+        (!ops.length || this.unresolvedAccess(runId, false) || ops.some((op) => op.native ||
+          !['PREPARED','CANCELLED'].includes(op.state) ||
+          !['rejected-validation-no-native-effect','cancelled-validation-no-native-effect','cancelled-without-execution']
+            .includes(proofClassifications.get(op.operationId))))) {
+      throw new CoordinationError('test-unused-operation-not-proved');
+    }
     if (attestation.operations.length !== ops.length || new Set(attestation.operations.map((op) => op?.operationId)).size !== ops.length) {
       throw new CoordinationError('test-unused-operations-divergent');
     }

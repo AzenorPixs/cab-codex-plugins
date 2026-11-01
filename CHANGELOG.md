@@ -1,3 +1,25 @@
+## 2.1.42 — Preuve ledger-only après compaction native
+
+- Une compaction après acquisition peut utiliser le registre durable seulement
+  si toutes les opérations du bail sont terminales, rejetées/annulées sans
+  `nativeStart`, sans accès actif ni permission ; le reçu indique le mode de
+  couverture.
+- Toute opération native démarrée, inconnue, non terminale ou toute permission
+  conserve le bail HELD. Les contrôles de frontière et la preview sans jeton
+  restent requis.
+- CAB/CABU, les quatre briques et les commandes passent à 2.1.42.
+
+## 2.1.42 — Preuve ledger-only après compaction native
+
+- Une compaction après acquisition peut utiliser le registre durable seulement
+  si toutes les opérations du bail sont terminales, rejetées/annulées sans
+  `nativeStart`, sans accès actif ni permission ; le reçu indique le mode de
+  couverture.
+- Toute opération native démarrée, inconnue, non terminale ou toute permission
+  conserve le bail HELD. Les contrôles de frontière et la preview sans jeton
+  restent requis.
+- CAB/CABU, les quatre briques et les commandes passent à 2.1.42.
+
 ## 2.1.41 — Réconcilier les validations rejetées lors d’un bail de test inutilisé
 
 - La récupération tokenless reconnaît un rejet natif corrélé uniquement sans
