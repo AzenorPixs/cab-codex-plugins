@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.53';
+export const VERSION = '2.1.54';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
@@ -442,9 +442,12 @@ function codeModePart(content, part) {
     call = { tool: 'cgpt-validation.' + match[2], input: literal.value };
   } else if (code || !discovery) return null;
   const expected = [discovery, call].filter(Boolean), observed = part.state.metadata?.toolCalls;
-  const nativeFailure = part.state.status === 'completed' && part.state.metadata?.error === true &&
-    !discovery && ['cgpt-validation.request_validation', 'cgpt-validation.get_approval'].includes(call?.tool) &&
-    Array.isArray(observed) && observed.length === 1 && observed[0]?.status === 'error';
+  const failureTool = call?.tool === 'cgpt-validation.request_validation' ||
+    (!discovery && call?.tool === 'cgpt-validation.get_approval');
+  const nativeFailure = part.state.status === 'completed' && part.state.metadata?.error === true && failureTool &&
+    (!discovery || discovery.tool === 'search') && Array.isArray(observed) && observed.length === expected.length &&
+    expected.length > 0 && observed.at(-1)?.tool === call?.tool && observed.at(-1)?.status === 'error' &&
+    observed.slice(0, -1).every(entry => entry?.status === 'completed');
   if ((observed !== undefined && !Array.isArray(observed)) ||
       (part.state.status === 'completed' && part.state.metadata?.truncated !== false)) return null;
   const omittedEmptyReadinessInput = entry => !discovery && expected.length === 1 &&

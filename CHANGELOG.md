@@ -1,3 +1,9 @@
+## 2.1.54 — Corrélation stricte du request_validation CodeMode en erreur
+
+- Le contrôleur corrèle une notification uniquement lorsque le CodeMode natif prouve l'appel exact `request_validation` en erreur après admission ; aucun marqueur libre ne vaut preuve.
+- Les décisions, permissions/once, requêtes terminales et gardes d'identité restent inchangées ; les tests couvrent aussi les identités divergentes et appels supplémentaires.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.54.
+
 ## 2.1.53 — Clôture de la restitution NO_EFFECT native
 
 - Archive le correctif générique du ledger d’accès après la restitution C12 confirmée, sans replay ni effet métier nouveau.
