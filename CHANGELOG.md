@@ -1,3 +1,15 @@
+## 2.1.56 — Corrélation des erreurs MCP CodeMode brutes
+
+- Le contrôleur reconnaît la preuve native complète d'un `request_validation` en erreur même lorsque le wrapper dynamique n'a pas pu être normalisé.
+- Un seul appel exact, éventuellement précédé d'une recherche terminée, est admis ; les autres appels, identités divergentes ou métadonnées incomplètes restent refusés.
+- Les gardes de décision, permission/once et les états terminaux restent inchangés ; CAB/CABU et les composants partagent la version 2.1.56.
+
+## 2.1.55 — Clôture de la corrélation CodeMode native
+
+- Archive le correctif de corrélation de `request_validation` CodeMode en erreur après validation positive/négative, sans décision ou permission implicite.
+- Conserve le terminal `NOT_ADMITTED` de l'ancienne requête ; une reprise métier demande une identité neuve.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.55.
+
 ## 2.1.54 — Corrélation stricte du request_validation CodeMode en erreur
 
 - Le contrôleur corrèle une notification uniquement lorsque le CodeMode natif prouve l'appel exact `request_validation` en erreur après admission ; aucun marqueur libre ne vaut preuve.
