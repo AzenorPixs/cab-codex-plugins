@@ -69,7 +69,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.36"
+SERVER_VERSION = "2.1.37"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -91,7 +91,7 @@ DEFAULT_CONTROLLER_URL = "http://127.0.0.1:8788"
 
 DEFAULT_POLL_TIMEOUT_SECONDS = 600
 DEFAULT_POLL_INTERVAL_SECONDS = 5
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 0
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 
 CONTROLLER_HTTP_TIMEOUT_SECONDS = 2
 CONTROLLER_TCP_TIMEOUT_SECONDS = 1
@@ -4197,7 +4197,7 @@ def do_request_validation(
     ) = validate_wait_parameters(
         args,
         DEFAULT_REQUEST_TIMEOUT_SECONDS,
-        allow_no_timeout=True,
+        allow_no_timeout=False,
     )
 
     item = do_propose(
@@ -8528,9 +8528,15 @@ TOOLS = [
                 **APPROVAL_REQUEST_PROPERTIES,
                 "timeout_seconds": {
                     "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "default": DEFAULT_REQUEST_TIMEOUT_SECONDS,
                 },
                 "interval_seconds": {
                     "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60,
+                    "default": DEFAULT_POLL_INTERVAL_SECONDS,
                 },
             },
             "required": [

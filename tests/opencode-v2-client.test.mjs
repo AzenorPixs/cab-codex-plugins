@@ -57,9 +57,19 @@ test('Code Mode : projection littérale, provenance et découverte pure', async 
     [{tool:'search',status:'completed',input:{query:'broker_readiness'}}]));
   assert.equal(acknowledgement.tool,'cab_codemode_discovery');
   assert.deepEqual(acknowledgement.state.input,{query:'broker_readiness'});
+  const requestSchemaQuery={query:'request_validation',namespace:'cgpt-validation',limit:20};
+  const returnedSearch=await codeModeFixture(t,wrapped('return await search('+JSON.stringify(requestSchemaQuery)+');',
+    [{tool:'search',status:'completed',input:requestSchemaQuery}]));
+  assert.equal(returnedSearch.tool,'cab_codemode_discovery');
+  assert.deepEqual(returnedSearch.state.input,requestSchemaQuery);
+  assert.equal(returnedSearch.state.metadata.toolCalls.length,1);
   for(const code of ['search({}); return other;', 'search({}); await tools["cgpt-validation"].reject({}); return "done";']) {
     assert.equal((await codeModeFixture(t,wrapped(code,[{tool:'search',status:'completed',input:{}}]))).tool,'execute');
   }
+  assert.equal((await codeModeFixture(t,wrapped('await search('+JSON.stringify(requestSchemaQuery)+');',
+    [{tool:'search',status:'completed',input:requestSchemaQuery}]))).tool,'execute');
+  assert.equal((await codeModeFixture(t,wrapped('return await search('+JSON.stringify(requestSchemaQuery)+');',
+    [{tool:'search',status:'completed',input:{...requestSchemaQuery,limit:10}}]))).tool,'execute');
 });
 
 test('Code Mode : formes ambiguës conservées comme execute bloquant', async t => {

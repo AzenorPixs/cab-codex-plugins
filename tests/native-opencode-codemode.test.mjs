@@ -246,6 +246,18 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       changeId: 'synthetic-code', strictCommands: true, criteria: ['native once proof'] });
     const recovery = { jobId: 'job-code', expectedSessionId: old.id, sessionId: candidate.id,
       recoveryId: 'rec-code', preflightRequestId: 'preflight-code' };
+    const requestSchemaQuery = { query: 'request_validation', namespace: 'cgpt-validation', limit: 20 };
+    const expectedDiscoveryDispatched = dispatched + 1;
+    queue.push({ tool: 'execute', input: { code: 'return await search(' + JSON.stringify(requestSchemaQuery) + ');' } });
+    await client.prompt(candidate.id, 'Inspect only the native request_validation signature before recovery.');
+    await until(async () => !(await client.activeSessions())[candidate.id] && dispatched === expectedDiscoveryDispatched,
+      'request_validation signature discovery');
+    const signatureDiscovery = (await client.messages(candidate.id)).flatMap(message => message.parts)
+      .findLast(part => part.tool === 'cab_codemode_discovery');
+    assert.deepEqual(signatureDiscovery.state.input, requestSchemaQuery);
+    assert.equal(signatureDiscovery.state.metadata.toolCalls.length, 1);
+    assert.equal(signatureDiscovery.state.metadata.toolCalls[0].tool, 'search');
+    assert.equal(signatureDiscovery.state.metadata.truncated, false);
     await http('/runs/native-code/job/recover', { ...recovery, phase: 'prepare' });
     const approval = { run_id: run.runId, reservation_version: run.version, coordination_protocol: 'resource-scoped-v1',
       requestId: recovery.preflightRequestId, approval_id: 'approval-code', operation_id: 'operation-code',
@@ -253,9 +265,8 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       expected_revisions: { [resource]: 0 }, session_id: candidate.id, directory: workspace, change_id: 'synthetic-code',
       files: [], commands: ['/usr/bin/true'], title: 'synthetic native proof', summary: 'local fixture', timeout_seconds: 30, interval_seconds: 1 };
     const mcp = (name, input) => ({ tool: 'execute', input: { code: `return await tools["cgpt-validation"].${name}(${JSON.stringify(input)});` } });
-    const expectedDispatched = dispatched + 5;
-    queue.push({ tool: 'execute', input: { code: 'search({query: "broker_readiness"}); return "search done";' } },
-      mcp('broker_readiness', { run_id: run.runId }), mcp('request_validation', approval),
+    const expectedPreflightDispatched = dispatched + 4;
+    queue.push(mcp('broker_readiness', { run_id: run.runId }), mcp('request_validation', approval),
       { tool: 'shell', input: { command: '/usr/bin/true' } }, mcp('broker_readiness', { run_id: run.runId }));
     await client.prompt(candidate.id, 'Execute only the queued synthetic preflight.', {requiredNativeAsk:['shell']});
     await until(async () => (await http('/runs/native-code/status')).undecidedValidationCount === 1, 'native admission', async () => ({
@@ -265,10 +276,10 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const access = await http('/runs/native-code/locks/acquire', { version: run.version, operationId: approval.operation_id,
       operationDigest: approval.operation_digest, resources: approval.resources, expectedRevisions: approval.expected_revisions });
     assert.equal(access.state, 'HELD');
-    await until(async () => !(await client.activeSessions())[candidate.id] && dispatched === expectedDispatched, 'native completion');
+    await until(async () => !(await client.activeSessions())[candidate.id] && dispatched === expectedPreflightDispatched, 'native completion');
     const parts = (await client.messages(candidate.id)).flatMap(message => message.parts.filter(part => part.type === 'tool'));
     assert.deepEqual(parts.map(part => part.tool), ['cab_codemode_discovery', 'cgpt-validation_broker_readiness', 'cgpt-validation_request_validation', 'bash', 'cgpt-validation_broker_readiness'], JSON.stringify(parts[1]));
-    assert.equal(parts[0].state.output, 'search done');
+    assert.equal(parts[0].state.input.query, 'request_validation');
     assert.equal(parts[3].executed, false); assert.equal(parts[3].nativeTool, 'shell'); assert.equal(parts[3].state.metadata.exit, 0);
     const status = await http('/runs/native-code/status'); assert.equal(status.unmatchedNativePermissionCount, 0);
     await http('/runs/native-code/locks/release', { version: run.version, operationId: approval.operation_id,

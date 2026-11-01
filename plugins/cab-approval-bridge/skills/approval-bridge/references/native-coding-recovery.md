@@ -1,5 +1,35 @@
 # Reprise des incidents de codage natif — CAB 2.1.26
 
+## Prévol avant récupération d'une session adossée à un RUN
+
+Pour un job adossé à un RUN, avant `phase: "prepare"`, vérifier que la candidate est idle, sans permission
+native en attente, et que ses règles effectives sont `shell: ask` et
+`edit: ask`. Une règle `deny` doit être corrigée sur la seule candidate par
+l'API native et revérifiée avant le gel ; conserver les autres règles et ne
+pas élargir le périmètre.
+
+Découvrir et vérifier la signature exacte de `request_validation` avant le
+gel avec une recherche littérale retournée, par exemple :
+
+```js
+return await search({ query: "request_validation", namespace: "cgpt-validation", limit: 20 });
+```
+
+La découverte doit être un appel `search` unique, complet et non tronqué. Le
+contrôleur scelle cette preuve dans `preparationHistory`. Après `prepare`, ne
+pas lancer de découverte Code Mode : seuls readiness, le prévol corrélé,
+l'unique `once`, `/usr/bin/true` et readiness finale sont admis. Pour le
+prévol, utiliser le wrapper natif retourné par `request_validation` et fournir
+explicitement `timeout_seconds: 120` et `interval_seconds: 3`. À l'expiration,
+garder le même approval ID et interroger celui-ci ; ne pas créer une nouvelle
+demande. Notification livrée, décision, permission, commande et readiness
+restent des preuves distinctes. `complete` n'est permis qu'après exit 0 et
+readiness finale `READY` sans pending.
+
+Un job historique non adossé à un RUN conserve son chemin de récupération
+existant ; ses gardes de permission, corrélation, effets et fin native restent
+applicables.
+
 ## Outils natifs et catalogue MCP
 
 Le client installé exporte nativeCodingMandate(instruction). Utiliser explicitement ce helper pour préparer le texte d’un nouveau mandat avant client.prompt ; le texte fourni reste conservé intégralement après le préambule. Les prompts historiques ne sont pas modifiés implicitement. Le préambule rappelle que write/edit/shell sont des outils natifs distincts de search/execute MCP ; une recherche MCP vide n’établit pas leur absence. Vérifier le catalogue natif transmis au modèle si l’outil est réellement absent. Ne pas substituer shell à write, changer de cible ou chercher indéfiniment. Garder les schémas natifs observés : write {path,content}, edit {path,oldString,newString}, shell {command}. Ce rappel n’autorise aucune opération.

@@ -1,6 +1,6 @@
 # ORCHESTRATED_CODING.md — Sessions de codage pilotées
 
-Version : 0.7
+Version : 0.9
 
 Projet : identité à résoudre depuis la racine réelle et les cadrages applicables
 
@@ -71,6 +71,33 @@ codage réalise les seuls mandats autorisés. Le transport ne décide jamais.
 Une permission technique ne constitue ni une validation métier ni une extension
 du périmètre. La concurrence protège les effets et les ressources concernés,
 sans imposer de gel global aux travaux indépendants.
+
+### Autorité sur les politiques de permission de l'agent de codage
+
+Pour un RUN associé à un change OpenSpec actif et autorisé, l'orchestrateur
+peut consulter, créer, modifier ou retirer les règles natives `ALLOW`, `ASK`
+et `DENY` de l'agent de codage, sans validation ponctuelle supplémentaire,
+à toute portée exposée par l'agent : session, agent, projet ou espace de
+travail, utilisateur ou globale. Cette autorité s'applique uniquement aux
+changements nécessaires à la réalisation du change en cours et directement
+cohérents avec son périmètre OpenSpec validé et les autorisations du prompt.
+
+Avant toute modification, l'orchestrateur identifie la règle effective, sa
+portée, les opérations et ressources touchées ainsi que les effets possibles
+hors du RUN. Il applique le changement minimal permettant le travail autorisé.
+À une portée partagée, la règle doit rester bornée aux opérations et ressources
+du change ; si ses effets ne peuvent être ainsi bornés ou vérifiés, ne pas la
+modifier et signaler le blocage. L'orchestrateur consigne la règle précédente,
+la règle résultante, sa portée et sa justification dans le checkpoint déjà
+autorisé. Les changements temporaires sont restaurés à la clôture du RUN ; une
+modification persistante n'est conservée que si elle constitue elle-même un
+livrable explicitement prévu par le change OpenSpec.
+
+Cette autorité ne permet ni d'élargir le mandat métier, ni de contourner une
+restriction explicite du développeur, une spécification OpenSpec validée, une
+permission de plateforme ou les décisions unitaires et contrôles CAB exigés
+par le protocole. Une politique `ALLOW` ne vaut pas approbation CAB, validation
+métier ou autorisation d'une opération hors périmètre.
 
 Une opération échouée ou interrompue doit être réconciliée avant reprise.
 Les états d'attente, de blocage, de préparation et de livraison sont distincts.
@@ -396,6 +423,15 @@ et réservations CAB. Le numéro vient de la demande ou, s'il manque, d'un
 numéro disponible vérifié dans le registre et les chats accessibles. Ne pas
 inventer d'identifiant natif ; une valeur non exposée reste `null`.
 
+Un numéro de RUN redevient disponible une fois le RUN clôturé et toutes ses
+réservations et tous ses accès réconciliés puis libérés. Avant réattribution,
+vérifier dans le registre qu'aucun RUN actif du même projet et de la même
+racine ne porte ce numéro. La réutilisation crée un nouveau `run_id`, un
+nouveau job et une nouvelle session ; elle ne remplace ni ne renomme les
+enregistrements ou sessions historiques. Les titres peuvent donc partager le
+même préfixe ; les identifiants natifs et la correspondance du registre
+distinguent les RUN.
+
 Le préfixe des sessions est `<SIGLE><N> - `, suivi du change ou de leur fonction.
 Pour CISMP, employer `CISMP<N> - `. Les sessions des sous-jobs et les sessions
 techniques attribuables au RUN conservent le préfixe du parent. Chaque nouveau
@@ -535,6 +571,13 @@ PLLM complète ; le seul dépassement de huit heures ne le renouvelle pas.
 Les contrôles requis après une maintenance du raccord restent applicables.
 Ne pas inventer une correspondance fournisseur, une variante ou une réussite.
 
+Configurer toute session de codage pilotée dans OpenCode exclusivement en
+mode `build` (`BUILD`) avant son premier mandat, et conserver ce mode pendant
+le RUN, y compris lors des reprises, récupérations et sous-jobs. Ne pas
+démarrer ni poursuivre une session de codage en mode `plan` (`PLAN`). Cette
+exigence de mode ne modifie pas le périmètre du mandat : l'agent exécute
+uniquement les opérations autorisées.
+
 Seuls un dysfonctionnement réel du modèle appliqué ou une instruction
 explicite du développeur peuvent déclencher, en cours de session, un
 basculement vers une politique PLLM de priorité inférieure dans l'ordre de
@@ -642,6 +685,21 @@ analysée par un agent, copiée dans un prompt, un état de reprise, un rapport 
 les sources. La persistance éventuelle se limite au stockage d'authentification
 natif nécessaire à l'agent de codage. Aucun autre accès ou usage de secret n'est
 autorisé par cette exception ; les règles générales continuent de s'appliquer.
+
+Les jetons bearer temporaires remis par CAB ou un autre service, notamment
+ceux d'un accès temporaire, d'un verrou ou d'une réservation de test, sont
+des credentials éphémères. Leur valeur brute ne doit être copiée ni dans le
+checkpoint, ni dans un journal, rapport, fichier temporaire, statistique ou
+message. Cette interdiction vaut même pendant que l'accès est `HELD`.
+Conserver uniquement les références et états non secrets nécessaires à la
+réconciliation, par exemple les identifiants d'accès et d'opération, le
+fencing, l'état et les empreintes.
+
+Après une interruption ou un redémarrage, ne jamais restaurer ni réutiliser
+un jeton depuis un checkpoint historique. Réconcilier l'état natif par le
+protocole applicable et obtenir un accès courant avec un jeton neuf lorsque
+cela est autorisé. Si cet accès n'est pas disponible, conserver les
+protections et attendre ; ne pas rejouer l'opération avec l'ancien jeton.
 
 L'orchestrateur conserve cette autorisation dans l'état de reprise non secret
 et la transmet au pilotage sans sa valeur. Les mandats CAB unitaires et les
