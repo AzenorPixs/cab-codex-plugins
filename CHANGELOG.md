@@ -1,3 +1,10 @@
+## 2.1.44 — Réconciliation des reçus CABU dépassés par le source
+
+- Un reçu historique `RESTARTING` peut être clos `SUPERSEDED` seulement si la récupération MCP autorisée est déjà vérifiée, les artefacts non broker correspondent encore au reçu, et les trois fichiers broker installés sont identiques au paquet CAB plus récent.
+- Le garde vérifie les versions actives des services et du broker. La transition ajoutée conserve empreintes et erreurs historiques. Toute divergence conserve le reçu non terminal ; aucun reload déjà vérifié n’est rejoué et aucune nouvelle installation ne démarre dans cette invocation.
+- Tests positifs et négatifs isolés, documentation OpenSpec et protocole de reprise mis à jour.
+- CAB/CABU, les quatre briques et les commandes passent à 2.1.44.
+
 ## 2.1.43 — Récupération autorisée d’un reçu MCP failed
 
 - `--recover-mcp` peut désormais traiter un broker `failed` seulement sur un

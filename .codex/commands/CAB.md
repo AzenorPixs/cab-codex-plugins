@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 2.1.43
+version: 2.1.44
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -41,7 +41,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 2.1.43
+## RUN concurrents CAB 2.1.44
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -353,7 +353,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/identity avec version 2.1.43 et identity.workspace
+Vérifier service actif, GET /api/identity avec version 2.1.44 et identity.workspace
 attendus, puis GET / ; ne pas lire /api/snapshot pour ce contrôle d'identité ;
 terminer cette tentative bornée et rapporter son résultat avant les contrôles amont.
 Afficher l'URL réelle uniquement après ces preuves,
@@ -1014,7 +1014,7 @@ La récupération conserve le même journal et les mêmes destinations. Le jeu W
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs,
 cgpt-approval-bridge-permission-policy.mjs et cgpt-approval-bridge-process-lifecycle.mjs.
 
-Contrat courant CABU 2.1.43 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.44 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -1091,7 +1091,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.43 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.44 ; les preuves 2.1.8 restent historiques.
 
 ## Priorité medium puis high — nouvelles sessions et reprises
 
@@ -1320,7 +1320,7 @@ Appliquer [la procédure de diagnostic et reprise](../../plugins/cab-approval-br
 
 ## MCP pending et récupération CABU — 2.1.32
 
-Appliquer [la procédure MCP pending](../../plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-pending-recovery.md). Attendre la transition dans le budget existant sans réémettre connect/disconnect. MCP_RECOVERY_REQUIRED reste nonterminal dans le même reçu ; aucune nouvelle installation ou boucle de repli implicite. Le flag updater --recover-mcp <transactionId> signifie rechargement GLOBAL des locations et exige un accord humain explicite pour ce reçu, jamais l’accord d’un ancien incident. Intention durable avant POST, jamais rejouée ; PID/location/sessions et frontière native vérifiés. Profils gelés/reuse-readonly exclus. Après récupération : mêmes artefacts, versions et readiness prouvés, puis information des sessions ; aucune once ou demande métier rejouée.
+Appliquer [la procédure MCP pending](../../plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-pending-recovery.md). Attendre la transition dans le budget existant sans réémettre connect/disconnect. MCP_RECOVERY_REQUIRED reste nonterminal dans le même reçu ; aucune nouvelle installation ou boucle de repli implicite. Le flag updater --recover-mcp <transactionId> signifie rechargement GLOBAL des locations et exige un accord humain explicite pour ce reçu, jamais l’accord d’un ancien incident. Intention durable avant POST, jamais rejouée ; PID/location/sessions et frontière native vérifiés. Profils gelés/reuse-readonly exclus. Un ancien reçu `RESTARTING` peut être clos `SUPERSEDED` seulement si les empreintes hors broker sont intactes, les trois modules broker correspondent exactement au paquet plus récent et la readiness active est cohérente ; l’installation complète vient d’un CABU ultérieur avec un nouvel identifiant. Après récupération : versions et readiness prouvées, puis information des sessions ; aucune once ou demande métier rejouée.
 
 
 ## Permissions avant prévol — CAB2.1.32
