@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.43';
+export const VERSION = '2.1.44';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -21,7 +21,7 @@ const error = (code) => Object.assign(new Error(code), { code });
 const safeCauseCode = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(value) ? value : 'unexpected-error';
 const brokerFiles = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
 const unit = (name) => 'cgpt-approval-bridge-' + name + '.service';
-const complete = new Set(['COMPLETED', 'ROLLED_BACK', 'PREPARATION_FAILED']);
+const complete = new Set(['COMPLETED', 'ROLLED_BACK', 'PREPARATION_FAILED', 'SUPERSEDED']);
 const recoveryPhases = ['PREPARED', 'STOPPING', 'RESTARTING', 'VERIFYING', 'ROLLING_BACK'];
 const recoverySnapshotKeys = ['pid','version','sharedDirectory','sessionCount','sessionIdsSha256','activeSessionCount','sharedPermissionCount'];
 const validRecoverySnapshot = value => value && typeof value === 'object' &&
@@ -542,6 +542,35 @@ export async function updateComponents(input, options = {}) {
     receipt.brokerConnected = true;
     if (receipt.mcpTransition?.state === 'INTENT') receipt.mcpTransition.state = 'RECONCILED';
     if (options.rollbackOnly) { await rollback(); return {status:'rolled-back',transactionId:receipt.id,recoveredMcp:true}; }
+    if (input.recoverMcp === receipt.id && recovery.resumePhase === 'RESTARTING' && newer(VERSION, receipt.version)) {
+      const advancedBrokerFiles = [];
+      for (let index = 0; index < receipt.files.length; index++) {
+        const file = receipt.files[index];
+        const staged = await regular(join(transaction(), 'stage', String(index)));
+        if (hash(staged.data) !== file.afterHash) throw error('update-stage-changed');
+        const installed = await deployed(file);
+        const installedHash = installed ? hash(installed.data) : null;
+        if (installedHash === file.afterHash) continue;
+        if (file.group !== 'broker' || !brokerFiles.includes(file.name) || !installed) throw error('update-installed-artifact-changed');
+        const packaged = await regular(join(c.pluginRoot, 'broker', file.name));
+        if (sourceVersion(packaged.data) !== VERSION || hash(installed.data) !== hash(packaged.data)) throw error('update-installed-artifact-changed');
+        advancedBrokerFiles.push(file.name);
+      }
+      if (advancedBrokerFiles.length === brokerFiles.length && brokerFiles.every(name => advancedBrokerFiles.includes(name))) {
+        const status = await request(c.controllerUrl, '/status');
+        const liveBrokerVersion = baseVersion(status.brokerReadiness?.server_version);
+        if (!liveBrokerVersion || !newer(liveBrokerVersion, receipt.version) || newer(liveBrokerVersion, VERSION)) {
+          throw error('update-superseded-state-unconfirmed');
+        }
+        const expected = { ...desiredVersions(), broker: liveBrokerVersion };
+        if (!await wait(() => verified(expected, targetActive()), c.waitMs)) throw error('update-superseded-state-unconfirmed');
+        receipt.supersession = { fromVersion: receipt.version, packageVersion: VERSION, brokerRuntimeVersion: liveBrokerVersion,
+          brokerFiles: [...advancedBrokerFiles].sort(), reason: 'newer-cab-source-already-installed', at: now() };
+        await save('SUPERSEDED');
+        return { status: 'superseded', transactionId: receipt.id, previousVersion: receipt.version,
+          supersedingVersion: VERSION, brokerRuntimeVersion: liveBrokerVersion, recoveredMcp: true };
+      }
+    }
     if (['RESTARTING','VERIFYING'].includes(recovery.resumePhase)) {
       for (const file of receipt.files) { const actual = await deployed(file); if (!actual || hash(actual.data) !== file.afterHash) throw error('update-installed-artifact-changed'); }
       if (!await wait(() => verified(desiredVersions(),targetActive()),c.waitMs)) throw error('update-active-version-unconfirmed');

@@ -30,6 +30,16 @@ Après reconstruction, comparer PID/version/location et empreinte des sessions, 
 
 Une installation complète récupérée retourne completed avec le même transactionId. Un repli retourne rolled-back avec ce même identifiant ; une nouvelle installation ultérieure est distincte et ne doit pas être présentée comme la réussite du repli. Aucun résultat n’est déduit d’un simple HTTP200 ou du retour de systemctl. Les erreurs antérieures restent historiques dans les reçus et preuves.
 
+Si une source CAB plus récente a remplacé uniquement les trois modules broker
+pendant qu’un ancien reçu `RESTARTING` restait ouvert, l’updater peut terminer
+ce reçu en `SUPERSEDED` après récupération MCP vérifiée. Les autres artefacts
+doivent correspondre aux empreintes du reçu ; chaque broker doit correspondre
+au paquet CAB courant et la readiness doit confirmer les services à l’ancienne
+version ainsi qu’un broker plus récent, sans dépasser le paquet. Le reçu et son
+échec restent conservés. Cet appel ne réinstalle rien ; un CABU ultérieur ouvre
+une transaction neuve pour déployer le jeu complet. Toute divergence reste
+bloquante, et une intention de reload existante n’est jamais rejouée.
+
 ## Retour aux sessions
 
 Après activation vérifiée des quatre briques, informer les sessions avec les versions réelles et le reçu terminal. Chaque propriétaire effectue lookup de ses demandes/approvals, réconciliation des effets et leases, puis prévol requis avant les seuls travaux déjà mandatés. Ne pas annuler un PENDING CAB, restaurer un ancien état, rejouer once, changer de fournisseur/modèle ou relancer le codeur pour réparer le raccord. Les commandes de profil ne sont publiées qu’après succès réel des briques.
