@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.39';
+export const VERSION = '2.1.40';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -180,9 +180,11 @@ export class ResourceRunRegistry extends RunRegistry {
         if (entry.proofDigest !== undefined && !hash(entry.proofDigest)) fail();
         if (entry.unusedReleaseReceipt !== undefined) {
           const receipt = entry.unusedReleaseReceipt;
+          const lostTokenRelease = receipt?.mode === 'unused-no-effect-lost-token';
           if (entry.state !== 'RELEASED' || !hash(entry.releaseDigest) || !hash(entry.proofDigest) ||
               !onlyKeys(receipt, ['mode','authorizationDigest','attestationDigest','boundaryDigest','nativeProof','operationIds','evidenceDigest']) ||
-              receipt.mode !== 'unused-no-effect' || entry.proofDigest !== digest(receipt) ||
+              !['unused-no-effect','unused-no-effect-lost-token'].includes(receipt.mode) ||
+              (lostTokenRelease && entry.token !== undefined) || entry.proofDigest !== digest(receipt) ||
               !['authorizationDigest','attestationDigest','boundaryDigest','evidenceDigest'].every((key) => hash(receipt[key])) ||
               !validUnusedNativeProof(receipt.nativeProof) || !Array.isArray(receipt.operationIds) ||
               new Set(receipt.operationIds).size !== receipt.operationIds.length ||
@@ -369,6 +371,25 @@ export class ResourceRunRegistry extends RunRegistry {
       accesses: Object.values(this.resourceState.accesses).filter((access) => access.runId === entry.runId),
       owners: Object.fromEntries(Object.entries(this.requestOwners).filter(([, owner]) => owner.runId === entry.runId)) });
   }
+  restoredTestForUnusedRecovery(runId, payload) {
+    this.mutable();
+    const run = this.owned(runId, payload.version);
+    const entry = this.resourceState.testReservations?.[payload.transactionId];
+    if (payload.recoveryMode !== 'validated-change-unused' || !entry || entry.runId !== runId || entry.version !== run.version || entry.contextId !== run.contextId ||
+        entry.state !== 'HELD' || !this.restoredTests.has(entry.transactionId)) {
+      throw new CoordinationError('test-unused-recovery-required');
+    }
+    if (payload.contextId !== entry.contextId || payload.sessionId !== run.sessionId) {
+      throw new CoordinationError('test-unused-recovery-identity-divergent');
+    }
+    if (payload.fencing !== entry.fencing) throw new CoordinationError('test-token-invalid');
+    if (!hash(payload.boundaryDigest) || payload.boundaryDigest !== this.unusedTestBoundary(entry)) {
+      throw new CoordinationError('test-unused-boundary-stale');
+    }
+    if (this.unresolvedAccess(runId, false) || this.operationTests(entry).some((op) =>
+        !['COMPLETED','CANCELLED'].includes(op.state))) throw new CoordinationError('test-effects-unresolved');
+    return entry;
+  }
   unusedTestReplay(runId, payload) {
     const prior = this.resourceState.testReservations?.[payload.transactionId];
     if (prior?.state !== 'RELEASED') return null;
@@ -377,20 +398,23 @@ export class ResourceRunRegistry extends RunRegistry {
     }
     return copy(prior);
   }
-  releaseUnusedTests(runId, payload, verifiedNativeProof) {
+  releaseUnusedTests(runId, payload, verifiedNativeProof, { lostTokenRecovery = false, validatedChangeScope = false } = {}) {
     this.mutable();
     const replay = this.unusedTestReplay(runId, payload);
     if (replay) return replay;
     this.admission(runId);
-    const entry = this.testHeld(runId, payload);
+    const entry = lostTokenRecovery ? this.restoredTestForUnusedRecovery(runId, payload) : this.testHeld(runId, payload);
     const run = this.runs.get(runId);
     evidence(payload.evidence);
     const attestation = payload.attestation;
-    if (!onlyKeys(payload, ['version','transactionId','token','fencing','contextId','sessionId','boundaryDigest',
-        'developerAuthorization','evidence','attestation','nativeProof']) ||
+    const allowedKeys = ['version','transactionId',...(lostTokenRecovery ? ['recoveryMode'] : ['token']),
+      'fencing','contextId','sessionId','boundaryDigest',...(lostTokenRecovery ? [] : ['developerAuthorization']),
+      'evidence','attestation','nativeProof'];
+    if (!onlyKeys(payload, allowedKeys) ||
+        (lostTokenRecovery && (payload.recoveryMode !== 'validated-change-unused' || validatedChangeScope !== true)) ||
         payload.contextId !== entry.contextId || payload.sessionId !== run.sessionId ||
-        typeof payload.developerAuthorization !== 'string' || !payload.developerAuthorization.trim() ||
-        payload.developerAuthorization.length > 500 ||
+        (!lostTokenRecovery && (typeof payload.developerAuthorization !== 'string' || !payload.developerAuthorization.trim() ||
+        payload.developerAuthorization.length > 500)) ||
         !onlyKeys(attestation, ['noEnvironmentMutation','noMutatingMandate','operations']) ||
         attestation.noEnvironmentMutation !== true || attestation.noMutatingMandate !== true ||
         !Array.isArray(attestation.operations) || !validUnusedNativeProof(payload.nativeProof) ||
@@ -414,11 +438,15 @@ export class ResourceRunRegistry extends RunRegistry {
         throw new CoordinationError('test-unused-operation-not-proved');
       }
     }
-    entry.unusedReleaseReceipt = { mode: 'unused-no-effect', authorizationDigest: digest(payload.developerAuthorization),
+    entry.unusedReleaseReceipt = { mode: lostTokenRecovery ? 'unused-no-effect-lost-token' : 'unused-no-effect',
+      authorizationDigest: lostTokenRecovery ? digest({mode:'validated-change-scope',runId,contextId:entry.contextId,
+        version:entry.version,changeId:run.changeId}) : digest(payload.developerAuthorization),
       attestationDigest: digest(attestation), boundaryDigest: payload.boundaryDigest, nativeProof: copy(verifiedNativeProof),
       operationIds: ops.map((op) => op.operationId), evidenceDigest: digest(payload.evidence) };
     entry.state = 'RELEASED'; entry.finishedAt = now(); entry.releaseDigest = digest(payload);
-    entry.proofDigest = digest(entry.unusedReleaseReceipt); this.grantTests(); this.persist(); return copy(entry);
+    entry.proofDigest = digest(entry.unusedReleaseReceipt);
+    if (lostTokenRecovery) { delete entry.token; this.restoredTests.delete(entry.transactionId); }
+    this.grantTests(); this.persist(); return copy(entry);
   }
   releaseTests(runId, payload) {
     this.mutable(); evidence(payload.evidence);

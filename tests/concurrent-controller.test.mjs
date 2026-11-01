@@ -1154,7 +1154,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.39');
+  assert.equal(initialized.result.serverInfo.version, '2.1.40');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1630,10 +1630,21 @@ test('environnement Docker HTTP : conservation entre commandes et restitution pr
 
 test('réservation LXC HTTP restaurée : nouvelle frontière native et jeton renouvelé', async (t) => {
   const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
-  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lxc-a',resources:a.resources,evidence:['instance canonique']})).body;
+  const acquisition={version:a.version,transactionId:'lxc-a',resources:a.resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
   await h.stop();await h.start();
-  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].reconciliationRequired,true);
-  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['frontière native sans activité']};
+  const restoredView=(await h.get('/runs/a/test-resources')).body;
+  assert.equal(restoredView.reservations[0].reconciliationRequired,true);
+  assert.equal(restoredView.reservations[0].token,undefined);
+  const reacquired=await h.post('/runs/a/test-resources/acquire',acquisition);
+  assert.equal(reacquired.status,200,JSON.stringify(reacquired));
+  assert.equal(reacquired.body.state,'HELD');assert.equal(reacquired.body.token,lease.token);
+  assert.equal(reacquired.body.fencing,lease.fencing);assert.equal(reacquired.body.reconciliationRequired,true);
+  const redacted=(await h.get('/runs/a/test-resources')).body;
+  assert.equal(redacted.reservations[0].token,undefined);
+  assert.ok(!JSON.stringify(redacted).includes(reacquired.body.token));
+  assert.equal((await h.post('/runs/a/test-resources/acquire',{...acquisition,evidence:['divergent']})).status,409);
+  const payload={version:a.version,transactionId:lease.transactionId,token:reacquired.body.token,fencing:reacquired.body.fencing,evidence:['frontière native sans activité']};
   assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-reconciliation-required');
   h.native.busy[a.sessionId]={type:'busy'};
   assert.equal((await h.post('/runs/a/test-resources/reconcile',{...payload,reconciliationId:'reconcile-a'})).status,409);
@@ -2080,6 +2091,73 @@ test('release-unused HTTP : frontière sans opération, reçu exact, FIFO et ext
   assert.equal((await h.post('/runs/a/test-resources/release',p)).status,409);
   assert.equal((await h.post('/runs/a/extend',extension)).status,200);
   assert.equal(h.native.replies.length,replies);
+});
+
+test('release-unused lost-token HTTP : preview filtrée puis restitution sans effet dans le change armé',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/101',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const acquisition={version:a.version,transactionId:'lost-token-a',resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));
+  assert.equal(preview.body.state,'HELD');assert.equal(preview.body.reconciliationRequired,true);
+  assert.equal(preview.body.approvedChangeScope,true);assert.equal(preview.body.eligibleForLostTokenRelease,true);
+  assert.ok(!JSON.stringify(preview.body).includes(lease.token));
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,
+    evidence:['bail restauré relu sans effet natif'],attestation:{noEnvironmentMutation:true,noMutatingMandate:true,
+      operations:preview.body.operations.map(op=>({operationId:op.operationId,
+        classification:op.state==='CANCELLED'&&!op.nativeKind?'cancelled-without-execution':'read-only-no-effect'}))}};
+  const denied=await h.post('/runs/a/test-resources/release-unused-lost-token',{...payload,attestation:{...payload.attestation,noEnvironmentMutation:false}});
+  assert.notEqual(denied.status,200);assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+  const released=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(released.status,200,JSON.stringify(released));assert.equal(released.body.state,'RELEASED');
+  assert.equal(released.body.token,undefined);assert.equal(released.body.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+  assert.ok(!JSON.stringify(released.body).includes(lease.token));
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].token,undefined);
+  assert.equal(h.native.replies.length,0);
+  assert.deepEqual((await h.post('/runs/a/test-resources/release-unused-lost-token',payload)).body,released.body);
+});
+
+test('release-unused lost-token HTTP refuse sans job armé dans le change',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/102',mode:'write'}];
+  const candidate={...h.candidate('a'),resources,exclusiveResources:[]};
+  const reserved=await h.post('/runs/reserve',candidate);assert.equal(reserved.status,201,JSON.stringify(reserved));
+  const a=reserved.body;
+  const acquisition={version:a.version,transactionId:'lost-token-unarmed',resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.approvedChangeScope,false);
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail restauré'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:[]}};
+  const result=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(result.status,409);assert.equal(result.body.error,'test-unused-approved-change-required');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+test('release-unused lost-token HTTP refuse une preview stale et une session native active',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/103',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const acquisition={version:a.version,transactionId:'lost-token-stale',resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail restauré'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:[]}};
+  const stale=await h.post('/runs/a/test-resources/release-unused-lost-token',{...payload,boundaryDigest:'0'.repeat(64)});
+  assert.equal(stale.status,409);assert.equal(stale.body.error,'test-unused-boundary-stale');
+  h.native.busy[a.sessionId]={type:'busy'};
+  const active=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(active.status,409);assert.equal(active.body.error,'native-session-not-quiescent');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
 });
 
 test('release-unused HTTP : fin native exit1 relue même COMPLETED et diagnostic non converti en succès',async(t)=>{
