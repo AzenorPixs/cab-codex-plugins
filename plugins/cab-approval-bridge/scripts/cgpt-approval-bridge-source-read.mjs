@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { realpath } from 'node:fs/promises';
 
-export const VERSION = '2.1.47';
+export const VERSION = '2.1.48';
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 
 function loopback(value) {
@@ -99,8 +99,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
     const result=await readSource(parseArguments(process.argv.slice(2)));
     process.stdout.write(JSON.stringify(result)+'\n');
   } catch (cause) {
-    process.stderr.write(JSON.stringify({error:/^source-read-/.test(cause?.code||'')?cause.code:'source-read-unavailable',
-      ...(cause?.causeCode?{cause:cause.causeCode}:{})})+'\n');
+    const code=typeof cause?.code==='string'?cause.code:'';
+    const causeCode=/^opencode-(?:source|http)-[a-z0-9-]{1,100}$/.test(code)?code:
+      (typeof cause?.causeCode==='string'&&/^[A-Za-z0-9_-]{1,80}$/.test(cause.causeCode)?cause.causeCode:undefined);
+    process.stderr.write(JSON.stringify({error:/^source-read-/.test(code)?code:'source-read-unavailable',
+      ...(causeCode?{cause:causeCode}:{})})+'\n');
     process.exitCode=1;
   }
 }

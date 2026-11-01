@@ -2,10 +2,10 @@ import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.47';
+export const VERSION = '2.1.48';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
@@ -87,6 +87,31 @@ function sourcePath(value, { allowRoot = false } = {}) {
     fail('opencode-source-path-excluded');
   }
   return value;
+}
+
+function sourceEntryPath(value, directoryValue) {
+  if (typeof value !== 'string' || value.includes('\\') || value.includes('\0') || value.split('/').includes('..')) {
+    fail('opencode-source-path-invalid');
+  }
+  if (value === '' || value === '.' || value === './') return null;
+  let candidate = value;
+  if (isAbsolute(candidate)) {
+    candidate = relative(directoryValue, candidate);
+    if (!candidate || candidate === '..' || candidate.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(candidate)) {
+      fail('opencode-source-path-invalid');
+    }
+  }
+  if (candidate.startsWith('./')) candidate = candidate.slice(2);
+  if (!candidate) return null;
+  return sourcePath(candidate);
+}
+
+function sourceMimeType(value) {
+  const type = value.split(';', 1)[0].trim().toLowerCase();
+  return type === 'application/octet-stream' || type.startsWith('text/') ||
+    ['application/json', 'application/javascript', 'application/x-javascript', 'application/xml',
+      'application/yaml', 'application/x-yaml', 'application/toml', 'application/x-toml',
+      'application/typescript', 'application/x-typescript'].includes(type);
 }
 
 async function readPassword(path) {
@@ -598,7 +623,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       fail(`opencode-http-${response.status}`);
     }
     if (responseMode === 'binary') {
-      if (!type.toLowerCase().includes('application/octet-stream')) {
+      if (!sourceMimeType(type)) {
         await response.body?.cancel();
         fail('opencode-source-response-invalid');
       }
@@ -751,7 +776,8 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
         fail('opencode-source-list-invalid');
       }
       try {
-        return [{ path: sourcePath(entry.path), type: entry.type }];
+        const path = sourceEntryPath(entry.path, directoryValue);
+        return path ? [{ path, type: entry.type }] : [];
       } catch (cause) {
         if (cause?.code === 'opencode-source-path-excluded') return [];
         throw cause;

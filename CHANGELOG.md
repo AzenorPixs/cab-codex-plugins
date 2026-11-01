@@ -1,3 +1,10 @@
+## 2.1.48 — Compatibilité des réponses filesystem OpenCode
+
+- La lecture native accepte les types MIME textuels et structurés servis par OpenCode ; les réponses binaires non textuelles restent refusées.
+- Le listing normalise les chemins sous la location exacte, ignore l’entrée racine et refuse toujours les chemins sortants.
+- Les diagnostics CLI restituent les seuls codes OpenCode contrôlés ; les gardes de RUN/session et les bornes restent inchangées.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.48.
+
 ## 2.1.47 — Stabilisation du helper de lecture source
 
 - Le helper distribué démarre correctement via son lien stable, et les échecs
