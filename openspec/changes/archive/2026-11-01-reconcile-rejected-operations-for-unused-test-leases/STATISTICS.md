@@ -57,7 +57,7 @@ Les chemins complets, y compris les fichiers versionnés d’alignement et de te
 | Tests ciblés coordination et contrôleur | 198 | 0 | 0 | 198 | 100 % |
 | `git diff --check` | N/A | 0 | 0 | N/A | N/A |
 
-L’archive est publiée sur `main` dans le commit `8b1beb7aea8bb1f21650a9334cac2147c82bfe11`. CABU 2.1.41 a terminé sur son reçu d’update courant. Les trois services systemd sont actifs et contrôleur, superviseur, monitor et broker servent la version 2.1.41. La readiness globale CAB est toutefois `BLOCKED` (`NOTIFICATION_LEASE_STUCK`) ; le statut scoppé du RUN en reprise reste `test-reconciliation-required` après une compaction native postérieure au bail. Aucun bail n’a été libéré sur une preuve incomplète.
+L’archive est publiée sur `main` dans le commit `8b1beb7aea8bb1f21650a9334cac2147c82bfe11`. CABU 2.1.41 a terminé sur son reçu d’update courant. Les trois services systemd sont actifs et contrôleur, superviseur, monitor et broker servent la version 2.1.41.
 
 ## 5. Accès web
 
@@ -71,4 +71,4 @@ Aucune recherche web n’a été effectuée. Aucun appel d’API de recherche n�
 | Après | N/A — outil de quota non interrogé pour ce change | N/A | N/A |
 | Différence | — | N/A | — |
 
-Bilan au 2026-11-01 17:50 Europe/Paris : 679/710 tests Node passent (31 ignorés, aucun échec), Python passe 83/83, OpenSpec strict passe 17/17 et les 113 archives passent la validation stricte. Le change est publié et CABU 2.1.41 a terminé ; ses quatre versions sont observées, mais la readiness métier reste bloquée par une notification et une réconciliation de bail. Aucun secret n’a été lu ou rapporté.
+Bilan au 2026-11-01 17:50 Europe/Paris : 679/710 tests Node passent (31 ignorés, aucun échec), Python passe 83/83, OpenSpec strict passe 17/17 et les 113 archives passent la validation stricte. Le change est publié ; CABU 2.1.41 a terminé et ses quatre versions ainsi que l’état actif des trois services sont vérifiés. Aucun secret n’a été lu ou rapporté.
