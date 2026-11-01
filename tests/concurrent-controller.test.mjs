@@ -170,25 +170,37 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       metadata: value.commands.length ? { command: value.commands[0] } : { filepath: directory + '/' + value.files[0] } });
     await waitFor(() => native.replies.some((r) => r.path.endsWith('/perm-' + value.requestId)));
   }
-  async function completeTool(value, exit = 0) {
+  async function completeTool(value, exit = 0, { error = false, output = 'synthetic native result' } = {}) {
     const op = (await get('/runs')).body.coordination.operations[value.operation_id];
     const stamp = Math.max(Date.now(), op.native.startedAt) + 1;
     const part = { type: 'tool', id: 'part-' + value.requestId, callID: 'call-' + value.requestId,
       sessionID: value.session_id, tool: value.commands.length ? 'bash' : 'edit', state: { status: 'completed',
         input: value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] },
-        time: { start: stamp, end: stamp + 1 }, metadata: { exit } } };
+        output, time: { start: stamp, end: stamp + 1 }, metadata: { exit, ...(error ? { error: true } : {}) } } };
     native.messages[value.session_id].push({ parts: [part] });
     native.emit({ type: 'message.part.updated', properties: { part } });
   }
-  async function releaseOperation(run, value, access) {
+  async function approvedEditAccess(run, requestId, filePath) {
+    const value = approval(run, requestId);
+    value.commands = []; value.files = [filePath];
+    native.messages[run.sessionId].at(-1).parts[0].state.input = structuredClone(value);
+    assert.equal((await post('/validation/request', { approval: value })).status, 202);
+    assert.equal((await post('/runs/' + run.runId + '/decision/' + value.requestId, { decision: 'approved' })).status, 201);
+    const acquired=await post('/runs/' + run.runId + '/locks/acquire', { version:run.version,
+      operationId:value.operation_id,operationDigest:value.operation_digest,resources:value.resources,
+      expectedRevisions:value.expected_revisions });
+    assert.equal(acquired.status,200,JSON.stringify(acquired));
+    return { approval:value,access:acquired.body };
+  }
+  async function releaseOperation(run, value, access, outcome='COMPLETED') {
     const current = access || (await get('/runs/' + run.runId + '/locks')).body.accesses.find((a) => a.accessId === value.operation_id);
     return post('/runs/' + run.runId + '/locks/release', { version: run.version, operationId: current.accessId,
-      token: current.token, fencing: current.fencing, outcome: 'COMPLETED', evidence: ['native effects reviewed'] });
+      token: current.token, fencing: current.fencing, outcome, evidence: ['native effects reviewed'] });
   }
   const nativeClient = createOpenCodeV2Client({ baseUrl:'http://127.0.0.1:'+opencode.address().port, directory,
     passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE });
   return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
-    approvedAccess, execute, completeTool, releaseOperation };
+    approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation };
 }
 
 test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation et chemins exclus refusés', async t => {
@@ -212,6 +224,53 @@ test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation 
   const after=(await h.get('/runs/source-read/status')).body;
   assert.equal(after.job.jobId,before.job.jobId);assert.equal(after.undecidedValidationCount,0);
   assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+});
+
+test('locks/release accepte NO_EFFECT après erreur native edit vérifiée et restaure outcome hérité',async t=>{
+ const h=await setup(t);const run=await h.reserve('edit-no-effect',{resources:[{key:'file:src/theme.css',mode:'write'}]});
+ const {approval,access}=await h.approvedEditAccess(run,'edit-no-effect','src/theme.css');
+ await h.execute(approval);await h.completeTool(approval,0,{error:true,output:'newString is already in the file'});
+ await h.stop();
+ const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));delete state.coordination.operations[approval.operation_id].nativeResult;
+ writeFileSync(statePath,JSON.stringify(state));
+ await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const before=(await h.get('/runs/'+run.runId+'/locks')).body.revisions['file:src/theme.css'];
+ const released=await h.releaseOperation(run,approval,access,'NO_EFFECT');
+ assert.equal(released.status,200,JSON.stringify(released));assert.equal(released.body.state,'RELEASED');
+ assert.equal(released.body.outcome,'NO_EFFECT');assert.equal(released.body.token,undefined);
+ assert.equal((await h.get('/runs/'+run.runId+'/locks')).body.revisions['file:src/theme.css'],before);
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.pendingWrites?.['file:src/theme.css'],undefined);
+ assert.equal(h.native.replies.length,1);
+});
+
+test('locks/release refuse NO_EFFECT after a successful edit and allow its explicit completion',async t=>{
+ const h=await setup(t);const run=await h.reserve('edit-success',{resources:[{key:'file:src/theme.css',mode:'write'}]});
+ const {approval,access}=await h.approvedEditAccess(run,'edit-success','src/theme.css');
+ await h.execute(approval);await h.completeTool(approval);
+ const refused=await h.releaseOperation(run,approval,access,'NO_EFFECT');
+ assert.equal(refused.status,409);assert.equal(refused.body.error,'access-outcome-invalid');
+ assert.equal((await h.get('/runs/'+run.runId+'/locks')).body.accesses[0].state,'HELD');
+ const released=await h.releaseOperation(run,approval,access,'COMPLETED');
+ assert.equal(released.status,200,JSON.stringify(released));
+ assert.ok((await h.get('/runs/'+run.runId+'/locks')).body.revisions['file:src/theme.css']>0);
+});
+
+test('locks/release conserve HELD sans preuve native unique et pour une erreur shell',async t=>{
+ for(const kind of ['missing-proof','duplicate-proof','shell-error'])await t.test(kind,async t=>{
+  const h=await setup(t);const run=await h.reserve('no-effect-'+kind,{resources:[{key:'file:src/theme.css',mode:'write'}]});
+  const edit=kind!=='shell-error';
+  const pair=edit?await h.approvedEditAccess(run,'no-effect-'+kind,'src/theme.css'):
+    await h.approvedAccess(run,'no-effect-'+kind);
+  await h.execute(pair.approval);await h.completeTool(pair.approval,0,{error:true,output:'native tool error'});
+  if(kind==='missing-proof')h.native.messages[run.sessionId]=[];
+  if(kind==='duplicate-proof')h.native.messages[run.sessionId].push(structuredClone(h.native.messages[run.sessionId].at(-1)));
+  const response=await h.releaseOperation(run,pair.approval,pair.access,'NO_EFFECT');
+  assert.equal(response.status,409,JSON.stringify(response));
+  assert.ok(['native-completion-not-proved','native-outcome-history-divergent','access-outcome-invalid'].includes(response.body.error),JSON.stringify(response));
+  assert.ok(['HELD','EXECUTING'].includes((await h.get('/runs/'+run.runId+'/locks')).body.accesses[0].state));
+  assert.equal((await h.get('/runs/'+run.runId+'/locks')).body.revisions['file:src/theme.css'],0);
+ });
 });
 
 test('source read-only fallback refuse une permission native en attente',async t=>{
@@ -1187,7 +1246,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.51');
+  assert.equal(initialized.result.serverInfo.version, '2.1.52');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

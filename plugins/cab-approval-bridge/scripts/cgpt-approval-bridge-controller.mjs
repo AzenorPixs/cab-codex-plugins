@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.51";
+const version = "2.1.52";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -408,6 +408,17 @@ function nativePartProof(operation, part, sessionId) {
     finishedAt: state.time.end, status: state.status,
     exit: Number.isInteger(state.metadata?.exit) ? state.metadata.exit : null };
 }
+function nativeEffectOutcome(part) {
+  const state = part?.state;
+  if (!state || !['completed','error'].includes(state.status)) throw new CoordinationError('native-outcome-not-proved');
+  const errorFlag = state.metadata?.error === true;
+  const status = state.status === 'error' || errorFlag ? 'error' : 'completed';
+  return { status, proofStatus: state.status, exit: Number.isInteger(state.metadata?.exit) ? state.metadata.exit : null,
+    partDigest: proofHash(part) };
+}
+function recordNativeEffectOutcome(runId, operation, part, proof) {
+  registry.recordNativeOutcome(runId, operation.operationId, nativeEffectOutcome(part), proofHash(proof));
+}
 const noEnvironmentMcpTools = new Set(['cgpt-validation.request_validation', 'cgpt-validation.poll_approval',
   'cgpt-validation.get_approval', 'cgpt-validation.reject', 'cgpt-validation.list_pending',
   'cgpt-validation.cancel_approval', 'cgpt-validation.broker_readiness', 'cgpt-validation.broker_health']);
@@ -466,7 +477,10 @@ function observeNativeCompletion(runId, part, sessionId) {
   for (const operation of Object.values(registry.resourceState.operations)) {
     if (operation.runId !== runId || !['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(operation.state)) continue;
     const proof = nativePartProof(operation, part, sessionId);
-    if (proof) registry.completeNative(runId, operation.operationId, proof);
+    if (proof) {
+      registry.completeNative(runId, operation.operationId, proof);
+      recordNativeEffectOutcome(runId, operation, part, proof);
+    }
   }
 }
 async function proveNativeCompletions(runId, access) {
@@ -478,12 +492,38 @@ async function proveNativeCompletions(runId, access) {
   try { messages = await openCode.messages(sessionId, workspace); }
   catch { throw new CoordinationError('native-completion-unavailable'); }
   if (!Array.isArray(messages)) throw new CoordinationError('native-completion-invalid');
+  const parts = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []);
   for (const op of pending) {
-    const proof = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : [])
-      .map((part) => nativePartProof(op, part, op.sessionId)).find(Boolean);
-    if (!proof) throw new CoordinationError('native-completion-not-proved');
-    registry.completeNative(runId, op.operationId, proof);
+    const matches = parts.map((part) => ({ part, proof: nativePartProof(op, part, op.sessionId) }))
+      .filter((item) => item.proof);
+    if (matches.length !== 1) throw new CoordinationError('native-completion-not-proved');
+    registry.completeNative(runId, op.operationId, matches[0].proof);
+    recordNativeEffectOutcome(runId, op, matches[0].part, matches[0].proof);
   }
+}
+
+async function reconcileTerminalNativeOutcomes(runId, access) {
+  const operations = access.operationIds.map((id) => registry.resourceState.operations[id])
+    .filter((op) => op.state === 'COMPLETED' && op.native);
+  if (!operations.length) return;
+  const sessionIds = [...new Set(operations.map((op) => op.sessionId))];
+  if (sessionIds.length !== 1) throw new CoordinationError('native-outcome-session-divergent');
+  const sessionId = sessionIds[0];
+  await checkNative(sessionId, true);
+  let messages;
+  try { messages = await openCode.messages(sessionId, workspace); }
+  catch { throw new CoordinationError('native-outcome-history-unavailable'); }
+  if (!Array.isArray(messages)) throw new CoordinationError('native-outcome-history-invalid');
+  const parts = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []);
+  for (const operation of operations) {
+    const matches = parts.map((part) => ({ part, proof: nativePartProof(operation, part, sessionId) }))
+      .filter((item) => item.proof);
+    if (matches.length !== 1 || proofHash(matches[0].proof) !== operation.completionDigest) {
+      throw new CoordinationError('native-outcome-history-divergent');
+    }
+    recordNativeEffectOutcome(runId, operation, matches[0].part, matches[0].proof);
+  }
+  await checkNative(sessionId, true);
 }
 
 async function reconcileNativeCompletionsFromTranscript(runId, sessionId) {
@@ -500,8 +540,12 @@ async function reconcileNativeCompletionsFromTranscript(runId, sessionId) {
     for (const operation of pending) {
       const current = registry.resourceState.operations[operation.operationId];
       if (!current || !['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(current.state)) continue;
-      const proof = parts.map((part) => nativePartProof(operation, part, sessionId)).find(Boolean);
-      if (proof) registry.completeNative(runId, operation.operationId, proof);
+      const matches = parts.map((part) => ({ part, proof: nativePartProof(operation, part, sessionId) }))
+        .filter((item) => item.proof);
+      if (matches.length === 1) {
+        registry.completeNative(runId, operation.operationId, matches[0].proof);
+        recordNativeEffectOutcome(runId, operation, matches[0].part, matches[0].proof);
+      }
     }
   } catch (cause) {
     const code = /^[a-z][a-z0-9-]{1,90}$/.test(cause?.code || '') ? cause.code : 'native-completion-unavailable';
@@ -1204,6 +1248,7 @@ async function handleRequest(request, response) {
           throw new CoordinationError('run-not-quiescent');
         }
         await proveNativeCompletions(runId, access);
+        await reconcileTerminalNativeOutcomes(runId, access);
         await checkNative(registry.resourceState.operations[access.operationIds[0]]?.sessionId ||
           context.publicJob()?.sessionId || run.sessionId, true);
         const result = url.pathname === '/publish' ? registry.publish(runId, payload) : registry.releaseAccess(runId, payload);

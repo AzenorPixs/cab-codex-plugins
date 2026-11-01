@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.51';
+export const VERSION = '2.1.52';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -116,9 +116,13 @@ export class ResourceRunRegistry extends RunRegistry {
           (op.rejectionOnly !== undefined && op.rejectionOnly !== true) ||
           typeof op.sessionId !== 'string' || !['PREPARED', 'ISSUING', 'EXECUTING', 'COMPLETED', 'UNKNOWN', 'CANCELLED'].includes(op.state)) fail();
       try { this.resources(op.resources); this.validateExpected(op.expectedRevisions, op.resources, false); } catch { fail(); }
-      if (op.nativeResult !== undefined && (!onlyKeys(op.nativeResult, ['status','exit']) ||
+      if (op.nativeResult !== undefined && (!onlyKeys(op.nativeResult, ['status','exit','proofStatus','partDigest']) ||
           !['completed','error'].includes(op.nativeResult.status) ||
-          (op.nativeResult.exit !== null && !Number.isInteger(op.nativeResult.exit)))) fail();
+          (op.nativeResult.exit !== null && !Number.isInteger(op.nativeResult.exit)) ||
+          (op.nativeResult.proofStatus !== undefined && !['completed','error'].includes(op.nativeResult.proofStatus)) ||
+          (op.nativeResult.partDigest !== undefined && !hash(op.nativeResult.partDigest)) ||
+          (op.nativeResult.status === 'completed' && op.nativeResult.proofStatus === 'error') ||
+          (op.nativeResult.status === 'error' && op.nativeResult.proofStatus === 'completed' && !hash(op.nativeResult.partDigest)))) fail();
       if (op.testReservationId !== undefined && (!id(op.testReservationId) ||
           state.testReservations?.[op.testReservationId]?.runId !== op.runId ||
           state.testReservations[op.testReservationId].contextId !== op.contextId)) fail();
@@ -820,8 +824,9 @@ export class ResourceRunRegistry extends RunRegistry {
       return;
     }
     op.state = 'COMPLETED'; op.finishedAt = proof.finishedAt; op.completionDigest = digest(proof);
+    op.nativeResult = { status: proof.status, proofStatus: proof.status,
+      exit: Number.isInteger(proof.exit) ? proof.exit : null };
     if (op.testReservationId) {
-      op.nativeResult = { status: proof.status, exit: Number.isInteger(proof.exit) ? proof.exit : null };
       op.finishedSequence = ++this.resourceState.sequence;
     }
     if (op.maintenancePreflight) op.preflightSucceeded = proof.status === 'completed' && proof.exit === 0;
@@ -830,6 +835,27 @@ export class ResourceRunRegistry extends RunRegistry {
       access.state = 'HELD';
     }
     this.persist();
+  }
+  recordNativeOutcome(runId, operationId, outcome, completionDigest) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    if (!op || op.runId !== runId || op.state !== 'COMPLETED' || op.completionDigest !== completionDigest ||
+        !record(outcome) || !['completed','error'].includes(outcome.status) ||
+        !['completed','error'].includes(outcome.proofStatus) ||
+        (outcome.exit !== null && !Number.isInteger(outcome.exit)) ||
+        (outcome.partDigest !== undefined && !hash(outcome.partDigest)) ||
+        (outcome.status === 'completed' && outcome.proofStatus === 'error') ||
+        (outcome.status === 'error' && outcome.proofStatus === 'completed' && !hash(outcome.partDigest))) {
+      throw new CoordinationError('native-outcome-not-proved');
+    }
+    const prior = op.nativeResult;
+    if (prior?.partDigest && (prior.status !== outcome.status || prior.proofStatus !== outcome.proofStatus ||
+        prior.exit !== outcome.exit || prior.partDigest !== outcome.partDigest)) {
+      throw new CoordinationError('native-outcome-divergent');
+    }
+    op.nativeResult = { status: outcome.status, proofStatus: outcome.proofStatus, exit: outcome.exit,
+      ...(outcome.partDigest ? { partDigest: outcome.partDigest } : {}) };
+    this.persist(); return copy(op);
   }
   held(runId, payload) {
     this.mutable();
@@ -892,14 +918,25 @@ export class ResourceRunRegistry extends RunRegistry {
   finishAccess(access, outcome) {
     const ops = access.operationIds.map((key) => this.resourceState.operations[key]);
     if (ops.some((op) => ['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(op.state))) throw new CoordinationError('access-effects-unresolved');
-    const changed = ops.some((op) => op.state === 'COMPLETED' && op.resources.some((r) => r.mode === 'write'));
+    const completedWrites = ops.filter((op) => op.state === 'COMPLETED' && op.resources.some((r) => r.mode === 'write'));
+    if (completedWrites.some((op) => !op.nativeResult)) throw new CoordinationError('access-native-outcome-unverified');
+    const failedEditWithoutEffect = (op) => op.native?.kind === 'edit' && op.nativeResult?.status === 'error' &&
+      (op.nativeResult.proofStatus === 'error' || hash(op.nativeResult.partDigest || ''));
+    const changed = completedWrites.some((op) => !failedEditWithoutEffect(op));
+    if (outcome === 'NO_EFFECT' && access.resources.some((resource) =>
+        this.revision(resource.key) !== access.expectedRevisions[resource.key])) {
+      throw new CoordinationError('access-outcome-revision-divergent');
+    }
+    if (outcome === 'COMPLETED' && ops.some((op) => op.nativeResult?.status === 'error')) {
+      throw new CoordinationError('access-native-failure');
+    }
     if (!['COMPLETED', 'NO_EFFECT', 'RECONCILED'].includes(outcome) || (outcome === 'NO_EFFECT' && changed)) {
       throw new CoordinationError('access-outcome-invalid');
     }
     if (outcome === 'COMPLETED' && ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) throw new CoordinationError('access-effects-unresolved');
     if (changed) {
       const revision = ++this.resourceState.sequence;
-      for (const op of ops.filter((op) => op.state === 'COMPLETED')) for (const r of op.resources) {
+      for (const op of completedWrites.filter((op) => !failedEditWithoutEffect(op))) for (const r of op.resources) {
         if (r.mode === 'write') {
           this.resourceState.revisions[r.key] = revision;
           const run = this.runs.get(access.runId);
