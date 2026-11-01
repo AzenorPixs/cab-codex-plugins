@@ -837,6 +837,7 @@ test('Code Mode : omission input readiness ne généralise aucune valeur implici
 test('mandat natif : instruction explicite sans recopie ni modification du mandat', () => {
  const text='é\nwrite exact "{}"\n';const value=nativeCodingMandate(text);
  assert.ok(value.endsWith('\n\n'+text));assert.match(value,/recherche MCP vide/);assert.match(value,/réconciliation/);
+ assert.match(value,/uniquement Code Mode execute/);assert.match(value,/nom exact découvert par search/);assert.match(value,/Ne pas appeler directement une entrée MCP native/);
  assert.throws(()=>nativeCodingMandate(''),/mandate-invalid/);
 });
 
