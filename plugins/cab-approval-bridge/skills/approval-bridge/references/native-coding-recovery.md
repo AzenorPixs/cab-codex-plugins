@@ -1,4 +1,4 @@
-# Reprise des incidents de codage natif — CAB 2.1.57
+# Reprise des incidents de codage natif — CAB 2.1.58
 
 ## Prévol avant récupération d'une session adossée à un RUN
 
@@ -60,6 +60,15 @@ est terminé.
 Le client installé exporte nativeCodingMandate(instruction). Utiliser explicitement ce helper pour préparer le texte d’un nouveau mandat avant client.prompt ; le texte fourni reste conservé intégralement après le préambule. Les prompts historiques ne sont pas modifiés implicitement. Le préambule rappelle que write/edit/shell sont des outils natifs distincts de search/execute MCP ; une recherche MCP vide n’établit pas leur absence. Vérifier le catalogue natif transmis au modèle si l’outil est réellement absent. Ne pas substituer shell à write, changer de cible ou chercher indéfiniment. Garder les schémas natifs observés : write {path,content}, edit {path,oldString,newString}, shell {command}. Ce rappel n’autorise aucune opération.
 
 Le codeur produit un contenu complet, l’orchestrateur le revoit. Si les longs arguments sont instables, préparer un NOUVEAU payload explicitement Bash par la procédure exact-shell-carrier.md : octets scellés revus et invocation courte, décision sur les effets réels, ressources, accès et once. Cette conversion nécessite son propre mandat ; ne pas réinterpréter une ancienne autorisation write en Bash. Le modèle ne complète jamais le fragment d’un fichier refusé pour le faire passer.
+
+En Code Mode, `execute` est l’outil hôte qui exécute les appels MCP dynamiques ;
+`request_validation` peut apparaître dans la réponse de `search` sans être une
+entrée distincte du catalogue d’outils présenté au modèle. Appeler uniquement le
+nom exact découvert dans le résultat complet, par exemple
+`tools["cgpt-validation"].request_validation(...)` à l’intérieur du wrapper
+Code Mode. L’absence d’entrée séparée `request_validation` dans ce catalogue ne
+justifie ni un nom deviné, ni un appel shell ou un contournement des gardes RUN,
+validation et permission.
 
 ## Erreur fournisseur et diagnostic
 
