@@ -1,4 +1,4 @@
-# Reprise des incidents de codage natif — CAB 2.1.38
+# Reprise des incidents de codage natif — CAB 2.1.39
 
 ## Prévol avant récupération d'une session adossée à un RUN
 
@@ -38,6 +38,22 @@ dupliquées ou incomplètes et les autres outils inattendus restent refusés.
 Un job historique non adossé à un RUN conserve son chemin de récupération
 existant ; ses gardes de permission, corrélation, effets et fin native restent
 applicables.
+
+## Payload `request_validation` Code Mode
+
+Pour qu'une demande `request_validation` soit corrélée à l'admission CAB, le
+wrapper `execute` doit utiliser un appel terminal natif dont l'objet correspond
+exactement aux métadonnées du tool call. Une commande longue peut être écrite
+directement comme chaîne littérale, y compris une template sans interpolation,
+ou être liée par une seule déclaration `const` à chaîne double-quotée ou
+template littérale sans interpolation, utilisée une fois comme seul élément
+de `commands`. Aucun préfixe, interpolation `${...}`, expression dynamique,
+statement ou tool additionnel n'est admis dans cette forme liée. Le parseur ne
+doit pas exécuter ce code pour l'interpréter ; toute ambiguïté reste refusée
+avant notification ou permission. Un refus de corrélation ne justifie ni
+annulation, ni rejeu, ni nouvelle demande : conserver l'approval ID existant
+et ne consulter que `poll_approval` ou `get_approval` lorsque l'appel initial
+est terminé.
 
 ## Outils natifs et catalogue MCP
 
