@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-01
+goal: Classify complete, correlated rejection-only native operations as no
+  environment mutation without relaxing guards for commands, permissions, or
+  unknown tools.

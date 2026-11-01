@@ -1,4 +1,6 @@
 import copy
+import io
+import json
 import hashlib
 import os
 from pathlib import Path
@@ -12,6 +14,8 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 import cgpt_approval_bridge_server as bridge
+
+real_maybe_notify_controller = bridge.maybe_notify_controller
 
 
 class ConcurrentBrokerTest(unittest.TestCase):
@@ -36,6 +40,28 @@ class ConcurrentBrokerTest(unittest.TestCase):
                 "session_id": f"ses_{run}", "directory": "/synthetic-project",
                 "title": "Synthetic command", "files": [], "commands": ["/usr/bin/true"],
                 "resources": [{"key": f"resource:{run}", "mode": "read"}]}
+
+    def test_native_tool_input_digest_is_immutable_and_correlated(self):
+        args = {**self.args(), "files": ["one.py"], "commands": [], "tool_input_sha256": "a" * 64}
+        item = bridge.do_propose(args)
+        self.assertEqual(item["tool_input_sha256"], "a" * 64)
+        self.assertEqual(bridge.do_propose(args)["approval_id"], item["approval_id"])
+        for replacement in [None, "b" * 64]:
+            changed = {**args}
+            if replacement is None:
+                changed.pop("tool_input_sha256")
+            else:
+                changed["tool_input_sha256"] = replacement
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose(changed)
+        decision = {"requestId": item["requestId"], "approval_id": item["approval_id"],
+                    "change_id": item["change_id"], "decision": "approved"}
+        self.assertFalse(bridge.validate_controller_decision(item, decision))
+        for invalid in [None, "", "z" * 64, "a" * 63]:
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose({**args, "tool_input_sha256": invalid})
+        with self.assertRaises(bridge.ValidationError):
+            bridge.do_propose({**self.args("command"), "tool_input_sha256": "a" * 64})
 
     def test_three_parallel_calls_preserve_each_run_identity(self):
         with ThreadPoolExecutor(max_workers=3) as executor:
@@ -76,6 +102,35 @@ class ConcurrentBrokerTest(unittest.TestCase):
         self.assertFalse(bridge.validate_controller_decision(item, {**decision, "operation_id": "other"}))
         self.assertFalse(bridge.validate_controller_decision(item, {**decision, "expected_revisions": {"resource:a": 1}}))
 
+    def test_request_validation_default_timeout_is_finite_and_delivery_is_not_terminal(self):
+        args = {**self.args(), "timeout_seconds": 1, "interval_seconds": 1}
+
+        def delivered(item):
+            lease = bridge.acquire_notification_lease(item["approval_id"])
+            self.assertIsNotNone(lease)
+            bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], True)
+            return True
+
+        with patch.object(bridge, "maybe_notify_controller", side_effect=delivered), \
+             patch.object(bridge.time, "monotonic", side_effect=[0.0, 2.0]):
+            result = bridge.do_request_validation(args)
+
+        self.assertEqual(result["status"], "PENDING")
+        self.assertTrue(result["validation_timeout"])
+        self.assertTrue(result["retry_required"])
+        self.assertEqual(result["next_action"], "poll_approval")
+        self.assertEqual(result["retry_approval_id"], result["approval_id"])
+        stored = bridge.do_get({"approval_id": result["approval_id"]})
+        self.assertEqual(stored["status"], "PENDING")
+        self.assertEqual(stored["notification_status"], "DELIVERED")
+
+    def test_request_validation_timeout_zero_is_rejected_before_request_creation(self):
+        args = {**self.args("zero-timeout"), "timeout_seconds": 0}
+        with self.assertRaises(bridge.ValidationError):
+            bridge.do_request_validation(args)
+        with self.assertRaises(bridge.ValidationError):
+            bridge.do_get({"approval_id": args["approval_id"]})
+
     def test_old_or_incomplete_coordination_is_refused_before_persistence(self):
         for key in ("coordination_protocol", "operation_id", "operation_digest", "expected_revisions"):
             args = self.args()
@@ -84,6 +139,114 @@ class ConcurrentBrokerTest(unittest.TestCase):
                 bridge.do_propose(args)
         with self.assertRaises(bridge.ValidationError):
             bridge.do_propose({**self.args(), "expected_revisions": {"resource:a": True}})
+
+    def test_empty_access_id_is_refused_before_registration_and_schema_matches(self):
+        schema = bridge.APPROVAL_REQUEST_PROPERTIES["access_id"]
+        self.assertEqual(schema["minLength"], 1)
+        self.assertRegex("access-valid", schema["pattern"])
+        for value in ("", "bad value", "/absolute"):
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose({**self.args(), "access_id": value})
+            self.assertEqual(bridge.load_store(bridge.store_path())["approvals"], {})
+        self.assertEqual(bridge.do_propose(self.args())["status"], "PENDING")
+
+    def test_notification_diagnostic_closes_deterministic_refusal_without_decision(self):
+        args = self.args()
+        item = bridge.do_propose(args)
+        diagnostic = {"http_status": 409, "error_code": "resource-revision-stale"}
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        bridge.complete_notification_lease(item["approval_id"], "stale-lease", False, diagnostic)
+        self.assertNotIn("notification_diagnostic", bridge.do_get({"approval_id": item["approval_id"]}))
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, diagnostic)
+        restored = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertEqual(restored["notification_diagnostic"], diagnostic)
+        self.assertEqual(restored["status"], "NOT_ADMITTED")
+        self.assertEqual(restored["notification_status"], "FAILED")
+        self.assertEqual(restored["notification_attempts"], 1)
+        self.assertEqual(restored["decision_id"], "")
+        self.assertEqual(restored["reviewer"], "")
+        self.assertIsNone(bridge.acquire_notification_lease(item["approval_id"]))
+        self.assertEqual(bridge.do_propose(args)["status"], "NOT_ADMITTED")
+        self.assertEqual(bridge.do_get({"approval_id": item["approval_id"]})["notification_attempts"], 1)
+        events = bridge.journal.read_events(approval_id=item["approval_id"])
+        self.assertTrue(any(event["event_type"] == "APPROVAL_NOT_ADMITTED" for event in events))
+        self.assertFalse(any(event["event_type"] == "APPROVAL_REJECTED" for event in events))
+        self.assertTrue(bridge.store_journal_consistency_snapshot()["ok"])
+        self.assertEqual(bridge.do_list({"status": "NOT_ADMITTED"})["count"], 1)
+
+    def test_existing_pending_with_deterministic_refusal_closes_on_poll_without_decision(self):
+        item = bridge.do_propose(self.args())
+        path = bridge.store_path()
+        with bridge.locked_store(path):
+            data = bridge.load_store(path)
+            current = data["approvals"][item["approval_id"]]
+            current["notification_status"] = "FAILED"
+            current["notification_diagnostic"] = {"http_status": 409, "error_code": "resource-revision-stale"}
+            bridge.save_store(path, data)
+        result = bridge.do_poll({"approval_id": item["approval_id"], "timeout_seconds": 1, "interval_seconds": 1})
+        self.assertEqual(result["status"], "NOT_ADMITTED")
+        self.assertNotIn("poll_timeout", result)
+        self.assertEqual(result["notification_diagnostic"]["error_code"], "resource-revision-stale")
+        self.assertEqual(result["decision_id"], "")
+        with patch.object(bridge, "controller_tcp_reachable", return_value=False):
+            bridge.run_pending_watchdog_once()
+        self.assertEqual(bridge.pending_watchdog_snapshot()["pending_count"], 0)
+
+    def test_transient_or_unrecognized_notification_failure_remains_pending(self):
+        item = bridge.do_propose(self.args())
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False,
+                                           {"http_status": 503, "error_code": None})
+        current = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertEqual(current["status"], "PENDING")
+        self.assertTrue(bridge.notification_retry_due({**current, "notification_next_retry_at": ""}))
+
+    def test_known_http_400_refusal_is_not_admitted(self):
+        item = bridge.do_propose(self.args())
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False,
+                                           {"http_status": 400, "error_code": "expected-revisions-invalid"})
+        current = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertEqual(current["status"], "NOT_ADMITTED")
+        self.assertEqual(current["notification_diagnostic"]["error_code"], "expected-revisions-invalid")
+        self.assertEqual(current["decision_id"], "")
+
+    def test_notification_diagnostic_rejects_untrusted_shape(self):
+        item = bridge.do_propose(self.args())
+        diagnostic = {"http_status": 409, "error_code": "resource-revision-stale"}
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, {**diagnostic, "message": "PRIVATE"})
+        restored = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertNotIn("notification_diagnostic", restored)
+        self.assertNotIn("PRIVATE", str(restored))
+
+    def test_http_refusal_diagnostic_reaches_persisted_approval_without_decision(self):
+        item = bridge.do_propose(self.args())
+        body = json.dumps({"error": "resource-revision-stale", "message": "PRIVATE"}).encode()
+        exc = bridge.error.HTTPError("http://controller", 409, "Conflict", {}, io.BytesIO(body))
+        with patch.object(bridge.request, "urlopen", side_effect=exc):
+            self.assertFalse(real_maybe_notify_controller(item))
+        restored = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertEqual(restored["notification_diagnostic"], {"http_status": 409, "error_code": "resource-revision-stale"})
+        self.assertEqual(restored["notification_attempts"], 1)
+        self.assertEqual(restored["status"], "NOT_ADMITTED")
+        self.assertEqual(restored["decision_id"], "")
+        self.assertNotIn("PRIVATE", str(restored))
+
+    def test_request_validation_returns_not_admitted_instead_of_polling_after_stale_revision(self):
+        args = {**self.args(), "timeout_seconds": 30, "interval_seconds": 1}
+        body = json.dumps({"error": "resource-revision-stale", "message": "PRIVATE"}).encode()
+        exc = bridge.error.HTTPError("http://controller", 409, "Conflict", {}, io.BytesIO(body))
+        with patch.object(bridge, "maybe_notify_controller", side_effect=real_maybe_notify_controller), patch.object(bridge.request, "urlopen", side_effect=exc):
+            result = bridge.do_request_validation(args)
+        self.assertEqual(result["status"], "NOT_ADMITTED")
+        self.assertEqual(result["notification_diagnostic"]["error_code"], "resource-revision-stale")
+        self.assertNotIn("retry_required", result)
+        self.assertEqual(result["decision_id"], "")
+        self.assertEqual(result["status"], "NOT_ADMITTED")
+        self.assertEqual(result["notification_diagnostic"]["error_code"], "resource-revision-stale")
+        self.assertNotIn("retry_required", result)
+        self.assertEqual(result["decision_id"], "")
 
     def test_old_controller_cannot_receive_new_run_through_legacy_route(self):
         item = bridge.do_propose(self.args())

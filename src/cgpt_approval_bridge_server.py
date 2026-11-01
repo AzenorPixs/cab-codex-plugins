@@ -12,6 +12,7 @@ Persistance :
 Transitions metier journalisees :
 
   APPROVAL_CREATED
+  APPROVAL_NOT_ADMITTED
   APPROVAL_APPROVED
   APPROVAL_REJECTED
   APPROVAL_NEEDS_CLARIFICATION
@@ -69,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.3"
+SERVER_VERSION = "2.1.47"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -91,7 +92,7 @@ DEFAULT_CONTROLLER_URL = "http://127.0.0.1:8788"
 
 DEFAULT_POLL_TIMEOUT_SECONDS = 600
 DEFAULT_POLL_INTERVAL_SECONDS = 5
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 0
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 
 CONTROLLER_HTTP_TIMEOUT_SECONDS = 2
 CONTROLLER_TCP_TIMEOUT_SECONDS = 1
@@ -405,6 +406,7 @@ KNOWN_NOTIFICATIONS = (
 
 VALID_STATES = (
     "PENDING",
+    "NOT_ADMITTED",
     "APPROVED",
     "REJECTED",
     "NEEDS_CLARIFICATION",
@@ -413,6 +415,7 @@ VALID_STATES = (
 )
 
 TERMINAL_STATES = (
+    "NOT_ADMITTED",
     "APPROVED",
     "REJECTED",
     "NEEDS_CLARIFICATION",
@@ -425,6 +428,7 @@ DECIDABLE = (
 )
 
 STATUS_EVENT_TYPES = {
+    "NOT_ADMITTED": "APPROVAL_NOT_ADMITTED",
     "APPROVED": "APPROVAL_APPROVED",
     "REJECTED": "APPROVAL_REJECTED",
     "NEEDS_CLARIFICATION": "APPROVAL_NEEDS_CLARIFICATION",
@@ -1904,7 +1908,7 @@ def terminal_event_actor(item):
         "status"
     )
 
-    if status == "EXPIRED":
+    if status in ("EXPIRED", "NOT_ADMITTED"):
         return "BROKER"
 
     if status == "CANCELLED":
@@ -1991,6 +1995,14 @@ def terminal_event_data(item):
                         "",
                     ),
                 ),
+            }
+        )
+
+    elif status == "NOT_ADMITTED":
+        payload.update(
+            {
+                "not_admitted_at": item.get("not_admitted_at", ""),
+                "notification_diagnostic": item.get("notification_diagnostic", {}),
             }
         )
 
@@ -2187,18 +2199,32 @@ def journal_controller_event(
     )
 
 
-def controller_length_failure(exc):
-    """Reconstruit uniquement le diagnostic de longueur connu, sans texte distant."""
-    if exc.code != 400:
-        return None
+CONTROLLER_NOTIFICATION_ERROR_CODES = {
+    400: frozenset(("expected-revisions-invalid", "command-too-long")),
+    409: frozenset((
+        "resource-revision-stale", "reservation-version-stale",
+        "operation-outside-reservation", "validation-reservation-divergent",
+        "run-mandate-already-active", "coordination-upgrade-required",
+        "native-validation-not-correlated", "native-permission-ask-required",
+        "native-permission-context-divergent", "native-permission-control-unavailable",
+        "validation-session-not-admitted", "run-not-reserved", "run-transition-in-flight",
+    )),
+}
+
+
+def controller_error_payload(exc):
+    """Lit un diagnostic JSON borné, sans propager de texte distant."""
     try:
         body = exc.read(1025)
         if len(body) > 1024:
             return None
-        payload = json.loads(body.decode("utf-8"))
+        return json.loads(body.decode("utf-8"))
     except (OSError, HTTPException, ValueError, UnicodeError):
         return None
-    if not isinstance(payload, dict):
+
+
+def controller_length_diagnostic(status, payload):
+    if status != 400 or not isinstance(payload, dict):
         return None
     maximum = payload.get("maxLength")
     actual = payload.get("actualLength")
@@ -2208,6 +2234,44 @@ def controller_length_failure(exc):
         return None
     return ("command-too-long: longueur %d, limite autorisée %d (utf16)."
             % (actual, maximum))
+
+
+def controller_length_failure(exc):
+    """Compatibilité du diagnostic de longueur déjà publié."""
+    return controller_length_diagnostic(exc.code, controller_error_payload(exc))
+
+
+def filtered_notification_diagnostic(value):
+    if not isinstance(value, dict) or set(value) != {"http_status", "error_code"}:
+        return None
+    status, code = value["http_status"], value["error_code"]
+    if type(status) is not int or not 100 <= status <= 599:
+        return None
+    if code is not None and (not isinstance(code, str)
+            or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())):
+        return None
+    return {"http_status": status, "error_code": code}
+
+
+def pre_admission_refusal(item):
+    if item.get("status") != "PENDING" or item.get("notification_status") != "FAILED":
+        return None
+    diagnostic = filtered_notification_diagnostic(item.get("notification_diagnostic"))
+    return diagnostic if diagnostic is not None and diagnostic.get("error_code") is not None else None
+
+
+def mark_not_admitted(item):
+    """Close only a deterministically refused controller notification, never as a decision."""
+    if pre_admission_refusal(item) is None:
+        return False
+    now = utc_now()
+    item["status"] = "NOT_ADMITTED"
+    item["not_admitted_at"] = now
+    item["updated_at"] = now
+    item["notification_next_retry_at"] = ""
+    item["notification_lease_id"] = ""
+    item["notification_lease_until"] = ""
+    return True
 
 
 def notify_controller(
@@ -2257,6 +2321,7 @@ def notify_controller(
     delivered = False
     status = None
     failure = ""
+    diagnostic = None
 
     try:
         with request.urlopen(
@@ -2279,7 +2344,14 @@ def notify_controller(
     except error.HTTPError as exc:
         status = exc.code
         with exc:
-            failure = controller_length_failure(exc) or "HTTPError: %s" % status
+            payload = controller_error_payload(exc)
+            length_failure = controller_length_diagnostic(status, payload)
+            code = payload.get("error") if isinstance(payload, dict) else None
+            if (not isinstance(code, str) or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())
+                    or (code == "command-too-long" and not length_failure)):
+                code = None
+            diagnostic = filtered_notification_diagnostic({"http_status": status, "error_code": code})
+            failure = length_failure or "HTTPError: %s" % status
 
     except error.URLError as exc:
         failure = (
@@ -2320,6 +2392,9 @@ def notify_controller(
             "error": failure,
         }
 
+    if diagnostic is not None:
+        event_data["diagnostic"] = diagnostic
+
     journal_controller_event(
         item,
         event_type,
@@ -2335,6 +2410,7 @@ def notify_controller(
         "delivered": delivered,
         "http_status": status,
         "error": failure,
+        "diagnostic": diagnostic,
     }
 
 
@@ -2821,6 +2897,9 @@ def validate_controller_decision(
     ):
         return False
 
+    if item.get("tool_input_sha256") != decision.get("tool_input_sha256"):
+        return False
+
     if item.get("run_id") and (decision.get("run_id") != item["run_id"] or
             decision.get("reservation_version") != item.get("reservation_version")):
         return False
@@ -2935,6 +3014,9 @@ def notification_retry_due(item):
     ) == "DELIVERED":
         return False
 
+    if pre_admission_refusal(item) is not None:
+        return False
+
     if notification_lease_active(
         item
     ):
@@ -2980,7 +3062,8 @@ def acquire_notification_lease(
             item
         )
 
-        if expired:
+        not_admitted = False if expired else mark_not_admitted(item)
+        if expired or not_admitted:
             save_store(
                 path,
                 data,
@@ -3044,6 +3127,7 @@ def complete_notification_lease(
     approval_id,
     lease_id,
     delivered,
+    diagnostic=None,
 ):
     path = store_path()
 
@@ -3126,10 +3210,20 @@ def complete_notification_lease(
                 )
             )
 
+        safe_diagnostic = filtered_notification_diagnostic(diagnostic)
+        if not delivered and safe_diagnostic is not None:
+            item["notification_diagnostic"] = safe_diagnostic
+        else:
+            item.pop("notification_diagnostic", None)
+
+        not_admitted = mark_not_admitted(item)
+
         save_store(
             path,
             data,
         )
+        if not_admitted:
+            repair_journal_for_item(item)
 
 
 def maybe_notify_controller(item):
@@ -3167,6 +3261,7 @@ def maybe_notify_controller(item):
             "lease_id"
         ],
         delivered,
+        notification_result.get("diagnostic"),
     )
 
     return delivered
@@ -3493,7 +3588,10 @@ def validate_existing_approval(
     directory,
     commands,
     run_identity=None,
+    tool_input_sha256=None,
 ):
+    if item.get("tool_input_sha256") != tool_input_sha256:
+        return False
     if bool(item.get("run_id")) != bool(run_identity):
         return False
     if run_identity and any(item.get(k) != v for k, v in run_identity.items()):
@@ -3580,6 +3678,14 @@ def do_propose(args):
         "directory",
         500,
     )
+
+    tool_input_sha256 = args.get("tool_input_sha256")
+    if "tool_input_sha256" in args and (
+        not isinstance(tool_input_sha256, str)
+        or not re.fullmatch(r"[a-f0-9]{64}", tool_input_sha256)
+        or len(files) != 1 or commands or not session_id or not directory
+    ):
+        raise ValidationError("tool_input_sha256 exige un mandat fichier natif et une empreinte SHA256")
 
     run_id = optional_str(args, "run_id", 100)
     run_identity = {}
@@ -3756,6 +3862,7 @@ def do_propose(args):
                 directory,
                 commands,
                 run_identity,
+                tool_input_sha256,
             ):
                 raise ValidationError(
                     "retry incompatible avec "
@@ -3816,6 +3923,7 @@ def do_propose(args):
 
             item = {
                 **run_identity,
+                **({"tool_input_sha256": tool_input_sha256} if tool_input_sha256 is not None else {}),
                 "approval_id": approval_id,
                 "requestId": request_id,
                 "legacy_requestIds": [],
@@ -3932,7 +4040,8 @@ def do_get(args):
             item
         )
 
-        if expired:
+        not_admitted = False if expired else mark_not_admitted(item)
+        if expired or not_admitted:
             save_store(
                 path,
                 data,
@@ -4130,7 +4239,7 @@ def do_request_validation(
     ) = validate_wait_parameters(
         args,
         DEFAULT_REQUEST_TIMEOUT_SECONDS,
-        allow_no_timeout=True,
+        allow_no_timeout=False,
     )
 
     item = do_propose(
@@ -4206,9 +4315,9 @@ def do_list(args):
         for item in data[
             "approvals"
         ].values():
-            if check_expired(
-                item
-            ):
+            expired = check_expired(item)
+            not_admitted = False if expired else mark_not_admitted(item)
+            if expired or not_admitted:
                 changed = True
 
         #
@@ -4729,6 +4838,7 @@ def store_journal_consistency_snapshot():
         ).append(event)
 
     terminal_by_event = {
+        "APPROVAL_NOT_ADMITTED": "NOT_ADMITTED",
         "APPROVAL_APPROVED": "APPROVED",
         "APPROVAL_REJECTED": "REJECTED",
         "APPROVAL_NEEDS_CLARIFICATION": "NEEDS_CLARIFICATION",
@@ -7817,6 +7927,7 @@ def do_health():
             "integrity": journal_integrity,
             "business_events": [
                 "APPROVAL_CREATED",
+                "APPROVAL_NOT_ADMITTED",
                 "APPROVAL_APPROVED",
                 "APPROVAL_REJECTED",
                 "APPROVAL_NEEDS_CLARIFICATION",
@@ -8237,6 +8348,9 @@ def reconcile_pending_approvals():
 
                     changed = True
 
+                if mark_not_admitted(item):
+                    changed = True
+
             #
             # Persistance avant toute reparation du journal.
             #
@@ -8394,6 +8508,8 @@ def start_background_reconciliation():
 
 
 APPROVAL_REQUEST_PROPERTIES = {
+    "tool_input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$",
+        "description": "Empreinte canonique SHA256 des arguments natifs write/edit exacts approuves ; verifiee avant once."},
     "run_id": {"type": "string"},
     "reservation_version": {"type": "integer", "minimum": 1},
     "coordination_protocol": {"const": "resource-scoped-v1"},
@@ -8401,7 +8517,9 @@ APPROVAL_REQUEST_PROPERTIES = {
     "operation_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "expected_revisions": {"type": "object", "maxProperties": 256,
         "additionalProperties": {"type": "integer", "minimum": 0}},
-    "access_id": {"type": "string", "maxLength": 100},
+    "access_id": {"type": "string", "minLength": 1, "maxLength": 100,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+        "description": "Identifiant optionnel d un acces existant ; omettre la cle si absent, jamais une chaine vide."},
     "resources": {"type": "array", "items": {"type": "object",
         "properties": {"key": {"type": "string"}, "mode": {"enum": ["read", "write"]}},
         "required": ["key", "mode"], "additionalProperties": False}},
@@ -8457,9 +8575,15 @@ TOOLS = [
                 **APPROVAL_REQUEST_PROPERTIES,
                 "timeout_seconds": {
                     "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "default": DEFAULT_REQUEST_TIMEOUT_SECONDS,
                 },
                 "interval_seconds": {
                     "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60,
+                    "default": DEFAULT_POLL_INTERVAL_SECONDS,
                 },
             },
             "required": [

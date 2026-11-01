@@ -1,0 +1,5 @@
+# Conception
+
+Le client normalise une erreur directe seulement pour request_validation et get_approval nommés exactement. La partie assistant tool doit porter executed=false, status=error, un objet error de type tool.execution, un itemId natif fc_ lié exactement au suffixe du call_ et des temps created/ran/completed entiers positifs ordonnés. Le marqueur interne et l’empreinte de la partie native complète sont dérivés ; les marqueurs libres entrants sont supprimés. La voie Code Mode reste inchangée.
+
+Le retry utilise cette provenance comme alternative à celle de Code Mode, sans retirer aucun contrôle d’identité, génération, cible /usr/bin/true, refus déterministe access_id vide, lookup inconnu corrélé, absence d’enregistrement ou absence d’effet. Une provenance seule ne prouve aucun refus ni effet. Les cas inconnus restent bloquants. Les tests isolés reproduisent les parties directes historiques avec identifiants synthétiques et toutes les mutations négatives utiles ; la qualification réelle C10 reste une étape distincte après activation coordonnée.

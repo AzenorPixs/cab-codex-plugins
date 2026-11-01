@@ -1,5 +1,6 @@
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
+import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -162,14 +163,16 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
     recoveryId: "recovery-1", preflightRequestId: "preflight-1" };
   const approval = (requestId, sessionId = "ses_new", command = "/usr/bin/true") => ({
     requestId, approval_id: `approval-${requestId}`, change_id: "change-recovery", session_id: sessionId,
-    directory, files: [], commands: [command], summary: "fixture synthétique" });
+    directory, files: [], commands: [command], timeout_seconds: 120, interval_seconds: 3,
+    summary: "fixture synthétique" });
   async function validate(a) { return post("/validation/request", { approval: a }); }
   async function approve(id) { return post(`/decision/${id}`, { decision: "approved" }); }
   async function preflight(alreadyApproved = false) {
     const repliesBefore = native.replies.length;
     const a = approval(recovery.preflightRequestId);
     if (!alreadyApproved) {
-      assert.equal((await validate(a)).status, 202);
+      const preflightValidation = await validate(a);
+      assert.equal(preflightValidation.status, 202, JSON.stringify(preflightValidation.body));
       assert.equal((await approve(a.requestId)).status, 201);
     }
     native.permissions = [{ id: "permission-preflight", sessionID: "ses_new", permission: "bash",
@@ -186,12 +189,14 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
   }
   const httpStatus = async (path) => (await fetch(base + path)).status;
   return { native, get, post, recovery, contract, approval, validate, approve, preflight, start, stop, httpStatus,
+    nativeBase: 'http://127.0.0.1:' + opencode.address().port, directory,
     releaseDecision: () => writeFileSync(decisionRelease, "release\n") };
 }
 
 test("refuse les règles natives non prouvées avant admission et prépare seulement sous ask", async (context) => {
   const h = await setup(context);
-  const safe = [{ permission: "bash", pattern: "*", action: "ask" }];
+  const safe = [{ permission: "bash", pattern: "*", action: "ask" },
+    { permission: "edit", pattern: "*", action: "ask" }];
   for (const rules of [undefined, null, [], {}, [null],
     [{ permission: "bash", pattern: "*", action: "allow" }],
     [{ permission: "bash", pattern: "*", action: "deny" }],
@@ -204,8 +209,9 @@ test("refuse les règles natives non prouvées avant admission et prépare seule
   ]) {
     h.native.sessionPermission = rules;
     const a = h.approval("unsafe", "ses_old");
-    assert.ok(["native-permission-ask-required", "native-permission-control-unavailable"]
-      .includes((await h.validate(a)).body.error));
+    const refusedValidation = await h.validate(a);
+    assert.ok(["native-permission-ask-required", "native-permission-control-unavailable", "validation-session-not-admitted"]
+      .includes(refusedValidation.body?.error), JSON.stringify({ rules, refusedValidation }));
     assert.equal((await h.approve(a.requestId)).status, 400);
     assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 404);
     assert.ok(["preflight-native-ask-required", "opencode-session-invalid"]
@@ -237,7 +243,8 @@ test("la réactivation permissive refuse le prévol puis ask permet une décisio
   // État natif produit par tools.bash=true ; noReply permet de corriger avant génération.
   h.native.sessionPermission = [{ permission: "bash", pattern: "*", action: "allow" }];
   const a = h.approval(h.recovery.preflightRequestId);
-  assert.equal((await h.validate(a)).body.error, "native-permission-ask-required");
+  const denied = await h.validate(a);
+  assert.equal(denied.body.error, "native-permission-ask-required", JSON.stringify(denied));
   assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 404);
   h.native.sessionPermission = [{ permission: "*", pattern: "*", action: "ask" }];
   await h.preflight();
@@ -459,6 +466,7 @@ test("un refus explicite pour délai prescrit omis ne consomme aucune permission
   const h = await setup(context);
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
   const submitted = { ...h.approval(h.recovery.preflightRequestId), interval_seconds: 3 };
+  delete submitted.timeout_seconds;
   assert.equal(Object.hasOwn(submitted, "timeout_seconds"), false);
   assert.equal((await h.validate(submitted)).status, 202);
   const reason = "CGPT refuse timeout_seconds prescrit omis, aucun effet autorisé";
@@ -634,6 +642,84 @@ test("retry refuse chaque identité ou opération de polling divergente sans mut
   }
   h.native.messages = good;
   assert.equal((await h.post("/job/recover", retryPayload(h))).status, 200);
+});
+
+test('reconcile-rejected Code Mode conserve découverte, interruption et rejet natif', async t => {
+  const h=await setup(t);await h.post('/job/recover',{...h.recovery,phase:'prepare'});
+  const a=h.approval(h.recovery.preflightRequestId);
+  const raw=(name,input,status,output,index)=>({type:'tool',id:'native_'+index,name:'execute',executed:false,
+    time:{created:index*2,ran:index*2,completed:index*2+1},state:{status,
+      input:{code:`return await tools["cgpt-validation"].${name}(${JSON.stringify(input)});`},
+      content:output?[{type:'text',text:JSON.stringify(output)}]:[],
+      ...(status==='error'?{error:{type:'ToolError',message:'Tool execution interrupted'}}:{}),
+      metadata:{toolCalls:[{tool:'cgpt-validation.'+name,status,input}],truncated:false}}});
+  const parts=[raw('request_validation',a,'completed',{...a,status:'PENDING'},1),
+    raw('poll_approval',{approval_id:a.approval_id},'error',null,2),
+    raw('reject',{approval_id:a.approval_id,reviewer:'CGPT'},'completed',{...a,status:'REJECTED'},3)];
+  h.native.messages=[{nativeV2:{id:'msg_codemode',type:'assistant',content:parts}}];
+  const client=createOpenCodeV2Client({baseUrl:h.nativeBase,directory:h.directory,
+    passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE});
+  const normalized=(await client.messages('ses_new')).flatMap(m=>m.parts);
+  const sort=v=>Array.isArray(v)?v.map(sort):v&&typeof v==='object'?Object.fromEntries(Object.keys(v).sort().map(k=>[k,sort(v[k])])):v;
+  const payload={...retryPayload(h),phase:'reconcile-rejected',developerAuthorization:'human fixture',
+    rejectedPreflightProof:{nativeToolCount:normalized.length,nativeToolHash:createHash('sha256').update(JSON.stringify(sort(normalized))).digest('hex')}};
+  const result=await h.post('/job/recover',payload);assert.equal(result.status,200,JSON.stringify(result.body));
+  assert.deepEqual(h.native.replies,[]);h.recovery.preflightRequestId='preflight-2';
+  await h.preflight();assert.equal((await h.post('/job/recover',{...h.recovery,phase:'complete'})).status,200);
+});
+
+test('reconcile-rejected scelle un rejet après redémarrage sans restaurer de décision', async (context) => {
+  const h = await setup(context);
+  await h.post('/job/recover', { ...h.recovery, phase: 'prepare' });
+  const a = await refusedPreflight(h);
+  h.native.messages.unshift({ parts: [{ type: 'tool', tool: 'cgpt-validation_request_validation',
+    state: { status: 'error', input: a, error: 'MCP error -32602: mandat invalide' } }] });
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'resource-scoped-v1', pending_count: 0 });
+  assert.equal((await h.post('/job/recover', retryPayload(h))).status, 409);
+  const parts = h.native.messages.flatMap(m => m.parts);
+  const payload = { ...retryPayload(h), phase: 'reconcile-rejected', developerAuthorization: 'accord test',
+    rejectedPreflightProof: { nativeToolCount: parts.length, nativeToolHash: canonicalProofHash(parts) } };
+  const result = await h.post('/job/recover', payload);
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.equal(result.body.recovery.attempts.at(-1).outcome, 'REJECTED_WITHOUT_EFFECT');
+  assert.deepEqual(h.native.replies, []);
+  assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 404);
+  await h.stop(); await h.start();
+  assert.deepEqual((await h.get('/job')).recovery, result.body.recovery);
+  await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'resource-scoped-v1', pending_count: 0 });
+  h.recovery.preflightRequestId = 'preflight-2';
+  await h.preflight();
+  const completed = await h.post('/job/recover', { ...h.recovery, phase: 'complete' });
+  assert.equal(completed.status, 200, JSON.stringify(completed.body));
+  assert.equal(h.native.replies.length, 1);
+  assert.equal(h.native.replies[0].body.response, 'once');
+});
+
+test('reconcile-rejected refuse autorité, empreinte, approbation et outil divergents', async (context) => {
+  const h = await setup(context);
+  await h.post('/job/recover', { ...h.recovery, phase: 'prepare' });
+  await refusedPreflight(h);
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'resource-scoped-v1', pending_count: 0 });
+  const good = structuredClone(h.native.messages), before = await h.get('/job');
+  for (const variant of ['authority', 'hash', 'approved', 'tool', 'identity']) {
+    h.native.messages = structuredClone(good);
+    if (variant === 'approved') {
+      const part = h.native.messages[0].parts[0];
+      part.state.output = JSON.stringify({ ...JSON.parse(part.state.output), status: 'APPROVED' });
+    }
+    if (variant === 'tool') h.native.messages[0].parts.push({ type: 'tool', tool: 'bash', state: { status: 'completed' } });
+    if (variant === 'identity') h.native.messages[0].parts[0].state.input.session_id = 'ses_foreign';
+    const parts = h.native.messages.flatMap(m => m.parts);
+    const payload = { ...retryPayload(h), phase: 'reconcile-rejected',
+      developerAuthorization: variant === 'authority' ? '' : 'accord test',
+      rejectedPreflightProof: { nativeToolCount: parts.length,
+        nativeToolHash: variant === 'hash' ? '0'.repeat(64) : canonicalProofHash(parts) } };
+    assert.equal((await h.post('/job/recover', payload)).status, 409, variant);
+    assert.deepEqual((await h.get('/job')).recovery, before.recovery);
+    assert.deepEqual(h.native.replies, []);
+  }
 });
 
 test("retry refuse un refus de polling sans décision locale restaurée", async (context) => {

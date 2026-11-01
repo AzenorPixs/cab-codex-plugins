@@ -2,6 +2,7 @@ const fixturePassword = 'synthetic-v2-test-password';
 const fixtureAuthorization = `Basic ${Buffer.from(`opencode:${fixturePassword}`).toString('base64')}`;
 
 function v2Message(message) {
+  if (message?.nativeV2) return structuredClone(message.nativeV2);
   const info = message?.info || {};
   const role = info.role || (Array.isArray(message?.parts) && message.parts.length ? 'assistant' : 'system');
   const id = info.id || 'msg_fixture';
@@ -16,7 +17,7 @@ function v2Message(message) {
     ...(model ? { model } : {}), finish: info.finish || 'stop', ...(info.error ? { error: info.error } : {}),
     metadata: { parentID: info.parentID },
     content: (message.parts || []).map((part) => part.type === 'tool' ? ({ type: 'tool', id: part.callID || 'call_fixture',
-      name: part.tool, executed: true, time: { created: part.state?.time?.start || 1,
+      name: part.tool, executed: part.executed ?? true, time: { created: part.state?.time?.start || 1,
         ...(Number.isFinite(part.state?.time?.start) ? { ran: part.state.time.start } : {}),
         ...(Number.isFinite(part.state?.time?.end) ? { completed: part.state.time.end } : {}) },
       state: { status: part.state?.status, input: part.state?.input || {},
@@ -116,7 +117,7 @@ function transform(path, method, payload, directory) {
 }
 
 export function openCodeV2TestHandler(handler, { directory, locationDirectory = () => directory, onModelSwitch,
-  allowNonApi = false, allowLegacyTestCalls = false } = {}) {
+  allowNonApi = false, allowLegacyTestCalls = false, sourceFiles = {}, sourceEntries = [], onFsRequest } = {}) {
   return async (request, response) => {
     const incoming = new URL(request.url, 'http://localhost');
     const path = incoming.pathname;
@@ -131,7 +132,7 @@ export function openCodeV2TestHandler(handler, { directory, locationDirectory = 
     }
     if (path === '/api/info') {
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ version: '2.2.0', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }));
+      response.end(JSON.stringify({ version: '2.2.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }));
       return;
     }
     if (path === '/api/location') {
@@ -139,6 +140,32 @@ export function openCodeV2TestHandler(handler, { directory, locationDirectory = 
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(transform(path, request.method, null, targetDirectory)));
       return;
+    }
+    if (path.startsWith('/api/fs/read/')) {
+      onFsRequest?.(path, incoming);
+      if (incoming.searchParams.get('location[directory]') !== directory ||
+          request.headers['x-opencode-directory'] !== directory) {
+        response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'fixture-location-divergent' })); return;
+      }
+      const relative = path.slice('/api/fs/read/'.length).split('/').map(decodeURIComponent).join('/');
+      if (!Object.hasOwn(sourceFiles, relative)) {
+        response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'file-not-found' })); return;
+      }
+      response.writeHead(200, { 'content-type': 'application/octet-stream' });
+      response.end(Buffer.from(sourceFiles[relative], 'utf8')); return;
+    }
+    if (path === '/api/fs/list' || path === '/api/fs/find') {
+      onFsRequest?.(path, incoming);
+      if (incoming.searchParams.get('location[directory]') !== directory ||
+          request.headers['x-opencode-directory'] !== directory) {
+        response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'fixture-location-divergent' })); return;
+      }
+      const requestedPath = incoming.searchParams.get('path') || '';
+      const query = incoming.searchParams.get('query') || '';
+      const entries = sourceEntries.filter(entry => path === '/api/fs/find'
+        ? entry.path.includes(query) : (!requestedPath || entry.path.startsWith(requestedPath.replace(/\/$/, '') + '/')));
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ location: { directory }, data: entries })); return;
     }
     if (/^\/api\/session\/[^/]+\/model$/.test(path)) {
       const chunks = [];

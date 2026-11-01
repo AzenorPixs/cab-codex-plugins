@@ -8,7 +8,7 @@ import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { createObservationJournal } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
 import { monitorConfiguration, parseTasks, parseChangeTitle, readChanges, MonitorState, fetchJson, normalizeRuns, operationalState } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs';
 import { nextLifecycle } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs';
-import { createMonitorServer } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
+import { createMonitorServer, VERSION as monitorVersion } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
 
 const config = () => monitorConfiguration({ OC_Codex_WORKSPACE: process.cwd(), OC_Codex_MONITOR_STATE_DIR: join(tmpdir(), 'catalogs') });
 async function fixture(t) {
@@ -49,13 +49,18 @@ test('tâches : total dynamique, clôture indépendante, fences et code ignorés
 });
 
 test('codes de lot : premier titre explicite hors code, formats et absences', () => {
-  for (const code of ['PA01', 'PA02', 'C08', 'O26', 'B02']) {
+  for (const code of ['PA01', 'PA02', 'C08', 'O26', 'B02', 'L1', 'L2', 'L01', 'L10']) {
     for (const separator of ['—', '–', '-', ':']) {
       assert.equal(parseChangeTitle('# ' + code + ' ' + separator + ' Intitulé').lotCode, code);
     }
     assert.equal(parseChangeTitle('# ' + code).lotCode, code);
   }
   for (const source of ['# Sans code PA01', '# PA1 — Court', '# pa01 — Minuscules',
+    '# L0 — Inconnu', '# L3 — Inconnu', '# L9 — Inconnu', '# l1 — Minuscules',
+    '# L1suffixe — Invalide', '# L2 texte sans séparateur', '# L1 —',
+    '# ABCDEFGHIJK01 — Trop de lettres', '# A00001 — Trop de chiffres',
+    '# Sans code\n# L1 — Second titre', '```md\n# L2 — Exemple\n```\n# Sans code',
+    '~~~\n# L1 — Exemple\n~~~', '    # L2 — Code indenté',
     '# PA01 texte sans séparateur', 'PA01 — Sans titre', '## PA01 — Sous-titre',
     '    # PA01 — Code indenté', '# Sans code\n# PA01 — Second titre',
     '```md\n# PA01 — Exemple\n```\n# Sans code', '~~~\n# C08 — Exemple\n~~~']) {
@@ -63,6 +68,27 @@ test('codes de lot : premier titre explicite hors code, formats et absences', ()
   }
   assert.deepEqual(parseChangeTitle('```md\n# PA02 — Exemple\n```\n# B02 — Import ###'),
     { title: 'B02 — Import', lotCode: 'B02' });
+});
+
+test('codes historiques : L1 actif et L2 archivé référencé restent inchangés', async (t) => {
+  const root = await fixture(t);
+  const active = join(root, 'openspec', 'changes', 'change-a');
+  const archived = join(root, 'openspec', 'changes', 'archive', '2026-10-25-historical-change');
+  await mkdir(archived, { recursive: true });
+  await writeFile(join(active, 'proposal.md'), '# L1 — Admission');
+  await writeFile(join(archived, 'proposal.md'), '# L2 — Maintenance');
+  await writeFile(join(archived, 'tasks.md'), '- [x] Qualification\n');
+  const result = await readChanges(root, ['historical-change']);
+  const first = result.changes.find((change) => change.changeId === 'change-a');
+  const second = result.changes.find((change) => change.changeId === 'historical-change');
+  assert.equal(first.lotCode, 'L1');
+  assert.equal(first.title, 'L1 — Admission');
+  assert.equal(first.location, 'active');
+  assert.equal(first.progress.total, 2);
+  assert.equal(second.lotCode, 'L2');
+  assert.equal(second.title, 'L2 — Maintenance');
+  assert.equal(second.location, 'archived');
+  assert.equal(second.progress.completed, 1);
 });
 
 test('changes : lecture locale, archive référencée et liens refusés', async (t) => {
@@ -110,7 +136,7 @@ test('collecte : limite effective, RUN isolés, aucune décision ou mutation et 
       runs: { a: { job: { changeId: 'change-a', sessionId: 'ses_a', armed: true }, terminalGate: { status: 'OPEN' },
         coordination: { reason: 'resource-conflict', blockers: [{ runId: 'b' }] } },
       b: { job: { changeId: 'change-b', sessionId: 'ses_b', armed: true }, terminalGate: { status: 'OPEN' } } } });
-    if (request.url === '/runs') return json(response, { runs: [{ runId: 'a', state: 'RESERVED' }, { runId: 'b', state: 'RESERVED' }], privateToken: 'PRIVATE-SENTINEL' });
+    if (request.url === '/monitor/runs') return json(response, { runs: [{ runId: 'a', state: 'RESERVED' }, { runId: 'b', state: 'RESERVED' }], privateToken: 'PRIVATE-SENTINEL' });
     if (request.url === '/monitor/events') return json(response, journal.snapshot());
     if (request.url.startsWith('/api/info')) return json(response, { version: '2.2.0', pid: 42,
       hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } });
@@ -153,10 +179,10 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.1.3', mode: 'concurrent', brokerReadiness: { server_version: '2.1.3' },
+    else if (target.pathname === '/status') value = { version: '2.1.47', mode: 'concurrent', brokerReadiness: { server_version: '2.1.47' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
-    else if (target.pathname === '/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
+    else if (target.pathname === '/monitor/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
     else if (target.pathname === '/monitor/events') value = createObservationJournal().snapshot();
     else value = {};
     return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
@@ -164,7 +190,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.1.3', supervisor: '1.4.0', broker: '2.1.3', opencode: '2.2.0', monitor: '2.1.3' });
+  assert.deepEqual(result.componentVersions, { controller: '2.1.47', supervisor: '1.4.0', broker: '2.1.47', opencode: '2.2.0', monitor: '2.1.47' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -215,7 +241,21 @@ test('collectes non chevauchantes et réponses amont bornées', async () => {
   await assert.rejects(fetchJson('http://127.0.0.1/', 1000, async () => new Response(' '.repeat(2 * 1024 * 1024 + 1))), /source-too-large/);
 });
 
-test('serveur indépendant : page, CSP, SSE initial et méthodes de mutation refusées', async (t) => {
+test('bootstrap identité minimale : version/workspace seulement, sans données RUN', async (t) => {
+  const workspace = await fixture(t);
+  const upstream = await listen(t, (_request, response) => { response.writeHead(503).end(); });
+  const monitor = await createMonitorServer({ ...config(), workspace, port: 0, controllerUrl: upstream, supervisorUrl: upstream, opencodeUrl: upstream });
+  const address = await monitor.start(); t.after(() => monitor.close());
+  const base = 'http://127.0.0.1:' + address.port;
+  const response = await fetch(base + '/api/identity'); assert.equal(response.status, 200);
+  const identity = await response.json();
+  assert.deepEqual(identity, { version: monitorVersion, identity: { workspace } });
+  assert.equal((await fetch(base + '/api/identity?fields=runs')).status, 400);
+  assert.equal((await fetch(base + '/api/identity', { method: 'POST' })).status, 405);
+  assert.equal((await fetch(base + '/api/identity', { headers: { origin: 'http://foreign.invalid' } })).status, 403);
+});
+
+test('serveur indépendant : page, snapshot multi-RUN, CSP, SSE initial et mutations refusées', async (t) => {
   const workspace = await fixture(t);
   const upstream = await listen(t, (request, response) => { response.writeHead(503).end(); });
   const monitor = await createMonitorServer({ ...config(), workspace, port: 0, controllerUrl: upstream, supervisorUrl: upstream, opencodeUrl: upstream });
@@ -224,6 +264,8 @@ test('serveur indépendant : page, CSP, SSE initial et méthodes de mutation ref
   const page = await fetch(base); assert.equal(page.status, 200); assert.match(await page.text(), /CAB Monitor/);
   assert.match(page.headers.get('content-security-policy'), /default-src 'none'/);
   for (const path of ['/app.mjs', '/style.css', '/api/snapshot']) assert.equal((await fetch(base + path)).status, 200);
+  const snapshot = await (await fetch(base + '/api/snapshot')).json();
+  assert.ok(Array.isArray(snapshot.runs)); assert.ok(Array.isArray(snapshot.changes.changes));
   assert.equal((await fetch(base + '/api/snapshot', { method: 'POST' })).status, 405);
   assert.equal((await fetch(base + '/api/snapshot', { headers: { origin: 'http://foreign.invalid' } })).status, 403);
   assert.equal((await fetch(base + '/../../project.env')).status, 404);
@@ -265,4 +307,16 @@ test('relais STATS : routes fixes, origine obligatoire, corps borné et panne', 
   assert.equal((await fetch(base + '/api/statistics/retention/arbitrary', { method: 'POST', headers })).status, 404);
   failed = true;
   assert.equal((await fetch(base + '/api/statistics?selection=7d')).status, 503);
+});
+
+
+test('registre compact : collecte indépendante de l’historique complet et refus détaillés bornés',async t=>{
+ const workspace=await fixture(t);let fullReads=0;const base=await listen(t,(req,res)=>{if(req.url==='/runs'){fullReads++;return json(res,{history:'x'.repeat(3*1024*1024),runs:[]})}if(req.url==='/monitor/runs')return json(res,{snapshot_only:true,totalRuns:1,truncated:false,runs:[{runId:'a',changeId:'change-a',sessionId:'ses_a',state:'RESERVED',version:1}]});res.writeHead(503).end()});
+ const state=new MonitorState({...config(),workspace,controllerUrl:base,supervisorUrl:base,opencodeUrl:base});await state.collect();assert.equal(fullReads,0);assert.equal(state.snapshot().sources.registry.available,true);assert.equal(state.snapshot().runs[0].runId,'a');
+ const old=state.sources.registry.value;
+ for(const [body,status,expected] of [['x'.repeat(2*1024*1024+1),200,'source-too-large'],['PRIVATE-BAD-JSON',200,'source-invalid'],['[]',200,'source-invalid'],['PRIVATE-HTTP',503,'source-http-error']]){
+  state.fetcher=async()=>new Response(body,{status});await state.source('registry',base+'/monitor/runs');assert.equal(state.snapshot().sources.registry.error,expected);assert.equal(state.snapshot().sources.registry.stale,true);assert.deepEqual(state.sources.registry.value,old);assert.ok(!JSON.stringify(state.snapshot()).includes('PRIVATE-'));
+ }
+ state.fetcher=async()=>{throw Object.assign(new Error('PRIVATE-TIMEOUT'),{name:'TimeoutError'})};await state.source('registry',base+'/monitor/runs');assert.equal(state.snapshot().sources.registry.error,'source-timeout');
+ state.fetcher=async()=>new Response('{"runs":[]}');await state.source('registry',base+'/monitor/runs');assert.equal(state.snapshot().sources.registry.available,true);assert.equal(state.snapshot().sources.registry.error,null);
 });

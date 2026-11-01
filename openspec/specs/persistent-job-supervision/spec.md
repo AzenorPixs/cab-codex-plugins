@@ -77,16 +77,11 @@ observée.
 
 ### Requirement: Relance technique corrélée à la session
 
-Après une pause de reprise configurable de 60 secondes par défaut, le superviseur SHALL
-vérifier la disponibilité d'OpenCode, le SSE, la readiness CAB et le gate terminal avant
-d'adresser un message structuré de reprise à la session enregistrée. Ce message SHALL
-demander l'examen du dernier état, du flux SSE et du protocole CAB, puis la poursuite du
-premier jalon non prouvé. Le message de reprise SHALL interdire toute réponse finale
-tant que le gate reste ouvert.
+Pour un job historique sans RUN, après le délai configurable de 60 secondes par défaut, le superviseur SHALL vérifier OpenCode, SSE, readiness CAB et gate avant un message corrélé demandant examen de l’état, du SSE et de CAB puis poursuite du premier jalon non prouvé. Ce message MUST NOT créer mandat ou permission et SHALL interdire une réponse finale tant que le gate reste ouvert.
 
 #### Scenario: Session inactive et reprise admissible
 
-- **WHEN** la session enregistrée est inactive, que le gate est ouvert et que
+- **WHEN** la session historique sans RUN enregistrée est inactive, que le gate est ouvert et que
   les contrôles techniques sont exploitables après la pause de reprise
 - **THEN** le superviseur envoie un unique message de reprise à cette session
   et mémorise sa tentative
@@ -413,3 +408,51 @@ Les anciens jobs sans lifecycle MUST rester lisibles avec étape inconnue. Un li
 #### Scenario: Redémarrage après retour en implémentation
 - **WHEN** le contrôleur redémarre après un passage REVIEW puis IMPLEMENTATION persisté
 - **THEN** il restaure Implémentation 6/11 et les deux passages dans leur ordre
+
+### Requirement: Interruption technique sans clôture métier
+La fermeture technique de CAB après disparition prouvée d’OpenCode MUST conserver les RUN, jobs, réservations, décisions, gates et gels existants. Elle MUST NOT purger, libérer de protection, synthétiser de décision ou de clôture métier, ni rejouer une permission consommée. La reprise MUST rester explicite et soumise à réconciliation ; les effets inconnus MUST rester protégés.
+
+#### Scenario: Plusieurs RUN dont une récupération gelée
+- **WHEN** le serveur commun disparaît avec des RUN réservés et un gel de récupération
+- **THEN** les composants se ferment et leurs états métier et protections restent conservés
+
+### Requirement: Attente de mandat destinée à l’orchestrateur
+
+Pour un RUN piloté sans mandat courant, le superviseur MUST publier une attente observable destinée à l’orchestrateur et MUST NOT envoyer de prompt générateur à OpenCode. Le job et le gate MUST être conservés. Un mandat courant, une récupération, une pause, un accès ou une permission non résolus MUST NOT être contournés par cette attente.
+
+#### Scenario: RUN sans mandat après récupération
+- **WHEN** la récupération est achevée et le RUN ne déclare aucun mandat courant
+- **THEN** le superviseur publie l’attente de l’orchestrateur sans prompt OpenCode, commande, décision ou fermeture du job
+
+#### Scenario: Analyse ou mandat déjà déclaré
+- **WHEN** le RUN déclare un mandat courant ou conserve un effet non résolu
+- **THEN** le superviseur conserve la garde correspondante et ne génère aucun travail supplémentaire
+
+### Requirement: Transition durable du modèle dans le même job
+CAB MUST proposer prepare, commit et cancel pour un choix de modèle sous PAUSE et frontière sûre. Il MUST conserver RUN, job, session, réservations, jalons, écritures connues et ancien choix ou absence historique. L’armement ordinaire MUST rester immuable. Les versions divergentes, demandes, permissions ou effets non réconciliés MUST empêcher la transition. L’historique MUST rester non secret et atomiquement persisté avec le choix adopté.
+
+#### Scenario: Job historique sans choix négocié
+- **WHEN** son propriétaire autorise une transition avec prévol qualifié
+- **THEN** le même job adopte le nouveau choix et conserve null comme ancien choix, sans historique inventé ni réarmement
+
+#### Scenario: Job durable réorienté
+- **WHEN** une transition explicite ou PLLM est qualifiée
+- **THEN** la session et le job restent identiques et l’ancien choix est conservé dans l’historique avant adoption du nouveau
+
+### Requirement: Reprise après interruption de transition
+Une transition en cours MUST bloquer la supervision et les nouveaux mandats métier. Avant effet natif, elle MUST persister sa phase. Après un effet incertain ou une persistance échouée, elle MUST rester non terminale et permettre une observation/réconciliation sans rejeu aveugle. Cancel MUST être refusé après possibilité d’effet. Aucune transition MUST lever automatiquement PAUSE ou rejouer une once.
+
+#### Scenario: Effet natif puis interruption
+- **WHEN** la session peut avoir changé de modèle avant confirmation durable
+- **THEN** la reprise relit le choix natif et conserve la frontière jusqu’à cohérence prouvée
+
+#### Scenario: Annulation préparée sans effet
+- **WHEN** le propriétaire annule avant toute mutation native
+- **THEN** CAB conserve le choix précédent et l’événement d’annulation sans réarmement
+
+### Requirement: Connexion fournisseur corrélée à la transition
+La préparation MUST conserver la référence opaque de la connexion native lorsqu’elle existe et l’identité serveur. Commit et réconciliation MUST vérifier que cette connexion n’a pas changé autour du prévol et de l’application. Aucune valeur secrète MUST être enregistrée. Une préparation sans effet MAY être annulée après divergence fournisseur sans prétendre restaurer le compte précédent.
+
+#### Scenario: Compte remplacé pendant préparation
+- **WHEN** la connexion opaque change avant commit
+- **THEN** le changement de modèle est refusé sans effet et la préparation peut être annulée sous frontière sûre

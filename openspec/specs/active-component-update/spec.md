@@ -158,14 +158,14 @@ un profil distinct et conserve sa preuve stricte.
   résultat du repli sont rapportés sans modifier les anciennes releases
 
 ### Requirement: Transition mixte bornée au rétablissement
-Le profil gelé MAY charger le contrôleur 1.10.5 avec broker, superviseur et Web 1.7.1 conservés, uniquement pour maintenance et récupération resource-scoped-v1 qualifiées. Il MUST publier séparément version du paquet, empreinte du contrôleur chargé et versions des processus préservés. Une autre version ou une capacité inconnue MUST refuser cette transition ; elle MUST NOT annoncer tout le runtime aligné en 1.10.5.
+Le profil gelé MAY charger le contrôleur 2.1.9 avec broker, superviseur et Web 1.7.1 conservés, uniquement pour maintenance et récupération resource-scoped-v1 qualifiées. Il MUST publier séparément version du paquet, empreinte du contrôleur chargé et versions des processus préservés. Une autre version ou une capacité inconnue MUST refuser cette transition ; elle MUST NOT annoncer tout le runtime aligné en 2.1.9.
 
 #### Scenario: Broker original conservé jusqu'au prévol
-- **WHEN** le contrôleur 1.10.5 réconcilie puis reprend le prévol via le broker 1.7.1 conservé
+- **WHEN** le contrôleur 2.1.9 réconcilie puis reprend le prévol via le broker 1.7.1 conservé
 - **THEN** les échanges MCP et la permission fraîche restent corrélés, le broker reste vivant et l'état mixte reste explicitement annoncé
 
 ### Requirement: Frontière avant reprise métier
-Le profil mixte MUST conserver les pairs sous PAUSE explicite et limiter la reprise ciblée au prévol. complete MUST NOT valoir autorisation de mandat métier dans ce profil. Le pilotage MUST attendre un alignement homogène 1.10.5 vérifié par maintenance ordinaire distinctement autorisée, puis une reprise explicite ; aucune reconnexion ou relance MUST découler du seul incrément de version.
+Le profil mixte MUST conserver les pairs sous PAUSE explicite et limiter la reprise ciblée au prévol. complete MUST NOT valoir autorisation de mandat métier dans ce profil. Le pilotage MUST attendre un alignement homogène 2.1.9 vérifié par maintenance ordinaire distinctement autorisée, puis une reprise explicite ; aucune reconnexion ou relance MUST découler du seul incrément de version.
 
 #### Scenario: Prévol réparé, processus encore mixtes
 - **WHEN** complete a réussi avec le broker original conservé
@@ -203,7 +203,7 @@ La politique ordinaire brokerPolicy=reuse-readonly MUST exiger une autorisation 
 Les trois fichiers broker MUST être réguliers, sans liens ou alias, sous le répertoire réel déclaré, avec propriétaire, groupe et empreintes autorisés et contenu identique au paquet cible. Une dérive MUST être refusée avant arrêt ou suspendre la récupération. La maintenance MUST NOT écrire, remplacer, compiler sur place, changer les droits ou restaurer ces fichiers.
 
 #### Scenario: Source déjà cible et processus ancien
-- **WHEN** les fichiers sont 1.10.5 mais le broker vivant est encore 1.7.1
+- **WHEN** les fichiers sont 2.1.9 mais le broker vivant est encore 1.7.1
 - **THEN** le bilan distingue ces versions et aucun fichier broker n'est remplacé pour provoquer son chargement
 
 ### Requirement: Intention durable et récupération conservatoire
@@ -243,7 +243,7 @@ La politique ordinaire reuse-readonly de CAB 1.10.5 MUST accepter une preuve exa
 - **THEN** la reprise utilise le même journal, conserve le gel jusqu'à réconciliation et ne restaure ni ancien processus ni état métier
 
 ### Requirement: Registre de maintenance borné à seize Mio
-L'updater ordinaire MUST lire intégralement jusqu'à 16 Mio le GET exact /runs et le fichier privé controller-runs.json. Les autres réponses HTTP MUST conserver 2 Mio et les autres fichiers 4 Mio. Il MUST compter les octets reçus avant de parser le JSON. Un dépassement MUST être refusé sans troncature, purge ou admission partielle. Les contrôles d'identité, génération, permissions, PAUSE et HELD MUST rester appliqués.
+L'updater ordinaire MUST lire intégralement jusqu'à 16 Mio les GET exacts /runs et /status et le fichier privé controller-runs.json. Les autres réponses HTTP MUST conserver 2 Mio et les autres fichiers 4 Mio. Il MUST compter les octets reçus avant de parser le JSON. Un dépassement MUST être refusé sans troncature, purge ou admission partielle. Les contrôles d'identité, génération, permissions, PAUSE et HELD MUST rester appliqués.
 
 #### Scenario: Registre valide au-delà des anciennes limites
 - **WHEN** le snapshot dépasse 2 Mio et le fichier privé dépasse 4 Mio, chacun sous 16 Mio
@@ -254,8 +254,16 @@ L'updater ordinaire MUST lire intégralement jusqu'à 16 Mio le GET exact /runs 
 - **THEN** la lecture échoue avec update-response-too-large avant utilisation du snapshot
 
 #### Scenario: Autre réponse volumineuse
-- **WHEN** /status dépasse 2 Mio
-- **THEN** sa limite reste appliquée et aucune augmentation globale n'est déduite de l'exception /runs
+- **WHEN** /api/snapshot dépasse 2 Mio
+- **THEN** sa limite reste appliquée et aucune augmentation globale n'est déduite des exceptions /runs et /status
+
+#### Scenario: Statut contrôleur volumineux
+- **WHEN** GET /status dépasse2Mio et reste au plus16Mio
+- **THEN** le statut complet est lu sans troncature pour vérifier les versions et la readiness
+
+#### Scenario: Statut au-delà de la borne
+- **WHEN** GET /status dépasse16Mio
+- **THEN** update-response-too-large est conservé et aucun démarrage ou rollback réussi n’est déduit
 
 ### Requirement: Réparation explicite du lecteur sous gel existant
 Une réparation autorisée MUST conserver le même identifiant de maintenance, HELD et générations, vérifier PAUSE, quiescence native, OpenCode et broker déconnecté. Elle MUST préserver le journal et stages initiaux et ne réviser que le candidat de code explicitement qualifié. Le registre métier et les anciennes releases MUST NOT être réécrits. Une dérive MUST refuser avant application.
@@ -368,3 +376,111 @@ Un échec de démarrage ou de vérification MUST conserver dans le reçu une cau
 #### Scenario: Échec de credential au démarrage
 - **WHEN** une unité retourne 243/CREDENTIALS après remplacement
 - **THEN** le rapport nomme cette unité, son statut 243 et le résultat du repli sans assimiler systemctl start réussi à une application opérationnelle
+
+### Requirement: Empreinte stable de la transition historique
+L’empreinte de maintenance MUST protéger toutes les données du registre, sauf les champs déjà neutralisés version et coordination.global et l’annonce publique testResourceProtocol. Cette annonce MUST être absente ou égale à test-resources-v1 ; toute autre valeur MUST être refusée. Son exclusion MUST NOT autoriser une réservation de test ni exclure les données de réservation de l’empreinte.
+
+#### Scenario: Annonce ajoutée sans changement métier
+- **WHEN** un lecteur récent ajoute seulement testResourceProtocol=test-resources-v1 à l’observation du registre historique
+- **THEN** l’empreinte métier demeure identique sans attribuer cette capacité au processus historique
+
+#### Scenario: Annonce inconnue ou registre modifié
+- **WHEN** l’annonce porte une valeur inconnue ou un autre champ métier du registre change
+- **THEN** la valeur inconnue est refusée ou l’empreinte change, interdisant une adoption sous l’ancienne preuve
+
+### Requirement: Horodatage cohérent du sceau de maintenance
+La création du sceau BOOTSTRAP_HELD MUST utiliser un seul instant pour createdAt et expiresAt, avec expiresAt égal à createdAt plus 60000 ms. La garde de durée maximale MUST rester strictement 60000 ms ; les contrôles d’expiration, d’identité et de preuve MUST rester conservés.
+
+#### Scenario: Frontière de milliseconde
+- **WHEN** l’horloge change de milliseconde pendant la création du sceau
+- **THEN** sa durée reste exactement 60000 ms et une reprise par ailleurs admissible n’est pas refusée pour une durée artificiellement excessive
+
+### Requirement: Attente bornée du contrôleur effectivement démarré
+L’updater MUST attendre la version réelle du contrôleur dans le budget waitMs existant, au démarrage cible comme au rollback. Un démarrage non confirmé MUST rester distinct d’un échec de rechargement du broker. Le dépassement MUST refuser le succès, sans changer les exigences de versions, identités et readiness.
+
+#### Scenario: Contrôleur prêt après dix secondes
+- **WHEN** le contrôleur devient prêt après dix secondes mais avant expiration du budget configuré
+- **THEN** l’updater poursuit seulement après observation de la version attendue
+
+#### Scenario: Contrôleur indisponible jusqu’au terme
+- **WHEN** la version attendue n’est pas observée dans le budget
+- **THEN** l’activation échoue avec un diagnostic de démarrage et aucune réussite n’est déduite du seul état systemd
+
+### Requirement: Échec de rollback durablement non terminal
+Un échec après coupure ou durant la récupération MUST conserver le journal et ses sauvegardes dans une phase non terminale. ROLLBACK_FAILED MUST NOT devenir PREPARATION_FAILED. La reprise MUST traiter ce journal avant toute nouvelle transaction ; seul un rollback vérifié MAY devenir ROLLED_BACK.
+
+#### Scenario: Reprise du rollback encore en échec
+- **WHEN** une reprise d’un journal ROLLBACK_FAILED ne peut pas confirmer les services restaurés
+- **THEN** le même journal reste ROLLBACK_FAILED et aucune nouvelle transaction ni donnée métier restaurée n’est créée
+
+#### Scenario: Réparation et reprise ultérieure
+- **WHEN** les conditions techniques permettent enfin de vérifier les versions et le broker restaurés
+- **THEN** le rollback du même journal peut être confirmé sans modifier les RUN ni rejouer once
+
+### Requirement: Récupération globale explicite d’un reçu MCP avec broker failed
+Pour un reçu non terminal exact en `MCP_RECOVERY_REQUIRED`, CAB MAY traiter
+`failed` par `--recover-mcp` uniquement après accord explicite lié à ce reçu.
+CAB MUST vérifier une snapshot globale inactive, sans permission partagée,
+écrire l’intention avant l’unique POST global et contrôler identité, versions
+et readiness fraîche. Sans flag exact ou si une garde échoue, aucun POST.
+
+#### Scenario: Broker failed avec reçu exact et locations inactives
+- **WHEN** le reçu est autorisé, OpenCode conserve sa même identité et la
+  snapshot montre zéro session active et zéro permission partagée
+- **THEN** l’updater persiste l’intention, envoie un POST global unique,
+  vérifie PID/version/location/sessions et clôt le même reçu seulement après
+  confirmation du broker cible et de sa readiness
+
+#### Scenario: Broker failed sans autorisation exacte
+- **WHEN** `--recover-mcp` manque, vise un autre reçu ou le reçu est terminal
+- **THEN** l’updater refuse avant le POST global et conserve le reçu courant
+
+#### Scenario: Session active, permission ou identité divergente
+- **WHEN** une session est active, une permission partagée existe, la snapshot
+  est invalide ou l’identité OpenCode diverge
+- **THEN** l’updater refuse sans POST, arrêt ou redémarrage OpenCode
+
+#### Scenario: Résultat inconnu après l’intention
+- **WHEN** l’intention globale existe déjà, la réponse est perdue ou le broker
+  reste failed après le reload
+- **THEN** l’updater conserve le même reçu non terminal et ne rejoue pas le POST
+
+### Requirement: Clôture explicite d’un reçu dépassé
+CAB MUST clore en `SUPERSEDED` un reçu `MCP_RECOVERY_REQUIRED` en reprise
+`RESTARTING` uniquement après récupération MCP vérifiée et autorisée sur son
+identifiant exact. CAB MUST conserver l’historique du reçu et MUST NOT démarrer
+d’installation dans cette invocation.
+
+#### Scenario: Récupération autorisée du reçu historique
+- **WHEN** le reçu exact est autorisé, le reload global est déjà vérifié, les
+  sessions et permissions partagées sont absentes et les preuves d’artefacts
+  et de readiness satisfont leurs exigences
+- **THEN** l’updater consigne la supersession dans le même reçu et retourne
+  `SUPERSEDED`, sans rejouer le reload ni arrêter un service
+
+### Requirement: Preuve d’artefacts et versions avant supersession
+CAB MUST vérifier que chaque artefact hors broker correspond à l’empreinte du
+reçu. Les trois artefacts broker MUST correspondre octet pour octet au paquet
+CAB courant, plus récent que le reçu. La readiness fraîche MUST confirmer les
+versions des services du reçu et un broker supérieur au reçu, au plus égal à
+la version du paquet courant.
+
+#### Scenario: Seul le broker a avancé vers le paquet CAB courant
+- **WHEN** les artefacts hors broker correspondent au reçu et les trois
+  artefacts broker correspondent au paquet courant plus récent
+- **THEN** l’updater accepte la preuve de supersession si les versions actives
+  et la readiness respectent l’intervalle défini
+
+#### Scenario: Un artefact hors broker ou une version diverge
+- **WHEN** un autre artefact diffère, un fichier broker ne correspond pas au
+  paquet courant ou la readiness/version active ne satisfait pas les bornes
+- **THEN** l’updater garde le reçu non terminal et refuse `SUPERSEDED`
+
+### Requirement: Nouvelle transaction après supersession
+CAB MUST utiliser un nouvel identifiant pour l’installation complète qui suit
+un reçu `SUPERSEDED` et MUST conserver ce reçu historique sans le réécrire.
+
+#### Scenario: Reprise du reçu superseded
+- **WHEN** un appel CABU ultérieur rencontre le reçu terminal `SUPERSEDED`
+- **THEN** il ouvre une nouvelle transaction avec un nouvel identifiant et
+  installe le jeu complet courant ; il ne relance pas le reload global du reçu

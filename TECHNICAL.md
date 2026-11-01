@@ -10,6 +10,8 @@ Après premier reçu générique recoveryId=null, les anciens lecteurs exigeant 
 
 Ce document décrit le fonctionnement technique de CAB. Il complète `PROJECT.md` sans reprendre son cadrage fonctionnel et `BUILD.md` sans traiter du packaging ou de la publication.
 
+Avant `/locks/attach`, le contrôleur vérifie l'identité de l'accès et recherche la fin native corrélée des opérations non résolues. Une preuve absente ou divergente refuse le rattachement et conserve la protection ; une fin avec code non nul ne prouve pas une réussite métier. La libération `RECONCILED` existante annule les opérations préparées rattachées et invalide leurs validations non consommées. Vérifier les effets et protections avant cette libération ; une réservation de test distincte ne remplace pas l'accès libéré.
+
 Le déroulement d'une session orchestrateur–agent de codage et ses contrats
 de pilotage sont regroupés dans `ORCHESTRATED_CODING.md` à la racine du projet.
 AGENTS.md conserve les règles générales et impose cette référence aux sessions
@@ -37,6 +39,7 @@ CAB/
 │       ├── cgpt-approval-bridge-statistics-maintenance.mjs
 │       ├── cgpt-approval-bridge-resource-coordination.mjs
 │       ├── cgpt-approval-bridge-statistics.mjs
+│       ├── cgpt-approval-bridge-process-lifecycle.mjs
 │       ├── cgpt-approval-bridge-registry-lock.py
 │       ├── cgpt-approval-bridge-supervisor.mjs
 │       ├── cgpt-approval-bridge-supervisor-context.mjs
@@ -48,7 +51,7 @@ CAB/
 │   ├── cgpt_approval_bridge_server.py
 │   ├── cgpt_approval_bridge_router.py
 │   └── cgpt_approval_bridge_journal.py
-└── .codex/commands/{CAB,CABU,cab}.md
+└── .codex/commands/{CAB,CABU}.md
 ```
 
 `.codex/commands/CAB.md` est la définition versionnée de la commande Codex
@@ -59,7 +62,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.3` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.47` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -366,10 +369,23 @@ Le reçu et rejectionOnly sont des extensions conservatrices du registre 4 :
 un ancien lecteur strict peut les refuser. Après première utilisation, aucun
 retour aux anciens modules ni restauration d'une sauvegarde runtime antérieure
 ne doit effacer ces preuves. L'installation et le chargement restent distincts
-de ce lot source. L'update forcé 2.1.3 ne consulte pas l'état de récupération
+de ce lot source. L'update forcé 2.1.6 ne consulte pas l'état de récupération
 pour décider de remplacer les fichiers ou redémarrer systemd ; le profil
 frozen-recovery-controller conserve ses contrôles spécifiques lorsqu'il est
 explicitement sélectionné.
+
+#### Réconciliation explicite du rejet après redémarrage — préparation 2.1.7
+
+La phase `reconcile-rejected` conserve le RUN/job et la candidate. Elle exige
+`developerAuthorization`, les identités recovery, `previousPreflightRequestId`,
+un `preflightRequestId` inédit et `rejectedPreflightProof` (nombre de parties
+outils et SHA-256 JSON canonique). Elle relit l'historique et scelle uniquement
+un rejet terminal sans effet. Les erreurs request_validation MCP -32602 sont
+admises seulement avant l'unique soumission enregistrée avec les mêmes
+identifiants et `/usr/bin/true` exact. Aucun autre outil ou effet n'est admis.
+Le reçu conserve l'autorité et l'empreinte ; aucune décision locale n'est
+reconstruite. Un nouveau prévol reste obligatoire. Ce travail source ne
+prouve pas son installation réelle.
 
 #### Retry ordinaire préservé
 
@@ -415,7 +431,7 @@ Les versions CAB précédentes pouvaient reconstruire un prévol exécuté sans
 permission `once` en s'appuyant sur `tools.bash=true` dans le message utilisateur
 V1 et sur une autorisation humaine spécifique. OpenCode V2 ne prend pas en charge
 ce champ dans le corps des prompts ni dans le schéma documenté des messages
-utilisateur. CAB 2.1.3 refuse cette ancienne phase `reconcile` avec
+utilisateur. CAB 2.1.6 refuse cette ancienne phase `reconcile` avec
 `preflight-native-allow-not-proved`, conserve le job et n'infère aucune
 autorisation ni exécution. Un autre échec de preuve ne consomme aucune permission.
 
@@ -459,6 +475,14 @@ repoussent pas la reprise. Un JSON SSE invalide reste observable sans contenu
 brut dans `lastEventError`, sans actualiser l'activité. Un changement de job,
 session ou répertoire invalide l'ancienne horloge ; les états déjà enregistrés
 restent lisibles sans migration. Le gel de récupération reste prioritaire.
+
+Après un événement SSE terminal, le contrôleur relit le transcript natif
+uniquement lorsqu'une opération de cette session reste `ISSUING`, `EXECUTING`
+ou `UNKNOWN`. Il applique les mêmes contrôles de session, permission, callID,
+cible et temps que pour une partie SSE directe. Une partie prouvée clôt
+l'opération même avec un code de sortie non nul ; elle ne vaut pas succès de
+prévol. Si la relecture est indisponible ou ne fournit aucune preuve exacte,
+la protection reste détenue.
 
 Le statut public du superviseur expose `lastProvenMilestone` et `terminalGate`
 depuis le dernier contrat observé ; ils sont indisponibles sans job armé.
@@ -695,11 +719,11 @@ par le contrôleur et le healthcheck pour préserver les installations existante
 
 ## 16. Commande `/CAB`
 
-Le jeu de commandes comprend `CAB.md` (procédure canonique), `cab.md` (alias
-avec arguments inchangés) et `CABU.md` (argument fixe `update`, aucun argument
-supplémentaire admis). Les alias vérifient le fichier frère et sa version
-avant effet. Leur présence dans les sources ne prouve pas un enregistrement
-natif ou une installation dans un profil Codex.
+Le jeu de commandes comprend uniquement `CAB.md` (procédure canonique) et
+`CABU.md` (argument fixe `update`, aucun argument supplémentaire admis). CABU
+vérifie le fichier frère et sa version avant effet. Leur présence dans les
+sources ne prouve pas un enregistrement natif ou une installation dans un
+profil Codex. `cab.md` et `/cab` sont retirés.
 
 
 La commande Codex `/CAB`, définie dans `.codex/commands/CAB.md`, orchestre le
@@ -783,6 +807,11 @@ Les notifications concurrentes du broker utilisent /validation/resource-request 
 
 Chaque request_validation ajoute coordination_protocol, operation_id, operation_digest, expected_revisions et access_id optionnel, en plus de run_id, reservation_version et resources. La décision reprend ces identités et le manifeste. Le contenu est préparé hors détention d'écriture inutile ; avant once, le contrôleur recontrôle les accès, révisions, session et règles natives ask. Un jeton restauré ou libéré ne donne pas une nouvelle permission. /locks/reconcile exige la frontière native prouvée et renouvelle token/fencing sans relâcher les fichiers ; une correction utilise une identité neuve.
 
+Après `/locks/release` ou une publication, le contrôleur retire le jeton brut
+de l'accès avant persistance et réponse. Le rejeu exact reste idempotent par
+`releaseDigest`, empreinte de la requête complète ; un accès `RELEASED` ne
+réexpose pas la capacité bearer.
+
 Le démarrage de l'appel MCP ne prouve pas encore l'admission de sa notification.
 Avant une décision, vérifier la corrélation native et l'enregistrement du
 propriétaire de la demande dans le contrôleur. Une notification non admise ne
@@ -833,8 +862,11 @@ Les URLs refusent identifiants, redirections, requêtes et chemins arbitraires.
 La configuration invalide refuse le démarrage avant collecte. Les adresses
 loopback `127.0.0.1`, `::1` et `localhost` sont admises comme sources.
 
-Le moniteur fournit `GET /`, `/app.mjs`, `/stats.mjs`, `/style.css`, `/api/snapshot` et
-`/api/events`. Ce dernier diffuse un snapshot initial puis les vues actuelles
+Le moniteur fournit `GET /`, `/app.mjs`, `/stats.mjs`, `/style.css`, `/api/identity`,
+`/api/snapshot` et `/api/events`. `/api/identity` retourne uniquement sa version
+et le workspace canonique pour le bootstrap sans transmettre les vues multi-RUN.
+`/api/snapshot` reste la vue complète du tableau de bord ; `/api/events` diffuse
+un snapshot initial puis les vues actuelles
 par SSE. La reconnexion reçoit une vue complète. Les autres méthodes sont
 refusées sauf les POST fermés de maintenance statistique et de gestion décrits ci-dessous ; aucun proxy générique, bouton d'approbation ou accès au runtime
 privé n'est proposé. Les vues sont servies sans cache, avec CSP locale et
@@ -885,7 +917,7 @@ dans ce dossier ; les services et RUN de production ne sont pas sollicités.
 
 ### Cycle du RUN, ETAT et versions observées
 
-Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.3. Le
+Le module partagé `cgpt-approval-bridge-run-steps.mjs` reste en 2.1.10. Le
 contrôleur et le moniteur l'importent ; le catalogue stable est le suivant :
 
 | Position | stepId | Nom |
@@ -1016,7 +1048,7 @@ instance active divergente n'est jamais remplacée ou réaffectée implicitement
 L'unité n'est pas activée au login. Une installation inactive réussie est
 suivie de systemctl --user daemon-reload, puis systemctl --user start
 cgpt-approval-bridge-monitor.service. Le succès exige un service active, la
-page GET / et GET /api/snapshot avec version 2.1.3 et identity.workspace égal
+page GET / et GET /api/snapshot avec version 2.1.10 et identity.workspace égal
 au workspace canonique attendu. L'identité est publique et non secrète ; elle
 reste disponible sans aucune source amont. Une simple réponse d'un port occupé
 ne prouve pas l'identité du service. Aucune ouverture du navigateur n'est requise.
@@ -1130,7 +1162,7 @@ Le profil qualifie temporairement contrôleur 1.10.10 avec broker, superviseur
 et Web 1.7.1 conservés. packageVersion, runtimeVersions, maintenanceBuildDigest
 et frozenRecoveryMaintenance distinguent paquet et processus. La preuve
 isolée va jusqu'au prévol neuf once/exit 0 et complete avec le même broker
-original. Elle ne vaut pas déploiement global 1.10.10 ni test produit Pixs.
+original. Elle ne vaut pas déploiement global 1.10.10 ni test du produit consommateur.
 Une version préservée inconnue ou différente est refusée. Le mode ordinaire
 update conserve ses contrôles et ses opérations de cycle de vie propres.
 
@@ -1141,12 +1173,12 @@ réinstallé. --rollback est refusé pour ce profil : il ne doit pas être
 interprété comme une nouvelle maintenance. Toute reprise utilise le même
 journal et refuse une preuve expirée ou altérée.
 
-## Mise à jour forcée des briques CAB — 2.1.3
+## Mise à jour forcée des briques CAB — 2.1.6
 
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.3 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.47 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1218,7 +1250,7 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Sélection du modèle de codage — 1.10.7
 
-Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, demander medium ; si cette variante est indisponible, examiner la politique PLLM suivante. Un modèle imposé incompatible bloque. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.
+Appliquer [la politique de modèle](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md) : un modèle explicite du prompt garde sa priorité ; sinon PLLM en mode automatique. Sans raisonnement explicite, demander medium ; si cette variante est indisponible, demander high sur le même modèle avant la politique PLLM suivante. Un modèle imposé incompatible bloque. Le catalogue public et les variantes réelles ne remplacent pas le prévol exact. Le choix validé est persisté et transmis explicitement lors des reprises ; broker et moniteur restent sans sélection LLM, et le validateur Codex conserve son rôle distinct.
 
 OC_Codex_PLLM_CATALOG désigne exclusivement le pllm-current.json public du skill actif par chemin absolu, avec alias OC_CGPT_PLLM_CATALOG seulement si le nom principal est absent. Le lecteur refuse symlinks, fichiers non réguliers, liens multiples, taille supérieure à 2 Mio, schéma ou priorités invalides. POST /model-policy/resolve est sans effet fournisseur. POST /job/arm avec modelSelectionProtocol=pllm-auto-v1 vérifie modelSelection et modelPreflight, puis persiste codingModel. Les contrats et limites sont dans la référence model-policy.md. Les reprises transmettent explicitement model et variant à l'API OpenCode. Les nouveaux champs de job restent optionnels pour la lecture des états historiques.
 
@@ -1246,7 +1278,7 @@ prepareControllerModelPolicy et son CLI distribué préparent le patch public du
 
 catalogProviderID rapproche exclusivement opencodego vers le natif unique opencode-go en absence d'identité exacte. Le sélecteur contrôle ensuite connexion, modèle et variantes ; logicalProviderID conserve la provenance avec le digest original. Le contrôleur utilise le même rapprochement pour les preuves d'indisponibilité. L'extracteur commun de variante exige un champ parent valide et la cohérence de parent.variant, parent.model.variant et assistant.variant présents, sans modifier les autres gardes. Les contrats historiques sans logicalProviderID restent lisibles ; le repli vers un ancien lecteur strict après un nouvel armement n'est pas qualifié. Voir la référence model-policy.md pour les opérations de raccord autorisées.
 
-### CABU 2.1.3 : coupure courte et reprise
+### CABU 2.1.6 : coupure courte et reprise
 
 CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
 et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
@@ -1261,7 +1293,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.3 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.47 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1273,7 +1305,7 @@ GET /api/location sans en-tête de projet. Les requêtes MCP utilisent cette
 location ; les requêtes de session gardent le workspace du RUN via
 x-opencode-directory. Ne pas créer un deuxième broker dans un projet distinct.
 
-### Identité et garde d'installation — 2.1.3
+### Identité et garde d'installation — 2.1.6
 
 La garde cab-source vérifie le manifeste du plugin CAB et son égalité avec le
 paquet installé. Le dossier source conserve son chemin cab-approval-bridge ;
@@ -1289,10 +1321,10 @@ hors blocs de code : par exemple `# PA01 — Composition PA`. Il comporte de une
 séparateur explicite (`—`, `–`, `-`, `:`) et d'un intitulé. Sans code reconnu ou
 sans document admissible, la cellule reste vide. Le RUN reprend le code de son
 change corrélé, y compris une archive référencée. Le tri et les actions restent
-identiques. Cette évolution source 2.1.3 ne prouve pas une mise à jour active.
+identiques. Cette évolution source 2.1.6 ne prouve pas une mise à jour active.
 
 
-## Prévol du credential et installation mixte — 2.1.3
+## Prévol du credential et installation mixte — 2.1.6
 
 Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
 
@@ -1303,3 +1335,301 @@ Cette option est facultative : les projets sans OpenCode ou session pilotée n�
 Pour une installation mixte, utiliser `--broker-policy cab-source --layout managed-release` : le broker dans src/ reste ordinaire ; seuls les scripts des services et le Web utilisent les releases gérées. Les anciens liens et releases sont sauvegardés et restaurables ; aucune conversion manuelle des liens n’est nécessaire. `--service-workspace` conserve le workspace réel des services.
 
 Un échec après coupure expose `failureCode`, `serviceFailures` (composant, ActiveState, SubState, Result, ExecMainStatus), `transactionId` et `recoveryPhase`. Un code 243 désigne un échec systemd CREDENTIALS avant Node.js. Un retour 0 de systemctl start seul ne prouve pas la santé de l’application. La cause filtrée reste dans le reçu après repli, sans sortie brute du journal ou de systemctl.
+
+### Compatibilité des catalogues PLLM — 2.1.6
+
+CAB accepte strictement le schéma 2 à six politiques et le schéma 3 à sept politiques, sans réécrire le catalogue. Les priorités, dates, sélection courante, medium et prévol natif restent contrôlés ; mode7 peut être sélectionné puis conservé dans le job. Les jobs existants conservent leur choix hors transition explicite qualifiée à chaud. Le raccord utilise le catalogue public du skill actif, vérifié par /model-policy/resolve avant nouveau job. Aucune activation ou réussite de CAB test n’est déduite de la qualification source.
+
+### Pagination et prévol natif V2 — 2.1.6
+
+Le client n’envoie order que sur la première page et conserve les curseurs opaques. Le prévol peut corréler un échange natif unique complet lorsque l’utilisateur omet le modèle : la réponse assistant fournit alors le modèle/variante réellement utilisés, avec les dates et gardes habituelles. Aucun champ utilisateur n’est inventé. Les échanges ambigus ou contradictoires restent refusés. La preuve héritée et le choix des jobs existants sont conservés.
+
+## Fermeture technique liée à OpenCode — 2.1.6
+
+`cgpt-approval-bridge-process-lifecycle.mjs` suit le PID retourné par `/api/info` authentifié et son starttime dans `/proc/<pid>/stat`, sans lire commande ou environnement. Le contrat concerne le serveur et les services dans le même espace de PID local. Avant rattachement, CAB attend une identité vérifiable. Après rattachement, absence, zombie ou starttime différent établissent la fin du serveur ; une erreur de lecture non probante produit seulement un diagnostic filtré. HTTP/SSE seuls ne décident jamais de la fermeture. Aucun autre PID n’est adopté automatiquement.
+
+Le contrôle non recouvrant a une cadence de 500 ms. Les trois services arrêtent leurs admissions et minuteries, annulent les transports et ferment HTTP ; les gestionnaires déjà admis et écritures techniques sont drainés. Le contrôleur ferme les contextes, attend leurs App Servers enfants puis les statistiques et la fin du helper `registry-lock.py` avant de sortir. Le superviseur annule ses observations/reprises et termine ses écritures de suivi. Le moniteur reste indépendant d’une panne CAB isolée mais ferme avec son serveur OpenCode prouvé disparu.
+
+Le nettoyage est borné à quatre secondes après détection, avec une cible de cinq secondes depuis la fin du serveur dans le banc contrôlé. Le succès sort 0 ; un nettoyage incomplet sort 78 avec diagnostic. `RestartPreventExitStatus=78` évite alors une boucle de relance sans masquer l’échec ; les autres pannes gardent `Restart=on-failure`. L’arrêt est idempotent, y compris avec un signal simultané. Le broker termine sur EOF MCP avec annulation des seules attentes en mémoire, conservation du magasin et libération de son verrou.
+
+Ni gate, ni job, ni réservation ou gel n’est libéré par cette fermeture. Les décisions consommées et les protections d’effets inconnus restent conservées ; aucune permission once n’est rejouée. Les écritures de déconnexion et statistiques ne valent pas clôture métier. La remise en service est explicite et soumise à réconciliation. Le banc utilise ses propres processus, RUN et gel ; aucune installation ni activation réelle n’est effectuée.
+
+Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de l’instant de création ; expiresAt est calculé en ajoutant exactement 60000 ms à createdAt. Cette correction évite une durée artificielle de 60001 ms à une frontière d’horloge, sans modifier les contrôles de durée maximale, d’expiration, de preuve ou d’identité.
+
+## Réconciliation des prévols rejetés — 2.1.7
+
+La distribution courante des quatre briques, plugins et commandes est 2.1.47.
+Les preuves historiques conservent leur version. Après redémarrage,
+`reconcile-rejected` permet une réconciliation humaine du rejet natif sans
+effet et sans reconstruire de décision locale. Le retry ordinaire conserve
+ses contrôles. Le reçu lie l'historique natif et, si nécessaire, la transaction
+GLOBAL_RECONCILIATION exacte. Confirm/release exigent `authorization` et
+`rejectedRecovery` (runId, jobId, recoveryId, prochain preflightRequestId,
+nativeToolHash du reçu), puis recontrôlent l'historique et toute la cohorte.
+Une permission, un effet, une attente, un pair occupé ou une autre récupération
+non réconciliée conserve le gel. Le nouveau prévol exige décision et once
+propres avant complete. CABU intervient après archivage ; les tests source
+ne prouvent ni installation ni réconciliation réelle.
+
+## Raccord Code Mode OpenCode 2.2 — 2.1.8
+
+Le client reconnaît seulement le retour direct d'un appel MCP cgpt-validation
+avec objet de données littérales. Les clés peuvent être des identifiants
+statiques non cités ; les valeurs restent des données JSON. Les métadonnées
+toolCalls doivent concorder et la sortie ne doit pas être tronquée. CAB
+n'évalue aucun programme. La découverte search reconnue reste diagnostique.
+Une transformation de résultat, une variable, un calcul, un appel caché ou
+une provenance fabriquée conserve une enveloppe execute bloquante. Le sceau
+couvre l'enveloppe native complète et les anciens outils directs restent
+stables. Les clés de provenance internes reçues dans les métadonnées sont
+écartées puis produites seulement par la projection vérifiée.
+
+OpenCode 2.2 nomme sa commande native shell. Le client conserve sa source
+native et la rattache au contrat interne bash. Il vérifie l'appel source,
+la commande, l'absence de background et le workdir courant avant once. Les
+permissions d'écriture relatives sont rapprochées du fichier du contexte
+et de l'appel natif. Les règles shell: ask doivent couvrir le nouvel appel ;
+une seule règle historique bash: ask ne suffit pas pour transmettre once.
+Le drapeau executed ne prouve pas l'effet : OpenCode 2.2 termine réellement
+shell et write avec ce drapeau faux. CAB exige permission once acquittée,
+identité d'appel, cible, dates et résultat ; shell exige sa fin et son exit
+natifs. Une fin non corrélée garde ses protections.
+
+Le rejet réconcilié accepte les découvertes reconnues, un polling interrompu
+en lecture seule et le relais natif du rejected décidé par CGPT, avec rejet
+terminal exact obligatoire. Aucun ancien accord n'est restauré comme
+exécutable. Qualifier avec CAB_TEST_OPENCODE=/chemin/vers/opencode-2.2
+et le banc tests/native-opencode-codemode.test.mjs : serveur privé, fournisseur
+synthétique loopback, broker réel, prévol et écriture sous once, puis contrôle
+de disparition du broker et nettoyage. Aucune configuration ou credential
+réel n'est copié. Après archive et publication, CABU précède le recovery réel.
+
+## Découverte non autorisante — complément 2.1.9
+
+Le diagnostic Code Mode admet aussi un unique search à données littérales
+suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
+exacte, terminée, concordante et non tronquée. La projection reste
+cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
+Une variable, un appel ajouté ou une expression inconnue conserve le refus.
+Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
+La distribution commune est 2.1.10 ; les preuves 2.1.8 restent historiques.
+
+## Édition native et attente de mandat — source 2.1.10
+
+Le banc `tests/native-opencode-codemode.test.mjs` capture les outils transmis
+au fournisseur synthétique et qualifie `edit({path, oldString, newString,
+replaceAll?})` comme outil natif direct d’OpenCode 2.2. `search` décrit le
+catalogue Code Mode (MCP et helpers internes annoncés) ; il ne suffit pas pour déterminer les outils natifs disponibles.
+Le remplacement exact conserve décision CAB, cible unique, accès, `ask`,
+`once` et contrôle du contenu final. Refus et ambiguïté sont vérifiés sans
+écriture. Voir le skill CAB et la commande CAB pour les permissions V2 de
+lecture seule et la séquence PATCH, lecture de contrôle, prompt.
+
+Le superviseur d’un RUN sans mandat publie `WAITING` et
+`orchestrator-mandate-required`, sans prompt au codeur. Récupération achevée,
+gate ouvert et disponibilité technique ne créent aucun mandat. Le mode
+historique sans RUN garde sa relance technique bornée, sans droit nouveau.
+Ces résultats source ne prouvent ni activation 2.1.10, ni qualification du
+choix d’outil d’un modèle réel ; CABU reste distinct et coordonné.
+
+## Adaptations natives V2 — source 2.1.10
+
+Le retry historique après `access_id` vide exige l’enveloppe native exacte
+Code Mode, un seul appel et ses arguments concordants, `metadata.error=true`,
+`truncated=false`, le refus de validation déterministe, puis un `get_approval`
+natif corrélé prouvant l’absence de cette approbation. Session, RUN, génération,
+commande `/usr/bin/true`, absence d’effet et nouvelle identité de prévol restent
+contrôlés. Le texte libre ou le timeout seuls restent insuffisants. Le schéma
+MCP refuse désormais `access_id` vide : omettre cette clé si aucun accès
+existant n’est référencé. Le banc reproduit explicitement l’ancien schéma
+2.1.9 pour qualifier cette récupération, avec le validateur réel inchangé.
+
+Les vérifications d’un RUN filtrent les permissions par leurs identités de
+session avant de valider leurs cibles. Une permission étrangère n’est ni
+répondue ni autorisée ; une identité manquante ou une cible propre invalide
+reste bloquante. Les contrôles globaux conservent leur validation stricte.
+
+Le client expose les `tokens` et le `cost` natifs valides dans `info`, avec
+`usageSource=opencode-v2`. Absence reste inconnue, zéro reste zéro ; les
+métadonnées libres ne fabriquent pas ces mesures. Les événements SSE V2
+`data` et `location` sont normalisés avec vérification des identités et
+répertoires. Les débuts/fins d’exécution et permissions corrélés invalident
+les observations de génération ; les états statistiques suivent l’activité
+sans créer de décision CAB. Les mesures historiques manquantes ne sont pas
+reconstruites.
+
+## Récupération directe et pagination — source 2.1.11
+
+Le retry historique du refus `access_id` vide reconnaît aussi les erreurs MCP
+natives directes qualifiées, en plus de Code Mode : partie assistant tool pour
+request_validation/get_approval, executed faux, error de type tool.execution,
+itemId natif fc_ lié exactement au call_, et temps created/ran/completed
+entiers positifs ordonnés. Le client dérive la provenance et l’empreinte de
+la partie complète ; une marque libre ne suffit pas. Le refus déterministe,
+les identités/génération exactes, `/usr/bin/true` unique, le lookup natif inconnu
+corrélé, la quiescence et l’absence d’effet restent requis. Le prévol suivant
+a une identité neuve dans la même candidate. Aucun -32602 n’est fabriqué et
+aucun once n’est rejoué. Les autres formes restent refusées.
+
+Pour les historiques volumineux, le client conserve le plafond de 2 Mio et
+réduit par moitié la limite de la même page seulement après
+`opencode-response-too-large`, de 200 jusqu’à un minimum de un. Il n’avance pas
+le curseur et ne conserve aucune réponse partielle lors de cette réduction.
+Les pages complètes, l’ordre, les curseurs et la borne de 100 pages restent
+contrôlés ; un message unique trop volumineux échoue explicitement. Les autres
+erreurs ne sont pas masquées ni réessayées par ce mécanisme. Ne pas purger
+ni tronquer le transcript pour franchir cette limite.
+
+Les tests et lectures filtrées qualifient les sources. L’activation CABU et
+la récupération réelle du RUN restent des étapes distinctes, coordonnées
+séparément ; les services actifs ne sont pas modifiés par cette préparation.
+
+## Diagnostics de notification et refus avant admission — source 2.1.32
+
+Une approbation peut rester `PENDING` alors que sa notification au contrôleur
+est `FAILED`. Le champ optionnel `notification_diagnostic` expose le dernier
+échec HTTP sous la forme `{http_status, error_code}`. Le code est reconnu dans
+une liste fermée pour son statut ; `null` signifie inconnu. Le corps est lu
+sous une limite de1024 octets, sans recopier message distant, ressources,
+commande ou champ arbitraire. Le diagnostic existant `command-too-long` reste
+filtré comme auparavant. La lease exacte conditionne la persistance ; un
+résultat périmé n’écrase rien et une livraison réussie retire l’ancien diagnostic.
+Les anciennes approbations restent compatibles sans ce champ.
+
+Les refus de validation corrélés au RUN connu sont comptés dans
+`GET /runs/<runId>/statistics`, section `contexts[].httpFailures`, y compris
+lorsqu’ils surviennent localement avant admission. Chaque requête HTTP compte
+au plus une fois ; les réessais sont des tentatives distinctes. Ce compteur
+ne représente ni des demandes uniques, ni des décisions `REJECTED`. Une demande
+non admise ne doit pas apparaître comme validation indécise. Les compteurs ne
+contiennent aucun corps ou contenu métier.
+
+Lire le diagnostic et les révisions réellement observées ; ne pas inventer
+une révision0 pour une ressource non listée. Réconcilier l’ancienne demande
+sans effet puis préparer une demande exacte neuve selon les règles applicables.
+`FAILED` ne donne aucune décision, attribution, admission, permission ou retry
+exécutable ; les corrélations, révisions, accès et `ask/once` restent inchangés.
+La préparation source n’active rien. L’activation CABU coordonnée est rapportée
+avec les versions des processus réels avant notification aux sessions.
+
+
+## Restitution des réservations sans effet — source 2.1.32
+
+La route explicite release-unused permet de restituer une réservation de test
+HELD sans nettoyage fictif, uniquement sur autorisation humaine spécifique,
+attestation exhaustive et preuves natives complètes à frontière inchangée.
+Les échecs de diagnostic restent des échecs ; aucune disponibilité distante
+n’est déduite. Les mutations et incertitudes conservent la restitution
+ordinaire. Procédure et limites :
+[référence distribuée](plugins/cab-approval-bridge/skills/approval-bridge/references/unused-test-reservations.md).
+Le reçu enrichi est refusé par les anciens lecteurs stricts ; ne pas restaurer
+un état ancien pour supprimer une preuve. La préparation source ne modifie
+aucun RUN ni composant actif.
+
+
+## Isolation des sondes et du broker partagé — source 2.1.32
+
+La découverte serveur est envoyée sans scope de workspace. Les contrôles MCP
+visent la location partagée et refusent une cible explicite divergente.
+createProbeSession prépare la sonde jetable dans cette location avec deny
+global et modèle explicite ; sa suppression ne touche que sa session.
+Aucune panne ne déclenche de reconnexion automatique ni de redémarrage
+OpenCode. La récupération d’un contexte concurrent reste explicitement
+autorisée et contrôlée. Les workspaces des exemples sont génériques.
+Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-location-isolation.md).
+
+
+## Attente du contrôleur et échec de récupération — CAB2.1.32
+
+L’attente de la version réelle du contrôleur utilise le budget --wait-ms
+existant (120000ms par défaut, borne maximale900000ms), y compris au rollback.
+Un service déclaré active par systemd ne suffit pas. Un dépassement conserve
+update-controller-start-unconfirmed, distinct du rechargement du broker.
+Aucun délai ne remplace la vérification des versions et de la readiness.
+
+Après la coupure, un rollback non confirmé reste ROLLBACK_FAILED, non terminal.
+La reprise doit traiter le même journal avant une nouvelle transaction ;
+elle ne peut pas le reclasser PREPARATION_FAILED. Ne jamais modifier le
+journal pour fabriquer un succès. Les anciens journaux déjà classés à tort
+par une version antérieure restent conservés comme preuves ; observer les
+artefacts et processus effectivement restaurés séparément, sans réécrire
+leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
+une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
+
+
+### Complément de lecture de maintenance2.1.32
+
+GET /status et GET /runs des services CAB acceptent jusqu’à16Mio sous contrôle
+des octets reçus avant parsing. Cette exception ciblée ne modifie ni les
+limites OpenCode, ni celles des autres réponses HTTP (2Mio). Le statut complet
+est vérifié sans troncature ou purge ; un dépassement conserve son diagnostic
+et le journal de récupération non terminal.
+
+
+## Diagnostics des décisions — source2.1.32
+
+Les refus de décision auparavant400 vides rendent un JSON filtré avec code,
+message français fixe et decision_recorded. Révision périmée, contexte,
+doublon et validation inconnue sont distingués sans exposer les données du
+mandat. Les gardes et succès existants restent inchangés. Le champ indique
+la présence locale d’une décision, pas son application native. Procédure :
+[diagnostics distribués](plugins/cab-approval-bridge/skills/approval-bridge/references/decision-http-diagnostics.md).
+
+
+## Coordination des incidents CAB
+
+Le skill et la commande distribuent la procédure [coding-incidents.md](plugins/cab-approval-bridge/skills/approval-bridge/references/coding-incidents.md) : signalement au chat « Correctif CAB - OC », réutilisation ou création conditionnelle et suivi jusqu’au correctif puis à son activation CABU vérifiée. Les propriétaires des sessions conservent leurs mandats et preuves ; la livraison source et l’activation restent distinctes.
+
+
+## Entrées modèle du client V2
+
+CAB2.1.32 refuse le champ natif model.variant dans les écritures du client avant HTTP et indique model.reasoning. Les lectures natives conservent variant ; la conversion est explicite. Contrat, exemples et compatibilité : [model-policy.md](plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md). Cette livraison source ne prouve aucune activation.
+
+
+## Changement à chaud du fournisseur et du modèle
+
+CAB2.1.32 accepte un nouveau choix explicite indépendant de l’ancienne politique ; en son absence, la session suit la PLLM. La transition conserve RUN/job/session et historique, sans réarmement. Le raccord natif des clés et la nouvelle politique restent explicitement coordonnés, sans fermeture d’OpenCode ni copie de secret dans CAB. Procédure, limites et reprise : [hot-model-switch.md](plugins/cab-approval-bridge/skills/approval-bridge/references/hot-model-switch.md). Après SCM réussi, CABU puis information des sessions sur activation vérifiée sont obligatoires ; aucune application implicite aux jobs réels.
+
+
+## Continuité historique après raccord
+
+CAB2.1.32 corrige l’entrée CLI par lien et distingue adoption du modèle et continuité historique. Une preuve native texte seul sous deny dans la session existante est requise avant reprise ; la sonde fraîche ne suffit pas. La limite Responses inter-comptes2.2.0 est explicitée sans réparation fictive, purge ou mise à niveau implicite. Voir [account-bound-history.md](plugins/cab-approval-bridge/skills/approval-bridge/references/account-bound-history.md).
+
+
+### Projection portable du contexte — CAB2.1.32
+
+Le module context-portability distribué prépare un hook natif ciblé sur session, modèle, connexion opaque et anciens messages. Après transition PLLM/compte, les anciens raisonnements et métadonnées fournisseur ne sont plus renvoyés ; historique enregistré, textes et contrats d’outils restent préservés. Le banc exact2.2.0 qualifie chargement à chaud, même modèle/SID/PID et isolation du pair. L’application réelle exige la frontière du propriétaire et un échange historique sans outil avant prévol CAB et reprise ; voir portable-context.md du skill. Aucune clé, nouvelle session ou bascule de politique n’est déduite de CABU. Si le PID préparé a changé, le plugin se rattache au PID courant uniquement après preuve ESRCH que l’ancien processus est arrêté ; un PID vivant ou un contrôle indéterminé bloque. Les règles session/modèle/connexion/messages restent inchangées.
+
+
+### Empreinte des arguments avant once — CAB2.1.32
+
+Les nouveaux mandats write/edit portent tool_input_sha256, lié au retry et à la décision. Le client dérive la preuve depuis le call natif vérifié ; le contrôleur bloque une divergence avant once, sans reconstruire de décision ni effacer une preuve. Les historiques sans champ restent compatibles et non protégés par cette extension ; le contrôle du fichier après effet reste nécessaire. Procédure : native-input-guard.md du skill. Source, CABU et adoption des nouveaux mandats sont distincts.
+
+
+### Diagnostic readiness vide — CAB2.1.32
+
+Le client reconnaît la seule omission native input dans l’unique broker_readiness({}) littéral achevé et non tronqué, sans erreur. Provenance et empreinte brute restent intactes ; autres outils, formes ambiguës, arguments non vides ou divergents restent bloquants. Aucune décision ou permission n’est déduite de ce diagnostic ; voir empty-readiness-input.md du skill.
+
+
+### Admission observée — CAB2.1.32
+
+Le statut du RUN expose BUSY/STABLE et le GET ciblé /runs/<run>/decision/<request>/admission distingue propriétaire, validation et décision locale. Les refus de transition restent inchangés dans leur statut et effet ; les diagnostics rendent l’état explicite. STABLE n’est ni réservation ni autorisation ; chaque POST réexamine toutes les gardes. Procédure : admission-state.md du skill.
+
+
+Les longs mandats Bash peuvent utiliser le [transport scellé](plugins/cab-approval-bridge/skills/approval-bridge/references/exact-shell-carrier.md) : corps UTF-8 revu conservé par CAB, invocation courte transmise par le modèle, SHA256 vérifié avant exécution. La décision porte aussi sur le corps ; accès et permission native `once` restent obligatoires. Le staging ne donne aucune autorisation.
+
+
+CAB 2.1.32 fournit GET /monitor/runs, projection de navigation bornée sans historique, pour préserver le plafond de collecte de 2 Mio. Les helpers explicites nativeCodingMandate et diagnoseCodingTurn distinguent outils natifs, erreur fournisseur et entrée divergente sans autorisation ou relance. Le protocole de reprise exige effets réconciliés, choix LLM explicite conservé et conducteur de tests complet avec preuves réelles ; voir la référence native-coding-recovery du plugin.
+
+
+CAB 2.1.32 applique immédiatement la vue confirmée après archivage, suppression ou restauration dans le moniteur, même en mode Manuel. Une lecture antérieure retardée ne rétablit plus l’ancienne vue. Les lignes RUN sont bleues pour BLOCKED, vertes pour DONE et orange pour STOPPED ; WAITING reste jaune et la sélection distincte. Le rangement reste privé au moniteur et ses gardes restent inchangées.
+
+
+CAB 2.1.32 attend les transitions MCP pending dans le budget existant sans réémettre connect/disconnect. MCP_RECOVERY_REQUIRED conserve le reçu nonterminal ; une récupération explicite --recover-mcp <transactionId> peut autoriser un unique rechargement global des locations sous frontière contrôlée, sans arrêter OpenCode. PID/location/sessions, artefacts et readiness sont vérifiés, sans rejouer les mandats ou permissions ; voir la référence mcp-pending-recovery du plugin.
+
+
+CAB2.1.32 partage le prédicat de permissions natives entre client et contrôleur. Le client inspecte la politique en lecture seule et contrôle requiredNativeAsk avant l’envoi des nouveaux prévols/mandats permissionnés. Une revue peut conserver deny ; sa sortie demande un changement minimal explicite et audité du propriétaire, sans restauration automatique par CABU. Les gardes serveur et les prompts de revue historiques restent préservés.
+
+
+CAB2.1.32 ferme les imports relatifs statiquement déclarés selon leurs destinations réelles, et inclut permission-policy dans le groupe du moniteur. Une dépendance seulement présente dans un autre groupe est refusée avant coupure ; les contrôles de permissions restent ceux du correctif29.
+

@@ -327,7 +327,7 @@ CAB MUST réserver atomiquement l'ensemble déclaré des environnements Docker/L
 - **THEN** A n'obtient aucun des deux environnements avant disponibilité de l'ensemble
 
 ### Requirement: Restitution vérifiée des environnements
-CAB MUST conserver la réservation entre commandes jusqu'à la fin de toutes les opérations et la restitution de chaque environnement. La libération MUST exiger un nettoyage puis une vérification distincts, corrélés et réussis après les autres tests, avec preuves examinées. Une fin de commande ou un booléen seul MUST NOT suffire. Une répétition identique MUST restituer le reçu ; une répétition divergente MUST être refusée.
+CAB MUST conserver la réservation jusqu’à la fin des opérations et la restitution vérifiée. La libération ordinaire MUST exiger nettoyage puis vérification distincts, corrélés et réussis après les tests, avec preuves examinées. Seule la restitution explicite sans effet MAY remplacer ce parcours sans mutation. Une fin de commande ou un booléen seul MUST NOT suffire. Une répétition identique MUST restituer le reçu ; une répétition divergente MUST être refusée.
 
 #### Scenario: Test fini et nettoyage incomplet
 - **WHEN** la dernière commande de test termine mais le nettoyage est absent ou échoué
@@ -347,6 +347,18 @@ CAB MUST conserver les réservations après crash, pause, arrêt ou délai dépa
 #### Scenario: Gate prématuré
 - **WHEN** les accès de fichiers sont libérés mais l'environnement de test reste détenu
 - **THEN** le gate terminal normal et la livraison sont refusés
+
+#### Scenario: Réacquisition idempotente d'un bail restauré
+- **WHEN** le propriétaire répète le POST `acquire` avec le même RUN, `transactionId`, version, ressources, evidence et payload après redémarrage
+- **THEN** CAB renvoie le bail HELD existant au demandeur POST avec le même token/fencing et `reconciliationRequired=true`, sans créer de bail ni permission ; les projections GET omettent toujours le token
+
+#### Scenario: Payload de réacquisition divergent
+- **WHEN** un champ du payload POST diffère pour un `transactionId` déjà détenu
+- **THEN** CAB refuse la transaction sans changer le bail, le token ou le fencing
+
+#### Scenario: Réconciliation conserve le bail
+- **WHEN** le propriétaire transmet le token/fencing retournés par la réacquisition exacte à `/test-resources/reconcile`, avec `reconciliationId` neuf et les contrôles natifs réussis
+- **THEN** CAB renouvelle token/fencing, conserve la réservation HELD et retire `reconciliationRequired` ; aucune ressource n'est libérée ni commandée
 
 ### Requirement: Réservation des navigateurs externes de test
 CAB MUST appliquer le cycle durable de réservation et restitution aux navigateurs externes déclarés dans DEVOPS.md, notamment Chromium et Firefox. Les clés MUST identifier le mécanisme sur son hôte. La libération MUST exiger fermeture des sessions et ressources de test, nettoyage puis vérification corrélés. Les sessions utilisateur préexistantes MUST rester préservées. Un ensemble navigateur/conteneur MUST être acquis atomiquement.
@@ -387,3 +399,222 @@ Le contrôleur MUST refuser les mutations après perte d'autorité. Il MUST sort
 #### Scenario: Helper de verrou interrompu
 - **WHEN** le helper d'autorité se termine hors arrêt volontaire
 - **THEN** le contrôleur devient indisponible puis redémarre en restaurant le registre, sans rejouer les décisions consommées
+
+### Requirement: Conservation des protections à la fermeture OpenCode
+La fermeture technique de CAB après disparition prouvée d’OpenCode MUST conserver les RUN, jobs, réservations, décisions, gates et gels existants. Elle MUST NOT purger, libérer de protection, synthétiser de décision ou de clôture métier, ni rejouer une permission consommée. La reprise MUST rester explicite et soumise à réconciliation ; les effets inconnus MUST rester protégés.
+
+#### Scenario: Plusieurs RUN dont une récupération gelée
+- **WHEN** le serveur commun disparaît avec des RUN réservés et un gel de récupération
+- **THEN** les composants se ferment et leurs états métier et protections restent conservés
+
+### Requirement: Restitution explicite de réservation sans effet
+CAB MUST proposer une restitution HELD distincte du nettoyage ordinaire seulement sur autorisation développeur spécifique et attestation explicite de l’orchestrateur couvrant tous les mandats et opérations du cycle sans mutation de l’environnement. Il MUST vérifier propriétaire, contexte, génération, jeton, fencing, frontière exacte et liste exhaustive des opérations.
+
+#### Scenario: Diagnostics sans mutation puis SSH inaccessible
+- **WHEN** toutes les opérations terminales sont corrélées nativement et explicitement examinées sans effet, avec autorisation spécifique et frontière inchangée
+- **THEN** CAB restitue la réservation avec un reçu unused-no-effect sans annoncer nettoyage, disponibilité distante ou réussite des diagnostics
+
+#### Scenario: Frontière inconnue ou mutation
+- **WHEN** une opération manque, reste active, a muté l’environnement ou que l’attestation ou l’autorisation manque
+- **THEN** la réservation reste protégée et le parcours ordinaire reste nécessaire
+
+#### Scenario: Reçu durable et répétition
+- **WHEN** une restitution sans effet est rejouée exactement ou le registre est restauré
+- **THEN** le reçu et ses empreintes restent conservés, le rejeu identique est idempotent et une requête divergente est refusée sans rejouer once
+
+### Requirement: Gardes de la restitution sans effet
+Une opération active, inconnue, non attestée ou une mutation déclarée MUST refuser cette voie. Une classification MUST NOT être déduite du texte des commandes, du résultat SSH, d’un exit ou d’un timeout. Les accès temporaires MUST être libérés et les protections de restauration, pause et gel MUST rester applicables.
+
+#### Scenario: Interdiction de restitution implicite
+- **WHEN** un délai expire ou une commande semble inoffensive sans examen explicite
+- **THEN** CAB conserve la réservation sans fabriquer d’attestation
+
+### Requirement: Observation explicite de l’admission concurrente
+CAB MUST exposer un instantané BUSY/STABLE du RUN et une lecture ciblée d’admission d’une demande distinguant propriétaire, validation et décision locale enregistrés. Une demande inconnue MUST rester404 et une cible étrangère MUST être refusée. STABLE MUST NOT constituer autorisation, réservation ou garantie de succès ; chaque décision MUST réexaminer les gardes existantes.
+
+#### Scenario: Demande visible pendant transition
+- **WHEN** une transition est encore active après visibilité du propriétaire et de la validation
+- **THEN** le GET exposeBUSY et le POST reste refusé sans décision ni once
+
+#### Scenario: Fin de transition et même identité
+- **WHEN** la transition se termine et aucune décision n’est enregistrée
+- **THEN** le GET exposeSTABLE mais le même POST reste soumis aux identités/révisions/permissions courantes et à l’unicité
+
+### Requirement: Refus de transition non décisionnel explicite
+Le409 précoce et le400 tardif run-transition-in-flight MUST conserver leurs gardes/statuts et indiquer admissionBUSY sans enregistrer une nouvelle décision. Le refus précoce MUST exposer decision_recorded local, ounull pour demande inconnue. Une décision déjà enregistrée MUST NOT être rejouée ou reconstruite depuis cet instantané.
+
+#### Scenario: Course après observation stable
+- **WHEN** une transition commence avant la décision effective
+- **THEN** le POST refuse encore, sans attente serveur ni bypass de garde
+
+### Requirement: Payload Bash scellé sans recopie modèle
+CAB MUST permettre le staging d’un payload Bash UTF-8 revu et son SHA256, immuable et lié aux identités RUN/job/SID/version/requête/opération. Le staging MUST NOT créer validation, décision, accès ou exécution. Le modèle MUST pouvoir transmettre seulement l’invocation courte scellée ; décision exacte, accès HELD et once natifs MUST rester requis.
+
+#### Scenario: Préparation revue et idempotence
+- **WHEN** l’orchestrateur dépose le corps et hash vérifiés à une frontière sûre
+- **THEN** CAB retourne le même transport pour le même stage exact et refuse une substitution ou un contexte étranger
+
+### Requirement: Revue du corps derrière le transport
+La décision MUST porter sur l’invocation et le corps scellé exact. Le mode de décision automatique MUST recevoir le corps et son hash depuis le stage privé correspondant, jamais depuis un texte libre du modèle. La réponse de staging MUST rester non autorisante ; le codeur MUST NOT être chargé de recopier le long corps après revue.
+
+#### Scenario: Décision automatique sur le transport
+- **WHEN** la demande correspond aux identités et à l’invocation d’un stage
+- **THEN** le validateur reçoit le payload scellé pour examen, distinct du transport court confié au codeur
+
+### Requirement: Vérification et livraison native du corps exact
+La livraison MUST être liée à l’opération approuvée et au contexte natif en exécution, sans accès restauré/inconnu. Le lanceur MUST vérifier longueur, SHA256, UTF-8 et CWD avant Bash, sans fichier mutable ni retry. Une altération ou réponse invalide MUST terminer avant payload. Les plafonds existants MUST rester inchangés ; aucun mandat historique MUST être réinterprété.
+
+#### Scenario: Corps long et modèle absent du transport
+- **WHEN** l’invocation courte approuvée reçoit once
+- **THEN** le corps scellé exact est exécuté par le shell natif sans que le modèle ait recopié ses octets
+
+#### Scenario: Transport ou corps divergent
+- **WHEN** le corps, le hash ou le contexte ne correspond plus
+- **THEN** le payload ne s’exécute pas et la réconciliation conserve les preuves sans once rejouée
+
+### Requirement: Réconciliation native avant rattachement d'une opération
+Avant rattachement, le contrôleur MUST vérifier l'accès puis prouver les fins natives non résolues comme pour sa libération. Les contrôles de décision, génération, couverture et révision MUST rester applicables. Une fin non prouvée MUST refuser le rattachement en conservant les protections. Le rattachement MUST NOT conférer de permission ni libérer de ressource.
+
+#### Scenario: Fin native prouvée et diagnostic rattaché
+- **WHEN** une commande native corrélée est terminée et qu'un diagnostic approuvé satisfait tous les contrôles de l'accès détenu
+- **THEN** le contrôleur constate cette fin et rattache le diagnostic sans consommer de permission ni changer le jeton et le fencing
+
+#### Scenario: Preuve absente ou divergente
+- **WHEN** la fin de la commande native ne peut être prouvée ou qu'une identité native diverge
+- **THEN** le rattachement est refusé et les protections restent détenues
+
+#### Scenario: Libération concurrente
+- **WHEN** une libération concurrente survient pendant la vérification native du rattachement
+- **THEN** les transitions sont sérialisées et une ancienne identité ne peut autoriser un rattachement après libération
+
+#### Scenario: Annulation existante du diagnostic rattaché
+- **WHEN** le propriétaire libère l'accès avec le résultat RECONCILED après rattachement d'un diagnostic préparé et non exécuté
+- **THEN** ce diagnostic est annulé et sa validation non consommée est invalidée sans permission native supplémentaire
+
+### Requirement: Décision restaurée limitée à une annulation
+Après redémarrage, un rattachement MAY demander explicitement la preuve native de la décision approuvée perdue pour annuler une opération préparée. CAB MUST vérifier les identités persistantes, l'accès restauré, la réponse MCP native et la stabilité de la session. Cette preuve MUST NOT restaurer une permission exécutable.
+
+#### Scenario: Décision et identité corrélées
+- **WHEN** la réponse MCP native approuvée correspond exactement à l'opération préparée et à l'accès restauré
+- **THEN** le rattachement en vue de l'annulation peut être admis sans rétablir la décision exécutable
+
+#### Scenario: Preuve ambiguë ou session active
+- **WHEN** la réponse, les identités, les révisions ou l'historique divergent, ou qu'une permission native reste en attente
+- **THEN** le rattachement est refusé et les protections restent détenues
+
+### Requirement: Suppression du jeton d'un accès libéré
+Après libération ou publication, CAB MUST retirer le jeton brut de l'accès
+persisté et de toute réponse. Le rejeu exact MUST rester idempotent grâce à
+l'empreinte persistée de la requête. Les accès actifs MUST conserver leur
+jeton ; une requête divergente MUST être refusée.
+
+#### Scenario: Libération et rejeu exact
+- **WHEN** un accès HELD est libéré puis la même requête est rejouée
+- **THEN** le reçu est rendu sans jeton brut et sans nouvelle mutation
+
+#### Scenario: Rejeu divergent
+- **WHEN** une requête de libération diffère du reçu persistant
+- **THEN** CAB refuse le rejeu sans exposer ni réactiver l'ancien jeton
+
+#### Scenario: Publication d'un accès
+- **WHEN** un accès est consommé par une publication réussie
+- **THEN** son état RELEASED et son reçu subsistent sans jeton brut
+
+### Requirement: Jetons de réservation absents des projections GET
+Les projections GET `/runs`, `/runs/<run_id>/status` et
+`/runs/<run_id>/test-resources` MUST omettre le jeton bearer des réservations
+de test dans tous leurs états. La projection MUST laisser intacts l'état
+persistant et les gardes de mutation. Les réponses POST d'acquisition et de
+réconciliation peuvent retourner le jeton au demandeur autorisé.
+
+#### Scenario: Lecture d'une réservation détenue ou en attente
+- **WHEN** un client lit le statut d'une réservation HELD, WAITING ou restaurée
+- **THEN** aucune projection GET ne contient son champ `token`
+
+#### Scenario: Acquisition conserve son retour unitaire
+- **WHEN** le demandeur autorisé acquiert ou réconcilie une réservation
+- **THEN** la réponse POST peut fournir le jeton nécessaire aux mutations ultérieures
+
+#### Scenario: Projection après restitution
+- **WHEN** une réservation est `RELEASED` et relue par l'un des GET protégés
+- **THEN** le snapshot conserve les champs non secrets mais omet toujours `token`
+
+### Requirement: Restitution sans effet d'un bail restauré lorsque le jeton est perdu
+CAB MAY restituer un bail HELD restauré sans jeton par preview/POST sur le même
+RUN et change armé. L’absence d’effet MUST être prouvée par transcript natif
+complet ou, après compaction, par registre durable complet attestant que chaque
+opération postérieure est rejetée/annulée sans démarrage natif et qu’aucun
+accès/permission n’est actif. Toute opération inconnue ou démarrée conserve
+HELD ; aucun jeton n’est révélé.
+
+#### Scenario: Bail restauré inutilisé dans un change déjà armé
+- **WHEN** le bail est HELD/restauré, le RUN et son job armé portent le même
+  change, le transcript complet prouve zéro mutation et aucune opération active
+- **THEN** le propriétaire peut restituer le bail sans ancien token ni nouvelle
+  permission ; CAB marque uniquement ce bail RELEASED avec un reçu sans token
+
+#### Scenario: Bail restauré avec activité ou preuve incertaine
+- **WHEN** une permission, un mandat, un effet, une opération en cours/inconnue,
+  une mutation ou une divergence d’historique est observée
+- **THEN** preview ou POST refuse et le bail reste HELD sans suppression de token
+
+#### Scenario: Compaction avec registre complet sans démarrage natif
+- **WHEN** une compaction survient après l’acquisition, chaque opération
+  postérieure est durablement rejetée/annulée sans `nativeStart`, la session est
+  idle, aucune permission ou accès n’est actif et la frontière ne change pas
+- **THEN** CAB enregistre une preuve `operation-ledger-after-compaction` et peut
+  restituer uniquement le bail inutilisé
+
+#### Scenario: Compaction avec opération native inconnue ou démarrée
+- **WHEN** après compaction une opération est absente du registre, non terminale,
+  munie d’un `nativeStart`, ou une permission/accès reste actif
+- **THEN** preview ou POST refuse et le bail reste HELD
+
+#### Scenario: Scope ou frontière divergente
+- **WHEN** le `changeId`, propriétaire, session, contexte, répertoire, version,
+  fencing ou digest de preview diverge du RUN courant
+- **THEN** le POST est refusé sans mutation ni restitution
+
+### Requirement: Rejet natif sans effet pour un bail de test restauré
+La restitution tokenless MUST accepter une opération `PREPARED` sans permission
+native uniquement si la décision native de rejet est corrélée à la même
+opération ou si un reçu durable `REJECTION_ONLY` correspond exactement. Une
+opération approuvée, inconnue ou avec accès associé MUST conserver le bail
+`HELD`.
+
+#### Scenario: Validation rejetée sans permission native
+- **WHEN** un bail restauré est associé à une opération `PREPARED` portant un
+  reçu `REJECTION_ONLY` concordant, sans accès ni permission native
+- **THEN** la preview décrit l’opération sans jeton et la restitution peut
+  l’attester comme sans effet sur l’environnement
+
+#### Scenario: Permission ou effet actif
+- **WHEN** une permission, commande, écriture, accès actif ou effet incertain
+  est observé
+- **THEN** la restitution est refusée et aucune protection n’est libérée
+
+### Requirement: Observations Code Mode bornées pour la récupération d’un bail
+Un wrapper Code Mode MUST être attesté sans effet sur l’environnement uniquement
+si son historique natif est complet, non tronqué et ne contient que des appels
+CAB terminaux appartenant à une liste fermée sans effet. Un wrapper inconnu, une
+méthode mutatrice ou une preuve absente MUST bloquer la restitution.
+
+#### Scenario: Wrapper Code Mode d’observations autorisées
+- **WHEN** l’historique natif complet montre un wrapper Code Mode non tronqué
+  contenant uniquement des appels CAB explicitement autorisés, tous terminaux
+- **THEN** ces observations ne bloquent pas la preuve d’absence d’effet
+
+#### Scenario: Wrapper incomplet ou inconnu
+- **WHEN** un wrapper est tronqué, incomplet ou appelle une méthode absente de
+  la liste autorisée
+- **THEN** la restitution est refusée et le bail reste `HELD`
+
+### Requirement: Preview filtrée des blocages de récupération
+La preview GET MUST rester en lecture seule, ne jamais révéler le jeton et
+retourner un code de blocage ainsi que des états d’opérations filtrés lorsque
+la preuve ne permet pas une restitution sûre.
+
+#### Scenario: Preuve insuffisante dans la preview
+- **WHEN** l’historique comporte une permission, un effet inconnu ou une
+  méthode native non autorisée
+- **THEN** la preview renvoie un blocage filtré sans argument ni sortie native

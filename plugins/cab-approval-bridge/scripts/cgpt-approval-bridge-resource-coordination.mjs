@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.3';
+export const VERSION = '2.1.47';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -32,6 +32,18 @@ function evidence(value) {
     throw new CoordinationError('evidence-references-required', 400);
   }
 }
+function validUnusedNativeProof(proof) {
+  if (!onlyKeys(proof, ['messageCount','toolCount','historyHash','operationClassifications','coverage']) ||
+      !Number.isSafeInteger(proof.messageCount) || proof.messageCount < 0 ||
+      !Number.isSafeInteger(proof.toolCount) || proof.toolCount < 0 || !hash(proof.historyHash)) return false;
+  if (proof.coverage !== undefined && !['complete-native-transcript','operation-ledger-after-compaction'].includes(proof.coverage)) return false;
+  if (proof.operationClassifications === undefined) return true;
+  const allowed = new Set(['cancelled-without-execution','rejected-validation-no-native-effect','cancelled-validation-no-native-effect','read-only-no-effect']);
+  return Array.isArray(proof.operationClassifications) &&
+    new Set(proof.operationClassifications.map((item) => item?.operationId)).size === proof.operationClassifications.length &&
+    proof.operationClassifications.every((item) => onlyKeys(item,['operationId','classification']) &&
+      id(item.operationId) && allowed.has(item.classification));
+}
 function emptyState() {
   return { protocol: COORDINATION_PROTOCOL, sequence: 0, revisions: {}, operations: {}, accesses: {},
     publications: {}, global: null, globalHistory: [], legacySources: [], legacyHandoffs: [] };
@@ -49,9 +61,17 @@ export class ResourceRunRegistry extends RunRegistry {
     if (this.schemaVersion === 4) this.validateResourceState(this.resourceState);
     else this.resourceState = emptyState();
     if (!this.migrationRequired) this.schemaVersion = 4;
+    let scrubbedReleasedAccessToken = false;
+    if (this.lock) for (const access of Object.values(this.resourceState.accesses)) {
+      if (access.state === 'RELEASED' && Object.hasOwn(access, 'token')) {
+        delete access.token;
+        scrubbedReleasedAccessToken = true;
+      }
+    }
     // Restored executions keep their protection but cannot issue a fresh once.
     this.restoredAccesses = new Set(Object.values(this.resourceState.accesses).filter(active).map((a) => a.accessId));
     this.restoredTests = new Set(Object.values(this.resourceState.testReservations || {}).filter((r) => r.state === 'HELD').map((r) => r.transactionId));
+    if (scrubbedReleasedAccessToken) this.persist();
   }
 
   validateResourceState(state) {
@@ -153,7 +173,7 @@ export class ResourceRunRegistry extends RunRegistry {
       for (const [key, entry] of Object.entries(state.testReservations)) {
         const owner = [...this.runs.values(), ...this.history].find((r) => r.runId === entry?.runId && r.contextId === entry?.contextId);
         if (!id(key) || !onlyKeys(entry, ['transactionId','runId','contextId','version','resources','inputDigest','state',
-          'order','requestedAt','grantedAt','token','fencing','finishedAt','releaseDigest','proofDigest','reconciliationReceipts']) ||
+          'order','requestedAt','grantedAt','token','fencing','finishedAt','releaseDigest','proofDigest','reconciliationReceipts','unusedReleaseReceipt']) ||
           entry.transactionId !== key || !owner || !hash(entry.inputDigest) ||
           !Number.isSafeInteger(entry.version) || entry.version < entry.contextId || entry.version > owner.version ||
           !['WAITING','HELD','RELEASED','CANCELLED'].includes(entry.state) ||
@@ -165,6 +185,19 @@ export class ResourceRunRegistry extends RunRegistry {
           entry.fencing < entry.order || entry.fencing > state.sequence)) fail();
         if (entry.releaseDigest !== undefined && !hash(entry.releaseDigest)) fail();
         if (entry.proofDigest !== undefined && !hash(entry.proofDigest)) fail();
+        if (entry.unusedReleaseReceipt !== undefined) {
+          const receipt = entry.unusedReleaseReceipt;
+          const lostTokenRelease = receipt?.mode === 'unused-no-effect-lost-token';
+          if (entry.state !== 'RELEASED' || !hash(entry.releaseDigest) || !hash(entry.proofDigest) ||
+              !onlyKeys(receipt, ['mode','authorizationDigest','attestationDigest','boundaryDigest','nativeProof','operationIds','evidenceDigest']) ||
+              !['unused-no-effect','unused-no-effect-lost-token'].includes(receipt.mode) ||
+              (lostTokenRelease && entry.token !== undefined) || entry.proofDigest !== digest(receipt) ||
+              !['authorizationDigest','attestationDigest','boundaryDigest','evidenceDigest'].every((key) => hash(receipt[key])) ||
+              !validUnusedNativeProof(receipt.nativeProof) || !Array.isArray(receipt.operationIds) ||
+              new Set(receipt.operationIds).size !== receipt.operationIds.length ||
+              receipt.operationIds.some((key) => !id(key) || state.operations[key]?.runId !== entry.runId ||
+                state.operations[key]?.contextId !== entry.contextId)) fail();
+        }
         if (entry.reconciliationReceipts !== undefined && (!record(entry.reconciliationReceipts) ||
           Object.entries(entry.reconciliationReceipts).some(([key, value]) => !id(key) ||
             !onlyKeys(value,['inputDigest','fencing']) || !hash(value.inputDigest) ||
@@ -193,6 +226,14 @@ export class ResourceRunRegistry extends RunRegistry {
           entry.scope !== 'all' || !Number.isSafeInteger(entry.generation) || entry.generation > state.sequence ||
           !Number.isFinite(Date.parse(entry.requestedAt)) || typeof entry.authorization !== 'string' || !entry.authorization) fail();
     }
+  }
+
+  monitorRuns() {
+    const values = [...this.runs.values()].sort((a, b) =>
+      Number(b.state === 'RESERVED') - Number(a.state === 'RESERVED') || a.runId.localeCompare(b.runId));
+    return { version: VERSION, snapshot_only: true, totalRuns: values.length, truncated: values.length > 200,
+      runs: values.slice(0, 200).map(run => Object.fromEntries(
+        ['runId', 'changeId', 'sessionId', 'version', 'state', 'phase'].map(key => [key, run[key] ?? null]))) };
   }
 
   snapshot() {
@@ -243,7 +284,8 @@ export class ResourceRunRegistry extends RunRegistry {
   testReservations(runId) {
     return Object.values(this.resourceState.testReservations || {}).filter((r) => !runId || r.runId === runId).map((r) =>
       ({ ...copy(r), reconciliationRequired: this.restoredTests.has(r.transactionId),
-        blockers: r.state === 'WAITING' ? this.testBlockers(r) : [] }));
+        blockers: r.state === 'WAITING' ? this.testBlockers(r) : [],
+        ...(r.state === 'HELD' ? { unusedReleaseBoundary: this.unusedTestBoundary(r) } : {}) }));
   }
   testBlockers(entry) {
     return Object.values(this.resourceState.testReservations || {}).filter((other) => other !== entry &&
@@ -325,10 +367,129 @@ export class ResourceRunRegistry extends RunRegistry {
   operationTests(entry) {
     return Object.values(this.resourceState.operations).filter((op) => op.testReservationId === entry.transactionId);
   }
+  unusedTestOperations(entry) {
+    return Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId &&
+      op.contextId === entry.contextId && (op.testReservationId === entry.transactionId ||
+        Date.parse(op.preparedAt) >= Date.parse(entry.grantedAt))).sort((a, b) => a.operationId.localeCompare(b.operationId));
+  }
+  isRejectionOnlyOperation(op) {
+    const owner = this.requestOwners[op?.requestId];
+    const receipt = owner?.reconciliation;
+    return Boolean(op && op.rejectionOnly === true && op.state === 'PREPARED' && !op.native &&
+      owner?.runId === op.runId && receipt?.outcome === 'REJECTION_ONLY' && receipt.recoveryId === null &&
+      receipt.operationId === op.operationId && receipt.contextId === op.contextId &&
+      receipt.version === op.version && receipt.sessionId === op.sessionId &&
+      !Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId ||
+        access.operationIds.includes(op.operationId)));
+  }
+  unusedTestOperationClassification(op, decision = null) {
+    if (op.state === 'CANCELLED' && !op.native) return 'cancelled-without-execution';
+    if (this.isRejectionOnlyOperation(op)) return 'rejected-validation-no-native-effect';
+    if (op.state === 'PREPARED' && !op.native && decision === 'rejected') return 'rejected-validation-no-native-effect';
+    if (op.state === 'PREPARED' && !op.native && decision === 'cancelled') return 'cancelled-validation-no-native-effect';
+    if (op.state === 'COMPLETED' && op.native?.onceAcknowledged && op.native.kind === 'bash') {
+      return 'read-only-no-effect';
+    }
+    return null;
+  }
+  unusedTestBoundary(entry) {
+    return digest({ entry, run: this.runs.get(entry.runId),
+      operations: Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId),
+      accesses: Object.values(this.resourceState.accesses).filter((access) => access.runId === entry.runId),
+      owners: Object.fromEntries(Object.entries(this.requestOwners).filter(([, owner]) => owner.runId === entry.runId)) });
+  }
+  restoredTestForUnusedRecovery(runId, payload) {
+    this.mutable();
+    const run = this.owned(runId, payload.version);
+    const entry = this.resourceState.testReservations?.[payload.transactionId];
+    if (payload.recoveryMode !== 'validated-change-unused' || !entry || entry.runId !== runId || entry.version !== run.version || entry.contextId !== run.contextId ||
+        entry.state !== 'HELD' || !this.restoredTests.has(entry.transactionId)) {
+      throw new CoordinationError('test-unused-recovery-required');
+    }
+    if (payload.contextId !== entry.contextId || payload.sessionId !== run.sessionId) {
+      throw new CoordinationError('test-unused-recovery-identity-divergent');
+    }
+    if (payload.fencing !== entry.fencing) throw new CoordinationError('test-token-invalid');
+    if (!hash(payload.boundaryDigest) || payload.boundaryDigest !== this.unusedTestBoundary(entry)) {
+      throw new CoordinationError('test-unused-boundary-stale');
+    }
+    if (this.unresolvedAccess(runId, false) || this.operationTests(entry).some((op) =>
+        !['COMPLETED','CANCELLED'].includes(op.state))) throw new CoordinationError('test-effects-unresolved');
+    return entry;
+  }
+  unusedTestReplay(runId, payload) {
+    const prior = this.resourceState.testReservations?.[payload.transactionId];
+    if (prior?.state !== 'RELEASED') return null;
+    if (prior.runId !== runId || !prior.unusedReleaseReceipt || prior.releaseDigest !== digest(payload)) {
+      throw new CoordinationError('test-unused-release-divergent');
+    }
+    return copy(prior);
+  }
+  releaseUnusedTests(runId, payload, verifiedNativeProof, { lostTokenRecovery = false, validatedChangeScope = false } = {}) {
+    this.mutable();
+    const replay = this.unusedTestReplay(runId, payload);
+    if (replay) return replay;
+    this.admission(runId);
+    const entry = lostTokenRecovery ? this.restoredTestForUnusedRecovery(runId, payload) : this.testHeld(runId, payload);
+    const run = this.runs.get(runId);
+    evidence(payload.evidence);
+    const attestation = payload.attestation;
+    const allowedKeys = ['version','transactionId',...(lostTokenRecovery ? ['recoveryMode'] : ['token']),
+      'fencing','contextId','sessionId','boundaryDigest',...(lostTokenRecovery ? [] : ['developerAuthorization']),
+      'evidence','attestation','nativeProof'];
+    if (!onlyKeys(payload, allowedKeys) ||
+        (lostTokenRecovery && (payload.recoveryMode !== 'validated-change-unused' || validatedChangeScope !== true)) ||
+        payload.contextId !== entry.contextId || payload.sessionId !== run.sessionId ||
+        (!lostTokenRecovery && (typeof payload.developerAuthorization !== 'string' || !payload.developerAuthorization.trim() ||
+        payload.developerAuthorization.length > 500)) ||
+        !onlyKeys(attestation, ['noEnvironmentMutation','noMutatingMandate','operations']) ||
+        attestation.noEnvironmentMutation !== true || attestation.noMutatingMandate !== true ||
+        !Array.isArray(attestation.operations) || !validUnusedNativeProof(payload.nativeProof) ||
+        digest(payload.nativeProof) !== digest(verifiedNativeProof)) {
+      throw new CoordinationError('test-unused-attestation-required');
+    }
+    if (this.unresolvedAccess(runId, false)) throw new CoordinationError('test-effects-unresolved');
+    if (!hash(payload.boundaryDigest) || payload.boundaryDigest !== this.unusedTestBoundary(entry)) {
+      throw new CoordinationError('test-unused-boundary-stale');
+    }
+    const ops = this.unusedTestOperations(entry);
+    const proofClassifications = new Map((payload.nativeProof.operationClassifications || []).map((item) =>
+      [item.operationId, item.classification]));
+    if (proofClassifications.size !== ops.length || ops.some((op) =>
+        !proofClassifications.has(op.operationId))) throw new CoordinationError('test-unused-operations-divergent');
+    if (payload.nativeProof.coverage === 'operation-ledger-after-compaction' &&
+        (!ops.length || this.unresolvedAccess(runId, false) || ops.some((op) => op.native ||
+          !['PREPARED','CANCELLED'].includes(op.state) ||
+          !['rejected-validation-no-native-effect','cancelled-validation-no-native-effect','cancelled-without-execution']
+            .includes(proofClassifications.get(op.operationId))))) {
+      throw new CoordinationError('test-unused-operation-not-proved');
+    }
+    if (attestation.operations.length !== ops.length || new Set(attestation.operations.map((op) => op?.operationId)).size !== ops.length) {
+      throw new CoordinationError('test-unused-operations-divergent');
+    }
+    for (const op of ops) {
+      const review = attestation.operations.find((review) => review?.operationId === op.operationId);
+      if (!onlyKeys(review, ['operationId','classification']) ||
+          review.classification !== proofClassifications.get(op.operationId) ||
+          review.classification !== this.unusedTestOperationClassification(op, proofClassifications.get(op.operationId) === 'rejected-validation-no-native-effect' ? 'rejected' :
+            proofClassifications.get(op.operationId) === 'cancelled-validation-no-native-effect' ? 'cancelled' : null)) {
+        throw new CoordinationError('test-unused-operation-not-proved');
+      }
+    }
+    entry.unusedReleaseReceipt = { mode: lostTokenRecovery ? 'unused-no-effect-lost-token' : 'unused-no-effect',
+      authorizationDigest: lostTokenRecovery ? digest({mode:'validated-change-scope',runId,contextId:entry.contextId,
+        version:entry.version,changeId:run.changeId}) : digest(payload.developerAuthorization),
+      attestationDigest: digest(attestation), boundaryDigest: payload.boundaryDigest, nativeProof: copy(verifiedNativeProof),
+      operationIds: ops.map((op) => op.operationId), evidenceDigest: digest(payload.evidence) };
+    entry.state = 'RELEASED'; entry.finishedAt = now(); entry.releaseDigest = digest(payload);
+    entry.proofDigest = digest(entry.unusedReleaseReceipt);
+    if (lostTokenRecovery) { delete entry.token; this.restoredTests.delete(entry.transactionId); }
+    this.grantTests(); this.persist(); return copy(entry);
+  }
   releaseTests(runId, payload) {
     this.mutable(); evidence(payload.evidence);
     const prior = this.resourceState.testReservations?.[payload.transactionId];
-    if (prior?.state === 'RELEASED' && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
+    if (prior?.state === 'RELEASED' && !prior.unusedReleaseReceipt && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
     const entry = this.testHeld(runId, payload);
     const ops = this.operationTests(entry);
     if (this.unresolvedAccess(runId, false) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {
@@ -457,14 +618,16 @@ export class ResourceRunRegistry extends RunRegistry {
     const { run, resources } = this.scope(runId, approval.reservation_version, approval.resources);
     if (approval.coordination_protocol !== COORDINATION_PROTOCOL || !id(approval.operation_id) ||
         !hash(approval.operation_digest) || !id(approval.requestId) ||
-        (approval.access_id !== undefined && !id(approval.access_id))) {
+        (approval.access_id !== undefined && !id(approval.access_id)) ||
+        (approval.tool_input_sha256 !== undefined && !hash(approval.tool_input_sha256))) {
       throw new CoordinationError('coordination-upgrade-required');
     }
     this.validateExpected(approval.expected_revisions, resources);
     if (approval.session_id !== run.sessionId && approval.session_id !== candidateSession) throw new CoordinationError('operation-session-divergent');
     const identityDigest = digest(Object.fromEntries(['run_id', 'reservation_version', 'requestId', 'approval_id',
       'change_id', 'session_id', 'directory', 'title', 'summary', 'files', 'commands', 'resources',
-      'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol']
+      'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol',
+      ...(Object.hasOwn(approval,'tool_input_sha256') ? ['tool_input_sha256'] : [])]
       .map((key) => [key, approval[key] ?? null])));
     const prior = this.resourceState.operations[approval.operation_id];
     if (prior) {
@@ -753,12 +916,13 @@ export class ResourceRunRegistry extends RunRegistry {
       delete this.runs.get(access.runId).maintenancePreflightRequired;
     }
     access.state = 'RELEASED'; access.finishedAt = now(); access.outcome = outcome;
+    delete access.token;
     this.restoredAccesses.delete(access.accessId);
   }
   releaseAccess(runId, payload) {
     evidence(payload.evidence);
     const prior = this.resourceState.accesses[payload.operationId];
-    if (prior?.state === 'RELEASED' && prior.runId === runId && prior.token === payload.token &&
+    if (prior?.state === 'RELEASED' && prior.runId === runId &&
         prior.fencing === payload.fencing && prior.releaseDigest === digest(payload)) return copy(prior);
     const access = this.held(runId, payload);
     this.finishAccess(access, payload.outcome); access.releaseDigest = digest(payload);

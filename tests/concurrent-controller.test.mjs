@@ -3,7 +3,7 @@ import { openCodeV2TestHandler, v2ProviderResponseBytes, v2NormalizedToolPart } 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,15 +11,19 @@ import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import test from 'node:test';
 import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
+import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-async function waitFor(check) {
-  for (let i = 0; i < 200; i++) { if (await check()) return; await delay(20); }
+async function waitFor(check, timeoutMs = 4000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
-async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false } = {}) {
+async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false,
+  sourceFiles = {}, sourceEntries = [] } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
   const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
   if (codingPolicy) {
@@ -67,7 +71,10 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       ...native.sessions[url.pathname.split('/')[2]] };
     else { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'content-type': 'application/json', connection: 'close' }); response.end(JSON.stringify(payload));
-  }, { directory }));
+  }, { directory, sourceFiles, sourceEntries, onFsRequest: (path) => native.requests.push(path), onModelSwitch: ({sessionId,body}) => {
+    native.sessions[sessionId] = { ...native.sessions[sessionId], model: { providerID: body.model.providerID,
+      modelID: body.model.id, ...(body.model.variant ? { variant: body.model.variant } : {}) } };
+  } }));
   await new Promise((resolve) => opencode.listen(0, '127.0.0.1', resolve));
   const listener = createServer();
   await new Promise((resolve) => listener.listen(0, '127.0.0.1', resolve));
@@ -86,7 +93,12 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     } });
     child.stderr.on('data', (data) => { stderr += data; });
     await waitFor(async () => { if (child.exitCode !== null) throw new Error(stderr);
-      try { return (await fetch(base + '/status')).ok; } catch { return false; } });
+      let status;
+      try { const response = await fetch(base + '/status', { headers: { connection: 'close' }, signal: AbortSignal.timeout(500) }); if (!response.ok) return false; status = await response.json(); }
+      catch { return false; }
+      assert.equal(status.pid, child.pid, 'fixture controller PID mismatch');
+      assert.equal(status.workspace, directory, 'fixture controller workspace mismatch');
+      return status.opencodeSse === 'connected'; }, 10000);
   }
   async function stop() {
     if (child.exitCode !== null) return;
@@ -101,7 +113,18 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     await new Promise((resolve) => opencode.close(resolve)); rmSync(directory, { recursive: true, force: true }); });
   const get = async (path) => { const r = await fetch(base + path, { headers: { connection: 'close' } });
     const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
-  const post = async (path, data) => { const r = await fetch(base + path, { method: 'POST',
+  const post = async (path, data, { skipRecoveryDiscovery = false } = {}) => {
+    if (!skipRecoveryDiscovery && path.endsWith('/job/recover') && data?.phase === 'prepare' && data?.sessionId) {
+      native.messages[data.sessionId] ||= [];
+      if (!native.messages[data.sessionId].some(message => message.parts?.some(part => part.state?.input?.code?.includes('request_validation')))) {
+        const input = { namespace: 'cgpt-validation', query: 'request_validation' };
+        native.messages[data.sessionId].push({ parts: [{ type: 'tool', tool: 'execute', callID: 'call-discovery-' + data.sessionId,
+          executed: false, state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify(input) + ');' },
+            output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }), time: { start: 10, end: 11 },
+            metadata: { truncated: false, toolCalls: [{ tool: 'search', status: 'completed', input }] } } }] });
+      }
+    }
+    const r = await fetch(base + path, { method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close' }, body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
     const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
   const candidate = (id) => ({ runId: id, ownerId: 'codex-' + id, sessionId: 'ses_' + id, directory,
@@ -122,6 +145,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     expected_revisions: expectedRevisions || Object.fromEntries(resources.map((r) => [r.key, 0])),
     requestId, approval_id: 'approval-' + requestId, session_id: run.sessionId,
     change_id: run.changeId, directory, files: [], commands: ['/usr/bin/true'],
+    ...(requestId.startsWith('preflight') ? { timeout_seconds: 120, interval_seconds: 3 } : {}),
     resources, title: 'isolated command', summary: 'synthetic fixture' };
     native.messages[run.sessionId] ||= [];
     native.messages[run.sessionId].push({ parts: [{ type: 'tool', tool: 'cgpt-validation_request_validation',
@@ -146,13 +170,13 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       metadata: value.commands.length ? { command: value.commands[0] } : { filepath: directory + '/' + value.files[0] } });
     await waitFor(() => native.replies.some((r) => r.path.endsWith('/perm-' + value.requestId)));
   }
-  async function completeTool(value) {
+  async function completeTool(value, exit = 0) {
     const op = (await get('/runs')).body.coordination.operations[value.operation_id];
     const stamp = Math.max(Date.now(), op.native.startedAt) + 1;
     const part = { type: 'tool', id: 'part-' + value.requestId, callID: 'call-' + value.requestId,
       sessionID: value.session_id, tool: value.commands.length ? 'bash' : 'edit', state: { status: 'completed',
         input: value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] },
-        time: { start: stamp, end: stamp + 1 }, metadata: { exit: 0 } } };
+        time: { start: stamp, end: stamp + 1 }, metadata: { exit } } };
     native.messages[value.session_id].push({ parts: [part] });
     native.emit({ type: 'message.part.updated', properties: { part } });
   }
@@ -161,9 +185,43 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     return post('/runs/' + run.runId + '/locks/release', { version: run.version, operationId: current.accessId,
       token: current.token, fencing: current.fencing, outcome: 'COMPLETED', evidence: ['native effects reviewed'] });
   }
-  return { native, children, directory, base, get, post, candidate, reserve, approval, start, stop,
+  const nativeClient = createOpenCodeV2Client({ baseUrl:'http://127.0.0.1:'+opencode.address().port, directory,
+    passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE });
+  return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
     approvedAccess, execute, completeTool, releaseOperation };
 }
+
+test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation et chemins exclus refusés', async t => {
+  const h=await setup(t,{sourceFiles:{'src/example.py':'value = 42\n'},sourceEntries:[
+    {path:'src/example.py',type:'file'},{path:'src',type:'directory'},{path:'.env',type:'file'},
+  ]});
+  const run=await h.reserve('source-read');
+  const before=(await h.get('/runs/source-read/status')).body;
+  const read=await h.get('/runs/source-read/source/read?path=src%2Fexample.py');
+  assert.equal(read.status,200,JSON.stringify(read));assert.equal(read.body.content,'value = 42\n');
+  assert.equal(read.body.sessionId,run.sessionId);assert.equal(read.body.directory,h.directory);
+  assert.match(read.body.sha256,/^[a-f0-9]{64}$/);assert.equal(read.body.source,'opencode-v2-fs-read');
+  const list=await h.get('/runs/source-read/source/list');
+  assert.equal(list.status,200);assert.deepEqual(list.body.entries,[{path:'src/example.py',type:'file'},{path:'src',type:'directory'}]);
+  const found=await h.get('/runs/source-read/source/find?query=example.py&type=file');
+  assert.equal(found.status,200);assert.deepEqual(found.body.entries,[{path:'src/example.py',type:'file'}]);
+  const fsReadsBefore=h.native.requests.filter(path=>path.startsWith('/api/fs/')).length;
+  assert.equal((await h.get('/runs/source-read/source/read?path=..%2Foutside')).status,400);
+  assert.equal((await h.get('/runs/source-read/source/read?path=.env')).status,400);
+  assert.equal(h.native.requests.filter(path=>path.startsWith('/api/fs/')).length,fsReadsBefore);
+  const after=(await h.get('/runs/source-read/status')).body;
+  assert.equal(after.job.jobId,before.job.jobId);assert.equal(after.undecidedValidationCount,0);
+  assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+});
+
+test('source read-only fallback refuse une permission native en attente',async t=>{
+  const h=await setup(t,{sourceFiles:{'src/file.py':'x=1\n'}});const run=await h.reserve('source-busy');
+  h.native.permissions.push({id:'pending-read-boundary',sessionID:run.sessionId,permission:'edit',tool:{callID:'call-read'}});
+  const before=h.native.requests.filter(path=>path.startsWith('/api/fs/')).length;
+  const result=await h.get('/runs/source-busy/source/read?path=src%2Ffile.py');
+  assert.equal(result.status,409);assert.equal(result.body.error,'source-read-native-session-busy');
+  assert.equal(h.native.requests.filter(path=>path.startsWith('/api/fs/')).length,before);
+});
 
 test('garde du moniteur : quiescence, origine et exclusion des mutations concurrentes', async (t) => {
   const h = await setup(t);
@@ -445,7 +503,148 @@ test('une fin native inconnue garde les protections et interdit le gate', async 
   assert.equal(refused.body.error, 'native-completion-not-proved');
   assert.equal((await h.post('/runs/a/job/terminal-gate', { state: 'TERMINÉ' })).body.error, 'run-accesses-unresolved');
   assert.equal((await h.get('/runs/a/locks')).body.accesses[0].state, 'EXECUTING');
-  await h.completeTool(approval); assert.equal((await h.releaseOperation(a, approval, access)).status, 200);
+  await h.completeTool(approval);
+  const released = await h.releaseOperation(a, approval, access);
+  assert.equal(released.status, 200); assert.equal(Object.hasOwn(released.body, 'token'), false);
+  assert.equal(Object.hasOwn((await h.get('/runs/a/locks')).body.accesses[0], 'token'), false);
+  const replay = await h.releaseOperation(a, approval, access);
+  assert.equal(replay.status, 200); assert.equal(Object.hasOwn(replay.body, 'token'), false);
+});
+
+test('fin SSE idle sans partie : le transcript corrélé clôt une commande exit 1 sans succès implicite', async (t) => {
+  const h = await setup(t); const run = await h.reserve('idle-transcript-fallback');
+  const { approval, access } = await h.approvedAccess(run, 'idle-transcript-fallback');
+  await h.execute(approval);
+  await waitFor(async () => (await h.get('/status')).body.opencodeSse === 'connected');
+  const operation = (await h.get('/runs')).body.coordination.operations[approval.operation_id];
+  const start = operation.native.startedAt + 1;
+  h.native.messages[run.sessionId].push({ parts: [{ type: 'tool', id: 'part-idle-transcript-fallback',
+    callID: 'call-' + approval.requestId, sessionID: run.sessionId, tool: 'shell', executed: false,
+    state: { status: 'completed',
+      input: { command: approval.commands[0] }, time: { start, end: start + 1 },
+      metadata: { status: 'completed', exit: 1 } } }] });
+  h.native.emit({ type: 'session.idle', location: { directory: h.directory },
+    properties: { sessionID: run.sessionId, status: { type: 'idle' } } });
+  await waitFor(async () => (await h.get('/runs')).body.coordination.operations[approval.operation_id].state === 'COMPLETED');
+  const completed = (await h.get('/runs')).body.coordination.operations[approval.operation_id];
+  assert.equal(completed.state, 'COMPLETED');
+  assert.match(completed.completionDigest, /^[a-f0-9]{64}$/);
+  assert.equal((await h.get('/runs/' + run.runId + '/locks')).body.accesses[0].state, 'HELD');
+  assert.equal(h.native.replies.length, 1, 'aucune nouvelle once après relecture du transcript');
+  const released = await h.releaseOperation(run, approval, access);
+  assert.equal(released.status, 200);
+});
+
+test('attach réconcilie la fin native prouvée avant rattachement sans libérer les protections', async (t) => {
+  const h = await setup(t); const a = await h.reserve('attach-refresh');
+  const { approval, access } = await h.approvedAccess(a, 'attach-parent'); await h.execute(approval);
+  const diagnostic = h.approval(a, 'attach-diagnostic'); diagnostic.access_id = access.accessId;
+  h.native.messages[a.sessionId].at(-1).parts[0].state.input.access_id = access.accessId;
+  assert.equal((await h.post('/validation/request', { approval: diagnostic })).status, 202);
+  assert.equal((await h.post('/runs/' + a.runId + '/decision/' + diagnostic.requestId, { decision: 'approved' })).status, 201);
+  const payload = { version: a.version, operationId: access.accessId, token: access.token, fencing: access.fencing,
+    operationIds: [diagnostic.operation_id], evidence: ['diagnostic exact approuvé'] };
+  const route = '/runs/' + a.runId + '/locks/attach';
+  assert.equal((await h.post(route, { ...payload, token: 'incorrect' })).body.error, 'access-token-invalid');
+  assert.equal((await h.post(route, payload)).body.error, 'native-completion-not-proved');
+  const op = (await h.get('/runs')).body.coordination.operations[approval.operation_id];
+  const part = { type: 'tool', tool: 'bash', callID: 'incorrect', state: { status: 'completed',
+    input: { command: '/usr/bin/true' }, time: { start: op.native.startedAt, end: Date.now() + 10 }, metadata: { exit: 1 } } };
+  h.native.messages[a.sessionId].push({ parts: [part] });
+  assert.equal((await h.post(route, payload)).body.error, 'native-completion-not-proved');
+  assert.equal((await h.get('/runs/' + a.runId + '/locks')).body.accesses[0].state, 'EXECUTING');
+  part.callID = 'call-' + approval.requestId;
+  const attached = await h.post(route, payload); assert.equal(attached.status, 200, JSON.stringify(attached));
+  assert.equal(attached.body.state, 'HELD'); assert.equal(attached.body.token, access.token);
+  assert.equal(attached.body.fencing, access.fencing); assert.ok(attached.body.operationIds.includes(diagnostic.operation_id));
+  const released = await h.post('/runs/' + a.runId + '/locks/release', { ...payload, operationIds: undefined,
+    outcome: 'RECONCILED', evidence: ['fin et absence de diagnostic exécuté vérifiées'] });
+  assert.equal(released.status, 200, JSON.stringify(released));
+  assert.equal((await h.get('/runs')).body.coordination.operations[diagnostic.operation_id].state, 'CANCELLED');
+  assert.equal((await h.get('/runs/' + a.runId + '/status')).body.hasUnresolvedOperation, false);
+  assert.equal(h.native.replies.length, 1);
+});
+
+test('attach sérialise la libération concurrente pendant la lecture native', async (t) => {
+  const h = await setup(t); const a = await h.reserve('attach-race');
+  const { approval, access } = await h.approvedAccess(a, 'race-parent'); await h.execute(approval);
+  const diagnostic = h.approval(a, 'race-diagnostic'); diagnostic.access_id = access.accessId;
+  h.native.messages[a.sessionId].at(-1).parts[0].state.input.access_id = access.accessId;
+  assert.equal((await h.post('/validation/request', { approval: diagnostic })).status, 202);
+  assert.equal((await h.post('/runs/' + a.runId + '/decision/' + diagnostic.requestId, { decision: 'approved' })).status, 201);
+  let resume, entered; const paused = new Promise((resolve) => { resume = resolve; });
+  const waiting = new Promise((resolve) => { entered = resolve; }); let first = true;
+  h.native.onRequest = async (path) => { if (path === '/session/' + a.sessionId + '/message' && first) {
+    first = false; entered(); await paused;
+  } };
+  const attach = h.post('/runs/' + a.runId + '/locks/attach', { version: a.version, operationId: access.accessId,
+    token: access.token, fencing: access.fencing, operationIds: [diagnostic.operation_id], evidence: ['approuvé'] });
+  await waiting; await h.completeTool(approval, 1);
+  const released = await h.post('/runs/' + a.runId + '/locks/release', { version: a.version, operationId: access.accessId,
+    token: access.token, fencing: access.fencing, outcome: 'RECONCILED', evidence: ['fin vérifiée'] });
+  assert.equal(released.body.error, 'run-transition-in-flight'); resume();
+  assert.equal((await attach).status, 200);
+  assert.equal(h.native.replies.length, 1);
+});
+
+test('une décision approuvée perdue après redémarrage ne sert qu’au rattachement pour annulation', async (t) => {
+  const h = await setup(t); const a = await h.reserve('attach-restart');
+  const { approval, access } = await h.approvedAccess(a, 'restart-parent'); await h.execute(approval);
+  const diagnostic = h.approval(a, 'restart-diagnostic'); diagnostic.access_id = access.accessId;
+  h.native.messages[a.sessionId].at(-1).parts[0].state.input.access_id = access.accessId;
+  assert.equal((await h.post('/validation/request', { approval: diagnostic })).status, 202);
+  assert.equal((await h.post('/runs/' + a.runId + '/decision/' + diagnostic.requestId, { decision: 'approved' })).status, 201);
+  const request = h.native.messages[a.sessionId].at(-1).parts[0];
+  request.executed = false;
+  request.state.status = 'completed'; request.state.time = { start: Date.now(), end: Date.now() + 1 };
+  request.state.output = JSON.stringify({ ...diagnostic, status: 'APPROVED', reviewer: 'CGPT',
+    decision_applied_at: new Date().toISOString() });
+  await h.stop(); await h.start();
+  const decision = await h.get('/runs/' + a.runId + '/decision/' + diagnostic.requestId);
+  assert.equal(decision.body, null, JSON.stringify(decision));
+  const payload = { version: a.version,
+    operationId: access.accessId, token: access.token, fencing: access.fencing,
+    operationIds: [diagnostic.operation_id], evidence: ['diagnostic approuvé avant redémarrage'] };
+  const route = '/runs/' + a.runId + '/locks/attach';
+  assert.equal((await h.post(route, payload)).body.error, 'access-operation-not-approved');
+  const original = request.state.output;
+  for (const alteration of [
+    (out) => { out.status = 'REJECTED'; },
+    (out) => { out.operation_digest = '0'.repeat(64); },
+    (out) => { out.access_id = 'wrong-access'; },
+    (out) => { out.resources = []; },
+    (out) => { delete out.decision_applied_at; },
+  ]) {
+    const out = JSON.parse(original); alteration(out); request.state.output = JSON.stringify(out);
+    assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-not-proved');
+  }
+  request.state.output = original;
+  h.native.messages[a.sessionId].push({ parts: [structuredClone(request)] });
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-not-proved');
+  h.native.messages[a.sessionId].pop();
+  assert.equal((await h.post(route, { ...payload, token: 'stale', restoreApprovedForCancellation: true })).body.error, 'access-token-invalid');
+  h.native.permissions.push({ id: 'other', sessionID: a.sessionId, permission: 'bash', metadata: { command: 'synthetic' } });
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'native-session-not-quiescent');
+  h.native.permissions = [];
+  request.state.input.operation_digest = '0'.repeat(64);
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-not-proved');
+  request.state.input.operation_digest = diagnostic.operation_digest;
+  let reads = 0; h.native.onRequest = async (path) => {
+    if (path === '/session/' + a.sessionId + '/message' && ++reads === 2) request.state.output += ' ';
+  };
+  assert.equal((await h.post(route, { ...payload, restoreApprovedForCancellation: true })).body.error, 'restored-approval-history-changed');
+  h.native.onRequest = null; request.state.output = original;
+  assert.equal((await h.get('/runs/' + a.runId + '/locks')).body.accesses[0].state, 'EXECUTING');
+  await h.completeTool(approval, 1);
+  const attach = await h.post(route, { ...payload, restoreApprovedForCancellation: true });
+  assert.equal(attach.status, 200, JSON.stringify(attach));
+  assert.equal((await h.get('/runs/' + a.runId + '/decision/' + diagnostic.requestId)).body, null);
+  const released = await h.post('/runs/' + a.runId + '/locks/release', { version: a.version,
+    operationId: access.accessId, token: access.token, fencing: access.fencing,
+    outcome: 'RECONCILED', evidence: ['fin et diagnostic non exécuté vérifiés'] });
+  assert.equal(released.status, 200, JSON.stringify(released));
+  assert.equal((await h.get('/runs')).body.coordination.operations[diagnostic.operation_id].state, 'CANCELLED');
+  assert.equal(h.native.replies.length, 1);
 });
 
 test('sélection simultanée : un seul propriétaire du change et aucun écrasement', async (t) => {
@@ -555,7 +754,7 @@ async function orphanedPreflight(t, mutate = () => {}) {
     recoveryId: 'recovery-orphan', preflightRequestId: 'preflight-orphan' };
   assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
   const approval = h.approval({ ...a, sessionId: recovery.sessionId }, recovery.preflightRequestId);
-  h.native.messages.ses_a_new[0].parts[0].state = { status: 'completed', input: structuredClone(approval),
+  h.native.messages.ses_a_new.at(-1).parts[0].state = { status: 'completed', input: structuredClone(approval),
     output: JSON.stringify({ ...approval, status: 'PENDING', notification_status: 'FAILED' }) };
   await h.stop();
   // Reproduire l'état durable produit par l'ancienne admission, uniquement dans la fixture arrêtée.
@@ -639,7 +838,7 @@ for(const variant of ['no-pause','busy','permission','allow','effect','poll-iden
 test('prévol orphelin : rejet seul durable, notifications répétées, pair actif puis retry existant', async (t) => {
   const { h, b, approval, recovery, payload } = await orphanedPreflight(t);
   const before = (await h.get('/runs')).body;
-  assert.equal((await h.post('/validation/resource-request', { approval })).body.error, 'request-reconciliation-required');
+  assert.equal((await h.post('/validation/resource-request', { approval })).body.error, 'preflight-request-not-correlated');
   h.native.busy.ses_b = { type: 'busy' };
   const receipt = await h.post('/runs/a/validation/reconcile', payload);
   assert.equal(receipt.status, 201, JSON.stringify(receipt));
@@ -700,7 +899,7 @@ test('réconciliation orpheline : autorisation, identités et preuves divergente
     assert.deepEqual((await h.get('/runs')).body, before);
   }
   for (const status of ['APPROVED', 'REJECTED', 'CANCELLED']) {
-    h.native.messages.ses_a_new[0].parts[0].state.output = JSON.stringify({ ...approval, status });
+    h.native.messages.ses_a_new.at(-1).parts[0].state.output = JSON.stringify({ ...approval, status });
     assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 409);
   }
   assert.deepEqual(h.native.replies, []);
@@ -850,19 +1049,35 @@ test('récupération de A avec B actif : réservation conservée et génération
   let stamp;
   const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new', recoveryId: 'recovery-a', preflightRequestId: 'preflight-a' };
   assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'a');
+  const runContext = readdirSync(runStateDirectory)[0];
+  const jobStatePath = join(runStateDirectory, runContext, 'controller-job.json');
+  const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
+  delete persistedJob.recovery.preparationHistory.requestValidationSignatureHash;
+  writeFileSync(jobStatePath, JSON.stringify(persistedJob));
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 0, by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
   const approval = h.approval({ ...a, sessionId: 'ses_a_new' }, 'preflight-a');
-  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  const requested = await h.post('/validation/request', { approval });
+  assert.equal(requested.status, 202, JSON.stringify(requested));
   assert.equal((await h.post('/runs/a/decision/preflight-a', { decision: 'approved' })).status, 201);
   h.native.permissions.push({ id: 'permission-a', sessionID: 'ses_a_new', permission: 'bash', metadata: { command: '/usr/bin/true' } });
   await waitFor(() => h.native.replies.length === 1);
   stamp = Date.now() + 1;
-  h.native.messages.ses_a_new = [{ parts: [
+  const signatureHistory = h.native.messages.ses_a_new.slice(0, 1);
+  const discoveryInput = { namespace: 'cgpt-validation', query: 'request_validation', limit: 20 };
+  const discoveryCallId = 'call-legacy-discovery';
+  const legacyDiscovery = { type: 'tool', tool: 'execute', callID: discoveryCallId, executed: false,
+    state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify(discoveryInput) + ');' },
+      output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }), time: { start: stamp + 1, end: stamp + 2 },
+      metadata: { truncated: false, toolCalls: [{ tool: 'search', status: 'completed', input: discoveryInput }] } } };
+  h.native.messages.ses_a_new = [...signatureHistory, { parts: [legacyDiscovery,
     { type: 'tool', tool: 'cgpt-validation_request_validation', state: { status: 'completed', input: approval,
-      output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: stamp + 1, end: stamp + 2 } } },
+      output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: stamp + 3, end: stamp + 4 } } },
     { type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: '/usr/bin/true' },
-      metadata: { exit: 0 }, time: { start: stamp + 3, end: stamp + 4 } } },
+      metadata: { exit: 0 }, time: { start: stamp + 5, end: stamp + 6 } } },
     { type: 'tool', tool: 'cgpt-validation_broker_readiness', state: { status: 'completed',
-      output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: stamp + 5, end: stamp + 6 } } },
+      output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: stamp + 7, end: stamp + 8 } } },
   ] }];
   await h.post('/broker/readiness', { status: 'READY', pending_count: 0, by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
   assert.equal((await h.releaseOperation(a, approval)).status, 200);
@@ -874,6 +1089,58 @@ test('récupération de A avec B actif : réservation conservée et génération
   assert.equal(h.native.permissions[0].sessionID, 'ses_b');
   assert.equal((await h.post('/validation/request', { approval: h.approval(a, 'old-owner') })).status, 409);
 });
+
+for (const invalidDiscovery of ['duplicate', 'truncated', 'untimed', 'divergent']) {
+  test('complete legacy sans effet refuse discovery invalide : ' + invalidDiscovery, async t => {
+    const h = await setup(t); const run = await h.reserve('legacy-invalid');
+    const recovery = { jobId: 'job-legacy-invalid', expectedSessionId: 'ses_legacy-invalid',
+      sessionId: 'ses_legacy-invalid_new', recoveryId: 'recovery-legacy-invalid', preflightRequestId: 'preflight-legacy-invalid' };
+    assert.equal((await h.post('/runs/legacy-invalid/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+    const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'legacy-invalid');
+    const jobStatePath = join(runStateDirectory, readdirSync(runStateDirectory)[0], 'controller-job.json');
+    const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
+    delete persistedJob.recovery.preparationHistory.requestValidationSignatureHash;
+    writeFileSync(jobStatePath, JSON.stringify(persistedJob));
+    await h.stop(); await h.start();
+    await h.post('/broker/readiness', { status: 'READY', pending_count: 0, by_run: { 'legacy-invalid': { pending_count: 0 } } });
+    const approval = h.approval({ ...run, sessionId: recovery.sessionId }, recovery.preflightRequestId);
+    assert.equal((await h.post('/validation/request', { approval })).status, 202);
+    assert.equal((await h.post('/runs/legacy-invalid/decision/' + recovery.preflightRequestId, { decision: 'approved' })).status, 201);
+    h.native.permissions.push({ id: 'permission-legacy-invalid', sessionID: recovery.sessionId,
+      permission: 'bash', metadata: { command: '/usr/bin/true' } });
+    await waitFor(() => h.native.replies.length === 1);
+    const stamp = Date.now() + 10;
+    const discovery = (callID) => ({ type: 'tool', tool: 'execute', callID, executed: false,
+      state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify({
+        namespace: 'cgpt-validation', query: invalidDiscovery === 'divergent' ? 'broker_health' : 'request_validation', limit: 20 }) + ');' },
+        output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }),
+        time: { start: stamp, end: stamp + 1 },
+        metadata: { truncated: invalidDiscovery === 'truncated', toolCalls: [{ tool: 'search', status: 'completed',
+          input: { namespace: 'cgpt-validation', query: invalidDiscovery === 'divergent' ? 'broker_health' : 'request_validation', limit: 20 } }] } } });
+    const extraDiscovery = discovery('call-legacy-invalid-discovery');
+    const discoveries = invalidDiscovery === 'duplicate' ? [extraDiscovery, discovery('call-legacy-invalid-discovery-2')] : [extraDiscovery];
+    if (invalidDiscovery === 'untimed') delete extraDiscovery.state.time;
+    h.native.messages[recovery.sessionId] = [...h.native.messages[recovery.sessionId].slice(0, 1), { parts: [
+      ...discoveries,
+      { type: 'tool', tool: 'cgpt-validation_request_validation', state: { status: 'completed', input: approval,
+        output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: stamp + 2, end: stamp + 3 } } },
+      { type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: '/usr/bin/true' },
+        metadata: { exit: 0 }, time: { start: stamp + 4, end: stamp + 5 } } },
+      { type: 'tool', tool: 'cgpt-validation_broker_readiness', state: { status: 'completed',
+        output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: stamp + 6, end: stamp + 7 } } },
+    ] }];
+    await h.post('/broker/readiness', { status: 'READY', pending_count: 0,
+      by_run: { 'legacy-invalid': { pending_count: 0 } } });
+    assert.equal((await h.releaseOperation(run, approval)).status, 200);
+    const before = (await h.get('/runs/legacy-invalid/job')).body;
+    const refused = await h.post('/runs/legacy-invalid/job/recover', { ...recovery, phase: 'complete' });
+    assert.equal(refused.status, 409, JSON.stringify(refused));
+    assert.equal(refused.body.error, 'preflight-unexpected-tool');
+    assert.deepEqual((await h.get('/runs/legacy-invalid/job')).body, before);
+    assert.equal((await h.get('/runs')).body.runs.find(value => value.runId === 'legacy-invalid').sessionId, run.sessionId);
+    assert.equal(h.native.replies.length, 1);
+  });
+}
 
 test('périmètre, génération, identité native et redémarrage refusent les permissions obsolètes', async (t) => {
   const h = await setup(t); const a = await h.reserve('a');
@@ -920,7 +1187,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.3');
+  assert.equal(initialized.result.serverInfo.version, '2.1.47');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1006,6 +1273,48 @@ test('une réduction quiescente retire project:* sans accepter une génération 
 });
 
 
+test('rejet réconcilié permet seulement la levée globale liée et quiescente', async (t) => {
+  const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
+  const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new',
+    recoveryId: 'recovery-rejected', preflightRequestId: 'preflight-rejected' };
+  assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const approval = h.approval({ ...a, sessionId: 'ses_a_new' }, recovery.preflightRequestId);
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
+  h.native.messages.ses_a_new.at(-1).parts[0].state = { status: 'completed', input: approval,
+    output: JSON.stringify({ ...approval, status: 'REJECTED' }), time: { start: 1, end: 2 } };
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 0,
+    infrastructure_status: 'READY', coordination_protocol: 'resource-scoped-v1' });
+  const global = (await h.post('/coordination/global/request', { transactionId: 'rejected-global',
+    cause: 'GLOBAL_RECONCILIATION', scope: 'all', authorization: 'human test', evidence: ['test'] })).body;
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).sort().map(k => [k, canonical(value[k])])) : value;
+  const parts = (await h.nativeClient.messages('ses_a_new', h.directory)).flatMap(m => m.parts);
+  const payload = { ...recovery, phase: 'reconcile-rejected', previousPreflightRequestId: approval.requestId,
+    preflightRequestId: 'preflight-next', developerAuthorization: 'human test', globalTransactionId: global.transactionId,
+    rejectedPreflightProof: { nativeToolCount: parts.length,
+      nativeToolHash: createHash('sha256').update(JSON.stringify(canonical(parts))).digest('hex') } };
+  assert.equal((await h.post('/runs/a/job/recover', { ...payload, globalTransactionId: 'other' })).status, 409);
+  const reconciled = await h.post('/runs/a/job/recover', payload);
+  assert.equal(reconciled.status, 200, JSON.stringify(reconciled.body));
+  const attempt = reconciled.body.recovery.attempts.at(-1);
+  const release = { transactionId: global.transactionId, generation: global.generation,
+    authorization: 'human test', evidence: ['sealed rejection'], rejectedRecovery: { runId: 'a', jobId: 'job-a',
+      recoveryId: recovery.recoveryId, preflightRequestId: 'preflight-next', nativeToolHash: attempt.nativeToolHash } };
+  assert.equal((await h.post('/coordination/global/confirm', { ...release, authorization: '' })).status, 409);
+  h.native.busy.ses_b = { type: 'busy' };
+  assert.equal((await h.post('/coordination/global/confirm', release)).status, 409);
+  delete h.native.busy.ses_b;
+  assert.equal((await h.post('/coordination/global/confirm', release)).status, 200);
+  h.native.messages.ses_a_new.at(-1).parts[0].state.output = 'changed';
+  assert.equal((await h.post('/coordination/global/release', release)).status, 409);
+  h.native.messages.ses_a_new.at(-1).parts[0].state.output = JSON.stringify({ ...approval, status: 'REJECTED' });
+  assert.equal((await h.post('/coordination/global/release', release)).status, 200);
+  assert.equal((await h.get('/runs/a/job')).body.recovery.preflightRequestId, 'preflight-next');
+  assert.deepEqual(h.native.replies, []);
+});
+
 test('restauration humaine concurrente conserve propriétaire et digest sans nouvelle once', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
   const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new',
@@ -1020,7 +1329,8 @@ test('restauration humaine concurrente conserve propriétaire et digest sans nou
     metadata: { command: '/usr/bin/true' } });
   await waitFor(() => h.native.replies.length === 1);
   stamp = Date.now() + 1;
-  h.native.messages.ses_a_new = [{ parts: [
+  const signatureHistory = h.native.messages.ses_a_new.slice(0, 1);
+  h.native.messages.ses_a_new = [...signatureHistory, { parts: [
     { type: 'tool', tool: 'cgpt-validation_request_validation', state: { status: 'completed', input: approval,
       output: JSON.stringify({ ...approval, status: 'APPROVED', reviewer: 'CGPT' }),
       time: { start: stamp + 1, end: stamp + 2 } } },
@@ -1039,20 +1349,21 @@ test('restauration humaine concurrente conserve propriétaire et digest sans nou
   const decision = (await h.get('/runs/a/decision/' + approval.requestId)).body;
   const ordered = (v) => Array.isArray(v) ? v.map(ordered) : v !== null && typeof v === 'object'
     ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, ordered(v[k])])) : v;
-  const hash = () => createHash('sha256').update(JSON.stringify(ordered(
-    h.native.messages.ses_a_new.flatMap((m) => m.parts).map(v2NormalizedToolPart)))).digest('hex');
+  const hash = async () => createHash('sha256').update(JSON.stringify(ordered(
+    (await h.nativeClient.messages('ses_a_new', h.directory)).flatMap((m) => m.parts)))).digest('hex');
   for (const message of h.native.messages.ses_a_new) for (const part of message.parts) if (part.type === 'tool') {
+    if (part.tool === 'execute' && part.state.input?.code?.includes('request_validation')) continue;
     part.callID ||= 'call_fixture'; part.executed = true; part.state.metadata ||= {};
   }
   const payload = { ...recovery, phase: 'complete', developerAuthorization: 'accord-ciblé-fixture',
-    restoredPreflightProof: { nativeToolCount: 3, nativeToolHash: hash(), decision,
+    restoredPreflightProof: { nativeToolCount: 4, nativeToolHash: await hash(), decision,
       blockedGateValidatedAt: gate.body.validatedAt } };
   const v2History = structuredClone(h.native.messages.ses_a_new);
   await h.stop(); await h.start();
   await h.post('/broker/readiness', { status: 'READY', pending_count: 0,
     by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
-  h.native.messages.ses_a_new[0].parts[0].state.input.resources = [{ key: 'file:src/foreign.py', mode: 'write' }];
-  const changed = structuredClone(payload); changed.restoredPreflightProof.nativeToolHash = hash();
+  h.native.messages.ses_a_new.at(-1).parts[0].state.input.resources = [{ key: 'file:src/foreign.py', mode: 'write' }];
+  const changed = structuredClone(payload); changed.restoredPreflightProof.nativeToolHash = await hash();
   assert.equal((await h.post('/runs/a/job/recover', changed)).body.error, 'preflight-approval-divergent');
   h.native.messages.ses_a_new = v2History;
   const result = await h.post('/runs/a/job/recover', payload);
@@ -1129,7 +1440,10 @@ test('migration HTTP conserve les RUN et exige once exact avant leur reprise mé
   await h.stop();
   const state = join(h.directory,'.opencode','state','cgpt-approval-bridge');
   writeFileSync(join(state,'controller-runs.json'),JSON.stringify(legacy)+'\n');
-  await h.start(); await h.post('/broker/readiness',{status:'READY',pending_count:0});
+  await h.start();
+  // A nominal cohort proof requires the initial SSE connection to be established.
+  await waitFor(async () => (await h.get('/status')).body.opencodeSse === 'connected');
+  await h.post('/broker/readiness',{status:'READY',pending_count:0});
   assert.equal((await h.get('/runs/a/status')).body.coordination.reason,'coordination-upgrade-required');
   const migrated = await h.post('/coordination/migrate',{cause:'SHARED_MAINTENANCE',authorization:'explicit migration',evidence:['native quiescence and backup']});
   assert.equal(migrated.status,200,JSON.stringify(migrated));
@@ -1313,6 +1627,14 @@ test('environnement Docker HTTP : conservation entre commandes et restitution pr
   const acquire={version:a.version,transactionId:'tests-a',resources,evidence:['identité du moteur vérifiée']};
   const lease=(await h.post('/runs/a/test-resources/acquire',acquire)).body;
   assert.equal(lease.state,'HELD');
+  assert.equal(typeof lease.token,'string');
+  const publicReservations=(await h.get('/runs/a/test-resources')).body;
+  const publicStatus=(await h.get('/runs/a/status')).body;
+  const publicSnapshot=(await h.get('/runs')).body;
+  assert.equal(publicReservations.reservations[0].token,undefined);
+  assert.equal(publicStatus.coordination.testReservations[0].token,undefined);
+  assert.equal(publicSnapshot.coordination.testReservations[lease.transactionId].token,undefined);
+  assert.ok(!JSON.stringify([publicReservations,publicStatus,publicSnapshot]).includes(lease.token));
   assert.equal((await h.post('/runs/b/test-resources/acquire',{...acquire,version:b.version,transactionId:'tests-b'})).status,202);
   assert.equal((await h.get('/runs/b/status')).body.coordination.reason,'test-resource-conflict');
   const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['restitution examinée']};
@@ -1330,7 +1652,10 @@ test('environnement Docker HTTP : conservation entre commandes et restitution pr
   const cleanupOperationId=await execute('cleanup');
   const verificationOperationId=await execute('verify-clean');
   const release={...payload,cleanup:[{resourceKey:resources[0].key,cleanupOperationId,verificationOperationId,restored:true}]};
-  assert.equal((await h.post('/runs/a/test-resources/release',release)).status,200);
+  const released=await h.post('/runs/a/test-resources/release',release);
+  assert.equal(released.status,200);assert.equal(released.body.state,'RELEASED');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].token,undefined);
+  assert.equal((await h.get('/runs')).body.coordination.testReservations[lease.transactionId].token,undefined);
   assert.equal((await h.post('/runs/a/test-resources/release',release)).body.state,'RELEASED');
   assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
   assert.equal((await h.post('/runs/a/test-resources/release',{...release,evidence:['preuve divergente']})).status,409);
@@ -1338,10 +1663,21 @@ test('environnement Docker HTTP : conservation entre commandes et restitution pr
 
 test('réservation LXC HTTP restaurée : nouvelle frontière native et jeton renouvelé', async (t) => {
   const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
-  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lxc-a',resources:a.resources,evidence:['instance canonique']})).body;
+  const acquisition={version:a.version,transactionId:'lxc-a',resources:a.resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
   await h.stop();await h.start();
-  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].reconciliationRequired,true);
-  const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['frontière native sans activité']};
+  const restoredView=(await h.get('/runs/a/test-resources')).body;
+  assert.equal(restoredView.reservations[0].reconciliationRequired,true);
+  assert.equal(restoredView.reservations[0].token,undefined);
+  const reacquired=await h.post('/runs/a/test-resources/acquire',acquisition);
+  assert.equal(reacquired.status,200,JSON.stringify(reacquired));
+  assert.equal(reacquired.body.state,'HELD');assert.equal(reacquired.body.token,lease.token);
+  assert.equal(reacquired.body.fencing,lease.fencing);assert.equal(reacquired.body.reconciliationRequired,true);
+  const redacted=(await h.get('/runs/a/test-resources')).body;
+  assert.equal(redacted.reservations[0].token,undefined);
+  assert.ok(!JSON.stringify(redacted).includes(reacquired.body.token));
+  assert.equal((await h.post('/runs/a/test-resources/acquire',{...acquisition,evidence:['divergent']})).status,409);
+  const payload={version:a.version,transactionId:lease.transactionId,token:reacquired.body.token,fencing:reacquired.body.fencing,evidence:['frontière native sans activité']};
   assert.equal((await h.post('/runs/a/test-resources/release',payload)).body.error,'test-reconciliation-required');
   h.native.busy[a.sessionId]={type:'busy'};
   assert.equal((await h.post('/runs/a/test-resources/reconcile',{...payload,reconciliationId:'reconcile-a'})).status,409);
@@ -1398,10 +1734,12 @@ test('PLLM HTTP : défaut medium, prévol exact, choix persisté et modèle du j
  assert.deepEqual((await h.get('/runs/a/job')).body.codingModel,selected);
 });
 
-test('PLLM HTTP : absence de medium examine la politique inférieure, modèle explicite incompatible bloqué',async(t)=>{
+test('PLLM HTTP : medium absent choisit high avant la politique inférieure, modèle incompatible bloqué',async(t)=>{
  const h=await setup(t,{codingPolicy:true});
  h.native.providers.all[0].models.model1.variants={high:{},xhigh:{}};
- assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
+ const resolved=await h.post('/model-policy/resolve',{});
+ assert.equal(resolved.status,200,JSON.stringify(resolved));
+ assert.equal(resolved.body.mode,'mode1');assert.equal(resolved.body.reasoning,'high');
  h.native.providers.all[0].models.model1.variants={low:{}};
  assert.equal((await h.post('/model-policy/resolve',{})).body.mode,'mode2');
  assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1'})).body.error,'explicit-model-unavailable');
@@ -1409,7 +1747,7 @@ test('PLLM HTTP : absence de medium examine la politique inférieure, modèle ex
 });
 
 
-test('PLLM HTTP : refus natif corrélé de medium autorise la politique suivante mais 429 bloque',async(t)=>{
+test('PLLM HTTP : refus natif corrélé de medium autorise high mais 429 bloque',async(t)=>{
  const h=await setup(t,{codingPolicy:true});
  const reject=(reasoning,status=400)=>{
   const name=reasoning+'-'+status;const user=structuredClone(h.native.messages.ses_probe[0]);
@@ -1421,9 +1759,9 @@ test('PLLM HTTP : refus natif corrélé de medium autorise la politique suivante
  };
  const medium=reject('medium');
  const next=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});
- assert.equal(next.body.mode,'mode2',JSON.stringify(next));assert.equal(next.body.unavailabilityProofs.length,1);
+ assert.equal(next.body.mode,'mode1',JSON.stringify(next));assert.equal(next.body.reasoning,'high');assert.equal(next.body.unavailabilityProofs.length,1);
  assert.equal(JSON.stringify(next.body).includes('diagnostic privé fictif'),false);
- assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',unavailablePreflights:[medium]})).body.error,'explicit-model-unavailable');
+ assert.equal((await h.post('/model-policy/resolve',{model:'provider1/model1',reasoning:'medium',unavailablePreflights:[medium]})).body.error,'explicit-model-unavailable');
  assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reject('medium',429)]})).body.error,'model-unavailability-not-proved');
 });
 
@@ -1493,6 +1831,727 @@ test('Raccord HTTP : indisponibilités imbriquées rattachées au catalogue logi
   response.parts=[];h.native.messages.ses_probe.push(user,response);return {sessionId:'ses_probe',messageId:response.info.id};
  };
  const medium=reject('medium');
- const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode2');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
+ const lower=await h.post('/model-policy/resolve',{unavailablePreflights:[medium]});assert.equal(lower.status,200);assert.equal(lower.body.mode,'mode1');assert.equal(lower.body.reasoning,'high');assert.ok(!JSON.stringify(lower).includes('PRIVE_SYNTHETIQUE'));
  for(const reference of [reject('medium',429),reject('medium',401),reject('medium',400,true)])assert.equal((await h.post('/model-policy/resolve',{unavailablePreflights:[reference]})).body.error,'model-unavailability-not-proved');
+});
+
+test('recovery du RUN : permission étrangère ignorée avant lecture de cible, permission propre toujours bloquante', async t => {
+  const h = await setup(t); await h.reserve('scoped');
+  const permission = { id: 'per_foreign_shell', sessionID: 'ses_foreign', permission: 'shell', metadata: { command: '/usr/bin/true' } };
+  h.native.permissions.push(permission);
+  const recovery = { jobId: 'job-scoped', expectedSessionId: 'ses_scoped', sessionId: 'ses_scoped_new',
+    recoveryId: 'recovery-scoped', preflightRequestId: 'preflight-scoped', phase: 'prepare' };
+  const prepared = await h.post('/runs/scoped/job/recover', recovery);
+  assert.equal(prepared.status, 200, JSON.stringify(prepared));
+  assert.equal(prepared.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(h.native.permissions[0], permission);
+  assert.deepEqual(h.native.replies, []);
+  permission.sessionID = recovery.sessionId;
+  const retried = await h.post('/runs/scoped/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-scoped-next' });
+  assert.equal(retried.status, 409);
+  assert.equal(retried.body.error, 'opencode-control-unavailable');
+  assert.deepEqual(h.native.replies, []);
+});
+
+test('recovery : prepare exige une discovery exacte avant le gel', async t => {
+  const h = await setup(t); await h.reserve('recovery-signature');
+  const recovery = { jobId: 'job-recovery-signature', expectedSessionId: 'ses_recovery-signature',
+    sessionId: 'ses_recovery-signature_candidate', recoveryId: 'recovery-signature',
+    preflightRequestId: 'preflight-signature', phase: 'prepare' };
+  const before = (await h.get('/runs/recovery-signature/job')).body;
+  const refused = await h.post('/runs/recovery-signature/job/recover', recovery, { skipRecoveryDiscovery: true });
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.error, 'preflight-signature-discovery-required');
+  const after = (await h.get('/runs/recovery-signature/job')).body;
+  assert.equal(after.recovery, null);
+  assert.deepEqual(after.revokedSessions, before.revokedSessions);
+});
+
+test('recovery : prepare scelle la signature native exacte de request_validation', async t => {
+  const h = await setup(t); await h.reserve('recovery-signature-positive');
+  const recovery = { jobId: 'job-recovery-signature-positive', expectedSessionId: 'ses_recovery-signature-positive',
+    sessionId: 'ses_recovery-signature-positive_candidate', recoveryId: 'recovery-signature-positive',
+    preflightRequestId: 'preflight-signature-positive', phase: 'prepare' };
+  const input = { namespace: 'cgpt-validation', query: 'request_validation', limit: 20 };
+  h.native.messages[recovery.sessionId] = [{ parts: [{ type: 'tool', tool: 'execute', callID: 'call-signature-positive',
+    executed: false, state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify(input) + ');' },
+      output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }), time: { start: 10, end: 11 },
+      metadata: { truncated: false, toolCalls: [{ tool: 'search', status: 'completed', input }] } } }] }];
+  const prepared = await h.post('/runs/recovery-signature-positive/job/recover', recovery);
+  assert.equal(prepared.status, 200, JSON.stringify(prepared));
+  assert.match(prepared.body.recovery.preparationHistory.requestValidationSignatureHash, /^[a-f0-9]{64}$/);
+  assert.equal(prepared.body.recovery.preparationHistory.nativeToolCount, 1);
+});
+
+test('recovery : prepare refuse une candidate avec edit deny', async t => {
+  const h = await setup(t); await h.reserve('recovery-edit-deny');
+  const recovery = { jobId: 'job-recovery-edit-deny', expectedSessionId: 'ses_recovery-edit-deny',
+    sessionId: 'ses_recovery-edit-deny_candidate', recoveryId: 'recovery-edit-deny',
+    preflightRequestId: 'preflight-edit-deny', phase: 'prepare' };
+  const input = { namespace: 'cgpt-validation', query: 'request_validation', limit: 20 };
+  h.native.rules[recovery.sessionId] = [
+    { permission: 'shell', pattern: '*', action: 'ask' },
+    { permission: 'edit', pattern: '*', action: 'deny' },
+  ];
+  h.native.messages[recovery.sessionId] = [{ parts: [{ type: 'tool', tool: 'execute', callID: 'call-edit-deny',
+    executed: false, state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify(input) + ');' },
+      output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }), time: { start: 10, end: 11 },
+      metadata: { truncated: false, toolCalls: [{ tool: 'search', status: 'completed', input }] } } }] }];
+  const refused = await h.post('/runs/recovery-edit-deny/job/recover', recovery, { skipRecoveryDiscovery: true });
+  assert.equal(refused.status, 409);
+  assert.equal(refused.body.error, 'preflight-native-ask-required');
+  assert.equal((await h.get('/runs/recovery-edit-deny/job')).body.recovery, null);
+});
+
+test('recovery : une discovery après prepare bloque la validation avant notification', async t => {
+  const h = await setup(t); const run = await h.reserve('recovery-late-discovery');
+  const recovery = { jobId: 'job-recovery-late-discovery', expectedSessionId: 'ses_recovery-late-discovery',
+    sessionId: 'ses_recovery-late-discovery_candidate', recoveryId: 'recovery-late-discovery',
+    preflightRequestId: 'preflight-late-discovery', phase: 'prepare' };
+  assert.equal((await h.post('/runs/recovery-late-discovery/job/recover', recovery)).status, 200);
+  const input = { namespace: 'cgpt-validation', query: 'request_validation', limit: 20 };
+  h.native.messages[recovery.sessionId].push({ parts: [{ type: 'tool', tool: 'execute', callID: 'call-late-discovery',
+    executed: false, state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify(input) + ');' },
+      output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }), time: { start: 20, end: 21 },
+      metadata: { truncated: false, toolCalls: [{ tool: 'search', status: 'completed', input }] } } }] });
+  const approval = h.approval({ ...run, sessionId: recovery.sessionId }, recovery.preflightRequestId);
+  const result = await h.post('/validation/request', { approval });
+  assert.equal(result.status, 409);
+  assert.equal(result.body.error, 'preflight-unexpected-tool');
+  assert.equal((await h.get('/runs/recovery-late-discovery/status')).body.undecidedValidationCount, 0);
+  assert.deepEqual(h.native.replies, []);
+});
+
+async function unregisteredNativeRefusal(t) {
+  const h = await setup(t); const run = await h.reserve('refusal');
+  const recovery = { jobId: 'job-refusal', expectedSessionId: 'ses_refusal', sessionId: 'ses_refusal_new',
+    recoveryId: 'recovery-refusal', preflightRequestId: 'preflight-refusal' };
+  assert.equal((await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const input = { ...h.approval({ ...run, sessionId: recovery.sessionId }, recovery.preflightRequestId), access_id: '' };
+  h.native.messages[recovery.sessionId].pop();
+  const envelope = (name, args, output, id) => ({ type: 'tool', id, callID: id, tool: 'execute', executed: false,
+    state: { status: 'completed', input: { code: `return await tools["cgpt-validation"].${name}(${JSON.stringify(args)});` },
+      output, time: { start: Date.now(), end: Date.now() + 1 }, metadata: { error: true, truncated: false,
+        toolCalls: [{ tool: 'cgpt-validation.' + name, status: 'error', input: structuredClone(args) }] } } });
+  const refusal = envelope('request_validation', input,
+    'MCP tool "request_validation" on server "cgpt-validation" failed: protocole de coordination ou identite d operation invalide', 'call_refusal');
+  const lookup = envelope('get_approval', { approval_id: input.approval_id },
+    `MCP tool "get_approval" on server "cgpt-validation" failed: approval_id '${input.approval_id}' inconnu`, 'call_lookup');
+  h.native.messages[recovery.sessionId].push({ parts: [refusal, lookup] });
+  return { h, recovery, input, refusal, lookup };
+}
+
+test('retry V2 : refus natif avant enregistrement et lookup inconnu corrélés conservent la candidate', async t => {
+  const { h, recovery } = await unregisteredNativeRefusal(t);
+  const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-refusal-next' });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal(result.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(result.body.recovery.attempts[0].preflightRequestId, recovery.preflightRequestId);
+  assert.match(result.body.recovery.attempts[0].nativeToolHash, /^[a-f0-9]{64}$/);
+  assert.deepEqual(h.native.replies, []);
+});
+
+for (const kind of ['texte-seul', 'lookup-absent', 'lookup-divergent', 'arguments-divergents', 'appel-supplémentaire', 'troncature', 'refus-non-déterministe']) {
+  test('retry V2 refuse la preuve ambiguë : ' + kind, async t => {
+    const { h, recovery, refusal, lookup, input } = await unregisteredNativeRefusal(t);
+    if (kind === 'texte-seul') refusal.state.metadata.error = false;
+    if (kind === 'lookup-absent') h.native.messages[recovery.sessionId].at(-1).parts.pop();
+    if (kind === 'lookup-divergent') lookup.state.output = 'approval inconnue';
+    if (kind === 'arguments-divergents') refusal.state.metadata.toolCalls[0].input.requestId = 'foreign';
+    if (kind === 'appel-supplémentaire') h.native.messages[recovery.sessionId].at(-1).parts.push({ type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: '/usr/bin/true' } } });
+    if (kind === 'troncature') refusal.state.metadata.truncated = true;
+    if (kind === 'refus-non-déterministe') {
+      input.access_id = 'valid-access';
+      refusal.state.input.code = `return await tools["cgpt-validation"].request_validation(${JSON.stringify(input)});`;
+      refusal.state.metadata.toolCalls[0].input = input;
+    }
+    const before = (await h.get('/runs/refusal/job')).body;
+    const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+      previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-refusal-next' });
+    assert.equal(result.status, 409, JSON.stringify(result));
+    assert.deepEqual((await h.get('/runs/refusal/job')).body.recovery, before.recovery);
+    assert.deepEqual(h.native.replies, []);
+  });
+}
+
+
+for (const type of ['session.execution.started', 'session.execution.succeeded', 'permission.asked']) {
+  test('un événement SSE V2 data invalide la cohorte : ' + type, async t => {
+    const h = await setup(t); await h.reserve('a');
+    const g = (await h.post('/coordination/global/request', { cause: 'GLOBAL_PAUSE', scope: 'all',
+      transactionId: 'pause-v2', authorization: 'explicit pause all', evidence: ['authorized'] })).body;
+    let fired = false; h.native.onRequest = async path => {
+      if (path !== '/session/status' || fired) return; fired = true;
+      h.native.emit({ type, location: { directory: h.directory }, data: { sessionID: 'ses_a' } }); await delay(50);
+    };
+    const result = await h.post('/coordination/global/confirm', { ...g, evidence: ['quiescence'] });
+    assert.equal(result.body.error, 'native-observation-changed');
+    assert.deepEqual(h.native.replies, []);
+  });
+}
+
+async function directNativeRefusal(t) {
+  const value = await unregisteredNativeRefusal(t);
+  const { h, recovery, refusal, lookup } = value;
+  const stamp = Date.now();
+  const direct = (part, index) => ({ type: 'tool', id: 'call_direct' + index,
+    name: part === refusal ? 'cgpt-validation_request_validation' : 'cgpt-validation_get_approval',
+    executed: false, native: { itemId: 'fc_direct' + index }, time: { created: stamp, ran: stamp + 1, completed: stamp + 2 },
+    state: { status: 'error', input: structuredClone(part.state.metadata.toolCalls[0].input),
+      error: { type: 'tool.execution', message: part.state.output } } });
+  const parts = [direct(refusal, 1), direct(lookup, 2)];
+  const signatureHistory = h.native.messages[recovery.sessionId].slice(0, 1);
+  h.native.messages[recovery.sessionId] = [...signatureHistory,
+    { nativeV2: { id: 'msg_direct', type: 'assistant', content: parts } }];
+  return { ...value, parts };
+}
+
+test('retry MCP direct : refus et lookup natifs conservent la candidate, prévol neuf sous once puis complete', async t => {
+  const { h, recovery } = await directNativeRefusal(t);
+  const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+    previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-direct-next' });
+  assert.equal(result.status, 200, JSON.stringify(result));
+  assert.equal(result.body.recovery.sessionId, recovery.sessionId);
+  assert.equal(result.body.recovery.attempts[0].nativeToolCount, 3);
+  assert.deepEqual(h.native.replies, []);
+  const run = (await h.get('/runs')).body.runs.find(r => r.runId === 'refusal');
+  const { approval, access } = await h.approvedAccess({ ...run, sessionId: recovery.sessionId }, 'preflight-direct-next');
+  await h.execute(approval); await h.completeTool(approval);
+  const messages = h.native.messages[recovery.sessionId], command = messages.at(-1).parts[0];
+  const submitted = messages.find(message => message.parts?.[0]?.state?.input?.requestId === approval.requestId).parts[0];
+  submitted.state = { ...submitted.state, status: 'completed', output: JSON.stringify({ ...approval, status: 'APPROVED' }),
+    time: { start: command.state.time.start - 2, end: command.state.time.start - 1 } };
+  messages.push({ parts: [{ type: 'tool', tool: 'cgpt-validation_broker_readiness', state: { status: 'completed',
+    input: {}, output: JSON.stringify({ status: 'READY', pending_count: 0 }),
+    time: { start: command.state.time.end + 1, end: command.state.time.end + 2 } } }] });
+  assert.equal((await h.releaseOperation(run, approval, access)).status, 200);
+  const done = await h.post('/runs/refusal/job/recover', { ...recovery, preflightRequestId: 'preflight-direct-next', phase: 'complete' });
+  assert.equal(done.status, 200, JSON.stringify(done));
+  assert.equal(done.body.sessionId, recovery.sessionId); assert.equal(done.body.recovery, null);
+  assert.equal(h.native.replies.length, 1);
+});
+
+for (const kind of ['type-libre', 'item-divergent', 'temps-absent', 'temps-inverse', 'execute-vrai', 'session-divergente',
+  'generation-divergente', 'lookup-absent', 'lookup-faux', 'effet-supplementaire', 'marqueur-fabrique', 'refus-non-deterministe']) {
+  test('retry MCP direct reste fermé : ' + kind, async t => {
+    const { h, recovery, parts } = await directNativeRefusal(t);
+    if (kind === 'type-libre') parts[0].state.error = parts[0].state.error.message;
+    if (kind === 'item-divergent') parts[0].native.itemId = 'fc_other';
+    if (kind === 'temps-absent') delete parts[0].time.ran;
+    if (kind === 'temps-inverse') parts[0].time.completed = parts[0].time.created - 1;
+    if (kind === 'execute-vrai') parts[0].executed = true;
+    if (kind === 'session-divergente') parts[0].state.input.session_id = 'ses_other';
+    if (kind === 'generation-divergente') parts[0].state.input.reservation_version++;
+    if (kind === 'lookup-absent') parts.pop();
+    if (kind === 'lookup-faux') parts[1].state.error.message = 'approval inconnue';
+    if (kind === 'effet-supplementaire') parts.push({ type: 'tool', id: 'call_shell', name: 'shell', executed: true,
+      time: { created: 1, ran: 2, completed: 3 }, state: { status: 'completed', input: { command: '/usr/bin/true' }, metadata: { exit: 0 } } });
+    if (kind === 'marqueur-fabrique') {
+      delete parts[0].native; parts[0].state.metadata = { cabDirectMcpError: { itemId: 'fc_forged', envelopeHash: '0'.repeat(64) } };
+    }
+    if (kind === 'refus-non-deterministe') parts[0].state.input.access_id = 'valid-access';
+    const before = (await h.get('/runs/refusal/job')).body;
+    const result = await h.post('/runs/refusal/job/recover', { ...recovery, phase: 'retry',
+      previousPreflightRequestId: recovery.preflightRequestId, preflightRequestId: 'preflight-direct-next' });
+    assert.equal(result.status, 409, JSON.stringify(result));
+    assert.deepEqual((await h.get('/runs/refusal/job')).body.recovery, before.recovery);
+    assert.deepEqual(h.native.replies, []);
+  });
+}
+
+test('notification stale avant admission : chaque tentative locale est comptée une fois pour son RUN sans décision', async t => {
+  const h = await setup(t); const a = await h.reserve('a'); await h.reserve('b');
+  const stale = h.approval(a, 'diagnostic-stale', { [a.resources[0].key]: 1 });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const refused = await h.post('/validation/resource-request', { approval: stale });
+    assert.equal(refused.status, 409); assert.equal(refused.body.error, 'resource-revision-stale');
+    const stats = (await h.get('/runs/a/statistics')).body.contexts[0];
+    assert.equal(stats.httpFailures['resource-revision-stale'], attempt);
+    assert.equal(stats.decisions.pending, 0); assert.equal(stats.decisions.rejected, 0);
+    assert.equal(stats.decisions.approved, 0); assert.equal(stats.decisions.once, 0);
+    const status = (await h.get('/runs/a/status')).body;
+    assert.equal(status.undecidedValidationCount, 0); assert.equal(status.activeValidationCount, 0);
+  }
+  assert.equal((await h.get('/runs/b/statistics')).body.contexts[0].httpFailures['resource-revision-stale'], undefined);
+  const registry = (await h.get('/runs')).body;
+  assert.equal(registry.requestOwners[stale.requestId], undefined);
+  assert.equal(registry.coordination.operations[stale.operation_id], undefined);
+  assert.deepEqual(h.native.replies, []);
+  const valid = h.approval(a, 'diagnostic-valid');
+  assert.equal((await h.post('/validation/resource-request', { approval: valid })).status, 202);
+  assert.equal((await h.get('/runs/a/statistics')).body.contexts[0].httpFailures['resource-revision-stale'], 3);
+  assert.deepEqual(h.native.replies, []);
+});
+
+
+
+async function unusedHttpPayload(h, run, lease) {
+  const current = (await h.get('/runs/'+run.runId+'/test-resources')).body.reservations.find((r)=>r.transactionId===lease.transactionId);
+  const all=(await h.get('/runs')).body.coordination.operations;
+  const ops=Object.values(all).filter((op)=>op.runId===run.runId && op.contextId===run.contextId &&
+    (op.testReservationId===lease.transactionId || Date.parse(op.preparedAt)>=Date.parse(current.grantedAt)));
+  const messages=await h.nativeClient.messages(run.sessionId,h.directory);
+  return {version:run.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,
+    contextId:run.contextId,sessionId:run.sessionId,boundaryDigest:current.unusedReleaseBoundary,
+    developerAuthorization:'autorisation humaine ciblée de cette réservation sans effet',evidence:['mandats et historique natif examinés'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:ops.map((op)=>
+      ({operationId:op.operationId,classification:op.state==='CANCELLED'?'cancelled-without-execution':'read-only-no-effect'}))},
+    nativeProof:{messageCount:messages.length,toolCount:messages.flatMap(m=>m.parts.filter(p=>p.type==='tool')).length,
+      historyHash:proofHash(messages),coverage:'complete-native-transcript',operationClassifications:ops.map((op)=>({operationId:op.operationId,
+        classification:op.state==='CANCELLED'?'cancelled-without-execution':'read-only-no-effect'}))}};
+}
+async function unusedHttpLease(h, run, transactionId='unused-http') {
+  const result=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,transactionId,
+    resources:run.resources.filter(r=>r.key.startsWith('lxc:')),evidence:['instance canonique examinée']});
+  assert.equal(result.status,200,JSON.stringify(result)); return result.body;
+}
+
+test('release-unused HTTP : frontière sans opération, reçu exact, FIFO et extend débloqué sans effet natif',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/101',mode:'write'}];
+  const a=await h.reserve('a',{resources});const b=await h.reserve('b',{resources});const lease=await unusedHttpLease(h,a);
+  const waiting=await h.post('/runs/b/test-resources/acquire',{version:b.version,transactionId:'wait-b',resources,evidence:['même instance']});
+  assert.equal(waiting.status,202);
+  const extension={version:a.version,resources:[{key:'file:independent.py',mode:'write'}]};
+  assert.equal((await h.post('/runs/a/extend',extension)).body.error,'run-accesses-unresolved');
+  const p=await unusedHttpPayload(h,a,lease);const replies=h.native.replies.length;
+  const result=await h.post('/runs/a/test-resources/release-unused',p);
+  assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.unusedReleaseReceipt.mode,'unused-no-effect');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].token,undefined);
+  assert.equal((await h.get('/runs')).body.coordination.testReservations[lease.transactionId].token,undefined);
+  assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
+  assert.deepEqual((await h.post('/runs/a/test-resources/release-unused',p)).body,result.body);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',{...p,evidence:['différent']})).status,409);
+  assert.equal((await h.post('/runs/a/test-resources/release',p)).status,409);
+  assert.equal((await h.post('/runs/a/extend',extension)).status,200);
+  assert.equal(h.native.replies.length,replies);
+});
+
+test('release-unused lost-token HTTP : preview filtrée puis restitution sans effet dans le change armé',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/101',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const acquisition={version:a.version,transactionId:'lost-token-a',resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));
+  assert.equal(preview.body.state,'HELD');assert.equal(preview.body.reconciliationRequired,true);
+  assert.equal(preview.body.approvedChangeScope,true);assert.equal(preview.body.eligibleForLostTokenRelease,true);
+  assert.ok(!JSON.stringify(preview.body).includes(lease.token));
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,
+    evidence:['bail restauré relu sans effet natif'],attestation:{noEnvironmentMutation:true,noMutatingMandate:true,
+      operations:preview.body.operations.map(op=>({operationId:op.operationId,classification:op.classification}))}};
+  const denied=await h.post('/runs/a/test-resources/release-unused-lost-token',{...payload,attestation:{...payload.attestation,noEnvironmentMutation:false}});
+  assert.notEqual(denied.status,200);assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+  const released=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(released.status,200,JSON.stringify(released));assert.equal(released.body.state,'RELEASED');
+  assert.equal(released.body.token,undefined);assert.equal(released.body.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+  assert.ok(!JSON.stringify(released.body).includes(lease.token));
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].token,undefined);
+  assert.equal(h.native.replies.length,0);
+  assert.deepEqual((await h.post('/runs/a/test-resources/release-unused-lost-token',payload)).body,released.body);
+});
+
+test('release-unused lost-token HTTP : validation rejetée et wrappers CAB complets ne bloquent pas un bail inutilisé',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/104',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lost-token-rejected-a',
+    resources,evidence:['instance canonique']})).body;
+  const approval=h.approval(a,'rejected-after-lease');
+  const request=await h.post('/runs/a/validation/request',{approval});assert.equal(request.status,202,JSON.stringify(request));
+  const reject=await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'});
+  assert.equal(reject.status,201,JSON.stringify(reject));
+  const requestPart=h.native.messages[a.sessionId].flatMap(message=>message.parts||[])
+    .find(part=>part.tool==='cgpt-validation_request_validation');
+  requestPart.state.status='completed';requestPart.state.time={start:Date.now()-5,end:Date.now()-4};
+  assert.ok((await h.nativeClient.messages(a.sessionId,h.directory)).length>0,'history after rejected request');
+  h.native.messages[a.sessionId].push({info:{id:'msg-native-observations',sessionID:a.sessionId,role:'assistant',
+    time:{created:Date.now()}},parts:[
+    {type:'tool',tool:'cgpt-validation_reject',state:{status:'completed',input:{requestId:approval.requestId},
+      time:{start:Date.now()-3,end:Date.now()-2}}},
+  ]});
+  assert.ok((await h.nativeClient.messages(a.sessionId,h.directory)).length>0,'history after direct rejection');
+  h.native.messages[a.sessionId].push({info:{id:'msg-native-code-observations',sessionID:a.sessionId,role:'assistant',
+    time:{created:Date.now()}},parts:[
+    {type:'tool',id:'call-observation-batch',callID:'call-observation-batch',tool:'execute',executed:false,
+      state:{status:'completed',input:{code:'return await Promise.all([tools["cgpt-validation"].list_pending({}),tools["cgpt-validation"].broker_readiness({})]);'},
+        time:{start:Date.now()-2,end:Date.now()-1},metadata:{truncated:false,toolCalls:[
+          {tool:'cgpt-validation.list_pending',status:'completed',input:{}},
+          {tool:'cgpt-validation.broker_readiness',status:'completed',input:{}}]}}}
+  ]});
+  assert.ok((await h.nativeClient.messages(a.sessionId,h.directory)).length>0);
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));
+  assert.equal(preview.body.blockerCode,null);
+  assert.equal(preview.body.eligibleForLostTokenRelease,true);
+  assert.equal(preview.body.operations.length,1);
+  assert.equal(preview.body.operations[0].classification,'rejected-validation-no-native-effect');
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail sans effet'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:preview.body.operations.map(op=>
+      ({operationId:op.operationId,classification:op.classification}))}};
+  const released=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(released.status,200,JSON.stringify(released));assert.equal(released.body.state,'RELEASED');
+  assert.equal(released.body.token,undefined);assert.equal(released.body.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+});
+
+test('release-unused lost-token HTTP : registre durable prouve un bail inutilisé après compaction',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/106',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lost-token-compacted-a',
+    resources,evidence:['instance canonique']})).body;
+  const approval=h.approval(a,'rejected-before-compaction');
+  assert.equal((await h.post('/runs/a/validation/request',{approval})).status,202);
+  assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,201);
+  const requestPart=h.native.messages[a.sessionId].flatMap(message=>message.parts||[])
+    .find(part=>part.tool==='cgpt-validation_request_validation');
+  requestPart.state.status='completed';requestPart.state.time={start:Date.now()-5,end:Date.now()-4};
+  h.native.messages[a.sessionId].push({info:{id:'msg-rejection-before-compaction',sessionID:a.sessionId,role:'assistant',
+    time:{created:Date.now()}},parts:[{type:'tool',tool:'cgpt-validation_reject',state:{status:'completed',
+      input:{approval_id:approval.approval_id},time:{start:Date.now()-3,end:Date.now()-2}}}]});
+  h.native.messages[a.sessionId].push({nativeV2:{id:'msg-compaction-after-lease',type:'compaction',
+    time:{created:Date.now()},metadata:{},content:[]}});
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.blockerCode,null);
+  assert.equal(preview.body.eligibleForLostTokenRelease,true);
+  assert.equal(preview.body.nativeProof.coverage,'operation-ledger-after-compaction');
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail sans effet'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:preview.body.operations.map(op=>
+      ({operationId:op.operationId,classification:op.classification}))}};
+  const result=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'RELEASED');
+  assert.equal(result.body.token,undefined);assert.equal(result.body.unusedReleaseReceipt.nativeProof.coverage,
+    'operation-ledger-after-compaction');
+});
+
+test('release-unused lost-token HTTP : compaction ne masque jamais une opération native commencée',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/107',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'used-token-compacted-a',
+    resources,evidence:['instance canonique']})).body;
+  const op=await h.approvedAccess(a,'command-under-test');await h.execute(op.approval);await h.completeTool(op.approval,0);
+  assert.equal((await h.releaseOperation(a,op.approval,op.access)).status,200);
+  h.native.messages[a.sessionId].push({nativeV2:{id:'msg-compaction-after-command',type:'compaction',
+    time:{created:Date.now()},metadata:{},content:[]}});
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.eligibleForLostTokenRelease,false);
+  assert.equal(preview.body.nativeProof,null);assert.equal(preview.body.blockerCode,'test-unused-history-incomplete');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations.find(x=>x.transactionId===lease.transactionId).state,'HELD');
+});
+
+test('release-unused lost-token HTTP refuse sans job armé dans le change',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/102',mode:'write'}];
+  const candidate={...h.candidate('a'),resources,exclusiveResources:[]};
+  const reserved=await h.post('/runs/reserve',candidate);assert.equal(reserved.status,201,JSON.stringify(reserved));
+  const a=reserved.body;
+  const acquisition={version:a.version,transactionId:'lost-token-unarmed',resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.approvedChangeScope,false);
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail restauré'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:[]}};
+  const result=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(result.status,409);assert.equal(result.body.error,'test-unused-approved-change-required');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+test('release-unused lost-token HTTP refuse une preview stale et une session native active',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/103',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const acquisition={version:a.version,transactionId:'lost-token-stale',resources,evidence:['instance canonique']};
+  const lease=(await h.post('/runs/a/test-resources/acquire',acquisition)).body;
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail restauré'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:[]}};
+  const stale=await h.post('/runs/a/test-resources/release-unused-lost-token',{...payload,boundaryDigest:'0'.repeat(64)});
+  assert.equal(stale.status,409);assert.equal(stale.body.error,'test-unused-boundary-stale');
+  h.native.busy[a.sessionId]={type:'busy'};
+  const active=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(active.status,409);assert.equal(active.body.error,'native-session-not-quiescent');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+for(const variant of ['unknown-method','truncated-wrapper'])test('release-unused preview garde HELD un wrapper Code Mode '+variant,async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/105',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'unknown-wrapper-'+variant,
+    resources,evidence:['instance canonique']})).body;
+  h.native.messages[a.sessionId]=[{info:{id:'msg-unknown-wrapper',sessionID:a.sessionId,role:'assistant',time:{created:Date.now()}},
+    parts:[{type:'tool',id:'call-unknown-wrapper',callID:'call-unknown-wrapper',tool:'execute',executed:false,
+      state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_execute_controlled_remediation({});'},
+        time:{start:Date.now()-2,end:Date.now()-1},metadata:{truncated:variant==='truncated-wrapper',toolCalls:[
+          {tool:'cgpt-validation.broker_execute_controlled_remediation',status:'completed',input:{}}]}}}]}];
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.eligibleForLostTokenRelease,false);
+  assert.equal(preview.body.nativeProof,null);
+  assert.equal(preview.body.blockerCode,variant==='truncated-wrapper'?'test-unused-history-incomplete':'test-unused-native-tool-unreviewable');
+  assert.ok(!JSON.stringify(preview.body).includes(lease.token));
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+test('release-unused HTTP : fin native exit1 relue même COMPLETED et diagnostic non converti en succès',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const op=await h.approvedAccess(a,'readonly-diagnostic');
+  await h.execute(op.approval);await h.completeTool(op.approval,1);
+  assert.equal((await h.releaseOperation(a,op.approval,op.access)).status,200);
+  const p=await unusedHttpPayload(h,a,lease);const result=await h.post('/runs/a/test-resources/release-unused',p);
+  assert.equal(result.status,200,JSON.stringify(result));
+  assert.equal((await h.get('/runs')).body.coordination.operations[op.approval.operation_id].nativeResult.exit,1);
+  assert.equal(h.native.replies.length,1); assert.equal(h.native.replies[0].body.response,'once');
+});
+
+test('release-unused HTTP : autorisation, attestations, mutation et preuve incomplète refusées sans nouvelle once',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const p=await unusedHttpPayload(h,a,lease);
+  for(const change of [x=>delete x.developerAuthorization,x=>x.attestation.noMutatingMandate=false,
+    x=>x.attestation.noEnvironmentMutation=false,x=>delete x.nativeProof,x=>x.nativeProof.historyHash='0'.repeat(64),
+    x=>x.contextId++,x=>x.sessionId='ses_b',x=>x.token='wrong']){
+    const q=structuredClone(p);change(q);const result=await h.post('/runs/a/test-resources/release-unused',q);
+    assert.equal(result.status,409,JSON.stringify(result));
+    assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+  }
+  h.native.busy.ses_a={type:'busy'};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).status,409);h.native.busy={};
+  h.native.permissions=[{id:'pending',sessionID:a.sessionId,permission:'bash',metadata:{command:'true'}}];
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).status,409);h.native.permissions=[];
+  assert.equal(h.native.replies.length,0);
+});
+
+test('release-unused HTTP : résultat natif déjà enregistré puis altéré ne peut pas être rescellé',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const op=await h.approvedAccess(a,'diagnostic-altered');
+  await h.execute(op.approval);await h.completeTool(op.approval,1);await h.releaseOperation(a,op.approval,op.access);
+  h.native.messages.ses_a.at(-1).parts[0].state.metadata.exit=0;
+  const p=await unusedHttpPayload(h,a,lease);const result=await h.post('/runs/a/test-resources/release-unused',p);
+  assert.equal(result.body.error,'test-unused-native-completion-divergent');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+test('release-unused HTTP : changement du transcript pendant relecture et outil hors CAB bloquent',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const p=await unusedHttpPayload(h,a,lease);let reads=0;
+  h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message' && ++reads===2)
+    h.native.messages.ses_a=[{info:{id:'msg_late',role:'user',time:{created:Date.now()}},parts:[{type:'text',text:'late'}]}];};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-boundary-stale');
+  h.native.onRequest=null;const stamp=Date.now()+1;
+  h.native.messages.ses_a.push({info:{id:'msg_untracked',role:'assistant',time:{created:stamp}},parts:[{type:'tool',tool:'bash',callID:'call_untracked',
+    state:{status:'completed',input:{command:'/usr/bin/true'},time:{start:stamp,end:stamp+1},metadata:{exit:0}}}]});
+  const q=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',q)).body.error,'test-unused-native-tool-unreviewable');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');assert.equal(h.native.replies.length,0);
+});
+
+
+test('release-unused HTTP : mandat courant, restauration, compaction et fin absente conservent HELD',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);let p=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:'inspection en cours'})).status,202);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'run-not-quiescent');
+  assert.equal((await h.post('/runs/a/job/progress',{jobId:'job-a',currentCabMandate:''})).status,202);
+  const stamp=Date.now()+1;
+  h.native.messages.ses_a=[{nativeV2:{id:'msg_compaction',type:'compaction',time:{created:stamp}}}];
+  p=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-incomplete');
+  h.native.messages.ses_a=[{info:{id:'msg_running',role:'assistant',time:{created:stamp}},parts:[{type:'tool',tool:'read',callID:'call_running',
+    state:{status:'running',input:{path:'/test'},time:{start:stamp},metadata:{}}}]}];
+  p=await unusedHttpPayload(h,a,lease);
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-incomplete');
+  h.native.messages.ses_a=[];p=await unusedHttpPayload(h,a,lease);await h.stop();await h.start();
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-reconciliation-required');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+test('release-unused HTTP : course de permission et indisponibilité native refusent sans réparation',async(t)=>{
+  const h=await setup(t);const a=await h.reserve('a',{resources:[{key:'lxc:host-a/101',mode:'write'}]});
+  const lease=await unusedHttpLease(h,a);const p=await unusedHttpPayload(h,a,lease);let reads=0;
+  h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message' && ++reads===1)
+    h.native.permissions=[{id:'late-native',sessionID:a.sessionId,permission:'bash',metadata:{command:'true'}}];};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'native-session-not-quiescent');
+  h.native.permissions=[];h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message')h.native.messages.ses_a=[{nativeV2:{id:'msg_bad',type:'assistant',content:'invalid',time:{created:Date.now()}}}];};
+  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-unavailable');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');assert.equal(h.native.replies.length,0);
+});
+
+
+test('diagnostic décision HTTP : trois ressources, révision périmée et rejet sans once supplémentaire',async t=>{
+ const h=await setup(t);const shared={key:'file:shared.txt',mode:'read'};
+ const a=await h.reserve('a',{resources:[shared,{key:'file:config.yaml',mode:'read'},{key:'resource:cli',mode:'read'}]});
+ const b=await h.reserve('b',{resources:[{...shared,mode:'write'}]});
+ const approval=h.approval(a,'decision-stale');assert.equal((await h.post('/validation/request',{approval})).status,202);
+ const writer=await h.approvedAccess(b,'concurrent-writer');await h.execute(writer.approval);await h.completeTool(writer.approval);await h.releaseOperation(b,writer.approval,writer.access);
+ const replies=h.native.replies.length;
+ assert.equal((await h.get('/runs/a/decision/decision-stale/admission')).body.admission.state,'STABLE');
+ const result=await h.post('/runs/a/decision/decision-stale',{decision:'approved'});
+ assert.equal(result.status,400);assert.equal(result.body.error,'resource-revision-stale');assert.equal(result.body.decision_recorded,false);
+ assert.equal((await h.get('/runs/a/decision/decision-stale')).status,404);
+ assert.equal((await h.get('/runs/a/status')).body.undecidedValidationCount,1);assert.equal(h.native.replies.length,replies);
+ assert.equal((await h.post('/runs/a/decision/decision-stale',{decision:'rejected'})).status,201);
+ assert.equal(h.native.replies.length,replies);
+});
+
+test('diagnostic décision HTTP : succès inchangé, doublon explicite et garde native409 préservée',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');const approval=h.approval(a,'decision-success');
+ await h.post('/validation/request',{approval});
+ assert.equal((await h.post('/runs/a/decision/decision-success',{decision:'invalid'})).body.error,'decision-invalid');
+ h.native.rules.ses_a=[{permission:'shell',pattern:'*',action:'deny'}];
+ const denied=await h.post('/runs/a/decision/decision-success',{decision:'approved'});assert.equal(denied.status,409);assert.equal(denied.body.error,'native-permission-ask-required');
+ h.native.rules.ses_a=[{permission:'*',pattern:'*',action:'ask'}];
+ assert.equal((await h.post('/runs/a/decision/decision-success',{decision:'approved'})).status,201);
+ const first=(await h.get('/runs/a/decision/decision-success')).body;
+ const duplicate=await h.post('/runs/a/decision/decision-success',{decision:'rejected'});
+ assert.equal(duplicate.status,400);assert.equal(duplicate.body.error,'decision-already-recorded');assert.equal(duplicate.body.decision_recorded,true);
+ assert.deepEqual((await h.get('/runs/a/decision/decision-success')).body,first);assert.equal(h.native.replies.length,0);
+});
+
+test('diagnostic décision HTTP : révision modifiée pendant la vérification native reste bloquante',async t=>{
+ const h=await setup(t);const resource={key:'file:race.txt',mode:'read'};
+ const a=await h.reserve('a',{resources:[resource]});const b=await h.reserve('b',{resources:[{...resource,mode:'write'}]});
+ const approval=h.approval(a,'decision-race');await h.post('/validation/request',{approval});let changed=false;
+ h.native.onRequest=async path=>{if(path==='/session/ses_a'&&!changed){changed=true;const writer=await h.approvedAccess(b,'writer-during-guard');await h.execute(writer.approval);await h.completeTool(writer.approval);await h.releaseOperation(b,writer.approval,writer.access);}};
+ const result=await h.post('/runs/a/decision/decision-race',{decision:'approved'});
+ assert.equal(result.status,400);assert.equal(result.body.error,'resource-revision-stale');assert.equal(result.body.decision_recorded,false);
+ assert.equal((await h.get('/runs/a/decision/decision-race')).status,404);assert.equal(h.native.replies.length,1);
+});
+
+
+test('diagnostic décision HTTP : transition de reminder tardive signalée sans décision',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');const approval=h.approval(a,'decision-reminder-race');
+ await h.post('/validation/request',{approval});assert.equal((await h.get('/runs/a/decision/'+approval.requestId+'/admission')).body.admission.state,'STABLE');let count=0,release,entered,reminder;
+ const parked=new Promise(resolve=>{release=resolve;});const waiting=new Promise(resolve=>{entered=resolve;});
+ h.native.onRequest=async path=>{
+  if(path!=='/session/ses_a')return;
+  if(++count===1){reminder=h.post('/runs/a/validation/reminder',{approval});await waiting;}
+  else if(count===2){entered();await parked;}
+ };
+ let result;
+ try{result=await h.post('/runs/a/decision/decision-reminder-race',{decision:'approved'});}
+ finally{release();}
+ assert.equal(result.status,400);assert.equal(result.body.error,'run-transition-in-flight');assert.equal(result.body.decision_recorded,false);assert.deepEqual(result.body.admission,{state:'BUSY',snapshot_only:true});
+ assert.equal((await reminder).status,202);assert.equal((await h.get('/runs/a/decision/decision-reminder-race')).status,404);
+ assert.equal(h.native.replies.length,0);
+});
+
+test('transition modèle HTTP : choix explicite libre, même job historique et reprise durable',async t=>{
+ const h=await setup(t,{codingPolicy:true});const run=await h.reserve('hot');
+ h.native.sessions.ses_hot={id:'ses_hot',directory:h.directory,model:{providerID:'provider1',modelID:'model1',variant:'medium'}};
+ const paused=await h.post('/runs/hot/suspend',{version:run.version,action:'PAUSE',evidence:['explicit-human-boundary']});assert.equal(paused.status,200,JSON.stringify(paused));
+ const before=(await h.get('/runs/hot/job')).body;assert.equal(before.codingModel,undefined);
+ const base={transactionId:'hot-switch',developerAuthorization:'human-transition-ref',jobId:before.jobId,sessionId:before.sessionId,runVersion:paused.body.version};
+ // Un choix explicite doit fonctionner même sans catalogue PLLM valide.
+ writeFileSync(h.native.catalogPath,JSON.stringify({invalid:true}));
+ const prepared=await h.post('/runs/hot/job/model-transition',{...base,phase:'prepare',expectedModelHash:before.modelContractHash,
+  selection:{model:'provider2/model2',reasoning:'low'}});assert.equal(prepared.status,200,JSON.stringify(prepared));
+ assert.equal(prepared.body.transition.before,null);
+ const rearm=await h.post('/runs/hot/job/arm',{jobId:before.jobId,sessionId:before.sessionId,directory:h.directory,changeId:before.changeId,criteria:['unrelated']});
+ assert.equal(rearm.body.error,'model-transition-pending');
+ const stamp=Date.now();h.native.sessions.ses_probe.model={providerID:'provider2',modelID:'model2',variant:'low'};
+ h.native.messages.ses_probe=[{info:{id:'msg_hot_user',sessionID:'ses_probe',role:'user',time:{created:stamp}},parts:[{type:'text',text:'probe'}]},
+  {info:{id:'msg_hot_reply',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_hot_user',providerID:'provider2',modelID:'model2',variant:'low',time:{created:stamp,completed:stamp}},parts:[{type:'text',text:'probe ok'}]}];
+ const committed=await h.post('/runs/hot/job/model-transition',{...base,phase:'commit',preflight:{sessionId:'ses_probe',messageId:'msg_hot_reply'}});
+ assert.equal(committed.status,200,JSON.stringify(committed));assert.equal(committed.body.codingModel.providerID,'provider2');assert.equal(committed.body.codingModel.reasoning,'low');
+ const after=(await h.get('/runs/hot/job')).body;assert.equal(after.jobId,before.jobId);assert.equal(after.sessionId,before.sessionId);
+ assert.deepEqual(after.criteria,before.criteria);assert.equal(after.modelTransitionHistory[0].before,null);assert.equal(after.modelTransition,null);
+ assert.equal(h.native.replies.length,0);assert.equal((await h.get('/runs/hot/status')).body.coordination.suspension.action,'PAUSE');
+ await h.stop();await h.start();assert.deepEqual((await h.get('/runs/hot/job')).body.modelTransitionHistory,after.modelTransitionHistory);
+});
+
+test('transition modèle HTTP : sans choix explicite adopte la PLLM actuelle et conserve source prompt antérieure',async t=>{
+ const h=await setup(t,{codingPolicy:true});const run=(await h.post('/runs/reserve',h.candidate('hot-auto'))).body;
+ h.native.sessions['ses_hot-auto']={id:'ses_hot-auto',directory:h.directory,model:{providerID:'provider1',modelID:'model1',variant:'medium'}};
+ const arm=await h.post('/runs/hot-auto/job/arm',{jobId:'job-hot-auto',sessionId:run.sessionId,directory:h.directory,changeId:run.changeId,
+  strictCommands:true,criteria:['preserve-known-write'],modelSelectionProtocol:'pllm-auto-v1',modelSelection:{model:'provider1/model1'},
+  modelPreflight:{sessionId:'ses_probe',messageId:'msg_response'}});assert.equal(arm.status,201,JSON.stringify(arm));
+ const old=arm.body.codingModel;assert.equal(old.source,'prompt');assert.equal(old.mode,null);
+ await h.post('/runs/hot-auto/suspend',{version:run.version,action:'PAUSE',evidence:['human-auto-boundary']});
+ const catalog=JSON.parse(readFileSync(h.native.catalogPath,'utf8'));catalog.selected_mode='mode2';catalog.models[0].state='Invalide';catalog.models[0].selected=false;catalog.models[1].selected=true;writeFileSync(h.native.catalogPath,JSON.stringify(catalog));
+ const before=(await h.get('/runs/hot-auto/job')).body;
+ const base={transactionId:'hot-auto-switch',developerAuthorization:'human-auto-ref',jobId:before.jobId,sessionId:before.sessionId,runVersion:run.version};
+ const p=await h.post('/runs/hot-auto/job/model-transition',{...base,phase:'prepare',expectedModelHash:before.modelContractHash});assert.equal(p.status,200,JSON.stringify(p));
+ assert.equal(p.body.transition.candidate.mode,'mode2');
+ const resume=await h.post('/runs/hot-auto/suspend',{version:run.version,action:'RESUME',evidence:['too-early']});assert.equal(resume.body.error,'model-transition-pending');
+ const stamp=Date.now();h.native.sessions.ses_probe.model={providerID:'provider2',modelID:'model2',variant:'medium'};
+ h.native.messages.ses_probe=[{info:{id:'msg_auto_user',sessionID:'ses_probe',role:'user',time:{created:stamp}},parts:[{type:'text',text:'probe'}]},
+  {info:{id:'msg_auto_reply',sessionID:'ses_probe',role:'assistant',finish:'stop',parentID:'msg_auto_user',providerID:'provider2',modelID:'model2',variant:'medium',time:{created:stamp,completed:stamp}},parts:[{type:'text',text:'probe ok'}]}];
+ const result=await h.post('/runs/hot-auto/job/model-transition',{...base,phase:'commit',preflight:{sessionId:'ses_probe',messageId:'msg_auto_reply'}});assert.equal(result.status,200,JSON.stringify(result));
+ const after=(await h.get('/runs/hot-auto/job')).body;assert.equal(after.codingModel.source,'pllm-automatic');assert.equal(after.codingModel.mode,'mode2');
+ assert.deepEqual(after.modelTransitionHistory[0].before,old);assert.deepEqual(after.criteria,before.criteria);assert.equal(h.native.replies.length,0);
+});
+
+test('admission observée : BUSY refuse la décision, pair isolé puis même demande STABLE',async t=>{
+ const h=await setup(t);const a=await h.reserve('a'),b=await h.reserve('b');
+ const approval=h.approval(a,'admission-busy');await h.post('/validation/request',{approval});
+ let release,entered;const parked=new Promise(r=>{release=r}),waiting=new Promise(r=>{entered=r});
+ h.native.onRequest=async path=>{if(path==='/session/ses_a'){entered();await parked;}};
+ const reminder=h.post('/runs/a/validation/reminder',{approval});await waiting;
+ try{
+  const observed=await h.get('/runs/a/decision/'+approval.requestId+'/admission');
+  assert.equal(observed.status,200);assert.deepEqual(observed.body.admission,{state:'BUSY',snapshot_only:true});
+  assert.equal(observed.body.owner_registered,true);assert.equal(observed.body.validation_registered,true);assert.equal(observed.body.decision_recorded,false);
+  assert.equal((await h.get('/runs/a/status')).body.admission.state,'BUSY');
+  assert.equal((await h.get('/runs/b/status')).body.admission.state,'STABLE');
+  const refused=await h.post('/runs/a/decision/'+approval.requestId,{decision:'approved'});
+  assert.equal(refused.status,409);assert.equal(refused.body.error,'run-transition-in-flight');assert.equal(refused.body.decision_recorded,false);assert.equal(refused.body.admission.state,'BUSY');
+  assert.equal((await h.get('/runs/a/decision/'+approval.requestId)).status,404);assert.equal(h.native.replies.length,0);
+  const unknown=await h.post('/runs/a/decision/unknown-request',{decision:'approved'});assert.equal(unknown.status,409);assert.equal(unknown.body.decision_recorded,null);
+  const peer=h.approval(b,'admission-peer');assert.equal((await h.post('/validation/request',{approval:peer})).status,202);
+  assert.equal((await h.post('/runs/b/decision/'+peer.requestId,{decision:'approved'})).status,201);
+ }finally{release();}
+ assert.equal((await reminder).status,202);h.native.onRequest=undefined;
+ const stable=await h.get('/runs/a/decision/'+approval.requestId+'/admission');assert.equal(stable.body.admission.state,'STABLE');assert.equal(stable.body.decision_recorded,false);
+ assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const decided=await h.get('/runs/a/decision/'+approval.requestId+'/admission');assert.equal(decided.body.decision_recorded,true);
+ const before=(await h.get('/runs/a/decision/'+approval.requestId)).body;
+ assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,400);
+ assert.deepEqual((await h.get('/runs/a/decision/'+approval.requestId)).body,before);assert.equal(h.native.replies.length,0);
+});
+
+test('admission ciblée : inconnue explicite, propriétaire étranger refusé et lectures sans mutation',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');await h.reserve('b');
+ const unknown=await h.get('/runs/a/decision/unknown/admission');assert.equal(unknown.status,404);assert.equal(unknown.body.owner_registered,false);
+ assert.equal(unknown.body.validation_registered,false);assert.equal(unknown.body.decision_recorded,null);assert.deepEqual(unknown.body.admission,{state:'STABLE',snapshot_only:true});
+ const approval=h.approval(a,'admission-owned');await h.post('/validation/request',{approval});
+ const before=(await h.get('/runs')).body;
+ assert.equal((await h.get('/runs/a/decision/'+approval.requestId+'/admission')).status,200);
+ const foreign=await h.get('/runs/b/decision/'+approval.requestId+'/admission');assert.equal(foreign.status,409);assert.equal(foreign.body.error,'decision-run-divergent');
+ assert.equal(foreign.body.decision_recorded,undefined);assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
+});
+
+test('porte-mandat HTTP : staging sans décision/accès, substitution et livraison anticipée refusées',async t=>{
+ const h=await setup(t);const a=await h.reserve('a');await h.reserve('b');
+ const payload='printf "reviewed\\n"\n';const input={stageId:'stage-http',jobId:'job-a',sessionId:a.sessionId,reservationVersion:a.version,requestId:'request-carrier',approvalId:'approval-carrier',operationId:'op-carrier',payload,payloadSha256:createHash('sha256').update(payload).digest('hex')};
+ const before=(await h.get('/runs')).body;const created=await h.post('/runs/a/shell-stage',input);assert.equal(created.status,201,JSON.stringify(created));
+ assert.equal(created.body.payload,undefined);assert.ok(created.body.command.includes(input.payloadSha256));assert.deepEqual((await h.get('/runs')).body,before);
+ assert.equal((await h.get('/runs/a/shell-stage/stage-http/payload')).status,409);assert.equal((await h.get('/runs/b/shell-stage/stage-http')).status,409);
+ assert.deepEqual((await h.post('/runs/a/shell-stage',Object.fromEntries(Object.entries(input).reverse()))).body,created.body);
+ const changed={...input,payload:payload+'#different',payloadSha256:createHash('sha256').update(payload+'#different').digest('hex')};
+ assert.equal((await h.post('/runs/a/shell-stage',changed)).body.error,'shell-stage-identity-divergent');
+ assert.equal((await h.post('/runs/a/shell-stage',{...input,jobId:'foreign'})).status,409);assert.equal(h.native.replies.length,0);
+ h.native.rules[a.sessionId]=[{permission:'shell',pattern:'*',action:'allow'}];assert.equal((await h.post('/runs/a/shell-stage',input)).body.error,'native-permission-ask-required');h.native.rules[a.sessionId]=[{permission:'*',pattern:'*',action:'ask'}];
+ await h.stop();await h.start();assert.deepEqual((await h.get('/runs/a/shell-stage/stage-http')).body,created.body);
+ assert.equal((await h.get('/runs/a/shell-stage/stage-http/payload')).status,409);
+});
+
+
+test('projection moniteur HTTP : navigation exacte sans registre privé ni mutation',async t=>{
+ const h=await setup(t);await h.reserve('a');await h.reserve('b');const before=(await h.get('/runs')).body;
+ const {status,body}=await h.get('/monitor/runs');assert.equal(status,200);assert.equal(body.snapshot_only,true);assert.equal(body.totalRuns,2);assert.equal(body.truncated,false);
+ for(const run of before.runs){const row=body.runs.find(r=>r.runId===run.runId);for(const k of ['runId','changeId','sessionId','version','state','phase'])assert.equal(row[k],run[k]??null);}
+ assert.equal(body.coordination,undefined);assert.equal(body.requestOwners,undefined);assert.equal(body.history,undefined);assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
 });

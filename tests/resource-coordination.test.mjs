@@ -215,9 +215,43 @@ test('scoped publication is idempotent, enters REPORT and does not stale indepen
   const receipt = h.r.publish('a', payload);
   assert.equal(h.r.runs.get('a').phase, 'REPORT'); assert.equal(h.r.runs.get('b').version, b.version);
   assert.equal(h.r.resourceState.accesses[other.operationId].state, 'EXECUTING');
+  assert.equal(Object.hasOwn(h.r.resourceState.accesses[access.accessId], 'token'), false);
   assert.deepEqual(h.r.publish('a', payload), receipt);
   assert.throws(() => h.r.publish('a', { ...payload, evidence: ['different'] }), /publication-transaction-divergent/);
   await h.restart(); assert.deepEqual(h.r.publish('a', payload), receipt);
+});
+
+test('released access removes bearer token but preserves exact replay by digest', async (t) => {
+  const h = await fixture(t); const run = h.reserve('released-token', [file('preflight', 'read')]);
+  const op = h.prepare(run, 'released-token-op', [file('preflight', 'read')]);
+  const access = h.acquire(run, op); h.start(run, op); h.complete(run, op);
+  const payload = { version: run.version, operationId: access.accessId, token: access.token,
+    fencing: access.fencing, outcome: 'COMPLETED', evidence: ['native result reviewed'] };
+  const released = h.r.releaseAccess(run.runId, payload);
+  assert.equal(released.state, 'RELEASED'); assert.equal(Object.hasOwn(released, 'token'), false);
+  assert.equal(Object.hasOwn(h.r.resourceState.accesses[access.accessId], 'token'), false);
+  assert.deepEqual(h.r.releaseAccess(run.runId, payload), released);
+  await h.restart();
+  assert.equal(Object.hasOwn(h.r.resourceState.accesses[access.accessId], 'token'), false);
+  assert.deepEqual(h.r.releaseAccess(run.runId, payload), released);
+  assert.throws(() => h.r.releaseAccess(run.runId, { ...payload, evidence: ['different request'] }),
+    /access-token-invalid/);
+});
+
+test('restoration scrubs a legacy token only from an already RELEASED access', async (t) => {
+  const h = await fixture(t); const run = h.reserve('legacy-released-token', [file('preflight', 'read')]);
+  const op = h.prepare(run, 'legacy-released-token-op', [file('preflight', 'read')]);
+  const access = h.acquire(run, op); h.start(run, op); h.complete(run, op);
+  const payload = { version: run.version, operationId: access.accessId, token: access.token,
+    fencing: access.fencing, outcome: 'COMPLETED', evidence: ['native result reviewed'] };
+  h.r.releaseAccess(run.runId, payload);
+  h.r.resourceState.accesses[access.accessId].token = access.token;
+  h.r.persist();
+  await h.restart();
+  const restored = h.r.resourceState.accesses[access.accessId];
+  assert.equal(restored.state, 'RELEASED'); assert.equal(Object.hasOwn(restored, 'token'), false);
+  assert.equal(Object.hasOwn(JSON.parse(readFileSync(h.r.path, 'utf8')).coordination.accesses[access.accessId], 'token'), false);
+  assert.equal(Object.hasOwn(h.r.releaseAccess(run.runId, payload), 'token'), false);
 });
 
 test('pause is targeted, global exceptions drain explicitly and timeout never releases', async (t) => {
@@ -435,15 +469,21 @@ test('Le nettoyage exige des opérations natives réussies et ordonnées du cycl
 });
 
 test('Le redémarrage conserve la réservation de test et la réconciliation renouvelle le jeton', async (t) => {
-  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'lease-a');
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);
+  const acquisition={version:a.version,transactionId:'lease-a',resources:[lxcTest],evidence:['canonical environment identity reviewed']};
+  const entry=h.r.acquireTests(a.runId,acquisition);
   finishTestCommand(h,a,'test'); await h.restart();
   assert.equal(h.r.testReservations('a')[0].reconciliationRequired,true);
+  const reacquired=h.r.acquireTests(a.runId,acquisition);
+  assert.equal(reacquired.state,'HELD');assert.equal(reacquired.token,entry.token);assert.equal(reacquired.fencing,entry.fencing);
+  assert.equal(reacquired.reconciliationRequired,true);
   const op=h.prepare(a,'after-crash');
   assert.throws(() => h.acquire(a,op),/test-reconciliation-required/);
-  assert.throws(() => h.r.releaseTests('a',testPayload(a,entry)),/test-reconciliation-required/);
-  const reconciliation=testPayload(a,entry,{reconciliationId:'reconcile-a'});
+  assert.throws(() => h.r.releaseTests('a',testPayload(a,reacquired)),/test-reconciliation-required/);
+  assert.throws(() => h.r.acquireTests(a.runId,{...acquisition,evidence:['divergent evidence']}),/test-transaction-divergent/);
+  const reconciliation=testPayload(a,reacquired,{reconciliationId:'reconcile-a'});
   const restored=h.r.reconcileTests('a',reconciliation);
-  assert.notEqual(restored.token,entry.token);assert.ok(restored.fencing>entry.fencing);
+  assert.notEqual(restored.token,reacquired.token);assert.ok(restored.fencing>reacquired.fencing);
   assert.equal(h.r.reconcileTests('a',reconciliation).token,restored.token);
   assert.throws(() => h.r.releaseTests('a',testPayload(a,entry)),/test-token-invalid/);
   const cleanup=cleanupProof(h,a,'post-restart');
@@ -519,4 +559,159 @@ test('identifiants logiques historiques conservés sans donner de nouvelle rése
   assert.throws(()=>h.r.acquireTests(a.runId,{version:a.version,transactionId:'new-old-key',resources:legacy,evidence:['new attempt']}),/test-resources-invalid/);
   const alias=[{key:'browser:host-a/Chromium',mode:'write'}];
   assert.throws(()=>h.r.testResources(alias),/test-resources-invalid/);
+});
+
+
+function unusedPayload(h, run, entry, extra = {}) {
+  const operations=h.r.unusedTestOperations(h.r.resourceState.testReservations[entry.transactionId]);
+  return testPayload(run, entry, { contextId: run.contextId, sessionId: run.sessionId,
+    boundaryDigest: h.r.unusedTestBoundary(h.r.resourceState.testReservations[entry.transactionId]),
+    developerAuthorization: 'autorisation humaine ciblée de restitution sans effet',
+    attestation: { noEnvironmentMutation: true, noMutatingMandate: true,
+      operations: operations.map((op) =>
+        ({ operationId: op.operationId, classification: h.r.unusedTestOperationClassification(op) || 'read-only-no-effect' })) },
+    nativeProof: { messageCount: 4, toolCount: 2, historyHash: fingerprint('observed full native history'),
+      operationClassifications: operations.map((op) => ({ operationId: op.operationId,
+        classification: h.r.unusedTestOperationClassification(op) || 'read-only-no-effect' })) }, ...extra });
+}
+
+test('restitution sans effet : reçu durable, FIFO, idempotence et reprise des travaux indépendants', async (t) => {
+  const h = await fixture(t); const a = h.reserve('a', [lxcTest]); const b = h.reserve('b', [lxcTest]);
+  const entry = testLease(h, a, 'unused-a'); testLease(h, b, 'waiting-b');
+  const p = unusedPayload(h, a, entry);
+  assert.throws(() => h.r.extend('a', { version: a.version, resources: [file('independent')] }), /run-accesses-unresolved/);
+  const receipt = h.r.releaseUnusedTests('a', p, p.nativeProof);
+  assert.equal(receipt.state, 'RELEASED'); assert.equal(receipt.unusedReleaseReceipt.mode, 'unused-no-effect');
+  assert.equal(h.r.testReservations('b')[0].state, 'HELD');
+  assert.deepEqual(h.r.releaseUnusedTests('a', p, p.nativeProof), receipt);
+  assert.throws(() => h.r.releaseUnusedTests('a', {...p, evidence:['changed']}, p.nativeProof), /test-unused-release-divergent/);
+  assert.throws(() => h.r.releaseTests('a', p), /test-token-invalid/);
+  assert.equal(h.r.extend('a', { version:a.version, resources:[file('independent')] }).state, 'RESERVED');
+  const restored = await h.restart();
+  assert.deepEqual(restored.resourceState.testReservations[entry.transactionId], receipt);
+  assert.deepEqual(restored.releaseUnusedTests('a', p, p.nativeProof), receipt);
+});
+
+test('restitution sans effet après restauration : scope armé, token perdu et reçu sans token', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'lost-token-a');
+  await h.restart();
+  const p=unusedPayload(h,a,entry);delete p.token;delete p.developerAuthorization;p.recoveryMode='validated-change-unused';
+  const receipt=h.r.releaseUnusedTests('a',p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true});
+  assert.equal(receipt.state,'RELEASED');
+  assert.equal(receipt.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+  assert.equal(receipt.token,undefined);
+  assert.equal(h.r.resourceState.testReservations[entry.transactionId].token,undefined);
+  assert.equal(h.r.testReservations('a')[0].reconciliationRequired,false);
+  assert.deepEqual(h.r.releaseUnusedTests('a',p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true}),receipt);
+  assert.throws(()=>h.r.releaseUnusedTests('a',{...p,evidence:['divergent']},p.nativeProof,
+    {lostTokenRecovery:true,validatedChangeScope:true}),/test-unused-release-divergent/);
+});
+
+test('restitution sans effet après restauration : une validation REJECTION_ONLY prouvée ne bloque pas le bail', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'rejected-only-a');
+  const op=h.prepare(a,'rejected-validation-a');
+  const stored=h.r.resourceState.operations[op.operationId];stored.rejectionOnly=true;
+  const requestId='request-'+op.operationId;
+  h.r.requestOwners[requestId]={runId:a.runId,digest:fingerprint('rejected-validation-identity'),reconciliation:{
+    transactionId:'rejection-tx-a',jobId:'job-a',operationId:op.operationId,approvalId:'approval-a',
+    recoveryId:null,sessionId:a.sessionId,inputDigest:fingerprint('rejection-input'),
+    nativeToolHash:fingerprint('native-rejection-tools'),authorizationDigest:fingerprint('rejection-authorization'),
+    contextId:a.contextId,version:a.version,nativeToolCount:1,outcome:'REJECTION_ONLY',at:new Date().toISOString()}};
+  h.r.persist();await h.restart();
+  const restored=h.r.resourceState.testReservations[entry.transactionId];
+  assert.equal(h.r.unusedTestOperationClassification(h.r.resourceState.operations[op.operationId]),
+    'rejected-validation-no-native-effect');
+  const p=unusedPayload(h,a,restored);delete p.token;delete p.developerAuthorization;
+  p.recoveryMode='validated-change-unused';
+  const receipt=h.r.releaseUnusedTests(a.runId,p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true});
+  assert.equal(receipt.state,'RELEASED');
+  assert.equal(receipt.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+  assert.equal(receipt.unusedReleaseReceipt.operationIds[0],op.operationId);
+});
+
+test('restitution sans effet après restauration : un rejet sans reçu concordant reste bloquant', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'rejected-only-unproved');
+  const op=h.prepare(a,'rejected-validation-unproved');
+  h.r.persist();await h.restart();
+  const p=unusedPayload(h,a,h.r.resourceState.testReservations[entry.transactionId]);delete p.token;delete p.developerAuthorization;
+  p.recoveryMode='validated-change-unused';
+  assert.equal(h.r.unusedTestOperationClassification(h.r.resourceState.operations[op.operationId]),null);
+  assert.throws(()=>h.r.releaseUnusedTests(a.runId,p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true}),/test-unused-operation-not-proved/);
+  assert.equal(h.r.testReservations(a.runId)[0].state,'HELD');
+});
+
+test('restitution sans effet après restauration refuse l’absence de scope validé ou un token résiduel', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'lost-token-negative');
+  await h.restart();
+  const p=unusedPayload(h,a,entry);delete p.token;delete p.developerAuthorization;p.recoveryMode='validated-change-unused';
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof,{lostTokenRecovery:true}),/test-unused-attestation-required/);
+  assert.throws(()=>h.r.releaseUnusedTests('a',{...p,token:'unexpected'},p.nativeProof,
+    {lostTokenRecovery:true,validatedChangeScope:true}),/test-unused-attestation-required/);
+  assert.equal(h.r.testReservations('a')[0].state,'HELD');
+  assert.equal(h.r.testReservations('a')[0].reconciliationRequired,true);
+});
+
+test('restitution sans effet : diagnostic terminé exit1 reste un échec, sans nettoyage fictif', async (t) => {
+  const h=await fixture(t); const a=h.reserve('a',[lxcTest]); const entry=testLease(h,a,'diagnostic-a');
+  const op=finishTestCommand(h,a,'diagnostic',a.resources,1); const p=unusedPayload(h,a,entry);
+  const receipt=h.r.releaseUnusedTests('a',p,p.nativeProof);
+  assert.deepEqual(receipt.unusedReleaseReceipt.operationIds,[op.operationId]);
+  assert.equal(h.r.resourceState.operations[op.operationId].nativeResult.exit,1);
+  assert.equal(receipt.cleanup,undefined);
+});
+
+test('restitution sans effet : attestations incomplètes, mutation, identités, preuve et frontière divergentes refusées', async (t) => {
+  const h=await fixture(t); const a=h.reserve('a',[lxcTest]); const entry=testLease(h,a,'negative-a');
+  finishTestCommand(h,a,'diagnostic',a.resources,1); const p=unusedPayload(h,a,entry);
+  for(const change of [x=>delete x.developerAuthorization,x=>x.developerAuthorization=' ',
+    x=>x.attestation.noEnvironmentMutation=false,x=>x.attestation.noMutatingMandate=false,
+    x=>x.attestation.operations=[],x=>x.attestation.operations.push(x.attestation.operations[0]),
+    x=>x.attestation.operations[0].classification='mutation',x=>x.attestation.extra=true,
+    x=>x.sessionId='ses_other',x=>x.contextId++,x=>x.version++,x=>x.token='wrong',x=>x.fencing++,
+    x=>x.boundaryDigest=fingerprint('old'),x=>x.nativeProof.historyHash=fingerprint('forged'),x=>x.extra=true]){
+    const q=structuredClone(p);change(q);assert.throws(()=>h.r.releaseUnusedTests('a',q,p.nativeProof));
+    assert.equal(h.r.testReservations('a')[0].state,'HELD');
+  }
+  finishTestCommand(h,a,'late-command');
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-unused-boundary-stale/);
+});
+
+test('restitution sans effet : opération préparée et restauration restent protégées', async (t) => {
+  const h=await fixture(t); const a=h.reserve('a',[lxcTest]); const entry=testLease(h,a,'guards-a');
+  h.prepare(a,'not-started'); let p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-unused-operation-not-proved/);
+  await h.restart();p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-reconciliation-required/);
+});
+
+
+test('restitution sans effet : accès actif, STOP et gel global ne sont jamais contournés',async(t)=>{
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'active-guard');
+  const op=h.prepare(a,'active-command');h.acquire(a,op);let p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/test-effects-unresolved/);
+  h.r.suspend('a',{version:a.version,action:'STOP',evidence:['arrêt ciblé']});p=unusedPayload(h,a,entry);
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof),/run-stop/);
+  const other=await fixture(t);const b=other.reserve('b',[lxcTest]);const held=testLease(other,b,'frozen-unused');
+  other.r.requestGlobal({cause:'GLOBAL_PAUSE',scope:'all',transactionId:'freeze-unused',authorization:'gel humain',evidence:['frontière']});
+  const frozen=unusedPayload(other,b,held);
+  assert.throws(()=>other.r.releaseUnusedTests('b',frozen,frozen.nativeProof),/global-coordination-suspended/);
+});
+
+test('restitution sans effet : opération annulée sans exécution et intégrité du reçu restauré',async(t)=>{
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'cancelled-cycle');
+  const op=h.prepare(a,'cancelled-operation');
+  const access=h.acquire(a,op);h.release(a,access,'NO_EFFECT');
+  const p=unusedPayload(h,a,entry);const receipt=h.r.releaseUnusedTests('a',p,p.nativeProof);
+  assert.deepEqual(receipt.unusedReleaseReceipt.operationIds,[op.operationId]);
+  const state=structuredClone(h.r.resourceState);state.testReservations[entry.transactionId].unusedReleaseReceipt.nativeProof.historyHash='0'.repeat(64);
+  assert.throws(()=>h.r.validateResourceState(state),/registry-restoration-invalid/);
+  assert.equal(h.r.resourceState.testReservations[entry.transactionId].state,'RELEASED');
+});
+
+
+test('projection moniteur : historique volumineux exclu, actives prioritaires et limite explicite', () => {
+ const runs=new Map(Array.from({length:205},(_,i)=>['run-'+i,{runId:'run-'+i,changeId:'change-'+i,sessionId:'ses_'+i,version:i+1,state:i===204?'RESERVED':'DELIVERED',phase:'IMPLEMENTATION',history:'PRIVATE-HISTORY-'+'x'.repeat(16000),resources:[{key:'PRIVATE-RESOURCE'}]}]));
+ const source={runs,snapshot(){throw Error('full snapshot forbidden')}};const before=JSON.stringify([...runs]);assert.ok(before.length>2*1024*1024);
+ const view=ResourceRunRegistry.prototype.monitorRuns.call(source);assert.equal(view.runs.length,200);assert.equal(view.totalRuns,205);assert.equal(view.truncated,true);assert.equal(view.snapshot_only,true);assert.equal(view.runs[0].runId,'run-204');
+ assert.ok(JSON.stringify(view).length<100000);assert.ok(!JSON.stringify(view).includes('PRIVATE-'));assert.equal(JSON.stringify([...runs]),before);
 });
