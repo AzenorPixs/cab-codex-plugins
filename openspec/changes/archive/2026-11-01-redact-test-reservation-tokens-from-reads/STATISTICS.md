@@ -19,10 +19,11 @@ Session SCM directe, change `redact-test-reservation-tokens-from-reads`, release
 | Suite JavaScript complète dans le checkout réel | 669 | 0 | 31 | 700 | 95,6 % |
 | Tests Python | 83 | 0 | 0 | 83 | 100 % |
 | OpenSpec strict avant archivage | 17 | 0 | 0 | 17 | 100 % |
+| OpenSpec archivé strict après clôture | 111 | 0 | 0 | 111 | 100 % |
 
-La suite JavaScript complète inclut les assertions GET qui vérifient l'absence du champ bearer `token` dans les projections publiques et l'absence de sa valeur dans les réponses. Les réponses POST d'acquisition restent testées. Aucun jeton réel n'a été lu ou recopié. Au premier statut post-archivage, ce change comptait 4/8 tâches : l'archive est présente mais la livraison SCM n'est pas attestée.
+La suite JavaScript complète inclut les assertions GET qui vérifient l'absence du champ bearer `token` dans les projections publiques et l'absence de sa valeur dans les réponses. Les réponses POST d'acquisition restent testées. Aucun jeton réel n'a été lu ou recopié. Au premier statut post-archivage, ce change comptait 4/8 tâches ; après publication GitHub et CABU, les 8 tâches sont cochées.
 
-Aucune approbation ou permission native n'a été demandée dans cette session SCM. L'archivage OpenSpec a été exécuté le 1er novembre 2026 ; ce rapport est le suivi post-archive et ne vaut pas commit, publication ou activation.
+Aucune approbation ou permission native n'a été demandée dans cette session SCM. L'archivage OpenSpec a été exécuté le 1er novembre 2026 ; la clôture 8/8 suit l'implémentation, les tests, la publication et CABU.
 
 ## 2. Types de messages et d'outils
 
@@ -46,6 +47,7 @@ Les projections GET omettent le jeton des réservations de test, sans changer l'
 | Suite Node complète | 669 | 0 | 31 | 700 | 95,6 % |
 | Tests Python | 83 | 0 | 0 | 83 | 100 % |
 | OpenSpec strict | 17 | 0 | 0 | 17 | 100 % |
+| OpenSpec strict des archives après clôture | 111 | 0 | 0 | 111 | 100 % |
 | Compilation Python des modules versionnés | N/A | 0 | 0 | N/A | N/A |
 | Contrôle `git diff --check` | 1 | 0 | 0 | 1 | 100 % |
 
@@ -53,14 +55,14 @@ Aucun échec technique observé dans la suite complète du checkout réel. Les c
 
 ## 5. Accès web
 
-Aucun accès web n'a été effectué. Requêtes, approbations, refus, erreurs et URL visitées : 0. Aucune URL refusée ou visitée n'est à rapporter.
+Aucune navigation web ni recherche web n'a été effectuée. L'API GitHub a servi à lire la branche/manifests et publier deux commits ; aucun compteur d'appels par opération n'est conservé par le connecteur. URL de pages visitées dans un navigateur : 0.
 
 ## 6. Synthèse globale
 
 | Durée de la session de codage | Valeur |
 |---|---|
 | Début | N/A — horodatage initial absent |
-| Fin — après archivage | 2026-11-01 15:49:50 Europe/Paris |
+| Fin — après archivage | 2026-11-01 16:03:50 Europe/Paris |
 | Durée globale (pauses et attentes incluses) | N/A — borne de début absente |
 
 | Mesure du quota Codex sur 7 jours | Horodatage du relevé | Quota utilisé | Réinitialisation |
@@ -71,4 +73,4 @@ Aucun accès web n'a été effectué. Requêtes, approbations, refus, erreurs et
 
 Le quota est partagé par le compte ; la valeur observée après archivage peut inclure d'autres tâches et n'est pas attribuée à ce change.
 
-Bilan : les suites exécutées passent ; le change est archivé avec ses tâches de livraison encore en cours. Rapport vérifié en UTF-8/LF avec six sections. Commit/publication SCM et CABU restent à exécuter. Aucun secret n'a été lu ou rapporté.
+Bilan : suite JavaScript 669/700 (0 échec, 31 ignorés), Python 83/83 et OpenSpec archives strictes 111/111. Ce change est archivé, ses 8/8 tâches sont cochées, les commits locaux `a63ede8`/`16ce0d2` et GitHub `53e49a8`/`f7af64d` sont publiés avec arbre distant identique. CABU `update-c5c3bef3-fc09-46a8-b272-bb6a643ab6de` a vérifié le contrôleur, superviseur, moniteur et broker READY en 2.1.39 ; CAB/CABU globales 2.1.39. Aucun secret n'a été lu ou rapporté.
