@@ -1,3 +1,9 @@
+## 2.1.49 — Filtrage des chemins de listing hors location
+
+- Le listing ignore les entrées représentant la racine et filtre les chemins parent/externes ; seuls les chemins relatifs restés dans la location sont restitués.
+- Les tests couvrent la racine, un chemin absolu interne, une réponse MIME textuelle et un chemin externe filtré.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.49.
+
 ## 2.1.48 — Compatibilité des réponses filesystem OpenCode
 
 - La lecture native accepte les types MIME textuels et structurés servis par OpenCode ; les réponses binaires non textuelles restent refusées.
