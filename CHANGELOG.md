@@ -1,3 +1,9 @@
+## 2.1.59 — Routage explicite des méthodes MCP par Code Mode
+
+- `nativeCodingMandate` distingue les outils natifs write/edit/shell des méthodes MCP CAB, appelées via l’hôte Code Mode `execute` et le nom exact découvert.
+- Sans discovery complète ou sans wrapper `execute`, le mandat reste bloqué ; aucun appel MCP direct, shell de repli, décision ou permission supplémentaire.
+- CAB/CABU et les quatre briques partagent la version 2.1.59.
+
 ## 2.1.58 — Corrélation des CodeMode bruts terminés
 
 - Le contrôleur corrèle aussi un `request_validation` CodeMode dynamique non normalisé lorsque son transcript natif complet atteste l'appel terminé et son identité exacte.

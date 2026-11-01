@@ -1,4 +1,4 @@
-# Reprise des incidents de codage natif — CAB 2.1.58
+# Reprise des incidents de codage natif — CAB 2.1.59
 
 ## Prévol avant récupération d'une session adossée à un RUN
 
@@ -66,9 +66,10 @@ En Code Mode, `execute` est l’outil hôte qui exécute les appels MCP dynamiqu
 entrée distincte du catalogue d’outils présenté au modèle. Appeler uniquement le
 nom exact découvert dans le résultat complet, par exemple
 `tools["cgpt-validation"].request_validation(...)` à l’intérieur du wrapper
-Code Mode. L’absence d’entrée séparée `request_validation` dans ce catalogue ne
-justifie ni un nom deviné, ni un appel shell ou un contournement des gardes RUN,
-validation et permission.
+Code Mode. Ne pas appeler directement l’entrée native `cgpt-validation_request_validation`.
+L’absence d’entrée séparée `request_validation` dans ce catalogue ne justifie
+ni un nom deviné, ni un appel shell ou un contournement des gardes RUN,
+validation et permission ; si le wrapper `execute` manque, garder le mandat bloqué.
 
 ## Erreur fournisseur et diagnostic
 
