@@ -3,7 +3,7 @@ import { openCodeV2TestHandler, v2ProviderResponseBytes, v2NormalizedToolPart } 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -1016,20 +1016,35 @@ test('récupération de A avec B actif : réservation conservée et génération
   let stamp;
   const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new', recoveryId: 'recovery-a', preflightRequestId: 'preflight-a' };
   assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+  const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'a');
+  const runContext = readdirSync(runStateDirectory)[0];
+  const jobStatePath = join(runStateDirectory, runContext, 'controller-job.json');
+  const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
+  delete persistedJob.recovery.preparationHistory.requestValidationSignatureHash;
+  writeFileSync(jobStatePath, JSON.stringify(persistedJob));
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 0, by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
   const approval = h.approval({ ...a, sessionId: 'ses_a_new' }, 'preflight-a');
-  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  const requested = await h.post('/validation/request', { approval });
+  assert.equal(requested.status, 202, JSON.stringify(requested));
   assert.equal((await h.post('/runs/a/decision/preflight-a', { decision: 'approved' })).status, 201);
   h.native.permissions.push({ id: 'permission-a', sessionID: 'ses_a_new', permission: 'bash', metadata: { command: '/usr/bin/true' } });
   await waitFor(() => h.native.replies.length === 1);
   stamp = Date.now() + 1;
   const signatureHistory = h.native.messages.ses_a_new.slice(0, 1);
-  h.native.messages.ses_a_new = [...signatureHistory, { parts: [
+  const discoveryInput = { namespace: 'cgpt-validation', query: 'request_validation', limit: 20 };
+  const discoveryCallId = 'call-legacy-discovery';
+  const legacyDiscovery = { type: 'tool', tool: 'execute', callID: discoveryCallId, executed: false,
+    state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify(discoveryInput) + ');' },
+      output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }), time: { start: stamp + 1, end: stamp + 2 },
+      metadata: { truncated: false, toolCalls: [{ tool: 'search', status: 'completed', input: discoveryInput }] } } };
+  h.native.messages.ses_a_new = [...signatureHistory, { parts: [legacyDiscovery,
     { type: 'tool', tool: 'cgpt-validation_request_validation', state: { status: 'completed', input: approval,
-      output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: stamp + 1, end: stamp + 2 } } },
+      output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: stamp + 3, end: stamp + 4 } } },
     { type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: '/usr/bin/true' },
-      metadata: { exit: 0 }, time: { start: stamp + 3, end: stamp + 4 } } },
+      metadata: { exit: 0 }, time: { start: stamp + 5, end: stamp + 6 } } },
     { type: 'tool', tool: 'cgpt-validation_broker_readiness', state: { status: 'completed',
-      output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: stamp + 5, end: stamp + 6 } } },
+      output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: stamp + 7, end: stamp + 8 } } },
   ] }];
   await h.post('/broker/readiness', { status: 'READY', pending_count: 0, by_run: { a: { pending_count: 0 }, b: { pending_count: 0 } } });
   assert.equal((await h.releaseOperation(a, approval)).status, 200);
@@ -1041,6 +1056,58 @@ test('récupération de A avec B actif : réservation conservée et génération
   assert.equal(h.native.permissions[0].sessionID, 'ses_b');
   assert.equal((await h.post('/validation/request', { approval: h.approval(a, 'old-owner') })).status, 409);
 });
+
+for (const invalidDiscovery of ['duplicate', 'truncated', 'untimed', 'divergent']) {
+  test('complete legacy sans effet refuse discovery invalide : ' + invalidDiscovery, async t => {
+    const h = await setup(t); const run = await h.reserve('legacy-invalid');
+    const recovery = { jobId: 'job-legacy-invalid', expectedSessionId: 'ses_legacy-invalid',
+      sessionId: 'ses_legacy-invalid_new', recoveryId: 'recovery-legacy-invalid', preflightRequestId: 'preflight-legacy-invalid' };
+    assert.equal((await h.post('/runs/legacy-invalid/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
+    const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'legacy-invalid');
+    const jobStatePath = join(runStateDirectory, readdirSync(runStateDirectory)[0], 'controller-job.json');
+    const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
+    delete persistedJob.recovery.preparationHistory.requestValidationSignatureHash;
+    writeFileSync(jobStatePath, JSON.stringify(persistedJob));
+    await h.stop(); await h.start();
+    await h.post('/broker/readiness', { status: 'READY', pending_count: 0, by_run: { 'legacy-invalid': { pending_count: 0 } } });
+    const approval = h.approval({ ...run, sessionId: recovery.sessionId }, recovery.preflightRequestId);
+    assert.equal((await h.post('/validation/request', { approval })).status, 202);
+    assert.equal((await h.post('/runs/legacy-invalid/decision/' + recovery.preflightRequestId, { decision: 'approved' })).status, 201);
+    h.native.permissions.push({ id: 'permission-legacy-invalid', sessionID: recovery.sessionId,
+      permission: 'bash', metadata: { command: '/usr/bin/true' } });
+    await waitFor(() => h.native.replies.length === 1);
+    const stamp = Date.now() + 10;
+    const discovery = (callID) => ({ type: 'tool', tool: 'execute', callID, executed: false,
+      state: { status: 'completed', input: { code: 'return await search(' + JSON.stringify({
+        namespace: 'cgpt-validation', query: invalidDiscovery === 'divergent' ? 'broker_health' : 'request_validation', limit: 20 }) + ');' },
+        output: JSON.stringify({ items: [{ path: 'tools/request_validation' }] }),
+        time: { start: stamp, end: stamp + 1 },
+        metadata: { truncated: invalidDiscovery === 'truncated', toolCalls: [{ tool: 'search', status: 'completed',
+          input: { namespace: 'cgpt-validation', query: invalidDiscovery === 'divergent' ? 'broker_health' : 'request_validation', limit: 20 } }] } } });
+    const extraDiscovery = discovery('call-legacy-invalid-discovery');
+    const discoveries = invalidDiscovery === 'duplicate' ? [extraDiscovery, discovery('call-legacy-invalid-discovery-2')] : [extraDiscovery];
+    if (invalidDiscovery === 'untimed') delete extraDiscovery.state.time;
+    h.native.messages[recovery.sessionId] = [...h.native.messages[recovery.sessionId].slice(0, 1), { parts: [
+      ...discoveries,
+      { type: 'tool', tool: 'cgpt-validation_request_validation', state: { status: 'completed', input: approval,
+        output: JSON.stringify({ ...approval, status: 'APPROVED' }), time: { start: stamp + 2, end: stamp + 3 } } },
+      { type: 'tool', tool: 'bash', state: { status: 'completed', input: { command: '/usr/bin/true' },
+        metadata: { exit: 0 }, time: { start: stamp + 4, end: stamp + 5 } } },
+      { type: 'tool', tool: 'cgpt-validation_broker_readiness', state: { status: 'completed',
+        output: JSON.stringify({ status: 'READY', pending_count: 0 }), time: { start: stamp + 6, end: stamp + 7 } } },
+    ] }];
+    await h.post('/broker/readiness', { status: 'READY', pending_count: 0,
+      by_run: { 'legacy-invalid': { pending_count: 0 } } });
+    assert.equal((await h.releaseOperation(run, approval)).status, 200);
+    const before = (await h.get('/runs/legacy-invalid/job')).body;
+    const refused = await h.post('/runs/legacy-invalid/job/recover', { ...recovery, phase: 'complete' });
+    assert.equal(refused.status, 409, JSON.stringify(refused));
+    assert.equal(refused.body.error, 'preflight-unexpected-tool');
+    assert.deepEqual((await h.get('/runs/legacy-invalid/job')).body, before);
+    assert.equal((await h.get('/runs')).body.runs.find(value => value.runId === 'legacy-invalid').sessionId, run.sessionId);
+    assert.equal(h.native.replies.length, 1);
+  });
+}
 
 test('périmètre, génération, identité native et redémarrage refusent les permissions obsolètes', async (t) => {
   const h = await setup(t); const a = await h.reserve('a');
@@ -1087,7 +1154,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.37');
+  assert.equal(initialized.result.serverInfo.version, '2.1.38');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

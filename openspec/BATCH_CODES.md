@@ -125,6 +125,7 @@ Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des 
 | --- | --- | --- | --- |
 | code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
 | code non attribué | require-native-recovery-preflight | ARCHIVÉ, source 2.1.37 qualifiée ; CABU et activation font l'objet d'une preuve distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-require-native-recovery-preflight/tasks.md) |
+| code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
 
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
 
@@ -258,3 +259,4 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 | --- | --- | --- | --- |
 | code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
 | code non attribué | require-native-recovery-preflight | ARCHIVÉ, source 2.1.37 qualifiée ; CABU et activation font l'objet d'une preuve distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-require-native-recovery-preflight/tasks.md) |
+| code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
