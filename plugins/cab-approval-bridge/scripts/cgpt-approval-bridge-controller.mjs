@@ -176,11 +176,24 @@ function activeContexts() {
 function admissionSnapshot(runId) {
   return {state:transitions.has(runId) ? 'BUSY' : 'STABLE',snapshot_only:true};
 }
+function publicTestReservations(runId) {
+  return registry.testReservations(runId).map(({ token, ...reservation }) => reservation);
+}
+function publicRunSnapshot() {
+  const snapshot = registry.snapshot();
+  const reservations = snapshot.coordination?.testReservations;
+  if (reservations && typeof reservations === 'object' && !Array.isArray(reservations)) {
+    for (const reservation of Object.values(reservations)) {
+      if (reservation && typeof reservation === 'object') delete reservation.token;
+    }
+  }
+  return snapshot;
+}
 function statusFor(runId, context) {
   const status = context.publicStatus();
   const run = registry.runs.get(runId);
   const accesses = registry.accesses(runId);
-  const testReservations = registry.testReservations(runId);
+  const testReservations = publicTestReservations(runId);
   const global = registry.resourceState.global;
   const reason = registry.migrationRequired || broker?.coordination_protocol !== COORDINATION_PROTOCOL ? 'coordination-upgrade-required'
     : global && global.state !== 'RELEASED' ? 'global-coordination-suspended'
@@ -784,7 +797,7 @@ async function handleRequest(request, response) {
       json(response, 200, registry.monitorRuns()); return;
     }
     if (request.method === 'GET' && url.pathname === '/runs') {
-      json(response, 200, registry.snapshot()); return;
+      json(response, 200, publicRunSnapshot()); return;
     }
     if (request.method === 'GET' && url.pathname === '/status' && !url.searchParams.has('runId')) {
       const entries = activeContexts();
@@ -928,7 +941,7 @@ async function handleRequest(request, response) {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/test-resources') {
-        json(response, 200, { runId, protocol: TEST_RESOURCE_PROTOCOL, reservations: registry.testReservations(runId) }); return;
+        json(response, 200, { runId, protocol: TEST_RESOURCE_PROTOCOL, reservations: publicTestReservations(runId) }); return;
       }
       if (request.method === 'POST' && url.pathname === '/test-resources/acquire') {
         const result = registry.acquireTests(runId, payload);

@@ -1594,6 +1594,14 @@ test('environnement Docker HTTP : conservation entre commandes et restitution pr
   const acquire={version:a.version,transactionId:'tests-a',resources,evidence:['identité du moteur vérifiée']};
   const lease=(await h.post('/runs/a/test-resources/acquire',acquire)).body;
   assert.equal(lease.state,'HELD');
+  assert.equal(typeof lease.token,'string');
+  const publicReservations=(await h.get('/runs/a/test-resources')).body;
+  const publicStatus=(await h.get('/runs/a/status')).body;
+  const publicSnapshot=(await h.get('/runs')).body;
+  assert.equal(publicReservations.reservations[0].token,undefined);
+  assert.equal(publicStatus.coordination.testReservations[0].token,undefined);
+  assert.equal(publicSnapshot.coordination.testReservations[lease.transactionId].token,undefined);
+  assert.ok(!JSON.stringify([publicReservations,publicStatus,publicSnapshot]).includes(lease.token));
   assert.equal((await h.post('/runs/b/test-resources/acquire',{...acquire,version:b.version,transactionId:'tests-b'})).status,202);
   assert.equal((await h.get('/runs/b/status')).body.coordination.reason,'test-resource-conflict');
   const payload={version:a.version,transactionId:lease.transactionId,token:lease.token,fencing:lease.fencing,evidence:['restitution examinée']};
@@ -1611,7 +1619,10 @@ test('environnement Docker HTTP : conservation entre commandes et restitution pr
   const cleanupOperationId=await execute('cleanup');
   const verificationOperationId=await execute('verify-clean');
   const release={...payload,cleanup:[{resourceKey:resources[0].key,cleanupOperationId,verificationOperationId,restored:true}]};
-  assert.equal((await h.post('/runs/a/test-resources/release',release)).status,200);
+  const released=await h.post('/runs/a/test-resources/release',release);
+  assert.equal(released.status,200);assert.equal(released.body.state,'RELEASED');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].token,undefined);
+  assert.equal((await h.get('/runs')).body.coordination.testReservations[lease.transactionId].token,undefined);
   assert.equal((await h.post('/runs/a/test-resources/release',release)).body.state,'RELEASED');
   assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
   assert.equal((await h.post('/runs/a/test-resources/release',{...release,evidence:['preuve divergente']})).status,409);
@@ -2061,6 +2072,8 @@ test('release-unused HTTP : frontière sans opération, reçu exact, FIFO et ext
   const p=await unusedHttpPayload(h,a,lease);const replies=h.native.replies.length;
   const result=await h.post('/runs/a/test-resources/release-unused',p);
   assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.unusedReleaseReceipt.mode,'unused-no-effect');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].token,undefined);
+  assert.equal((await h.get('/runs')).body.coordination.testReservations[lease.transactionId].token,undefined);
   assert.equal((await h.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
   assert.deepEqual((await h.post('/runs/a/test-resources/release-unused',p)).body,result.body);
   assert.equal((await h.post('/runs/a/test-resources/release-unused',{...p,evidence:['différent']})).status,409);
