@@ -1,3 +1,9 @@
+## 2.1.51 — Clôture du fallback filesystem OpenCode V2
+
+- Archive le change `read-only-opencode-fs-fallback` après preuve de lecture et de listing natifs liés au RUN.
+- Réconcilie les deux capacités OpenSpec et ajoute le rapport statistique d’archive à six sections.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.51.
+
 ## 2.1.50 — Normalisation des entrées de répertoire OpenCode
 
 - Le listing retire le séparateur final des entrées de type répertoire avant validation, sans transformer les chemins fichiers ni élargir la location.
