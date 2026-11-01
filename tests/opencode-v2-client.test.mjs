@@ -34,6 +34,7 @@ const wrapped = (code, toolCalls, status = 'completed') => ({ type: 'tool', id: 
 test('lecture native OpenCode V2 : session/location liées, chemin relatif et secrets exclus', async t => {
   const f = fixture(); t.after(f.close);
   const calls = [];
+  let outsideEntry = false;
   const fetchImpl = async (input, init = {}) => {
     const url = new URL(input);
     calls.push({ path: url.pathname, location: url.searchParams.get('location[directory]'),
@@ -41,10 +42,15 @@ test('lecture native OpenCode V2 : session/location liées, chemin relatif et se
     if (url.pathname === '/api/info') return json(info);
     if (url.pathname === '/api/session/ses_read') return json({ data: { id: 'ses_read', directory: '/workspace', permissions: [] } });
     if (url.pathname === '/api/fs/read/src/example.mjs') {
-      return new Response('export const value = 42;\n', { headers: { 'content-type': 'application/octet-stream' } });
+      return new Response('export const value = 42;\n', { headers: { 'content-type': 'text/javascript; charset=utf-8' } });
+    }
+    if (url.pathname === '/api/fs/read/src/image.png') {
+      return new Response('not source text', { headers: { 'content-type': 'image/png' } });
     }
     if (url.pathname === '/api/fs/list') return json({ location: { directory: '/workspace' }, data: [
-      { path: 'src/example.mjs', type: 'file' }, { path: '.env', type: 'file' }, { path: 'src', type: 'directory' },
+      { path: '.', type: 'directory' }, { path: '/workspace/src/example.mjs', type: 'file' },
+      { path: '.env', type: 'file' }, { path: 'src', type: 'directory' },
+      ...(outsideEntry ? [{ path: '/outside/secret.txt', type: 'file' }] : []),
     ] });
     if (url.pathname === '/api/fs/find') return json({ location: { directory: '/workspace' }, data: [
       { path: 'src/example.mjs', type: 'file' }, { path: 'credentials.json', type: 'file' },
@@ -62,6 +68,9 @@ test('lecture native OpenCode V2 : session/location liées, chemin relatif et se
   assert.equal(calls.find(call => call.path === '/api/fs/read/src/example.mjs').header, '/workspace');
   assert.deepEqual((await client.sourceList('ses_read')).entries,
     [{ path: 'src/example.mjs', type: 'file' }, { path: 'src', type: 'directory' }]);
+  outsideEntry = true;
+  await assert.rejects(client.sourceList('ses_read'), { code: 'opencode-source-path-invalid' });
+  await assert.rejects(client.sourceRead('ses_read', 'src/image.png'), { code: 'opencode-source-response-invalid' });
   assert.deepEqual((await client.sourceFind('ses_read', 'example.mjs', { type: 'file' })).entries,
     [{ path: 'src/example.mjs', type: 'file' }]);
   const requests = calls.length;
