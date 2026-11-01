@@ -1154,7 +1154,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.40');
+  assert.equal(initialized.result.serverInfo.version, '2.1.41');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -2065,7 +2065,9 @@ async function unusedHttpPayload(h, run, lease) {
     developerAuthorization:'autorisation humaine ciblée de cette réservation sans effet',evidence:['mandats et historique natif examinés'],
     attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:ops.map((op)=>
       ({operationId:op.operationId,classification:op.state==='CANCELLED'?'cancelled-without-execution':'read-only-no-effect'}))},
-    nativeProof:{messageCount:messages.length,toolCount:messages.flatMap(m=>m.parts.filter(p=>p.type==='tool')).length,historyHash:proofHash(messages)}};
+    nativeProof:{messageCount:messages.length,toolCount:messages.flatMap(m=>m.parts.filter(p=>p.type==='tool')).length,
+      historyHash:proofHash(messages),operationClassifications:ops.map((op)=>({operationId:op.operationId,
+        classification:op.state==='CANCELLED'?'cancelled-without-execution':'read-only-no-effect'}))}};
 }
 async function unusedHttpLease(h, run, transactionId='unused-http') {
   const result=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,transactionId,
@@ -2108,8 +2110,7 @@ test('release-unused lost-token HTTP : preview filtrée puis restitution sans ef
     fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
     boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,
     evidence:['bail restauré relu sans effet natif'],attestation:{noEnvironmentMutation:true,noMutatingMandate:true,
-      operations:preview.body.operations.map(op=>({operationId:op.operationId,
-        classification:op.state==='CANCELLED'&&!op.nativeKind?'cancelled-without-execution':'read-only-no-effect'}))}};
+      operations:preview.body.operations.map(op=>({operationId:op.operationId,classification:op.classification}))}};
   const denied=await h.post('/runs/a/test-resources/release-unused-lost-token',{...payload,attestation:{...payload.attestation,noEnvironmentMutation:false}});
   assert.notEqual(denied.status,200);assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
   const released=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
@@ -2119,6 +2120,51 @@ test('release-unused lost-token HTTP : preview filtrée puis restitution sans ef
   assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].token,undefined);
   assert.equal(h.native.replies.length,0);
   assert.deepEqual((await h.post('/runs/a/test-resources/release-unused-lost-token',payload)).body,released.body);
+});
+
+test('release-unused lost-token HTTP : validation rejetée et wrappers CAB complets ne bloquent pas un bail inutilisé',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/104',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lost-token-rejected-a',
+    resources,evidence:['instance canonique']})).body;
+  const approval=h.approval(a,'rejected-after-lease');
+  const request=await h.post('/runs/a/validation/request',{approval});assert.equal(request.status,202,JSON.stringify(request));
+  const reject=await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'});
+  assert.equal(reject.status,201,JSON.stringify(reject));
+  const requestPart=h.native.messages[a.sessionId].flatMap(message=>message.parts||[])
+    .find(part=>part.tool==='cgpt-validation_request_validation');
+  requestPart.state.status='completed';requestPart.state.time={start:Date.now()-5,end:Date.now()-4};
+  assert.ok((await h.nativeClient.messages(a.sessionId,h.directory)).length>0,'history after rejected request');
+  h.native.messages[a.sessionId].push({info:{id:'msg-native-observations',sessionID:a.sessionId,role:'assistant',
+    time:{created:Date.now()}},parts:[
+    {type:'tool',tool:'cgpt-validation_reject',state:{status:'completed',input:{requestId:approval.requestId},
+      time:{start:Date.now()-3,end:Date.now()-2}}},
+  ]});
+  assert.ok((await h.nativeClient.messages(a.sessionId,h.directory)).length>0,'history after direct rejection');
+  h.native.messages[a.sessionId].push({info:{id:'msg-native-code-observations',sessionID:a.sessionId,role:'assistant',
+    time:{created:Date.now()}},parts:[
+    {type:'tool',id:'call-observation-batch',callID:'call-observation-batch',tool:'execute',executed:false,
+      state:{status:'completed',input:{code:'return await Promise.all([tools["cgpt-validation"].list_pending({}),tools["cgpt-validation"].broker_readiness({})]);'},
+        time:{start:Date.now()-2,end:Date.now()-1},metadata:{truncated:false,toolCalls:[
+          {tool:'cgpt-validation.list_pending',status:'completed',input:{}},
+          {tool:'cgpt-validation.broker_readiness',status:'completed',input:{}}]}}}
+  ]});
+  assert.ok((await h.nativeClient.messages(a.sessionId,h.directory)).length>0);
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));
+  assert.equal(preview.body.blockerCode,null);
+  assert.equal(preview.body.eligibleForLostTokenRelease,true);
+  assert.equal(preview.body.operations.length,1);
+  assert.equal(preview.body.operations[0].classification,'rejected-validation-no-native-effect');
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail sans effet'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:preview.body.operations.map(op=>
+      ({operationId:op.operationId,classification:op.classification}))}};
+  const released=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(released.status,200,JSON.stringify(released));assert.equal(released.body.state,'RELEASED');
+  assert.equal(released.body.token,undefined);assert.equal(released.body.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
 });
 
 test('release-unused lost-token HTTP refuse sans job armé dans le change',async(t)=>{
@@ -2157,6 +2203,25 @@ test('release-unused lost-token HTTP refuse une preview stale et une session nat
   h.native.busy[a.sessionId]={type:'busy'};
   const active=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
   assert.equal(active.status,409);assert.equal(active.body.error,'native-session-not-quiescent');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+});
+
+for(const variant of ['unknown-method','truncated-wrapper'])test('release-unused preview garde HELD un wrapper Code Mode '+variant,async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/105',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'unknown-wrapper-'+variant,
+    resources,evidence:['instance canonique']})).body;
+  h.native.messages[a.sessionId]=[{info:{id:'msg-unknown-wrapper',sessionID:a.sessionId,role:'assistant',time:{created:Date.now()}},
+    parts:[{type:'tool',id:'call-unknown-wrapper',callID:'call-unknown-wrapper',tool:'execute',executed:false,
+      state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_execute_controlled_remediation({});'},
+        time:{start:Date.now()-2,end:Date.now()-1},metadata:{truncated:variant==='truncated-wrapper',toolCalls:[
+          {tool:'cgpt-validation.broker_execute_controlled_remediation',status:'completed',input:{}}]}}}]}];
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.eligibleForLostTokenRelease,false);
+  assert.equal(preview.body.nativeProof,null);
+  assert.equal(preview.body.blockerCode,variant==='truncated-wrapper'?'test-unused-history-incomplete':'test-unused-native-tool-unreviewable');
+  assert.ok(!JSON.stringify(preview.body).includes(lease.token));
   assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
 });
 
