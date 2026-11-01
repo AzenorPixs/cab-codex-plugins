@@ -184,6 +184,9 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       if (!catalogReady) await delay(100);
     }
     assert.equal(catalogReady, true, 'MCP catalog must advertise broker_readiness before preflight');
+    const systemInstructions = providerRequests.map(raw => JSON.parse(raw)).flatMap(body => body.messages || [])
+      .filter(message => message.role === 'system').map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).join('\n');
+    assert.match(systemInstructions, /Les autres clients MCP suivent leur propre contrat/);
     console.log('Version API privée :', (await client.info()).version);
     const nativeEdit = nativeTools.find(tool => tool.name === 'edit');
     assert.deepEqual(nativeEdit.parameters.required, ['path', 'oldString', 'newString']);
