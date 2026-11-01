@@ -117,7 +117,7 @@ function transform(path, method, payload, directory) {
 }
 
 export function openCodeV2TestHandler(handler, { directory, locationDirectory = () => directory, onModelSwitch,
-  allowNonApi = false, allowLegacyTestCalls = false } = {}) {
+  allowNonApi = false, allowLegacyTestCalls = false, sourceFiles = {}, sourceEntries = [], onFsRequest } = {}) {
   return async (request, response) => {
     const incoming = new URL(request.url, 'http://localhost');
     const path = incoming.pathname;
@@ -140,6 +140,32 @@ export function openCodeV2TestHandler(handler, { directory, locationDirectory = 
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(transform(path, request.method, null, targetDirectory)));
       return;
+    }
+    if (path.startsWith('/api/fs/read/')) {
+      onFsRequest?.(path, incoming);
+      if (incoming.searchParams.get('location[directory]') !== directory ||
+          request.headers['x-opencode-directory'] !== directory) {
+        response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'fixture-location-divergent' })); return;
+      }
+      const relative = path.slice('/api/fs/read/'.length).split('/').map(decodeURIComponent).join('/');
+      if (!Object.hasOwn(sourceFiles, relative)) {
+        response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'file-not-found' })); return;
+      }
+      response.writeHead(200, { 'content-type': 'application/octet-stream' });
+      response.end(Buffer.from(sourceFiles[relative], 'utf8')); return;
+    }
+    if (path === '/api/fs/list' || path === '/api/fs/find') {
+      onFsRequest?.(path, incoming);
+      if (incoming.searchParams.get('location[directory]') !== directory ||
+          request.headers['x-opencode-directory'] !== directory) {
+        response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'fixture-location-divergent' })); return;
+      }
+      const requestedPath = incoming.searchParams.get('path') || '';
+      const query = incoming.searchParams.get('query') || '';
+      const entries = sourceEntries.filter(entry => path === '/api/fs/find'
+        ? entry.path.includes(query) : (!requestedPath || entry.path.startsWith(requestedPath.replace(/\/$/, '') + '/')));
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ location: { directory }, data: entries })); return;
     }
     if (/^\/api\/session\/[^/]+\/model$/.test(path)) {
       const chunks = [];

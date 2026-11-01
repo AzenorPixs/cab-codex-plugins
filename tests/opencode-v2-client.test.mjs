@@ -31,6 +31,66 @@ const wrapped = (code, toolCalls, status = 'completed') => ({ type: 'tool', id: 
   state: { status, input: { code }, content: [{ type: 'text', text: '{"status":"PENDING"}' }],
     metadata: { toolCalls, truncated: false } } });
 
+test('lecture native OpenCode V2 : session/location liées, chemin relatif et secrets exclus', async t => {
+  const f = fixture(); t.after(f.close);
+  const calls = [];
+  const fetchImpl = async (input, init = {}) => {
+    const url = new URL(input);
+    calls.push({ path: url.pathname, location: url.searchParams.get('location[directory]'),
+      header: init.headers?.['x-opencode-directory'] });
+    if (url.pathname === '/api/info') return json(info);
+    if (url.pathname === '/api/session/ses_read') return json({ data: { id: 'ses_read', directory: '/workspace', permissions: [] } });
+    if (url.pathname === '/api/fs/read/src/example.mjs') {
+      return new Response('export const value = 42;\n', { headers: { 'content-type': 'application/octet-stream' } });
+    }
+    if (url.pathname === '/api/fs/list') return json({ location: { directory: '/workspace' }, data: [
+      { path: 'src/example.mjs', type: 'file' }, { path: '.env', type: 'file' }, { path: 'src', type: 'directory' },
+    ] });
+    if (url.pathname === '/api/fs/find') return json({ location: { directory: '/workspace' }, data: [
+      { path: 'src/example.mjs', type: 'file' }, { path: 'credentials.json', type: 'file' },
+    ] });
+    return json({ error: 'fixture-route-unsupported' }, 404);
+  };
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace',
+    passwordFile: f.passwordFile, fetchImpl });
+  const source = await client.sourceRead('ses_read', 'src/example.mjs');
+  assert.equal(source.content, 'export const value = 42;\n');
+  assert.equal(source.byteLength, Buffer.byteLength(source.content));
+  assert.match(source.sha256, /^[a-f0-9]{64}$/);
+  assert.equal(source.snapshot_only, true);
+  assert.equal(calls.find(call => call.path === '/api/fs/read/src/example.mjs').location, '/workspace');
+  assert.equal(calls.find(call => call.path === '/api/fs/read/src/example.mjs').header, '/workspace');
+  assert.deepEqual((await client.sourceList('ses_read')).entries,
+    [{ path: 'src/example.mjs', type: 'file' }, { path: 'src', type: 'directory' }]);
+  assert.deepEqual((await client.sourceFind('ses_read', 'example.mjs', { type: 'file' })).entries,
+    [{ path: 'src/example.mjs', type: 'file' }]);
+  const requests = calls.length;
+  await assert.rejects(client.sourceRead('ses_read', '../outside.txt'), { code: 'opencode-source-path-invalid' });
+  await assert.rejects(client.sourceRead('ses_read', '.env'), { code: 'opencode-source-path-excluded' });
+  assert.equal(calls.length, requests, 'chemins refusés avant requête native');
+});
+
+test('lecture native OpenCode V2 : identité divergente et taille excessive refusées', async t => {
+  const f = fixture(); t.after(f.close);
+  let foreign = false;
+  const fetchImpl = async input => {
+    const url = new URL(input);
+    if (url.pathname === '/api/info') return json(info);
+    if (url.pathname === '/api/session/ses_read') return json({ data: { id: 'ses_read',
+      directory: foreign ? '/foreign' : '/workspace', permissions: [] } });
+    if (url.pathname === '/api/fs/read/src/large.txt') {
+      return new Response('x'.repeat(128), { headers: { 'content-type': 'application/octet-stream' } });
+    }
+    return json({ error: 'fixture-route-unsupported' }, 404);
+  };
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace',
+    passwordFile: f.passwordFile, fetchImpl });
+  foreign = true;
+  await assert.rejects(client.sourceRead('ses_read', 'src/large.txt'), { code: 'opencode-session-divergent' });
+  foreign = false;
+  await assert.rejects(client.sourceRead('ses_read', 'src/large.txt', { maxBytes: 32 }), { code: 'opencode-response-too-large' });
+});
+
 test('Code Mode : projection littérale, provenance et découverte pure', async t => {
   const input = { requestId: 'request', commands: ['/usr/bin/true'] };
   const raw = wrapped('return await tools["cgpt-validation"].request_validation('+JSON.stringify(input)+');',

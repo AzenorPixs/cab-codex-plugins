@@ -22,7 +22,8 @@ async function waitFor(check, timeoutMs = 4000) {
   while (Date.now() < deadline) { if (await check()) return; await delay(20); }
   throw new Error('condition not reached');
 }
-async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false } = {}) {
+async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false,
+  sourceFiles = {}, sourceEntries = [] } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
   const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
   if (codingPolicy) {
@@ -70,7 +71,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       ...native.sessions[url.pathname.split('/')[2]] };
     else { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'content-type': 'application/json', connection: 'close' }); response.end(JSON.stringify(payload));
-  }, { directory, onModelSwitch: ({sessionId,body}) => {
+  }, { directory, sourceFiles, sourceEntries, onFsRequest: (path) => native.requests.push(path), onModelSwitch: ({sessionId,body}) => {
     native.sessions[sessionId] = { ...native.sessions[sessionId], model: { providerID: body.model.providerID,
       modelID: body.model.id, ...(body.model.variant ? { variant: body.model.variant } : {}) } };
   } }));
@@ -189,6 +190,38 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
   return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
     approvedAccess, execute, completeTool, releaseOperation };
 }
+
+test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation et chemins exclus refusés', async t => {
+  const h=await setup(t,{sourceFiles:{'src/example.py':'value = 42\n'},sourceEntries:[
+    {path:'src/example.py',type:'file'},{path:'src',type:'directory'},{path:'.env',type:'file'},
+  ]});
+  const run=await h.reserve('source-read');
+  const before=(await h.get('/runs/source-read/status')).body;
+  const read=await h.get('/runs/source-read/source/read?path=src%2Fexample.py');
+  assert.equal(read.status,200,JSON.stringify(read));assert.equal(read.body.content,'value = 42\n');
+  assert.equal(read.body.sessionId,run.sessionId);assert.equal(read.body.directory,h.directory);
+  assert.match(read.body.sha256,/^[a-f0-9]{64}$/);assert.equal(read.body.source,'opencode-v2-fs-read');
+  const list=await h.get('/runs/source-read/source/list');
+  assert.equal(list.status,200);assert.deepEqual(list.body.entries,[{path:'src/example.py',type:'file'},{path:'src',type:'directory'}]);
+  const found=await h.get('/runs/source-read/source/find?query=example.py&type=file');
+  assert.equal(found.status,200);assert.deepEqual(found.body.entries,[{path:'src/example.py',type:'file'}]);
+  const fsReadsBefore=h.native.requests.filter(path=>path.startsWith('/api/fs/')).length;
+  assert.equal((await h.get('/runs/source-read/source/read?path=..%2Foutside')).status,400);
+  assert.equal((await h.get('/runs/source-read/source/read?path=.env')).status,400);
+  assert.equal(h.native.requests.filter(path=>path.startsWith('/api/fs/')).length,fsReadsBefore);
+  const after=(await h.get('/runs/source-read/status')).body;
+  assert.equal(after.job.jobId,before.job.jobId);assert.equal(after.undecidedValidationCount,0);
+  assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+});
+
+test('source read-only fallback refuse une permission native en attente',async t=>{
+  const h=await setup(t,{sourceFiles:{'src/file.py':'x=1\n'}});const run=await h.reserve('source-busy');
+  h.native.permissions.push({id:'pending-read-boundary',sessionID:run.sessionId,permission:'edit',tool:{callID:'call-read'}});
+  const before=h.native.requests.filter(path=>path.startsWith('/api/fs/')).length;
+  const result=await h.get('/runs/source-busy/source/read?path=src%2Ffile.py');
+  assert.equal(result.status,409);assert.equal(result.body.error,'source-read-native-session-busy');
+  assert.equal(h.native.requests.filter(path=>path.startsWith('/api/fs/')).length,before);
+});
 
 test('garde du moniteur : quiescence, origine et exclusion des mutations concurrentes', async (t) => {
   const h = await setup(t);
@@ -1154,7 +1187,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.45');
+  assert.equal(initialized.result.serverInfo.version, '2.1.46');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
