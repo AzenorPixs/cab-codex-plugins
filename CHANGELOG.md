@@ -1,13 +1,12 @@
-## 2.1.42 — Preuve ledger-only après compaction native
+## 2.1.43 — Récupération autorisée d’un reçu MCP failed
 
-- Une compaction après acquisition peut utiliser le registre durable seulement
-  si toutes les opérations du bail sont terminales, rejetées/annulées sans
-  `nativeStart`, sans accès actif ni permission ; le reçu indique le mode de
-  couverture.
-- Toute opération native démarrée, inconnue, non terminale ou toute permission
-  conserve le bail HELD. Les contrôles de frontière et la preview sans jeton
-  restent requis.
-- CAB/CABU, les quatre briques et les commandes passent à 2.1.42.
+- `--recover-mcp` peut désormais traiter un broker `failed` seulement sur un
+  reçu non terminal exact déjà autorisé, après snapshot inactive sans permission
+  partagée et identité native inchangée.
+- L’intention précède l’unique `POST /api/location/reload` ; l’état `failed`
+  ordinaire, `needs_auth`, les locations occupées et les intentions existantes
+  restent refusés sans rejeu.
+- CAB/CABU, les quatre briques et les commandes passent à 2.1.43.
 
 ## 2.1.42 — Preuve ledger-only après compaction native
 

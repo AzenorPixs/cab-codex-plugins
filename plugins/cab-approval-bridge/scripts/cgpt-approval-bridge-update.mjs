@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.42';
+export const VERSION = '2.1.43';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -517,7 +517,7 @@ export async function updateComponents(input, options = {}) {
     let state = await brokerState();
     const recovery = receipt.mcpRecovery;
     if (state === 'needs_auth') throw error('update-broker-needs-auth');
-    if (state === 'failed') throw error('update-broker-state-unconfirmed');
+    if (state === 'failed' && input.recoverMcp === undefined) throw error('update-broker-state-unconfirmed');
     if (input.recoverMcp !== undefined && state !== 'connected' && !recovery.reload) {
       const before = await recoveryObservation();
       if (before.activeSessionCount || before.sharedPermissionCount) throw error('update-mcp-recovery-native-busy');
