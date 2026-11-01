@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.58';
+export const VERSION = '2.1.59';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
@@ -212,6 +212,10 @@ export function nativeToolInputDigest(input) {
 export function nativeCodingMandate(instruction) {
   if (typeof instruction !== 'string' || !instruction.trim()) fail('opencode-coding-mandate-invalid');
   return 'CAB — outils natifs : write, edit et shell sont distincts du catalogue MCP search/execute. ' +
+    'Pour les méthodes MCP CAB broker_readiness, request_validation, poll_approval, get_approval et reject, ' +
+    'utiliser uniquement Code Mode execute avec le nom exact découvert par search, sous la forme ' +
+    'tools["cgpt-validation"].request_validation(...). Ne pas appeler directement une entrée MCP native. ' +
+    'Si execute ou la méthode découverte est indisponible, signaler le blocage sans appel direct ou repli. ' +
     'Une recherche MCP vide ne prouve pas leur absence. Utiliser directement l’outil natif disponible prescrit, ' +
     'avec les arguments exacts approuvés, seulement après les étapes CAB requises. ' +
     'Si cet outil est réellement absent, signaler le blocage sans substitution ni opération supplémentaire. ' +
