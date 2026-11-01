@@ -1088,6 +1088,40 @@ test('une identité déclarée ne remplace pas le tool part natif de la session 
   assert.equal(h.native.replies.length, 0);
 });
 
+function codeModeValidationFailure(id,input,searchInput) {
+ const calls=[];let code='';
+ if(searchInput){calls.push({tool:'search',status:'completed',input:structuredClone(searchInput)});
+  code='const catalog=search('+JSON.stringify(searchInput)+'); ';}
+ code+='return await tools["cgpt-validation"].request_validation('+JSON.stringify(input)+');';
+ calls.push({tool:'cgpt-validation.request_validation',status:'error',input:structuredClone(input)});
+ return {type:'tool',id:'execute-'+id,name:'execute',tool:'execute',executed:false,time:{created:Date.now()},state:{status:'completed',
+  input:{code},
+  output:'MCP notification failed after the durable request',time:{start:Date.now(),end:Date.now()+1},
+  metadata:{error:true,truncated:false,toolCalls:calls}}};
+}
+
+test('request_validation Code Mode en erreur native garde la corrélation exacte sans créer de permission',async t=>{
+ const h=await setup(t);const run=await h.reserve('codemode-error');const approval=h.approval(run,'codemode-error');
+ approval.commands=[];approval.files=['src/codemode-error.py'];
+ const message=h.native.messages[run.sessionId].at(-1);
+ message.parts=[codeModeValidationFailure(approval.requestId,approval,{query:'request_validation',namespace:'cgpt-validation'})];
+ const response=await h.post('/validation/request',{approval});
+ assert.equal(response.status,202,JSON.stringify(response));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,1);
+ assert.equal(h.native.replies.length,0);
+});
+
+test('request_validation Code Mode en erreur refuse une identité d’input divergente',async t=>{
+ const h=await setup(t);const run=await h.reserve('codemode-divergent');const approval=h.approval(run,'codemode-divergent');
+ const wrong={...approval,files:['src/foreign.py']};
+ h.native.messages[run.sessionId].at(-1).parts=[codeModeValidationFailure(approval.requestId,wrong,
+  {query:'request_validation',namespace:'cgpt-validation'})];
+ const response=await h.post('/validation/request',{approval});
+ assert.equal(response.status,409);assert.equal(response.body.error,'native-validation-not-correlated');
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,0);
+ assert.equal(h.native.replies.length,0);
+});
+
 test('une publication indépendante ne suspend pas le pair ni sa génération', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
   assert.equal((await h.post('/runs/a/integration', { version: a.version, acquire: true })).body.error, 'coordination-upgrade-required');
@@ -1246,7 +1280,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.53');
+  assert.equal(initialized.result.serverInfo.version, '2.1.54');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

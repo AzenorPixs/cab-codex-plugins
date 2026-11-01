@@ -505,6 +505,15 @@ test('erreur MCP V2 : provenance structurée stricte et texte libre sans preuve 
     const changed = structuredClone(raw); mutate(changed);
     assert.equal((await codeModeFixture(t, changed)).tool, 'execute');
   }
+  const search={query:'request_validation',namespace:'cgpt-validation'};
+  const discovered=wrapped('const catalog=search('+JSON.stringify(search)+'); return await tools["cgpt-validation"].request_validation('+JSON.stringify(input)+');',
+    [{tool:'search',status:'completed',input:search},{tool:'cgpt-validation.request_validation',status:'error',input}]);
+  discovered.state.metadata.error=true;discovered.state.content=[{type:'text',text:'synthetic native error'}];
+  const normalized=await codeModeFixture(t,discovered);
+  assert.equal(normalized.tool,'cgpt-validation_request_validation');assert.equal(normalized.state.status,'error');
+  assert.equal(normalized.state.metadata.cabCodeMode.nativeMcpError,true);
+  const extra=structuredClone(discovered);extra.state.metadata.toolCalls.push({tool:'shell',status:'completed',input:{command:'true'}});
+  assert.equal((await codeModeFixture(t,extra)).tool,'execute');
 });
 
 function directErrorFixture(name = 'request_validation') {
