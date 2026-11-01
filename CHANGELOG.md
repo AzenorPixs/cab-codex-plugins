@@ -1,3 +1,8 @@
+## 2.1.57 — Fixture natif de recovery CodeMode conforme au prévol
+
+- Le scénario natif découvre désormais la signature `request_validation` avant `prepare`, conformément aux gardes CAB existantes.
+- Aucun comportement produit, décision ou permission ne change ; CAB/CABU et les composants partagent la version 2.1.57.
+
 ## 2.1.56 — Corrélation des erreurs MCP CodeMode brutes
 
 - Le contrôleur reconnaît la preuve native complète d'un `request_validation` en erreur même lorsque le wrapper dynamique n'a pas pu être normalisé.
