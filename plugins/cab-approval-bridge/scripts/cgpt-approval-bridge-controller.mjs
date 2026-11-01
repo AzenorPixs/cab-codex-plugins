@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.54";
+const version = "2.1.56";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -365,12 +365,24 @@ function nativeIdentity(approval) {
 async function verifyNativeValidation(approval) {
   const messages = await openCode.messages(approval.session_id, workspace);
   const expected = JSON.stringify(nativeIdentity(approval));
-  if (!Array.isArray(messages) || !messages.some((message) => Array.isArray(message.parts) &&
-      message.parts.some((part) => part.type === 'tool' &&
-        part.tool === 'cgpt-validation_request_validation' &&
+  const correlated = (part) => {
+    if (part?.type !== 'tool') return false;
+    if (part.tool === 'cgpt-validation_request_validation' &&
         (['running', 'completed'].includes(part.state?.status) ||
-          part.state?.status === 'error' && part.state?.metadata?.cabCodeMode?.nativeMcpError === true) && part.state?.input &&
-        JSON.stringify(nativeIdentity(part.state.input)) === expected))) {
+          part.state?.status === 'error' && part.state?.metadata?.cabCodeMode?.nativeMcpError === true) && part.state?.input) {
+      return JSON.stringify(nativeIdentity(part.state.input)) === expected;
+    }
+    const metadata = part.state?.metadata;
+    const calls = metadata?.toolCalls;
+    if (part.tool !== 'execute' || part.executed !== false ||
+        !['completed', 'error'].includes(part.state?.status) || metadata?.error !== true ||
+        metadata?.truncated !== false || !Array.isArray(calls) || calls.length < 1 || calls.length > 2) return false;
+    const request = calls.at(-1);
+    if (request?.tool !== 'cgpt-validation.request_validation' || request.status !== 'error' || !request.input ||
+        JSON.stringify(nativeIdentity(request.input)) !== expected) return false;
+    return calls.length === 1 || calls[0]?.tool === 'search' && calls[0]?.status === 'completed';
+  };
+  if (!Array.isArray(messages) || !messages.some((message) => Array.isArray(message.parts) && message.parts.some(correlated))) {
     throw new CoordinationError('native-validation-not-correlated');
   }
 }
