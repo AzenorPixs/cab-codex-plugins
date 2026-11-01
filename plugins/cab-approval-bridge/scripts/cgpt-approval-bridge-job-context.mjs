@@ -12,7 +12,7 @@ import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bri
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.37";
+export const VERSION = "2.1.38";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -319,7 +319,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.37",
+    version: "2.1.38",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1203,16 +1203,16 @@ async function checkRecoveryPreflight(recovery, restored = null) {
   let commandEnd = null;
   let ready = false;
   let commandCount = 0;
-  let legacyTailDiscoverySeen = false;
-  for (let partIndex = 0; partIndex < parts.length; partIndex++) {
-    const part = parts[partIndex];
+  let legacyDiscoverySeen = false;
+  for (const part of parts) {
     const state = part.state;
     if (part.tool === 'cab_codemode_discovery') {
-      const legacyTailDiscovery = !recovery.preparationHistory?.requestValidationSignatureHash &&
-        !legacyTailDiscoverySeen && partIndex === parts.length - 1 && submitted && commandCount === 1 && ready &&
-        Boolean(requestValidationSignatureDiscovery(part));
-      if (!legacyTailDiscovery) recoveryFailure('preflight-unexpected-tool');
-      legacyTailDiscoverySeen = true;
+      const nativeTimeValid = Number.isFinite(state?.time?.start) && Number.isFinite(state?.time?.end) &&
+        state.time.start <= state.time.end;
+      const legacyDiscovery = !recovery.preparationHistory?.requestValidationSignatureHash &&
+        !legacyDiscoverySeen && nativeTimeValid && Boolean(requestValidationSignatureDiscovery(part));
+      if (!legacyDiscovery) recoveryFailure('preflight-unexpected-tool');
+      legacyDiscoverySeen = true;
       continue;
     }
     const approvalTool = ["cgpt-validation_request_validation", "cgpt-validation_poll_approval",
@@ -1914,7 +1914,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.37",
+      version: "2.1.38",
     },
   });
 
