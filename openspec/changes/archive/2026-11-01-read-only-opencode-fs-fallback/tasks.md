@@ -10,7 +10,7 @@
 
 ## Archivage et livraison
 
-- [ ] Archiver le change et produire un `STATISTICS.md` vérifié.
-- [ ] Committer et publier sous SCM.
-- [ ] Exécuter CABU 2.1.50 et vérifier les versions/runtime.
-- [ ] Vérifier un mandat réel de lecture autorisé dans la session concernée, sans shell ni mutation.
+- [x] Archiver le change et produire un `STATISTICS.md` vérifié.
+- [x] Committer et publier sous SCM.
+- [x] Exécuter CABU 2.1.50 et vérifier les versions/runtime.
+- [x] Vérifier un mandat réel de lecture autorisé dans la session concernée, sans shell ni mutation.
