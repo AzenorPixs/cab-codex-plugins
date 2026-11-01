@@ -1,3 +1,14 @@
+## 2.1.39 — Corrélation Code Mode statique
+
+- Le client normalise les commandes littérales en template et une constante
+  chaîne strictement bornée pour `request_validation`, sans évaluer JavaScript
+  ni élargir les permissions ou la corrélation native.
+- Les lectures GET des réservations de tests omettent les jetons bearer ;
+  les réponses POST autorisées et les gardes des mutations restent inchangées.
+- Tests positifs/négatifs isolés et protocole de récupération documentés.
+- CAB/CABU, les quatre briques et les commandes passent à la version commune
+  2.1.39.
+
 ## 2.1.38 — Réconciliation sûre d’une discovery héritée
 
 - `complete` reconnaît dans une recovery RUN historique non signée au plus
