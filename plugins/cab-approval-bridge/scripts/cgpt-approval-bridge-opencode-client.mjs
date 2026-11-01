@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.38';
+export const VERSION = '2.1.39';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
@@ -179,10 +179,71 @@ export function diagnoseCodingTurn(messages, { sessionId, promptId, toolInputSha
 }
 
 // Une grammaire de données, jamais un interpréteur JavaScript.
+function templateLiteralValue(source, start = 0) {
+  if (source[start] !== '`') return null;
+  let value = '';
+  for (let index = start + 1; index < source.length; index++) {
+    const character = source[index];
+    if (character === '`') return { value, end: index + 1 };
+    if (character === '$' && source[index + 1] === '{') return null;
+    if (character !== '\\') { value += character; continue; }
+    const escaped = source[++index];
+    if (escaped === undefined) return null;
+    if (escaped === '\n') continue;
+    if (escaped === '\r') { if (source[index + 1] === '\n') index++; continue; }
+    if (escaped === 'x') {
+      const digits = source.slice(index + 1, index + 3);
+      if (!/^[a-f0-9]{2}$/i.test(digits)) return null;
+      value += String.fromCharCode(Number.parseInt(digits, 16)); index += 2; continue;
+    }
+    if (escaped === 'u') {
+      if (source[index + 1] === '{') {
+        const close = source.indexOf('}', index + 2);
+        if (close < 0) return null;
+        const digits = source.slice(index + 2, close);
+        if (!/^[a-f0-9]{1,6}$/i.test(digits)) return null;
+        const codePoint = Number.parseInt(digits, 16);
+        if (codePoint > 0x10ffff) return null;
+        value += String.fromCodePoint(codePoint); index = close; continue;
+      }
+      const digits = source.slice(index + 1, index + 5);
+      if (!/^[a-f0-9]{4}$/i.test(digits)) return null;
+      value += String.fromCharCode(Number.parseInt(digits, 16)); index += 4; continue;
+    }
+    const escapes = { '\\': '\\', '`': '`', '$': '$', n: '\n', r: '\r', t: '\t', b: '\b', f: '\f', v: '\v', '0': '\0' };
+    if (!Object.hasOwn(escapes, escaped)) return null;
+    value += escapes[escaped];
+  }
+  return null;
+}
+
+function literalStringAt(source, start) {
+  if (source[start] === '`') return templateLiteralValue(source, start);
+  if (source[start] !== '"') return null;
+  let escaped = false;
+  for (let index = start + 1; index < source.length; index++) {
+    const character = source[index];
+    if (escaped) escaped = false;
+    else if (character === '\\') escaped = true;
+    else if (character === '"') {
+      try { return { value: JSON.parse(source.slice(start, index + 1)), end: index + 1 }; }
+      catch { return null; }
+    }
+  }
+  return null;
+}
+
 function parseLiteralData(raw) {
   let text = '', quoted = false, escaped = false;
   for (let i = 0; i < raw.length; i++) {
     const c = raw[i]; text += c;
+    if (!quoted && c === '`') {
+      const literal = templateLiteralValue(raw, i);
+      if (!literal) throw new Error('Code Mode template literal invalide');
+      text = text.slice(0, -1) + JSON.stringify(literal.value);
+      i = literal.end - 1;
+      continue;
+    }
     if (quoted) {
       if (escaped) escaped = false;
       else if (c === '\\') escaped = true;
@@ -196,11 +257,54 @@ function parseLiteralData(raw) {
   return JSON.parse(text);
 }
 
-function literalObject(source) {
+function replaceCommandBinding(source, binding) {
+  let result = '', braceDepth = 0, matches = 0;
+  for (let index = 0; index < source.length;) {
+    const character = source[index];
+    if (character === '"') {
+      let end = index + 1, escaped = false;
+      for (; end < source.length; end++) {
+        const value = source[end];
+        if (escaped) escaped = false;
+        else if (value === '\\') escaped = true;
+        else if (value === '"') { end++; break; }
+      }
+      if (end > source.length || source[end - 1] !== '"') return null;
+      result += source.slice(index, end); index = end; continue;
+    }
+    if (character === '`') {
+      const literal = templateLiteralValue(source, index);
+      if (!literal) return null;
+      result += source.slice(index, literal.end); index = literal.end; continue;
+    }
+    if (character === '{') { braceDepth++; result += character; index++; continue; }
+    if (character === '}') { braceDepth--; result += character; index++; continue; }
+    const previous = source[index - 1];
+    if (braceDepth === 1 && /[A-Za-z_$]/.test(character) &&
+        (previous === '{' || previous === ',' || previous === undefined || /\s/.test(previous))) {
+      const key = /^commands\b\s*:\s*\[\s*([A-Za-z_$][\w$]*)\s*\]/.exec(source.slice(index));
+      if (key) {
+        if (key[1] !== binding.name || matches !== 0) return null;
+        const identifier = key[0].lastIndexOf(key[1]);
+        result += key[0].slice(0, identifier) + JSON.stringify(binding.value) + key[0].slice(identifier + key[1].length);
+        index += key[0].length; matches++; continue;
+      }
+    }
+    result += character; index++;
+  }
+  return matches === 1 ? result : null;
+}
+
+function literalObject(source, commandBinding = null) {
   if (source[0] !== '{') return null;
   let depth = 0, quoted = false, escaped = false;
   for (let i = 0; i < source.length; i++) {
     const c = source[i];
+    if (!quoted && c === '`') {
+      const literal = templateLiteralValue(source, i);
+      if (!literal) return null;
+      i = literal.end - 1; continue;
+    }
     if (quoted) {
       if (escaped) escaped = false;
       else if (c === '\\') escaped = true;
@@ -210,7 +314,12 @@ function literalObject(source) {
     else if (c === '}' || c === ']') {
       depth--;
       if (depth === 0) {
-        try { return { value: parseLiteralData(source.slice(0, i + 1)), rest: source.slice(i + 1).trim() }; }
+        try {
+          const object = source.slice(0, i + 1);
+          const resolved = commandBinding ? replaceCommandBinding(object, commandBinding) : object;
+          if (!resolved) return null;
+          return { value: parseLiteralData(resolved), rest: source.slice(i + 1).trim() };
+        }
         catch { return null; }
       }
     }
@@ -221,6 +330,18 @@ function literalObject(source) {
 function codeModePart(content, part) {
   if (typeof part.state.input?.code !== 'string' || part.state.metadata?.truncated === true) return null;
   let code = part.state.input.code.trim(), discovery;
+  let commandBinding = null;
+  const declaration = /^const\s+([A-Za-z_$][\w$]*)\s*=\s*/.exec(code);
+  if (declaration) {
+    const literal = literalStringAt(code, declaration[0].length);
+    if (literal) {
+      const suffix = code.slice(literal.end);
+      const terminator = /^\s*;\s*/.exec(suffix);
+      if (!terminator) return null;
+      commandBinding = { name: declaration[1], value: literal.value };
+      code = suffix.slice(terminator[0].length);
+    }
+  }
   const returnedSearch = /^return\s+await\s+search\s*\(\s*/.exec(code);
   if (returnedSearch) {
     const literal = literalObject(code.slice(returnedSearch[0].length));
@@ -249,7 +370,7 @@ function codeModePart(content, part) {
   let call;
   if (match) {
     if (!['broker_readiness', 'request_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
-    const literal = literalObject(code.slice(match[0].length));
+    const literal = literalObject(code.slice(match[0].length), commandBinding);
     if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
     call = { tool: 'cgpt-validation.' + match[2], input: literal.value };
   } else if (code || !discovery) return null;
