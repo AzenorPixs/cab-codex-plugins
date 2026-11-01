@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.35";
+const version = "2.1.36";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -45,6 +45,7 @@ const nativeSessionGenerations = new Map();
 let lifecycleLease = null;
 let lifecycleMutations = 0;
 let observedOperations = new Map();
+const nativeCompletionReconciliations = new Set();
 function observeStatistics(callback) {
   try { callback(); } catch { statistics.error = 'statistics-observation-unavailable'; }
 }
@@ -405,6 +406,31 @@ async function proveNativeCompletions(runId, access) {
       .map((part) => nativePartProof(op, part, op.sessionId)).find(Boolean);
     if (!proof) throw new CoordinationError('native-completion-not-proved');
     registry.completeNative(runId, op.operationId, proof);
+  }
+}
+
+async function reconcileNativeCompletionsFromTranscript(runId, sessionId) {
+  const key = runId + '\0' + sessionId;
+  if (nativeCompletionReconciliations.has(key)) return;
+  const pending = Object.values(registry.resourceState.operations).filter((op) =>
+    op.runId === runId && op.sessionId === sessionId && ['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(op.state));
+  if (!pending.length) return;
+  nativeCompletionReconciliations.add(key);
+  try {
+    const messages = await openCode.messages(sessionId, workspace);
+    if (!Array.isArray(messages)) return;
+    const parts = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []);
+    for (const operation of pending) {
+      const current = registry.resourceState.operations[operation.operationId];
+      if (!current || !['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(current.state)) continue;
+      const proof = parts.map((part) => nativePartProof(operation, part, sessionId)).find(Boolean);
+      if (proof) registry.completeNative(runId, operation.operationId, proof);
+    }
+  } catch (cause) {
+    const code = /^[a-z][a-z0-9-]{1,90}$/.test(cause?.code || '') ? cause.code : 'native-completion-unavailable';
+    process.stderr.write('CAB native completion transcript reconciliation failed: ' + code + '\n');
+  } finally {
+    nativeCompletionReconciliations.delete(key);
   }
 }
 
@@ -1203,6 +1229,14 @@ async function consumeEvents() {
         }
         if (props.part) for (const [runId, context] of activeContexts()) {
           if (context.sessions().includes(session)) observeNativeCompletion(runId, props.part, session);
+        }
+        if (['session.idle', 'session.execution.succeeded', 'session.execution.failed',
+          'session.execution.interrupted'].includes(type)) {
+          for (const [runId, context] of activeContexts()) {
+            if (context.sessions().includes(session)) {
+              void reconcileNativeCompletionsFromTranscript(runId, session);
+            }
+          }
         }
       }
     }

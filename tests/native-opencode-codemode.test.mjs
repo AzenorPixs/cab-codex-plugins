@@ -279,6 +279,42 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const done = await http('/runs/native-code/job/recover', { ...recovery, phase: 'complete' });
     assert.equal(done.sessionId, candidate.id); assert.equal(done.recovery, null); assert.equal(done.terminalGate.status, 'OPEN');
     assert.equal((await client.permissions()).length, 0);
+    const failedStatus = await http('/runs/native-code/status');
+    const failedRegistry = await http('/runs');
+    assert.equal(failedStatus.runId, run.runId);
+    const failedRun = failedRegistry.runs.find(entry => entry.runId === run.runId);
+    const failedApproval = { ...approval, reservation_version: failedRun.version, requestId: 'ssh-failure-native',
+      approval_id: 'approval-ssh-failure', operation_id: 'operation-ssh-failure',
+      operation_digest: createHash('sha256').update('/usr/bin/false').digest('hex'),
+      expected_revisions: { [resource]: failedRegistry.coordination.revisions[resource] ?? 0 }, commands: ['/usr/bin/false'],
+      title: 'synthetic non-zero SSH wrapper' };
+    const failedEnd = dispatched + 3;
+    queue.push(mcp('request_validation', failedApproval), { tool: 'shell', input: { command: '/usr/bin/false' } },
+      mcp('broker_readiness', { run_id: run.runId }));
+    await client.prompt(candidate.id, 'Execute synthetic failing wrapper and read readiness.', { requiredNativeAsk: ['shell'] });
+    await until(async () => (await http('/runs/native-code/status')).undecidedValidationCount === 1, 'non-zero shell admission', async () => ({
+      status: await http('/runs/native-code/status'), dispatched, queuedActions: queue.length,
+      recentTools: (await client.messages(candidate.id)).flatMap(message => message.parts.filter(part => part.type === 'tool'))
+        .slice(-5).map(part => ({ tool: part.tool, status: part.state?.status,
+          error: part.state?.metadata?.error === true, exit: part.state?.metadata?.exit,
+          result: (part.state?.content?.[0]?.text || part.state?.output || '').slice(0, 240) })),
+      permissionCount: (await client.permissions()).length }));
+    await http('/runs/native-code/decision/' + failedApproval.requestId, { decision: 'approved', rationale: 'synthetic wrapper failure only' });
+    const failedAccess = await http('/runs/native-code/locks/acquire', { version: failedRun.version,
+      operationId: failedApproval.operation_id, operationDigest: failedApproval.operation_digest,
+      resources: failedApproval.resources, expectedRevisions: failedApproval.expected_revisions });
+    await until(async () => !(await client.activeSessions())[candidate.id] && dispatched === failedEnd, 'non-zero shell completion');
+    await until(async () => (await http('/runs')).coordination.operations[failedApproval.operation_id]?.state === 'COMPLETED',
+      'non-zero shell transcript reconciliation');
+    const failedOperation = (await http('/runs')).coordination.operations[failedApproval.operation_id];
+    const failedPart = (await client.messages(candidate.id)).flatMap(m => m.parts.filter(part => part.tool === 'bash')).at(-1);
+    assert.equal(failedOperation.state, 'COMPLETED');
+    assert.match(failedOperation.completionDigest, /^[a-f0-9]{64}$/);
+    assert.equal(failedPart.state.status, 'completed');
+    assert.equal(failedPart.state.metadata.exit, 1);
+    await http('/runs/native-code/locks/release', { version: failedRun.version, operationId: failedApproval.operation_id,
+      token: failedAccess.token, fencing: failedAccess.fencing, outcome: 'COMPLETED', evidence: ['synthetic wrapper completed with exit 1; no success inferred'] });
+    console.log('Shell natif exit 1 : operation corrélée COMPLETED, échec métier conservé.');
     let current = (await http('/runs')).runs.find(r => r.runId === run.runId);
     const edit = { ...approval, reservation_version: current.version, requestId: 'edit-native', approval_id: 'approval-edit-native',
       operation_id: 'operation-edit-native', operation_digest: createHash('sha256').update('synthetic file content').digest('hex'),
