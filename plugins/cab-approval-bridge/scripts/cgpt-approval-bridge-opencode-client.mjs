@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.48';
+export const VERSION = '2.1.49';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
@@ -90,16 +90,15 @@ function sourcePath(value, { allowRoot = false } = {}) {
 }
 
 function sourceEntryPath(value, directoryValue) {
-  if (typeof value !== 'string' || value.includes('\\') || value.includes('\0') || value.split('/').includes('..')) {
+  if (typeof value !== 'string' || value.includes('\\') || value.includes('\0')) {
     fail('opencode-source-path-invalid');
   }
-  if (value === '' || value === '.' || value === './') return null;
+  if (value === '' || value === '.' || value === './' || value === '..' || value.startsWith('../')) return null;
+  if (value.split('/').includes('..')) return null;
   let candidate = value;
   if (isAbsolute(candidate)) {
     candidate = relative(directoryValue, candidate);
-    if (!candidate || candidate === '..' || candidate.startsWith(`..${process.platform === 'win32' ? '\\' : '/'}`) || isAbsolute(candidate)) {
-      fail('opencode-source-path-invalid');
-    }
+    if (!candidate || candidate === '..' || candidate.startsWith('../') || isAbsolute(candidate)) return null;
   }
   if (candidate.startsWith('./')) candidate = candidate.slice(2);
   if (!candidate) return null;
