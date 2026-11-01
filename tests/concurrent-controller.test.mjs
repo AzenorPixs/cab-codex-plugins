@@ -466,6 +466,30 @@ test('une fin native inconnue garde les protections et interdit le gate', async 
   assert.equal(replay.status, 200); assert.equal(Object.hasOwn(replay.body, 'token'), false);
 });
 
+test('fin SSE idle sans partie : le transcript corrélé clôt une commande exit 1 sans succès implicite', async (t) => {
+  const h = await setup(t); const run = await h.reserve('idle-transcript-fallback');
+  const { approval, access } = await h.approvedAccess(run, 'idle-transcript-fallback');
+  await h.execute(approval);
+  await waitFor(async () => (await h.get('/status')).body.opencodeSse === 'connected');
+  const operation = (await h.get('/runs')).body.coordination.operations[approval.operation_id];
+  const start = operation.native.startedAt + 1;
+  h.native.messages[run.sessionId].push({ parts: [{ type: 'tool', id: 'part-idle-transcript-fallback',
+    callID: 'call-' + approval.requestId, sessionID: run.sessionId, tool: 'shell', executed: false,
+    state: { status: 'completed',
+      input: { command: approval.commands[0] }, time: { start, end: start + 1 },
+      metadata: { status: 'completed', exit: 1 } } }] });
+  h.native.emit({ type: 'session.idle', location: { directory: h.directory },
+    properties: { sessionID: run.sessionId, status: { type: 'idle' } } });
+  await waitFor(async () => (await h.get('/runs')).body.coordination.operations[approval.operation_id].state === 'COMPLETED');
+  const completed = (await h.get('/runs')).body.coordination.operations[approval.operation_id];
+  assert.equal(completed.state, 'COMPLETED');
+  assert.match(completed.completionDigest, /^[a-f0-9]{64}$/);
+  assert.equal((await h.get('/runs/' + run.runId + '/locks')).body.accesses[0].state, 'HELD');
+  assert.equal(h.native.replies.length, 1, 'aucune nouvelle once après relecture du transcript');
+  const released = await h.releaseOperation(run, approval, access);
+  assert.equal(released.status, 200);
+});
+
 test('attach réconcilie la fin native prouvée avant rattachement sans libérer les protections', async (t) => {
   const h = await setup(t); const a = await h.reserve('attach-refresh');
   const { approval, access } = await h.approvedAccess(a, 'attach-parent'); await h.execute(approval);
@@ -1050,7 +1074,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.35');
+  assert.equal(initialized.result.serverInfo.version, '2.1.36');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

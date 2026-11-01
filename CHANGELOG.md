@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.36 — Réconciliation des fins natives après SSE terminal
+
+- Après un événement SSE terminal sans partie d’outil exploitable, le
+  contrôleur relit le transcript natif uniquement pour les opérations non
+  résolues de la session concernée et applique les mêmes gardes de preuve.
+- Une commande terminée avec exit non nul clôt l’opération technique, sans
+  satisfaire un prévol exigeant exit 0 ni rejouer une permission.
+- CAB/CABU et les briques communes sont alignées en 2.1.36.
+
 ## 2.1.35 — Retrait des jetons d’accès libérés
 
 - Les accès libérés par `locks/release` ou publication ne conservent plus le

@@ -119,6 +119,12 @@ Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des 
 | code non attribué | fix-opencode-codemode-native-proof-correlation | ARCHIVÉ, source 5/5 lots validés ; CABU 2.1.8 vérifié ; complément diagnostique en cours | [tâches](changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/tasks.md) |
 | code non attribué | fix-rejected-preflight-recovery-after-restart | ARCHIVÉ, source validée 5/5 ; CABU 2.1.7 vérifié le 29 octobre ; PA01 suspendu au raccord Code Mode | [qualification](changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/QUALIFICATION.md) |
 
+### Entrée provisoire SCM — 1er novembre 2026
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
+
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
 
 ## Portée et limites
@@ -244,3 +250,9 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 `discard-released-access-tokens` : ARCHIVÉ — source 2.1.35 ; jetons bruts
 supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 **code non attribué**, attribution ACL ultérieure. [Proposition](changes/archive/2026-10-31-discard-released-access-tokens/proposal.md), [tâches](changes/archive/2026-10-31-discard-released-access-tokens/tasks.md), [statistiques](changes/archive/2026-10-31-discard-released-access-tokens/STATISTICS.md). Activation à vérifier après CABU.
+
+### Entrée provisoire SCM — 1er novembre 2026
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
