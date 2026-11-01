@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { mkdtemp, rm, symlink } from 'node:fs/promises';
+import { createServer } from 'node:http';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { readSource } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-source-read.mjs';
 
 test('source-read CLI requests only the scoped RUN route and returns a snapshot',async()=>{
@@ -24,4 +30,39 @@ test('source-read CLI rejects non-loopback controller, invalid RUN and unfiltere
   {status:200,headers:{'content-type':'application/json'}});
  await assert.rejects(readSource({controllerUrl:'http://127.0.0.1:8788',runId:'run-read',operation:'read',path:'a'},async()=>response),
   {code:'source-read-response-invalid'});
+});
+
+test('source-read CLI expose uniquement une cause technique filtrée si le contrôleur échoue',async()=>{
+ const input={controllerUrl:'http://127.0.0.1:8788',runId:'run-read',operation:'read',path:'src/file.py'};
+ await assert.rejects(readSource(input,async()=>{throw Object.assign(new Error('secret body'),{code:'ECONNREFUSED'});}),error=>{
+  assert.equal(error.code,'source-read-controller-unavailable');
+  assert.equal(error.causeCode,'ECONNREFUSED');
+  assert.equal(error.message.includes('secret body'),false);
+  return true;
+ });
+ await assert.rejects(readSource(input,async()=>{throw Object.assign(new Error('private'),{code:'bad code!'});}),error=>{
+  assert.equal(error.code,'source-read-controller-unavailable');
+  assert.equal(error.causeCode,'Error');
+  assert.equal(error.message.includes('private'),false);
+  return true;
+ });
+});
+
+test('source-read CLI démarre depuis le lien stable des scripts distribués',async t=>{
+ const root=await mkdtemp(join(tmpdir(),'cab-source-read-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const stable=join(root,'cgpt-approval-bridge-source-read.mjs');
+ await symlink(fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-source-read.mjs',import.meta.url)),stable);
+ const server=createServer((request,response)=>{
+  if(request.url==='/runs/run-read/source/read?path=src%2Fexample.py'){
+   response.writeHead(200,{'content-type':'application/json'});
+   response.end(JSON.stringify({runId:'run-read',source:'opencode-v2-fs-read',snapshot_only:true,
+    path:'src/example.py',sessionId:'ses_read',directory:'/workspace',content:'value=42\n',byteLength:9,sha256:'b'.repeat(64)}));
+  }else{response.writeHead(404,{'content-type':'application/json'});response.end(JSON.stringify({error:'source-read-failed'}));}
+ });
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
+ const child=spawn(process.execPath,[stable,'--controller-url',`http://127.0.0.1:${server.address().port}`,
+  '--run-id','run-read','--operation','read','--path','src/example.py']);let stdout='',stderr='';
+ child.stdout.setEncoding('utf8').on('data',chunk=>stdout+=chunk);child.stderr.setEncoding('utf8').on('data',chunk=>stderr+=chunk);
+ const code=await new Promise(resolve=>child.once('close',resolve));
+ assert.equal(code,0,stderr);assert.equal(JSON.parse(stdout).content,'value=42\n');
 });
