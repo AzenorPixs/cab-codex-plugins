@@ -102,6 +102,35 @@ class ConcurrentBrokerTest(unittest.TestCase):
         self.assertFalse(bridge.validate_controller_decision(item, {**decision, "operation_id": "other"}))
         self.assertFalse(bridge.validate_controller_decision(item, {**decision, "expected_revisions": {"resource:a": 1}}))
 
+    def test_request_validation_default_timeout_is_finite_and_delivery_is_not_terminal(self):
+        args = {**self.args(), "timeout_seconds": 1, "interval_seconds": 1}
+
+        def delivered(item):
+            lease = bridge.acquire_notification_lease(item["approval_id"])
+            self.assertIsNotNone(lease)
+            bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], True)
+            return True
+
+        with patch.object(bridge, "maybe_notify_controller", side_effect=delivered), \
+             patch.object(bridge.time, "monotonic", side_effect=[0.0, 2.0]):
+            result = bridge.do_request_validation(args)
+
+        self.assertEqual(result["status"], "PENDING")
+        self.assertTrue(result["validation_timeout"])
+        self.assertTrue(result["retry_required"])
+        self.assertEqual(result["next_action"], "poll_approval")
+        self.assertEqual(result["retry_approval_id"], result["approval_id"])
+        stored = bridge.do_get({"approval_id": result["approval_id"]})
+        self.assertEqual(stored["status"], "PENDING")
+        self.assertEqual(stored["notification_status"], "DELIVERED")
+
+    def test_request_validation_timeout_zero_is_rejected_before_request_creation(self):
+        args = {**self.args("zero-timeout"), "timeout_seconds": 0}
+        with self.assertRaises(bridge.ValidationError):
+            bridge.do_request_validation(args)
+        with self.assertRaises(bridge.ValidationError):
+            bridge.do_get({"approval_id": args["approval_id"]})
+
     def test_old_or_incomplete_coordination_is_refused_before_persistence(self):
         for key in ("coordination_protocol", "operation_id", "operation_digest", "expected_revisions"):
             args = self.args()

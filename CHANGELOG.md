@@ -1,3 +1,9 @@
+## 2.1.37 — Prévol natif borné pour la récupération
+
+- `prepare` exige désormais la découverte littérale et scellée de `request_validation` avant le gel, ainsi que `shell: ask` et `edit: ask` sur la candidate.
+- Toute discovery après le gel est refusée avant admission ; les attentes MCP utilisent un délai fini et conservent le même identifiant d’approbation pour les polls.
+- CAB et CABU ainsi que les quatre briques et commandes partagent la version 2.1.37.
+
 # Changelog
 
 ## 2.1.36 — Réconciliation des fins natives après SSE terminal

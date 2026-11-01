@@ -163,14 +163,16 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
     recoveryId: "recovery-1", preflightRequestId: "preflight-1" };
   const approval = (requestId, sessionId = "ses_new", command = "/usr/bin/true") => ({
     requestId, approval_id: `approval-${requestId}`, change_id: "change-recovery", session_id: sessionId,
-    directory, files: [], commands: [command], summary: "fixture synthétique" });
+    directory, files: [], commands: [command], timeout_seconds: 120, interval_seconds: 3,
+    summary: "fixture synthétique" });
   async function validate(a) { return post("/validation/request", { approval: a }); }
   async function approve(id) { return post(`/decision/${id}`, { decision: "approved" }); }
   async function preflight(alreadyApproved = false) {
     const repliesBefore = native.replies.length;
     const a = approval(recovery.preflightRequestId);
     if (!alreadyApproved) {
-      assert.equal((await validate(a)).status, 202);
+      const preflightValidation = await validate(a);
+      assert.equal(preflightValidation.status, 202, JSON.stringify(preflightValidation.body));
       assert.equal((await approve(a.requestId)).status, 201);
     }
     native.permissions = [{ id: "permission-preflight", sessionID: "ses_new", permission: "bash",
@@ -193,7 +195,8 @@ require('node:readline').createInterface({ input: process.stdin }).on('line', (l
 
 test("refuse les règles natives non prouvées avant admission et prépare seulement sous ask", async (context) => {
   const h = await setup(context);
-  const safe = [{ permission: "bash", pattern: "*", action: "ask" }];
+  const safe = [{ permission: "bash", pattern: "*", action: "ask" },
+    { permission: "edit", pattern: "*", action: "ask" }];
   for (const rules of [undefined, null, [], {}, [null],
     [{ permission: "bash", pattern: "*", action: "allow" }],
     [{ permission: "bash", pattern: "*", action: "deny" }],
@@ -206,8 +209,9 @@ test("refuse les règles natives non prouvées avant admission et prépare seule
   ]) {
     h.native.sessionPermission = rules;
     const a = h.approval("unsafe", "ses_old");
-    assert.ok(["native-permission-ask-required", "native-permission-control-unavailable"]
-      .includes((await h.validate(a)).body.error));
+    const refusedValidation = await h.validate(a);
+    assert.ok(["native-permission-ask-required", "native-permission-control-unavailable", "validation-session-not-admitted"]
+      .includes(refusedValidation.body?.error), JSON.stringify({ rules, refusedValidation }));
     assert.equal((await h.approve(a.requestId)).status, 400);
     assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 404);
     assert.ok(["preflight-native-ask-required", "opencode-session-invalid"]
@@ -239,7 +243,8 @@ test("la réactivation permissive refuse le prévol puis ask permet une décisio
   // État natif produit par tools.bash=true ; noReply permet de corriger avant génération.
   h.native.sessionPermission = [{ permission: "bash", pattern: "*", action: "allow" }];
   const a = h.approval(h.recovery.preflightRequestId);
-  assert.equal((await h.validate(a)).body.error, "native-permission-ask-required");
+  const denied = await h.validate(a);
+  assert.equal(denied.body.error, "native-permission-ask-required", JSON.stringify(denied));
   assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 404);
   h.native.sessionPermission = [{ permission: "*", pattern: "*", action: "ask" }];
   await h.preflight();
@@ -461,6 +466,7 @@ test("un refus explicite pour délai prescrit omis ne consomme aucune permission
   const h = await setup(context);
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "prepare" })).status, 200);
   const submitted = { ...h.approval(h.recovery.preflightRequestId), interval_seconds: 3 };
+  delete submitted.timeout_seconds;
   assert.equal(Object.hasOwn(submitted, "timeout_seconds"), false);
   assert.equal((await h.validate(submitted)).status, 202);
   const reason = "CGPT refuse timeout_seconds prescrit omis, aucun effet autorisé";

@@ -12,7 +12,7 @@ import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bri
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.36";
+export const VERSION = "2.1.37";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -319,7 +319,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.36",
+    version: "2.1.37",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -424,7 +424,9 @@ function validPersistedJob(payload) {
     if (value.preparationHistory !== undefined && (!record(value.preparationHistory) ||
         !Number.isSafeInteger(value.preparationHistory.nativeToolCount) ||
         value.preparationHistory.nativeToolCount < 0 ||
-        !/^[a-f0-9]{64}$/.test(value.preparationHistory.nativeToolHash))) return false;
+        !/^[a-f0-9]{64}$/.test(value.preparationHistory.nativeToolHash) ||
+        value.preparationHistory.requestValidationSignatureHash !== undefined &&
+          !/^[a-f0-9]{64}$/.test(value.preparationHistory.requestValidationSignatureHash))) return false;
     if (value.restoredPreflight !== undefined && (!record(value.restoredPreflight) ||
         !text(value.restoredPreflight.authorizationReference) ||
         !text(value.restoredPreflight.blockedGateValidatedAt) ||
@@ -541,7 +543,10 @@ function assertDecisionOperation(operation, requestId) {
 }
 
 function recoveryFailure(reason) {
-  throw new Error(reason);
+  const error = new Error(reason);
+  error.code = reason;
+  error.status = 409;
+  throw error;
 }
 
 function nativePermissionFailure(reason) {
@@ -603,9 +608,27 @@ function nativeParentHash(info) {
   return createHash("sha256").update(JSON.stringify({ id: info.id, role: info.role, tools: info.tools })).digest("hex");
 }
 
+function requestValidationSignatureDiscovery(part) {
+  if (part?.tool !== 'cab_codemode_discovery' || part.state?.status !== 'completed' ||
+      part.state?.metadata?.cabCodeMode?.wrapperId !== part.callID ||
+      part.state?.metadata?.truncated !== false) return null;
+  const input = part.state.input;
+  if (input === null || typeof input !== 'object' || Array.isArray(input) ||
+      input.namespace !== 'cgpt-validation' || input.query !== 'request_validation') return null;
+  const calls = part.state.metadata.toolCalls;
+  if (!Array.isArray(calls) || calls.length !== 1 || calls[0]?.tool !== 'search' ||
+      calls[0]?.status !== 'completed' || canonicalRecoveryHash(calls[0].input) !== canonicalRecoveryHash(input)) return null;
+  let output;
+  try { output = JSON.parse(part.state.output); } catch { return null; }
+  if (output === null || typeof output !== 'object' || Array.isArray(output) || !Array.isArray(output.items) ||
+      !output.items.some(item => item !== null && typeof item === 'object' && !Array.isArray(item) && typeof item.path === 'string' &&
+        /(?:^|[./])request_validation$/.test(item.path))) return null;
+  return recoveryToolsHash([part]);
+}
+
 function isPreparationDiagnostic(part, parts) {
   const tool = part.tool;
-  if (tool === 'cab_codemode_discovery' && part.state?.status === 'completed' && part.state.metadata?.cabCodeMode) return true;
+  if (tool === 'cab_codemode_discovery') return Boolean(requestValidationSignatureDiscovery(part));
   if (["cgpt-validation_broker_readiness", "cgpt-validation_broker_health",
     "cgpt-validation_list_pending", "cgpt-validation_broker_evaluate_remediation"].includes(tool)) return true;
   if (tool === "cgpt-validation_cancel_approval") {
@@ -640,6 +663,10 @@ function currentRecoveryTools(recovery, parts, messages = []) {
   if (preparation && (parts.length < preparation.nativeToolCount ||
       recoveryToolsHash(parts.slice(0, preparation.nativeToolCount)) !== preparation.nativeToolHash)) {
     recoveryFailure("preflight-history-divergent");
+  }
+  if (preparation?.requestValidationSignatureHash &&
+      parts.slice(preparation.nativeToolCount).some((part) => part.tool === 'cab_codemode_discovery')) {
+    recoveryFailure('preflight-unexpected-tool');
   }
   const previous = recovery.attempts?.at(-1);
   if (!previous) {
@@ -1107,9 +1134,55 @@ async function checkRecoveryContext(candidate, blockedRestore = false) {
     const session = await openCode.session(id, job.directory);
     if (session.id !== id || session.directory !== job.directory) recoveryFailure("session-context-divergent");
     if (busy[id] && busy[id].type !== "idle") recoveryFailure("session-not-idle");
-    if (id === candidate.sessionId && !hasNativeAsk(session, "bash")) {
+    if (id === candidate.sessionId &&
+        (!hasNativeAsk(session, "bash") || run && !hasNativeAsk(session, "edit"))) {
       recoveryFailure("preflight-native-ask-required");
     }
+  }
+}
+
+function preflightAdmissionFailure(code) {
+  const cause = new Error(code);
+  cause.code = code;
+  cause.status = 409;
+  throw cause;
+}
+
+async function assertRecoveryPreflightAdmission(approval) {
+  const recovery = job?.recovery;
+  if (!recovery?.preparationHistory?.requestValidationSignatureHash ||
+      approval?.requestId !== recovery.preflightRequestId) return;
+  let messages;
+  try { messages = await openCode.messages(recovery.sessionId, job.directory); }
+  catch { preflightAdmissionFailure('preflight-history-unavailable'); }
+  const parts = recoveryTools(messages);
+  const current = currentRecoveryTools(recovery, parts, messages);
+  const requestParts = current.filter((part) => part.tool === 'cgpt-validation_request_validation' &&
+    part.state?.input?.requestId === recovery.preflightRequestId);
+  if (requestParts.length !== 1 || current.at(-1) !== requestParts[0] ||
+      requestParts[0].state?.status !== 'running') {
+    preflightAdmissionFailure('preflight-request-not-correlated');
+  }
+  for (const part of current.slice(0, -1)) {
+    if (part.tool !== 'cgpt-validation_broker_readiness' || part.state?.status !== 'completed') {
+      preflightAdmissionFailure('preflight-unexpected-tool');
+    }
+    let output;
+    try { output = JSON.parse(part.state.output); }
+    catch { preflightAdmissionFailure('preflight-readiness-invalid'); }
+    if (output.status !== 'READY' || output.pending_count !== 0 ||
+        run && output.run_id !== run.runId) preflightAdmissionFailure('broker-not-ready');
+  }
+  const input = requestParts[0].state.input;
+  if (input.approval_id !== approval.approval_id || input.change_id !== job.changeId ||
+      input.session_id !== recovery.sessionId || input.directory !== job.directory ||
+      run && (input.run_id !== run.runId || input.reservation_version !== currentRun()?.version) ||
+      JSON.stringify(input.files) !== '[]' || JSON.stringify(input.commands) !== '["/usr/bin/true"]') {
+    preflightAdmissionFailure('preflight-request-divergent');
+  }
+  if (!Number.isSafeInteger(input.timeout_seconds) || input.timeout_seconds < 1 || input.timeout_seconds > 300 ||
+      !Number.isSafeInteger(input.interval_seconds) || input.interval_seconds < 1 || input.interval_seconds > 60) {
+    preflightAdmissionFailure('preflight-timeout-required');
   }
 }
 
@@ -1130,9 +1203,18 @@ async function checkRecoveryPreflight(recovery, restored = null) {
   let commandEnd = null;
   let ready = false;
   let commandCount = 0;
-  for (const part of parts) {
+  let legacyTailDiscoverySeen = false;
+  for (let partIndex = 0; partIndex < parts.length; partIndex++) {
+    const part = parts[partIndex];
     const state = part.state;
-    if (part.tool === 'cab_codemode_discovery' && state?.status === 'completed' && state.metadata?.cabCodeMode) continue;
+    if (part.tool === 'cab_codemode_discovery') {
+      const legacyTailDiscovery = !recovery.preparationHistory?.requestValidationSignatureHash &&
+        !legacyTailDiscoverySeen && partIndex === parts.length - 1 && submitted && commandCount === 1 && ready &&
+        Boolean(requestValidationSignatureDiscovery(part));
+      if (!legacyTailDiscovery) recoveryFailure('preflight-unexpected-tool');
+      legacyTailDiscoverySeen = true;
+      continue;
+    }
     const approvalTool = ["cgpt-validation_request_validation", "cgpt-validation_poll_approval",
       "cgpt-validation_get_approval"].includes(part.tool);
     if (part.tool === "cgpt-validation_request_validation") {
@@ -1320,8 +1402,11 @@ async function recoverJob(payload) {
   const preparationParts = recoveryTools(await openCode.messages(payload.sessionId, job.directory));
     if (preparationParts.some((part) => !isPreparationDiagnostic(part, preparationParts) ||
         !["completed", "error"].includes(part.state?.status))) recoveryFailure("preflight-preparation-tool-forbidden");
+    const signatureDiscoveries = preparationParts.map(requestValidationSignatureDiscovery).filter(Boolean);
+    if (run && signatureDiscoveries.length !== 1) recoveryFailure('preflight-signature-discovery-required');
     snapshot.recovery.preparationHistory = { nativeToolCount: preparationParts.length,
-      nativeToolHash: recoveryToolsHash(preparationParts) };
+      nativeToolHash: recoveryToolsHash(preparationParts),
+      ...(run && signatureDiscoveries.length === 1 ? { requestValidationSignatureHash: signatureDiscoveries[0] } : {}) };
     snapshot.revokedSessions = [...new Set([...(snapshot.revokedSessions || []), job.sessionId])];
     snapshot.recovery.invalidatedRequestIds = [...validations.values()]
       .filter((validation) => validation.operation?.sessionId === job.sessionId)
@@ -1829,7 +1914,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.36",
+      version: "2.1.37",
     },
   });
 
@@ -2572,6 +2657,8 @@ const handle = async (request, response, url) => {
           response.end(JSON.stringify({ requestId, status: 'PENDING' }));
           return;
         }
+
+        await assertRecoveryPreflightAdmission(approval);
 
         if (
           !active.has(requestId) &&

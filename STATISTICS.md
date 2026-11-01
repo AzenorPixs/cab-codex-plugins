@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 95**
+**NCA — Nombre de changes analysés : 96**
 
 ## Périmètre et durée
 
@@ -8,8 +8,8 @@
 |---|---|---|
 | DGCT — Temps total de développement du projet via l’IA | 10 | 0,098763 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 95 | N/A |
-| NCMA — Changes achevés par jour (NCA / NJT) | 95 | N/A |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 96 | N/A |
+| NCMA — Changes achevés par jour (NCA / NJT) | 96 | N/A |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
@@ -24,8 +24,8 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 91 | N/A | N/A | 95,79 % |
-| 4 | gpt-6.1-sol | N/A | 4,21 % |
+| 92 | N/A | N/A | 95,83 % |
+| 4 | gpt-6.1-sol | N/A | 4,17 % |
 
 ## Performances des LLM de codage OpenCode
 
@@ -100,11 +100,11 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Périmètre | Lignes de code | Lignes de commentaires |
 |---|---|---|
-| Global | 23602 | 396 |
-| Broker | 10282 | 334 |
+| Global | 23710 | 396 |
+| Broker | 10288 | 334 |
 | Commun | N/A | N/A |
 | Contrôleur | N/A | N/A |
-| Moniteur | 1581 | 8 |
+| Moniteur | 1586 | 8 |
 | Superviseur | 386 | 1 |
 
 ## Commandes des codeurs
@@ -144,13 +144,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 37975 | 468,827 |
+| Tests exécutés dans les bilans finaux | 38723 | 472,232 |
 | Fichiers ayant passé un contrôle syntaxique | 2144 | 52,293 |
-| Tâches OpenSpec prouvées et terminées | 57 | 6,333 |
+| Tâches OpenSpec prouvées et terminées | 68 | 6,800 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 37967 | 99,98 % |
+| Tests finaux réussis | 38715 | 99,98 % |
 | Tests finaux échoués | 8 | 0,02 % |
 
 | Catégorie de tests | Nombre |
@@ -160,7 +160,7 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 | Validations OpenSpec | Réussies | Échouées | Réussite | Échec |
 |---|---|---|---|---|
 | Standard | 3 | 0 | 100,00 % | 0,00 % |
-| Strict | 10 | 4 | 71,43 % | 28,57 % |
+| Strict | 14 | 4 | 77,78 % | 22,22 % |
 
 ## Synthèse transversale des codeurs
 
