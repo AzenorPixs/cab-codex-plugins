@@ -49,7 +49,7 @@ test('lecture native OpenCode V2 : session/location liées, chemin relatif et se
     }
     if (url.pathname === '/api/fs/list') return json({ location: { directory: '/workspace' }, data: [
       { path: '.', type: 'directory' }, { path: '/workspace/src/example.mjs', type: 'file' },
-      { path: '.env', type: 'file' }, { path: 'src', type: 'directory' },
+      { path: '.env', type: 'file' }, { path: 'src/', type: 'directory' },
       ...(outsideEntry ? [{ path: '/outside/secret.txt', type: 'file' }] : []),
     ] });
     if (url.pathname === '/api/fs/find') return json({ location: { directory: '/workspace' }, data: [

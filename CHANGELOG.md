@@ -1,3 +1,9 @@
+## 2.1.50 — Normalisation des entrées de répertoire OpenCode
+
+- Le listing retire le séparateur final des entrées de type répertoire avant validation, sans transformer les chemins fichiers ni élargir la location.
+- Le test natif couvre les MIME texte, l’entrée racine, les chemins absolus internes/externes et les séparateurs finaux.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.50.
+
 ## 2.1.49 — Filtrage des chemins de listing hors location
 
 - Le listing ignore les entrées représentant la racine et filtre les chemins parent/externes ; seuls les chemins relatifs restés dans la location sont restitués.

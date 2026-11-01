@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.49';
+export const VERSION = '2.1.50';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
@@ -89,7 +89,7 @@ function sourcePath(value, { allowRoot = false } = {}) {
   return value;
 }
 
-function sourceEntryPath(value, directoryValue) {
+function sourceEntryPath(value, directoryValue, type) {
   if (typeof value !== 'string' || value.includes('\\') || value.includes('\0')) {
     fail('opencode-source-path-invalid');
   }
@@ -101,6 +101,7 @@ function sourceEntryPath(value, directoryValue) {
     if (!candidate || candidate === '..' || candidate.startsWith('../') || isAbsolute(candidate)) return null;
   }
   if (candidate.startsWith('./')) candidate = candidate.slice(2);
+  if (type === 'directory') candidate = candidate.replace(/\/+$/, '');
   if (!candidate) return null;
   return sourcePath(candidate);
 }
@@ -775,7 +776,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
         fail('opencode-source-list-invalid');
       }
       try {
-        const path = sourceEntryPath(entry.path, directoryValue);
+        const path = sourceEntryPath(entry.path, directoryValue, entry.type);
         return path ? [{ path, type: entry.type }] : [];
       } catch (cause) {
         if (cause?.code === 'opencode-source-path-excluded') return [];

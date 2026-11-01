@@ -6,11 +6,11 @@
 - [x] Tester succès, location exacte, dérive de session, refus de chemins, borne de réponse et absence de mutation.
 - [x] Corriger le démarrage du helper depuis son lien stable distribué et restituer une cause contrôleur filtrée sans fuite de message.
 - [x] Accepter les types MIME textuels servis par OpenCode, ignorer l’entrée de racine et normaliser uniquement les chemins absolus restant dans la location.
-- [x] Aligner CAB/CABU, briques et documentation en 2.1.49 ; exécuter toutes les suites et OpenSpec strict.
+- [x] Aligner CAB/CABU, briques et documentation en 2.1.50 ; exécuter toutes les suites et OpenSpec strict.
 
 ## Archivage et livraison
 
 - [ ] Archiver le change et produire un `STATISTICS.md` vérifié.
 - [ ] Committer et publier sous SCM.
-- [ ] Exécuter CABU 2.1.49 et vérifier les versions/runtime.
+- [ ] Exécuter CABU 2.1.50 et vérifier les versions/runtime.
 - [ ] Vérifier un mandat réel de lecture autorisé dans la session concernée, sans shell ni mutation.
