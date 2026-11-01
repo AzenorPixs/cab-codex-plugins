@@ -30,14 +30,19 @@ async function fixture(t) {
   const acquire = (run, op, overrides = {}) => registry.acquireAccess(run.runId, {
     version: run.version, operationId: op.operationId, operationDigest: op.operationDigest,
     resources: op.resources, expectedRevisions: op.expectedRevisions, ...overrides });
-  const start = (run, op) => {
-    registry.nativeStart(run.runId, op, 'request-' + op.operationId, { id: 'permission-' + op.operationId,
+  const start = (run, op, kind = 'bash') => {
+    registry.nativeStart(run.runId, { ...op, kind }, 'request-' + op.operationId, { id: 'permission-' + op.operationId,
       tool: { callID: 'call-' + op.operationId } });
     registry.nativeIssued(op.operationId);
   };
-  const complete = (run, op, status = 'completed', exit = 0) => registry.completeNative(run.runId, op.operationId, {
-    sessionId: run.sessionId, permissionId: 'permission-' + op.operationId, callId: 'call-' + op.operationId,
-    finishedAt: Date.now(), status, exit });
+  const complete = (run, op, status = 'completed', exit = 0) => {
+    const proof={sessionId:run.sessionId,permissionId:'permission-'+op.operationId,callId:'call-'+op.operationId,
+      finishedAt:Date.now(),status,exit};
+    registry.completeNative(run.runId,op.operationId,proof);
+    const stored=registry.resourceState.operations[op.operationId];
+    registry.recordNativeOutcome(run.runId,op.operationId,{status,proofStatus:status,exit,
+      partDigest:fingerprint(JSON.stringify([op.operationId,status,exit]))},stored.completionDigest);
+  };
   const release = (run, access, outcome = 'COMPLETED') => registry.releaseAccess(run.runId, {
     version: run.version, operationId: access.accessId, token: access.token, fencing: access.fencing,
     outcome, evidence: ['native end and effects reviewed'] });
@@ -189,9 +194,28 @@ test('unknown effects survive restart, fence old permissions and require native 
   await h.restart(); assert.equal(h.r.accesses('a')[0].state, 'UNKNOWN');
   assert.throws(() => h.r.operationAdmission('a', op, 'request-crash', 'permission'), /operation-access-not-held/);
   assert.throws(() => h.r.completeNative('a', op.operationId, { sessionId: a.sessionId }), /native-completion-not-proved/);
-  h.complete(a, op, 'error'); h.release(a, access);
+  h.complete(a, op, 'error');
+  assert.throws(() => h.release(a, access), /access-native-failure/);
+  assert.throws(() => h.release(a, access, 'NO_EFFECT'), /access-outcome-invalid/);
+  h.release(a, access, 'RECONCILED');
   assert.ok(h.r.revision('file:x') > 0);
   assert.throws(() => h.r.operationAdmission('a', op, 'request-crash', 'permission'), /resource-revision-stale/);
+});
+
+test('edit natif en erreur peut être libéré sans effet si la révision reste inchangée',async t=>{
+ const h=await fixture(t);const a=h.reserve('edit-failure',[file('theme.css')]);const op=h.prepare(a,'edit-failure');
+ const access=h.acquire(a,op);const expected=h.r.revision('file:theme.css');h.start(a,op,'edit');h.complete(a,op,'error');
+ assert.throws(()=>h.release(a,access),/access-native-failure/);
+ assert.equal(h.release(a,access,'NO_EFFECT').state,'RELEASED');
+ assert.equal(h.r.revision('file:theme.css'),expected);
+ assert.equal(h.r.runs.get('edit-failure').pendingWrites,undefined);
+});
+
+test('NO_EFFECT refuse une révision divergente et un edit sans preuve d’erreur',async t=>{
+ const h=await fixture(t);const a=h.reserve('edit-stale',[file('theme.css')]);const op=h.prepare(a,'edit-stale');
+ const access=h.acquire(a,op);h.start(a,op,'edit');h.complete(a,op,'error');
+ h.r.resourceState.revisions['file:theme.css']=1;h.r.resourceState.sequence++;
+ assert.throws(()=>h.release(a,access,'NO_EFFECT'),/access-outcome-revision-divergent/);
 });
 
 test('OpenSpec read validation does not suspend independent code writes', async (t) => {
@@ -360,7 +384,7 @@ test('a restored group requires a fresh fence before a new corrective permission
   const correction=h.prepare(a,'correction',[file('x')],'group');
   h.r.attachOperations('a',{version:a.version,operationId:'group',token:fresh.token,fencing:fresh.fencing,
     operationIds:['correction'],evidence:['new correction approved']});
-  h.start(a,correction);h.complete(a,correction);h.release(a,fresh);
+  h.start(a,correction);h.complete(a,correction);h.release(a,fresh,'RECONCILED');
   assert.equal(h.r.accesses('a')[0].state,'RELEASED');
 });
 
