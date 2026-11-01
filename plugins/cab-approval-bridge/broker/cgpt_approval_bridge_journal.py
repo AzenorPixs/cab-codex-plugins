@@ -80,7 +80,7 @@ import os
 import threading
 import uuid
 
-VERSION = "2.1.44"
+VERSION = "2.1.45"
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -2061,6 +2061,7 @@ def reconstruct_terminal_status(
 ):
     """Reconstruit le dernier statut terminal connu."""
     terminal_event_statuses = {
+        "APPROVAL_NOT_ADMITTED": "NOT_ADMITTED",
         "APPROVAL_APPROVED": "APPROVED",
         "APPROVAL_REJECTED": "REJECTED",
         "APPROVAL_NEEDS_CLARIFICATION": (

@@ -12,6 +12,7 @@ Persistance :
 Transitions metier journalisees :
 
   APPROVAL_CREATED
+  APPROVAL_NOT_ADMITTED
   APPROVAL_APPROVED
   APPROVAL_REJECTED
   APPROVAL_NEEDS_CLARIFICATION
@@ -69,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.44"
+SERVER_VERSION = "2.1.45"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 
 STORE_SCHEMA_VERSION = 2
@@ -405,6 +406,7 @@ KNOWN_NOTIFICATIONS = (
 
 VALID_STATES = (
     "PENDING",
+    "NOT_ADMITTED",
     "APPROVED",
     "REJECTED",
     "NEEDS_CLARIFICATION",
@@ -413,6 +415,7 @@ VALID_STATES = (
 )
 
 TERMINAL_STATES = (
+    "NOT_ADMITTED",
     "APPROVED",
     "REJECTED",
     "NEEDS_CLARIFICATION",
@@ -425,6 +428,7 @@ DECIDABLE = (
 )
 
 STATUS_EVENT_TYPES = {
+    "NOT_ADMITTED": "APPROVAL_NOT_ADMITTED",
     "APPROVED": "APPROVAL_APPROVED",
     "REJECTED": "APPROVAL_REJECTED",
     "NEEDS_CLARIFICATION": "APPROVAL_NEEDS_CLARIFICATION",
@@ -1904,7 +1908,7 @@ def terminal_event_actor(item):
         "status"
     )
 
-    if status == "EXPIRED":
+    if status in ("EXPIRED", "NOT_ADMITTED"):
         return "BROKER"
 
     if status == "CANCELLED":
@@ -1991,6 +1995,14 @@ def terminal_event_data(item):
                         "",
                     ),
                 ),
+            }
+        )
+
+    elif status == "NOT_ADMITTED":
+        payload.update(
+            {
+                "not_admitted_at": item.get("not_admitted_at", ""),
+                "notification_diagnostic": item.get("notification_diagnostic", {}),
             }
         )
 
@@ -2239,6 +2251,27 @@ def filtered_notification_diagnostic(value):
             or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())):
         return None
     return {"http_status": status, "error_code": code}
+
+
+def pre_admission_refusal(item):
+    if item.get("status") != "PENDING" or item.get("notification_status") != "FAILED":
+        return None
+    diagnostic = filtered_notification_diagnostic(item.get("notification_diagnostic"))
+    return diagnostic if diagnostic is not None and diagnostic.get("error_code") is not None else None
+
+
+def mark_not_admitted(item):
+    """Close only a deterministically refused controller notification, never as a decision."""
+    if pre_admission_refusal(item) is None:
+        return False
+    now = utc_now()
+    item["status"] = "NOT_ADMITTED"
+    item["not_admitted_at"] = now
+    item["updated_at"] = now
+    item["notification_next_retry_at"] = ""
+    item["notification_lease_id"] = ""
+    item["notification_lease_until"] = ""
+    return True
 
 
 def notify_controller(
@@ -2981,6 +3014,9 @@ def notification_retry_due(item):
     ) == "DELIVERED":
         return False
 
+    if pre_admission_refusal(item) is not None:
+        return False
+
     if notification_lease_active(
         item
     ):
@@ -3026,7 +3062,8 @@ def acquire_notification_lease(
             item
         )
 
-        if expired:
+        not_admitted = False if expired else mark_not_admitted(item)
+        if expired or not_admitted:
             save_store(
                 path,
                 data,
@@ -3179,10 +3216,14 @@ def complete_notification_lease(
         else:
             item.pop("notification_diagnostic", None)
 
+        not_admitted = mark_not_admitted(item)
+
         save_store(
             path,
             data,
         )
+        if not_admitted:
+            repair_journal_for_item(item)
 
 
 def maybe_notify_controller(item):
@@ -3999,7 +4040,8 @@ def do_get(args):
             item
         )
 
-        if expired:
+        not_admitted = False if expired else mark_not_admitted(item)
+        if expired or not_admitted:
             save_store(
                 path,
                 data,
@@ -4273,9 +4315,9 @@ def do_list(args):
         for item in data[
             "approvals"
         ].values():
-            if check_expired(
-                item
-            ):
+            expired = check_expired(item)
+            not_admitted = False if expired else mark_not_admitted(item)
+            if expired or not_admitted:
                 changed = True
 
         #
@@ -4796,6 +4838,7 @@ def store_journal_consistency_snapshot():
         ).append(event)
 
     terminal_by_event = {
+        "APPROVAL_NOT_ADMITTED": "NOT_ADMITTED",
         "APPROVAL_APPROVED": "APPROVED",
         "APPROVAL_REJECTED": "REJECTED",
         "APPROVAL_NEEDS_CLARIFICATION": "NEEDS_CLARIFICATION",
@@ -7884,6 +7927,7 @@ def do_health():
             "integrity": journal_integrity,
             "business_events": [
                 "APPROVAL_CREATED",
+                "APPROVAL_NOT_ADMITTED",
                 "APPROVAL_APPROVED",
                 "APPROVAL_REJECTED",
                 "APPROVAL_NEEDS_CLARIFICATION",
@@ -8302,6 +8346,9 @@ def reconcile_pending_approvals():
                         "notification_next_retry_at"
                     ] = ""
 
+                    changed = True
+
+                if mark_not_admitted(item):
                     changed = True
 
             #
