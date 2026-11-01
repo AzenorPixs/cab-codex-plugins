@@ -1,3 +1,15 @@
+## 2.1.40 — Reprise protégée des baux de test restaurés
+
+- Formalise et teste le replay exact du POST acquire après redémarrage pour
+  récupérer le jeton du bail existant, sans créer de réservation ni autoriser
+  une commande ; les projections GET restent sans jeton.
+- Quand le jeton et le payload original manquent, une preview filtrée puis une
+  restitution sans effet sont permises uniquement pour un bail restauré
+  inutilisé dans un job armé du même change, après preuve native complète.
+- `reconciliationRequired` reste actif jusqu’à réconciliation native ou
+  restitution sans effet ; toute divergence, activité ou mutation conserve
+  HELD. CAB/CABU, les quatre briques et les commandes passent à 2.1.40.
+
 ## 2.1.39 — Corrélation Code Mode statique
 
 - Le client normalise les commandes littérales en template et une constante

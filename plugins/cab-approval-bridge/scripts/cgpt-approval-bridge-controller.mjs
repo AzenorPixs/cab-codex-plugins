@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.39";
+const version = "2.1.40";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -175,6 +175,16 @@ function activeContexts() {
 }
 function admissionSnapshot(runId) {
   return {state:transitions.has(runId) ? 'BUSY' : 'STABLE',snapshot_only:true};
+}
+function validatedChangeScopeForTestRecovery(runId, context, entry) {
+  const run = registry.runs.get(runId);
+  const job = context.publicJob();
+  const status = context.publicStatus();
+  return Boolean(run && run.state === 'RESERVED' && run.version === entry.version &&
+    run.contextId === entry.contextId && run.sessionId === job?.sessionId &&
+    run.changeId && job?.armed === true && job.changeId === run.changeId &&
+    job.directory === run.directory && !job.currentCabMandate && !job.recovery &&
+    status.undecidedValidationCount === 0 && !context.pendingEffects());
 }
 function publicTestReservations(runId) {
   return registry.testReservations(runId).map(({ token, ...reservation }) => reservation);
@@ -505,7 +515,7 @@ async function proveRestoredApprovalForCancellation(runId, context, access, oper
   }
 }
 // This path verifies provenance and completeness; the orchestrator owns the no-effect review.
-async function verifyUnusedTestHistory(runId, context, entry, payload) {
+async function verifyUnusedTestHistory(runId, context, entry, payload, { previewOnly = false } = {}) {
   const sessionId = registry.runs.get(runId)?.sessionId;
   const quiescent = () => {
     const job = context.publicJob();
@@ -528,7 +538,11 @@ async function verifyUnusedTestHistory(runId, context, entry, payload) {
   const messages = await read();
   const parts = messages.flatMap((message) => message.parts.filter((part) => part.type === 'tool'));
   const proof = { messageCount: messages.length, toolCount: parts.length, historyHash: proofHash(messages) };
-  if (!payload.nativeProof || proofHash(proof) !== proofHash(payload.nativeProof)) throw new CoordinationError('test-unused-history-divergent');
+  if (payload.nativeProof === undefined) {
+    if (!previewOnly) throw new CoordinationError('test-unused-history-divergent');
+  } else if (!payload.nativeProof || proofHash(proof) !== proofHash(payload.nativeProof)) {
+    throw new CoordinationError('test-unused-history-divergent');
+  }
   const ops = registry.unusedTestOperations(entry);
   for (const op of ops) {
     if (op.state === 'CANCELLED' && !op.native) continue;
@@ -890,7 +904,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -955,6 +969,41 @@ async function handleRequest(request, response) {
         const entry = registry.testHeld(runId, payload);
         const proof = await verifyUnusedTestHistory(runId, context, entry, payload);
         json(response, 200, registry.releaseUnusedTests(runId, payload, proof)); return;
+      }
+      if (request.method === 'GET' && url.pathname === '/test-resources/release-unused-preview') {
+        const transactionId = url.searchParams.get('transactionId');
+        if (!transactionId || !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(transactionId)) {
+          throw new CoordinationError('test-transaction-invalid', 400);
+        }
+        const entry = registry.resourceState.testReservations?.[transactionId];
+        const reservation = registry.testReservations(runId).find((item) => item.transactionId === transactionId);
+        const run = registry.runs.get(runId);
+        if (!entry || entry.runId !== runId || !reservation || reservation.state !== 'HELD' ||
+            reservation.reconciliationRequired !== true || !run) {
+          throw new CoordinationError('test-unused-recovery-required');
+        }
+        const previewInput = { version: entry.version, transactionId, fencing: entry.fencing,
+          contextId: entry.contextId, sessionId: run.sessionId, boundaryDigest: registry.unusedTestBoundary(entry) };
+        const nativeProof = await verifyUnusedTestHistory(runId, context, entry, previewInput, { previewOnly: true });
+        const operations = registry.unusedTestOperations(entry).map((op) => ({ operationId: op.operationId,
+          state: op.state, nativeKind: op.native?.kind ?? null, onceAcknowledged: Boolean(op.native?.onceAcknowledged) }));
+        const approvedChangeScope = validatedChangeScopeForTestRecovery(runId, context, entry);
+        json(response, 200, { runId, protocol: TEST_RESOURCE_PROTOCOL, transactionId, state: entry.state,
+          reconciliationRequired: true, version: entry.version, contextId: entry.contextId,
+          sessionId: run.sessionId, fencing: entry.fencing, boundaryDigest: previewInput.boundaryDigest,
+          nativeProof, operations, approvedChangeScope,
+          eligibleForLostTokenRelease: approvedChangeScope, snapshot_only: true }); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/test-resources/release-unused-lost-token') {
+        const replay = registry.unusedTestReplay(runId, payload);
+        if (replay) { json(response, 200, replay); return; }
+        const entry = registry.restoredTestForUnusedRecovery(runId, payload);
+        if (!validatedChangeScopeForTestRecovery(runId, context, entry)) {
+          throw new CoordinationError('test-unused-approved-change-required');
+        }
+        const proof = await verifyUnusedTestHistory(runId, context, entry, payload);
+        json(response, 200, registry.releaseUnusedTests(runId, payload, proof,
+          { lostTokenRecovery: true, validatedChangeScope: true })); return;
       }
       if (request.method === 'POST' && ['/test-resources/release', '/test-resources/reconcile'].includes(url.pathname)) {
         if (url.pathname.endsWith('/reconcile') && registry.resourceState.testReservations?.[payload.transactionId]?.reconciliationReceipts?.[payload.reconciliationId]) {

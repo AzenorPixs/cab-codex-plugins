@@ -469,15 +469,21 @@ test('Le nettoyage exige des opérations natives réussies et ordonnées du cycl
 });
 
 test('Le redémarrage conserve la réservation de test et la réconciliation renouvelle le jeton', async (t) => {
-  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'lease-a');
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);
+  const acquisition={version:a.version,transactionId:'lease-a',resources:[lxcTest],evidence:['canonical environment identity reviewed']};
+  const entry=h.r.acquireTests(a.runId,acquisition);
   finishTestCommand(h,a,'test'); await h.restart();
   assert.equal(h.r.testReservations('a')[0].reconciliationRequired,true);
+  const reacquired=h.r.acquireTests(a.runId,acquisition);
+  assert.equal(reacquired.state,'HELD');assert.equal(reacquired.token,entry.token);assert.equal(reacquired.fencing,entry.fencing);
+  assert.equal(reacquired.reconciliationRequired,true);
   const op=h.prepare(a,'after-crash');
   assert.throws(() => h.acquire(a,op),/test-reconciliation-required/);
-  assert.throws(() => h.r.releaseTests('a',testPayload(a,entry)),/test-reconciliation-required/);
-  const reconciliation=testPayload(a,entry,{reconciliationId:'reconcile-a'});
+  assert.throws(() => h.r.releaseTests('a',testPayload(a,reacquired)),/test-reconciliation-required/);
+  assert.throws(() => h.r.acquireTests(a.runId,{...acquisition,evidence:['divergent evidence']}),/test-transaction-divergent/);
+  const reconciliation=testPayload(a,reacquired,{reconciliationId:'reconcile-a'});
   const restored=h.r.reconcileTests('a',reconciliation);
-  assert.notEqual(restored.token,entry.token);assert.ok(restored.fencing>entry.fencing);
+  assert.notEqual(restored.token,reacquired.token);assert.ok(restored.fencing>reacquired.fencing);
   assert.equal(h.r.reconcileTests('a',reconciliation).token,restored.token);
   assert.throws(() => h.r.releaseTests('a',testPayload(a,entry)),/test-token-invalid/);
   const cleanup=cleanupProof(h,a,'post-restart');
@@ -581,6 +587,32 @@ test('restitution sans effet : reçu durable, FIFO, idempotence et reprise des t
   const restored = await h.restart();
   assert.deepEqual(restored.resourceState.testReservations[entry.transactionId], receipt);
   assert.deepEqual(restored.releaseUnusedTests('a', p, p.nativeProof), receipt);
+});
+
+test('restitution sans effet après restauration : scope armé, token perdu et reçu sans token', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'lost-token-a');
+  await h.restart();
+  const p=unusedPayload(h,a,entry);delete p.token;delete p.developerAuthorization;p.recoveryMode='validated-change-unused';
+  const receipt=h.r.releaseUnusedTests('a',p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true});
+  assert.equal(receipt.state,'RELEASED');
+  assert.equal(receipt.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+  assert.equal(receipt.token,undefined);
+  assert.equal(h.r.resourceState.testReservations[entry.transactionId].token,undefined);
+  assert.equal(h.r.testReservations('a')[0].reconciliationRequired,false);
+  assert.deepEqual(h.r.releaseUnusedTests('a',p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true}),receipt);
+  assert.throws(()=>h.r.releaseUnusedTests('a',{...p,evidence:['divergent']},p.nativeProof,
+    {lostTokenRecovery:true,validatedChangeScope:true}),/test-unused-release-divergent/);
+});
+
+test('restitution sans effet après restauration refuse l’absence de scope validé ou un token résiduel', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'lost-token-negative');
+  await h.restart();
+  const p=unusedPayload(h,a,entry);delete p.token;delete p.developerAuthorization;p.recoveryMode='validated-change-unused';
+  assert.throws(()=>h.r.releaseUnusedTests('a',p,p.nativeProof,{lostTokenRecovery:true}),/test-unused-attestation-required/);
+  assert.throws(()=>h.r.releaseUnusedTests('a',{...p,token:'unexpected'},p.nativeProof,
+    {lostTokenRecovery:true,validatedChangeScope:true}),/test-unused-attestation-required/);
+  assert.equal(h.r.testReservations('a')[0].state,'HELD');
+  assert.equal(h.r.testReservations('a')[0].reconciliationRequired,true);
 });
 
 test('restitution sans effet : diagnostic terminé exit1 reste un échec, sans nettoyage fictif', async (t) => {
