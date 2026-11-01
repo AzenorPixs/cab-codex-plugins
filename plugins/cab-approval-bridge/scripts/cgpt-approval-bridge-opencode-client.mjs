@@ -5,10 +5,14 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.45';
+export const VERSION = '2.1.46';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
+const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
+const SOURCE_FILE_MAX_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
+const EXCLUDED_SOURCE_DIRS = new Set(['.git', '.opencode', '.cache', '.idea', '.mypy_cache', '.npm',
+  '.pytest_cache', '.ruff_cache', '.venv', '.vscode', '__pycache__', 'env', 'logs', 'node_modules', 'tmp', 'venv']);
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 
 function envValue(name) {
@@ -45,6 +49,44 @@ function readResponse(response, limit = RESPONSE_LIMIT) {
     }
     return Buffer.concat(chunks, size).toString('utf8');
   })();
+}
+
+async function readResponseBytes(response, limit) {
+  if (!response.body) fail('opencode-response-empty');
+  const reader = response.body.getReader();
+  const chunks = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) {
+        await reader.cancel();
+        fail('opencode-response-too-large');
+      }
+      chunks.push(Buffer.from(value));
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  return Buffer.concat(chunks, size);
+}
+
+function sourcePath(value, { allowRoot = false } = {}) {
+  if (typeof value !== 'string' || value.includes('\\') || value.includes('\0') || value.includes('..') || value.length > 1024 ||
+      isAbsolute(value) || (!value && !allowRoot)) fail('opencode-source-path-invalid');
+  if (!value && allowRoot) return '';
+  const segments = value.split('/');
+  if (segments.some(segment => !segment || segment === '.' || segment === '..')) fail('opencode-source-path-invalid');
+  const name = segments.at(-1);
+  if (segments.some(segment => EXCLUDED_SOURCE_DIRS.has(segment)) ||
+      /(?:^|\/)\.env(?:\..*)?$/i.test(value) || /(?:^|\/)[^/]+\.env(?:\..*)?$/i.test(value) ||
+      /(?:^|\/)(?:credentials|secrets)\.(?:json|ya?ml)$/i.test(value) ||
+      /(?:^|\/)(?:id_rsa|id_ed25519)$/i.test(value) || /\.(?:crt|cer|der|key|pem|p12|pfx)$/i.test(name)) {
+    fail('opencode-source-path-excluded');
+  }
+  return value;
 }
 
 async function readPassword(path) {
@@ -522,8 +564,9 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   async function request(path, { method = 'GET', query = {}, body, accept = 'application/json', timeout = timeoutMs,
-    maxResponseBytes = RESPONSE_LIMIT, scoped = true } = {}, schemaRead = false) {
+    maxResponseBytes = RESPONSE_LIMIT, scoped = true, locationDirectory, responseMode = 'json' } = {}, schemaRead = false) {
     if (!Number.isSafeInteger(maxResponseBytes) || maxResponseBytes <= 0) fail('opencode-response-limit-invalid');
+    if (!['json', 'binary'].includes(responseMode)) fail('opencode-response-mode-invalid');
     if (typeof path !== 'string' || (!path.startsWith('/api/') &&
         !(schemaRead && method === 'GET' && path === '/openapi.json')) || path.startsWith('//') || path.includes('..')) {
       fail('opencode-v2-route-invalid');
@@ -534,10 +577,10 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       if (value !== undefined && value !== null) url.searchParams.set(key, String(value));
     }
     const headers = { accept, authorization: await authorization() };
-    const locationDirectory = query.directory ?? directory;
-    if (scoped && locationDirectory !== undefined) {
-      if (typeof locationDirectory !== 'string' || !isAbsolute(locationDirectory)) fail('opencode-location-invalid');
-      headers['x-opencode-directory'] = locationDirectory;
+    const scopedDirectory = locationDirectory ?? query.directory ?? directory;
+    if (scoped && scopedDirectory !== undefined) {
+      if (typeof scopedDirectory !== 'string' || !isAbsolute(scopedDirectory)) fail('opencode-location-invalid');
+      headers['x-opencode-directory'] = scopedDirectory;
     }
     if (body !== undefined) headers['content-type'] = 'application/json';
     let response;
@@ -550,6 +593,17 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     if (response.status === 401) { await response.body?.cancel(); fail('opencode-auth-required'); }
     if (response.status === 204) return { status: 204, data: null };
     const type = response.headers.get('content-type') || '';
+    if (!response.ok) {
+      await response.body?.cancel();
+      fail(`opencode-http-${response.status}`);
+    }
+    if (responseMode === 'binary') {
+      if (!type.toLowerCase().includes('application/octet-stream')) {
+        await response.body?.cancel();
+        fail('opencode-source-response-invalid');
+      }
+      return { status: response.status, data: await readResponseBytes(response, maxResponseBytes) };
+    }
     if (!type.toLowerCase().includes('application/json')) {
       await response.body?.cancel();
       fail('opencode-v2-response-invalid');
@@ -557,7 +611,6 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     const text = await readResponse(response, maxResponseBytes);
     let payload;
     try { payload = JSON.parse(text); } catch { fail('opencode-v2-response-invalid'); }
-    if (!response.ok) fail(`opencode-http-${response.status}`);
     return { status: response.status, data: payload };
   }
 
@@ -646,6 +699,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
 
   async function session(sessionId, directoryValue = directory) {
     if (typeof sessionId !== 'string' || !sessionId) fail('opencode-session-id-invalid');
+    if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     const response = await json(`/api/session/${encodeURIComponent(sessionId)}`);
     const value = unwrapData(response, 'opencode-session-invalid');
     const normalized = normalizeSession(value);
@@ -666,6 +720,83 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   async function sessionStatus(directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     return activeSessions();
+  }
+
+  async function sourceIdentity(sessionId, directoryValue) {
+    if (typeof sessionId !== 'string' || !/^ses_[A-Za-z0-9_.-]{1,100}$/.test(sessionId) ||
+        typeof directoryValue !== 'string' || !isAbsolute(directoryValue) || resolve(directoryValue) === '/') {
+      fail('opencode-source-scope-invalid');
+    }
+    const initial = await info(true);
+    const sessionResponse = await json(`/api/session/${encodeURIComponent(sessionId)}`, { locationDirectory: directoryValue });
+    const observed = normalizeSession(unwrapData(sessionResponse, 'opencode-session-invalid'));
+    if (observed.id !== sessionId || observed.directory !== directoryValue) fail('opencode-session-divergent');
+    return initial;
+  }
+
+  async function verifySourceIdentity(sessionId, directoryValue, initial) {
+    const final = await info(true);
+    const sessionResponse = await json(`/api/session/${encodeURIComponent(sessionId)}`, { locationDirectory: directoryValue });
+    const observed = normalizeSession(unwrapData(sessionResponse, 'opencode-session-invalid'));
+    if (initial.pid !== final.pid || initial.version !== final.version ||
+        observed.id !== sessionId || observed.directory !== directoryValue) fail('opencode-source-identity-changed');
+  }
+
+  function sourceEntries(value, directoryValue) {
+    if (!record(value) || !record(value.location) || value.location.directory !== directoryValue || !Array.isArray(value.data)) {
+      fail('opencode-source-list-invalid');
+    }
+    return value.data.flatMap(entry => {
+      if (!record(entry) || typeof entry.path !== 'string' || !['file', 'directory'].includes(entry.type)) {
+        fail('opencode-source-list-invalid');
+      }
+      try {
+        return [{ path: sourcePath(entry.path), type: entry.type }];
+      } catch (cause) {
+        if (cause?.code === 'opencode-source-path-excluded') return [];
+        throw cause;
+      }
+    });
+  }
+
+  async function sourceList(sessionId, relativeDirectory = '', { directory: directoryValue = directory } = {}) {
+    const path = sourcePath(relativeDirectory, { allowRoot: true });
+    const initial = await sourceIdentity(sessionId, directoryValue);
+    const result = await json('/api/fs/list', { query: {
+      'location[directory]': directoryValue, ...(path ? { path } : {}) },
+      locationDirectory: directoryValue, maxResponseBytes: RESPONSE_LIMIT });
+    const entries = sourceEntries(result, directoryValue);
+    await verifySourceIdentity(sessionId, directoryValue, initial);
+    return { sessionId, directory: directoryValue, path, source: 'opencode-v2-fs-list', snapshot_only: true, entries };
+  }
+
+  async function sourceFind(sessionId, query, { directory: directoryValue = directory, type, limit = 100 } = {}) {
+    if (typeof query !== 'string' || !query.trim() || query.length > 200 ||
+        (type !== undefined && !['file', 'directory'].includes(type)) ||
+        !Number.isSafeInteger(limit) || limit < 1 || limit > 200) fail('opencode-source-find-invalid');
+    const initial = await sourceIdentity(sessionId, directoryValue);
+    const result = await json('/api/fs/find', { query: {
+      'location[directory]': directoryValue, query: query.trim(), ...(type ? { type } : {}), limit: String(limit) },
+      locationDirectory: directoryValue, maxResponseBytes: RESPONSE_LIMIT });
+    const entries = sourceEntries(result, directoryValue);
+    await verifySourceIdentity(sessionId, directoryValue, initial);
+    return { sessionId, directory: directoryValue, query: query.trim(), source: 'opencode-v2-fs-find', snapshot_only: true, entries };
+  }
+
+  async function sourceRead(sessionId, relativePath, { directory: directoryValue = directory,
+    maxBytes = SOURCE_FILE_DEFAULT_LIMIT } = {}) {
+    const path = sourcePath(relativePath);
+    if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > SOURCE_FILE_MAX_LIMIT) fail('opencode-source-size-invalid');
+    const initial = await sourceIdentity(sessionId, directoryValue);
+    const encoded = path.split('/').map(segment => encodeURIComponent(segment)).join('/');
+    const response = await request(`/api/fs/read/${encoded}`, { query: { 'location[directory]': directoryValue },
+      locationDirectory: directoryValue, accept: 'application/octet-stream', responseMode: 'binary', maxResponseBytes: maxBytes });
+    let content;
+    try { content = new TextDecoder('utf-8', { fatal: true }).decode(response.data); }
+    catch { fail('opencode-source-encoding-invalid'); }
+    await verifySourceIdentity(sessionId, directoryValue, initial);
+    return { sessionId, directory: directoryValue, path, content, byteLength: response.data.byteLength,
+      sha256: createHash('sha256').update(response.data).digest('hex'), source: 'opencode-v2-fs-read', snapshot_only: true };
   }
 
   async function messages(sessionId, directoryValue = directory) {
@@ -1033,6 +1164,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions,
+    sourceRead, sourceList, sourceFind,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,
     replyPermission, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy, events, request: json });

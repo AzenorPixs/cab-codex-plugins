@@ -8,7 +8,7 @@
 
 ## Archivage et livraison
 
-- [ ] Archiver le change et produire un `STATISTICS.md` vérifié.
-- [ ] Committer et publier sous SCM.
-- [ ] Exécuter CABU 2.1.45 et vérifier les versions et états runtime.
-- [ ] Vérifier que le même approval 03 devient `NOT_ADMITTED`, sans décision, et libère le RUN pour une nouvelle demande à révisions courantes.
+- [x] Archiver le change et produire un `STATISTICS.md` vérifié.
+- [x] Committer et publier CAB 2.1.45 sous SCM.
+- [x] Exécuter CABU 2.1.45 et vérifier les versions et états runtime.
+- [x] Vérifier que le même approval 03 devient `NOT_ADMITTED`, sans décision, et libère le RUN pour une nouvelle demande à révisions courantes.

@@ -1,3 +1,10 @@
+## 2.1.46 — Accès source read-only via OpenCode V2
+
+- Le contrôleur expose la lecture, la liste et la recherche de chemins via les routes filesystem OpenCode V2, bornées au RUN, à sa session et à sa location.
+- Les chemins absolus, traversées, sources exclues, sessions occupées/divergentes et réponses excessives sont refusés ; aucune permission, commande ou écriture n’est créée.
+- Le helper source-read local restitue un snapshot vérifiable ; les outils natifs absents ne sont pas remplacés par shell/execute dans la session de codage.
+- CAB/CABU, les quatre briques et les commandes passent à 2.1.46.
+
 ## 2.1.45 — Refus d’admission terminal sans décision
 
 - Un HTTP 400/409 déterministe du contrôleur ferme l’approval en `NOT_ADMITTED`, distinct de `REJECTED` et sans `decision_id`, accès ou permission.

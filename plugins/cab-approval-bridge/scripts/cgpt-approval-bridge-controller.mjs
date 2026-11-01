@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.45";
+const version = "2.1.46";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -986,6 +986,58 @@ async function handleRequest(request, response) {
         transitionRun = runId;
       }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      const sourceReadRoute = request.method === 'GET' && /^\/source\/(read|list|find)$/.exec(url.pathname);
+      if (sourceReadRoute) {
+        if (transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
+        registry.admission(runId);
+        const operation = sourceReadRoute[1], job = context.publicJob();
+        if (!job?.armed || job.sessionId !== run.sessionId || job.directory !== run.directory ||
+            !context.sessions().includes(run.sessionId) || job.currentCabMandate || job.recovery ||
+            job.modelTransition || context.pendingEffects() || context.publicStatus().undecidedValidationCount) {
+          throw new CoordinationError('source-read-run-not-quiescent');
+        }
+        const [activeSessions, permissions] = await Promise.all([
+          openCode.sessionStatus(run.directory), openCode.permissions(run.directory, { sessionIds: [run.sessionId] }),
+        ]);
+        if (activeSessions[run.sessionId]?.type !== undefined || permissions.some(permission => permission.sessionID === run.sessionId)) {
+          throw new CoordinationError('source-read-native-session-busy');
+        }
+        const initialVersion = run.version;
+        let result;
+        try {
+          if (operation === 'read') {
+            if (url.searchParams.getAll('path').length !== 1 || [...url.searchParams.keys()].some(key => key !== 'path')) {
+              throw new CoordinationError('source-read-request-invalid', 400);
+            }
+            result = await openCode.sourceRead(run.sessionId, url.searchParams.get('path'), { directory: run.directory });
+          } else if (operation === 'list') {
+            if (url.searchParams.getAll('path').length > 1 || [...url.searchParams.keys()].some(key => key !== 'path')) {
+              throw new CoordinationError('source-read-request-invalid', 400);
+            }
+            result = await openCode.sourceList(run.sessionId, url.searchParams.get('path') || '', { directory: run.directory });
+          } else {
+            const queries = url.searchParams.getAll('query'), types = url.searchParams.getAll('type'), limits = url.searchParams.getAll('limit');
+            if (queries.length !== 1 || types.length > 1 || limits.length > 1 ||
+                [...url.searchParams.keys()].some(key => !['query', 'type', 'limit'].includes(key))) {
+              throw new CoordinationError('source-read-request-invalid', 400);
+            }
+            result = await openCode.sourceFind(run.sessionId, queries[0], { directory: run.directory,
+              ...(types.length ? { type: types[0] } : {}), ...(limits.length ? { limit: Number(limits[0]) } : {}) });
+          }
+        } catch (cause) {
+          if (/^opencode-source-(?:path|find|size|scope)-/.test(cause?.code || '')) {
+            throw new CoordinationError(cause.code, 400);
+          }
+          throw cause;
+        }
+        if (transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
+        registry.admission(runId);
+        const current = registry.runs.get(runId), currentJob = context.publicJob();
+        if (!current || current.version !== initialVersion || current.sessionId !== run.sessionId ||
+            current.directory !== run.directory || currentJob?.sessionId !== run.sessionId ||
+            currentJob?.directory !== run.directory) throw new CoordinationError('source-read-run-changed');
+        json(response, 200, { ...result, runId, reservationVersion: initialVersion }); return;
+      }
       if(request.method==='POST' && url.pathname==='/shell-stage') {
         registry.admission(runId);
         const job=context.publicJob();
