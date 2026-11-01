@@ -52,10 +52,11 @@ Le change étend la récupération d’un bail de test inutilisé après compact
 | Suite Node complète | 681 | 0 | 31 | 712 | 95,6 % |
 | Suite Python | 83 | 0 | 0 | 83 | 100 % |
 | `openspec validate --all --strict` | 17 | 0 | 0 | 17 | 100 % |
+| `openspec validate --archived --strict` | 114 | 0 | 0 | 114 | 100 % |
 | Tests ciblés compaction ledger-only et refus natif | 2 | 0 | 0 | 2 | 100 % |
 | `git diff --check` | N/A | 0 | 0 | N/A | N/A |
 
-Les 113 archives précédentes passent la validation stricte. Au présent relevé, publication SCM et CABU 2.1.42 restent à faire ; les tâches de livraison ne sont pas déclarées terminées.
+Le code source est publié sur `main` dans le commit `4cca176203e209d9306320efb03534ff32d09cef`. CABU 2.1.42 a terminé ; le contrôleur, superviseur, monitor et broker sont en version 2.1.42 et les trois services sont actifs.
 
 ## 5. Accès web
 
@@ -69,4 +70,4 @@ Aucune recherche web n’a été effectuée. Aucun appel d’API de recherche n�
 | Après | N/A — outil de quota non interrogé pour ce change | N/A | N/A |
 | Différence | — | N/A | — |
 
-Bilan au 2026-11-01 18:01 Europe/Paris : 681/712 tests Node passent (31 ignorés, aucun échec), Python passe 83/83 et OpenSpec strict passe 17/17. Le change est archivé ; son commit source et l’activation CABU 2.1.42 restent à accomplir. Aucun secret n’a été lu ou rapporté.
+Bilan au 2026-11-01 18:05 Europe/Paris : 681/712 tests Node passent (31 ignorés, aucun échec), Python passe 83/83, OpenSpec strict passe 17/17 et les 114 archives passent leur validation stricte. Le change est publié et CABU 2.1.42 a terminé ; ses quatre versions et l’état actif des trois services sont vérifiés. Aucun secret n’a été lu ou rapporté.
