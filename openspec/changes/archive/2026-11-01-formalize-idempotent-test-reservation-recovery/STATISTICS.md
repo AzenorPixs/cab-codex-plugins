@@ -52,6 +52,7 @@ Le change formalise la récupération par réacquisition POST exacte et ajoute u
 | Suite Node complète | 674 | 0 | 31 | 705 | 95,6 % |
 | Tests Python | 83 | 0 | 0 | 83 | 100 % |
 | OpenSpec strict avant archivage | 17 | 0 | 0 | 17 | 100 % |
+| OpenSpec `validate --all --strict` final | 16 | 0 | 0 | 16 | 100 % |
 | Compilation Python des modules versionnés | N/A | 0 | 0 | N/A | N/A |
 | Contrôle `git diff --check` | N/A | 0 | 0 | N/A | N/A |
 
@@ -77,4 +78,4 @@ Aucune navigation web ni recherche web n'a été effectuée. L'API GitHub a serv
 
 Le quota est partagé par le compte ; la valeur observée après archivage peut inclure d'autres tâches et n'est pas attribuée à ce change.
 
-Bilan : 674/705 tests Node passent (31 ignorés, aucun échec), Python passe 83/83, et le change OpenSpec est présent avec son rapport post-archivage. Au relevé, commit/publication SCM et CABU 2.1.40 restent à exécuter. Aucun secret n'a été lu ou rapporté.
+Bilan : 674/705 tests Node passent (31 ignorés, aucun échec), Python passe 83/83, et les 16 spécifications OpenSpec passent en validation stricte. Le change a été publié dans `AzenorPixs/cab-codex-plugins` sur `main` (commit `0194a7a8316a30b66d8b0a5bad30be4d1870dafa`, arbre identique au checkout). CABU 2.1.40 est actif : contrôleur, superviseur, monitor et broker observés en 2.1.40 ; les trois services systemd sont actifs. Vérification des versions : 2026-11-01 17:03 Europe/Paris. Aucun secret n'a été lu ou rapporté.
