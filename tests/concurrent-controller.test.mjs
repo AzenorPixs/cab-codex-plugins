@@ -1154,7 +1154,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.41');
+  assert.equal(initialized.result.serverInfo.version, '2.1.42');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -2066,7 +2066,7 @@ async function unusedHttpPayload(h, run, lease) {
     attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:ops.map((op)=>
       ({operationId:op.operationId,classification:op.state==='CANCELLED'?'cancelled-without-execution':'read-only-no-effect'}))},
     nativeProof:{messageCount:messages.length,toolCount:messages.flatMap(m=>m.parts.filter(p=>p.type==='tool')).length,
-      historyHash:proofHash(messages),operationClassifications:ops.map((op)=>({operationId:op.operationId,
+      historyHash:proofHash(messages),coverage:'complete-native-transcript',operationClassifications:ops.map((op)=>({operationId:op.operationId,
         classification:op.state==='CANCELLED'?'cancelled-without-execution':'read-only-no-effect'}))}};
 }
 async function unusedHttpLease(h, run, transactionId='unused-http') {
@@ -2165,6 +2165,54 @@ test('release-unused lost-token HTTP : validation rejetée et wrappers CAB compl
   const released=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
   assert.equal(released.status,200,JSON.stringify(released));assert.equal(released.body.state,'RELEASED');
   assert.equal(released.body.token,undefined);assert.equal(released.body.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+});
+
+test('release-unused lost-token HTTP : registre durable prouve un bail inutilisé après compaction',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/106',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'lost-token-compacted-a',
+    resources,evidence:['instance canonique']})).body;
+  const approval=h.approval(a,'rejected-before-compaction');
+  assert.equal((await h.post('/runs/a/validation/request',{approval})).status,202);
+  assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,201);
+  const requestPart=h.native.messages[a.sessionId].flatMap(message=>message.parts||[])
+    .find(part=>part.tool==='cgpt-validation_request_validation');
+  requestPart.state.status='completed';requestPart.state.time={start:Date.now()-5,end:Date.now()-4};
+  h.native.messages[a.sessionId].push({info:{id:'msg-rejection-before-compaction',sessionID:a.sessionId,role:'assistant',
+    time:{created:Date.now()}},parts:[{type:'tool',tool:'cgpt-validation_reject',state:{status:'completed',
+      input:{approval_id:approval.approval_id},time:{start:Date.now()-3,end:Date.now()-2}}}]});
+  h.native.messages[a.sessionId].push({nativeV2:{id:'msg-compaction-after-lease',type:'compaction',
+    time:{created:Date.now()},metadata:{},content:[]}});
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.blockerCode,null);
+  assert.equal(preview.body.eligibleForLostTokenRelease,true);
+  assert.equal(preview.body.nativeProof.coverage,'operation-ledger-after-compaction');
+  const payload={version:preview.body.version,transactionId:lease.transactionId,recoveryMode:'validated-change-unused',
+    fencing:preview.body.fencing,contextId:preview.body.contextId,sessionId:preview.body.sessionId,
+    boundaryDigest:preview.body.boundaryDigest,nativeProof:preview.body.nativeProof,evidence:['bail sans effet'],
+    attestation:{noEnvironmentMutation:true,noMutatingMandate:true,operations:preview.body.operations.map(op=>
+      ({operationId:op.operationId,classification:op.classification}))}};
+  const result=await h.post('/runs/a/test-resources/release-unused-lost-token',payload);
+  assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'RELEASED');
+  assert.equal(result.body.token,undefined);assert.equal(result.body.unusedReleaseReceipt.nativeProof.coverage,
+    'operation-ledger-after-compaction');
+});
+
+test('release-unused lost-token HTTP : compaction ne masque jamais une opération native commencée',async(t)=>{
+  const h=await setup(t);const resources=[{key:'lxc:host-a/107',mode:'write'}];
+  const a=await h.reserve('a',{resources});
+  const lease=(await h.post('/runs/a/test-resources/acquire',{version:a.version,transactionId:'used-token-compacted-a',
+    resources,evidence:['instance canonique']})).body;
+  const op=await h.approvedAccess(a,'command-under-test');await h.execute(op.approval);await h.completeTool(op.approval,0);
+  assert.equal((await h.releaseOperation(a,op.approval,op.access)).status,200);
+  h.native.messages[a.sessionId].push({nativeV2:{id:'msg-compaction-after-command',type:'compaction',
+    time:{created:Date.now()},metadata:{},content:[]}});
+  await h.stop();await h.start();
+  const preview=await h.get('/runs/a/test-resources/release-unused-preview?transactionId='+lease.transactionId);
+  assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.eligibleForLostTokenRelease,false);
+  assert.equal(preview.body.nativeProof,null);assert.equal(preview.body.blockerCode,'test-unused-history-incomplete');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations.find(x=>x.transactionId===lease.transactionId).state,'HELD');
 });
 
 test('release-unused lost-token HTTP refuse sans job armé dans le change',async(t)=>{

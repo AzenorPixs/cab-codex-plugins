@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-01
+goal: Allow tokenless recovery after post-acquisition compaction only when every
+  relevant operation is durably resolved without native start, accesses, or
+  permissions; keep all unknown effects blocked.

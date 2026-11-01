@@ -1,4 +1,4 @@
-# Reprise des incidents de codage natif — CAB 2.1.41
+# Reprise des incidents de codage natif — CAB 2.1.42
 
 ## Prévol avant récupération d'une session adossée à un RUN
 
