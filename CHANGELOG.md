@@ -1,3 +1,10 @@
+## 2.1.58 — Corrélation des CodeMode bruts terminés
+
+- Le contrôleur corrèle aussi un `request_validation` CodeMode dynamique non normalisé lorsque son transcript natif complet atteste l'appel terminé et son identité exacte.
+- La voie reste bornée à un appel final unique, éventuellement précédé d'une recherche achevée ; troncature, appel supplémentaire et divergence restent refusés.
+- La documentation précise que `execute` est l'hôte Code Mode des méthodes MCP découvertes et ne constitue pas un contournement des permissions.
+- Aucune décision, permission ou `once` n'est créé ; CAB/CABU et les composants partagent la version 2.1.58.
+
 ## 2.1.57 — Fixture natif de recovery CodeMode conforme au prévol
 
 - Le scénario natif découvre désormais la signature `request_validation` avant `prepare`, conformément aux gardes CAB existantes.

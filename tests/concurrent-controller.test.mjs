@@ -1107,6 +1107,14 @@ function rawCodeModeValidationFailure(id,input,calls) {
   metadata:{error:true,truncated:false,toolCalls:structuredClone(calls)}}};
 }
 
+function rawCodeModeValidationCompleted(id,calls) {
+ return {type:'tool',id:'execute-'+id,name:'execute',tool:'execute',executed:false,time:{created:Date.now()},state:{status:'completed',
+  input:{code:'const payload=runtimeInput; return await tools["cgpt-validation"].request_validation(payload);'},
+  output:'NOT_ADMITTED/native-validation-not-correlated',time:{start:Date.now(),end:Date.now()+1},
+  metadata:{truncated:false,toolCalls:structuredClone(calls)}}};
+}
+
+
 test('request_validation Code Mode en erreur native garde la corrélation exacte sans créer de permission',async t=>{
  const h=await setup(t);const run=await h.reserve('codemode-error');const approval=h.approval(run,'codemode-error');
  approval.commands=[];approval.files=['src/codemode-error.py'];
@@ -1153,6 +1161,39 @@ test('request_validation Code Mode brut refuse les appels supplémentaires et le
   if(variant==='truncated')metadata={...metadata,truncated:true};
   h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationFailure(approval.requestId,approval,calls)];
   h.native.messages[run.sessionId].at(-1).parts[0].state.metadata=metadata;
+  const response=await h.post('/validation/request',{approval});
+  assert.equal(response.status,409,variant+': '+JSON.stringify(response));
+  assert.equal(response.body.error,'native-validation-not-correlated');
+  assert.equal(h.native.replies.length,0);
+ }
+});
+
+test('request_validation Code Mode brut terminé est corrélé par l’input exact sans permission',async t=>{
+ const h=await setup(t);const run=await h.reserve('codemode-raw-completed');const approval=h.approval(run,'codemode-raw-completed');
+ approval.commands=[];approval.files=['src/codemode-raw-completed.py'];
+ h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,[
+  {tool:'search',status:'completed',input:{query:'request_validation',namespace:'cgpt-validation'}},
+  {tool:'cgpt-validation.request_validation',status:'completed',input:approval}
+ ])];
+ const response=await h.post('/validation/request',{approval});
+ assert.equal(response.status,202,JSON.stringify(response));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,1);
+ assert.equal(h.native.replies.length,0);
+});
+
+test('request_validation Code Mode brut terminé refuse les métadonnées non exactes',async t=>{
+ for(const variant of ['extra-tool','divergent-input','truncated','call-status']){
+  const h=await setup(t);const run=await h.reserve('codemode-raw-done-'+variant);const approval=h.approval(run,'codemode-raw-done-'+variant);
+  let calls=[{tool:'cgpt-validation.request_validation',status:'completed',input:approval}];
+  if(variant==='extra-tool')calls=[{tool:'bash',status:'completed',input:{command:'true'}},...calls];
+  if(variant==='divergent-input')calls=[{...calls[0],input:{...approval,files:['src/foreign.py']}}];
+  if(variant==='truncated'){
+   h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
+   h.native.messages[run.sessionId].at(-1).parts[0].state.metadata.truncated=true;
+  }else if(variant==='call-status'){
+   calls=[{...calls[0],status:'error'}];
+   h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
+  }else h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
   const response=await h.post('/validation/request',{approval});
   assert.equal(response.status,409,variant+': '+JSON.stringify(response));
   assert.equal(response.body.error,'native-validation-not-correlated');
@@ -1318,7 +1359,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.57');
+  assert.equal(initialized.result.serverInfo.version, '2.1.58');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
