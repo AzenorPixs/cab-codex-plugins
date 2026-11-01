@@ -1,3 +1,14 @@
+## 2.1.38 — Réconciliation sûre d’une discovery héritée
+
+- `complete` reconnaît dans une recovery RUN historique non signée au plus
+  une discovery native `request_validation` exacte, complète, non tronquée,
+  horodatée et read-only, quelle que soit sa position dans le transcript.
+- Les preuves d’approbation, once consommée, commande exacte exit 0 et
+  readiness finale restent obligatoires ; aucune demande ou permission n’est
+  rejouée. Les recoveries signées et les preuves dupliquées ou invalides
+  restent refusées.
+- CAB/CABU, les quatre briques et les commandes partagent la version 2.1.38.
+
 ## 2.1.37 — Prévol natif borné pour la récupération
 
 - `prepare` exige désormais la découverte littérale et scellée de `request_validation` avant le gel, ainsi que `shell: ask` et `edit: ask` sur la candidate.
