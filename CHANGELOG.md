@@ -1,3 +1,14 @@
+## 2.1.41 — Réconcilier les validations rejetées lors d’un bail de test inutilisé
+
+- La récupération tokenless reconnaît un rejet natif corrélé uniquement sans
+  permission ni accès associé ; les validations approuvées ou incertaines restent bloquantes.
+- Les wrappers Code Mode sont classés sans effet seulement à partir de
+  métadonnées natives complètes et d’une liste fermée d’outils CAB ; méthode
+  inconnue, commande ou troncature conservent HELD.
+- La preview GET fournit un code de blocage et les états d’opération filtrés,
+  sans argument, sortie native ni jeton.
+- CAB/CABU, les quatre briques et les commandes passent à 2.1.41.
+
 ## 2.1.40 — Reprise protégée des baux de test restaurés
 
 - Formalise et teste le replay exact du POST acquire après redémarrage pour

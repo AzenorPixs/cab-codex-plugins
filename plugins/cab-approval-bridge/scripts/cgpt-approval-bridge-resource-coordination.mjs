@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.40';
+export const VERSION = '2.1.41';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -33,9 +33,15 @@ function evidence(value) {
   }
 }
 function validUnusedNativeProof(proof) {
-  return onlyKeys(proof, ['messageCount','toolCount','historyHash']) &&
-    Number.isSafeInteger(proof.messageCount) && proof.messageCount >= 0 &&
-    Number.isSafeInteger(proof.toolCount) && proof.toolCount >= 0 && hash(proof.historyHash);
+  if (!onlyKeys(proof, ['messageCount','toolCount','historyHash','operationClassifications']) ||
+      !Number.isSafeInteger(proof.messageCount) || proof.messageCount < 0 ||
+      !Number.isSafeInteger(proof.toolCount) || proof.toolCount < 0 || !hash(proof.historyHash)) return false;
+  if (proof.operationClassifications === undefined) return true;
+  const allowed = new Set(['cancelled-without-execution','rejected-validation-no-native-effect','cancelled-validation-no-native-effect','read-only-no-effect']);
+  return Array.isArray(proof.operationClassifications) &&
+    new Set(proof.operationClassifications.map((item) => item?.operationId)).size === proof.operationClassifications.length &&
+    proof.operationClassifications.every((item) => onlyKeys(item,['operationId','classification']) &&
+      id(item.operationId) && allowed.has(item.classification));
 }
 function emptyState() {
   return { protocol: COORDINATION_PROTOCOL, sequence: 0, revisions: {}, operations: {}, accesses: {},
@@ -365,6 +371,26 @@ export class ResourceRunRegistry extends RunRegistry {
       op.contextId === entry.contextId && (op.testReservationId === entry.transactionId ||
         Date.parse(op.preparedAt) >= Date.parse(entry.grantedAt))).sort((a, b) => a.operationId.localeCompare(b.operationId));
   }
+  isRejectionOnlyOperation(op) {
+    const owner = this.requestOwners[op?.requestId];
+    const receipt = owner?.reconciliation;
+    return Boolean(op && op.rejectionOnly === true && op.state === 'PREPARED' && !op.native &&
+      owner?.runId === op.runId && receipt?.outcome === 'REJECTION_ONLY' && receipt.recoveryId === null &&
+      receipt.operationId === op.operationId && receipt.contextId === op.contextId &&
+      receipt.version === op.version && receipt.sessionId === op.sessionId &&
+      !Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId ||
+        access.operationIds.includes(op.operationId)));
+  }
+  unusedTestOperationClassification(op, decision = null) {
+    if (op.state === 'CANCELLED' && !op.native) return 'cancelled-without-execution';
+    if (this.isRejectionOnlyOperation(op)) return 'rejected-validation-no-native-effect';
+    if (op.state === 'PREPARED' && !op.native && decision === 'rejected') return 'rejected-validation-no-native-effect';
+    if (op.state === 'PREPARED' && !op.native && decision === 'cancelled') return 'cancelled-validation-no-native-effect';
+    if (op.state === 'COMPLETED' && op.native?.onceAcknowledged && op.native.kind === 'bash') {
+      return 'read-only-no-effect';
+    }
+    return null;
+  }
   unusedTestBoundary(entry) {
     return digest({ entry, run: this.runs.get(entry.runId),
       operations: Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId),
@@ -426,15 +452,19 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('test-unused-boundary-stale');
     }
     const ops = this.unusedTestOperations(entry);
+    const proofClassifications = new Map((payload.nativeProof.operationClassifications || []).map((item) =>
+      [item.operationId, item.classification]));
+    if (proofClassifications.size !== ops.length || ops.some((op) =>
+        !proofClassifications.has(op.operationId))) throw new CoordinationError('test-unused-operations-divergent');
     if (attestation.operations.length !== ops.length || new Set(attestation.operations.map((op) => op?.operationId)).size !== ops.length) {
       throw new CoordinationError('test-unused-operations-divergent');
     }
     for (const op of ops) {
       const review = attestation.operations.find((review) => review?.operationId === op.operationId);
       if (!onlyKeys(review, ['operationId','classification']) ||
-          (op.state === 'CANCELLED' && !op.native ? review.classification !== 'cancelled-without-execution' :
-            op.state !== 'COMPLETED' || op.native?.kind !== 'bash' || !op.native.onceAcknowledged ||
-            review.classification !== 'read-only-no-effect')) {
+          review.classification !== proofClassifications.get(op.operationId) ||
+          review.classification !== this.unusedTestOperationClassification(op, proofClassifications.get(op.operationId) === 'rejected-validation-no-native-effect' ? 'rejected' :
+            proofClassifications.get(op.operationId) === 'cancelled-validation-no-native-effect' ? 'cancelled' : null)) {
         throw new CoordinationError('test-unused-operation-not-proved');
       }
     }

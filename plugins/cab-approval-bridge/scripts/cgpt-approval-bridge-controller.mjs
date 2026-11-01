@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.40";
+const version = "2.1.41";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -408,6 +408,60 @@ function nativePartProof(operation, part, sessionId) {
     finishedAt: state.time.end, status: state.status,
     exit: Number.isInteger(state.metadata?.exit) ? state.metadata.exit : null };
 }
+const noEnvironmentMcpTools = new Set(['cgpt-validation.request_validation', 'cgpt-validation.poll_approval',
+  'cgpt-validation.get_approval', 'cgpt-validation.reject', 'cgpt-validation.list_pending',
+  'cgpt-validation.cancel_approval', 'cgpt-validation.broker_readiness', 'cgpt-validation.broker_health']);
+function nativeNoEnvironmentObservation(part) {
+  const status = part?.state?.status;
+  if (part?.type !== 'tool' || !['completed', 'error'].includes(status)) return false;
+  if (['cgpt-validation_request_validation', 'cgpt-validation_poll_approval', 'cgpt-validation_get_approval',
+    'cgpt-validation_reject', 'cgpt-validation_list_pending', 'cgpt-validation_cancel_approval',
+    'cgpt-validation_broker_readiness', 'cgpt-validation_broker_health'].includes(part.tool)) return true;
+  if (part.tool !== 'execute' || part.executed !== false || typeof part.state.input?.code !== 'string' ||
+      part.state.metadata?.truncated !== false) return false;
+  const calls = part.state.metadata.toolCalls;
+  if (calls === undefined) return true;
+  return Array.isArray(calls) && calls.every((call) => call && noEnvironmentMcpTools.has(call.tool) &&
+    ['completed', 'error'].includes(call.status));
+}
+function rejectedNativeRequests(parts) {
+  const approvalRequests = new Map(), rejected = new Set();
+  const callsFor = (part) => {
+    if (part.tool === 'cgpt-validation_request_validation') return [{ tool: 'cgpt-validation.request_validation',
+      status: part.state?.status, input: part.state?.input }];
+    if (part.tool === 'cgpt-validation_get_approval') return [{ tool: 'cgpt-validation.get_approval',
+      status: part.state?.status, input: part.state?.input, output: part.state?.output }];
+    if (part.tool === 'cgpt-validation_reject') return [{ tool: 'cgpt-validation.reject',
+      status: part.state?.status, input: part.state?.input }];
+    if (part.tool !== 'execute' || part.executed !== false || part.state?.metadata?.truncated !== false ||
+        !Array.isArray(part.state.metadata.toolCalls)) return [];
+    return part.state.metadata.toolCalls;
+  };
+  for (const part of parts) for (const call of callsFor(part)) {
+    if (!call || !['completed','error'].includes(call.status) || !noEnvironmentMcpTools.has(call.tool)) continue;
+    const input = call.input;
+    if (call.tool === 'cgpt-validation.request_validation' && input &&
+        typeof input.requestId === 'string' && typeof input.approval_id === 'string') {
+      approvalRequests.set(input.approval_id, input.requestId);
+    }
+    if (call.tool === 'cgpt-validation.reject' && call.status === 'completed') {
+      if (typeof input?.requestId === 'string') rejected.add(input.requestId);
+      if (typeof input?.approval_id === 'string' && approvalRequests.has(input.approval_id)) {
+        rejected.add(approvalRequests.get(input.approval_id));
+      }
+    }
+    if (call.tool === 'cgpt-validation.get_approval' && call.status === 'completed' &&
+        typeof input?.approval_id === 'string' && typeof call.output === 'string') {
+      try {
+        const output = JSON.parse(call.output);
+        if (output?.status === 'REJECTED' && approvalRequests.has(input.approval_id)) {
+          rejected.add(approvalRequests.get(input.approval_id));
+        }
+      } catch { /* Native history will remain unreviewable when a lookup is malformed. */ }
+    }
+  }
+  return rejected;
+}
 function observeNativeCompletion(runId, part, sessionId) {
   for (const operation of Object.values(registry.resourceState.operations)) {
     if (operation.runId !== runId || !['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(operation.state)) continue;
@@ -538,21 +592,28 @@ async function verifyUnusedTestHistory(runId, context, entry, payload, { preview
   const messages = await read();
   const parts = messages.flatMap((message) => message.parts.filter((part) => part.type === 'tool'));
   const proof = { messageCount: messages.length, toolCount: parts.length, historyHash: proofHash(messages) };
-  if (payload.nativeProof === undefined) {
-    if (!previewOnly) throw new CoordinationError('test-unused-history-divergent');
-  } else if (!payload.nativeProof || proofHash(proof) !== proofHash(payload.nativeProof)) {
-    throw new CoordinationError('test-unused-history-divergent');
-  }
   const ops = registry.unusedTestOperations(entry);
+  const rejectedRequests = rejectedNativeRequests(parts);
+  proof.operationClassifications = [];
   for (const op of ops) {
-    if (op.state === 'CANCELLED' && !op.native) continue;
-    if (op.state !== 'COMPLETED' || !op.native?.onceAcknowledged || op.native.kind !== 'bash') {
+    const nativeDecision = context.decision(op.requestId)?.decision;
+    const classification = registry.unusedTestOperationClassification(op,
+      nativeDecision === 'rejected' || rejectedRequests.has(op.requestId) ? 'rejected' : nativeDecision);
+    if (!classification) {
       throw new CoordinationError('test-unused-operation-not-proved');
     }
+    proof.operationClassifications.push({ operationId: op.operationId, classification });
+    if (classification === 'rejected-validation-no-native-effect' ||
+        classification === 'cancelled-validation-no-native-effect' || classification === 'cancelled-without-execution') continue;
     const matches = parts.map((part) => nativePartProof(op, part, sessionId)).filter(Boolean);
     if (matches.length !== 1 || proofHash(matches[0]) !== op.completionDigest) {
       throw new CoordinationError('test-unused-native-completion-divergent');
     }
+  }
+  if (payload.nativeProof === undefined) {
+    if (!previewOnly) throw new CoordinationError('test-unused-history-divergent');
+  } else if (!payload.nativeProof || proofHash(proof) !== proofHash(payload.nativeProof)) {
+    throw new CoordinationError('test-unused-history-divergent');
   }
   const acquiredAt = Date.parse(entry.grantedAt);
   for (const message of messages) {
@@ -570,7 +631,9 @@ async function verifyUnusedTestHistory(runId, context, entry, payload, { preview
       const controlled = ops.some((op) => op.state === 'COMPLETED' && nativePartProof(op, part, sessionId));
       const observation = ['read','glob','grep','cab_codemode_discovery',
         'cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_broker_readiness',
-        'cgpt-validation_broker_health'].includes(part.tool);
+        'cgpt-validation_broker_health','cgpt-validation_poll_approval','cgpt-validation_reject',
+        'cgpt-validation_list_pending','cgpt-validation_cancel_approval'].includes(part.tool) ||
+        nativeNoEnvironmentObservation(part);
       if (!controlled && !observation) throw new CoordinationError('test-unused-native-tool-unreviewable');
     }
   }
@@ -984,15 +1047,23 @@ async function handleRequest(request, response) {
         }
         const previewInput = { version: entry.version, transactionId, fencing: entry.fencing,
           contextId: entry.contextId, sessionId: run.sessionId, boundaryDigest: registry.unusedTestBoundary(entry) };
-        const nativeProof = await verifyUnusedTestHistory(runId, context, entry, previewInput, { previewOnly: true });
+        let nativeProof = null, blockerCode = null;
+        try { nativeProof = await verifyUnusedTestHistory(runId, context, entry, previewInput, { previewOnly: true }); }
+        catch (cause) {
+          blockerCode = /^[a-z0-9-]{1,100}$/.test(cause?.code || '') ? cause.code : 'test-unused-preview-unavailable';
+        }
+        const provenClassifications = new Map((nativeProof?.operationClassifications || []).map((item) =>
+          [item.operationId,item.classification]));
         const operations = registry.unusedTestOperations(entry).map((op) => ({ operationId: op.operationId,
-          state: op.state, nativeKind: op.native?.kind ?? null, onceAcknowledged: Boolean(op.native?.onceAcknowledged) }));
+          state: op.state, nativeKind: op.native?.kind ?? null, onceAcknowledged: Boolean(op.native?.onceAcknowledged),
+          rejectionOnly: registry.isRejectionOnlyOperation(op),
+          classification: provenClassifications.get(op.operationId) ?? null }));
         const approvedChangeScope = validatedChangeScopeForTestRecovery(runId, context, entry);
         json(response, 200, { runId, protocol: TEST_RESOURCE_PROTOCOL, transactionId, state: entry.state,
           reconciliationRequired: true, version: entry.version, contextId: entry.contextId,
           sessionId: run.sessionId, fencing: entry.fencing, boundaryDigest: previewInput.boundaryDigest,
-          nativeProof, operations, approvedChangeScope,
-          eligibleForLostTokenRelease: approvedChangeScope, snapshot_only: true }); return;
+          nativeProof, operations, blockerCode, approvedChangeScope,
+          eligibleForLostTokenRelease: approvedChangeScope && nativeProof !== null, snapshot_only: true }); return;
       }
       if (request.method === 'POST' && url.pathname === '/test-resources/release-unused-lost-token') {
         const replay = registry.unusedTestReplay(runId, payload);

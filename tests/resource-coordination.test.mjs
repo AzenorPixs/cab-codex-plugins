@@ -563,13 +563,16 @@ test('identifiants logiques historiques conservés sans donner de nouvelle rése
 
 
 function unusedPayload(h, run, entry, extra = {}) {
+  const operations=h.r.unusedTestOperations(h.r.resourceState.testReservations[entry.transactionId]);
   return testPayload(run, entry, { contextId: run.contextId, sessionId: run.sessionId,
     boundaryDigest: h.r.unusedTestBoundary(h.r.resourceState.testReservations[entry.transactionId]),
     developerAuthorization: 'autorisation humaine ciblée de restitution sans effet',
     attestation: { noEnvironmentMutation: true, noMutatingMandate: true,
-      operations: h.r.unusedTestOperations(h.r.resourceState.testReservations[entry.transactionId]).map((op) =>
-        ({ operationId: op.operationId, classification: op.state === 'CANCELLED' ? 'cancelled-without-execution' : 'read-only-no-effect' })) },
-    nativeProof: { messageCount: 4, toolCount: 2, historyHash: fingerprint('observed full native history') }, ...extra });
+      operations: operations.map((op) =>
+        ({ operationId: op.operationId, classification: h.r.unusedTestOperationClassification(op) || 'read-only-no-effect' })) },
+    nativeProof: { messageCount: 4, toolCount: 2, historyHash: fingerprint('observed full native history'),
+      operationClassifications: operations.map((op) => ({ operationId: op.operationId,
+        classification: h.r.unusedTestOperationClassification(op) || 'read-only-no-effect' })) }, ...extra });
 }
 
 test('restitution sans effet : reçu durable, FIFO, idempotence et reprise des travaux indépendants', async (t) => {
@@ -602,6 +605,39 @@ test('restitution sans effet après restauration : scope armé, token perdu et r
   assert.deepEqual(h.r.releaseUnusedTests('a',p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true}),receipt);
   assert.throws(()=>h.r.releaseUnusedTests('a',{...p,evidence:['divergent']},p.nativeProof,
     {lostTokenRecovery:true,validatedChangeScope:true}),/test-unused-release-divergent/);
+});
+
+test('restitution sans effet après restauration : une validation REJECTION_ONLY prouvée ne bloque pas le bail', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'rejected-only-a');
+  const op=h.prepare(a,'rejected-validation-a');
+  const stored=h.r.resourceState.operations[op.operationId];stored.rejectionOnly=true;
+  const requestId='request-'+op.operationId;
+  h.r.requestOwners[requestId]={runId:a.runId,digest:fingerprint('rejected-validation-identity'),reconciliation:{
+    transactionId:'rejection-tx-a',jobId:'job-a',operationId:op.operationId,approvalId:'approval-a',
+    recoveryId:null,sessionId:a.sessionId,inputDigest:fingerprint('rejection-input'),
+    nativeToolHash:fingerprint('native-rejection-tools'),authorizationDigest:fingerprint('rejection-authorization'),
+    contextId:a.contextId,version:a.version,nativeToolCount:1,outcome:'REJECTION_ONLY',at:new Date().toISOString()}};
+  h.r.persist();await h.restart();
+  const restored=h.r.resourceState.testReservations[entry.transactionId];
+  assert.equal(h.r.unusedTestOperationClassification(h.r.resourceState.operations[op.operationId]),
+    'rejected-validation-no-native-effect');
+  const p=unusedPayload(h,a,restored);delete p.token;delete p.developerAuthorization;
+  p.recoveryMode='validated-change-unused';
+  const receipt=h.r.releaseUnusedTests(a.runId,p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true});
+  assert.equal(receipt.state,'RELEASED');
+  assert.equal(receipt.unusedReleaseReceipt.mode,'unused-no-effect-lost-token');
+  assert.equal(receipt.unusedReleaseReceipt.operationIds[0],op.operationId);
+});
+
+test('restitution sans effet après restauration : un rejet sans reçu concordant reste bloquant', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[lxcTest]);const entry=testLease(h,a,'rejected-only-unproved');
+  const op=h.prepare(a,'rejected-validation-unproved');
+  h.r.persist();await h.restart();
+  const p=unusedPayload(h,a,h.r.resourceState.testReservations[entry.transactionId]);delete p.token;delete p.developerAuthorization;
+  p.recoveryMode='validated-change-unused';
+  assert.equal(h.r.unusedTestOperationClassification(h.r.resourceState.operations[op.operationId]),null);
+  assert.throws(()=>h.r.releaseUnusedTests(a.runId,p,p.nativeProof,{lostTokenRecovery:true,validatedChangeScope:true}),/test-unused-operation-not-proved/);
+  assert.equal(h.r.testReservations(a.runId)[0].state,'HELD');
 });
 
 test('restitution sans effet après restauration refuse l’absence de scope validé ou un token résiduel', async (t) => {
