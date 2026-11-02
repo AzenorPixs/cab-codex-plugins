@@ -1,3 +1,13 @@
+## 2.1.67 — Réconcilier les rejets natifs après échec de notification
+
+- Le contrôleur relit deux fois le transcript exact et quiescent avant de
+  restaurer un rejet natif `CGPT` localement perdu.
+- Le registre persiste le rejet, l’empreinte filtrée et l’état `CANCELLED`
+  atomiquement, sans accès, permission, commande ni `once`.
+- Le même reçu est restauré de façon idempotente après redémarrage ; toute
+  divergence ou activité native conserve le mandat indécis.
+- CAB/CABU, les composants, plugins, commandes et cadrages partagent 2.1.67.
+
 ## 2.1.66 — Lier le requestId Code Mode aux métadonnées natives
 
 - Le parseur borné accepte un identifiant variable uniquement dans le champ
