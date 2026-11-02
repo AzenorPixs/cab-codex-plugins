@@ -1,3 +1,9 @@
+## 2.1.75 — Lier les commandes Code Mode à clé JSON
+
+- Le binder reconnaît la clé `"commands"` sérialisée par JSON.stringify en plus de la propriété JavaScript non quotée.
+- Les clés dupliquées, bindings divergents et expressions dynamiques restent bloqués.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.75.
+
 ## 2.1.74 — Cibler l’historique natif dans la location de session
 
 - Chaque page de messages V2 reçoit explicitement la location de la session dans `x-opencode-directory`.
