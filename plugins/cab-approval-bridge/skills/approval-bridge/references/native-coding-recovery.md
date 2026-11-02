@@ -1,4 +1,4 @@
-# Reprise des incidents de codage natif — CAB 2.1.70
+# Reprise des incidents de codage natif — CAB 2.1.71
 
 ## Opération approuvée interrompue par un redémarrage
 
