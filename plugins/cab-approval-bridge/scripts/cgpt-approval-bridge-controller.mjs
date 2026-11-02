@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.78";
+const version = "2.1.79";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -966,6 +966,7 @@ function nativeTerminalTurnNoEffectProof(messages,approval,operation,run,log,app
       final.parts.some(part=>part?.type==='tool'))return null;
   const turnIds=new Set([userId,requestMessage.info.id,final.info.id]);
   const messageIndexById=new Map(messages.map((message,index)=>[message.info?.id,index]).filter(([id])=>typeof id==='string'));
+  const terminalBoundary=operation.nativeRecovery?.logWatermark??0;
   for(let index=userIndex;index<=finalIndex;index++){
     const message=messages[index];
     for(const part of Array.isArray(message.parts)?message.parts:[]){
@@ -981,11 +982,11 @@ function nativeTerminalTurnNoEffectProof(messages,approval,operation,run,log,app
   }
   for(const event of log.events){
     const eventIndex=messageIndexById.get(event.messageId);
-    if(event.messageId!==undefined&&eventIndex===undefined)return null;
     if(!turnIds.has(event.messageId)){
-      if(event.messageId===undefined&&(noEffectToolNames.has(event.toolName)||
-          !noEffectReadOnlyToolNames.has(event.toolName)))return null;
-      continue;
+      if(typeof event.messageId==='string'&&event.messageId&&eventIndex===undefined)return null;
+      if(eventIndex!==undefined&&eventIndex<userIndex)continue;
+      if(Number.isSafeInteger(event.sequence)&&event.sequence>terminalBoundary)continue;
+      return null;
     }
     if(event.messageId===requestMessage.info.id&&event.callId===requestPart.callID&&
         event.toolName==='execute'&&['session.tool.called','session.tool.success'].includes(event.type))continue;
@@ -1010,7 +1011,10 @@ async function verifyTerminalTurnNoEffectProof(run,context,operation,approval,de
   messages,permissions,log,generation){
   const sibling=Object.values(registry.resourceState.operations).some(other=>other.operationId!==operation.operationId&&
     other.runId===run.runId&&other.sessionId===operation.sessionId&&
-    !['CANCELLED','COMPLETED'].includes(other.state));
+    (['ISSUING','EXECUTING','UNKNOWN'].includes(other.state)||
+      other.state==='PREPARED'&&other.decision?.status==='approved'&&(
+        Boolean(other.native)||other.native?.onceAcknowledged===true||
+        ['HELD','WAITING','EXECUTING','UNKNOWN'].includes(registry.resourceState.accesses[other.accessId]?.state))));
   if(!terminalTurnNoEffectCandidate(operation)||!registry.resourceState.accesses[operation.accessId]||
       sibling||context.publicJob()?.currentCabMandate||context.publicJob()?.recovery||
       permissions.some(permission=>permission.sessionID===operation.sessionId))return null;
