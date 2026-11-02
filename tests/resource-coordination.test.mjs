@@ -149,7 +149,7 @@ test('restauration conserve les accès actifs conflictuels sans réutiliser once
  assert.equal(h.acquire(writer,opWriter).state,'WAITING');
 });
 
-test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.70',async t=>{
+test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.71',async t=>{
  const h=await fixture(t);const run=h.reserve('native-reject-migration',[file('rejected.txt')]);
  const op=h.prepare(run,'native-reject-operation');const stored=h.r.resourceState.operations[op.operationId];
  h.r.claimRequest(run.runId,stored.requestId,fingerprint('native-reject-owner'),false);
@@ -593,12 +593,40 @@ test('Les réservations refusent propriétaire divergent, alias invalide et dét
   assert.throws(() => testLease(h,a,'invalid',[{key:'docker:ENGINE-A',mode:'write'}]), /test-resources-invalid/);
   const op=h.prepare(a,'no-lease',[dockerTest]);assert.throws(() => h.acquire(a,op),/test-resource-not-held/);
   const fileOp=h.prepare(a,'file',[file('x')]);const fileAccess=h.acquire(a,fileOp);
-  assert.throws(() => testLease(h,a,'premature',[dockerTest]),/test-acquisition-boundary-required/);
+  const entry=testLease(h,a,'premature',[dockerTest]);
+  assert.equal(entry.state,'HELD');
   h.start(a,fileOp);h.complete(a,fileOp);h.release(a,fileAccess);
-  const entry=testLease(h,a,'lease-a',[dockerTest]);
   assert.throws(() => h.r.releaseTests('b',testPayload(b,entry)),/test-token-invalid/);
   assert.throws(() => h.r.cancelTests('a',testPayload(a,entry)),/test-cancel-refused/);
   assert.throws(() => h.r.acquireTests('a',{version:a.version,transactionId:'second',resources:[dockerTest],evidence:['x']}),/test-acquisition-boundary-required/);
+});
+
+test('les environnements de test restent réservables avec des accès disjoints HELD, UNKNOWN et WAITING', async (t) => {
+  const h=await fixture(t);
+  const a=h.reserve('a',[file('tasks.md'),file('VALIDATION.md'),file('DEVELOPMENT_MAP.md'),lxcTest]);
+  const b=h.reserve('b',[file('DEVELOPMENT_MAP.md')]);
+  const heldOp=h.prepare(a,'held-task',[file('tasks.md')]);const held=h.acquire(a,heldOp);
+  const unknownOp=h.prepare(a,'unknown-validation',[file('VALIDATION.md')]);const unknown=h.acquire(a,unknownOp);
+  h.start(a,unknownOp);h.r.nativeUnknown(unknownOp.operationId);
+  const blockerOp=h.prepare(b,'block-map',[file('DEVELOPMENT_MAP.md')]);h.acquire(b,blockerOp);
+  const waitingOp=h.prepare(a,'waiting-map',[file('DEVELOPMENT_MAP.md')]);const waiting=h.acquire(a,waitingOp);
+  assert.equal(held.state,'HELD');assert.equal(unknown.state,'HELD');
+  assert.equal(h.r.accesses('a').find((x)=>x.accessId===unknown.accessId).state,'UNKNOWN');
+  assert.equal(waiting.state,'WAITING');
+  const lease=testLease(h,a,'independent-lxc',[lxcTest]);
+  assert.equal(lease.state,'HELD');
+  assert.equal(h.r.accesses('a').find((x)=>x.accessId===held.accessId).state,'HELD');
+  assert.equal(h.r.accesses('a').find((x)=>x.accessId===unknown.accessId).state,'UNKNOWN');
+  assert.equal(h.r.accesses('a').find((x)=>x.accessId===waiting.accessId).state,'WAITING');
+});
+
+test('un accès global recouvrant garde la réservation de test bloquée', async (t) => {
+  const h=await fixture(t);const a=h.reserve('a',[{key:'project:*',mode:'write'},lxcTest]);
+  h.r.resourceState.accesses['restored-project-write']={accessId:'restored-project-write',runId:a.runId,
+    contextId:a.contextId,version:a.version,resources:[{key:'project:*',mode:'write'}],state:'UNKNOWN',token:'protected'};
+  assert.throws(()=>testLease(h,a,'blocked-lxc',[lxcTest]),/test-acquisition-boundary-required/);
+  assert.equal(h.r.accesses('a')[0].state,'UNKNOWN');
+  assert.equal(h.r.testReservations('a').length,0);
 });
 
 test('Annuler une attente ne libère jamais un environnement détenu', async (t) => {
