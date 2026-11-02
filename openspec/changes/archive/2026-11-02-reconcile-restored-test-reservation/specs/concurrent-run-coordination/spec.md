@@ -58,6 +58,11 @@ confirment le même RUN, session et lease. Le bail MUST rester `HELD`.
 - **WHEN** le même reconciliationId et le même payload de propriétaire sont rejoués après succès
 - **THEN** CAB retourne le bail renouvelé au même RUN sans incrémenter une seconde fois le fencing
 
+#### Scenario: Événement d’un tour ultérieur read-only
+
+- **WHEN** une lecture read-only possède son propre message après le tour assistant terminal prouvé
+- **THEN** CAB garde la preuve `NO_EFFECT` limitée au tour d’origine et n’assimile pas l’événement ultérieur à un effet dans ce tour
+
 ### Requirement: Recovery locale terminale indépendante de l’admission métier
 
 La revalidation d’un candidat `NO_EFFECT` déjà approuvé MAY poursuivre
