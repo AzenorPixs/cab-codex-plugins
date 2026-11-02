@@ -755,7 +755,7 @@ Le registre MUST accepter la clôture rejetée uniquement pour l’opération ex
 
 Un rejet natif terminal MUST être stocké dans un schéma de décision et de registre déjà lisible par la brique immédiatement antérieure. Le digest du transcript MUST rester durable et corrélé à la demande. À la restauration, une extension connue plus récente MAY être normalisée sans modifier l’identité, le statut `rejected`, les ressources ou les autres RUN. Une extension inconnue ou une preuve divergente MUST échouer fermement.
 
-#### Scenario: Normalisation d’une empreinte 2.1.68
+#### Scenario: Normalisation d’une empreinte 2.1.69
 
 - **GIVEN** un rejet `CANCELLED` avec empreintes connues `nativeProofDigest` et `nativeRejectionProofDigest`
 - **WHEN** un contrôleur plus récent restaure le registre
@@ -766,3 +766,21 @@ Un rejet natif terminal MUST être stocké dans un schéma de décision et de re
 - **GIVEN** des digests malformés ou divergents, un statut non rejeté ou une opération native active
 - **WHEN** la normalisation est examinée
 - **THEN** le registre conserve ses protections et refuse d’inférer un rejet
+
+### Requirement: Préserver les accès actifs conflictuels après restauration
+
+Le registre MUST conserver les accès actifs présents au redémarrage, même lorsque deux accès concernent le même RUN ou se recouvrent. Chaque accès restauré MUST rester protégé contre l’émission d’une nouvelle permission `once`. Les nouveaux accès recouvrants MUST rester en `WAITING` jusqu’à réconciliation ; les accès disjoints MAY avancer. Un accès mal formé ou un jeton invalide MUST rester refusé.
+
+#### Scenario: Registre avec deux accès actifs recouvrants
+
+- **GIVEN** deux leases actifs conservés dans le registre après un arrêt
+- **WHEN** le contrôleur restaure le RUN
+- **THEN** il charge les deux accès comme restaurés sans rejeter tout le registre
+- **AND** aucun des deux accès ne peut être réutilisé pour une permission native
+- **AND** un nouvel accès recouvrant attend tandis qu’un accès disjoint peut être accordé
+
+#### Scenario: Lease restaurée mal formée
+
+- **GIVEN** un accès dont l’identité, les ressources ou le jeton sont invalides
+- **WHEN** le registre est restauré
+- **THEN** la restauration échoue sans supprimer ni réparer l’accès
