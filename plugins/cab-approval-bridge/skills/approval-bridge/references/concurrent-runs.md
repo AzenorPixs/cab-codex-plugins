@@ -58,7 +58,22 @@ POST /runs/<runId>/locks/release porte version, operationId, token, fencing, out
 
 Les écritures connues avancent les révisions des ressources et invalident les lectures de sous-arbre concernées. Les écritures à publier restent suivies après libération. Après crash, les protections sont restaurées mais l'ancien jeton ne permet aucune nouvelle once. /locks/reconcile vérifie la frontière connue, annule les anciennes sous-opérations non commencées et émet un jeton/fencing neufs sans relâcher les fichiers ; les corrections conservent des identités et décisions neuves. Réconcilier les effets sans rejouer une permission consommée. Le prévol de récupération garde ses règles strictes ; terminer/libérer son accès avant transfert de session.
 
-Pour une permission native encore pendante, le contrôleur 2.1.79 peut continuer
+Si le payload d'acquisition d'un accès de commande est perdu après redémarrage
+et que le registre conserve le même accès `HELD` avec des opérations terminales,
+ne pas répéter `/locks/acquire`. Le propriétaire lit
+`GET /runs/<runId>/locks/reconcile-preview?operationId=...`, puis vérifie le
+RUN, l'accès, les ressources, les révisions, les décisions durables et le digest
+de frontière. Il peut envoyer `POST /runs/<runId>/locks/reconcile-restored` avec
+ce digest, la version, le fencing, un `reconciliationId` neuf et des références
+de preuve. CAB relit l'historique natif, vérifie deux observations identiques,
+l'inactivité de la session, l'absence de permission et l'absence de conflit ou
+de changement de révision. Le reçu renouvelle le token et le fencing du même
+accès `HELD` ; il ne crée aucun accès et ne rejoue aucune permission ou `once`.
+Un reçu identique est idempotent. Une opération `ISSUING`, `EXECUTING` ou
+`UNKNOWN`, une preuve terminale absente, une permission, un conflit, une
+divergence ou une session active conserve l'accès protégé.
+
+Pour une permission native encore pendante, le contrôleur 2.1.80 peut continuer
 le `once` déjà décidé après redémarrage seulement si l’historique contient la
 demande et l’approbation terminées exactes et que deux lectures natives
 confirment permissionId/callID identiques, outil `running` et `executed=false`.

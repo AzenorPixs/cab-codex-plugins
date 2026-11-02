@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.79";
+const version = "2.1.80";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -1599,7 +1599,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -1833,6 +1833,12 @@ async function handleRequest(request, response) {
         json(response, 200, { runId, protocol: COORDINATION_PROTOCOL, accesses: registry.accesses(runId),
           revisions: registry.revisions(run.resources) }); return;
       }
+      if (request.method === 'GET' && url.pathname === '/locks/reconcile-preview') {
+        if (url.searchParams.getAll('operationId').length !== 1 || [...url.searchParams.keys()].some((key) => key !== 'operationId')) {
+          throw new CoordinationError('access-reconciliation-invalid', 400);
+        }
+        json(response, 200, registry.restoredAccessReconciliationSnapshot(runId, url.searchParams.get('operationId'))); return;
+      }
       if (request.method === 'GET' && url.pathname === '/operations') {
         const operationId = url.searchParams.get('operationId') ?? undefined;
         json(response, 200, registry.operationSnapshot(runId, operationId)); return;
@@ -1869,6 +1875,64 @@ async function handleRequest(request, response) {
         await checkNative(registry.resourceState.operations[access.operationIds[0]]?.sessionId || run.sessionId, true);
         const result = registry.reconcileAccess(runId, payload);
         for (const id of access.operationIds) if (registry.resourceState.operations[id].state === 'CANCELLED') {
+          context.invalidateOperation(registry.resourceState.operations[id].requestId);
+        }
+        json(response, 200, result); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/locks/reconcile-restored') {
+        const priorAccess=registry.resourceState.accesses[payload?.operationId];
+        if(priorAccess?.reconciliationReceipts?.[payload?.reconciliationId]){
+          json(response,200,registry.reconcileRestoredAccess(runId,payload,null));return;
+        }
+        if (context.publicJob()?.currentCabMandate || context.publicJob()?.recovery || context.publicJob()?.modelTransition ||
+            context.pendingEffects() || context.publicStatus().undecidedValidationCount) {
+          throw new CoordinationError('run-not-quiescent');
+        }
+        const before = registry.restoredAccessReconciliationSnapshot(runId, payload?.operationId);
+        if (payload?.version !== before.version || payload?.fencing !== before.fencing ||
+            payload?.boundaryDigest !== before.boundaryDigest) {
+          throw new CoordinationError('access-reconciliation-boundary-changed');
+        }
+        const sessionId = run.sessionId;
+        const generation = nativeSessionGenerations.get(sessionId) || 0;
+        const readNativeBoundary = async () => {
+          let messages, permissions, sessions;
+          try {
+            [messages, permissions, sessions] = await Promise.all([
+              openCode.messages(sessionId, run.directory),
+              openCode.permissions(run.directory, { sessionIds: [sessionId], verifyInputs: true }),
+              openCode.sessionStatus(run.directory),
+            ]);
+          } catch { throw new CoordinationError('access-reconciliation-native-unavailable'); }
+          if (!Array.isArray(messages) || !Array.isArray(permissions) || !sessions || typeof sessions !== 'object' || Array.isArray(sessions)) {
+            throw new CoordinationError('access-reconciliation-native-invalid');
+          }
+          const sessionIdle = !sessions[sessionId] || sessions[sessionId].type === 'idle';
+          if (!sessionIdle || permissions.some((permission) => permission.sessionID === sessionId)) {
+            throw new CoordinationError('native-session-not-quiescent');
+          }
+          return { messages, permissions, sessions };
+        };
+        await checkNative(sessionId, true);
+        await reconcileTerminalNativeOutcomes(runId, { operationIds: before.operations.map((operation) => operation.operationId) });
+        const first = await readNativeBoundary();
+        const after = registry.restoredAccessReconciliationSnapshot(runId, payload.operationId);
+        await checkNative(sessionId, true);
+        const second = await readNativeBoundary();
+        if (generation !== (nativeSessionGenerations.get(sessionId) || 0) ||
+            before.boundaryDigest !== after.boundaryDigest ||
+            proofHash(first.messages) !== proofHash(second.messages) ||
+            proofHash(first.permissions) !== proofHash(second.permissions) ||
+            proofHash(first.sessions) !== proofHash(second.sessions)) {
+          throw new CoordinationError('access-reconciliation-boundary-changed');
+        }
+        const observedAt = new Date().toISOString();
+        const proof = { runId, contextId: before.contextId, accessId: before.accessId, version: before.version,
+          fencing: before.fencing, boundaryDigest: before.boundaryDigest, sessionId, operationsDigest: proofHash(before.operations),
+          sessionIdle: true, pendingPermissions: 0, transcriptDigest: proofHash(second.messages), observedAt };
+        proof.proofDigest = proofHash(proof);
+        const result = registry.reconcileRestoredAccess(runId, payload, proof);
+        for (const id of result.operationIds) if (registry.resourceState.operations[id]?.state === 'CANCELLED') {
           context.invalidateOperation(registry.resourceState.operations[id].requestId);
         }
         json(response, 200, result); return;
