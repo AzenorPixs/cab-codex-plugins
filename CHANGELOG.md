@@ -1,3 +1,14 @@
+## 2.1.64 — Réconciliation des fins natives depuis le journal durable
+
+- La reprise lit le journal OpenCode V2 fini et exige son watermark `log.synced`.
+- Un succès terminal unique exactement corrélé clôt l’opération sans rejouer
+  `once` ; une erreur ambiguë, une absence ou une divergence reste `UNKNOWN`
+  avec accès protégé. Aucune réponse `permission.replied` n’est déduite.
+- Des accès complets compatibles et non recouvrants du même RUN peuvent
+  coexister ; les conflits continuent d’attendre atomiquement.
+- CAB, CABU, les composants, commandes, spécifications et documents partagent
+  la version 2.1.64.
+
 ## 2.1.63 — Reprise sûre des permissions natives après redémarrage
 
 - Les décisions terminales d’opération sont persistées avant la réponse native

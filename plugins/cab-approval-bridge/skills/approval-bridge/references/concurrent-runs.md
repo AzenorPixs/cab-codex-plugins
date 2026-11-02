@@ -45,14 +45,17 @@ POST /runs/<runId>/locks/release porte version, operationId, token, fencing, out
 
 Les écritures connues avancent les révisions des ressources et invalident les lectures de sous-arbre concernées. Les écritures à publier restent suivies après libération. Après crash, les protections sont restaurées mais l'ancien jeton ne permet aucune nouvelle once. /locks/reconcile vérifie la frontière connue, annule les anciennes sous-opérations non commencées et émet un jeton/fencing neufs sans relâcher les fichiers ; les corrections conservent des identités et décisions neuves. Réconcilier les effets sans rejouer une permission consommée. Le prévol de récupération garde ses règles strictes ; terminer/libérer son accès avant transfert de session.
 
-Pour une permission native encore pendante, le contrôleur 2.1.63 peut continuer
+Pour une permission native encore pendante, le contrôleur 2.1.64 peut continuer
 le `once` déjà décidé après redémarrage seulement si l’historique contient la
 demande et l’approbation terminées exactes et que deux lectures natives
 confirment permissionId/callID identiques, outil `running` et `executed=false`.
 L’accès est réacquis sur le manifeste et les révisions d’origine. Si la
-permission a disparu, `once` est acquitté, l’outil a commencé ou une preuve
-diverge, l’opération reste `UNKNOWN` sans rejeu jusqu’à fin native corrélée.
-Les accès non recouvrants d’autres RUN restent disponibles.
+permission a disparu, CAB lit le journal durable V2 de la session et exige
+`log.synced`. Un unique `session.tool.success` corrélé à la session, au callID,
+à l’outil, à son entrée et au mandat clôt `COMPLETED` sans réponse ni rejeu.
+Une erreur, l’absence d’événement ou toute preuve divergente reste `UNKNOWN`
+protégé ; ce journal ne prouve pas `permission.replied`. Les accès complets du
+même RUN ou d’autres RUN restent disponibles quand ils ne se recouvrent pas.
 
 ## Environnements de test Docker et LXC
 
