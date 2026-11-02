@@ -102,6 +102,53 @@ test('fresh reservation preserves owner, active suspension and global freeze gua
   assert.equal(h.r.reserve(candidate).state, 'RESERVED');
 });
 
+test('rejet natif : les reçus 2.1.67 sont normalisés sans perdre leur empreinte ni l’identité',async t=>{
+ const h=await fixture(t);const run=h.reserve('native-reject-migration',[file('rejected.txt')]);
+ const op=h.prepare(run,'native-reject-operation');const stored=h.r.resourceState.operations[op.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('native-reject-owner'),false);
+ const proofDigest=fingerprint('native-reject-transcript');
+ h.r.recordRejectedNativeDecision(run.runId,op.operationId,{status:'rejected',requestId:stored.requestId,
+  approvalId:'approval-native-reject',changeId:run.changeId,operationId:op.operationId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:run.runId,
+  version:run.version,sessionId:run.sessionId},proofDigest);
+ const legacy=JSON.parse(readFileSync(h.r.path,'utf8'));
+ const legacyOperation=legacy.coordination.operations[op.operationId];
+ legacyOperation.nativeRejectionProofDigest=proofDigest;
+ legacyOperation.decision.nativeProofDigest=proofDigest;
+ delete legacyOperation.completionDigest;
+ writeFileSync(h.r.path,JSON.stringify(legacy)+'\n');
+ const restored=await h.restart();
+ const operation=restored.resourceState.operations[op.operationId];
+ assert.equal(operation.state,'CANCELLED');assert.equal(operation.decision.status,'rejected');
+ assert.equal(operation.completionDigest,proofDigest);
+ assert.equal(operation.nativeRejectionProofDigest,undefined);assert.equal(operation.decision.nativeProofDigest,undefined);
+ const persisted=JSON.parse(readFileSync(restored.path,'utf8')).coordination.operations[op.operationId];
+ assert.equal(persisted.completionDigest,proofDigest);assert.equal(persisted.nativeRejectionProofDigest,undefined);
+});
+
+test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.68',async t=>{
+ const h=await fixture(t);const run=h.reserve('native-reject-migration',[file('rejected.txt')]);
+ const op=h.prepare(run,'native-reject-operation');const stored=h.r.resourceState.operations[op.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('native-reject-owner'),false);
+ const proofDigest=fingerprint('native-reject-transcript');
+ const decision={status:'rejected',requestId:stored.requestId,approvalId:'approval-native-reject',
+  changeId:run.changeId,operationId:op.operationId,operationDigest:op.operationDigest,
+  identityDigest:stored.identityDigest,runId:run.runId,version:run.version,sessionId:run.sessionId};
+ h.r.recordRejectedNativeDecision(run.runId,op.operationId,decision,proofDigest);
+ let snapshot=JSON.parse(readFileSync(h.r.path,'utf8'));
+ let record=snapshot.coordination.operations[op.operationId];
+ assert.equal(record.state,'CANCELLED');assert.equal(record.completionDigest,proofDigest);
+ assert.equal(record.nativeRejectionProofDigest,undefined);assert.equal(record.decision.nativeProofDigest,undefined);
+ record.nativeRejectionProofDigest=proofDigest;record.decision.nativeProofDigest=proofDigest;delete record.completionDigest;
+ writeFileSync(h.r.path,JSON.stringify(snapshot)+'\n');
+ const restored=await h.restart();
+ record=restored.resourceState.operations[op.operationId];
+ assert.equal(record.state,'CANCELLED');assert.equal(record.completionDigest,proofDigest);
+ assert.equal(record.nativeRejectionProofDigest,undefined);assert.equal(record.decision.nativeProofDigest,undefined);
+ const persisted=JSON.parse(readFileSync(restored.path,'utf8')).coordination.operations[op.operationId];
+ assert.equal(persisted.completionDigest,proofDigest);assert.equal(persisted.nativeRejectionProofDigest,undefined);
+});
+
 test('three independent RUNs execute without a cohort or global integration', async (t) => {
   const h = await fixture(t);
   const runs = ['a', 'b', 'c'].map((id) => h.reserve(id, [file('src/' + id)]));

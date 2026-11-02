@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.67";
+const version = "2.1.68";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -156,7 +156,7 @@ function contextFor(run) {
       registry.recordRejectedNativeDecision(run.runId, op.operationId, { status: 'rejected',
         requestId: validation.requestId, approvalId: validation.approvalId, changeId: validation.changeId,
         operationId: op.operationId, operationDigest: op.operationDigest, identityDigest: op.identityDigest,
-        runId: run.runId, version: op.version, sessionId: op.sessionId, nativeProofDigest: proofDigest }, proofDigest);
+        runId: run.runId, version: op.version, sessionId: op.sessionId }, proofDigest);
     },
     ensureOperationAccess: (operation) => {
       const op = registry.resourceState.operations[operation?.operationId];
@@ -477,7 +477,7 @@ async function restoreApprovedOperations(run, context) {
   try {
     const candidates = Object.values(registry.resourceState.operations).filter((op) => op.runId === run.runId &&
       op.contextId === run.contextId && (['PREPARED','ISSUING','UNKNOWN'].includes(op.state) ||
-        op.state === 'CANCELLED' && op.nativeRejectionProofDigest) &&
+        op.state === 'CANCELLED' && op.decision?.status === 'rejected' && op.completionDigest) &&
       op.native?.onceAcknowledged !== true && op.rejectionOnly !== true);
     for (const stored of candidates) {
       const key = run.runId + ':' + stored.operationId;
@@ -508,8 +508,7 @@ async function restoreApprovedOperations(run, context) {
         const owner = registry.requestOwners[current.requestId];
         if (owner?.runId !== run.runId || owner.digest !== identityHash) continue;
         const alreadyRejected = current.state === 'CANCELLED' && current.decision?.status === 'rejected' &&
-          typeof current.nativeRejectionProofDigest === 'string' &&
-          current.decision.nativeProofDigest === current.nativeRejectionProofDigest;
+          typeof current.completionDigest === 'string';
         let candidate;
         try { candidate = registry.operationCandidate(run.runId, approval); }
         catch (cause) {
@@ -537,7 +536,7 @@ async function restoreApprovedOperations(run, context) {
                 proofHash(registry.resourceState.operations[current.operationId]) === proofHash(operationSnapshot)) {
               const proofDigest = proofHash({ runId:run.runId, contextId:run.contextId, operationId:current.operationId,
                 requestId:current.requestId, approvalId:approval.approval_id, transcriptDigest:firstProof });
-              if (alreadyRejected && current.nativeRejectionProofDigest !== proofDigest) continue;
+              if (alreadyRejected && current.completionDigest !== proofDigest) continue;
               context.restoreNativeRejectedOperation(approval, proofDigest);
               reconciled = true;
             }
