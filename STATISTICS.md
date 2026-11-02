@@ -151,7 +151,7 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
 | Tests exécutés dans les bilans finaux | 59612 | 537,045 |
-| Fichiers ayant passé un contrôle syntaxique | 2224 | 57,026 |
+| Fichiers ayant passé un contrôle syntaxique | 2226 | 57,077 |
 | Tâches OpenSpec prouvées et terminées | 92 | 8,364 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
