@@ -14,7 +14,7 @@ import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credentia
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.1';
+export const VERSION = '2.2.2';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -681,6 +681,14 @@ export async function updateComponents(input, options = {}) {
     if (!readonlyBroker) {
       const selected = restartComponents().filter(component => receipt.phase !== 'STOPPING' ||
         (receipt.observedActive?.[component] ?? receipt.active[component]));
+      if (selected.includes('controller') && receipt.continuity?.state === 'PREPARED' &&
+          (await metadata('controller')).ActiveState === 'active') {
+        // The registry lock helper must outlive the controller's certified shutdown.
+        await service(['kill', '--signal=SIGTERM', '--kill-who=main', unit('controller')]);
+        if (!await wait(async () => (await metadata('controller')).ActiveState === 'inactive')) {
+          throw error('update-controller-shutdown-unconfirmed');
+        }
+      }
       if (selected.length) await service(['stop', ...selected.map(unit)]);
       if (receipt.brokerChanged !== false && receipt.openCodeAvailable && receipt.brokerWasConnected) await nativeBroker('disconnect');
       return;

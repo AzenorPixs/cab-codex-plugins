@@ -1,3 +1,9 @@
+## 2.2.2 — Arrêt CABU préservant l’autorité du registre
+
+- CABU termine d’abord le seul processus principal du contrôleur avant l’arrêt du groupe systemd, pour permettre le scellement du transfert avec son helper flock encore vivant. L’unité distribuée utilise KillMode=mixed.
+- Une page native réduite pour taille excessive ne réduit plus toutes les pages suivantes ; les bornes de réponse et de pagination restent inchangées, sans retour partiel.
+- Une passe de réconciliation réutilise un snapshot natif par session et génération au lieu de relire tout l’historique pour chaque opération. Une clôture continue d’exiger une seconde lecture stable indépendante.
+
 ## 2.2.1 — Annulation native après approbation et bootstrap cohérent
 
 - Une validation approuvée encore PREPARED, sans entrée native ni accès, peut être clôturée sur preuve native exacte CANCELLED/OC stable. La décision historique reste conservée, sa réponse exécutable est retirée ; aucune permission once n’est rejouée.
