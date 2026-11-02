@@ -6,13 +6,16 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.81. CABU prépare les artefacts avant la coupure,
-redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
-d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
-qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
-des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas
-le remplacement des fichiers broker ; sa version chargée est alors rapportée
-`INDISPONIBLE`.
+La version source courante est CAB 2.2.0. CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
+puis ne bascule que les composants nécessaires. Un jeu conforme ne subit
+aucune coupure. Le transfert compatible préserve demandes, décisions, accès et
+baux ; une réponse réseau perdue reprend le même reçu sans rejeu de once.
+OpenCode reste ouvert. Le broker n'est reconnecté que si nécessaire ; sa
+readiness et les versions réelles sont vérifiées. L'absence prouvée d'OpenCode
+permet `INDISPONIBLE` pour sa version chargée, sans en déduire un succès natif.
+Le repli restaure les artefacts, jamais un ancien état métier. Les mesures
+séparent préparation, bascule et indisponibilité observée ; aucune unité
+n'est activée au login.
 
 Après un redémarrage du contrôleur, CAB 2.1.70 restaure une décision seulement
 depuis une demande et une approbation natives terminées et corrélées. Il répond
@@ -197,18 +200,19 @@ après contrôle de la cohérence et des validations.
 
 ## Cadences de pilotage
 
-Le protocole CAB prévoit les événements SSE en temps réel et le contrôle des
-demandes et rapports toutes les **3 secondes**. Pendant l'analyse ou la
-rédaction de l'agent de codage, les vérifications de progression sont espacées
-de **7 secondes** fixes, indépendamment du contrôle CAB.
+Le suivi consomme les événements SSE en temps réel, avec curseur durable et
+attente HTTP de décision bornée ; un repli technique progressif couvre la perte
+du flux. Aucun tour LLM de polling à cadence fixe n'est imposé. La collecte
+statistique native conserve sa couverture et N/A pour les mesures absentes ;
+les sondes initiale/finale restent vérifiables sans réveils LLM périodiques.
 
 La fraîcheur PLLM de **huit heures** est contrôlée au démarrage initial ; le
 choix du RUN est conservé pendant la session, ses tâches, pauses et reprises.
 Une panne réelle ou une instruction explicite peut déclencher une réévaluation.
 Sans modèle admissible, conserver les preuves et attendre l'instruction du
 développeur, sans benchmark ni réessai automatique. La reprise conserve les
-contrôles CAB et les mandats unitaires. Les sondes statistiques sont prévues
-toutes les **30 minutes**, sans arrêter le travail pour attendre le créneau.
+contrôles CAB et les mandats unitaires. La collecte native évite les tours LLM périodiques ; les mesures absentes
+restent N/A motivé.
 Ces obligations du protocole distribué ne constituent pas un nouvel automate
 de benchmark dans les composants CAB.
 
@@ -226,7 +230,7 @@ CAB 1.10.7 utilise des ensembles de verrous atomiques sur les ressources partag�
 
 Le jeu source 1.10.7 conserve la correction de reprise d'un RUN arrêté puis libéré : son propriétaire peut demander une nouvelle réservation avec génération neuve, tout en conservant l'arrêt précédent dans l'historique. Les pauses et arrêts des réservations encore actives, les gels globaux et les permissions unitaires restent inchangés. Ce correctif ne déploie ni ne migre un runtime existant par sa seule présence dans les sources.
 
-Les consultations /CAB stats, /CAB statslast, /CAB stats 24, /CAB stats7 et /CAB stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir ORCHESTRATED_CODING.md pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
+Les consultations /CAB stats, /CAB statslast, /CAB stats 24, /CAB stats7 et /CAB stats30 exposent courant, dernière livraison observée et fenêtres 24 h/7 j/30 j. Les imports d'audit restent explicitement locaux, filtrés et séparés du natif, sans relancer le job arrêté. Les métriques et les quotas partagés absents restent N/A. Voir `plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md` et son index `references/protocol-index.md` pour les API et la migration explicite du registre schéma 4 ; une préparation source ne change aucun runtime actif.
 
 Le plugin CAB embarque `coding-session-statistics`. Son protocole impose un
 rapport `STATISTICS.md` dans chaque dossier d'archive OpenSpec après un
@@ -496,18 +500,17 @@ installées mais inactives jusqu'au prochain
 
 `/CAB update` vérifie le plugin installé, le skill `CAB`, sa
 référence de maintenance et les commandes `CAB.md` et `CABU.md`.
-CABU délègue à la procédure canonique et attend son rapport complet. Après
-staging et sauvegardes, l'update arrête systématiquement les trois unités
-systemd CAB, remplace les fichiers des quatre briques, recharge systemd puis
-redémarre controller, supervisor et monitor. Il n'inspecte pas les états RUN,
-permissions ou coordination comme précondition ; aucune unité n'est activée au
-login. OpenCode reste ouvert. Son API native recharge le broker si elle répond.
-Si elle est indisponible, les fichiers broker sont quand même remplacés et le
-runtime est rapporté `INDISPONIBLE`. Le bilan distingue versions publiées,
-installées, déployées et réellement actives. Un échec de démarrage déclenche le
-retour aux fichiers sauvegardés et le redémarrage des unités ; le rapport
-indique le résultat du repli. Détails :
-`skills/approval-bridge/references/component-update.md` dans le plugin.
+CABU délègue à la procédure canonique. CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
+puis ne bascule que les composants nécessaires. Un jeu conforme ne subit
+aucune coupure. Le transfert compatible préserve demandes, décisions, accès et
+baux ; une réponse réseau perdue reprend le même reçu sans rejeu de once.
+OpenCode reste ouvert. Le broker n'est reconnecté que si nécessaire ; sa
+readiness et les versions réelles sont vérifiées. L'absence prouvée d'OpenCode
+permet `INDISPONIBLE` pour sa version chargée, sans en déduire un succès natif.
+Le repli restaure les artefacts, jamais un ancien état métier. Les mesures
+séparent préparation, bascule et indisponibilité observée ; aucune unité
+n'est activée au login.
+Détails : `skills/approval-bridge/references/component-update.md` du plugin.
 
 Après un prévol de récupération divergent ou incomplet refusé sans effet,
 conserver la session candidate où le prévol a divergé, le même job et leurs
@@ -693,14 +696,13 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, des plugins CAB/CABU et des commandes
-est `2.1.81`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.2.0`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
 
-- **ORCHESTRATED_CODING.md** — document facultatif, réservé aux projets
-  nécessitant des sessions pilotées ; AGENTS.md impose alors sa lecture aux
-  deux agents concernés pour le protocole et ses contrats techniques.
+- **Contrat CAB distribué** — skill CAB, noyau et références conditionnelles ;
+  AGENTS.md le résout sans fichier local de protocole.
 - **PROJECT.md** — but, architecture et périmètre ;
 - **TECHNICAL.md** — protocoles, persistance, supervision et configuration ;
 - **BUILD.md** — installation, packaging et distribution ;
@@ -711,7 +713,7 @@ locales.
 
 Un seul OpenCode et un broker stdio servent plusieurs RUN dans le même répertoire. La réservation protège le change ; les accès temporaires protègent les ressources partagées. Une validation OpenSpec peut coexister avec une édition de code indépendante. Un conflit sur un fichier n'arrête pas les autres travaux.
 
-Consulter GET /runs puis les routes /runs/<runId>/... ; négocier resource-scoped-v1 avant mandat mutable. Les anciens appels d'intégration globale ordinaire sont refusés sans effet. Lire ORCHESTRATED_CODING.md et la référence du skill avant activation. Les formats historiques exigent une maintenance explicite ; CISM, CAISM et prompts directs restent hors concurrence pilotée. Les worktrees nécessitent une qualification distincte.
+Consulter GET /runs puis les routes /runs/<runId>/... ; négocier resource-scoped-v1 avant mandat mutable. Les anciens appels d'intégration globale ordinaire sont refusés sans effet. Lire `plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md` et son index `references/protocol-index.md` et la référence du skill avant activation. Les formats historiques exigent une maintenance explicite ; CISM, CAISM et prompts directs restent hors concurrence pilotée. Les worktrees nécessitent une qualification distincte.
 
 ## Broker existant sous un autre compte — 1.10.7
 
@@ -814,7 +816,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.81.
+La distribution courante des quatre briques, plugins et commandes est 2.2.0.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

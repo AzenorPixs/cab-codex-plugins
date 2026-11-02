@@ -1,5 +1,16 @@
 # CAB 1.10.4 — coordination atomique par ressource
 
+## Restitution ciblée d’un bail — évolution 2.2.0
+
+La restitution ordinaire examine les opérations liées au bail et les accès
+qui recouvrent ses ressources. Après cleanup et vérification natifs distincts
+et réussis, un accès disjoint du même RUN ne retient plus le bail nettoyé.
+Une opération encore incertaine liée au bail, ou un accès recouvrant actif,
+reste bloquant pour cette restitution. Le port d’un shell quarantiné distinct
+garde intégralement son accès, son opération et sa once. Cette règle ne
+dispense ni des preuves de nettoyage ni des contrôles de propriétaire et de
+fencing ; elle ne s’applique pas à une libération sans effet non prouvée.
+
 Ce profil est la référence du pilotage concurrent. Les anciens blocs techniques
 copiés dans les prompts ne font plus autorité. Les barrières ordinaires `/ready`,
 `/integration` et `/reconcile` issues de ces blocs ne sont pas utilisées à leur

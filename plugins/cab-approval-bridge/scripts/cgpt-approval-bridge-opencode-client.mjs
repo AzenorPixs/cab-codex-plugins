@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.81';
+export const VERSION = '2.2.0';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -214,7 +214,7 @@ export function nativeToolInputDigest(input) {
 export function nativeCodingMandate(instruction) {
   if (typeof instruction !== 'string' || !instruction.trim()) fail('opencode-coding-mandate-invalid');
   return 'CAB — outils natifs : write, edit et shell sont distincts du catalogue MCP search/execute. ' +
-    'Pour les méthodes MCP CAB broker_readiness, request_validation, poll_approval, get_approval et reject, ' +
+    'Pour les méthodes MCP CAB broker_readiness, request_validation, lookup_validation, poll_approval, get_approval et reject, ' +
     'utiliser uniquement Code Mode execute avec le nom exact découvert par search, sous la forme ' +
     'tools["cgpt-validation"].request_validation(...). Ne pas appeler directement une entrée MCP native. ' +
     'Si execute ou la méthode découverte est indisponible, signaler le blocage sans appel direct ou repli. ' +
@@ -514,7 +514,7 @@ function codeModePart(content, part) {
   const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
   let call, requestIdBound = false;
   if (match) {
-    if (!['broker_readiness', 'request_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
+    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
     const literal = literalObject(code.slice(match[0].length), commandBinding,
       match[2] === 'request_validation' ? nativeRequestId : null);
     if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
@@ -983,11 +983,14 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       if (!record(input) || !['running', 'completed'].includes(part.state.status)) fail('opencode-permission-source-invalid');
       if (raw.action === 'shell') {
         if (part.nativeTool !== 'shell' || raw.resources.length !== 1 || raw.resources[0] !== input.command ||
-            input.background === true || (input.workdir !== undefined &&
+            (input.workdir !== undefined &&
               (typeof input.workdir !== 'string' || resolve(directoryValue, input.workdir) !== directoryValue))) {
           fail('opencode-permission-target-invalid');
         }
         permission.metadata.command = input.command;
+        permission.metadata.shellBackground = input.background === true;
+        permission.metadata.shellTimeout = input.timeout;
+        permission.metadata.nativeToolInputSha256 = nativeToolInputDigest(input);
       } else {
         const file = input.path ?? input.filePath ?? input.filepath;
         const target = typeof file === 'string' ? resolve(directoryValue, file) : '';
@@ -1339,7 +1342,22 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     return {sessionId,after,watermark,events:items};
   }
 
-  return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions, sessionEventLog,
+  async function shellInfo(shellId, directoryValue = directory) {
+    if (!/^sh_[A-Za-z0-9]{1,100}$/.test(shellId || '')) fail('opencode-shell-id-invalid');
+    const envelope = await json('/api/shell/' + encodeURIComponent(shellId), {query:{directory:directoryValue}});
+    const value = envelope?.data;
+    if (envelope?.location?.directory !== directoryValue || !record(value) || value.id !== shellId ||
+        !['running','exited','timeout','killed'].includes(value.status) || typeof value.command !== 'string' ||
+        value.cwd !== directoryValue || !Number.isFinite(value.time?.started) ||
+        value.status !== 'running' && (!Number.isFinite(value.time?.completed) || value.time.completed < value.time.started) ||
+        value.exit !== undefined && !Number.isInteger(value.exit) ||
+        value.metadata?.sessionID !== undefined && typeof value.metadata.sessionID !== 'string') fail('opencode-shell-info-invalid');
+    return {shellId:value.id,status:value.status,command:value.command,cwd:value.cwd,
+      sessionId:value.metadata?.sessionID ?? null,startedAt:value.time.started,
+      finishedAt:value.time.completed ?? null,exit:value.exit ?? null};
+  }
+
+  return Object.freeze({ info, location, mcp, shellInfo, listSessions, session, activeSessions, sessionStatus, messages, message, permissions, sessionEventLog,
     sourceRead, sourceList, sourceFind,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,

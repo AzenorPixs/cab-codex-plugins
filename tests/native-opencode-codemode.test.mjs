@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
@@ -37,13 +38,14 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       const action = main ? queue.shift() : null;
       if (action) dispatched++;
       if(action?.providerError){response.writeHead(400,{'content-type':'application/json'});response.end(JSON.stringify({error:{type:'invalid_request_error',message:'SYNTHETIC_PROVIDER_FAILURE'}}));return;}
-      const delta = action ? { role: 'assistant', tool_calls: [{ index: 0, id: 'native_call_' + dispatched,
+      const delta = action?.text ? { role: 'assistant', content: action.text } : action ? { role: 'assistant', tool_calls: [{ index: 0, id: 'native_call_' + dispatched,
         type: 'function', function: { name: action.tool, arguments: JSON.stringify(action.input) } }] }
         : { role: 'assistant', content: 'synthetic fixture done' };
       response.writeHead(200, { 'content-type': 'text/event-stream' });
-      for (const [value, finish] of [[delta, null], [{}, action ? 'tool_calls' : 'stop']]) {
+      for (const [value, finish] of [[delta, null], [{}, action?.tool ? 'tool_calls' : 'stop']]) {
         response.write('data: ' + JSON.stringify({ id: 'fixture', object: 'chat.completion.chunk', created: 1,
-          model: 'fixture', choices: [{ index: 0, delta: value, finish_reason: finish }] }) + '\n\n');
+          model: 'fixture', ...(finish && action?.usage ? { usage: action.usage } : {}),
+          choices: [{ index: 0, delta: value, finish_reason: finish }] }) + '\n\n');
       }
       response.end('data: [DONE]\n\n');
     });
@@ -103,14 +105,17 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const stageEntry=new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-shell-stage.mjs',import.meta.url).href;
     const controllerWrapper=join(root,'controller-wrapper.mjs');
     writeFileSync(controllerWrapper,`import {ShellStageStore} from ${JSON.stringify(stageEntry)};const original=ShellStageStore.prototype.get;ShellStageStore.prototype.get=function(id){const s=original.call(this,id);return id==='stage-corrupt-fixture'&&s?{...s,payload:s.payload.replace('CAB_LONG_EXACT_OK','CAB_LONG_WRONG_OK')}:s};await import(${JSON.stringify(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs',import.meta.url).href)});`);
-    controller = spawn(process.execPath, [controllerWrapper],
+    function startController() {
+      controller = spawn(process.execPath, [controllerWrapper],
       { stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, OC_Codex_WORKSPACE: workspace,
         OC_Codex_OUTSIDE_SANDBOX: '1', OC_Codex_OPENCODE_URL: base, OC_Codex_OPENCODE_PASSWORD_FILE: passwordFile,
         OC_Codex_STATUS_PORT: String(controllerPort), OC_Codex_DECISION_MODE: 'manual', CODEX_COMMAND: 'cab-test-unused' } });
-    controller.stderr.on('data', chunk => controlLog += chunk);
+      controller.stderr.on('data', chunk => controlLog += chunk);
+    }
+    startController();
     async function http(path, body) {
       const r = await fetch(control + path, { method: body ? 'POST' : 'GET',
-        headers: { 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(5000) });
+        headers: { 'content-type': 'application/json', 'x-cab-continuity':'cab-continuity-v1' }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(5000) });
       const text = await r.text(); const data = text ? JSON.parse(text) : null;
       assert.ok(r.ok, JSON.stringify({ path, http: r.status, data })); return data;
     }
@@ -191,7 +196,41 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const nativeEdit = nativeTools.find(tool => tool.name === 'edit');
     assert.deepEqual(nativeEdit.parameters.required, ['path', 'oldString', 'newString']);
     assert.equal(nativeEdit.parameters.properties.replaceAll.type, 'boolean');
-    console.log('Catalogue natif synthétique :', JSON.stringify({ names: nativeTools.map(tool => tool.name), edit: nativeEdit.parameters }));
+    console.log('Catalogue natif synthétique :', JSON.stringify({ names: nativeTools.map(tool => tool.name), edit: nativeEdit.parameters,
+      shell: nativeTools.find(tool => tool.name === 'shell')?.parameters }));
+    const usageSession = await makeSession('native usage counters only');
+    for (let i = 0; i < 2; i++) {
+      const expected = dispatched + 1;
+      queue.push({ text: 'synthetic measured answer', usage: { prompt_tokens: 12, completion_tokens: 5,
+        total_tokens: 17, prompt_tokens_details: { cached_tokens: 4 } } });
+      await client.prompt(usageSession.id, 'Native usage fixture, no tool.');
+      await until(async () => !(await client.activeSessions())[usageSession.id] && dispatched === expected, 'native measured usage');
+    }
+    const measuredUsage = (await client.messages(usageSession.id)).filter(message => message.info.role === 'assistant');
+    console.log('Usage native par message contrôlé :', JSON.stringify(measuredUsage.map(message => ({ tokens: message.info.tokens, cost: message.info.cost }))));
+    assert.equal(measuredUsage.length, 2);
+    assert.ok(measuredUsage.every(message => message.info.tokens.output === 5 && message.info.tokens.cache.read === 4));
+    const backgroundProbe = await makeSession('native background runtime contract');
+    const backgroundEnd = dispatched + 1;
+    queue.push({ tool: 'shell', input: { command: '/usr/bin/sleep 0.2', background: true, timeout: 2000 } });
+    await client.prompt(backgroundProbe.id, 'Only the queued bounded synthetic sleep.');
+    let backgroundPermission;
+    await until(async () => {
+      const pending = await client.request('/api/permission/request');
+      backgroundPermission = pending.data.find(permission => permission.sessionID === backgroundProbe.id);
+      return Boolean(backgroundPermission);
+    }, 'native background ask');
+    await client.replyPermission(backgroundProbe.id, backgroundPermission.id, 'once');
+    await until(async () => !(await client.activeSessions())[backgroundProbe.id] && dispatched === backgroundEnd, 'native background return');
+    const backgroundPart = (await client.messages(backgroundProbe.id)).flatMap(message => message.parts)
+      .findLast(part => part.nativeTool === 'shell');
+    console.log('Contrat background natif :', JSON.stringify({ metadata: backgroundPart.state.metadata, status: backgroundPart.state.status }));
+    const nativeShellId = backgroundPart.state.metadata.shellID;
+    assert.match(nativeShellId, /^sh_/);
+    const nativeShell = await client.request('/api/shell/' + encodeURIComponent(nativeShellId));
+    console.log('Shell.Info natif contrôlé :', JSON.stringify({ location: nativeShell.location, info: nativeShell.data }));
+    assert.equal(nativeShell.data.id, nativeShellId); assert.equal(nativeShell.data.command, '/usr/bin/sleep 0.2');
+    await until(async () => (await client.request('/api/shell/' + encodeURIComponent(nativeShellId))).data.status !== 'running', 'bounded native background exit');
     const reviewed = await client.createSession({title:'lecture deny puis prévol contrôlé',model:{providerID:'fixture',modelID:'fixture'},permissions:['shell','edit','subagent','skill'].map(permission=>({permission,pattern:'*',action:'deny'}))});
     const policyBefore=await client.nativePermissionPolicy(reviewed.id,{requiredNativeAsk:['shell']});assert.equal(policyBefore.ready,false);assert.equal(policyBefore.effective.shell.action,'deny');
     const providerBefore=providerRequests.length,messagesBefore=(await client.messages(reviewed.id)).length;
@@ -244,7 +283,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const resource = 'resource:native-preflight';
     const run = await http('/runs/reserve', { runId: 'native-code', ownerId: 'synthetic-owner', sessionId: old.id,
       directory: workspace, changeId: 'synthetic-code', selectionKey: 'synthetic-code', dependsOn: [],
-      resources: [{ key: resource, mode: 'read' }, { key: 'file:fixture.txt', mode: 'write' }] });
+      resources: [{ key: resource, mode: 'read' }, { key: 'file:fixture.txt', mode: 'write' }, {key:'port:fixture/5173',mode:'write'}] });
     await http('/runs/native-code/job/arm', { jobId: 'job-code', sessionId: old.id, directory: workspace,
       changeId: 'synthetic-code', strictCommands: true, criteria: ['native once proof'] });
     const recovery = { jobId: 'job-code', expectedSessionId: old.id, sessionId: candidate.id,
@@ -428,6 +467,14 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     await until(async () => !(await client.activeSessions())[retryCandidate.id] && dispatched === unknownEnd, 'MCP unknown approval');
     const unknownMessage = (await client.messages(retryCandidate.id)).find(message => message.parts.some(part => part.tool === 'cgpt-validation_get_approval' || part.state?.input?.code?.includes('get_approval')));
     console.log('Lookup natif inconnu synthétique :', JSON.stringify((await client.request('/api/session/' + retryCandidate.id + '/message/' + unknownMessage.info.id)).data.content));
+    const lookupEnd=dispatched+1;
+    const lookupIdentity=Object.fromEntries(['requestId','run_id','session_id','operation_id','operation_digest'].map(key=>[key,approval[key]]));
+    queue.push(mcp('lookup_validation',lookupIdentity));
+    await client.prompt(retryCandidate.id,'Read only the existing synthetic receipt by its exact identity.');
+    await until(async()=>!(await client.activeSessions())[retryCandidate.id]&&dispatched===lookupEnd,'native durable lookup');
+    const lookupPart=(await client.messages(retryCandidate.id)).flatMap(m=>m.parts).findLast(p=>p.tool==='cgpt-validation_lookup_validation');
+    assert.ok(lookupPart);const lookedUp=JSON.parse(lookupPart.state.output);
+    assert.equal(lookedUp.found,true);assert.equal(lookedUp.approval_id,approval.approval_id);assert.equal(lookedUp.snapshot_only,true);
     const retried = await http('/runs/native-code/job/recover', { ...retryRecovery, phase: 'retry',
       previousPreflightRequestId: invalid.requestId, preflightRequestId: 'valid-native-retry' });
     assert.equal(retried.recovery.sessionId, retryCandidate.id);
@@ -499,6 +546,66 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     }
     console.log(JSON.stringify({exactShellCarrier:true,payloadBytes:Buffer.byteLength(longPayload),modelRecopiedPayload:false,exactNativeOnce:true,alteredBodyRefusedBeforePayload:true,sameLengthCorruption:true}));
 
+    const peerSession=await makeSession('native handoff peer');
+    const peerRun=await http('/runs/reserve',{runId:'native-peer',ownerId:'synthetic-peer-owner',sessionId:peerSession.id,
+      directory:workspace,changeId:'synthetic-peer',selectionKey:'synthetic-peer',dependsOn:[],
+      resources:[{key:'browser:fixture/peer',mode:'write'}]});
+    await http('/runs/native-peer/job/arm',{jobId:'job-peer',sessionId:peerSession.id,directory:workspace,
+      changeId:'synthetic-peer',strictCommands:true,criteria:['held lease survives cutover']});
+    await http('/runs/native-peer/test-resources/acquire',{version:peerRun.version,transactionId:'peer-lease',
+      resources:[{key:'browser:fixture/peer',mode:'write'}],evidence:['isolated fixture reservation; no browser effect']});
+    const peerBefore=(await http('/runs/native-peer/test-resources')).reservations;
+
+    // Background sous CAB : le start retourne, le port reste EXECUTING jusqu'à Shell.Info terminal.
+    current=(await http('/runs')).runs.find(r=>r.runId===run.runId);
+    const backgroundInput={command:'/usr/bin/sleep 2',background:true,timeout:5000};
+    const backgroundApproval={...approval,reservation_version:current.version,session_id:retryCandidate.id,
+      requestId:'background-approved',approval_id:'approval-background',operation_id:'operation-background',
+      operation_digest:createHash('sha256').update(backgroundInput.command).digest('hex'),commands:[backgroundInput.command],
+      shell_background:true,tool_input_sha256:nativeToolInputDigest(backgroundInput),
+      resources:[{key:'port:fixture/5173',mode:'write'}],expected_revisions:{'port:fixture/5173':0}};
+    const backgroundCabEnd=dispatched+2;
+    queue.push(mcp('request_validation',backgroundApproval),{tool:'shell',input:backgroundInput});
+    await client.prompt(retryCandidate.id,'Only the queued explicitly approved bounded background shell.');
+    await until(async()=>(await http('/runs/native-code/status')).undecidedValidationCount===1,'background admission');
+    await http('/runs/native-code/decision/'+backgroundApproval.requestId,{decision:'approved'});
+    const backgroundAccess=await http('/runs/native-code/locks/acquire',{version:current.version,
+      operationId:backgroundApproval.operation_id,operationDigest:backgroundApproval.operation_digest,
+      resources:backgroundApproval.resources,expectedRevisions:backgroundApproval.expected_revisions});
+    await until(async()=>!(await client.activeSessions())[retryCandidate.id]&&dispatched===backgroundCabEnd,'background start returned');
+    const runningBackground=(await http('/runs')).coordination.operations[backgroundApproval.operation_id];
+    assert.equal(runningBackground.state,'EXECUTING');assert.equal(runningBackground.native.onceAcknowledged,true);
+    const handoffNativePid=(await client.info(true)).pid,handoffBrokerPid=readFileSync(brokerPidFile,'utf8');
+    const beforeHandoffReadiness=(await http('/status')).brokerReadiness;
+    await http('/transport/prepare',{transactionId:'native-background-handoff'});
+    const handoffStartedAt=performance.now();
+    const controllerStopped=once(controller,'exit');controller.kill('SIGTERM');await controllerStopped;
+    assert.equal(controller.exitCode,0,'old controller sealed its exact state');
+    startController();
+    await until(async()=>{if(controller.exitCode!==null)throw new Error(controlLog.slice(-1000));
+      try{return (await http('/transport/status')).adopted===true;}catch{return false;}},'native compatible handoff');
+    const handoffUpperBoundMs=Math.ceil(performance.now()-handoffStartedAt);
+    const adopted=await http('/transport/status');assert.equal(adopted.receipt.transactionId,'native-background-handoff');
+    const afterHandoffReadiness=(await http('/runs/native-code/status')).brokerReadiness;
+    assert.equal(afterHandoffReadiness.restored_from,'certified-handoff');
+    assert.equal(afterHandoffReadiness.checked_at,beforeHandoffReadiness.checked_at,'no fabricated fresh timestamp');
+    assert.deepEqual((await http('/runs/native-peer/test-resources')).reservations,peerBefore,'disjoint peer lease unchanged');
+    const resumed=(await http('/runs')).coordination.operations[backgroundApproval.operation_id];
+    assert.equal(resumed.native.onceAcknowledged,true);assert.equal(resumed.native.callId,runningBackground.native.callId);
+    assert.equal((await client.info(true)).pid,handoffNativePid);assert.equal(readFileSync(brokerPidFile,'utf8'),handoffBrokerPid);
+    assert.equal(dispatched,backgroundCabEnd,'no new model tool or native command during handoff');
+    await until(async()=>(await http('/runs')).coordination.operations[backgroundApproval.operation_id].state==='COMPLETED','background terminal native event');
+    const finishedBackground=(await http('/runs')).coordination.operations[backgroundApproval.operation_id];
+    assert.equal(finishedBackground.nativeResult.exit,0);
+    await http('/runs/native-code/locks/release',{version:current.version,operationId:backgroundApproval.operation_id,
+      token:backgroundAccess.token,fencing:backgroundAccess.fencing,outcome:'COMPLETED',evidence:['native Shell.Info exact, explicit effects review']});
+    console.log(JSON.stringify({backgroundCab:true,startNotCompletion:true,onceAcknowledged:true,terminalNativeShell:true,explicitRelease:true,realCompatibleHandoff:true,nativeAndBrokerPidPreserved:true,peerLeasePreserved:true,handoffUpperBoundMs,measurement:'kill-to-observed-adoption-upper-bound'}));
+
+    await until(async()=>(await http('/runs/native-code/efficiency')).messageCount>0,'native usage collection');
+    const nativeUsage=await http('/runs/native-code/efficiency');
+    assert.equal(nativeUsage.source,'opencode-v2-message');assert.equal(nativeUsage.metrics.costUsd.observed,0);
+    assert.ok(nativeUsage.metrics.output.available>0);assert.equal(nativeUsage.billingSavings.observed,null);
+
     // Même cible et APPROVED, mais arguments divergents : aucune once ni écriture.
     current=(await http('/runs')).runs.find(r=>r.runId===run.runId);
     const mismatch={...partial,reservation_version:current.version,session_id:retryCandidate.id,requestId:'input-mismatch',approval_id:'approval-input-mismatch',operation_id:'operation-input-mismatch',
@@ -507,7 +614,8 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const mismatchEnd=dispatched+2;
     queue.push(mcp('request_validation',mismatch),{tool:'write',input:{path:target,content:'UNAPPROVED replacement'}});
     await client.prompt(retryCandidate.id,nativeCodingMandate('Execute only the queued synthetic mismatch.'));
-    await until(async()=>(await http('/runs/native-code/status')).undecidedValidationCount===1,'mismatch admission');
+    await until(async()=>(await http('/runs/native-code/status')).undecidedValidationCount===1,'mismatch admission',async()=>({status:await http('/runs/native-code/status'),log:controlLog.slice(-1500).replaceAll(password,'[synthetic]'),
+      recent:(await client.messages(retryCandidate.id)).flatMap(m=>m.parts).filter(p=>p.type==='tool').slice(-2).map(p=>({tool:p.tool,status:p.state.status,error:p.state.error,output:p.state.output?.slice(0,300)}))}));
     await http('/runs/native-code/decision/'+mismatch.requestId,{decision:'approved'});
     await http('/runs/native-code/locks/acquire',{version:current.version,operationId:mismatch.operation_id,operationDigest:mismatch.operation_digest,resources:mismatch.resources,expectedRevisions:mismatch.expected_revisions});
     await until(async()=>(await http('/runs/native-code/status')).blockedNativeInputs.some(x=>x.requestId===mismatch.requestId),'digest guard');

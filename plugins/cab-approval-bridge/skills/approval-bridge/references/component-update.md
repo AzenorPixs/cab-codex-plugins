@@ -1,4 +1,4 @@
-# Mise à jour autonome des briques CAB — CAB 2.1.81
+# Mise à jour autonome des briques CAB — CAB 2.2.0
 
 ## Association du skill et des commandes
 
@@ -9,42 +9,45 @@ ce lien avant mutation. `/CABU` MUST charger le fichier frère `CAB.md` de même
 version et lui déléguer exactement `update` ; il ne contient pas de procédure
 de maintenance parallèle.
 
-## Processus forcé de `/CAB update` et `/CABU`
+Les unités gérées sont cgpt-approval-bridge-controller.service,
+cgpt-approval-bridge-supervisor.service et cgpt-approval-bridge-monitor.service.
+Leurs fichiers et le broker sont vérifiés séparément des processus.
 
-`/CABU` sans argument charge le fichier frère `CAB.md` de même version et lui
-délègue exactement `update`. La procédure est portée par `CAB.md` et cette
-référence ; elle ne se duplique pas dans l'alias.
+## Préparation à chaud et bascule sélective
 
-L'update valide le manifeste, le skill, cette référence, l'updater, les trois
-commandes, les versions du paquet, la fermeture des imports, les syntaxes, les
-destinations explicites et les sauvegardes. Il ne consulte aucun RUN, job,
-permission, gel global ni état de service pour décider de commencer. Il ne
-demande pas `SHARED_MAINTENANCE`, ne suspend pas les RUN et ne relit pas le
-registre métier avant l'arrêt.
+/CABU délègue /CAB update dans le même tour. La provenance distante et les
+validations de paquet restent requises. Préparer entièrement les artefacts,
+fermetures d'imports, syntaxes, destinations et sauvegardes avant la coupure.
+Comparer les empreintes déployées et les versions réellement servies : un jeu
+conforme renvoie up-to-date, sans arrêt ni reconnexion. Un fichier hors de la
+fermeture active s'installe sans redémarrage. Le Web et les unités ne déclenchent
+que les groupes réellement affectés ; daemon-reload est limité aux unités
+modifiées. Aucune activation au login.
 
-Après validation et staging, l'updater appelle systématiquement, dans l'ordre,
-`systemctl --user stop` pour les unités
-`cgpt-approval-bridge-controller.service`,
-`cgpt-approval-bridge-supervisor.service` et
-`cgpt-approval-bridge-monitor.service`.
-Il remplace atomiquement tous les fichiers des quatre briques, y compris les
-trois fichiers Python broker dans le répertoire explicitement déclaré, conserve
-les sauvegardes privées, recharge systemd, puis appelle systématiquement
-`systemctl --user start` pour les trois unités. Les unités ne sont jamais
-activées au login. Une invocation dont les versions sont déjà égales effectue
-tout de même cet arrêt et ce redémarrage.
+La bascule compatible utilise [transport-continuity](transport-continuity.md).
+Elle prépare et scelle une frontière courte des communications sans attendre
+la fin des commandes longues. Le même reçu et la même transaction servent à
+la reprise après réponse perdue. Une frontière occupée laisse les services
+actifs et retourne waiting ; ne pas multiplier les préparations ni purger le
+stage. Ne pas fabriquer SHARED_MAINTENANCE pour une mise à jour ordinaire.
 
-OpenCode reste ouvert. L'updater détecte sa disponibilité avant la coupure,
-sans lire les RUN. Si OpenCode est actif, il déconnecte le broker via la route
-native V2 après arrêt des services, installe les fichiers, démarre les trois
-services puis reconnecte le broker. Une readiness fraîche doit prouver sa
-version cible. Un échec d'authentification, de location, de reconnexion ou de
-version sur un OpenCode actif interdit le succès et déclenche le repli.
+Exécuter `systemctl --user stop` puis `systemctl --user start` seulement pour
+les composants requis par le plan vérifié.
+OpenCode reste ouvert ; ne reconnecter le broker que si son code ou son état
+chargé l'exige. Une reconnexion native conserve les décisions en attente et
+ne rejoue aucune permission. La readiness fraîche et les versions observées
+restent nécessaires avant succès. L'absence prouvée d'OpenCode seule permet
+INDISPONIBLE pour la version chargée ; une présence incertaine ne suffit pas.
 
-L'absence prouvée du processus OpenCode autorise l'installation des fichiers
-broker sans version chargée ; le rapport indique alors `INDISPONIBLE`. Une
-présence incertaine ne vaut pas preuve d'absence. systemd est rechargé si les
-unités changent ; les trois services sont toujours arrêtés et redémarrés.
+Après remplacement, vérifier l'adoption du reçu compatible et les identités,
+accès et baux antérieurs ; une divergence conserve le repli protégé. Depuis
+2.1.81, le certificat nouveau n'existe pas : annoncer explicitement LEGACY,
+sans promettre la même continuité que pour deux versions compatibles.
+Le repli restaure les artefacts et leurs seuls services affectés, jamais un
+ancien état métier. Annuler avant coupure retire seulement la barrière de
+transport. Distinguer preparationMs, cutoverMs, communicationUnavailableMs,
+unavailableMs et totalMs ; une borne de vérification n'est pas une mesure
+exacte de coupure réseau. Ne promettre aucune durée non mesurée.
 
 Pour le dépôt CAB, la destination du broker est le répertoire `src/` sous la
 racine CAB : BUILD.md y définit le point d'entrée source et les trois modules
@@ -55,13 +58,10 @@ Les liens broker, caches et autres destinations dans le workspace restent refus�
 Le layout managed-release est admis pour les scripts des services et le Web ;
 les trois modules broker src/ restent des fichiers ordinaires, y compris au repli.
 
-Après redémarrage, l'updater vérifie les versions réellement servies par le
-contrôleur, le superviseur et le moniteur, et leur workspace. Il produit un
-rapport complet des versions publiées, du plugin installé, des fichiers
-déployés, des processus observés et du résultat transactionnel. Un échec de
-validation de paquet ou de destination survient avant l'arrêt. Un échec après
-arrêt restaure les seuls artefacts sauvegardés, recharge systemd et redémarre
-les trois unités ; il conserve le journal et signale le repli.
+Après bascule, vérifier chaque composant réellement actif, son workspace et
+sa version ; produire le bilan source/paquet/fichiers/processus et le résultat
+transactionnel. Une erreur précoce préserve les services ; une erreur après
+bascule conserve le reçu et qualifie le repli. Ne pas effacer les historiques.
 
 ## Profil de récupération gelée
 
@@ -226,23 +226,19 @@ Le paquet complet est vérifié puis sauvegardé. Les empreintes des fichiers
 installés sont recontrôlées avant remplacement ; une modification concurrente
 des artefacts cibles est préservée et bloque avant arrêt.
 
-L'outil arrête systématiquement les trois unités systemd CAB, tente une
-déconnexion native du broker si OpenCode répond, remplace atomiquement les
-fichiers des quatre briques, puis exécute `systemctl --user daemon-reload` et
-démarre controller, supervisor et monitor. Aucune unité n'est activée au login.
-OpenCode n'est ni fermé ni tué. Si son API est absente, le broker reste
-`INDISPONIBLE` côté runtime mais ses fichiers sont installés. Aucun état de RUN
-ou schéma métier n'est modifié par cette opération.
-
-Le succès exige les versions des trois unités après redémarrage et la version
-des fichiers broker. La version runtime broker vient uniquement d'une readiness
-postérieure au rechargement ; sans elle, le rapport indique `INDISPONIBLE`.
-Chaque invocation redémarre les trois unités, même si le jeu est déjà conforme.
+L'outil applique le plan sélectif décrit plus haut. La syntaxe, le staging,
+les sauvegardes et les empreintes concurrentes sont vérifiés avant arrêt.
+Les composants déjà conformes restent actifs. La readiness du broker et les
+versions réellement servies doivent correspondre à la cible ; les processus
+absents sont distingués des versions de fichiers. La barrière compatible
+préserve la communication ; un premier passage LEGACY reste explicitement
+non certifié. Les états métier ne sont jamais restaurés depuis une sauvegarde.
 
 ## Retour arrière
 
 Une erreur après le début des arrêts déclenche le retour aux seuls artefacts
-sauvegardés, recharge systemd et redémarre les trois unités. Les fichiers runtime,
+sauvegardés, recharge systemd si nécessaire et redémarre les seules unités
+affectées par le plan. Les fichiers runtime,
 décisions consommées, RUN et archives ne sont jamais restaurés depuis une
 ancienne copie. Un échec de repli conserve la phase ROLLBACK_FAILED et interdit
 d'annoncer un succès.
@@ -250,7 +246,7 @@ d'annoncer un succès.
 Une invocation suivante réconcilie d'abord un reçu interrompu. L'option
 `--rollback`, avec les mêmes cibles, permet un repli explicite sur les seules
 sauvegardes correspondantes. Aucune coordination globale n'est créée ou
-libérée par le chemin ordinaire forcé.
+libérée par le chemin ordinaire.
 
 Si le reçu est `ROLLBACK_FAILED` avec `failureCode=update-controller-start-unconfirmed`,
 `--resume-forward <transactionId>` peut reprendre uniquement ce reçu après

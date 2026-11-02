@@ -7,6 +7,20 @@ description: Préparer et produire des statistiques détaillées et auditables d
 
 Produire un rapport factuel à partir de l'historique persistant de la session concernée. Ne pas inventer les données absentes.
 
+## Collecte native CAB 2.2.0
+
+La collecte statistique native continue et GET /runs/<run_id>/efficiency sont
+prioritaires sur un tour LLM périodique pour recueillir des mesures déjà
+exposées. Les sondes initiale et finale et le rapport par archive restent
+requis selon le mandat. Une relève utile peut être native sans réveiller
+l'orchestrateur ; ne pas additionner snapshots cumulatifs et messages natifs.
+Conserver couverture, source, modèle, fournisseur, zéros réels et N/A motivé.
+Les sondes de substitution manuelles ne s'appliquent qu'aux mesures manquantes,
+sans duplication des résultats déjà disponibles ni reconstruction rétroactive.
+Une sonde statistique échouée reste distincte d'un échec du benchmark PLLM et
+ne suspend pas, à elle seule, le RUN. Poursuivre sans arrêter le travail pour
+attendre un créneau.
+
 ## Sources et méthode
 
 En profil concurrent avec statistiques intégrées, commencer par

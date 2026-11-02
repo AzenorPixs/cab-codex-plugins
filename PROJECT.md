@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.81`.
+Version de référence des briques CAB : `2.2.0`.
 
-CAB 2.1.81 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.0 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -26,7 +26,7 @@ CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni u
 
 CAB 1.10.7 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
 
-Validation, synchronisation, archivage, publication et rapport protègent leurs périmètres réels sans demander la stabilité de tous les RUN. Le gel global est réservé à la réconciliation commune, la maintenance partagée, la pause globale ou l'arrêt global explicites. Les décisions unitaires, ask/once, preuves et gates sont conservés. Le contrat détaillé est dans ORCHESTRATED_CODING.md et OpenSpec.
+Validation, synchronisation, archivage, publication et rapport protègent leurs périmètres réels sans demander la stabilité de tous les RUN. Le gel global est réservé à la réconciliation commune, la maintenance partagée, la pause globale ou l'arrêt global explicites. Les décisions unitaires, ask/once, preuves et gates sont conservés. Le contrat détaillé est dans `plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md` et son index `references/protocol-index.md` et OpenSpec.
 
 Le contrôleur persiste la décision terminale avant une réponse native. Après
 redémarrage, il ne restaure une approbation qu’à partir de la demande et de la
@@ -102,35 +102,15 @@ validité ni d’un élargissement de périmètre. Un archivage OpenSpec reste u
 mandat distinct, décidé seulement après vérification des critères d’acceptation,
 des validations et de la cohérence finale.
 
-Le protocole impose le SSE en temps réel et le contrôle des demandes et
-rapports toutes les 3 secondes. Les vérifications de progression pendant
-l'analyse ou la rédaction sont espacées de 7 secondes fixes. La fraîcheur PLLM
-de huit heures est vérifiée au démarrage initial ; le choix du RUN est ensuite
-conservé pendant la session. Une panne réelle ou une instruction explicite peut
-imposer une réévaluation. Sans choix admissible, attendre une instruction sans
-benchmark ni réessai automatique, avec preuves et état conservés.
-Les sondes statistiques suivent une cadence de 30 minutes sans arrêter le
-travail pour attendre l'échéance. `AGENTS.md` et le skill distribué précisent
-les contrôles et preuves exigés avant reprise.
+Le suivi consomme les événements SSE en temps réel, avec curseur durable et
+attente HTTP de décision bornée ; un repli technique progressif couvre la perte
+du flux. Aucun tour LLM de polling à cadence fixe n'est imposé. La collecte
+statistique native conserve sa couverture et N/A pour les mesures absentes ;
+les sondes initiale/finale restent vérifiables sans réveils LLM périodiques.
 
-### 3.4 Corrélation explicite
-
-Chaque demande est corrélée par un `requestId` stable. Une décision doit correspondre à la demande exacte qui l'a provoquée. Une décision déjà consommée ne doit pas pouvoir être remplacée par une décision contradictoire.
-
-### 3.5 Persistance et traçabilité
-
-CAB conserve l'état courant des approbations, leur historique, les éléments nécessaires à la reprise après interruption et les informations de diagnostic.
-
-Cette persistance couvre le RUN courant et sa reprise. Une réinitialisation globale exclusive
-CAB purge d'abord l'intégralité de son ancien état technique, y compris les
-conflits Syncthing, puis réinitialise le broker et la supervision. Les rapports
-et historiques natifs des agents sont conservés hors de cet espace runtime.
-
-Les identifiants logiques conservés dans l'histoire restent lisibles sans conversion. Les nouvelles réservations de test restent canoniques et distinctes des permissions. Une récupération de mise à jour conserve l'autorité de maintenance, les données métier et les anciennes releases jusqu'à vérification des composants réellement chargés.
-
-### 3.6 Supervision indépendante
-
-CAB distingue disponibilité des processus, activité des transports et progression métier réelle. Un processus vivant ou un échange réseau actif ne suffit pas à déclarer le système sain.
+La fraîcheur PLLM de huit heures reste contrôlée au démarrage initial ; le
+choix du RUN est conservé, sans benchmark ni réessai automatique en cas
+d’absence de politique admissible.
 
 ## 4. Architecture fonctionnelle
 
@@ -388,12 +368,9 @@ même procédure canonique `/CAB update` ; aucune ne duplique sa logique.
 - `/CAB test` : vérifie le chemin complet de validation dans cette session ;
 - `/CAB run` : maintient le job piloté et ses mandats unitaires dans cette
   même session, sauf récupération explicite contrôlée conservant le RUN ;
-- `/CAB update` (`/CABU` sans argument) : valide le jeu, arrête systématiquement
-  les trois unités systemd CAB, remplace les fichiers du broker, contrôleur,
-  superviseur et Web, puis redémarre les unités sans activation au login. Il ne
-  consulte pas les états RUN ou de coordination en précondition. Si OpenCode est
-  absent, les fichiers broker sont quand même installés et sa version runtime
-  est rapportée `INDISPONIBLE` ; le bilan sépare fichiers et processus ;
+- `/CAB update` (`/CABU` sans argument) : préparation à chaud, comparaison des
+  artefacts et bascule des seules briques nécessaires ; continuité certifiée
+  lorsqu’elle est disponible, repli protégé sinon, sans activation au login.
 - `/CAB stop` : arrête uniquement les ressources CAB qu'elle a créées, sans
   arrêter OpenCode ni le broker MCP géré par OpenCode.
 
@@ -544,7 +521,7 @@ purge et d'arrêt communes décrites ailleurs s'appliquent seulement à une
 réinitialisation globale exclusive, après quiescence et réconciliation.
 
 La capacité OpenSpec concurrent-run-coordination définit ces garanties.
-Le protocole détaillé est dans ORCHESTRATED_CODING.md. Les worktrees ne font
+Le protocole détaillé est dans `plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md` et son index `references/protocol-index.md`. Les worktrees ne font
 pas partie du profil concurrent initial. Les prompts directs ne sont pas
 exécutés en concurrence avec ces RUN et ne sont pas modifiés par cette évolution.
 

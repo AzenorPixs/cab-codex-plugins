@@ -8,41 +8,44 @@ interruption conversationnelle ne soit jamais confondue avec une fin de job.
 
 ### Requirement: Compactage coordonné des deux sessions
 
-L'orchestrateur SHALL déclencher un cycle commun de compactage de sa session et de la
-session de codage toutes les 1 h 30 (5 400 secondes). À l'échéance, l'orchestrateur
-SHALL suspendre les nouveaux mandats le temps d'achever le mandat autorisé en cours,
-traiter son rapport et sauvegarder le checkpoint, puis vérifier les API natives exposées
-pour les sessions réellement pilotées.
+L'orchestrateur SHOULD compacter selon la pression native du contexte et à
+une frontière sûre. Il MUST conserver mandat, checkpoint, permissions et
+preuves, et vérifier les API disponibles. Un échec ou une API absente MUST
+laisser continuer un contexte dont la continuité est prouvée. Un compactage
+en cours ou un contexte perdu MUST suspendre les seuls effets concernés
+jusqu'à réconciliation, sans rejeu ni preuve inventée.
+
+#### Scenario: Contexte exploitable après quatre-vingt-dix minutes
+- **WHEN** le contexte reste exploitable et aucune limite observée n’exige de compactage
+- **THEN** le RUN poursuit ses mandats sans interruption fondée sur cette seule durée
+
+#### Scenario: Pression de contexte à une frontière sûre
+- **WHEN** une limite de contexte est observée entre deux mandats
+- **THEN** les sessions accessibles sont compactées avec leurs preuves natives et le checkpoint est réconcilié avant reprise
 
 #### Scenario: Échéance entre deux mandats
-
-- **WHEN** l'échéance de 5 400 secondes est atteinte, aucun mandat n'est en cours et les deux API natives sont disponibles
-- **THEN** l'orchestrateur déclenche les deux compactages en parallèle dans un même cycle et ne reprend qu'après leurs preuves natives et la réconciliation
+- **WHEN** la politique constate une pression de contexte entre deux mandats et les API sont disponibles
+- **THEN** les deux compactages sont coordonnés et leurs preuves natives sont vérifiées avant reprise
 
 #### Scenario: Échéance pendant une exécution
-
-- **WHEN** l'échéance est atteinte pendant l'unique opération déjà autorisée
-- **THEN** l'orchestrateur laisse cette opération s'achever, traite son rapport, rend le retard observable, compacte les sessions accessibles puis reprend après réconciliation sûre
+- **WHEN** une pression de contexte est observée pendant une opération autorisée
+- **THEN** cette opération est conservée et le compactage attend une frontière sûre avec checkpoint
 
 #### Scenario: Compactage de l'orchestrateur non prouvé
-
-- **WHEN** seule la session de codage ou une session auxiliaire est compactée, ou que l'API de l'orchestrateur réel est indisponible
-- **THEN** le cycle reste incomplet avec sa cause, aucune réussite conjointe n'est déclarée et le RUN poursuit ses mandats autorisés après réconciliation sûre sans dérogation ni report des statistiques
+- **WHEN** seul le compactage de la session de codage est prouvé
+- **THEN** aucune réussite conjointe n’est annoncée et la continuité des sessions accessibles détermine la poursuite
 
 #### Scenario: Aucun compactage disponible
-
-- **WHEN** aucune des deux API natives n'est exposée et les contextes, CAB et les permissions restent exploitables
-- **THEN** l'orchestrateur consigne les opérations non exécutées, poursuit le RUN sans attendre une API absente et réexamine la disponibilité à l'échéance suivante
+- **WHEN** aucune API de compactage n’est exposée et le contexte reste exploitable
+- **THEN** les opérations non exécutées sont consignées et le RUN continue sans attendre une API absente
 
 #### Scenario: Échec de compactage avec contexte préservé
-
-- **WHEN** un compactage échoue mais la réconciliation confirme la continuité du périmètre, des preuves et des permissions sans opération encore en cours
-- **THEN** l'échec reste observable et le RUN poursuit les mandats autorisés sans classement `BLOQUÉ` fondé sur ce seul échec
+- **WHEN** le compactage échoue mais la continuité est prouvée
+- **THEN** le RUN continue les seuls mandats autorisés sans classement bloquant fondé sur cet échec seul
 
 #### Scenario: Réconciliation non sûre
-
-- **WHEN** un compactage reste en cours, le contexte est perdu, un mandat est ambigu ou une permission parasite subsiste
-- **THEN** l'orchestrateur suspend les opérations concernées et applique la récupération CAB sans inventer de preuve ni rejouer un mandat
+- **WHEN** le compactage reste actif, le contexte est perdu ou une permission est ambiguë
+- **THEN** les effets concernés restent suspendus et les travaux indépendants prouvés compatibles peuvent continuer
 
 ### Requirement: Contrat de job durable et non secret
 
@@ -180,27 +183,30 @@ Après une évaluation autorisée réussie, l'orchestrateur MUST réconcilier le
 
 ### Requirement: SSE temps réel et contrôle CAB toutes les trois secondes
 
-L'orchestrateur MUST consommer les événements SSE OpenCode en temps réel et
-contrôler les demandes et les rapports toutes les 3 secondes dans sa boucle
-de pilotage. Cette cadence MUST rester distincte des délais techniques du
-superviseur, des heartbeats et des rappels du broker.
+L’orchestrateur MUST traiter les changements via les événements CAB/OpenCode
+dès leur réception, sans attendre une cadence fixe de trois secondes. Le
+polling SHOULD servir de repli borné en cas de transport indisponible et de
+réconciliation périodique de santé. Les reprises MUST conserver leur curseur
+ou déclarer explicitement une lacune ; aucun événement ne vaut permission.
 
 #### Scenario: Demande ou rapport reçu
-
-- **WHEN** un événement SSE arrive pendant le pilotage
-- **THEN** il est consommé en temps réel et la boucle contrôle demandes et rapports toutes les trois secondes
+- **WHEN** une demande corrélée arrive pendant l’analyse du codeur
+- **THEN** elle est traitée dès l’événement sans pause artificielle imposée
 
 ### Requirement: Vérifications de progression espacées de sept secondes
 
-Pendant l'analyse ou la rédaction de l'agent de codage, l'orchestrateur MUST
-utiliser des pauses fixes de 7 secondes entre deux vérifications de
-progression. Ces pauses MUST NOT ralentir la réception SSE ou le contrôle CAB
-toutes les trois secondes.
+Les vérifications MUST être déclenchées par les changements utiles et MUST
+éviter les lectures répétées d’un état inchangé. Les pauses fixes de sept
+secondes MUST NOT être imposées au parcours nominal. Le repli technique MUST
+rester borné et distinct des échéances métier et des décisions attendues.
+
+#### Scenario: État inchangé sans action requise
+- **WHEN** la session travaille sans nouvelle demande ni anomalie
+- **THEN** CAB ne sollicite pas un échange LLM ou un rapport identique à chaque intervalle fixe
 
 #### Scenario: Demande pendant une analyse
-
-- **WHEN** une demande CAB arrive alors que l'agent de codage analyse ou rédige
-- **THEN** le SSE reste traité en temps réel et le contrôle des demandes et rapports continue toutes les trois secondes, indépendamment des vérifications de progression espacées de sept secondes fixes
+- **WHEN** une demande CAB arrive alors que le codeur analyse ou rédige
+- **THEN** l’événement est traité sans pause de sept secondes et les vérifications de santé restent indépendantes
 
 ### Requirement: Activité corrélée à la session du job
 Le superviseur SHALL attribuer l'activité SSE uniquement à la session du job
@@ -299,12 +305,14 @@ résultats natifs et éventuels retards dans le checkpoint non secret.
 
 ### Requirement: Échéance suivante du compactage commun
 
-La prochaine échéance SHALL être calculée depuis le déclenchement du cycle commun, sans
-remplacer un échec par une réussite rétroactive.
+Le prochain compactage MUST dépendre du besoin natif de contexte ou d'une
+instruction explicite, sans calendrier fixe ni attente d'une API absente.
+L'absence de capacité MUST être réévaluée lors d'un changement utile ou du
+prochain besoin réel. Un échec MUST rester tracé sans réussite rétroactive.
 
 #### Scenario: Échéance suivante du compactage commun
 - **WHEN** un cycle de compactage commence après un retard de fin de mandat
-- **THEN** la prochaine échéance part du déclenchement observé sans transformer un ancien échec en réussite
+- **THEN** la suite dépend du besoin de contexte observé sans transformer un ancien échec en réussite
 
 ### Requirement: Preuves natives du compactage conjoint
 

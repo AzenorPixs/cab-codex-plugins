@@ -70,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.81"
+SERVER_VERSION = "2.2.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
@@ -2333,6 +2333,7 @@ def notify_controller(
     status = None
     failure = ""
     diagnostic = None
+    transport_retry_seconds = None
 
     try:
         with request.urlopen(
@@ -2356,6 +2357,12 @@ def notify_controller(
         status = exc.code
         with exc:
             payload = controller_error_payload(exc)
+            if (status == 503 and isinstance(payload, dict)
+                    and set(payload) == {"error", "retry_after_ms"}
+                    and payload["error"] == "transport-update-in-progress"
+                    and type(payload["retry_after_ms"]) is int
+                    and 50 <= payload["retry_after_ms"] <= 1000):
+                transport_retry_seconds = payload["retry_after_ms"] / 1000
             length_failure = controller_length_diagnostic(status, payload)
             code = payload.get("error") if isinstance(payload, dict) else None
             if (not isinstance(code, str) or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())
@@ -2365,12 +2372,16 @@ def notify_controller(
             failure = length_failure or "HTTPError: %s" % status
 
     except error.URLError as exc:
+        if isinstance(exc.reason, (ConnectionError, TimeoutError)):
+            transport_retry_seconds = 0.25
         failure = (
             "URLError: %s"
             % exc.reason
         )
 
     except OSError as exc:
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            transport_retry_seconds = 0.25
         failure = (
             "OSError: %s"
             % exc
@@ -2422,6 +2433,7 @@ def notify_controller(
         "http_status": status,
         "error": failure,
         "diagnostic": diagnostic,
+        "transport_retry_seconds": transport_retry_seconds,
     }
 
 
@@ -2512,7 +2524,7 @@ def decision_fingerprint(decision):
     ).hexdigest()[:24]
 
 
-def controller_decision(item):
+def controller_decision(item, *, wait_ms=0):
     request_id = item.get(
         "requestId",
         "",
@@ -2529,6 +2541,8 @@ def controller_decision(item):
             safe="",
         )
     )
+    if type(wait_ms) is int and 0 < wait_ms <= 1000:
+        url += "?wait_ms=%d" % wait_ms
 
     journal_controller_event(
         item,
@@ -2908,7 +2922,8 @@ def validate_controller_decision(
     ):
         return False
 
-    if item.get("tool_input_sha256") != decision.get("tool_input_sha256"):
+    if (item.get("tool_input_sha256") != decision.get("tool_input_sha256")
+            or item.get("shell_background") != decision.get("shell_background")):
         return False
 
     if item.get("run_id") and (decision.get("run_id") != item["run_id"] or
@@ -2981,6 +2996,8 @@ def notification_retry_delay(
 ):
     if attempts < 1:
         attempts = 1
+    if attempts > 64:
+        return NOTIFICATION_RETRY_MAX_SECONDS
 
     delay = (
         NOTIFICATION_RETRY_INITIAL_SECONDS
@@ -3139,6 +3156,7 @@ def complete_notification_lease(
     lease_id,
     delivered,
     diagnostic=None,
+    transport_retry_seconds=None,
 ):
     path = store_path()
 
@@ -3199,6 +3217,8 @@ def complete_notification_lease(
         ] = ""
 
         if delivered:
+            item.pop("notification_transport_retries", None)
+            item.pop("notification_standard_attempts", None)
             item[
                 "notification_status"
             ] = "DELIVERED"
@@ -3212,13 +3232,28 @@ def complete_notification_lease(
                 "notification_status"
             ] = "FAILED"
 
+            fast_retries = item.get("notification_transport_retries", 0)
+            if type(fast_retries) is not int or not 0 <= fast_retries <= 10:
+                fast_retries = 0
+            standard_attempts = item.get("notification_standard_attempts", attempts - 1)
+            if type(standard_attempts) is not int or standard_attempts < 0:
+                standard_attempts = attempts - 1
+            fast_retry = (type(transport_retry_seconds) in (int, float)
+                          and 0.05 <= transport_retry_seconds <= 1 and fast_retries < 10)
+            delay = notification_retry_delay(standard_attempts + 1)
+            if fast_retry:
+                delay = transport_retry_seconds
+                item["notification_transport_retries"] = fast_retries + 1
+                item["notification_standard_attempts"] = standard_attempts
+            elif transport_retry_seconds is None:
+                item.pop("notification_transport_retries", None)
+            if not fast_retry and "notification_standard_attempts" in item:
+                item["notification_standard_attempts"] = standard_attempts + 1
             item[
                 "notification_next_retry_at"
             ] = utc_from_timestamp(
                 time.time()
-                + notification_retry_delay(
-                    attempts
-                )
+                + delay
             )
 
         safe_diagnostic = filtered_notification_diagnostic(diagnostic)
@@ -3273,6 +3308,7 @@ def maybe_notify_controller(item):
         ],
         delivered,
         notification_result.get("diagnostic"),
+        notification_result.get("transport_retry_seconds"),
     )
 
     return delivered
@@ -3600,8 +3636,10 @@ def validate_existing_approval(
     commands,
     run_identity=None,
     tool_input_sha256=None,
+    shell_background=None,
 ):
-    if item.get("tool_input_sha256") != tool_input_sha256:
+    if (item.get("tool_input_sha256") != tool_input_sha256
+            or item.get("shell_background") != shell_background):
         return False
     if bool(item.get("run_id")) != bool(run_identity):
         return False
@@ -3694,9 +3732,21 @@ def do_propose(args):
     if "tool_input_sha256" in args and (
         not isinstance(tool_input_sha256, str)
         or not re.fullmatch(r"[a-f0-9]{64}", tool_input_sha256)
-        or len(files) != 1 or commands or not session_id or not directory
+        or not ((len(files) == 1 and not commands) or (len(commands) == 1 and not files))
+        or not session_id or not directory
     ):
-        raise ValidationError("tool_input_sha256 exige un mandat fichier natif et une empreinte SHA256")
+        raise ValidationError("tool_input_sha256 exige un mandat unitaire natif et une empreinte SHA256")
+
+    shell_background = args.get("shell_background")
+    if "shell_background" in args and (
+        shell_background is not True or files or len(commands) != 1
+        or tool_input_sha256 is None or not args.get("run_id")
+        or not isinstance(args.get("resources"), list)
+        or not any(isinstance(r, dict) and r.get("mode") == "write"
+                   and isinstance(r.get("key"), str) and r["key"].startswith("port:")
+                   for r in args["resources"])
+    ):
+        raise ValidationError("shell_background exige un shell unitaire exact et un port write reserve")
 
     run_id = optional_str(args, "run_id", 100)
     run_identity = {}
@@ -3874,6 +3924,7 @@ def do_propose(args):
                 commands,
                 run_identity,
                 tool_input_sha256,
+                shell_background,
             ):
                 raise ValidationError(
                     "retry incompatible avec "
@@ -3935,6 +3986,7 @@ def do_propose(args):
             item = {
                 **run_identity,
                 **({"tool_input_sha256": tool_input_sha256} if tool_input_sha256 is not None else {}),
+                **({"shell_background": True} if shell_background is True else {}),
                 "approval_id": approval_id,
                 "requestId": request_id,
                 "legacy_requestIds": [],
@@ -4016,7 +4068,20 @@ def do_propose(args):
     return result
 
 
-def do_get(args):
+def do_lookup_validation(args):
+    keys = ("requestId", "run_id", "session_id", "operation_id", "operation_digest")
+    identity = {key: require_str(args, key, 100) for key in keys}
+    with locked_store(store_path()):
+        data, _ = migrate_store(raw_load_store(store_path()))
+        item = find_by_request_id(data["approvals"], identity["requestId"])
+        if item is None or any(item.get(key) != value for key, value in identity.items()):
+            return {"found": False, "snapshot_only": True}
+        return {"found": True, "snapshot_only": True, **identity,
+                "approval_id": item["approval_id"], "status": item["status"],
+                "next_action": "poll_approval"}
+
+
+def do_get(args, *, wait_ms=0):
     approval_id = optional_str(
         args,
         "approval_id",
@@ -4085,9 +4150,7 @@ def do_get(args):
     decision = None
 
     if should_check_decision:
-        decision = controller_decision(
-            snapshot
-        )
+        decision = (controller_decision(snapshot, wait_ms=wait_ms) if wait_ms else controller_decision(snapshot))
 
     with locked_store(
         path
@@ -4162,10 +4225,12 @@ def wait_for_approval(
         ):
             raise RequestCancelled()
 
+        started = time.monotonic()
+        decision_wait_ms = 1000 if deadline is None else min(1000, max(0, int((deadline - started) * 1000)))
         item = do_get(
             {
                 "approval_id": approval_id,
-            }
+            }, wait_ms=decision_wait_ms
         )
 
         if item.get(
@@ -4173,9 +4238,10 @@ def wait_for_approval(
         ) in TERMINAL_STATES:
             return item
 
+        finished = started if deadline is not None and started >= deadline else time.monotonic()
         if (
             deadline is not None
-            and time.monotonic()
+            and finished
             >= deadline
         ):
             result = dict(
@@ -4200,15 +4266,18 @@ def wait_for_approval(
 
             return result
 
+        if finished - started >= decision_wait_ms / 1000 * 0.8 and decision_wait_ms:
+            continue
+        fallback_interval = min(interval_seconds, 1)
         if cancel_event is not None:
             if cancel_event.wait(
-                interval_seconds
+                fallback_interval
             ):
                 raise RequestCancelled()
 
         else:
             time.sleep(
-                interval_seconds
+                fallback_interval
             )
 
 
@@ -8159,6 +8228,7 @@ def do_readiness(args=None):
         "schema_version": 1,
         "status": status,
         "ready": status == "READY",
+        "broker_process": {"pid": os.getpid(), "started_at": PROCESS_STARTED_AT},
         "server_version": SERVER_VERSION,
         "instance_id": INSTANCE_ID,
         "root_cause": diagnosis.get("root_cause", "NONE"),
@@ -8519,8 +8589,9 @@ def start_background_reconciliation():
 
 
 APPROVAL_REQUEST_PROPERTIES = {
+    "shell_background": {"const": True, "description": "Shell background explicite, arguments exacts, timeout natif positif et port write reserve."},
     "tool_input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$",
-        "description": "Empreinte canonique SHA256 des arguments natifs write/edit exacts approuves ; verifiee avant once."},
+        "description": "Empreinte canonique SHA256 des arguments natifs write/edit/shell exacts approuves ; verifiee avant once."},
     "run_id": {"type": "string"},
     "reservation_version": {"type": "integer", "minimum": 1},
     "coordination_protocol": {"const": "resource-scoped-v1"},
@@ -8574,6 +8645,17 @@ APPROVAL_REQUEST_PROPERTIES = {
 
 
 TOOLS = [
+    {
+        "name": "lookup_validation",
+        "description": "Retrouve le recu existant apres perte de reponse, sans creation ni notification.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {key: {"type": "string", "minLength": 1, "maxLength": 100}
+                           for key in ("requestId", "run_id", "session_id", "operation_id", "operation_digest")},
+            "required": ["requestId", "run_id", "session_id", "operation_id", "operation_digest"],
+            "additionalProperties": False,
+        },
+    },
     {
         "name": "request_validation",
         "description": (
@@ -9356,6 +9438,9 @@ def handle_request(
             payload = do_propose(
                 args
             )
+
+        elif name == "lookup_validation":
+            payload = do_lookup_validation(args)
 
         elif name == "get_approval":
             payload = do_get(

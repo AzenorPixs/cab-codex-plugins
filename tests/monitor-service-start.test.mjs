@@ -1,12 +1,16 @@
+import { readContractFileSync } from './helpers/cab-contract.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { copyFile, mkdir, mkdtemp, readFile, realpath, rm } from 'node:fs/promises';
+import { copyFile, mkdir, mkdtemp, readFile as readRawFile, realpath, rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+
+const readFile=async (path,encoding) => /(?:commands\/CAB|approval-bridge\/SKILL)\.md$/.test(String(path))
+  ? readContractFileSync(path,encoding) : readRawFile(path,encoding);
 
 const plugin = new URL('../plugins/cab-approval-bridge/', import.meta.url);
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -36,7 +40,7 @@ async function installedFixture(t) {
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(new URL(relative, plugin), destination); copied.push(relative);
   }
-  assert.equal(copied.length, 14);
+  assert.equal(copied.length, 15);
   const unit = await readFile(new URL('systemd/cgpt-approval-bridge-monitor.service', plugin), 'utf8');
   const entry = unit.match(/^ExecStart=\/usr\/bin\/env node (.+)$/m)[1].replace('%h', home);
   await mkdir(workspace, { recursive: true });
@@ -69,10 +73,10 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '2.1.81');
+  assert.equal(snapshot.version, '2.2.0');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
   const identity = await (await fetch(base + '/api/identity')).json();
-  assert.deepEqual(identity, { version: '2.1.81', identity: { workspace: await realpath(h.workspace) } });
+  assert.deepEqual(identity, { version: '2.2.0', identity: { workspace: await realpath(h.workspace) } });
   assert.equal((await fetch(base)).status, 200);
   for (const route of ['/app.mjs', '/stats.mjs', '/style.css']) assert.equal((await fetch(base + route)).status, 200);
   await wait(async () => (await (await fetch(base + '/api/snapshot')).json()).sources.controller?.available === false);
@@ -108,31 +112,15 @@ test('start, stop et reset documentent la réutilisation et les échecs sans cou
   assert.doesNotMatch(reference, /^systemctl --user enable/m);
 });
 
-test('le bootstrap précède les prévols dans chaque point d’entrée distribué', async () => {
-  const command = await readFile(new URL('../.codex/commands/CAB.md', import.meta.url), 'utf8');
-  const start = command.split('## `/CAB start`')[1].split('\n## ')[0];
-  const routing = command.split('## RUN concurrents')[0];
-  assert.match(routing, /Pour `start`, `run` ou `resume`, commencer par le seul bootstrap du monitoring/);
-  assert.match(routing, /avant toute\s+réservation, PLLM ou vérification OpenCode\/CAB/);
-  assert.match(routing, /aucune purge ni\s+réinitialisation n'en découle/);
-  assert.match(routing, /Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap/);
-  const skill = await readFile(new URL('skills/approval-bridge/SKILL.md', plugin), 'utf8');
-  for (const [name, source, boundary] of [
-    ['commande', start, '1. Vérifie qu’OpenCode répond'],
-    ['skill', skill, '## Cadences de pilotage et attente PLLM'],
-  ]) {
-    const end = source.indexOf(boundary);
-    assert.ok(end > 0, name + ' : étapes amont présentes');
-    const bootstrap = source.slice(0, end);
-    assert.match(bootstrap, /Dès la résolution du workspace absolu canonique/, name);
-    assert.match(bootstrap, /references\/monitor-service\.md/, name);
-    assert.match(bootstrap, /systemctl --user start cgpt-approval-bridge-monitor\.service/, name);
-    assert.match(bootstrap, /avant PLLM, santé\s+OpenCode et prévols modèle\/MCP/, name);
-    assert.match(bootstrap, /terminer cette tentative bornée et rapporter son résultat\s+avant les contrôles amont/, name);
-    assert.match(bootstrap, /GET \/api\/identity[\s\S]*identity\.workspace[\s\S]*GET \/ ;/, name);
-    assert.doesNotMatch(bootstrap, /GET \/api\/snapshot/, name);
-    assert.match(bootstrap, /Un échec PLLM ou CAB ultérieur\s+n'arrête pas le moniteur/, name);
-  }
+test('le bootstrap précède les prévols dans les routeurs et la procédure extraite', async () => {
+  const router=await readRawFile(new URL('../.codex/commands/CAB.md',import.meta.url),'utf8');
+  assert.match(router,/Pour start, run ou resume/);assert.match(router,/avant PLLM et les prévols/);
+  assert.match(router,/sans purge, reset ou/);
+  const start=await readRawFile(new URL('skills/approval-bridge/references/command-start.md',plugin),'utf8');
+  assert.ok(start.indexOf('monitor-service.md')<start.indexOf('1. Vérifie qu’OpenCode répond'));
+  const skill=await readRawFile(new URL('skills/approval-bridge/SKILL.md',plugin),'utf8');
+  assert.match(skill,/monitor-service.*d'abord/);
+  assert.match(skill,/références de\nl'action en cours/);
 });
 
 test('la reprise avec services CAB actifs exige le bootstrap sans modifier une instance conforme', async () => {

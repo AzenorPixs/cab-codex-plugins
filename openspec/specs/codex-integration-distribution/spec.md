@@ -199,23 +199,24 @@ La restriction lecture seule MUST NOT modifier la configuration persistante Open
 
 ### Requirement: Référence locale du protocole de codage piloté
 
-ORCHESTRATED_CODING.md MAY être absent d'un projet sans besoin de pilotage.
-AGENTS.md MUST préciser ce caractère facultatif et conditionnel. Lorsqu'un
-projet nécessite une session orchestrateur–agent de codage, il MUST disposer
-de ce document et les deux agents MUST le lire avant le pilotage. Le document
-MUST définir le protocole technique sans étendre les autorisations.
+Le skill CAB et ses références MUST porter le contrat commun. AGENTS.md MUST
+le résoudre sans copie locale intégrale ORCHESTRATED_CODING.md. La commande
+MUST router vers les procédures utiles, chargées à la demande. La migration
+MUST vérifier la destination des obligations avant retrait du fichier local.
+Une session SCM directe MUST NOT déclencher de pilotage, OpenCode ou de
+télémétrie réservée aux sessions pilotées.
 
 #### Scenario: Session pilotée
-- **WHEN** un orchestrateur prépare une session de codage pilotée dans un projet
-- **THEN** les deux agents lisent le document dédié de ce projet avant les opérations de pilotage
+- **WHEN** les deux agents préparent une session CAB
+- **THEN** ils chargent le noyau distribué commun et les branches nécessaires sans exiger le fichier local supprimé
 
 #### Scenario: Session directe
-- **WHEN** SCM est exécuté directement sans agent de codage piloté
-- **THEN** la référence documentaire ne déclenche ni CAB, ni OpenCode, ni sondes statistiques de pilotage
+- **WHEN** SCM est exécuté directement
+- **THEN** aucune présence du plugin ou du protocole ne déclenche de pilotage implicite
 
 #### Scenario: Projet sans besoin de pilotage
-- **WHEN** le projet ne nécessite pas de session menée par un agent orchestrateur
-- **THEN** l'absence du fichier facultatif est normale et ne bloque pas le travail direct
+- **WHEN** le projet ne nécessite aucune session orchestrée
+- **THEN** l’absence du protocole local est normale et ne bloque pas le travail direct
 
 ### Requirement: Prévol divergent dans la même session
 Après un prévol divergent ou incomplet refusé sans effet, l'orchestrateur MUST conserver session candidate, job, RUN et runtime. Il MUST NOT renouveler la session, abandonner le job ni purger pour cet incident. Le mandat erroné MUST rester refusé sans normalisation.
@@ -852,34 +853,45 @@ La distribution MUST aligner composants et commandes sur2.1.16 et documenter les
 - **THEN** les versions actives sont vérifiées séparément avant information des sessions
 
 ### Requirement: Point de coordination des incidents de codage CAB
-Le plugin, le skill et la commande CAB MUST distribuer une même procédure de signalement des problèmes de codage CAB au chat « Correctif CAB - OC ». L’orchestrateur MUST rechercher et réutiliser ce chat, le créer seulement après absence vérifiée, éviter les doublons et conserver les mandats propres au RUN. La procédure MUST traiter cible courante, ambiguïté et outil indisponible sans auto-message ni prétendre à un envoi réalisé.
+
+Le contrat distribué MUST privilégier le diagnostic local et les récupérations
+qualifiées déjà autorisées. Un incident réparable MUST NOT imposer un nouveau
+chat de correction. Un envoi ou une création de chat MUST nécessiter la demande
+explicite correspondante et respecter une clôture ou révocation existante.
+Les faits, limites, mandats et preuves MUST rester corrélés sans secret.
 
 #### Scenario: Chat existant
-- **WHEN** une session rencontre un problème CAB et le chat correspondant est identifié
-- **THEN** l’orchestrateur le réutilise et transmet un signalement factuel filtré, sans créer de doublon ni coder en dur une identité de chat
+- **WHEN** une coordination est explicitement demandée et son chat est identifié
+- **THEN** l'orchestrateur le réutilise sans doublon, sous réserve d'une clôture ou révocation applicable
 
 #### Scenario: Chat absent
-- **WHEN** la recherche complète accessible ne trouve pas ce chat
-- **THEN** l’orchestrateur le crée dans le contexte CAB avec le signalement, puis conserve son identité pour le suivi
+- **WHEN** la recherche complète accessible ne trouve pas la cible et sa création n'est pas explicitement demandée
+- **THEN** l'incident reste au checkpoint du RUN sans nouveau chat ni attente d'un correctif pour une récupération déjà autorisée
 
 #### Scenario: Chat courant ou cible ambiguë
-- **WHEN** le chat courant est déjà la cible ou plusieurs résultats restent ambigus
-- **THEN** il consigne directement l’incident dans le premier cas et signale l’ambiguïté dans le second, sans auto-message ni diffusion multiple ; un outil indisponible reste déclaré comme tel
+- **WHEN** le chat courant est la cible ou plusieurs résultats restent ambigus
+- **THEN** consigner localement dans le premier cas et signaler l'ambiguïté dans le second, sans auto-message ou diffusion multiple ; un outil absent reste déclaré
 
 ### Requirement: Suivi d’incident jusqu’à activation vérifiée
-L’orchestrateur MUST maintenir la coordination jusqu’au correctif qualifié et à son activation CABU vérifiée, puis informer les sessions concernées. Les signalements MUST être factuels, corrélés et filtrés sans secret ni source métier inutile. Les propriétaires MUST conserver RUN, job, session, checkpoint et permissions. Une source publiée MUST NOT être annoncée active ; un blocage MUST conserver preuves et conditions de reprise sans rejeu de décision ou once.
+
+Lorsqu'un correctif est nécessaire, son suivi MUST distinguer source qualifiée,
+publication et activation vérifiée. Une récupération locale réussie MAY clore
+l'incident sans nouvelle livraison. Les informations inter-chats MUST respecter
+l'autorisation de communication applicable. Un échec MUST conserver preuves et
+prochaine action sans rejouer une décision ou once ; les travaux disjoints
+autorisés MAY continuer.
 
 #### Scenario: Source publiée mais activation en attente
-- **WHEN** le correctif est qualifié et publié sans preuve CABU terminale
-- **THEN** l’incident reste suivi et la version n’est pas déclarée effective
+- **WHEN** le correctif est publié sans preuve CABU terminale
+- **THEN** la version n'est pas déclarée effective et les preuves de reprise restent conservées
 
 #### Scenario: Activation confirmée
-- **WHEN** CABU termine avec les versions réellement actives et la readiness vérifiées
-- **THEN** les sessions concernées sont informées de la correction et de la preuve d’activation, avant reprise autorisée
+- **WHEN** CABU confirme versions et readiness
+- **THEN** l'incident peut être clos ; les sessions sont informées dans le seul périmètre de communication autorisé
 
 #### Scenario: Échec de mise à jour
 - **WHEN** CABU échoue ou une dépendance empêche la suite
-- **THEN** l’incident conserve son état, ses preuves et ses conditions de reprise, sans rejeu de décision ou once
+- **THEN** l'incident conserve état, preuves et conditions de reprise sans rejeu ni gel des ressources indépendantes
 
 ### Requirement: Distribution du contrat modèle explicite2.1.18
 La distribution MUST aligner composants et commandes sur2.1.18 et documenter reasoning en entrée et variant dans les lectures natives. Skill et commande MUST présenter le refus du champ variant et la conversion explicite, sans alias ni repli silencieux. La qualification source MUST préserver les RUN et processus ; une publication MUST NOT être annoncée comme activation.
@@ -1036,3 +1048,15 @@ actifs.
   pas au manifeste installé
 - **THEN** l’update s’arrête avant maintenance et indique la dépendance
   manquante ou divergente
+
+### Requirement: Distribution cohérente CAB 2.2.0
+
+Le paquet, broker, modules, unités, plugins et commandes MUST porter la version
+2.2.0 commune. Les nouveaux modules de continuité, récupération, exécution et
+efficacité MUST appartenir aux fermetures effectivement déployées. Les outils
+de consultation et les nouvelles politiques MUST préserver les contrats
+unitaires de décision, permissions et preuves.
+
+#### Scenario: Import absent d’un groupe déployé
+- **WHEN** un module importé n’est pas inclus dans le groupe cible
+- **THEN** la préparation échoue avant coupure sans modifier les services

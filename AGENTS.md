@@ -1,6 +1,6 @@
 # AGENTS.md — Codex Approval Bridge
 
-Version : 0.5
+Version : 0.6
 
 ## 1. Contexte
 
@@ -12,8 +12,13 @@ Version : 0.5
 * Cadrage de déploiement : `BUILD.md` ;
 * Envrionnement de développement : `DEVOPS.md` ;
 * Cartographie et progression du développement : `DEVELOPMENT_MAP.md` ;
-* Protocole des sessions de codage pilotées : `ORCHESTRATED_CODING.md`
-  (facultatif, uniquement si le projet nécessite ce pilotage) ;
+* Protocole des sessions de codage pilotées : résolution décrite en section 7
+  (contrat distribué CAB pour CAB, fichier local facultatif sinon) ;
+
+La propagation des règles générales vers un projet consommateur conserve
+son identité et sa racine.
+Une adaptation locale ou une propagation vers d'autres consommateurs nécessite
+l'autorisation applicable ; elle ne modifie pas implicitement le référentiel.
 
 `DEVOPS.md` est généré automatiquement. Son contenu dépend de l'environnement
 de développement local dans lequel il est généré et décrit l'état observé
@@ -221,22 +226,30 @@ Toute modification de la configuration OpenCode nécessite une validation explic
 
 ### Sessions de codage pilotées par un agent orchestrateur
 
-`ORCHESTRATED_CODING.md` est un fichier facultatif. Il est uniquement présent
-pour les projets qui nécessitent un pilotage par agent orchestrateur vers un
-agent de codage. Son absence est normale pour les autres projets et ne bloque
-pas une session de codage directe.
+Une session de codage directe ne nécessite aucun protocole de pilotage.
 
-Lorsqu'une session pilotée est nécessaire, les deux agents DOIVENT lire intégralement
-[ORCHESTRATED_CODING.md](ORCHESTRATED_CODING.md) à la racine de ce projet,
-avant toute opération de pilotage. Ce fichier dédié définit le protocole,
-les rôles, les échanges, les mandats, les preuves et les détails techniques
-de la session pilotée.
+Pour une session pilotée via CAB, le protocole fait autorité dans le skill
+`CAB` et son index de références distribués avec le plugin CAB. L'orchestrateur
+DOIT charger le noyau du contrat et les références nécessaires à l'action,
+vérifier la version applicable et transmettre à l'agent de codage les
+obligations correspondant à son mandat. Les deux agents DOIVENT connaître ces
+obligations avant leur exécution. Le fichier local `ORCHESTRATED_CODING.md`
+n'est alors pas requis ; son absence ne constitue pas un blocage CAB et ne
+justifie pas de le recréer. Une copie locale historique ne prévaut pas sur le
+contrat CAB distribué.
 
-Cette référence complète les règles générales d'AGENTS.md et les
-spécifications OpenSpec validées, sans étendre les autorisations du développeur.
-Si un pilotage devient nécessaire et que le fichier est absent ou incohérent,
-l'agent DOIT signaler ce besoin et faire valider sa création ou sa correction
-avant de poursuivre ce pilotage.
+Pour un pilotage utilisant un autre protocole, le fichier facultatif
+`ORCHESTRATED_CODING.md`, lorsqu'il est retenu par le projet, définit les rôles,
+échanges, mandats et preuves ; les deux agents DOIVENT le lire intégralement
+avant ce pilotage.
+
+Le protocole retenu complète `AGENTS.md` et les spécifications OpenSpec validées
+sans étendre les autorisations du développeur. S'il est inaccessible ou
+incohérent, l'agent DOIT diagnostiquer la référence ou la distribution concernée
+et utiliser uniquement les récupérations déjà autorisées. Il ne doit ni inventer
+une autorisation ni relancer un effet incertain ; les travaux indépendants et
+déjà autorisés peuvent continuer. Toute correction hors mandat nécessite sa
+validation explicite.
 
 ### Statistiques d'archivage
 

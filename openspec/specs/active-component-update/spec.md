@@ -57,29 +57,33 @@ Le jeu indépendant du moniteur MUST inclure le client OpenCode V2 importé par 
 - **THEN** les imports du moniteur sont tous présents et le client V2 est sauvegardé et remplacé transactionnellement
 
 ### Requirement: Mise à jour forcée des services CAB
-Le profil ordinaire MUST valider et sauvegarder le paquet, arrêter controller,
-supervisor et monitor, remplacer les quatre briques, recharger systemd puis
-démarrer les trois unités. Il MUST NOT consulter les RUN, permissions,
-coordinations globales ou états de service comme précondition. OpenCode absent
-MUST NOT bloquer l'installation des fichiers broker. Le profil gelé reste
-distinct ; aucun profil ne décide ni ne rejoue une permission métier.
 
-#### Scenario: RUN ou coordination active
-- **WHEN** des RUN, permissions ou une coordination globale sont actifs au
-  début de `/CAB update`
-- **THEN** l'update ne les consulte pas pour décider de poursuivre, arrête les
-  trois unités systemd CAB, remplace les artefacts et les redémarre.
+Le profil ordinaire MUST préparer et vérifier les artefacts avant coupure,
+comparer empreintes et processus, puis basculer les seuls groupes nécessaires.
+Il MUST préserver l'état métier sans attendre les commandes longues. Une
+frontière de transfert indisponible MUST laisser l'ancienne version en service
+et différer la bascule compatible. Les profils gelés et reuse-readonly MUST
+conserver leurs gardes spécifiques.
+
+#### Scenario: Jeu déjà conforme
+- **WHEN** les empreintes et versions actives sont conformes
+- **THEN** CABU retourne up-to-date sans arrêt, reconnexion MCP ou nouvelle récupération métier
+
+#### Scenario: Mise à jour compatible pendant une commande
+- **WHEN** une commande native est en cours et le transfert contrôlé est disponible
+- **THEN** CABU prépare à chaud et bascule sans attendre cette commande ni rejouer sa permission
 
 #### Scenario: OpenCode absent
-- **WHEN** l'API ou le processus OpenCode est absent
-- **THEN** l'update remplace tout de même les trois fichiers broker et les
-  autres artefacts, démarre les trois unités, puis rapporte le broker runtime
-  `INDISPONIBLE` sans bloquer la réussite des autres briques.
+- **WHEN** l’absence d’OpenCode est prouvée
+- **THEN** les fichiers peuvent être installés et la version broker chargée reste INDISPONIBLE
+
+#### Scenario: RUN ou coordination active
+- **WHEN** des RUN, permissions ou une coordination sont actifs au début de CABU
+- **THEN** la préparation continue sans attendre la fin des commandes et la bascule préserve les identités et gardes de ces opérations
 
 #### Scenario: États CAB actifs
-- **WHEN** des RUN ou une coordination globale sont actifs avant l'update
-- **THEN** l'update les laisse intacts pendant son déroulement et ne les utilise
-  pas comme précondition d'arrêt, remplacement ou redémarrage
+- **WHEN** des RUN ou une coordination sont actifs avant la mise à jour
+- **THEN** leur état métier reste intact et une frontière de transfert indisponible diffère seulement la bascule
 
 ### Requirement: Déploiement des quatre briques
 Le profil ordinaire MUST installer broker, contrôleur, superviseur et Web, puis
@@ -129,17 +133,16 @@ interruption MUST être récupérable avant une autre transaction.
 - **THEN** les artefacts précédents et états initiaux sont rétablis lorsque le repli reste possible ; un repli incomplet ou une frontière reuse-readonly franchie conserve le gel et signale la récupération nécessaire
 
 ### Requirement: Redémarrage systématique et bilan explicite
-Chaque invocation ordinaire de `/CAB update` MUST arrêter puis redémarrer les
-trois unités CAB, y compris lorsque les versions de fichiers sont déjà
-conformes. Le bilan MUST distinguer le paquet, les fichiers déployés, les
-versions réellement actives, le broker non vérifiable, ainsi que tout échec de
-remplacement ou de démarrage. Une opération MUST conserver ses sauvegardes et
-son repli atomique.
+
+Le redémarrage MUST être limité aux groupes dont les artefacts ou processus
+doivent changer. Une installation de commandes ou d’instructions seules MUST
+préserver les services conformes. Le bilan MUST distinguer paquet, fichiers,
+versions servies, coupure et continuité vérifiée. Les sauvegardes et reçus
+MUST rester disponibles pour le repli compatible.
 
 #### Scenario: Deuxième invocation inchangée
-- **WHEN** les empreintes et versions sont conformes
-- **THEN** les trois unités systemd sont arrêtées puis redémarrées et le bilan
-  indique les versions observées après redémarrage
+- **WHEN** une installation terminée reste conforme sur disque et dans les processus
+- **THEN** la nouvelle vérification ne redémarre aucune brique et conserve les identités des RUN
 
 ### Requirement: Alignement ordinaire des releases gérées
 managed-release MUST préparer les artefacts dans les racines autorisées et
@@ -335,18 +338,33 @@ La preuve reuse-readonly MUST accepter les champs optionnels artifactOwnerUid et
 - **THEN** la maintenance refuse ou conserve son gel selon la frontière franchie, sans élargissement de permission
 
 ### Requirement: Coupure rapide et restauration sans notification
-CABU MUST préparer, vérifier et sauvegarder les artefacts avant la coupure. Il MUST arrêter et redémarrer les trois services sur les versions cibles sans avertir ni modifier les RUN. Les états persistants et décisions consommées MUST être conservés. Les nouvelles opérations dépendantes du transport MUST rester bloquées pendant la coupure. Une issue inconnue MUST NOT être rejouée implicitement.
+
+CABU MUST préparer les artefacts, leur fermeture d’imports, leur compatibilité
+et leur reprise avant interruption. Les nouvelles validations MAY attendre
+brièvement pendant la bascule ; les commandes natives déjà lancées MUST
+continuer. Les demandes, décisions, accès et baux sains MUST survivre à un
+transfert certifié. Une déconnexion MUST NOT devenir à elle seule un effet
+inconnu. Une issue réellement incertaine MUST rester protégée sans rejeu.
 
 #### Scenario: Coupure pendant un RUN actif
-- **WHEN** CABU est déclenché pendant une session
-- **THEN** les briques disparaissent sans notification, puis restaurent leurs états durables sans nouvelle permission implicite
+- **WHEN** CABU bascule un jeu compatible pendant la session
+- **THEN** la communication reprend ses identités et acquittements sans réarmement, pause globale ou invalidation générale des baux
 
 ### Requirement: Broker actif rechargé et versions prouvées
-Si OpenCode est actif, CABU MUST recharger le broker par les routes natives et vérifier sa version cible et une readiness postérieure à la reconnexion. Un OpenCode absent MAY laisser uniquement le runtime broker indisponible. Les trois services MUST toujours être actifs et servir la version cible pour conclure au succès.
+
+Si les artefacts du broker changent, CABU MUST employer les routes natives
+pour sa transition et vérifier une readiness fraîche portant la version cible.
+Un broker déjà conforme MUST être préservé et vérifié sans reconnexion
+inutile. Les services cibles MUST servir le jeu compatible attendu ; un
+processus absent ou divergent MUST NOT être annoncé actif.
+
+#### Scenario: Broker conforme et moniteur modifié
+- **WHEN** seul le groupe du moniteur doit changer
+- **THEN** le broker et les composants conformes restent chargés et le moniteur cible est vérifié indépendamment
 
 #### Scenario: OpenCode lancé
-- **WHEN** le serveur OpenCode est actif
-- **THEN** le broker est reconnecté et sa version chargée est prouvée ; une erreur de reconnexion interdit le succès global
+- **WHEN** OpenCode est actif et les artefacts du broker changent
+- **THEN** CABU effectue sa transition native et exige sa version cible et une readiness postérieure avant de conclure
 
 ### Requirement: Durées mesurées
 CABU MUST rapporter préparation, indisponibilité et durée totale. Le banc contrôlé SHOULD atteindre une indisponibilité inférieure à cinq secondes. Les validations en cache MUST être liées au contenu exact et recontrôlées avant coupure.
@@ -560,3 +578,27 @@ Sous `cab-source`, l’updater MAY accepter un fichier broker local plus récent
 - **GIVEN** un seul fichier broker local diffère du paquet publié courant
 - **WHEN** une reprise en avant s’effectue avec `cab-source`
 - **THEN** l’updater refuse avant la coupure et conserve le reçu
+
+### Requirement: Compatibilité du registre avant bascule
+
+CABU MUST vérifier la compatibilité du lecteur cible avec l’état conservé avant
+coupure. Un retour arrière MUST restaurer seulement le code compatible et
+MUST NOT restaurer les RUN, décisions ou permissions depuis un ancien snapshot.
+Sans repli compatible, CABU MUST conserver le reçu et proposer la récupération
+en avant sans annoncer un rollback réussi.
+
+#### Scenario: Ancien lecteur incompatible avec de nouveaux effets
+- **WHEN** une reprise de code ancien ne peut pas lire les preuves conservées
+- **THEN** CABU refuse ce repli et préserve le même reçu et l’état métier
+
+### Requirement: Durée de bascule et continuité qualifiées ensemble
+
+Les durées de préparation, interruption réelle, rattrapage et total MUST être
+distinctes. La cible d’une seconde SHOULD guider la préparation hors coupure.
+Un délai dépassé MUST NOT supprimer un contrôle ou prouver une fin. La
+qualification MUST tester pertes de réponse, crashs aux frontières critiques,
+RUN concurrents et retour automatique de communication sans effet dupliqué.
+
+#### Scenario: Préparation longue et bascule courte
+- **WHEN** les vérifications de préparation prennent plusieurs secondes
+- **THEN** ces secondes ne sont pas comptées comme indisponibilité lorsque les services continuent à répondre

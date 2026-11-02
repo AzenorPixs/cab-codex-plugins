@@ -1,0 +1,1339 @@
+--- a/SCMP.md
++++ b/SCMP.md
+@@ -12,5 +12,5 @@
+ SCMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec SCM est signalée avant l’action concernée ; elle n’est pas
+@@ -24,14 +24,17 @@
+ l'agent de codage relèvent des sections « Statistiques des sessions pilotées »
+ et « Nettoyage final des sessions de l'agent de codage » de
+-`ORCHESTRATED_CODING.md`. En pilotage, appliquer ces procédures communes ;
++`PROTOCOLE_PILOTAGE`. En pilotage, appliquer ces procédures communes ;
+ les modalités statistiques du prompt direct restent propres au mode direct.
+ Les objectifs, autorisations métier et conditions de réussite restent ceux
+ du présent prompt et de son contrat métier commun lorsqu'il existe.
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -49,5 +52,5 @@
+ 
+ Avant le premier mandat autonome, vérifier le feu vert explicite du développeur
+-et les préconditions de `ORCHESTRATED_CODING.md`. Réutiliser un accord prouvé,
++et les préconditions de `PROTOCOLE_PILOTAGE`. Réutiliser un accord prouvé,
+ applicable et non révoqué sans le redemander ; sinon, demander ce seul accord.
+ Le feu vert reste distinct de la validation du périmètre métier. Sans lui,
+@@ -290,6 +293,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -324,5 +327,5 @@
+ 
+ Après chaque archivage OpenSpec réussi et vérifié, après production et
+-vérification du rapport `STATISTICS.md` selon `ORCHESTRATED_CODING.md`,
++vérification du rapport `STATISTICS.md` selon `PROTOCOLE_PILOTAGE`,
+ puis après le nettoyage conditionnel du bilan de blocage, appliquer
+ cette étape avant la clôture réussie ou la sélection du change suivant.
+@@ -820,5 +823,5 @@
+ <CONTEXTE INITIAL> = à fournir au seul agent orchestrateur
+ <AGENT ORCHESTRATEUR> = à définir
+-<AGENT DE CODAGE> = résolu selon ORCHESTRATED_CODING.md
++<AGENT DE CODAGE> = résolu selon PROTOCOLE_PILOTAGE
+ <ENVIRONNEMENT AGENT DE CODAGE> = à vérifier dans l’environnement réel
+ 
+@@ -837,5 +840,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -894,5 +897,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L'état Git n'est pas inspecté sans demande explicite, hors opérations Git
+@@ -964,5 +967,5 @@
+ 
+ Appliquer les sections « Statistiques des sessions pilotées » et « Nettoyage
+-final des sessions de l'agent de codage » de `ORCHESTRATED_CODING.md`, dans le
++final des sessions de l'agent de codage » de `PROTOCOLE_PILOTAGE`, dans le
+ seul périmètre autonome validé. La collecte, les rapports après archivage ou
+ blocage, leur vérification et le nettoyage final suivent cette source unique.
+@@ -1118,5 +1121,5 @@
+ 
+ Associer chaque demande à un mandat borné et aux identifiants natifs définis
+-par `ORCHESTRATED_CODING.md`. Conserver périmètre, décision explicite,
++par `PROTOCOLE_PILOTAGE`. Conserver périmètre, décision explicite,
+ effets et preuves corrélées dans l'état autorisé. Une décision ne couvre
+ qu'une opération et ne peut être réutilisée. Les formats et interfaces sont
+@@ -1126,5 +1129,5 @@
+ 
+ Associer chaque demande à un mandat borné et aux identifiants natifs définis
+-par `ORCHESTRATED_CODING.md`. Conserver périmètre, décision explicite,
++par `PROTOCOLE_PILOTAGE`. Conserver périmètre, décision explicite,
+ effets et preuves corrélées dans l'état autorisé. Une décision ne couvre
+ qu'une opération et ne peut être réutilisée. Les formats et interfaces sont
+@@ -1618,5 +1621,5 @@
+ ### Statistiques dès le blocage et continuité du change
+ 
+-Appliquer « Statistiques des sessions pilotées » dans `ORCHESTRATED_CODING.md`
++Appliquer « Statistiques des sessions pilotées » dans `PROTOCOLE_PILOTAGE`
+ pour le rapport du change bloqué, ses amendements à la reprise et après
+ archivage, les mandats et les contrôles. Appliquer ensuite « Nettoyage final
+@@ -1698,5 +1701,5 @@
+ Avant la clôture, enregistrer le bilan dans `BLOCKERS.md` selon la section
+ « Rapport durable de blocage et réévaluation », puis appliquer « Statistiques
+-des sessions pilotées » dans `ORCHESTRATED_CODING.md` pour le rapport du
++des sessions pilotées » dans `PROTOCOLE_PILOTAGE` pour le rapport du
+ change ouvert ; vérifier les deux rapports et les références depuis `tasks.md` et le
+ checkpoint lorsqu'ils existent.
+@@ -1725,8 +1728,8 @@
+ permissions du seul RUN, sauvegarde son bilan, vérifie le gate `BLOQUÉ`,
+ clôture le contrat et libère les ressources sans déclarer de livraison,
+-selon `ORCHESTRATED_CODING.md`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
++selon `PROTOCOLE_PILOTAGE`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
+ ne clôt pas le change. Un sous-job transmet cet état au parent, qui effectue
+ la clôture du RUN sans attente de la dépendance. Terminer le suivi technique propre au RUN selon le protocole ; les arrêts et libérations suivent
+-les règles de `ORCHESTRATED_CODING.md`. Ne pas fermer l’agent de codage ni arrêter
++les règles de `PROTOCOLE_PILOTAGE`. Ne pas fermer l’agent de codage ni arrêter
+ une infrastructure partagée pour libérer ce seul RUN.
+ 
+@@ -1893,10 +1896,10 @@
+ validé, notamment la mise à jour de l’état de reprise, l'archivage éligible de `<CHANGEMENT OPENSPEC>` et la
+ production des rapports requis selon « Statistiques des sessions pilotées »
+-dans `ORCHESTRATED_CODING.md`, dans le change ouvert ou son archive selon le
++dans `PROTOCOLE_PILOTAGE`, dans le change ouvert ou son archive selon le
+ cas, puis le nettoyage conditionnel du bilan de blocage selon la section dédiée.
+ 
+ L’orchestrateur vérifie que l’agent a transmis ses derniers résultats et
+ qu’aucun mandat ne reste actif. Pour chaque changement archivé, il vérifie que
+-le rapport attendu est vérifié selon `ORCHESTRATED_CODING.md` et rattaché au
++le rapport attendu est vérifié selon `PROTOCOLE_PILOTAGE` et rattaché au
+ bon dossier d’archive. Il réalise lui-même le commit local conditionnel prévu
+ par « Commit Git local après archivage », puis la publication prévue par
+@@ -1911,5 +1914,5 @@
+ l’agent de codage selon le protocole, avant tout arrêt empêchant ce nettoyage.
+ Il applique les conditions de clôture et d’arrêt définies par
+-`ORCHESTRATED_CODING.md`, avec les preuves correspondantes.
++`PROTOCOLE_PILOTAGE`, avec les preuves correspondantes.
+ Il préserve les services partagés du pilotage. Il arrête uniquement
+ un conteneur dédié à son agent lorsqu'il en dispose et que cet arrêt est
+@@ -1941,5 +1944,5 @@
+ ## Exécution du contrat de travail
+ 
+-Définir et suivre le contrat de travail selon `ORCHESTRATED_CODING.md`,
++Définir et suivre le contrat de travail selon `PROTOCOLE_PILOTAGE`,
+ avec les seuls objectifs, ressources et effets autorisés par le présent prompt.
+ 
+@@ -1951,5 +1954,5 @@
+ Un jalon intermédiaire, une attente ou la fin d'un sous-job ne clôture pas
+ le cycle parent. Appliquer exclusivement les procédures de suivi, de reprise
+-et de clôture de `ORCHESTRATED_CODING.md`.
++et de clôture de `PROTOCOLE_PILOTAGE`.
+ 
+ ## Verrou terminal de restitution
+@@ -1959,5 +1962,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+--- a/CISMP.md
++++ b/CISMP.md
+@@ -12,5 +12,5 @@
+ CISMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec CISM est signalée avant l’action concernée ; elle n’est pas
+@@ -24,14 +24,17 @@
+ l'agent de codage relèvent des sections « Statistiques des sessions pilotées »
+ et « Nettoyage final des sessions de l'agent de codage » de
+-`ORCHESTRATED_CODING.md`. En pilotage, appliquer ces procédures communes ;
++`PROTOCOLE_PILOTAGE`. En pilotage, appliquer ces procédures communes ;
+ les modalités statistiques du prompt direct restent propres au mode direct.
+ Les objectifs, autorisations métier et conditions de réussite restent ceux
+ du présent prompt et de son contrat métier commun lorsqu'il existe.
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -282,6 +285,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -293,5 +296,5 @@
+ 
+ L'invocation explicite de CISMP pour lancer un RUN vaut feu vert conditionnel
+-après réussite des préconditions de `ORCHESTRATED_CODING.md`. Ne pas redemander
++après réussite des préconditions de `PROTOCOLE_PILOTAGE`. Ne pas redemander
+ cet accord lorsqu'il est prouvé, applicable et non révoqué. Une citation, une
+ analyse ou une modification du prompt ne lance aucune session.
+@@ -329,5 +332,5 @@
+ 
+ Après chaque archivage OpenSpec réussi et vérifié, après production et
+-vérification du rapport `STATISTICS.md` selon `ORCHESTRATED_CODING.md`,
++vérification du rapport `STATISTICS.md` selon `PROTOCOLE_PILOTAGE`,
+ puis après le nettoyage conditionnel du bilan de blocage, appliquer
+ cette étape avant la clôture réussie ou la sélection du change suivant.
+@@ -800,5 +803,5 @@
+ <VERSION> = 0.4
+ <AGENT ORCHESTRATEUR> = agent qui reçoit la demande du développeur
+-<AGENT CODAGE> = résolu selon ORCHESTRATED_CODING.md
++<AGENT CODAGE> = résolu selon PROTOCOLE_PILOTAGE
+ <ENVIRONNEMENT AGENT CODAGE> = à vérifier dans l’environnement réel
+ 
+@@ -819,5 +822,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -876,5 +879,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L’état Git NE DOIT PAS être inspecté, notamment par `git status`, `git diff`, `git log` ou la lecture de `.git/`, sauf pour les étapes « Commit Git local après archivage », « Publication Git Forgejo après le commit local », « Publication Git GitHub » et « Publication Git GitLab » dans leurs périmètres stricts, ou sur demande explicite du développeur.
+@@ -898,5 +901,5 @@
+ 
+ Vérifier le feu vert conditionnel de l'invocation et les préconditions de
+-`ORCHESTRATED_CODING.md` avant tout sous-job métier. Réutiliser les accords
++`PROTOCOLE_PILOTAGE` avant tout sous-job métier. Réutiliser les accords
+ applicables et non révoqués sans les redemander ; demander uniquement les
+ paramètres indispensables manquants.
+@@ -933,5 +936,5 @@
+ et les preuves encore valides. Réconcilier le lot précédent avant la bascule ;
+ appliquer les règles d'identité, de réservation et de session définies par
+-`ORCHESTRATED_CODING.md`. Ne pas transférer une permission consommée ou
++`PROTOCOLE_PILOTAGE`. Ne pas transférer une permission consommée ou
+ inventer une livraison pour libérer un lot.
+ 
+@@ -1146,5 +1149,5 @@
+ ### Statistiques dès le blocage et continuité du change
+ 
+-Appliquer « Statistiques des sessions pilotées » dans `ORCHESTRATED_CODING.md`
++Appliquer « Statistiques des sessions pilotées » dans `PROTOCOLE_PILOTAGE`
+ pour le rapport du change bloqué, ses amendements à la reprise et après
+ archivage, les mandats et les contrôles. Appliquer ensuite « Nettoyage final
+@@ -1226,5 +1229,5 @@
+ Avant la clôture, enregistrer le bilan dans `BLOCKERS.md` selon la section
+ « Rapport durable de blocage et réévaluation », puis appliquer « Statistiques
+-des sessions pilotées » dans `ORCHESTRATED_CODING.md` pour le rapport du
++des sessions pilotées » dans `PROTOCOLE_PILOTAGE` pour le rapport du
+ change ouvert ; vérifier les deux rapports et les références depuis `tasks.md` et le
+ checkpoint lorsqu'ils existent.
+@@ -1253,8 +1256,8 @@
+ permissions du seul RUN, sauvegarde son bilan, vérifie le gate `BLOQUÉ`,
+ clôture le contrat et libère les ressources sans déclarer de livraison,
+-selon `ORCHESTRATED_CODING.md`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
++selon `PROTOCOLE_PILOTAGE`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
+ ne clôt pas le change. Un sous-job transmet cet état au parent, qui effectue
+ la clôture du RUN sans attente de la dépendance. Terminer le suivi technique propre au RUN selon le protocole ; les arrêts et libérations suivent
+-les règles de `ORCHESTRATED_CODING.md`. Ne pas fermer l’agent de codage ni arrêter
++les règles de `PROTOCOLE_PILOTAGE`. Ne pas fermer l’agent de codage ni arrêter
+ une infrastructure partagée pour libérer ce seul RUN.
+ 
+@@ -1263,5 +1266,5 @@
+ L’orchestrateur mandate l’inventaire en lecture seule de l’unique change réservé par ce RUN avant toute écriture. Il pilote ensuite les seules tâches non prouvées, avec modification minimale, validations applicables, contrôles de syntaxe, tests, UTF-8, LF, conformité OpenSpec, absence de secret et vérification des preuves du protocole.
+ 
+-L’orchestrateur applique le cycle par tâche ou petit lot indissociable ci-dessus, valide explicitement les preuves locales puis autorise les coches correspondantes avant l’unité suivante. Après toutes les unités de réalisation, il obtient l’exclusion d’intégration et fait exécuter la validation globale finale sur la base courante. Il fait corriger puis revalider les écarts dans le périmètre autorisé ; seulement après réussite et preuve de tous les critères, il mandate l’archivage OpenSpec et vérifie son succès et STATISTICS.md. Il fait réaliser et vérifie ensuite le nettoyage conditionnel du bilan de blocage selon la section dédiée, puis réalise lui-même le commit local conditionnel prévu par « Commit Git local après archivage » puis les publications prévues par « Publication Git Forgejo après le commit local », « Publication Git GitHub » et « Publication Git GitLab », dans cet ordre, et vérifie leurs résultats ou leurs non-applications motivées avant de vérifier la publication commune. Après gate, désarmement et libération réconciliés, il vérifie le nettoyage final des sessions de l’agent de codage selon `ORCHESTRATED_CODING.md`, puis revient à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur. Le prochain change utilise obligatoirement une nouvelle session de l’agent de codage selon la règle ci-dessus.
++L’orchestrateur applique le cycle par tâche ou petit lot indissociable ci-dessus, valide explicitement les preuves locales puis autorise les coches correspondantes avant l’unité suivante. Après toutes les unités de réalisation, il obtient l’exclusion d’intégration et fait exécuter la validation globale finale sur la base courante. Il fait corriger puis revalider les écarts dans le périmètre autorisé ; seulement après réussite et preuve de tous les critères, il mandate l’archivage OpenSpec et vérifie son succès et STATISTICS.md. Il fait réaliser et vérifie ensuite le nettoyage conditionnel du bilan de blocage selon la section dédiée, puis réalise lui-même le commit local conditionnel prévu par « Commit Git local après archivage » puis les publications prévues par « Publication Git Forgejo après le commit local », « Publication Git GitHub » et « Publication Git GitLab », dans cet ordre, et vérifie leurs résultats ou leurs non-applications motivées avant de vérifier la publication commune. Après gate, désarmement et libération réconciliés, il vérifie le nettoyage final des sessions de l’agent de codage selon `PROTOCOLE_PILOTAGE`, puis revient à `SÉLECTION`, sans créer de conversation enfant pour l’orchestrateur. Le prochain change utilise obligatoirement une nouvelle session de l’agent de codage selon la règle ci-dessus.
+ 
+ Une contradiction ou une absence dans les spécifications ou cadrages qui empêche une implémentation conforme mène à `REPRISE`, sans contournement dans le code. Un échec de test métier entraîne une correction ciblée puis une revalidation dans le périmètre autorisé, sans recréer la session pour ce seul motif. Les erreurs de session et validations interrompues suivent la reprise obligatoire du mandat et de sa session. Un échec non résoluble dans le périmètre autorisé mène à `BLOQUÉ` selon les conditions terminales ci-dessus.
+@@ -1288,5 +1291,5 @@
+ Avant une restitution finale, vérifier que les mandats sont clôturés, que les fichiers attendus seuls ont été modifiés, que les validations ont leurs résultats et que la cohérence des cadrages a été contrôlée. À `TERMINÉ`, restituer les changes traités et archivés, les fichiers, validations, preuves, écarts éventuels et la preuve qu’aucun travail implémentable ne reste. À la durée maximale, produire un point de contrôle factuel sans déclarer le cycle terminé.
+ 
+-L’orchestrateur clôture le pilotage selon `ORCHESTRATED_CODING.md` à l’état `TERMINÉ`, `BLOQUÉ`, à la durée maximale avec un bilan partiel, ou sur instruction explicite du développeur.
++L’orchestrateur clôture le pilotage selon `PROTOCOLE_PILOTAGE` à l’état `TERMINÉ`, `BLOQUÉ`, à la durée maximale avec un bilan partiel, ou sur instruction explicite du développeur.
+ 
+ ## Verrou terminal de restitution
+@@ -1296,5 +1299,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+--- a/ISMP.md
++++ b/ISMP.md
+@@ -12,5 +12,5 @@
+ ISMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec ISM est signalée avant l’action concernée ; elle n’est pas
+@@ -27,14 +27,17 @@
+ l'agent de codage relèvent des sections « Statistiques des sessions pilotées »
+ et « Nettoyage final des sessions de l'agent de codage » de
+-`ORCHESTRATED_CODING.md`. En pilotage, appliquer ces procédures communes ;
++`PROTOCOLE_PILOTAGE`. En pilotage, appliquer ces procédures communes ;
+ les modalités statistiques du prompt direct restent propres au mode direct.
+ Les objectifs, autorisations métier et conditions de réussite restent ceux
+ du présent prompt et de son contrat métier commun lorsqu'il existe.
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -285,6 +288,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -332,5 +335,5 @@
+ 
+ Après chaque archivage OpenSpec réussi et vérifié, après production et
+-vérification du rapport `STATISTICS.md` selon `ORCHESTRATED_CODING.md`,
++vérification du rapport `STATISTICS.md` selon `PROTOCOLE_PILOTAGE`,
+ puis après le nettoyage conditionnel du bilan de blocage, appliquer
+ cette étape avant la clôture réussie ou la sélection du change suivant.
+@@ -836,5 +839,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -893,5 +896,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L'état Git n'est pas inspecté sans demande explicite, hors opérations Git
+@@ -902,5 +905,5 @@
+ 
+ Vérifier le feu vert explicite du développeur et les préconditions de
+-`ORCHESTRATED_CODING.md` avant tout mandat métier. Réutiliser un accord
++`PROTOCOLE_PILOTAGE` avant tout mandat métier. Réutiliser un accord
+ prouvé, toujours applicable et non révoqué sans le redemander ; sinon,
+ demander uniquement cet accord ou les paramètres indispensables manquants.
+@@ -1100,5 +1103,5 @@
+ ### Statistiques dès le blocage et continuité du change
+ 
+-Appliquer « Statistiques des sessions pilotées » dans `ORCHESTRATED_CODING.md`
++Appliquer « Statistiques des sessions pilotées » dans `PROTOCOLE_PILOTAGE`
+ pour le rapport du change bloqué, ses amendements à la reprise et après
+ archivage, les mandats et les contrôles. Appliquer ensuite « Nettoyage final
+@@ -1180,5 +1183,5 @@
+ Avant la clôture, enregistrer le bilan dans `BLOCKERS.md` selon la section
+ « Rapport durable de blocage et réévaluation », puis appliquer « Statistiques
+-des sessions pilotées » dans `ORCHESTRATED_CODING.md` pour le rapport du
++des sessions pilotées » dans `PROTOCOLE_PILOTAGE` pour le rapport du
+ change ouvert ; vérifier les deux rapports et les références depuis `tasks.md` et le
+ checkpoint lorsqu'ils existent.
+@@ -1207,8 +1210,8 @@
+ permissions du seul RUN, sauvegarde son bilan, vérifie le gate `BLOQUÉ`,
+ clôture le contrat et libère les ressources sans déclarer de livraison,
+-selon `ORCHESTRATED_CODING.md`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
++selon `PROTOCOLE_PILOTAGE`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
+ ne clôt pas le change. Un sous-job transmet cet état au parent, qui effectue
+ la clôture du RUN sans attente de la dépendance. Terminer le suivi technique propre au RUN selon le protocole ; les arrêts et libérations suivent
+-les règles de `ORCHESTRATED_CODING.md`. Ne pas fermer l’agent de codage ni arrêter
++les règles de `PROTOCOLE_PILOTAGE`. Ne pas fermer l’agent de codage ni arrêter
+ une infrastructure partagée pour libérer ce seul RUN.
+ 
+@@ -1224,5 +1227,5 @@
+ ## Exécution du contrat de travail
+ 
+-Définir et suivre le contrat de travail selon `ORCHESTRATED_CODING.md`,
++Définir et suivre le contrat de travail selon `PROTOCOLE_PILOTAGE`,
+ avec les seuls objectifs, ressources et effets autorisés par le présent prompt.
+ 
+@@ -1234,5 +1237,5 @@
+ Un jalon intermédiaire, une attente ou la fin d'un sous-job ne clôture pas
+ le cycle parent. Appliquer exclusivement les procédures de suivi, de reprise
+-et de clôture de `ORCHESTRATED_CODING.md`.
++et de clôture de `PROTOCOLE_PILOTAGE`.
+ 
+ ## Verrou terminal de restitution
+@@ -1242,5 +1245,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+--- a/SPCMP.md
++++ b/SPCMP.md
+@@ -12,5 +12,5 @@
+ SPCMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec SPCM est signalée avant l’action concernée ; elle n’est pas
+@@ -20,9 +20,12 @@
+ ## Contrat de pilotage du projet
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -273,6 +276,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -356,5 +359,5 @@
+ <VERSION> = 0.3
+ <AGENT ORCHESTRATEUR> = agent qui reçoit la demande du développeur d’exécuter le SPCMP
+-<AGENT CODAGE> = résolu selon ORCHESTRATED_CODING.md
++<AGENT CODAGE> = résolu selon PROTOCOLE_PILOTAGE
+ <ENVIRONNEMENT AGENT CODAGE> = à vérifier dans l’environnement réel
+ 
+@@ -375,5 +378,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -432,5 +435,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L’état Git NE DOIT PAS être inspecté, notamment par `git status`, `git diff`, `git log` ou la lecture de `.git/`, sauf demande explicite du développeur.
+@@ -457,5 +460,5 @@
+ 
+ Vérifier le feu vert explicite du développeur et les préconditions de
+-`ORCHESTRATED_CODING.md` avant tout mandat métier. Réutiliser un accord
++`PROTOCOLE_PILOTAGE` avant tout mandat métier. Réutiliser un accord
+ prouvé, toujours applicable et non révoqué sans le redemander ; sinon,
+ demander uniquement cet accord ou les paramètres indispensables manquants.
+@@ -490,5 +493,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+@@ -505,5 +508,5 @@
+ Après la validation automatique du candidat recommandé, l’orchestrateur établit le périmètre exact du change : objectif, identifiant envisagé, artefacts OpenSpec, critères, validations, limites et condition de passage à l’implémentation. Il valide automatiquement ce périmètre complet et autorise la création du change, sans demander le consentement du développeur.
+ 
+-Après cette validation automatique, il établit le contrat de préparation selon `ORCHESTRATED_CODING.md` et pilote des mandats unitaires corrélés. L’agent de codage ne réalise que les opérations strictement autorisées : création ou proposition du change avec OpenSpec, artefacts OpenSpec nécessaires, amendements conditionnels des deux documents existants et exploitables sous mandats distincts par fichier, contrôles UTF-8 et LF, validation OpenSpec et vérification de l’absence d’écriture hors périmètre. Il n’écrit jamais de code, ne coche aucune tâche sans preuve et n’archive pas le change.
++Après cette validation automatique, il établit le contrat de préparation selon `PROTOCOLE_PILOTAGE` et pilote des mandats unitaires corrélés. L’agent de codage ne réalise que les opérations strictement autorisées : création ou proposition du change avec OpenSpec, artefacts OpenSpec nécessaires, amendements conditionnels des deux documents existants et exploitables sous mandats distincts par fichier, contrôles UTF-8 et LF, validation OpenSpec et vérification de l’absence d’écriture hors périmètre. Il n’écrit jamais de code, ne coche aucune tâche sans preuve et n’archive pas le change.
+ 
+ Après chaque mandat, l’orchestrateur vérifie la corrélation des décisions et des preuves, les fichiers attendus, les validations exécutées et les écarts. Toute sortie de périmètre, erreur de pilotage ou incertitude suspend le mandat concerné et est soumise au développeur.
+@@ -511,5 +514,5 @@
+ ## 5. Clôture
+ 
+-Lorsque tous les artefacts requis du change sont complets et que la validation OpenSpec réussit, l’orchestrateur restitue le change préparé avec son périmètre, ses artefacts, ses validations, ses mandats et ses limites, sans démarrer d’implémentation. Sinon, la session peut se clore avec un bilan partiel pour blocage, refus ou interruption selon SPCM ; l’orchestrateur restitue alors l’état initial, les candidats, les décisions, les mandats, les fichiers modifiés, les validations et les écarts. Dans tous les cas, l’orchestrateur vérifie la clôture technique selon `ORCHESTRATED_CODING.md`.
++Lorsque tous les artefacts requis du change sont complets et que la validation OpenSpec réussit, l’orchestrateur restitue le change préparé avec son périmètre, ses artefacts, ses validations, ses mandats et ses limites, sans démarrer d’implémentation. Sinon, la session peut se clore avec un bilan partiel pour blocage, refus ou interruption selon SPCM ; l’orchestrateur restitue alors l’état initial, les candidats, les décisions, les mandats, les fichiers modifiés, les validations et les écarts. Dans tous les cas, l’orchestrateur vérifie la clôture technique selon `PROTOCOLE_PILOTAGE`.
+ 
+ ---
+--- a/GSCMP.md
++++ b/GSCMP.md
+@@ -12,5 +12,5 @@
+ GSCMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec GSCM est signalée avant l’action concernée ; elle n’est pas
+@@ -20,9 +20,12 @@
+ ## Contrat de pilotage du projet
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -286,5 +289,5 @@
+ 
+ Seules les modalités d’exécution changent : l’exécution directe est remplacée
+-par le pilotage selon `ORCHESTRATED_CODING.md`, avec les acteurs, mandats,
++par le pilotage selon `PROTOCOLE_PILOTAGE`, avec les acteurs, mandats,
+ réservations, preuves techniques, état de reprise et clôture technique requis.
+ Le nom de session, l’identité native du RUN et le dossier de sortie sont adaptés
+@@ -339,5 +342,5 @@
+ <MODE> = couverture par défaut ; référentiel uniquement sur demande explicite
+ <AGENT ORCHESTRATEUR> = agent qui reçoit la demande du développeur
+-<AGENT CODAGE> = résolu selon ORCHESTRATED_CODING.md, limité ici au travail spécificatif
++<AGENT CODAGE> = résolu selon PROTOCOLE_PILOTAGE, limité ici au travail spécificatif
+ <ENVIRONNEMENT AGENT CODAGE> = à vérifier dans l’environnement réel
+ <VERSION> = 0.4
+@@ -351,5 +354,5 @@
+ L'invocation explicite de GSCMP autorise ce RUN spécificatif sous les
+ conditions de la section 1 de GSCM et vaut feu vert conditionnel après
+-réussite des préconditions de `ORCHESTRATED_CODING.md`. Ne pas redemander
++réussite des préconditions de `PROTOCOLE_PILOTAGE`. Ne pas redemander
+ un accord prouvé, toujours applicable et non révoqué. Présenter le plan des
+ fichiers avant les écritures et demander uniquement les décisions indispensables
+@@ -367,5 +370,5 @@
+ excluent code métier, tests applicatifs, archivage et livraison fonctionnelle.
+ Les prévols techniques éventuels et la maintenance du pilotage sont définis
+-exclusivement par `ORCHESTRATED_CODING.md` ; ils n'étendent pas ce périmètre.
++exclusivement par `PROTOCOLE_PILOTAGE` ; ils n'étendent pas ce périmètre.
+ 
+ ## 3. Phase 1 — Diagnostic préalable et préparation de la cible sous contrôle
+@@ -414,5 +417,5 @@
+ une décision réservée au développeur.
+ 
+-Appliquer les mandats et permissions définis par `ORCHESTRATED_CODING.md`,
++Appliquer les mandats et permissions définis par `PROTOCOLE_PILOTAGE`,
+ avec les seules cibles et ressources autorisées. Une réservation ne vaut
+ pas approbation. Employer les exécutables déclarés dans `DEVOPS.md`.
+@@ -438,5 +441,5 @@
+ les effets du lot précédent. Transmettre les cadrages et preuves nécessaires
+ au lot suivant. Les identités de session, prévols et changements de contrat
+-suivent exclusivement `ORCHESTRATED_CODING.md`.
++suivent exclusivement `PROTOCOLE_PILOTAGE`.
+ 
+ En cas de conflit, ne pas modifier le change détenu par un autre RUN.
+@@ -464,5 +467,5 @@
+ 
+ Appliquer les protections, validations et procédures de publication définies
+-par `ORCHESTRATED_CODING.md` pour les seules écritures documentaires autorisées.
++par `PROTOCOLE_PILOTAGE` pour les seules écritures documentaires autorisées.
+ Vérifier le référentiel combiné et les preuves affectées avant d'annoncer
+ une publication. Toute extension de ressources doit respecter ce protocole
+@@ -497,5 +500,5 @@
+ 
+ En cas d'attente, d'interruption ou d'incident, appliquer la récupération
+-définie par `ORCHESTRATED_CODING.md`. Réconcilier les effets avant une reprise ;
++définie par `PROTOCOLE_PILOTAGE`. Réconcilier les effets avant une reprise ;
+ ne rejouer aucune écriture observée ni permission consommée.
+ 
+@@ -527,5 +530,5 @@
+ préparation ; ne pas les confondre avec les tâches de développement futures.
+ 
+-Clôturer le seul RUN selon `ORCHESTRATED_CODING.md`, avec les preuves des
++Clôturer le seul RUN selon `PROTOCOLE_PILOTAGE`, avec les preuves des
+ critères métier, des rapports et de la libération des ressources concernées.
+ Sans écriture nécessaire, justifier l'absence de publication de changes ;
+--- a/ACSP.md
++++ b/ACSP.md
+@@ -6,14 +6,17 @@
+ l'agent de codage relèvent des sections « Statistiques des sessions pilotées »
+ et « Nettoyage final des sessions de l'agent de codage » de
+-`ORCHESTRATED_CODING.md`. En pilotage, appliquer ces procédures communes ;
++`PROTOCOLE_PILOTAGE`. En pilotage, appliquer ces procédures communes ;
+ les modalités statistiques du prompt direct restent propres au mode direct.
+ Les objectifs, autorisations métier et conditions de réussite restent ceux
+ du présent prompt et de son contrat métier commun lorsqu'il existe.
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -264,6 +267,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -301,5 +304,5 @@
+ 
+ Après chaque archivage OpenSpec réussi et vérifié, après production et
+-vérification du rapport `STATISTICS.md` selon `ORCHESTRATED_CODING.md`,
++vérification du rapport `STATISTICS.md` selon `PROTOCOLE_PILOTAGE`,
+ puis après le nettoyage conditionnel du bilan de blocage, appliquer
+ cette étape avant la clôture réussie ou la sélection du change suivant.
+@@ -800,5 +803,5 @@
+ 
+ Si une commande échoue, rapporter les seuls faits observés et appliquer
+-la qualification et la récupération d'environnement de `ORCHESTRATED_CODING.md`.
++la qualification et la récupération d'environnement de `PROTOCOLE_PILOTAGE`.
+ Ne remplacer ni répéter une commande sans nouveau mandat exact.
+ 
+@@ -809,5 +812,5 @@
+ Avant tout accès au projet, confirmer à l'orchestrateur le répertoire réel,
+ la session, le change et le périmètre validé. Appliquer les préconditions et
+-prévols définis par `ORCHESTRATED_CODING.md`. Ne poursuivre qu'après leurs
++prévols définis par `PROTOCOLE_PILOTAGE`. Ne poursuivre qu'après leurs
+ preuves observables dans le contexte attendu. Une affirmation textuelle ne
+ remplace pas un contrôle natif.
+@@ -828,5 +831,5 @@
+ 
+ Appliquer le verrou de lecture seule, les formats de mandat, les contrôles
+-avant exécution et la procédure d'écart de `ORCHESTRATED_CODING.md`.
++avant exécution et la procédure d'écart de `PROTOCOLE_PILOTAGE`.
+ Un mandat d'analyse n'autorise aucune mutation. Avant toute opération,
+ vérifier la cible, le périmètre, la décision applicable et les effets permis.
+@@ -1042,5 +1045,5 @@
+ ### Statistiques dès le blocage et continuité du change
+ 
+-Appliquer « Statistiques des sessions pilotées » dans `ORCHESTRATED_CODING.md`
++Appliquer « Statistiques des sessions pilotées » dans `PROTOCOLE_PILOTAGE`
+ pour le rapport du change bloqué, ses amendements à la reprise et après
+ archivage, les mandats et les contrôles. Appliquer ensuite « Nettoyage final
+@@ -1122,5 +1125,5 @@
+ Avant la clôture, enregistrer le bilan dans `BLOCKERS.md` selon la section
+ « Rapport durable de blocage et réévaluation », puis appliquer « Statistiques
+-des sessions pilotées » dans `ORCHESTRATED_CODING.md` pour le rapport du
++des sessions pilotées » dans `PROTOCOLE_PILOTAGE` pour le rapport du
+ change ouvert ; vérifier les deux rapports et les références depuis `tasks.md` et le
+ checkpoint lorsqu'ils existent.
+@@ -1149,8 +1152,8 @@
+ permissions du seul RUN, sauvegarde son bilan, vérifie le gate `BLOQUÉ`,
+ clôture le contrat et libère les ressources sans déclarer de livraison,
+-selon `ORCHESTRATED_CODING.md`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
++selon `PROTOCOLE_PILOTAGE`, avec les preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée
+ ne clôt pas le change. Un sous-job transmet cet état au parent, qui effectue
+ la clôture du RUN sans attente de la dépendance. Terminer le suivi technique propre au RUN selon le protocole ; les arrêts et libérations suivent
+-les règles de `ORCHESTRATED_CODING.md`. Ne pas fermer l’agent de codage ni arrêter
++les règles de `PROTOCOLE_PILOTAGE`. Ne pas fermer l’agent de codage ni arrêter
+ une infrastructure partagée pour libérer ce seul RUN.
+ 
+@@ -1158,5 +1161,5 @@
+ 
+ Utiliser les états, formats de message et identifiants définis par
+-`ORCHESTRATED_CODING.md`. Toute décision de périmètre ou structurante est
++`PROTOCOLE_PILOTAGE`. Toute décision de périmètre ou structurante est
+ soumise à l'orchestrateur avant l'opération concernée. Après chaque mandat,
+ transmettre l'opération réellement exécutée, son résultat, les preuves,
+@@ -1171,5 +1174,5 @@
+ Conserver le mandat actif, ses références, les fichiers concernés, résultats,
+ validations, écarts et prochaine action autorisée. Appliquer les cadences
+-et le compactage de `ORCHESTRATED_CODING.md` en préservant cet état et les preuves.
++et le compactage de `PROTOCOLE_PILOTAGE` en préservant cet état et les preuves.
+ 
+ Après interruption ou reprise du même change, relire les règles et le seul
+--- a/RCAM.md
++++ b/RCAM.md
+@@ -256,5 +256,5 @@
+ Lorsqu’il est invoqué directement, l’agent réalise lui-même les opérations
+ autorisées. Ne démarrer ni OpenCode, ni CAB, ni sondes de pilotage. La présence
+-de `ORCHESTRATED_CODING.md` ne transforme pas cette session en pilotage.
++du protocole de pilotage désigné par `AGENTS.md` ne transforme pas cette session en pilotage.
+ `RCAMP` réutilise les sections 1 à 8 ci-dessous avec ses propres règles de
+ pilotage, de persistance et de clôture.
+--- a/RSMP.md
++++ b/RSMP.md
+@@ -12,5 +12,5 @@
+ RSMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec RSM est signalée avant l’action concernée ; elle n’est pas
+@@ -24,14 +24,17 @@
+ l'agent de codage relèvent des sections « Statistiques des sessions pilotées »
+ et « Nettoyage final des sessions de l'agent de codage » de
+-`ORCHESTRATED_CODING.md`. En pilotage, appliquer ces procédures communes ;
++`PROTOCOLE_PILOTAGE`. En pilotage, appliquer ces procédures communes ;
+ les modalités statistiques du prompt direct restent propres au mode direct.
+ Les objectifs, autorisations métier et conditions de réussite restent ceux
+ du présent prompt et de son contrat métier commun lorsqu'il existe.
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -49,5 +52,5 @@
+ 
+ Avant le premier mandat autonome, vérifier le feu vert explicite du développeur
+-et les préconditions de `ORCHESTRATED_CODING.md`. Réutiliser un accord prouvé,
++et les préconditions de `PROTOCOLE_PILOTAGE`. Réutiliser un accord prouvé,
+ applicable et non révoqué sans le redemander ; sinon, demander ce seul accord.
+ Le feu vert reste distinct de la validation du périmètre métier. Sans lui,
+@@ -290,6 +293,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -382,5 +385,5 @@
+ <ARCHIVAGE OPENSPEC> = inclus uniquement pour les changements finalisés et validés
+ <AGENT ORCHESTRATEUR> = agent qui reçoit la demande du développeur d’exécuter le RSMP
+-<AGENT CODAGE> = résolu selon ORCHESTRATED_CODING.md
++<AGENT CODAGE> = résolu selon PROTOCOLE_PILOTAGE
+ <ENVIRONNEMENT AGENT CODAGE> = à vérifier dans l’environnement réel
+ 
+@@ -399,5 +402,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -456,5 +459,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L'état Git n'est pas inspecté sans demande explicite, hors opérations Git
+@@ -476,5 +479,5 @@
+ 
+ La collecte, les rapports et leurs contrôles relèvent de « Statistiques des
+-sessions pilotées » dans `ORCHESTRATED_CODING.md`, pour les seuls changes du
++sessions pilotées » dans `PROTOCOLE_PILOTAGE`, pour les seuls changes du
+ périmètre validé. La clôture applique aussi « Nettoyage final des sessions de
+ l'agent de codage », sans imposer un archivage absent de la finalité autorisée.
+@@ -512,5 +515,5 @@
+ état d’orchestration : inventaire, sélection validée, décisions, mandats,
+ fichiers touchés, validations, état de chaque changement et prochaine action.
+-Après interruption ou reprise, il rétablit le pilotage selon `ORCHESTRATED_CODING.md`,
++Après interruption ou reprise, il rétablit le pilotage selon `PROTOCOLE_PILOTAGE`,
+ réconcilie cet état avant tout nouveau mandat et ne repart jamais d’une
+ hypothèse non vérifiée.
+@@ -551,5 +554,5 @@
+ 
+ Associer chaque demande à un mandat borné et aux identifiants natifs définis
+-par `ORCHESTRATED_CODING.md`. Conserver périmètre, décision explicite,
++par `PROTOCOLE_PILOTAGE`. Conserver périmètre, décision explicite,
+ effets et preuves corrélées dans l'état autorisé. Une décision ne couvre
+ qu'une opération et ne peut être réutilisée. Les formats et interfaces sont
+@@ -585,5 +588,5 @@
+ la section dédiée, maintenance du `STATISTICS.md` global existant selon
+ `SGS.md`, archivage éligible déjà validé et rapports requis selon
+-« Statistiques des sessions pilotées » dans `ORCHESTRATED_CODING.md`, dans le
++« Statistiques des sessions pilotées » dans `PROTOCOLE_PILOTAGE`, dans le
+ change ouvert ou son archive selon le cas. Les amendements restent exécutés
+ par l’agent de codage sous mandats distincts par fichier, vérifiés par
+@@ -592,5 +595,5 @@
+ Il vérifie qu’aucun mandat n’est actif et que chaque `STATISTICS.md` attendu
+ est vérifié selon le protocole dans le dossier attendu. Il clôture le pilotage
+-selon `ORCHESTRATED_CODING.md` et vérifie le nettoyage final des sessions
++selon `PROTOCOLE_PILOTAGE` et vérifie le nettoyage final des sessions
+ concernées avant l’arrêt autorisé du conteneur de l’agent de codage. Si la clôture du pilotage ou l’arrêt du conteneur échoue,
+ il avertit le développeur et attend sa décision. La restitution finale unique
+@@ -606,5 +609,5 @@
+ ## Exécution du contrat de travail
+ 
+-Définir et suivre le contrat de travail selon `ORCHESTRATED_CODING.md`,
++Définir et suivre le contrat de travail selon `PROTOCOLE_PILOTAGE`,
+ avec les seuls objectifs, ressources et effets autorisés par le présent prompt.
+ 
+@@ -616,5 +619,5 @@
+ Un jalon intermédiaire, une attente ou la fin d'un sous-job ne clôture pas
+ le cycle parent. Appliquer exclusivement les procédures de suivi, de reprise
+-et de clôture de `ORCHESTRATED_CODING.md`.
++et de clôture de `PROTOCOLE_PILOTAGE`.
+ 
+ ## Verrou terminal de restitution
+@@ -624,5 +627,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+--- a/RCAMP.md
++++ b/RCAMP.md
+@@ -12,5 +12,5 @@
+ RCAMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec RCAM est signalée avant l’action concernée ; elle n’est pas
+@@ -24,14 +24,17 @@
+ l'agent de codage relèvent des sections « Statistiques des sessions pilotées »
+ et « Nettoyage final des sessions de l'agent de codage » de
+-`ORCHESTRATED_CODING.md`. En pilotage, appliquer ces procédures communes ;
++`PROTOCOLE_PILOTAGE`. En pilotage, appliquer ces procédures communes ;
+ les modalités statistiques du prompt direct restent propres au mode direct.
+ Les objectifs, autorisations métier et conditions de réussite restent ceux
+ du présent prompt et de son contrat métier commun lorsqu'il existe.
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -289,5 +292,5 @@
+ Lire intégralement RCAM et appliquer ses sections 1 à 8 comme contrat
+ métier de revalidation. Sa règle d'exécution directe est remplacée ici par
+-le pilotage défini dans `ORCHESTRATED_CODING.md`. Aucune procédure technique
++le pilotage défini dans `PROTOCOLE_PILOTAGE`. Aucune procédure technique
+ n'est héritée d'un autre prompt. Ces lectures ne lancent aucun sous-job.
+ 
+@@ -338,5 +341,5 @@
+ <DOSSIER SORTIE> = output/rcamp/<run_id>/
+ <AGENT ORCHESTRATEUR> = agent qui reçoit la demande du développeur
+-<AGENT CODAGE> = résolu selon ORCHESTRATED_CODING.md
++<AGENT CODAGE> = résolu selon PROTOCOLE_PILOTAGE
+ <ENVIRONNEMENT AGENT CODAGE> = à vérifier dans l’environnement réel
+ <VERSION> = 0.3
+@@ -354,5 +357,5 @@
+ L'invocation explicite de RCAMP et l'identification de la cible valent feu
+ vert conditionnel pour ce seul audit après réussite des préconditions de
+-`ORCHESTRATED_CODING.md`. Ne pas redemander un accord prouvé, applicable et
++`PROTOCOLE_PILOTAGE`. Ne pas redemander un accord prouvé, applicable et
+ non révoqué. Le nom du change n'autorise aucune correction, nouvel archivage
+ ou extension du périmètre.
+@@ -361,5 +364,5 @@
+ 
+ Vérifier la racine réelle, la session et la cible selon
+-`ORCHESTRATED_CODING.md`. Transmettre intégralement ACSP, RCAMP et le contrat
++`PROTOCOLE_PILOTAGE`. Transmettre intégralement ACSP, RCAMP et le contrat
+ métier de RCAM avant le premier mandat. Les restrictions d'audit priment
+ sur toute instruction générique d'implémentation.
+@@ -393,5 +396,5 @@
+ 
+ Avant chaque opération soumise à permission, présenter un mandat exact et
+-les effets déclarés selon `ORCHESTRATED_CODING.md`. Conserver sa décision
++les effets déclarés selon `PROTOCOLE_PILOTAGE`. Conserver sa décision
+ et ses preuves corrélées ; une permission ne couvre aucune autre opération.
+ Employer les exécutables déclarés dans `DEVOPS.md`.
+@@ -417,5 +420,5 @@
+ 
+ Pour les statistiques de la revalidation ciblée, appliquer « Statistiques des
+-sessions pilotées » de `ORCHESTRATED_CODING.md` : ce protocole porte seul la
++sessions pilotées » de `PROTOCOLE_PILOTAGE` : ce protocole porte seul la
+ procédure d'amendement ou de création, la collecte, les mandats et les contrôles.
+ La revalidation conserve les autorisations et limites métier de `RCAM`.
+@@ -423,5 +426,5 @@
+ Conserver un état stable du code et de l’archive pendant les vérifications.
+ Si des écritures sont prévues, appliquer les protections et procédures de
+-publication de `ORCHESTRATED_CODING.md` pour les seuls livrables autorisés.
++publication de `PROTOCOLE_PILOTAGE` pour les seuls livrables autorisés.
+ Aucune synchronisation ou opération d'archivage n'est ainsi autorisée.
+ Vérifier les empreintes et revalider seulement les preuves affectées par un
+@@ -467,5 +470,5 @@
+ 
+ En cas d'attente ou d'incident, appliquer la récupération prévue par
+-`ORCHESTRATED_CODING.md`, après réconciliation des effets et permissions.
++`PROTOCOLE_PILOTAGE`, après réconciliation des effets et permissions.
+ Préserver la cible, les preuves et les ressources des autres sessions.
+ 
+@@ -500,5 +503,5 @@
+ 
+ Obtenir et vérifier les preuves de clôture technique et de libération selon
+-`ORCHESTRATED_CODING.md`, pour ce seul RUN. Préserver les services partagés et
++`PROTOCOLE_PILOTAGE`, pour ce seul RUN. Préserver les services partagés et
+ nettoyer seulement les processus et ressources temporaires de cette revalidation.
+ Aucune affirmation de l'agent ou ancienne preuve ne remplace les contrôles
+@@ -510,5 +513,5 @@
+ Restituer les totaux par verdict, les écarts, les tests, les limites et les
+ liens des livrables après vérification du nettoyage final des sessions de
+-l'agent de codage selon `ORCHESTRATED_CODING.md`. Ne pas sélectionner
++l'agent de codage selon `PROTOCOLE_PILOTAGE`. Ne pas sélectionner
+ un autre change ni appliquer les corrections proposées. Leur périmètre
+ nécessite une validation explicite et distincte du développeur.
+--- a/PPSCP.md
++++ b/PPSCP.md
+@@ -14,5 +14,5 @@
+ PPSCP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec PPSC est signalée avant l’action concernée ; elle n’est pas
+@@ -22,9 +22,12 @@
+ ## Contrat de pilotage du projet
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -275,6 +278,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -322,5 +325,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -379,5 +382,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L'état Git n'est pas inspecté sans demande explicite, hors opérations Git
+@@ -463,5 +466,5 @@
+ ## Déroulement obligatoire
+ 
+-1. Vérifier le feu vert explicite du développeur et les préconditions de `ORCHESTRATED_CODING.md` avant tout mandat métier. Réutiliser un accord prouvé, toujours applicable et non révoqué sans le redemander ; sinon, demander uniquement cet accord ou les paramètres indispensables manquants. Les contrôles techniques ne valent pas validation du périmètre métier.
++1. Vérifier le feu vert explicite du développeur et les préconditions de `PROTOCOLE_PILOTAGE` avant tout mandat métier. Réutiliser un accord prouvé, toujours applicable et non révoqué sans le redemander ; sinon, demander uniquement cet accord ou les paramètres indispensables manquants. Les contrôles techniques ne valent pas validation du périmètre métier.
+ 2. Après ce feu vert, l'agent de codage établit, sans écriture, l'état des prérequis nécessaires à la première session : documents de cadrage, OpenSpec, arborescence attendue, environnement, construction et validations.
+ 3. Si une mise en place est nécessaire, l'agent orchestrateur soumet au développeur les prérequis, fichiers concernés, effets attendus et vérifications. Il attend son autorisation explicite avant toute écriture de prérequis. Sinon, il le constate explicitement.
+@@ -473,5 +476,5 @@
+ 
+ Le JOB 0 prépare les prérequis et n'implémente aucun code. Son contrat et
+-sa clôture technique suivent `ORCHESTRATED_CODING.md` avec cette finalité.
++sa clôture technique suivent `PROTOCOLE_PILOTAGE` avec cette finalité.
+ Aucun critère technique ne doit imposer la réalisation ou l'archivage d'un
+ change ni la création artificielle de travail. Vérifier les prérequis et
+@@ -484,5 +487,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+--- a/DOPP.md
++++ b/DOPP.md
+@@ -12,5 +12,5 @@
+ DOPP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec DOP est signalée avant l’action concernée ; elle n’est pas
+@@ -20,9 +20,12 @@
+ ## Contrat de pilotage du projet
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -39,6 +42,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -109,5 +112,5 @@
+ <PROFIL D’ORIENTATION> = piloté par défaut, sauf demande explicite
+ <AGENT ORCHESTRATEUR> = agent qui reçoit la demande du développeur
+-<AGENT CODAGE> = résolu selon ORCHESTRATED_CODING.md
++<AGENT CODAGE> = résolu selon PROTOCOLE_PILOTAGE
+ <ENVIRONNEMENT AGENT CODAGE> = à vérifier dans l’environnement réel
+ 
+@@ -128,5 +131,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -163,5 +166,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L'état Git n'est pas inspecté sans demande explicite, hors opérations Git
+@@ -183,5 +186,5 @@
+ 
+ Avant de confier l'analyse, vérifier les préconditions de
+-`ORCHESTRATED_CODING.md` et les autorisations applicables. Le diagnostic
++`PROTOCOLE_PILOTAGE` et les autorisations applicables. Le diagnostic
+ reste en lecture seule, sous la seule exception du checkpoint autorisé.
+ Il ne demande aucun mandat d'écriture métier ni validation d'un périmètre
+@@ -577,5 +580,5 @@
+ prouvées, même si elles ne constituent pas l’action principale.
+ L’orchestrateur ne crée aucune conversation enfant et ne lance aucun prompt
+-automatiquement. Après la restitution préparatoire, il clôture le pilotage selon `ORCHESTRATED_CODING.md`
++automatiquement. Après la restitution préparatoire, il clôture le pilotage selon `PROTOCOLE_PILOTAGE`
+ pour ce seul RUN, selon les contrôles de clôture applicables.
+ 
+@@ -591,5 +594,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+--- a/ACSMP.md
++++ b/ACSMP.md
+@@ -12,5 +12,5 @@
+ ACSMP adapte uniquement les acteurs, mandats, réservations, preuves techniques,
+ état de reprise, paramètres techniques de session et clôture technique selon
+-`ORCHESTRATED_CODING.md`. Ces adaptations ne créent aucune autorisation métier.
++`PROTOCOLE_PILOTAGE`. Ces adaptations ne créent aucune autorisation métier.
+ Les rappels ci-dessous ne constituent pas un contrat métier distinct. Une
+ divergence avec ACSM est signalée avant l’action concernée ; elle n’est pas
+@@ -20,9 +20,12 @@
+ ## Contrat de pilotage du projet
+ 
+-Avant tout pilotage, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md` à la racine réelle du projet cible et appliquent le
+-profil qui y est défini. Ce protocole conserve les limites du présent prompt
+-et les décisions réservées au développeur. Son absence ou une incompatibilité
+-démontrée est signalée avant les opérations concernées, sans contournement.
++Avant tout pilotage, résoudre le protocole désigné par `AGENTS.md` du projet
++cible, puis charger ses obligations et les références nécessaires au mandat.
++`PROTOCOLE_PILOTAGE` désigne ce contrat résolu, pas un nom de fichier imposé.
++Les deux agents doivent connaître les obligations applicables avant leur
++exécution. Les limites métier et les décisions réservées au développeur
++restent celles du prompt. Une référence indisponible suspend les seules
++opérations concernées, sans autorisation inventée ni modification de la
++distribution source.
+ 
+ Ce prompt définit uniquement le travail demandé, ses autorisations métier,
+@@ -40,5 +43,5 @@
+ 
+ Avant le premier mandat autonome, vérifier le feu vert explicite du développeur
+-et les préconditions de `ORCHESTRATED_CODING.md`. Réutiliser un accord prouvé,
++et les préconditions de `PROTOCOLE_PILOTAGE`. Réutiliser un accord prouvé,
+ applicable et non révoqué sans le redemander ; sinon, demander ce seul accord.
+ Le feu vert reste distinct de la validation du périmètre métier. Sans lui,
+@@ -81,6 +84,6 @@
+ ## Règles communes de pilotage
+ 
+-Avant toute initialisation, les deux agents lisent intégralement
+-`ORCHESTRATED_CODING.md`, notamment « Identité, coordination et autorisations
++Avant toute initialisation, les deux agents chargent les obligations de
++`PROTOCOLE_PILOTAGE` applicables au mandat, notamment « Identité, coordination et autorisations
+ des RUN ». Cette section définit le nommage, la reprise et la vérification des
+ autorisations durables. Elle conserve les barrières, le périmètre, les
+@@ -148,5 +151,5 @@
+ <CONTEXTE INITIAL> = à fournir au seul agent orchestrateur
+ <AGENT ORCHESTRATEUR> = à définir
+-<AGENT ANALYSTE> = résolu selon ORCHESTRATED_CODING.md
++<AGENT ANALYSTE> = résolu selon PROTOCOLE_PILOTAGE
+ <ENVIRONNEMENT AGENT ANALYSTE> = à vérifier dans l’environnement réel
+ 
+@@ -165,5 +168,5 @@
+ 
+ À la reprise, relire les sources dans l'ordre prévu, puis réconcilier les
+-fichiers, effets, décisions et ressources selon `ORCHESTRATED_CODING.md`.
++fichiers, effets, décisions et ressources selon `PROTOCOLE_PILOTAGE`.
+ Un état absent ou divergent ne prouve aucun achèvement. Préserver les états
+ des autres sessions ; ne rejouer ni permission consommée ni écriture observée.
+@@ -200,5 +203,5 @@
+ employer les chemins déclarés. Une indisponibilité doit être diagnostiquée
+ sur preuves ; réconcilier tout effet avant un nouveau mandat. Les procédures
+-de récupération et les permissions restent celles de `ORCHESTRATED_CODING.md`.
++de récupération et les permissions restent celles de `PROTOCOLE_PILOTAGE`.
+ 
+ L’état Git NE DOIT PAS être inspecté, notamment par `git status`, `git diff`, `git log` ou la lecture de `.git/`, sauf demande explicite du développeur.
+@@ -252,5 +255,5 @@
+ un état factuel : périmètre, sources consultées, mandats, preuves, constats,
+ inconnues, axes proposés et décisions attendues. Après une interruption, il
+-rétablit le pilotage selon `ORCHESTRATED_CODING.md` et réconcilie cet état avant tout
++rétablit le pilotage selon `PROTOCOLE_PILOTAGE` et réconcilie cet état avant tout
+ nouveau mandat.
+ 
+@@ -432,5 +435,5 @@
+ 
+ Associer chaque demande à un mandat borné et aux identifiants natifs définis
+-par `ORCHESTRATED_CODING.md`. Conserver périmètre, décision explicite,
++par `PROTOCOLE_PILOTAGE`. Conserver périmètre, décision explicite,
+ effets et preuves corrélées dans l'état autorisé. Une décision ne couvre
+ qu'une opération et ne peut être réutilisée. Les formats et interfaces sont
+@@ -470,5 +473,5 @@
+ 
+ Après la restitution préparatoire, l’orchestrateur vérifie qu’aucun mandat n’est
+-actif, clôture le pilotage selon `ORCHESTRATED_CODING.md` et arrête le conteneur de l’agent analyste. Si l’un
++actif, clôture le pilotage selon `PROTOCOLE_PILOTAGE` et arrête le conteneur de l’agent analyste. Si l’un
+ de ces arrêts échoue, il avertit le développeur et attend sa décision. La
+ restitution finale unique est émise après cette séquence.
+@@ -480,5 +483,5 @@
+ ## Exécution du contrat de travail
+ 
+-Définir et suivre le contrat de travail selon `ORCHESTRATED_CODING.md`,
++Définir et suivre le contrat de travail selon `PROTOCOLE_PILOTAGE`,
+ avec les seuls objectifs, ressources et effets autorisés par le présent prompt.
+ 
+@@ -490,5 +493,5 @@
+ Un jalon intermédiaire, une attente ou la fin d'un sous-job ne clôture pas
+ le cycle parent. Appliquer exclusivement les procédures de suivi, de reprise
+-et de clôture de `ORCHESTRATED_CODING.md`.
++et de clôture de `PROTOCOLE_PILOTAGE`.
+ 
+ ## Verrou terminal de restitution
+@@ -498,5 +501,5 @@
+ les rapports requis et le traitement du dernier compte rendu. Il vérifie
+ également la clôture technique, la réconciliation et la libération des seules
+-ressources concernées selon `ORCHESTRATED_CODING.md`, avec leurs preuves.
++ressources concernées selon `PROTOCOLE_PILOTAGE`, avec leurs preuves.
+ 
+ Une attente, un délai, un rapport intermédiaire ou la fin d'un mandat ne
+--- a/INDEX.md
++++ b/INDEX.md
+@@ -225,5 +225,5 @@
+ après archivage ou arrêt pour dépendances insatisfaites, ainsi que leur
+ continuité, relèvent de « Statistiques des sessions pilotées » dans
+-`ORCHESTRATED_CODING.md`. Le nettoyage final des sessions de l'agent de codage
++`PROTOCOLE_PILOTAGE`. Le nettoyage final des sessions de l'agent de codage
+ suit la section dédiée du même protocole, après les rapports vérifiés et la
+ clôture technique, avant restitution ou nouvelle session. Les prompts pilotés
+@@ -347,14 +347,17 @@
+ ACSP, ACSMP, CISMP, DOPP, GSCMP, ISMP, PPSCP, RCAMP, RSMP, SCMP et SPCMP
+ définissent des contrats métier indépendants des solutions techniques de
+-pilotage. Les deux agents lisent intégralement `ORCHESTRATED_CODING.md` à la
+-racine réelle du projet cible avant toute initialisation. Ce protocole porte
++pilotage. `PROTOCOLE_PILOTAGE` désigne le contrat résolu selon `AGENTS.md` du
++projet cible. Les deux agents chargent son noyau et les références nécessaires
++au mandat avant son initialisation, selon les modalités du profil retenu.
++Ce protocole porte
+ exclusivement les profils techniques, la sélection des modèles, les accords
+ techniques, la coordination, la maintenance, les prévols, la récupération et
+ la clôture technique. Chaque prompt conserve ses limites et validations métier.
+ 
+-Le seul référentiel modifiable de ce protocole est le projet template.
++Le référentiel du protocole est celui désigné par cette résolution.
+ Les copies consommatrices ne sont pas modifiées directement ; leur propagation
+-est une opération distincte. Une absence ou une incompatibilité est signalée
+-avant les opérations concernées, sans inventer de procédure de remplacement.
++reste une opération distinctement autorisée. Une référence absente ou
++incompatible est signalée avant les seules opérations concernées, sans profil
++inventé. Le contrat résolu ne désigne pas nécessairement un fichier local.
+ Une lecture ou modification du corpus ne lance aucune session, opération Git,
+ maintenance ni propagation. Les autorisations techniques applicables sont
+--- a/README.md
++++ b/README.md
+@@ -15,5 +15,5 @@
+ | [DEVOPS.md](DEVOPS.md) | Environnement observé, dossier des prompts et index |
+ | [DEVELOPMENT_MAP.md](DEVELOPMENT_MAP.md) | Cadrage de navigation : lots, changes actifs et archivés, dépendances et avancements vérifiables |
+-| [ORCHESTRATED_CODING.md](ORCHESTRATED_CODING.md) | Protocole facultatif des sessions pilotées, lorsqu’il est requis |
++| Protocole de pilotage résolu via [AGENTS.md](AGENTS.md) | Contrat et références applicables au profil retenu, sans fichier local imposé |
+ 
+ ## Consultation des sources
+--- a/PROJECT.md
++++ b/PROJECT.md
+@@ -44,5 +44,6 @@
+ DEVELOPMENT_MAP.md fait partie des fichiers de cadrage : il synthétise les
+ lots, changes actifs et archivés, dépendances et avancements vérifiables.
+-ORCHESTRATED_CODING.md définit le protocole des sessions pilotées.
++AGENTS.md résout le protocole des sessions pilotées et ses références selon
++le profil retenu ; ce contrat n’impose pas un nom de fichier local.
+ 
+ La cartographie aide à naviguer dans le projet et à orienter les travaux.
+--- a/TECHNICAL.md
++++ b/TECHNICAL.md
+@@ -78,16 +78,15 @@
+ Les sessions directes sont exécutées par l’agent chargé du prompt.
+ 
+-Les sessions pilotées suivent `ORCHESTRATED_CODING.md` à la racine réelle
+-du projet cible. Les prompts définissent les objectifs, autorisations métier,
+-livrables, validations et conditions terminales ; ils restent indépendants
+-des solutions de pilotage et de sélection des modèles.
+-
+-Le protocole porte seul les profils techniques, interfaces, préconditions,
+-accords techniques, maintenance du raccord, sélection et continuité des modèles,
+-coordination, récupération et clôture technique. Les prompts et leur index ne
+-dupliquent ni ses commandes ni ses politiques techniques. Les deux agents le
+-lisent intégralement avant le pilotage et signalent toute absence ou incompatibilité
+-avant les opérations concernées. Les limites métier du prompt et les décisions
+-réservées au développeur demeurent applicables.
++Les sessions pilotées suivent le protocole désigné par `AGENTS.md` du projet
++cible. `PROTOCOLE_PILOTAGE` nomme ce contrat résolu, pas un fichier imposé.
++Les deux agents chargent ses obligations et les références nécessaires au
++mandat, selon le profil retenu, avant le pilotage. Une référence indisponible
++suspend les seules opérations concernées, sans profil ou autorisation inventés.
++
++Les prompts définissent objectifs, autorisations métier, livrables, validations
++et conditions terminales. Le protocole porte les solutions techniques,
++préconditions, accords, maintenance, modèles, coordination, récupération et
++clôture technique ; les prompts et leur index ne dupliquent pas ces procédures.
++Les limites métier et décisions réservées au développeur restent applicables.
+ 
+ Les prompts restent agnostiques du projet : leurs identités, composants et
+@@ -95,8 +94,8 @@
+ autorisés du projet cible, sans nom de projet ni chemin d'hôte imposé.
+ 
+-Le référentiel unique de ORCHESTRATED_CODING.md est le projet template.
++Le référentiel du protocole est celui désigné par la résolution d'AGENTS.md.
+ Les copies consommatrices ne font pas autorité et ne sont pas modifiées
+-directement ; leur propagation depuis cette source requiert une autorisation
+-distincte. Les opérations Git locales et distantes autorisées dans chaque
++directement ; leur propagation requiert une autorisation distincte.
++Les opérations Git locales et distantes autorisées dans chaque
+ référentiel sont réalisées par l’agent de codage en session directe et par
+ l’agent orchestrateur en session pilotée, sans délégation à l’agent de codage.
+@@ -284,5 +283,5 @@
+ après archivage ou arrêt pour dépendances insatisfaites, ainsi que leur
+ continuité, relèvent de « Statistiques des sessions pilotées » dans
+-`ORCHESTRATED_CODING.md`. Le nettoyage final des sessions de l'agent de codage
++`PROTOCOLE_PILOTAGE`. Le nettoyage final des sessions de l'agent de codage
+ suit la section dédiée du même protocole, après les rapports vérifiés et la
+ clôture technique, avant restitution ou nouvelle session. Les prompts pilotés
+--- a/SGS.md
++++ b/SGS.md
+@@ -110,5 +110,5 @@
+ un mandat distinct, explicitement validé, après vérification du rapport de
+ change. Protéger cette ressource partagée et sérialiser ses écritures selon
+-`ORCHESTRATED_CODING.md`, sans démarrer de nouveau pilotage pour SGS.
++le protocole de pilotage désigné par `AGENTS.md`, sans démarrer de nouveau pilotage pour SGS.
+ Revérifier les sources et le rapport global avant remplacement : une évolution
+ concurrente impose de recalculer depuis un état cohérent, sans l’écraser.
+--- a/openspec/specs/orchestrated-pllm-session/spec.md
++++ b/openspec/specs/orchestrated-pllm-session/spec.md
+@@ -4,7 +4,7 @@
+ 
+ Définir l'indépendance des prompts pilotés vis-à-vis des solutions techniques
+-et l'autorité du protocole maintenu dans le projet template. Les politiques
+-de sélection des modèles et de pilotage sont définies exclusivement dans
+-ORCHESTRATED_CODING.md ; les prompts définissent les contrats métier.
++et l'autorité du protocole résolu via AGENTS.md du projet cible. Les contrats
++techniques appartiennent au référentiel désigné par cette résolution ; les
++prompts définissent les contrats métier, sans nom de fichier local imposé.
+ 
+ ## Requirements
+@@ -26,15 +26,15 @@
+ ### Requirement: Autorité du protocole et lecture préalable
+ 
+-Les deux agents MUST lire intégralement ORCHESTRATED_CODING.md à la racine
+-réelle du projet cible avant le pilotage. Le seul référentiel modifiable de
+-ce protocole MUST être le projet template. Les copies consommatrices MUST NOT
+-être modifiées directement ; leur propagation MUST rester une opération
+-explicitement autorisée distincte. Un profil absent ou incompatible MUST
+-être signalé avant les opérations concernées, sans remplacement inventé.
++Les deux agents MUST résoudre le protocole via AGENTS.md du projet cible et
++charger ses obligations et références selon le mandat et le profil, sans
++imposer un fichier local. Son référentiel MUST être celui désigné par cette
++résolution. Toute propagation MUST être explicitement autorisée. Une référence indisponible
++MUST suspendre les seules opérations concernées, sans profil ou autorisation
++inventés.
+ 
+ #### Scenario: Copie consommatrice à mettre à jour
+ 
+ - **WHEN** le protocole source évolue et qu'une copie consommatrice reste ancienne
+-- **THEN** seule la source template est modifiée ; la propagation n'est ni réalisée ni annoncée sans mandat distinct.
++- **THEN** seule la source désignée par la résolution du protocole est modifiée ; la propagation n'est ni réalisée ni annoncée sans mandat distinct.
+ 
+ #### Scenario: Profil indisponible
+@@ -149,5 +149,5 @@
+ 
+ - **WHEN** un prompt de session pilotée rappelle la cadence de compactage
+-- **THEN** il MUST suivre le cycle commun du protocole, toutes les 1 h 30 (5 400 secondes), à une frontière entre mandats après traitement du rapport et sauvegarde du checkpoint ; le temps écoulé seul MUST NOT imposer un arrêt ou un gel de session.
++- **THEN** il MUST renvoyer aux modalités du protocole résolu via AGENTS.md, sans dupliquer une cadence fixe ; le temps écoulé seul MUST NOT imposer un arrêt ou un gel de session.
+ 
+ ### Requirement: Lecture seule préservée dans les analyses

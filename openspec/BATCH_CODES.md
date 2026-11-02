@@ -1,5 +1,13 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Entrée provisoire SCM — CAB 2.2.0
+
+| Code | Identifiant technique | État documentaire | Source |
+|---|---|---|---|
+| code non attribué | track-background-shell-lifecycle | ARCHIVÉ, source CAB 2.2.0 qualifiée le 2 novembre 2026 ; activation distincte | [proposition](changes/archive/2026-11-02-track-background-shell-lifecycle/proposal.md), [tâches](changes/archive/2026-11-02-track-background-shell-lifecycle/tasks.md), [validation](changes/archive/2026-11-02-track-background-shell-lifecycle/VALIDATION.md), [statistiques](changes/archive/2026-11-02-track-background-shell-lifecycle/STATISTICS.md) |
+
+Cette entrée ne crée aucun code ni réservation ; l’attribution relève d’ACL.
+
 Relevé et application : 28 octobre 2026 (Europe/Paris). Plan CAB-ACL-R1 explicitement validé par le développeur pour les trois volets.
 
 ## Périmètre et convention

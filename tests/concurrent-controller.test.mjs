@@ -3,7 +3,7 @@ import { openCodeV2TestHandler, v2ProviderResponseBytes, v2NormalizedToolPart } 
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -14,6 +14,7 @@ import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scr
 import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
+import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,6 +44,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
   }
   const eventStreams = new Set();
   native.emit = (event) => { for (const stream of eventStreams) stream.write('data: ' + JSON.stringify(event) + '\n\n'); };
+  native.disconnectEvents = () => { for (const stream of eventStreams) stream.end(); };
   const children = [];
   const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -133,7 +135,10 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       }
     }
     const r = await fetch(base + path, { method: 'POST',
-    headers: { 'content-type': 'application/json', connection: 'close' }, body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
+    headers: { 'content-type': 'application/json', connection: 'close',
+      ...(path.startsWith('/transport/') || /^\/runs\/[^/]+\/recovery\//.test(path)
+        ? { 'x-cab-continuity': 'cab-continuity-v1' } : {}) },
+    body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
     const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
   const candidate = (id) => ({ runId: id, ownerId: 'codex-' + id, sessionId: 'ses_' + id, directory,
     changeId: 'change-' + id, selectionKey: 'requirement-' + id, dependsOn: [],
@@ -210,6 +215,181 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
   return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
   approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation, getStderr:()=>stderr };
 }
+
+test('continuité HTTP : demandes admises et décisions survivent au redémarrage sans once dupliquée', async t => {
+  const h = await setup(t);
+  const pendingRun = await h.reserve('communication-pending');
+  const pending = h.approval(pendingRun, 'communication-pending-request');
+  assert.equal((await h.post('/validation/request', { approval: pending })).status, 202);
+  const run = await h.reserve('communication-approved');
+  const { approval } = await h.approvedAccess(run, 'communication-approved-request');
+  await h.execute(approval);
+  const before = (await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body;
+  const replies = h.native.replies.length;
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 1, infrastructure_status: 'READY' });
+  assert.deepEqual((await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body, before);
+  assert.equal((await h.get('/runs/' + pendingRun.runId + '/decision/' + pending.requestId)).body, null);
+  assert.equal((await h.get('/runs/' + pendingRun.runId + '/status')).body.undecidedValidationCount, 1);
+  const duplicate = await h.post('/runs/' + run.runId + '/decision/' + approval.requestId, { decision: 'approved' });
+  assert.equal(duplicate.status, 400); assert.equal(duplicate.body.error, 'decision-already-recorded');
+  const operation = (await h.get('/runs/' + run.runId + '/operations?operationId=' + approval.operation_id)).body.operations[0];
+  assert.equal(operation.onceAcknowledged, true);
+  assert.equal(h.native.replies.length, replies);
+});
+
+test('frontière de décision : une intention privée non engagée ne devient pas APPROVED', async t => {
+  const h = await setup(t), run = await h.reserve('uncommitted-decision');
+  const approval = h.approval(run, 'uncommitted-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  await h.stop();
+  const path = join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', run.runId, String(run.contextId), 'controller-communication.json');
+  const store = new ContinuityStore(path, 'communication', () => true), value = store.snapshot();
+  value.decisions.push([approval.requestId, { decision: 'approved', requestId: approval.requestId,
+    approval_id: approval.approval_id, change_id: approval.change_id }]);
+  store.write(value);
+  await h.start(); await h.post('/broker/readiness', { status: 'READY', pending_count: 1, infrastructure_status: 'READY' });
+  assert.equal((await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body, null);
+  assert.equal((await h.post('/runs/' + run.runId + '/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('frontière de décision : le registre engagé restaure la décision si son acquittement privé manque', async t => {
+  const h = await setup(t), run = await h.reserve('committed-decision');
+  const { approval } = await h.approvedAccess(run, 'committed-request');
+  await h.stop();
+  const path = join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', run.runId, String(run.contextId), 'controller-communication.json');
+  const store = new ContinuityStore(path, 'communication', () => true), value = store.snapshot();
+  value.decisions = []; store.write(value);
+  await h.start();
+  const decision = (await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body;
+  assert.equal(decision.decision, 'approved'); assert.equal(decision.operation_id, approval.operation_id);
+  assert.equal(decision.operation_digest, approval.operation_digest); assert.equal(decision.restored_from, 'operation-ledger');
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('continuité transport : une coupure SSE conserve une exécution acquittée et les observations reprennent leur séquence', async t => {
+  const h = await setup(t);
+  const run = await h.reserve('sse-continuity');
+  const { approval } = await h.approvedAccess(run, 'sse-continuity-operation');
+  await h.execute(approval);
+  const operationPath = '/runs/' + run.runId + '/operations?operationId=' + approval.operation_id;
+  const before = (await h.get(operationPath)).body.operations[0];
+  const observations = (await h.get('/monitor/events')).body;
+  assert.equal(observations.durable, true, JSON.stringify({ error: observations.error }));
+  h.native.disconnectEvents();
+  await waitFor(() => h.native.requests.filter(path => path === '/global/event').length > 1);
+  assert.equal((await h.get(operationPath)).body.operations[0].state, before.state);
+  assert.equal(h.native.replies.length, 1);
+  await h.stop(); await h.start();
+  const after = (await h.get('/monitor/events')).body;
+  assert.equal(after.durable, true, JSON.stringify({ error: after.error, diagnosticCode: after.diagnosticCode }));
+  assert.equal(after.instanceId, observations.instanceId);
+  assert.ok(after.sequence >= observations.sequence);
+  assert.equal(after.durable, true);
+  const replay = (await h.get('/monitor/events?cursor=' + encodeURIComponent(observations.cursor))).body;
+  assert.equal(replay.replay, 'complete');
+  assert.ok(replay.events.every(event => event.sequence > observations.sequence));
+});
+
+test('transfert HTTP certifié : baux et accès sains restent valides, crash suivant protégé', async t => {
+  const h = await setup(t), resources = [{ key: 'browser:host-a/chromium', mode: 'write' }];
+  const run = await h.reserve('transport-handoff', { resources });
+  const leaseResponse = await h.post('/runs/' + run.runId + '/test-resources/acquire', {
+    version: run.version, transactionId: 'transport-chromium', resources, evidence: ['isolated lease'] });
+  assert.equal(leaseResponse.status, 200, JSON.stringify(leaseResponse));
+  const { access } = await h.approvedAccess(run, 'transport-held-access');
+  const prepared = await h.post('/transport/prepare', { transactionId: 'update-http-handoff' });
+  assert.equal(prepared.status, 200, JSON.stringify(prepared)); assert.equal(prepared.body.ready, true);
+  const blocked = await h.post('/runs/' + run.runId + '/job/disarm', { jobId: 'job-' + run.runId });
+  assert.equal(blocked.status, 503); assert.equal(blocked.body.error, 'transport-update-in-progress');
+  await h.stop(); await h.start();
+  const transport = (await h.get('/transport/status')).body;
+  assert.equal(transport.adopted, true, JSON.stringify(transport));
+  assert.equal(transport.transactionId, 'update-http-handoff');
+  const leases = (await h.get('/runs/' + run.runId + '/test-resources')).body;
+  assert.equal(leases.reservations[0].reconciliationRequired, false);
+  const current = (await h.get('/runs/' + run.runId + '/locks')).body.accesses.find(item => item.accessId === access.accessId);
+  assert.equal(current.token, access.token); assert.equal(current.fencing, access.fencing);
+  assert.equal(h.native.replies.length, 0);
+  await h.stop(); await h.start();
+  assert.equal((await h.get('/transport/status')).body.adopted, false);
+  const coldLeases = (await h.get('/runs/' + run.runId + '/test-resources')).body;
+  assert.equal(coldLeases.reservations[0].reconciliationRequired, true);
+});
+
+test('récupération HTTP propriétaire : annulation qualifiée, reçu filtré et répétition sans effet', async t => {
+  const h = await setup(t), resources = [{ key: 'browser:host-a/chromium', mode: 'write' }];
+  const a = await h.reserve('recovery-a', { resources }), b = await h.reserve('recovery-b', { resources });
+  for (const run of [a, b]) {
+    const lease = await h.post('/runs/' + run.runId + '/test-resources/acquire', {
+      version: run.version, transactionId: 'lease-' + run.runId, resources, evidence: ['isolated lease'] });
+    assert.equal(lease.status, run === a ? 200 : 202, JSON.stringify(lease));
+  }
+  const base = '/runs/' + b.runId;
+  assert.equal((await h.post(base + '/recovery/policy', { policyId: 'http-recovery-policy', ownerId: b.ownerId,
+    version: b.version, actions: ['cancel-waiting-test'], resources, authorization: 'validated change recovery-b' })).status, 201);
+  await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 0, infrastructure_status: 'READY' });
+  const plan = (await h.get(base + '/recovery')).body;
+  assert.equal(plan.actions[0].authority, 'orchestrator');
+  const payload = { actionId: 'http-recovery-cancel', ownerId: b.ownerId, policyId: plan.policyId,
+    boundaryDigest: plan.boundaryDigest, action: 'cancel-waiting-test', targetId: 'lease-' + b.runId,
+    input: { evidence: ['owner cancels waiting lease'] } };
+  const result = await h.post(base + '/recovery/action', payload);
+  assert.equal(result.status, 200, JSON.stringify(result)); assert.equal(result.body.state, 'CANCELLED');
+  assert.equal(result.body.token, undefined);
+  const repeated = await h.post(base + '/recovery/action', payload);
+  assert.deepEqual(repeated, result);
+  assert.equal((await h.get(base + '/recovery/receipts?actionId=' + payload.actionId)).body.receipts[0].state, 'DONE');
+  assert.equal((await h.get('/runs/' + a.runId + '/test-resources')).body.reservations[0].state, 'HELD');
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('attente de décision : réveil après engagement durable et consultation ordinaire immédiate', async t => {
+  const h = await setup(t), run = await h.reserve('decision-wait');
+  const approval = h.approval(run, 'decision-wait-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  const path = '/runs/' + run.runId + '/decision/' + approval.requestId;
+  assert.equal((await h.get(path)).status, 404);
+  assert.equal((await h.get(path + '?wait_ms=1001')).body.error, 'decision-wait-invalid');
+  const waiting = h.get(path + '?wait_ms=1000');
+  await waitFor(async () => (await h.get('/runs/' + run.runId + '/status')).body.decisionWaiterCount === 1);
+  assert.equal((await h.post(path, { decision: 'rejected' })).status, 201);
+  const response = await waiting;
+  assert.equal(response.status, 200); assert.equal(response.body.decision, 'rejected');
+  assert.equal((await h.get('/runs/' + run.runId + '/status')).body.decisionWaiterCount, 0);
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('attente de décision : la préparation CABU libère l’attente sans décision ni perte de demande', async t => {
+  const h = await setup(t), run = await h.reserve('decision-wait-handoff');
+  const approval = h.approval(run, 'decision-wait-handoff-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  const path = '/runs/' + run.runId + '/decision/' + approval.requestId;
+  const waiting = h.get(path + '?wait_ms=1000');
+  await waitFor(async () => (await h.get('/runs/' + run.runId + '/status')).body.decisionWaiterCount === 1);
+  assert.equal((await h.post('/transport/prepare', { transactionId: 'update-decision-wait' })).status, 200);
+  assert.equal((await waiting).status, 404);
+  assert.equal((await h.post('/transport/cancel', { transactionId: 'update-decision-wait' })).status, 200);
+  assert.equal((await h.get('/runs/' + run.runId + '/status')).body.undecidedValidationCount, 1);
+  assert.equal((await h.get(path)).body, null); assert.equal(h.native.replies.length, 0);
+});
+
+test('checkpoint privé corrompu : diagnostic du RUN atteint et communication du pair indépendant conservés', async t => {
+  const h = await setup(t), a = await h.reserve('corrupt-private-a'), b = await h.reserve('healthy-private-b');
+  const approval = h.approval(a, 'corrupt-private-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  await h.stop();
+  const path = join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', a.runId, String(a.contextId), 'controller-communication.json');
+  writeFileSync(path, 'invalid private checkpoint\n');
+  await h.start(); await h.post('/broker/readiness', { status: 'READY', pending_count: 1, infrastructure_status: 'READY' });
+  assert.equal((await h.get('/runs/' + a.runId + '/status')).body.recoveryRequired, 'continuity-state-invalid');
+  assert.equal((await h.get('/runs/' + a.runId + '/recovery')).status, 200);
+  const next = h.approval(b, 'healthy-private-request');
+  assert.equal((await h.post('/validation/request', { approval: next })).status, 202);
+  assert.equal((await h.post('/runs/' + b.runId + '/decision/' + next.requestId, { decision: 'rejected' })).status, 201);
+  assert.equal(h.native.replies.length, 0);
+});
 
 test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation et chemins exclus refusés', async t => {
   const h=await setup(t,{sourceFiles:{'src/example.py':'value = 42\n'},sourceEntries:[
@@ -1080,7 +1260,7 @@ test('attach sérialise la libération concurrente pendant la lecture native', a
   assert.equal(h.native.replies.length, 1);
 });
 
-test('une décision approuvée perdue après redémarrage ne sert qu’au rattachement pour annulation', async (t) => {
+test('reprise historique sans checkpoint : une décision perdue ne sert qu’au rattachement pour annulation', async (t) => {
   const h = await setup(t); const a = await h.reserve('attach-restart');
   const { approval, access } = await h.approvedAccess(a, 'restart-parent'); await h.execute(approval);
   const diagnostic = h.approval(a, 'restart-diagnostic'); diagnostic.access_id = access.accessId;
@@ -1092,7 +1272,9 @@ test('une décision approuvée perdue après redémarrage ne sert qu’au rattac
   request.state.status = 'completed'; request.state.time = { start: Date.now(), end: Date.now() + 1 };
   request.state.output = JSON.stringify({ ...diagnostic, status: 'APPROVED', reviewer: 'CGPT',
     decision_applied_at: new Date().toISOString() });
-  await h.stop(); await h.start();
+  await h.stop();
+  unlinkSync(join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', a.runId, String(a.contextId), 'controller-communication.json'));
+  await h.start();
   const decision = await h.get('/runs/' + a.runId + '/decision/' + diagnostic.requestId);
   assert.equal(decision.body, null, JSON.stringify(decision));
   const payload = { version: a.version,
@@ -1439,13 +1621,13 @@ test('réconciliation orpheline : propriétaire ou opération absent/divergent n
   });
 });
 
-test('réconciliation orpheline : un reçu après perte du contexte ne restaure aucune décision', async (t) => {
+test('réconciliation orpheline : reçu durable après restart, rejet seul sans décision inventée', async (t) => {
   const { h, payload, approval } = await orphanedPreflight(t);
   assert.equal((await h.get('/status')).body.notificationReconciliation, 'rejection-only-v1');
   const result = await h.post('/runs/a/validation/reconcile', payload); assert.equal(result.status, 201);
   await h.stop(); await h.start();
   await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 1 });
-  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).body.error, 'notification-reconciliation-context-lost');
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 200);
   assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'approved' })).status, 400);
   assert.equal((await h.get('/runs/a/decision/' + approval.requestId)).status, 404);
   assert.deepEqual((await h.get('/runs')).body.requestOwners[approval.requestId].reconciliation, result.body);
@@ -1939,7 +2121,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.81');
+  assert.equal(initialized.result.serverInfo.version, '2.2.0');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
