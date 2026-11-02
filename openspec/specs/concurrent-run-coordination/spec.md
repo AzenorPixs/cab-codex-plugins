@@ -705,14 +705,10 @@ Le ledger MUST conserver pour chaque opération terminale l'issue native `comple
 
 ### Requirement: NO_EFFECT après erreur native sans mutation
 
-`NO_EFFECT` MUST être admis uniquement lorsque les opérations d'écriture
-terminales sont prouvées en erreur, aucune écriture réussie ou effet incertain
-n'existe et toutes les révisions restent égales aux révisions attendues.
-Cette libération MUST NOT avancer une révision ni créer un `pendingWrite`.
-Le cas spécifique d’un tour assistant terminal sans appel natif d’effet est
-régi par la preuve distincte `NO_EFFECT` d’approval-persistence ; il ne doit
-jamais être déduit d’un simple timeout, d’une permission absente ou d’un
-journal sans événement.
+`NO_EFFECT` MUST respecter les révisions attendues et MUST NOT créer un
+`pendingWrite` ni avancer une révision. Une écriture réussie ou incertaine reste
+refusée, sauf contrat distinct prouvant un tour assistant terminal sans effet ;
+un timeout, une permission absente ou un journal vide ne suffisent jamais.
 
 #### Scenario: Édition native en erreur et révision inchangée
 
@@ -887,3 +883,8 @@ une opération ni un accès et reste soumise au contrat de preuve terminale.
 
 - **WHEN** la récupération ne vise pas l’opération UNKNOWN approuvée exacte, ou que permission, callID, résultat natif, once ou ressource non fichier est présent
 - **THEN** CAB conserve les gardes d’admission et refuse la voie locale
+
+#### Scenario: Événement d’un tour ultérieur read-only
+
+- **WHEN** une lecture read-only possède son propre message après le tour assistant terminal prouvé
+- **THEN** CAB garde la preuve `NO_EFFECT` limitée au tour d’origine et n’assimile pas l’événement ultérieur à un effet dans ce tour

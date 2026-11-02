@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.77";
+const version = "2.1.78";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -966,7 +966,7 @@ function nativeTerminalTurnNoEffectProof(messages,approval,operation,run,log,app
       final.parts.some(part=>part?.type==='tool'))return null;
   const turnIds=new Set([userId,requestMessage.info.id,final.info.id]);
   const messageIndexById=new Map(messages.map((message,index)=>[message.info?.id,index]).filter(([id])=>typeof id==='string'));
-  for(let index=requestMessageIndex;index<messages.length;index++){
+  for(let index=userIndex;index<=finalIndex;index++){
     const message=messages[index];
     for(const part of Array.isArray(message.parts)?message.parts:[]){
       if(part?.type!=='tool')continue;
@@ -981,14 +981,15 @@ function nativeTerminalTurnNoEffectProof(messages,approval,operation,run,log,app
   }
   for(const event of log.events){
     const eventIndex=messageIndexById.get(event.messageId);
-    if(noEffectToolNames.has(event.toolName)&&(eventIndex===undefined||eventIndex>=requestMessageIndex))return null;
-    if(turnIds.has(event.messageId)&&!(event.messageId===requestMessage.info.id&&event.callId===requestPart.callID&&
-        event.toolName==='execute'&&['session.tool.called','session.tool.success'].includes(event.type)))return null;
-    if(event.messageId===undefined&&(!noEffectReadOnlyToolNames.has(event.toolName)&&event.toolName!=='execute'))return null;
-    if(event.toolName==='execute'&&event.messageId!==undefined){
-      if(!messageIndexById.has(event.messageId))return null;
-      if(eventIndex>=requestMessageIndex&&event.messageId!==requestMessage.info.id)return null;
+    if(event.messageId!==undefined&&eventIndex===undefined)return null;
+    if(!turnIds.has(event.messageId)){
+      if(event.messageId===undefined&&(noEffectToolNames.has(event.toolName)||
+          !noEffectReadOnlyToolNames.has(event.toolName)))return null;
+      continue;
     }
+    if(event.messageId===requestMessage.info.id&&event.callId===requestPart.callID&&
+        event.toolName==='execute'&&['session.tool.called','session.tool.success'].includes(event.type))continue;
+    return null;
   }
   const proof={runId:run.runId,contextId:run.contextId,operationId:operation.operationId,requestId:approval.requestId,
     approvalId:approval.approval_id,sessionId:operation.sessionId,directory:run.directory,

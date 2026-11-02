@@ -1,15 +1,14 @@
+## 2.1.78 — Borner NO_EFFECT au tour natif d’origine
+
+- Une activité read-only dans un tour ultérieur ne bloque plus la preuve terminale antérieure ; les parties et événements du tour d’origine restent strictement qualifiés.
+- Les gardes d’accès, permission, callID, `once`, session idle, transcript/log stables et révisions inchangées restent obligatoires.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.78.
+
 ## 2.1.77 — Réconcilier un bail de test restauré sans ancien token
 
-- Un propriétaire exact peut prévisualiser puis réconcilier un bail de test USED après redémarrage sans exposer son ancien token. CAB revalide les opérations, le transcript et la quiescence, renouvelle token/fencing et garde les mêmes ressources HELD.
+- Le prévol read-only scelle le RUN, le bail HELD, ses opérations terminales et la frontière native sans révéler de token. Le propriétaire exact peut réconcilier un bail USED après redémarrage sans ancien token ; CAB renouvelle token/fencing et garde les mêmes ressources HELD.
 - La récupération terminale NO_EFFECT peut examiner une opération approuvée existante alors qu’un bail test disjoint est encore restauré, sans créer d’accès ni rejouer `once`.
 - Toute activité, permission, opération native incertaine ou divergence conserve les protections ; les baux ne sont jamais déclarés inutilisés par absence de preuve.
-- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.77.
-
-## 2.1.77 — Récupérer un bail de test restauré sans token d’origine
-
-- Le prévol read-only scelle le RUN, le bail HELD, ses opérations terminales et la frontière native sans révéler de token.
-- Le propriétaire peut revalider le même bail après redémarrage ; CAB renouvelle token/fencing et conserve les mêmes ressources HELD. Les permissions, opérations actives/inconnues et dérives restent bloquantes.
-- La récupération NO_EFFECT terminale examine l’opération approuvée existante malgré l’admission bloquée par un bail test disjoint, sans créer d’accès ni rejouer `once`.
 - CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.77.
 
 ## 2.1.76 — Récupérer un tour terminal sans effet sous readiness bloquée

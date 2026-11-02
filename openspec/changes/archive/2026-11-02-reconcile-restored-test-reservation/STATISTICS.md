@@ -14,7 +14,7 @@
 
 La télémétrie détaillée de messages, décisions, tokens, cache, coût et
 compactions n’a pas été collectée pour ce SCM direct. Ces mesures sont `N/A`.
-Durée observée de la dernière suite Node : 60,7 s.
+Durée observée de la suite Node séquentielle réussie : 124,2 s.
 
 Vérifications : suite Node complète, 775 réussis, 31 ignorés, 0 échec ; tests
 Python 87/87 ; cas ciblés de réconciliation et NO_EFFECT 5/5 ; distribution
@@ -31,7 +31,7 @@ lancées directement par Codex.
 
 Le changement couvre les routes de prévol/réconciliation du contrôleur, le
 registre des baux, les tests positifs et négatifs, les spécifications
-OpenSpec, la documentation du protocole et l’alignement de version 2.1.77.
+OpenSpec, la documentation du protocole et l’alignement de version 2.1.78.
 Les comptes d’écritures approuvées, refusées et en erreur ne sont pas fournis
 par cette session SCM : `N/A`. L’archive est
 `2026-11-02-reconcile-restored-test-reservation`.
