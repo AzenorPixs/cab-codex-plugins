@@ -110,7 +110,7 @@ Tous les chemins sont relatifs à openspec/. Pour les 70 nouveaux codes : **Attr
 ## Entrées provisoires sans code
 
 Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code à cette date. Aucune réservation supplémentaire de code à cette date.
-État SCM vérifié le 2 novembre 2026 : 133 archives et aucun change actif. `fix-native-permission-reply-location-scope`, `expose-safe-run-native-operation-state`, `restore-approved-native-operations`, `bind-native-requestid-in-literal-codemode-validation` et `reconcile-persisted-native-rejections`, `forward-recover-cabu-after-controller-rollback-failure` et `preserve-conflicting-restored-accesses` sont archivés sans code ; cette session n’attribue ni ne réserve de code.
+État SCM vérifié le 2 novembre 2026 : 134 archives et aucun change actif. `fix-native-permission-reply-location-scope`, `expose-safe-run-native-operation-state`, `restore-approved-native-operations`, `bind-native-requestid-in-literal-codemode-validation` et `reconcile-persisted-native-rejections`, `forward-recover-cabu-after-controller-rollback-failure` et `preserve-conflicting-restored-accesses` sont archivés sans code ; cette session n’attribue ni ne réserve de code.
 
 
 
@@ -139,6 +139,7 @@ Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des 
 | code non attribué | reconcile-persisted-native-rejections | ARCHIVÉ, source 2.1.67 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-persisted-native-rejections/tasks.md) |
 | code non attribué | forward-recover-cabu-after-controller-rollback-failure | ARCHIVÉ, source 2.1.68 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-forward-recover-cabu-after-controller-rollback-failure/tasks.md) |
 | code non attribué | preserve-conflicting-restored-accesses | ARCHIVÉ, source 2.1.69 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-preserve-conflicting-restored-accesses/tasks.md) |
+| code non attribué | continue-cabu-forward-recovery-after-disconnect | ARCHIVÉ, source 2.1.70 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-continue-cabu-forward-recovery-after-disconnect/tasks.md) |
 
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
 
@@ -283,3 +284,4 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 | code non attribué | reconcile-persisted-native-rejections | ARCHIVÉ, source 2.1.67 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-persisted-native-rejections/tasks.md) |
 | code non attribué | forward-recover-cabu-after-controller-rollback-failure | ARCHIVÉ, source 2.1.68 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-forward-recover-cabu-after-controller-rollback-failure/tasks.md) |
 | code non attribué | preserve-conflicting-restored-accesses | ARCHIVÉ, source 2.1.69 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-preserve-conflicting-restored-accesses/tasks.md) |
+| code non attribué | continue-cabu-forward-recovery-after-disconnect | ARCHIVÉ, source 2.1.70 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-continue-cabu-forward-recovery-after-disconnect/tasks.md) |

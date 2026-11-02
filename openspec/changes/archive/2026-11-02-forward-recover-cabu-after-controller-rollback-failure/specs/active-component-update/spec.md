@@ -22,6 +22,12 @@ L’updater MAY reprendre seulement le reçu exact `ROLLBACK_FAILED` causé par 
 - **WHEN** le reçu d’échec est repris
 - **THEN** ces fichiers sont admis comme déjà avancés et revérifiés pendant le nouveau déploiement
 
+#### Scenario: Broker déjà déconnecté par la reprise précédente
+
+- **GIVEN** `brokerState=disabled` et un reçu enfant lié à un reçu parent `SUPERSEDED` avec déconnexion native confirmée et identité OpenCode identique
+- **WHEN** le reçu enfant exact est repris en avant
+- **THEN** l’updater accepte la transition terminale du parent sans reload global
+
 ### Requirement: Préserver les preuves pendant une reprise avant
 
 L’updater MUST conserver l’ancien reçu et ses sauvegardes, puis lier le nouveau reçu au précédent par `recoveryOf`. Il MUST NOT effacer les preuves, fermer OpenCode, recharger ses locations, ni activer une source locale.

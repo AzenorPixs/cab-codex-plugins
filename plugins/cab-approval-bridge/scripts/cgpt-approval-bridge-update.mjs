@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.69';
+export const VERSION = '2.1.70';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -814,12 +814,26 @@ export async function updateComponents(input, options = {}) {
       if (receipt.phase === 'MCP_RECOVERY_REQUIRED' && !receipt.mcpRecovery) throw error('update-journal-invalid');
       receiptTrusted = true;
       if (input.resumeForward !== undefined) {
+        const transitionSafe = receipt.mcpTransition?.action === 'disconnect' &&
+          ['CONFIRMED','RECONCILED'].includes(receipt.mcpTransition?.state);
         if (receipt.failureCode !== 'update-controller-start-unconfirmed' || !receipt.openCodeAvailable ||
-            !receipt.brokerWasConnected || receipt.mcpTransition?.action !== 'disconnect' ||
-            !['CONFIRMED','RECONCILED'].includes(receipt.mcpTransition?.state) || receipt.mcpRecovery?.reload ||
+            receipt.brokerWasConnected && !transitionSafe || receipt.mcpTransition && !transitionSafe || receipt.mcpRecovery?.reload ||
             !receipt.nativeIdentity || input.layout !== 'managed-release' || !receipt.managed ||
             !baseVersion(receipt.version) || !newer(VERSION, receipt.version)) {
           throw error('update-forward-recovery-boundary-invalid');
+        }
+        if (!receipt.brokerWasConnected) {
+          if (!/^update-[a-f0-9-]{36}$/.test(receipt.recoveryOf || '')) throw error('update-forward-recovery-boundary-invalid');
+          const parentFile = await optional(join(c.state,receipt.recoveryOf,'receipt.json'));
+          let parent;
+          try { parent = parentFile ? JSON.parse(parentFile.data.toString('utf8')) : null; }
+          catch { throw error('update-forward-recovery-parent-invalid'); }
+          if (!parent || parent.id !== receipt.recoveryOf || parent.phase !== 'SUPERSEDED' ||
+              parent.supersession?.reason !== 'forward-recovery-after-controller-rollback-failure' ||
+              parent.mcpTransition?.action !== 'disconnect' || !['CONFIRMED','RECONCILED'].includes(parent.mcpTransition?.state) ||
+              !parent.nativeIdentity || proofHash(parent.nativeIdentity) !== proofHash(receipt.nativeIdentity)) {
+            throw error('update-forward-recovery-parent-invalid');
+          }
         }
         const info = await openCode.info(true), sharedDirectory = await openCode.sharedMcpDirectory();
         if (info.pid !== receipt.nativeIdentity.pid || info.version !== receipt.nativeIdentity.version ||
