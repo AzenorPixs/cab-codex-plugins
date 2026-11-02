@@ -1,4 +1,28 @@
-# Reprise des incidents de codage natif — CAB 2.1.75
+# Reprise des incidents de codage natif — CAB 2.1.76
+
+## Tour assistant terminal sans effet
+
+Après une restauration, un accès `UNKNOWN` ne peut être clôturé `NO_EFFECT`
+sans callID natif que si une preuve dédiée lie la validation exacte au tour
+utilisateur terminé. Le transcript complet doit montrer le wrapper Code Mode
+`request_validation` unique, achevé, non tronqué et `executed=false`, puis le
+message assistant `finish=stop`. Le transcript et le journal V2 complet avec
+`log.synced` sont relus deux fois sans divergence ; la session reste idle sans
+permission, appel d’effet ni activité sœur. L’accès doit ne contenir que cette
+opération, sans permissionId, callID, état natif ou `once`, et les révisions
+doivent rester inchangées.
+
+CAB invalide l’accord approuvé local avant de persister le reçu `NO_EFFECT` et
+de libérer cet accès sans avancer les révisions. Cette voie exacte peut
+réconcilier l’opération même si une autre cause maintient la readiness globale
+du broker hors `READY`; elle ne modifie pas cette readiness, les autres RUN ou
+leurs permissions. Toute preuve absente, opération sœur active, session occupée,
+permission présente, divergence ou erreur de persistance laisse l’accès
+`UNKNOWN`. L’absence d’événement ne prouve jamais une réponse de permission.
+
+Une permission native, un callID, un accusé `once`, un résultat natif ou une
+réservation de test excluent cette voie. Aucun outil ou commande métier ne
+doit être rejoué pendant la réconciliation.
 
 ## Opération approuvée interrompue par un redémarrage
 

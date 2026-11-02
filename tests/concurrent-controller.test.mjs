@@ -207,7 +207,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
   const nativeClient = createOpenCodeV2Client({ baseUrl:'http://127.0.0.1:'+opencode.address().port, directory,
     passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE });
   return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
-    approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation };
+  approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation };
 }
 
 test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation et chemins exclus refusés', async t => {
@@ -338,6 +338,60 @@ test('une fin durable exacte restaure la décision et clôt sans rejouer once si
  assert.equal(operation.state,'COMPLETED');assert.equal(operation.decision.status,'approved');assert.equal(operation.onceAcknowledged,null);
  assert.equal(operation.nativeRecovery.boundary,'TOOL_TERMINAL_SUCCESS');assert.equal(operation.nativeRecovery.callId,callId);
  assert.equal(operation.nativeRecovery.logWatermark,3);assert.equal(operation.access.state,'HELD');
+});
+
+test('un tour assistant terminal exact invalide le mandat et libère NO_EFFECT même si le broker est BLOCKED',async t=>{
+ const h=await setup(t);const run=await h.reserve('restore-terminal-turn-no-effect',
+  {resources:[{key:'file:src/restore.py',mode:'write'}]});
+ const {approval,access}=await h.approvedEditAccess(run,'restore-terminal-turn-no-effect','src/restore.py');
+ await h.stop();
+ const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));
+ const op=state.coordination.operations[approval.operation_id];op.state='UNKNOWN';
+ op.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
+  proofDigest:createHash('sha256').update('terminal-turn-unclassified').digest('hex'),observedAt:new Date().toISOString()};
+ state.coordination.accesses[access.accessId].state='UNKNOWN';writeFileSync(statePath,JSON.stringify(state));
+ const approved={...approval,status:'APPROVED',reviewer:'CGPT'};
+ const wrapperId='call-terminal-turn-wrapper',userId='msg-terminal-turn-user',requestId='msg-terminal-turn-request',finalId='msg-terminal-turn-final';
+ const stamp=Date.now();
+ h.native.messages[run.sessionId]=[
+  {info:{id:userId,sessionID:run.sessionId,role:'user'},parts:[{type:'text',text:'mandat'}]},
+  {info:{id:requestId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'tool-calls'},parts:[{
+   type:'tool',tool:'execute',callID:wrapperId,executed:false,state:{status:'completed',input:{code:
+    'return await tools["cgpt-validation"].request_validation('+JSON.stringify(approval)+');'},
+    output:JSON.stringify(approved),time:{start:stamp-2,end:stamp-1},metadata:{truncated:false,toolCalls:[{
+      tool:'cgpt-validation.request_validation',status:'completed',input:approval}]}}}]},
+  {info:{id:finalId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'stop',time:{completed:stamp}},parts:[
+   {type:'text',text:'Validation terminée.'}]},
+ ];
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:0,infrastructure_status:'BLOCKED'});
+ let observed;
+ await waitFor(async()=>{
+  observed=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+  return observed.state==='CANCELLED'&&observed.access.state==='RELEASED';
+ }).catch(()=>assert.fail('état observé: '+JSON.stringify(observed)));
+ const result=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(result.state,'CANCELLED');assert.equal(result.nativeRecovery.boundary,'TERMINAL_TURN_NO_EFFECT');
+ assert.equal(result.access.state,'RELEASED');
+ assert.equal(result.onceAcknowledged,null);assert.equal(result.native,null);assert.equal(h.native.replies.length,0);
+ assert.equal((await h.get('/runs/'+run.runId+'/locks')).body.revisions['file:src/restore.py'],0);
+});
+
+test('le tour terminal sans effet reste UNKNOWN si une permission native est pendante',async t=>{
+ const h=await setup(t);const run=await h.reserve('restore-terminal-turn-pending',
+  {resources:[{key:'file:src/restore.py',mode:'write'}]});
+ const {approval,access}=await h.approvedEditAccess(run,'restore-terminal-turn-pending','src/restore.py');
+ await h.stop();
+ const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));const op=state.coordination.operations[approval.operation_id];
+ op.state='UNKNOWN';op.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
+  proofDigest:createHash('sha256').update('terminal-turn-unclassified').digest('hex'),observedAt:new Date().toISOString()};
+ state.coordination.accesses[access.accessId].state='UNKNOWN';writeFileSync(statePath,JSON.stringify(state));
+ h.native.permissions.push({id:'pending-terminal-turn',sessionID:run.sessionId,permission:'edit',tool:{callID:'call-effect'}});
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:0,infrastructure_status:'BLOCKED'});await delay(120);
+ const result=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(result.state,'UNKNOWN');assert.equal(result.access.state,'UNKNOWN');
+ assert.equal(result.nativeRecovery.boundary,'TOOL_TERMINAL_UNCLASSIFIED');assert.equal(h.native.replies.length,0);
 });
 
 test('un journal durable indisponible conserve UNKNOWN et protège le manifeste',async t=>{
@@ -1643,7 +1697,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.75');
+  assert.equal(initialized.result.serverInfo.version, '2.1.76');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

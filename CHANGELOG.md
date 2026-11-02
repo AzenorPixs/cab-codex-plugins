@@ -1,3 +1,10 @@
+## 2.1.76 — Récupérer un tour terminal sans effet sous readiness bloquée
+
+- Une décision approuvée reste irrécupérable tant que le transcript terminal, le journal synchronisé et l’absence d’effets ne sont pas prouvés deux fois.
+- La voie NO_EFFECT invalide l’accord local, puis clôt uniquement l’accès concerné sans avancer les révisions ; toute permission, activité, divergence ou opération sœur maintient UNKNOWN.
+- Le cas exact peut être réconcilié pendant qu’un autre RUN bloque la readiness globale ; aucun autre chemin de récupération n’est élargi.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.76.
+
 ## 2.1.75 — Lier les commandes Code Mode à clé JSON
 
 - Le binder reconnaît la clé `"commands"` sérialisée par JSON.stringify en plus de la propriété JavaScript non quotée.

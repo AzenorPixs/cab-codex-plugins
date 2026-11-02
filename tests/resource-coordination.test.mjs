@@ -927,6 +927,28 @@ test('une frontière absente reste UNKNOWN protégé même avec permission absen
  assert.equal(h.r.operationSnapshot(a.runId,op.operationId).operations[0].access.state,'UNKNOWN');
 });
 
+test('NO_EFFECT terminal refuse une permission consommée ou un callID natif',async t=>{
+ const h=await fixture(t);const a=h.reserve('terminal-native-effect-a',[file('a')]);
+ const op=h.prepare(a,'terminal-native-effect-op');h.acquire(a,op);
+ const stored=h.r.resourceState.operations[op.operationId];
+ h.r.recordDecision(a.runId,op.operationId,{status:'approved',requestId:stored.requestId,
+  approvalId:'approval-terminal-native-effect',changeId:a.changeId,operationId:op.operationId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:a.runId,
+  version:a.version,sessionId:a.sessionId});
+ h.r.nativeStart(a.runId,{...op,kind:'edit',target:'a'},stored.requestId,
+  {id:'permission-terminal-native-effect',tool:{callID:'call-terminal-native-effect'}});
+ h.r.nativeIssued(op.operationId);h.r.nativeUnknown(op.operationId);await h.restart();
+ const proof={runId:a.runId,contextId:a.contextId,operationId:op.operationId,requestId:stored.requestId,
+  sessionId:a.sessionId,operationDigest:op.operationDigest,identityDigest:stored.identityDigest,
+  finish:'stop',userMessageId:'user-terminal-effect',requestMessageId:'request-terminal-effect',
+  finalMessageId:'final-terminal-effect',transcriptDigest:fingerprint('transcript'),eventLogDigest:fingerprint('log'),
+  logWatermark:40,proofDigest:fingerprint('proof'),finishedAt:Date.now()};
+ assert.throws(()=>h.r.reconcileTerminalTurnNoEffect(a.runId,op.operationId,proof),/terminal-turn-no-effect-proof-required/);
+ const view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
+ assert.equal(view.state,'UNKNOWN');assert.equal(view.access.state,'UNKNOWN');
+ assert.equal(view.onceAcknowledged,true);assert.equal(view.native.callId,'call-terminal-native-effect');
+});
+
 test('reprise once exige une permission encore pendante prouvée et une opération sans accusé',async t=>{
  const h=await fixture(t);const a=h.reserve('pending-a',[file('a')]);
  const op=h.prepare(a,'pending-operation');h.acquire(a,op);
