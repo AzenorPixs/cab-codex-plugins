@@ -14,14 +14,14 @@ N/A — session SCM directe, aucun agent orchestrateur distinct.
 |---|---:|---|
 | Durée calendaire complète | N/A | Heure de début SCM non relevée |
 | Messages, appels d’outils et décisions | N/A | Export exhaustif absent |
-| Node.js — suite complète | 775 tests : 744 réussis, 31 ignorés, 0 échec | 96,0 % réussis ; 4,0 % ignorés |
+| Node.js — suite complète | 776 tests : 745 réussis, 31 ignorés, 0 échec | 96,0 % réussis ; 4,0 % ignorés |
 | Reprise CABU et migration du registre — tests ciblés | 2 réussis / 2 | Reçu `ROLLBACK_FAILED` lié et normalisation du reçu 2.1.67 |
 | Python | 87 réussis / 87 | 100 % ; 0 échec |
 | Compilation Python | Réussie | `compileall` sur broker, src, scripts et tests |
 | OpenSpec strict avant archivage | 17 réussis / 17 | 100 % ; 0 échec |
 | OpenSpec strict après archivage | 16 réussis / 16 | 100 % ; 0 échec |
 | Validation stricte des archives | 132 réussies / 132 | 100 % ; 0 échec |
-| Versions CAB/CABU/plugins/commandes | 2.1.68 communes | Cachebuster commun : `codex.20261102051701` |
+| Versions CAB/CABU/plugins/commandes | 2.1.68 communes | Cachebuster commun : `codex.20261102051455` |
 | Publication et activation runtime | En cours après archivage | Vérifiées séparément dans le rapport SCM/CABU |
 | Tokens, cache, coût, TTMT et débit | N/A | Télémétrie d’agent absente |
 
@@ -46,8 +46,8 @@ Les changements portent sur la reprise avant d’un reçu CABU après échec du 
 | Commande | Résultat |
 |---|---|
 | `node --test --test-name-pattern='rollback CABU : reprise avant liée' tests/active-component-update.test.mjs` | 1 réussi / 1 |
-| `node --test --test-name-pattern='rejet natif : les reçus 2.1.68' tests/resource-coordination.test.mjs` | 1 réussi / 1 |
-| `node --test tests/*.test.mjs` | 775 tests : 744 réussis, 31 ignorés, 0 échec |
+| `node --test --test-name-pattern='rejet natif : les reçus 2.1.67' tests/resource-coordination.test.mjs` | 1 réussi / 1 |
+| `node --test tests/*.test.mjs` | 776 tests : 745 réussis, 31 ignorés, 0 échec |
 | `python3 -B -m unittest discover -s tests` | 87 réussis / 87 |
 | `python3 -B -m compileall -q plugins/cab-approval-bridge/broker src plugins/cab-approval-bridge/scripts tests` | Réussie |
 | `node --check` updater et registre | Réussie |
