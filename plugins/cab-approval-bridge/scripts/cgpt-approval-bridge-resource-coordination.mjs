@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.80';
+export const VERSION = '2.1.81';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -180,7 +180,7 @@ export class ResourceRunRegistry extends RunRegistry {
         run.runId === access?.runId && run.contextId === access?.contextId);
       if (!id(key) || !onlyKeys(access, ['accessId','runId','contextId','version','operationDigest','inputDigest',
           'resources','operationIds','expectedRevisions','protection','state','order','requestedAt','token','fencing',
-          'grantedAt','finishedAt','outcome','releaseDigest','reconciliationReceipts']) || access.accessId !== key || !owner ||
+          'grantedAt','finishedAt','outcome','releaseDigest','reconciliationReceipts','timeoutQuarantine']) || access.accessId !== key || !owner ||
           !hash(access.inputDigest) || !hash(access.operationDigest) ||
           !['WAITING', 'HELD', 'EXECUTING', 'UNKNOWN', 'RELEASED', 'CANCELLED', 'STALE'].includes(access.state) ||
           !['SHARED', 'EXCLUSIVE'].includes(access.protection) || !Array.isArray(access.operationIds) ||
@@ -194,6 +194,17 @@ export class ResourceRunRegistry extends RunRegistry {
           Object.entries(access.reconciliationReceipts).some(([key, value]) => !id(key) ||
             !onlyKeys(value,['inputDigest','fencing']) || !hash(value.inputDigest) ||
             !Number.isSafeInteger(value.fencing) || value.fencing < 1 || value.fencing > state.sequence))) fail();
+      if (access.timeoutQuarantine !== undefined) {
+        const quarantine = access.timeoutQuarantine, operation = state.operations[quarantine.operationId];
+        if (!onlyKeys(quarantine,['operationId','quarantineId','inputDigest','proofDigest','fencing','observedAt']) ||
+            !id(quarantine.operationId) || !id(quarantine.quarantineId) || !hash(quarantine.inputDigest) ||
+            !hash(quarantine.proofDigest) || !Number.isSafeInteger(quarantine.fencing) ||
+            quarantine.fencing < 1 || quarantine.fencing > state.sequence || !Number.isFinite(Date.parse(quarantine.observedAt)) ||
+            !operation || operation.runId !== access.runId || operation.contextId !== access.contextId ||
+            !access.operationIds.includes(quarantine.operationId) || !['EXECUTING','UNKNOWN'].includes(operation.state) ||
+            operation.native?.onceAcknowledged !== true || !access.resources.some(resource =>
+              resource.mode === 'write' && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(resource.key))) fail();
+      }
     }
     for (const [requestId, requestOwner] of Object.entries(this.requestOwners)) {
       const receipt = requestOwner.reconciliation;
@@ -1013,10 +1024,28 @@ export class ResourceRunRegistry extends RunRegistry {
     for (const other of Object.values(this.resourceState.accesses)) {
       if (other.accessId === access.accessId) continue;
       if ((active(other) || (other.state === 'WAITING' && other.order < access.order)) &&
-          conflicts(access.resources, other.resources)) result.push({ runId: other.runId,
+          this.accessConflict(access, other)) result.push({ runId: other.runId,
         accessId: other.accessId, reason: other.protection === 'EXCLUSIVE' ? 'resource-promotion-pending' : 'resource-conflict' });
     }
     return result;
+  }
+  accessConflict(candidate, existing) {
+    for (const requested of candidate.resources) for (const held of existing.resources) {
+      if (!(requested.mode === 'write' || held.mode === 'write') || !overlaps(requested.key, held.key)) continue;
+      const timeoutQuarantineRead = candidate.runId === existing.runId &&
+        candidate.contextId === existing.contextId && requested.mode === 'read' && held.mode === 'write' &&
+        requested.key === held.key && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(requested.key) &&
+        this.validTimeoutQuarantine(existing);
+      if (!timeoutQuarantineRead) return true;
+    }
+    return false;
+  }
+  validTimeoutQuarantine(access) {
+    const quarantine=access?.timeoutQuarantine,operation=quarantine&&this.resourceState.operations[quarantine.operationId];
+    return Boolean(quarantine&&operation&&operation.runId===access.runId&&operation.contextId===access.contextId&&
+      access.operationIds.includes(operation.operationId)&&['EXECUTING','UNKNOWN'].includes(operation.state)&&
+      operation.native?.onceAcknowledged===true&&access.resources.some(resource=>resource.mode==='write'&&
+        /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(resource.key)));
   }
   grantWaiting() {
     if (this.migrationRequired || (this.resourceState.global && this.resourceState.global.state !== 'RELEASED')) return;
@@ -1136,11 +1165,12 @@ export class ResourceRunRegistry extends RunRegistry {
     op.state = 'COMPLETED'; op.finishedAt = proof.finishedAt; op.completionDigest = digest(proof);
     op.nativeResult = { status: proof.status, proofStatus: proof.status,
       exit: Number.isInteger(proof.exit) ? proof.exit : null };
+    const access = this.resourceState.accesses[op.accessId];
+    if (access?.timeoutQuarantine?.operationId === operationId) delete access.timeoutQuarantine;
     if (op.testReservationId) {
       op.finishedSequence = ++this.resourceState.sequence;
     }
     if (op.maintenancePreflight) op.preflightSucceeded = proof.status === 'completed' && proof.exit === 0;
-    const access = this.resourceState.accesses[op.accessId];
     if (access.operationIds.every((key) => !['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(this.resourceState.operations[key].state))) {
       access.state = 'HELD';
     }
@@ -1264,6 +1294,7 @@ export class ResourceRunRegistry extends RunRegistry {
     }
     access.state = 'RELEASED'; access.finishedAt = now(); access.outcome = outcome;
     delete access.token;
+    delete access.timeoutQuarantine;
     this.restoredAccesses.delete(access.accessId);
   }
   releaseAccess(runId, payload) {
@@ -1347,6 +1378,77 @@ export class ResourceRunRegistry extends RunRegistry {
     }
     access.token=randomUUID();access.fencing=++this.resourceState.sequence;
     access.reconciliationReceipts||={};access.reconciliationReceipts[payload.reconciliationId]={inputDigest,fencing:access.fencing};
+    this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
+  }
+  timeoutQuarantineSnapshot(runId,operationId){
+    const access=this.resourceState.accesses[operationId],run=this.runs.get(runId);
+    const alreadyQuarantined=Boolean(access?.timeoutQuarantine);
+    if(!access||!run||access.runId!==runId||access.contextId!==run.contextId||access.version!==run.version||
+        !(alreadyQuarantined?access.state==='HELD':['EXECUTING','UNKNOWN'].includes(access.state))||
+        !this.restoredAccesses.has(access.accessId)||
+        access.operationIds.length!==1||access.operationIds[0]!==operationId)
+      throw new CoordinationError('timeout-quarantine-boundary-required');
+    const operation=this.resourceState.operations[operationId];
+    if(!operation||operation.runId!==runId||operation.contextId!==run.contextId||
+        !['EXECUTING','UNKNOWN'].includes(operation.state)||operation.native?.onceAcknowledged!==true||
+        !operation.native?.callId||operation.nativeResult||operation.decision?.status!=='approved'||
+        access.resources.length!==1||access.resources[0].mode!=='write'||
+        !/^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(access.resources[0].key))
+      throw new CoordinationError('timeout-quarantine-boundary-required');
+    const boundary={runId,contextId:run.contextId,accessId:access.accessId,operationId,version:run.version,
+      fencing:access.fencing,state:access.state,resources:access.resources,expectedRevisions:access.expectedRevisions,
+      inputDigest:access.inputDigest,operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+      operationState:operation.state,decisionStatus:operation.decision.status,permissionId:operation.native.permissionId,
+      callId:operation.native.callId,onceAcknowledged:operation.native.onceAcknowledged,targetDigest:operation.native.targetDigest,
+      timeoutQuarantine:access.timeoutQuarantine??null};
+    return {runId,contextId:run.contextId,accessId:access.accessId,operationId,version:run.version,
+      fencing:access.fencing,state:access.state,resources:copy(access.resources),expectedRevisions:copy(access.expectedRevisions),
+      operation:{operationId,state:operation.state,decisionStatus:operation.decision.status,
+        onceAcknowledged:operation.native.onceAcknowledged,kind:operation.native.kind||'bash'},
+      timeoutQuarantineRequired:!alreadyQuarantined,
+      ...(alreadyQuarantined?{timeoutQuarantine:{quarantineId:access.timeoutQuarantine.quarantineId,
+        proofDigest:access.timeoutQuarantine.proofDigest}}:{}),
+      boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  quarantineTimedOutPortAccess(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','operationId','fencing','quarantineId','boundaryDigest','evidence'])||
+        !id(payload.operationId)||!id(payload.quarantineId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('timeout-quarantine-request-invalid',400);
+    const access=this.resourceState.accesses[payload.operationId],prior=access?.timeoutQuarantine;
+    const inputDigest=digest(payload);
+    if(prior){
+      if(access.runId!==runId||prior.quarantineId!==payload.quarantineId||prior.inputDigest!==inputDigest)
+        throw new CoordinationError('timeout-quarantine-divergent');
+      return copy(access);
+    }
+    const snapshot=this.timeoutQuarantineSnapshot(runId,payload.operationId),run=this.runs.get(runId);
+    const operation=this.resourceState.operations[payload.operationId];
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||snapshot.boundaryDigest!==payload.boundaryDigest)
+      throw new CoordinationError('timeout-quarantine-boundary-changed');
+    if(this.blockers(access).length)throw new CoordinationError('timeout-quarantine-conflict');
+    if(this.resourceState.global&&this.resourceState.global.state!=='RELEASED')
+      throw new CoordinationError('global-coordination-suspended');
+    if(run.suspension||run.phase!=='WORK')throw new CoordinationError('timeout-quarantine-run-not-quiescent');
+    this.validateExpected(access.expectedRevisions,access.resources);
+    const proofBody={runId,contextId:run.contextId,accessId:access.accessId,operationId:operation.operationId,
+      version:run.version,fencing:access.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+      permissionId:operation.native.permissionId,callId:operation.native.callId,
+      timeoutPartDigest:proof?.timeoutPartDigest,transcriptDigest:proof?.transcriptDigest,
+      shellInventoryDigest:proof?.shellInventoryDigest,sessionIdle:true,pendingPermissions:0,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.accessId!==access.accessId||
+        proof.operationId!==operation.operationId||proof.version!==run.version||proof.fencing!==access.fencing||
+        proof.boundaryDigest!==snapshot.boundaryDigest||proof.sessionId!==run.sessionId||
+        proof.operationDigest!==operation.operationDigest||proof.identityDigest!==operation.identityDigest||
+        proof.permissionId!==operation.native.permissionId||proof.callId!==operation.native.callId||
+        proof.sessionIdle!==true||proof.pendingPermissions!==0||!hash(proof.timeoutPartDigest)||
+        !hash(proof.transcriptDigest)||!hash(proof.shellInventoryDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('timeout-quarantine-proof-required');
+    access.timeoutQuarantine={quarantineId:payload.quarantineId,operationId:operation.operationId,
+      inputDigest,proofDigest:proof.proofDigest,fencing:++this.resourceState.sequence,observedAt:now()};
+    access.state='HELD';access.fencing=this.resourceState.sequence;access.token=randomUUID();access.grantedAt=now();
     this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
   }
   unresolvedAccess(runId, includeTests = true) {

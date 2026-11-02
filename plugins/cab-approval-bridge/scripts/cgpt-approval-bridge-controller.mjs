@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.80";
+const version = "2.1.81";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -718,6 +718,27 @@ function nativePartProof(operation, part, sessionId) {
   return { sessionId, permissionId: operation.native.permissionId, callId,
     finishedAt: state.time.end, status: state.status,
     exit: Number.isInteger(state.metadata?.exit) ? state.metadata.exit : null };
+}
+function nativeTimedOutShellPart(operation, part, sessionId) {
+  if (!operation?.native || operation.sessionId !== sessionId || part?.type !== 'tool' ||
+      part.tool !== 'bash' || part.nativeTool !== 'shell' || part.nativeFormat !== 'opencode-v2' ||
+      part.executed !== false || part.state?.status !== 'completed' || part.state?.metadata?.timeout !== true ||
+      Number.isInteger(part.state?.metadata?.exit)) return null;
+  const callId = part.callID || part.callId || null;
+  const command = part.state?.input?.command;
+  if (!callId || (operation.native.callId && operation.native.callId !== callId) ||
+      typeof command !== 'string' || !Number.isFinite(part.state?.time?.start) ||
+      !Number.isFinite(part.state?.time?.end) || part.state.time.end < operation.native.startedAt ||
+      part.state.time.end < part.state.time.start ||
+      createHash('sha256').update(JSON.stringify([operation.native.kind || 'bash', command])).digest('hex') !==
+        operation.native.targetDigest) return null;
+  let output;
+  try { output = typeof part.state.output === 'string' ? JSON.parse(part.state.output) : part.state.output; }
+  catch { output = null; }
+  if (output && typeof output === 'object' && (typeof output.shellID === 'string' || typeof output.shellId === 'string')) return null;
+  return { sessionId, permissionId: operation.native.permissionId, callId,
+    startedAt: part.state.time.start, finishedAt: part.state.time.end,
+    timeout: true, partDigest: proofHash(part) };
 }
 function nativeEffectOutcome(part) {
   const state = part?.state;
@@ -1599,7 +1620,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -1839,6 +1860,12 @@ async function handleRequest(request, response) {
         }
         json(response, 200, registry.restoredAccessReconciliationSnapshot(runId, url.searchParams.get('operationId'))); return;
       }
+      if (request.method === 'GET' && url.pathname === '/locks/timeout-quarantine-preview') {
+        if (url.searchParams.getAll('operationId').length !== 1 || [...url.searchParams.keys()].some((key) => key !== 'operationId')) {
+          throw new CoordinationError('timeout-quarantine-request-invalid', 400);
+        }
+        json(response, 200, registry.timeoutQuarantineSnapshot(runId, url.searchParams.get('operationId'))); return;
+      }
       if (request.method === 'GET' && url.pathname === '/operations') {
         const operationId = url.searchParams.get('operationId') ?? undefined;
         json(response, 200, registry.operationSnapshot(runId, operationId)); return;
@@ -1936,6 +1963,93 @@ async function handleRequest(request, response) {
           context.invalidateOperation(registry.resourceState.operations[id].requestId);
         }
         json(response, 200, result); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/locks/quarantine-timeout') {
+        const previous=registry.resourceState.accesses[payload?.operationId]?.timeoutQuarantine;
+        if(previous?.quarantineId===payload?.quarantineId){
+          json(response,200,registry.quarantineTimedOutPortAccess(runId,payload,null));return;
+        }
+        const run=registry.runs.get(runId),job=context.publicJob();
+        if(!run||!job?.armed||job.sessionId!==run.sessionId||job.directory!==run.directory||
+            job.currentCabMandate||job.recovery||job.modelTransition||context.publicStatus().undecidedValidationCount){
+          throw new CoordinationError('timeout-quarantine-run-not-quiescent');
+        }
+        const before=registry.timeoutQuarantineSnapshot(runId,payload?.operationId);
+        if(payload?.version!==before.version||payload?.fencing!==before.fencing||payload?.boundaryDigest!==before.boundaryDigest){
+          throw new CoordinationError('timeout-quarantine-boundary-changed');
+        }
+        const operation=registry.resourceState.operations[before.operationId],sessionId=operation.sessionId;
+        if(Object.values(registry.resourceState.operations).some(other=>other.runId===runId&&
+            other.operationId!==operation.operationId&&['ISSUING','EXECUTING','UNKNOWN'].includes(other.state))){
+          throw new CoordinationError('timeout-quarantine-other-effect-active');
+        }
+        const generation=nativeSessionGenerations.get(sessionId)||0;
+        const readNativeBoundary=async()=>{
+          let messages,permissions,sessions,shellInventory;
+          try{
+            [messages,permissions,sessions,shellInventory]=await Promise.all([
+              openCode.messages(sessionId,run.directory),
+              openCode.permissions(run.directory,{sessionIds:[sessionId],verifyInputs:true}),
+              openCode.sessionStatus(run.directory),
+              openCode.request('/api/shell',{query:{'location[directory]':run.directory},locationDirectory:run.directory}),
+            ]);
+          }catch{throw new CoordinationError('timeout-quarantine-native-unavailable');}
+          if(!Array.isArray(messages)||!Array.isArray(permissions)||!record(sessions)||Array.isArray(sessions)||
+              !record(shellInventory)||shellInventory.location?.directory!==run.directory||!Array.isArray(shellInventory.data)){
+            throw new CoordinationError('timeout-quarantine-native-invalid');
+          }
+          const busy=sessions[sessionId],sessionIdle=!busy||busy.type==='idle';
+          if(!sessionIdle||permissions.some(permission=>permission.sessionID===sessionId)){
+            throw new CoordinationError('native-session-not-quiescent');
+          }
+          return {messages,permissions,sessions,shellInventory};
+        };
+        await checkNative(sessionId,true);
+        const first=await readNativeBoundary();
+        const parts=first.messages.flatMap(message=>Array.isArray(message.parts)?message.parts:[]);
+        const requestEntries=nativeRequestValidationEntries(parts,operation.requestId).filter(entry=>entry.status==='completed');
+        const timeoutParts=parts.filter(part=>(part.callID||part.callId)===operation.native?.callId);
+        if(requestEntries.length!==1||timeoutParts.length!==1){
+          throw new CoordinationError('timeout-quarantine-native-correlation-required');
+        }
+        const approval=requestEntries[0].input,owner=registry.requestOwners[operation.requestId];
+        const ownerDigest=createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex');
+        if(approval.operation_id!==operation.operationId||approval.operation_digest!==operation.operationDigest||
+            approval.run_id!==runId||approval.reservation_version!==operation.version||approval.session_id!==sessionId||
+            approval.directory!==run.directory||approval.change_id!==run.changeId||
+            proofHash(nativeIdentity(approval))!==operation.identityDigest||owner?.runId!==runId||
+            owner.digest!==ownerDigest||operation.decision?.status!=='approved'||
+            operation.decision.approvalId!==approval.approval_id){
+          throw new CoordinationError('timeout-quarantine-approval-divergent');
+        }
+        const timeoutPart=nativeTimedOutShellPart(operation,timeoutParts[0],sessionId);
+        if(!timeoutPart)throw new CoordinationError('timeout-quarantine-timeout-proof-required');
+        const firstSnapshot=proofHash({messages:first.messages,permissions:first.permissions,sessions:first.sessions,
+          shellInventory:first.shellInventory,operation:registry.resourceState.operations[operation.operationId],
+          access:registry.resourceState.accesses[operation.accessId]});
+        await checkNative(sessionId,true);
+        const second=await readNativeBoundary(),secondParts=second.messages.flatMap(message=>Array.isArray(message.parts)?message.parts:[]);
+        const secondTimeoutParts=secondParts.filter(part=>(part.callID||part.callId)===operation.native?.callId);
+        const secondTimeoutPart=secondTimeoutParts.length===1?nativeTimedOutShellPart(operation,secondTimeoutParts[0],sessionId):null;
+        const secondSnapshot=proofHash({messages:second.messages,permissions:second.permissions,sessions:second.sessions,
+          shellInventory:second.shellInventory,operation:registry.resourceState.operations[operation.operationId],
+          access:registry.resourceState.accesses[operation.accessId]});
+        if(!secondTimeoutPart||timeoutPart.partDigest!==secondTimeoutPart.partDigest||firstSnapshot!==secondSnapshot||
+            generation!==(nativeSessionGenerations.get(sessionId)||0)||
+            registry.timeoutQuarantineSnapshot(runId,operation.operationId).boundaryDigest!==before.boundaryDigest){
+          throw new CoordinationError('timeout-quarantine-boundary-changed');
+        }
+        const observedAt=new Date().toISOString();
+        const proof={runId,contextId:before.contextId,accessId:before.accessId,operationId:operation.operationId,
+          version:before.version,fencing:before.fencing,boundaryDigest:before.boundaryDigest,sessionId,
+          operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+          permissionId:operation.native.permissionId,callId:operation.native.callId,
+          timeoutPartDigest:timeoutPart.partDigest,transcriptDigest:proofHash(second.messages),
+          shellInventoryDigest:proofHash(second.shellInventory),sessionIdle:true,pendingPermissions:0,observedAt};
+        proof.proofDigest=proofHash(proof);
+        const result=registry.quarantineTimedOutPortAccess(runId,payload,proof);
+        context.invalidateOperation(operation.requestId);
+        json(response,200,result);return;
       }
       if (request.method === 'POST' && ['/locks/release', '/publish'].includes(url.pathname)) {
         const receipt = url.pathname === '/publish' ? registry.resourceState.publications[payload.transactionId] : null;

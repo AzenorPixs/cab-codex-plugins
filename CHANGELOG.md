@@ -1,3 +1,10 @@
+## 2.1.81 — Quarantiner un shell timeout sans libérer son port
+
+- Un timeout shell natif sans shellID/exit garde l’opération et son verrou write en quarantine après double preuve native stable.
+- Le même RUN peut acquérir un accès read sur ce port pour un contrôle autorisé ; les écritures et les RUN étrangers restent bloqués.
+- La quarantine ne termine pas l’opération, ne conclut pas NO_EFFECT et ne rejoue jamais once.
+- CAB/CABU, broker, contrôleur, superviseur, moniteur, plugins, commandes et cadrages partagent 2.1.81.
+
 ## 2.1.80 — Récupérer un accès HELD restauré après redémarrage
 
 - Le prévol owner/RUN-scoped expose l’accès HELD sans token ni contenu natif.
