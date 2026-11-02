@@ -149,7 +149,7 @@ test('restauration conserve les accès actifs conflictuels sans réutiliser once
  assert.equal(h.acquire(writer,opWriter).state,'WAITING');
 });
 
-test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.69',async t=>{
+test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.70',async t=>{
  const h=await fixture(t);const run=h.reserve('native-reject-migration',[file('rejected.txt')]);
  const op=h.prepare(run,'native-reject-operation');const stored=h.r.resourceState.operations[op.operationId];
  h.r.claimRequest(run.runId,stored.requestId,fingerprint('native-reject-owner'),false);

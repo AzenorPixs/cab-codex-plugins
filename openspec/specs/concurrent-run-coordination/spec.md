@@ -755,7 +755,7 @@ Le registre MUST accepter la clôture rejetée uniquement pour l’opération ex
 
 Un rejet natif terminal MUST être stocké dans un schéma de décision et de registre déjà lisible par la brique immédiatement antérieure. Le digest du transcript MUST rester durable et corrélé à la demande. À la restauration, une extension connue plus récente MAY être normalisée sans modifier l’identité, le statut `rejected`, les ressources ou les autres RUN. Une extension inconnue ou une preuve divergente MUST échouer fermement.
 
-#### Scenario: Normalisation d’une empreinte 2.1.69
+#### Scenario: Normalisation d’une empreinte 2.1.70
 
 - **GIVEN** un rejet `CANCELLED` avec empreintes connues `nativeProofDigest` et `nativeRejectionProofDigest`
 - **WHEN** un contrôleur plus récent restaure le registre
