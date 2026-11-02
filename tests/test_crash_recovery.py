@@ -288,7 +288,7 @@ class CrashRecoveryTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         response = json.loads(result.stdout)
         self.assertEqual(response["id"], 1)
-        self.assertEqual(response["result"]["serverInfo"]["version"], "2.1.61")
+        self.assertEqual(response["result"]["serverInfo"]["version"], "2.1.62")
         self.assertIn("OpenCode Code Mode", response["result"]["instructions"])
         self.assertIn("tools[\"cgpt-validation\"].request_validation", response["result"]["instructions"])
         self.assertIn("ne devinez pas leur nom", response["result"]["instructions"])
