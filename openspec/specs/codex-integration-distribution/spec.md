@@ -805,7 +805,7 @@ Les composants versionnés CAB MUST partager la base 2.1.11 et documenter la ré
 
 ### Requirement: Distribution des diagnostics avant admission 2.1.12
 
-Les composants CAB MUST partager la base 2.1.65 et documenter les diagnostics de notification, la corrélation Code Mode en cours, les décisions durables, la reprise du journal natif et la protection des opérations concurrentes. Les phases source, archivage, publication et activation MUST rester distinctes. CABU MUST préserver OpenCode, les RUN et leurs preuves, puis rapporter les versions réellement actives avant notification.
+Les composants CAB MUST partager la base 2.1.66 et documenter la corrélation de `request_validation`, les décisions durables, la reprise native et l’isolation des opérations. Source, archivage, publication et activation MUST rester distincts. CABU MUST préserver OpenCode, les RUN et leurs preuves, puis vérifier les versions actives.
 
 #### Scenario: Distribution et activation vérifiées
 

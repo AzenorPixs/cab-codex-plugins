@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.65';
+export const VERSION = '2.1.66';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -368,7 +368,72 @@ function replaceCommandBinding(source, binding) {
   return matches === 1 ? result : null;
 }
 
-function literalObject(source, commandBinding = null) {
+function bindNativeRequestId(source, nativeRequestId) {
+  if (typeof nativeRequestId !== 'string') return { source, bound: false };
+  let result = '', braceDepth = 0, bracketDepth = 0, bound = false, requestIdProperties = 0;
+  for (let index = 0; index < source.length;) {
+    const character = source[index];
+    if (character === '"') {
+      let end = index + 1, escaped = false;
+      for (; end < source.length; end++) {
+        const value = source[end];
+        if (escaped) escaped = false;
+        else if (value === '\\') escaped = true;
+        else if (value === '"') { end++; break; }
+      }
+      if (end > source.length || source[end - 1] !== '"') return null;
+      result += source.slice(index, end); index = end; continue;
+    }
+    if (character === '`') {
+      const literal = templateLiteralValue(source, index);
+      if (!literal) return null;
+      result += source.slice(index, literal.end); index = literal.end; continue;
+    }
+    const propertyStart = bracketDepth === 0 &&
+      (character === ',' && braceDepth === 1 || character === '{' && braceDepth === 0);
+    if (propertyStart) {
+      let cursor = index + 1;
+      while (/\s/.test(source[cursor] || '')) cursor++;
+      let key, keyEnd = cursor;
+      if (source[cursor] === '"') {
+        const parsed = literalStringAt(source, cursor);
+        if (!parsed) return null;
+        key = parsed.value; keyEnd = parsed.end;
+      } else {
+        const parsed = /^[A-Za-z_$][\w$]*/.exec(source.slice(cursor));
+        if (parsed) { key = parsed[0]; keyEnd = cursor + parsed[0].length; }
+      }
+      if (key === 'requestId') {
+        requestIdProperties++;
+        if (requestIdProperties > 1) return null;
+        let colon = keyEnd;
+        while (/\s/.test(source[colon] || '')) colon++;
+        if (source[colon] === ':') {
+          let valueStart = colon + 1;
+          while (/\s/.test(source[valueStart] || '')) valueStart++;
+          const identifier = /^[A-Za-z_$][\w$]*/.exec(source.slice(valueStart));
+          if (identifier && !['true', 'false', 'null', 'undefined'].includes(identifier[0])) {
+            const end = valueStart + identifier[0].length;
+            let delimiter = end;
+            while (/\s/.test(source[delimiter] || '')) delimiter++;
+            if (source[delimiter] !== ',' && source[delimiter] !== '}') return null;
+            if (bound) return null;
+            result += source.slice(index, valueStart) + JSON.stringify(nativeRequestId);
+            index = end; bound = true; continue;
+          }
+        }
+      }
+    }
+    if (character === '{') { braceDepth++; result += character; index++; continue; }
+    if (character === '}') { braceDepth--; result += character; index++; continue; }
+    if (character === '[') { bracketDepth++; result += character; index++; continue; }
+    if (character === ']') { bracketDepth--; result += character; index++; continue; }
+    result += character; index++;
+  }
+  return { source: result, bound };
+}
+
+function literalObject(source, commandBinding = null, nativeRequestId = null) {
   if (source[0] !== '{') return null;
   let depth = 0, quoted = false, escaped = false;
   for (let i = 0; i < source.length; i++) {
@@ -389,9 +454,12 @@ function literalObject(source, commandBinding = null) {
       if (depth === 0) {
         try {
           const object = source.slice(0, i + 1);
-          const resolved = commandBinding ? replaceCommandBinding(object, commandBinding) : object;
-          if (!resolved) return null;
-          return { value: parseLiteralData(resolved), rest: source.slice(i + 1).trim() };
+          const commandResolved = commandBinding ? replaceCommandBinding(object, commandBinding) : object;
+          if (!commandResolved) return null;
+          const requestResolved = bindNativeRequestId(commandResolved, nativeRequestId);
+          if (!requestResolved) return null;
+          return { value: parseLiteralData(requestResolved.source), requestIdBound: requestResolved.bound,
+            rest: source.slice(i + 1).trim() };
         }
         catch { return null; }
       }
@@ -401,7 +469,11 @@ function literalObject(source, commandBinding = null) {
 }
 
 function codeModePart(content, part) {
-  if (typeof part.state.input?.code !== 'string' || part.state.metadata?.truncated === true) return null;
+  if (typeof part.state.input?.code !== 'string' || content.executed !== false || part.state.metadata?.truncated === true) return null;
+  const observed = part.state.metadata?.toolCalls;
+  const nativeRequestId = Array.isArray(observed) && observed.length === 1 &&
+    observed[0]?.tool === 'cgpt-validation.request_validation' && typeof observed[0]?.input?.requestId === 'string'
+    ? observed[0].input.requestId : null;
   let code = part.state.input.code.trim(), discovery;
   let commandBinding = null;
   const declaration = /^const\s+([A-Za-z_$][\w$]*)\s*=\s*/.exec(code);
@@ -440,14 +512,16 @@ function codeModePart(content, part) {
     if (new RegExp('^return\\s+' + prefix[1].replace(/[$]/g, '\\$&') + '\\s*;?$').test(code)) code = '';
   }
   const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
-  let call;
+  let call, requestIdBound = false;
   if (match) {
     if (!['broker_readiness', 'request_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
-    const literal = literalObject(code.slice(match[0].length), commandBinding);
+    const literal = literalObject(code.slice(match[0].length), commandBinding,
+      match[2] === 'request_validation' ? nativeRequestId : null);
     if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
     call = { tool: 'cgpt-validation.' + match[2], input: literal.value };
+    requestIdBound = literal.requestIdBound;
   } else if (code || !discovery) return null;
-  const expected = [discovery, call].filter(Boolean), observed = part.state.metadata?.toolCalls;
+  const expected = [discovery, call].filter(Boolean);
   const failureTool = call?.tool === 'cgpt-validation.request_validation' ||
     (!discovery && call?.tool === 'cgpt-validation.get_approval');
   const nativeFailure = part.state.status === 'completed' && part.state.metadata?.error === true && failureTool &&
@@ -473,7 +547,9 @@ function codeModePart(content, part) {
     state: { ...part.state, input: call?.input || discovery.input,
       ...(nativeFailure ? { status: 'error', error: part.state.output } : {}),
       metadata: { ...part.state.metadata, cabCodeMode: {
-        wrapperId: content.id, ...(nativeFailure ? { nativeMcpError: true } : {}), envelopeHash: createHash('sha256').update(canonical(content)).digest('hex') } } } };
+        wrapperId: content.id, ...(nativeFailure ? { nativeMcpError: true } : {}),
+        ...(requestIdBound ? { requestIdBoundFromNativeCall: true } : {}),
+        envelopeHash: createHash('sha256').update(canonical(content)).digest('hex') } } } };
 }
 
 function nativeUsage(message) {

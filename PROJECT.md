@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.65`.
+Version de référence des briques CAB : `2.1.66`.
 
-CAB 2.1.65 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.66 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -41,8 +41,11 @@ Les RUN et opérations compatibles sans recouvrement continuent selon leurs
 règles d’accès.
 
 Lorsqu’un wrapper Code Mode `execute` transporte `request_validation`, CAB peut
-admettre la demande dès que l’appel natif unique exact est visible dans ses
-métadonnées en cours. Cette corrélation n’émet aucune décision ou permission ;
+admettre la demande quand l’appel natif unique exact est visible dans ses
+métadonnées, qu’il soit en cours ou terminé. Dans un wrapper terminé non exécuté,
+le client lie un identifiant variable uniquement au champ `requestId` depuis
+l’input du call natif unique ; tous les autres champs restent littéraux et
+doivent correspondre. Cette corrélation n’émet aucune décision ou permission ;
 un accès restauré sur une ressource disjointe reste protégé et les accès
 recouvrants attendent leur propre acquisition.
 

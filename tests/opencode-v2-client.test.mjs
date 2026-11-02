@@ -153,6 +153,37 @@ test('Code Mode : projection littérale, provenance et découverte pure', async 
     [{tool:'search',status:'completed',input:{...requestSchemaQuery,limit:10}}]))).tool,'execute');
 });
 
+test('Code Mode : requestId variable lié au call natif unique et objets canoniques',async t=>{
+ const input={requestId:'native-request-id',run_id:'run-1',session_id:'ses-1',operation_id:'op-1',
+  operation_digest:'a'.repeat(64),reservation_version:7,expected_revisions:{'file:a':1,'file:b':2},
+  resources:[{key:'file:a',mode:'write'},{key:'file:b',mode:'read'}],commands:[]};
+ const code='return await tools["cgpt-validation"].request_validation({requestId: requestId, run_id:"run-1", session_id:"ses-1", '+
+  'operation_id:"op-1", operation_digest:"'+'a'.repeat(64)+'", reservation_version:7, '+
+  'expected_revisions:{"file:b":2,"file:a":1}, resources:[{key:"file:a",mode:"write"},{key:"file:b",mode:"read"}], commands:[]});';
+ const part=await codeModeFixture(t,wrapped(code,[{tool:'cgpt-validation.request_validation',status:'completed',input}]));
+ assert.equal(part.tool,'cgpt-validation_request_validation');
+ assert.equal(part.state.input.requestId,'native-request-id');
+ assert.deepEqual(part.state.input.expected_revisions,{'file:b':2,'file:a':1});
+ assert.match(part.state.metadata.cabCodeMode.envelopeHash,/^[a-f0-9]{64}$/);
+});
+
+test('Code Mode : requestId lié refuse toute liaison dynamique ou preuve native divergente',async t=>{
+ const input={requestId:'native-request-id',run_id:'run-1',commands:[]};
+ const code='return await tools["cgpt-validation"].request_validation({requestId: requestId, run_id:"run-1", commands:[]});';
+ const cases=[
+  {code:code.replace('run_id:"run-1"','run_id: runId'),calls:[{tool:'cgpt-validation.request_validation',status:'completed',input}]},
+  {code,calls:[{tool:'cgpt-validation.request_validation',status:'completed',input:{...input,requestId:4}}]},
+  {code,calls:[{tool:'cgpt-validation.request_validation',status:'completed',input},{tool:'shell',status:'completed',input:{}}]},
+  {code,calls:[{tool:'cgpt-validation.request_validation',status:'completed',input}],truncated:true},
+  {code,calls:[{tool:'cgpt-validation.request_validation',status:'completed',input}],executed:true},
+  {code:code.replace('requestId: requestId','requestId: requestId + suffix'),calls:[{tool:'cgpt-validation.request_validation',status:'completed',input}]},
+ ];
+ for(const [index,item] of cases.entries()){
+  const raw=wrapped(item.code,item.calls);if(item.truncated)raw.state.metadata.truncated=true;if(item.executed)raw.executed=true;
+  assert.equal((await codeModeFixture(t,raw)).tool,'execute','variant '+index);
+ }
+});
+
 test('Code Mode : formes ambiguës conservées comme execute bloquant', async t => {
   const base = wrapped('return await tools["cgpt-validation"].request_validation({});',
     [{tool:'cgpt-validation.request_validation',status:'completed',input:{}}]);
