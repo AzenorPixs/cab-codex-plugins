@@ -827,13 +827,22 @@ export async function updateComponents(input, options = {}) {
         const mcpState = await brokerState();
         if (!['connected','disabled'].includes(mcpState)) throw error(mcpState === 'needs_auth'
           ? 'update-broker-needs-auth' : mcpState === 'pending' ? 'update-broker-pending-timeout' : 'update-broker-state-unconfirmed');
+        const brokerFilesAdvanced = [];
         for (const file of receipt.files) {
           const actual = await deployed(file), actualHash = actual ? hash(actual.data) : null;
-          if (![file.beforeHash,file.afterHash].includes(actualHash)) throw error('update-installed-artifact-changed');
+          if ([file.beforeHash,file.afterHash].includes(actualHash)) continue;
+          if (file.group === 'broker' && input.brokerPolicy === 'cab-source' && actual && brokerFiles.includes(file.name)) {
+            const packaged = await regular(join(c.pluginRoot,'broker',file.name));
+            if (sourceVersion(packaged.data) === VERSION && hash(actual.data) === hash(packaged.data)) {
+              brokerFilesAdvanced.push(file.name); continue;
+            }
+          }
+          throw error('update-installed-artifact-changed');
         }
         resumeForwardParent = receipt.id;
         receipt.supersession = { fromVersion:receipt.version, packageVersion:VERSION,
-          reason:'forward-recovery-after-controller-rollback-failure', failureCode:receipt.failureCode, at:now() };
+          reason:'forward-recovery-after-controller-rollback-failure', failureCode:receipt.failureCode,
+          brokerFilesAdvanced:brokerFilesAdvanced.sort(), at:now() };
         await save('SUPERSEDED');
         receipt = null; receiptTrusted = false;
       }
@@ -887,6 +896,7 @@ export async function updateComponents(input, options = {}) {
       }
     }
     if (input.recoverMcp !== undefined && !receipt) throw error('update-mcp-recovery-authorization-invalid');
+    if (input.resumeForward !== undefined && !receipt && !resumeForwardParent) throw error('update-forward-recovery-authorization-invalid');
     if (options.rollbackOnly) {
       if (readonlyBroker && receipt?.externalBroker?.disconnectIntentAt !== null && receipt?.externalBroker) throw error('update-broker-forward-recovery-required');
       if (!receipt || complete.has(receipt.phase)) return { status: recovered ? 'rolled-back' : 'nothing-to-recover' };

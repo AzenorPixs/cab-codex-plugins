@@ -259,6 +259,8 @@ toutes les empreintes installées. La source publiée doit être au moins aussi
 récente que celle du reçu. CAB conserve l’ancien journal et ses sauvegardes,
 le marque `SUPERSEDED`, puis ouvre un nouveau reçu lié par `recoveryOf`. Cette
 reprise ne recharge pas les locations OpenCode et ne lit ni ne modifie les RUN.
+Avec `--broker-policy cab-source`, un fichier broker local déjà identique au
+paquet GitHub courant est accepté comme avancé et revérifié dans le nouveau reçu.
 Un MCP `pending`, `failed` ou `needs_auth`, une identité native changée ou une
 empreinte inconnue conserve le reçu sans action ; un rechargement global reste
 soumis à son autorisation exacte distincte.
