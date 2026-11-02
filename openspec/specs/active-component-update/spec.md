@@ -487,12 +487,12 @@ un reçu `SUPERSEDED` et MUST conserver ce reçu historique sans le réécrire.
 
 ### Requirement: Vérifier le reçu de reprise avant CABU
 
-L’updater MAY reprendre seulement le reçu exact `ROLLBACK_FAILED` causé par `update-controller-start-unconfirmed`, avec un paquet GitHub publié au moins aussi récent et un manifeste cohérent. Il MUST vérifier l’identité OpenCode et l’empreinte `beforeHash` ou `afterHash` de chaque destination. Toute autre phase ou divergence est refusée.
+L’updater MAY reprendre seulement le reçu exact `ROLLBACK_FAILED` causé par `update-controller-start-unconfirmed`, avec un paquet GitHub publié au moins aussi récent et un manifeste cohérent. Il MUST vérifier l’identité OpenCode et l’empreinte `beforeHash` ou `afterHash` de chaque destination. Sous `cab-source`, les fichiers broker MAY aussi correspondre exactement au paquet courant publié. Toute autre divergence est refusée.
 
 #### Scenario: Reprendre en avant le reçu exact après rollback incomplet
 
 - **GIVEN** un reçu `ROLLBACK_FAILED` avec cause contrôleur vérifiée et artefacts connus
-- **WHEN** une source GitHub plus récente et cohérente demande la reprise de cet identifiant exact
+- **WHEN** une source GitHub au moins aussi récente et cohérente demande la reprise de cet identifiant exact
 - **THEN** le reçu est admis pour une reprise liée, sans arrêter OpenCode ni lire ou modifier les RUN
 
 #### Scenario: Reçu ou artefact divergent
@@ -500,6 +500,12 @@ L’updater MAY reprendre seulement le reçu exact `ROLLBACK_FAILED` causé par 
 - **GIVEN** un autre état de reçu, une version antérieure, une identité OpenCode modifiée ou une destination hors de ses deux empreintes
 - **WHEN** la reprise avant est demandée
 - **THEN** l’updater refuse sans écriture ni nouvel arrêt de service
+
+#### Scenario: Source broker locale déjà publiée
+
+- **GIVEN** `brokerPolicy=cab-source` et les trois fichiers broker identiques au paquet GitHub courant
+- **WHEN** le reçu d’échec est repris
+- **THEN** ces fichiers sont admis comme déjà avancés et revérifiés pendant le nouveau déploiement
 
 ### Requirement: Préserver les preuves pendant une reprise avant
 
