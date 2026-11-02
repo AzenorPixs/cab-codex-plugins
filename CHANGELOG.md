@@ -1,3 +1,13 @@
+## 2.1.66 — Lier le requestId Code Mode aux métadonnées natives
+
+- Le parseur borné accepte un identifiant variable uniquement dans le champ
+  `requestId`, en liant sa valeur à l’unique appel natif `request_validation`.
+- La corrélation compare les identités structurées sans dépendre de l’ordre des
+  clés d’objets ; les tableaux, valeurs, ressources et révisions restent exacts.
+- Les expressions dynamiques hors `requestId`, appels supplémentaires,
+  divergences, troncatures et wrappers exécutés restent refusés.
+- CAB/CABU, les composants, plugins, commandes et cadrages partagent 2.1.66.
+
 ## 2.1.65 — Corrélation de request_validation Code Mode en cours
 
 - Le contrôleur peut corréler un appel MCP `request_validation` exact déjà

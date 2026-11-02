@@ -1325,6 +1325,73 @@ test('request_validation Code Mode brut terminé est corrélé par l’input exa
  assert.equal(h.native.replies.length,0);
 });
 
+test('request_validation Code Mode lie le requestId natif et compare les cartes sans ordre de clés',async t=>{
+ const h=await setup(t);const run=await h.reserve('codemode-bound-request-id',{resources:[
+  {key:'file:src/protected.md',mode:'write'},{key:'file:src/bound-a.md',mode:'write'},
+  {key:'file:src/bound-b.md',mode:'read'}]});
+ const held=h.approval(run,'held-before-bound-request-id');held.files=['src/protected.md'];held.commands=[];
+ held.resources=[{key:'file:src/protected.md',mode:'write'}];held.expected_revisions={'file:src/protected.md':0};
+ await h.stop();
+ const registry=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode','state','cgpt-approval-bridge'));
+ await registry.acquireAuthority();
+ try{
+  const prepared=registry.prepareOperation(run.runId,held);
+  registry.recordDecision(run.runId,prepared.operationId,{status:'approved',requestId:held.requestId,
+   approvalId:held.approval_id,changeId:run.changeId,operationId:held.operation_id,
+   operationDigest:held.operation_digest,identityDigest:prepared.identityDigest,runId:run.runId,
+   version:run.version,sessionId:run.sessionId});
+  const access=registry.acquireAccess(run.runId,{version:run.version,operationId:held.operation_id,
+   operationDigest:held.operation_digest,resources:held.resources,expectedRevisions:held.expected_revisions,
+   operationIds:[held.operation_id]});
+  const native={sessionId:run.sessionId,directory:h.directory,runId:run.runId,operationId:held.operation_id,
+   reservationVersion:run.version,resources:held.resources,expectedRevisions:held.expected_revisions,
+   operationDigest:held.operation_digest,coordinationProtocol:'resource-scoped-v1',accessId:held.operation_id,
+   kind:'edit',target:held.files[0]};
+  registry.nativeStart(run.runId,native,held.requestId,{id:'permission-held-bound',tool:{callID:'call-held-bound'}});
+  registry.nativeIssued(held.operation_id);
+  registry.completeNative(run.runId,held.operation_id,{sessionId:run.sessionId,permissionId:'permission-held-bound',
+   callId:'call-held-bound',finishedAt:Date.now()+1,status:'completed'});
+  const completed=registry.resourceState.operations[held.operation_id];
+  registry.recordNativeOutcome(run.runId,held.operation_id,{status:'completed',proofStatus:'completed',exit:null,
+   partDigest:createHash('sha256').update('synthetic-bound-native-part').digest('hex')},completed.completionDigest);
+  assert.equal(access.state,'HELD');
+ }finally{const ended=new Promise(resolve=>registry.lock.once('exit',resolve));registry.close();await ended;}
+ h.native.messages[run.sessionId]=[];
+ await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const before=(await h.get('/runs/'+run.runId+'/status')).body;
+ assert.equal(before.coordination.reason,'access-reconciliation-required');
+ assert.equal(before.coordination.accesses.find(a=>a.accessId===held.operation_id).state,'HELD');
+ const approval=h.approval(run,'codemode-bound-request-id');approval.commands=[];approval.files=['src/bound-a.md'];
+ approval.resources=[{key:'file:src/bound-a.md',mode:'write'},{key:'file:src/bound-b.md',mode:'read'}];
+ approval.expected_revisions={'file:src/bound-a.md':0,'file:src/bound-b.md':0};
+ const nativeInput=structuredClone(approval);nativeInput.expected_revisions={'file:src/bound-b.md':0,'file:src/bound-a.md':0};
+ const codeInput=structuredClone(nativeInput);codeInput.requestId='__request_id_binding__';
+ const serialized=JSON.stringify(codeInput).replace('"requestId":"__request_id_binding__"','"requestId":requestId');
+ h.native.messages[run.sessionId].at(-1).parts=[{type:'tool',tool:'execute',id:'execute-bound-request-id',callID:'execute-bound-request-id',
+  executed:false,state:{status:'completed',input:{code:'return await tools["cgpt-validation"].request_validation('+serialized+');'},
+   output:'request_validation terminé',metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',
+    status:'completed',input:nativeInput}]}}}];
+ const response=await h.post('/validation/request',{approval});
+ assert.equal(response.status,202,JSON.stringify(response));
+ assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission')).body.validation_registered,true);
+ const after=(await h.get('/runs/'+run.runId+'/status')).body;
+ assert.equal(after.coordination.accesses.find(a=>a.accessId===held.operation_id).state,'HELD');
+ assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+});
+
+test('request_validation Code Mode lie le requestId mais refuse une identité native divergente',async t=>{
+ const h=await setup(t);const run=await h.reserve('codemode-bound-request-id-divergent');const approval=h.approval(run,'codemode-bound-request-id-divergent');
+ const nativeInput={...approval,requestId:'different-native-request'};
+ h.native.messages[run.sessionId].at(-1).parts=[{type:'tool',tool:'execute',id:'execute-bound-request-id-divergent',callID:'execute-bound-request-id-divergent',
+  executed:false,state:{status:'completed',input:{code:'return await tools["cgpt-validation"].request_validation({requestId: requestId});'},
+   output:'request_validation terminé',metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',
+    status:'completed',input:nativeInput}]}}}];
+ const response=await h.post('/validation/request',{approval});
+ assert.equal(response.status,409);assert.equal(response.body.error,'native-validation-not-correlated');
+ const admission=await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission');
+ assert.equal(admission.status,404);assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+});
+
 test('request_validation Code Mode brut terminé refuse les métadonnées non exactes',async t=>{
  for(const variant of ['extra-tool','divergent-input','truncated','call-status']){
   const h=await setup(t);const run=await h.reserve('codemode-raw-done-'+variant);const approval=h.approval(run,'codemode-raw-done-'+variant);
@@ -1576,7 +1643,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.65');
+  assert.equal(initialized.result.serverInfo.version, '2.1.66');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
