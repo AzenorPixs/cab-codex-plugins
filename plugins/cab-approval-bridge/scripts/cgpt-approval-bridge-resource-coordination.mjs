@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.68';
+export const VERSION = '2.1.69';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -204,10 +204,8 @@ export class ResourceRunRegistry extends RunRegistry {
           Object.values(state.accesses).some((access) => access.accessId === op.accessId ||
             access.operationIds.includes(op.operationId))) fail();
     }
-    const held = Object.values(state.accesses).filter(active);
-    for (let i = 0; i < held.length; i++) for (let j = i + 1; j < held.length; j++) {
-      if (held[i].runId === held[j].runId || conflicts(held[i].resources, held[j].resources)) fail();
-    }
+    // Active legacy leases remain protected after restore. `restoredAccesses`
+    // blocks their native reuse, while `blockers()` keeps conflicts waiting.
     if (state.testReservations !== undefined) {
       if (!record(state.testReservations)) fail();
       for (const [key, entry] of Object.entries(state.testReservations)) {

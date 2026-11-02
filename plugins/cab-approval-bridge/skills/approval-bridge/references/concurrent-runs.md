@@ -22,6 +22,12 @@ Mode `execute` seulement si l’appel natif unique est déjà `running`, exact e
 non tronqué. La décision et l’acquisition restent ensuite distinctes ; un
 recouvrement attend et ne libère jamais un effet inconnu.
 
+Le registre conserve également les leases actifs si plusieurs accès restaurés
+se recouvrent ou appartiennent au même RUN. Tous restent protégés contre la
+réutilisation d'une permission `once`. Un nouvel accès recouvrant attend leur
+réconciliation ; un accès disjoint peut avancer. Ne pas supprimer, fusionner
+ou annuler automatiquement ces leases pour faire démarrer le contrôleur.
+
 Un fichier est partagé par défaut. exclusiveResources, sous-ensemble explicite de fichiers du manifeste, demande l'optimisation privée. CAB la vérifie avant effet. L'arrivée d'un accès recouvrant ferme cette admission exclusive ; le pair attend les effets concernés avant accès partagé, sans drainer les RUN indépendants.
 
 /extend et /resources contrôlent génération, portée et frontière sûre. Une réduction ne libère aucun effet inconnu ni obligation de publication. Le checkpoint reste output/<prompt>/<run_id>/state.json ; la reprise historique conserve preuves et propriété sans écraser un pair.
@@ -52,7 +58,7 @@ POST /runs/<runId>/locks/release porte version, operationId, token, fencing, out
 
 Les écritures connues avancent les révisions des ressources et invalident les lectures de sous-arbre concernées. Les écritures à publier restent suivies après libération. Après crash, les protections sont restaurées mais l'ancien jeton ne permet aucune nouvelle once. /locks/reconcile vérifie la frontière connue, annule les anciennes sous-opérations non commencées et émet un jeton/fencing neufs sans relâcher les fichiers ; les corrections conservent des identités et décisions neuves. Réconcilier les effets sans rejouer une permission consommée. Le prévol de récupération garde ses règles strictes ; terminer/libérer son accès avant transfert de session.
 
-Pour une permission native encore pendante, le contrôleur 2.1.68 peut continuer
+Pour une permission native encore pendante, le contrôleur 2.1.69 peut continuer
 le `once` déjà décidé après redémarrage seulement si l’historique contient la
 demande et l’approbation terminées exactes et que deux lectures natives
 confirment permissionId/callID identiques, outil `running` et `executed=false`.
