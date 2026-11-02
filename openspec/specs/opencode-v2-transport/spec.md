@@ -37,7 +37,7 @@ Le paquet CAB, le broker, tous les scripts, commandes, plugins, skills, unités 
 #### Scenario: Vérification des versions distribuées
 
 - **WHEN** les artefacts source et les deux manifestes de plugin sont inspectés
-- **THEN** toutes les briques annoncent la base courante commune `2.1.71` et les manifestes conservent leur cachebuster propre
+- **THEN** toutes les briques annoncent la base courante commune `2.1.72` et les manifestes conservent leur cachebuster propre
 
 #### Scenario: Faux succès HTML
 
@@ -529,3 +529,41 @@ consommée.
 - **WHEN** l’API ne confirme pas la réponse par HTTP 204
 - **THEN** le client signale l’échec sans déclarer `once` consommée ni renvoyer
   automatiquement le POST
+
+### Requirement: Contrôle des permissions natives par session
+
+Le contrôleur MUST demander les permissions natives de la seule session dont
+il vérifie l’inactivité. Les permissions d’autres sessions MUST NOT être
+validées, examinées ou modifiées au cours de ce contrôle. Une permission en
+attente de la session ciblée MUST continuer à bloquer la libération. Les
+vérifications d’identité, d’inactivité et de preuve native de la cible MUST
+rester en vigueur.
+
+#### Scenario: Permission étrangère mal formée
+
+- **WHEN** une permission étrangère est mal formée et le contrôleur vérifie une autre session
+- **THEN** la permission étrangère n’est ni lue ni modifiée et ne bloque pas la libération de l’accès ciblé
+
+#### Scenario: Permission de la session ciblée
+
+- **WHEN** la session contrôlée possède une permission native en attente
+- **THEN** le contrôleur refuse la libération avec le blocage existant de session non inactive
+
+### Requirement: Réconciliation d’une validation annulée par OpenCode
+
+Le contrôleur MAY clore une validation `PREPARED` sans décision seulement sur
+preuve terminale native `CANCELLED` par OpenCode. Il MUST vérifier l’identité
+exacte, deux lectures stables, la session inactive et l’absence de permission,
+d’opération native commencée et d’accès lié. Il MUST persister `CANCELLED` sans
+décision, permission, accès ni `once`, puis retirer la validation indécise.
+Toute divergence ou activité MUST conserver l’état protégé.
+
+#### Scenario: Annulation OpenCode stable sans effet
+
+- **WHEN** la demande exacte est terminale CANCELLED par OpenCode et deux lectures natives identiques prouvent l’identité exacte, session idle et absence d’effet
+- **THEN** l’opération devient CANCELLED sans décision, accès ni permission et le RUN peut préparer une autre demande distincte
+
+#### Scenario: Annulation divergente ou frontière native active
+
+- **WHEN** l’identité, le transcript, la session, la permission ou l’état de l’opération diverge ou reste actif
+- **THEN** CAB conserve l’opération préparée ou indécise sans libérer de ressource ni créer de décision

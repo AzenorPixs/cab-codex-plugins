@@ -1,3 +1,11 @@
+## 2.1.72 — Fiabiliser le suivi des permissions et validations
+
+- La cause `NONE` est normalisée comme absence de cause et ne bloque plus un RUN sain.
+- Le contrôle d’inactivité ne lit que les permissions de la session concernée ; une permission étrangère mal formée n’empêche plus sa libération.
+- Une validation annulée par OpenCode peut être close après preuve terminale stable, sans créer de décision ni libérer un effet natif.
+- Les causes réelles et les gardes de readiness restent inchangées.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.72.
+
 ## 2.1.71 — Réserver les environnements de test malgré des accès disjoints
 
 - Les réservations LXC/Docker ne sont plus bloquées par les seuls accès actifs disjoints du même RUN.
