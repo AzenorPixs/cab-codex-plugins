@@ -150,6 +150,28 @@ test('restauration conserve les accès actifs conflictuels sans réutiliser once
  assert.equal(h.acquire(writer,opWriter).state,'WAITING');
 });
 
+test('quarantine timeout port : read same-RUN only, writes et RUN étrangers restent bloqués après restart',async t=>{
+ const h=await fixture(t),port={key:'port:host-a/5173',mode:'write'},portRead={key:port.key,mode:'read'};
+ const run=h.reserve('timeout-quarantine-owner',[port]),operation=h.prepare(run,'timeout-quarantine-shell');
+ const access=h.acquire(run,operation);assert.equal(access.state,'HELD');h.start(run,operation);
+ const state=h.r.resourceState,storedAccess=state.accesses[access.accessId];
+ storedAccess.state='HELD';storedAccess.timeoutQuarantine={quarantineId:'timeout-quarantine-receipt',
+  operationId:operation.operationId,inputDigest:fingerprint('timeout-input'),proofDigest:fingerprint('timeout-proof'),
+  fencing:++state.sequence,observedAt:new Date().toISOString()};
+ storedAccess.fencing=state.sequence;storedAccess.token='11111111-1111-4111-8111-111111111111';
+ h.r.restoredAccesses.delete(access.accessId);h.r.persist();await h.restart();
+ const sameRunRead=h.prepare(run,'timeout-quarantine-same-run-read',[portRead]);
+ assert.equal(h.acquire(run,sameRunRead).state,'HELD');
+ const sameRunWriter=h.prepare(run,'timeout-quarantine-same-run-write',[port]);
+ assert.equal(h.acquire(run,sameRunWriter).state,'WAITING');
+ const other=h.reserve('timeout-quarantine-other-run',[portRead]),otherRead=h.prepare(other,'timeout-quarantine-other-read',[portRead]);
+ assert.equal(h.acquire(other,otherRead).state,'WAITING');
+ const unmarkedRun=h.reserve('timeout-unmarked-owner',[{key:'port:host-a/5174',mode:'write'}]);
+ const unmarkedOperation=h.prepare(unmarkedRun,'timeout-unmarked-shell'),unmarkedAccess=h.acquire(unmarkedRun,unmarkedOperation);
+ h.start(unmarkedRun,unmarkedOperation);const normalRead=h.prepare(unmarkedRun,'timeout-unmarked-read',[{key:'port:host-a/5174',mode:'read'}]);
+ assert.equal(h.acquire(unmarkedRun,normalRead).state,'WAITING');
+});
+
 test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.72',async t=>{
  const h=await fixture(t);const run=h.reserve('native-reject-migration',[file('rejected.txt')]);
  const op=h.prepare(run,'native-reject-operation');const stored=h.r.resourceState.operations[op.operationId];

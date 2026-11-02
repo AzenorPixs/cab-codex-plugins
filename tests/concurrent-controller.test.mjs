@@ -55,6 +55,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     }
     let payload;
     if (url.pathname === '/provider') payload = native.providers || {all:[],connected:[]};
+    else if (url.pathname === '/shell') payload = { location: { directory }, data: native.shells || [] };
     else if (/^\/session\/[^/]+\/message\/[^/]+$/.test(url.pathname)) payload=(native.messages[url.pathname.split('/')[2]] || []).find(m=>m.info?.id===url.pathname.split('/')[4]);
     else if (url.pathname === '/permission') payload = native.permissions;
     else if (/^\/session\/[^/]+\/log$/.test(url.pathname)) {
@@ -536,6 +537,9 @@ test('réconcilie un accès HELD restauré depuis la décision durable sans rejo
  assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.busy={};
  h.native.permissions.push({id:'pending-restored-access',sessionID:run.sessionId,permission:'bash',tool:{callID:'call-pending'}});
  assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.permissions=[];
+ await waitFor(async()=>{const status=(await h.get('/runs/'+run.runId+'/status')).body,job=status.job||{};
+  return !job.currentCabMandate&&!job.recovery&&!job.modelTransition&&status.undecidedValidationCount===0&&
+   status.unmatchedNativePermissionCount===0;});
  assert.equal((await h.get('/runs/'+run.runId+'/locks/reconcile-preview?operationId='+access.accessId)).body.boundaryDigest,payload.boundaryDigest);
  const result=await h.post(route,payload);
  assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.accessId,access.accessId);
@@ -548,6 +552,87 @@ test('réconcilie un accès HELD restauré depuis la décision durable sans rejo
  assert.deepEqual(current.resources,[resource]);assert.equal(current.token,result.body.token);
  const replay=await h.post(route,payload);
  assert.equal(replay.status,200);assert.equal(replay.body.token,result.body.token);assert.equal(replay.body.fencing,result.body.fencing);
+});
+
+test('quarantine un timeout port sans libérer le verrou et laisse lire au même RUN',async t=>{
+ const h=await setup(t),portWrite={key:'port:host-a/5173',mode:'write'},fileRead={key:'file:frontend/tests/browser-check.mjs',mode:'read'},
+  browserWrite={key:'browser:host-a/chromium',mode:'write'};
+ const run=await h.reserve('timeout-port-quarantine',{resources:[portWrite,fileRead,browserWrite]});
+ const start=h.approval(run,'timeout-port-start');start.files=[];start.commands=['npm run dev'];start.resources=[portWrite];
+ start.expected_revisions={[portWrite.key]:0};h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(start);
+ assert.equal((await h.post('/validation/request',{approval:start})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+start.requestId,{decision:'approved'})).status,201);
+ const accessResult=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:start.operation_id,
+  operationDigest:start.operation_digest,resources:[portWrite],expectedRevisions:start.expected_revisions});
+ assert.equal(accessResult.status,200,JSON.stringify({status:accessResult.status,error:accessResult.body?.error,state:accessResult.body?.state}));
+ await h.execute(start);assert.equal(h.native.replies.length,1);
+ const operationState=(await h.get('/runs/'+run.runId+'/operations?operationId='+start.operation_id)).body.operations[0];
+ assert.equal(operationState.state,'EXECUTING');assert.equal(operationState.onceAcknowledged,true);
+ const requestPart=h.native.messages[run.sessionId].flatMap(message=>message.parts||[])
+  .find(part=>part.tool==='cgpt-validation_request_validation'&&part.state?.input?.requestId===start.requestId);
+ requestPart.state.status='completed';requestPart.state.output=JSON.stringify({requestId:start.requestId,
+  approval_id:start.approval_id,status:'PENDING'});
+ const timeoutStarted=Math.max(Date.now(),operationState.native?.startedAt||0)+1;
+ h.native.messages[run.sessionId].push({info:{id:'msg-timeout-port',sessionID:run.sessionId,role:'assistant'},parts:[{
+  type:'tool',tool:'shell',nativeTool:'shell',nativeFormat:'opencode-v2',id:'call-'+start.requestId,
+  callID:'call-'+start.requestId,executed:false,state:{status:'completed',input:{command:start.commands[0]},
+   output:'Command timed out',time:{start:timeoutStarted,end:timeoutStarted+120000},metadata:{timeout:true}}}]});
+ const repliesBefore=h.native.replies.length;await h.stop();
+ await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const preview=await h.get('/runs/'+run.runId+'/locks/timeout-quarantine-preview?operationId='+encodeURIComponent(start.operation_id));
+ assert.equal(preview.status,200,JSON.stringify(preview));assert.ok(['EXECUTING','UNKNOWN'].includes(preview.body.state));
+ assert.equal(preview.body.snapshot_only,true);assert.equal(preview.body.timeoutQuarantineRequired,true);
+ const payload={version:run.version,operationId:start.operation_id,fencing:preview.body.fencing,
+  quarantineId:'timeout-port-quarantine-1',boundaryDigest:preview.body.boundaryDigest,
+  evidence:['native shell call timed out','native callID and command matched','session idle','no pending permissions','port lock retained']};
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',{...payload,boundaryDigest:'0'.repeat(64)})).body.error,
+  'timeout-quarantine-boundary-changed');
+ h.native.busy[run.sessionId]={type:'busy'};
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload)).body.error,'native-session-not-quiescent');
+ h.native.busy={};
+ h.native.permissions.push({id:'pending-timeout-port',sessionID:run.sessionId,permission:'bash',tool:{callID:'call-pending'}});
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload)).body.error,'native-session-not-quiescent');
+ h.native.permissions=[];
+ const quarantined=await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload);
+ assert.equal(quarantined.status,200,JSON.stringify({status:quarantined.status,error:quarantined.body?.error,
+  accessId:quarantined.body?.accessId,state:quarantined.body?.state}));assert.equal(quarantined.body.accessId,start.operation_id);
+ assert.equal(quarantined.body.state,'HELD');assert.notEqual(quarantined.body.fencing,accessResult.body.fencing);
+ assert.equal(h.native.replies.length,repliesBefore);
+ const parent=(await h.get('/runs/'+run.runId+'/locks')).body.accesses.find(access=>access.accessId===start.operation_id);
+ assert.equal(parent.state,'HELD');assert.equal(parent.timeoutQuarantine.operationId,start.operation_id);
+ const unchanged=(await h.get('/runs/'+run.runId+'/operations?operationId='+start.operation_id)).body.operations[0];
+ assert.equal(unchanged.state,'EXECUTING');assert.equal(unchanged.onceAcknowledged,true);assert.equal(unchanged.nativeResult,null);
+ await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const locksAfterRestart=await h.get('/runs/'+run.runId+'/locks');
+ const afterRestart=await h.get('/runs/'+run.runId+'/locks/timeout-quarantine-preview?operationId='+encodeURIComponent(start.operation_id));
+ const safeLocks=(locksAfterRestart.body.accesses||[]).map(access=>({accessId:access.accessId,state:access.state,
+  resources:access.resources,timeoutQuarantine:access.timeoutQuarantine}));
+ assert.equal(afterRestart.status,200,JSON.stringify({afterRestart:afterRestart.body,locks:safeLocks}));
+ assert.equal(afterRestart.body.timeoutQuarantineRequired,false);
+ assert.equal(afterRestart.body.timeoutQuarantine.quarantineId,payload.quarantineId);
+ const parentAfterRestart=(await h.get('/runs/'+run.runId+'/locks')).body.accesses.find(access=>access.accessId===start.operation_id);
+ assert.ok(['HELD','UNKNOWN'].includes(parentAfterRestart.state));
+ assert.equal(parentAfterRestart.timeoutQuarantine.quarantineId,payload.quarantineId);
+
+ const lease=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,
+  transactionId:'timeout-port-browser-lease',resources:[browserWrite],evidence:['same-run browser lease']});
+ assert.equal(lease.status,200,JSON.stringify({status:lease.status,error:lease.body?.error,state:lease.body?.state}));
+ const browser=h.approval(run,'timeout-port-browser-read');browser.files=[];browser.commands=['node frontend/tests/browser-check.mjs'];
+ browser.resources=[fileRead,{key:portWrite.key,mode:'read'},browserWrite];
+ browser.expected_revisions={[fileRead.key]:0,[portWrite.key]:0,[browserWrite.key]:0};
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(browser);
+ const browserRequest=await h.post('/validation/request',{approval:browser});assert.equal(browserRequest.status,202,
+  JSON.stringify({status:browserRequest.status,error:browserRequest.body?.error}));
+ const browserDecision=await h.post('/runs/'+run.runId+'/decision/'+browser.requestId,{decision:'approved'});
+ assert.equal(browserDecision.status,201,JSON.stringify({status:browserDecision.status,error:browserDecision.body?.error}));
+ const readAccess=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:browser.operation_id,
+  operationDigest:browser.operation_digest,resources:browser.resources,expectedRevisions:browser.expected_revisions});
+ assert.equal(readAccess.status,200,JSON.stringify({status:readAccess.status,error:readAccess.body?.error,state:readAccess.body?.state}));
+ assert.equal(readAccess.body.state,'HELD');
+ assert.deepEqual(readAccess.body.resources,[...browser.resources].sort((a,b)=>a.key.localeCompare(b.key)));
+ assert.equal(h.native.replies.length,repliesBefore);
+ const replay=await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload);
+ assert.equal(replay.status,200);assert.equal(replay.body.timeoutQuarantine.quarantineId,payload.quarantineId);
 });
 
 
@@ -1854,7 +1939,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.80');
+  assert.equal(initialized.result.serverInfo.version, '2.1.81');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

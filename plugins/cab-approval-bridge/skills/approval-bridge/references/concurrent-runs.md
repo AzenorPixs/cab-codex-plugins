@@ -73,7 +73,29 @@ Un reçu identique est idempotent. Une opération `ISSUING`, `EXECUTING` ou
 `UNKNOWN`, une preuve terminale absente, une permission, un conflit, une
 divergence ou une session active conserve l'accès protégé.
 
-Pour une permission native encore pendante, le contrôleur 2.1.80 peut continuer
+Pour un shell foreground timeouté sans shellID ni exit, le prévol
+`GET /runs/<runId>/locks/timeout-quarantine-preview?operationId=...` scelle le
+port et le tool part natif exact. Le POST
+`/runs/<runId>/locks/quarantine-timeout` exige deux lectures natives identiques,
+la décision durable, une session inactive et zéro permission. Il garde le shell
+`EXECUTING`, `once` inchangé et le port write `HELD`; il ne prouve aucune fin et
+ne libère rien. Sous cette quarantine, le même RUN peut acquérir un accès
+`read` au même port avec une nouvelle décision CAB. Toute écriture et tout RUN
+étranger restent bloqués ; gate et libération attendent toujours une preuve
+native terminale.
+
+Pour un shell foreground timeouté sans shellID ni exit, le prévol
+`GET /runs/<runId>/locks/timeout-quarantine-preview?operationId=...` scelle le
+port et le tool part natif exact. Le POST
+`/runs/<runId>/locks/quarantine-timeout` exige deux lectures natives identiques,
+la décision durable, une session inactive et zéro permission. Il garde le shell
+`EXECUTING`, `once` inchangé et le port write `HELD`; il ne prouve aucune fin et
+ne libère rien. Sous cette quarantine, le même RUN peut acquérir un accès
+`read` au même port avec une nouvelle décision CAB. Toute écriture et tout RUN
+étranger restent bloqués ; gate et libération attendent toujours une preuve
+native terminale.
+
+Pour une permission native encore pendante, le contrôleur 2.1.81 peut continuer
 le `once` déjà décidé après redémarrage seulement si l’historique contient la
 demande et l’approbation terminées exactes et que deux lectures natives
 confirment permissionId/callID identiques, outil `running` et `executed=false`.

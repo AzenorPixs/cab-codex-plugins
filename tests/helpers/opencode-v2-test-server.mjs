@@ -76,6 +76,7 @@ function v2ModelData(legacy) {
 function legacyPath(path) {
   let match = path.match(/^\/api\/experimental\/session\/([^/]+)\/log$/);
   if (match) return `/session/${match[1]}/log`;
+  if (path === '/api/shell') return '/shell';
   if (path === '/api/mcp') return '/mcp';
   if (path === '/api/session/active') return '/session/status';
   if (path === '/api/permission/request') return '/permission';
@@ -107,6 +108,7 @@ function transform(path, method, payload, directory) {
   if (path === '/api/permission/request') return { location: { directory }, data: (payload || []).map(v2Permission) };
   if (path === '/api/provider') return { location: { directory }, data: v2ProviderData(payload) };
   if (path === '/api/model') return { location: { directory }, data: v2ModelData(payload) };
+  if (path === '/api/shell') return payload;
   if (path.startsWith('/api/experimental/mcp/')) return null;
   if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path)) return null;
   if (/^\/api\/session\/[^/]+\/model$/.test(path)) return null;
