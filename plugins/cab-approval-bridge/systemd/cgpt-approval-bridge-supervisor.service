@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 2.1.64 — Superviseur persistant CAB
+Description=CAB 2.1.65 — Superviseur persistant CAB
 After=cgpt-approval-bridge-controller.service
 
 [Service]

@@ -1252,6 +1252,12 @@ function rawCodeModeValidationCompleted(id,calls) {
   metadata:{truncated:false,toolCalls:structuredClone(calls)}}};
 }
 
+function rawCodeModeValidationRunning(id,input,calls,overrides={}) {
+ return {type:'tool',id:'execute-'+id,name:'execute',tool:'execute',executed:overrides.executed??false,time:{created:Date.now()},state:{status:'running',
+  input:{code:'const payload=runtimeInput; return await tools["cgpt-validation"].request_validation(payload);'},
+  metadata:{truncated:overrides.truncated??false,toolCalls:structuredClone(calls)}}};
+}
+
 
 test('request_validation Code Mode en erreur native garde la corrélation exacte sans créer de permission',async t=>{
  const h=await setup(t);const run=await h.reserve('codemode-error');const approval=h.approval(run,'codemode-error');
@@ -1337,6 +1343,79 @@ test('request_validation Code Mode brut terminé refuse les métadonnées non ex
   assert.equal(response.body.error,'native-validation-not-correlated');
   assert.equal(h.native.replies.length,0);
  }
+});
+
+test('request_validation Code Mode en cours est admis sur ressource disjointe avec un accès restauré HELD',async t=>{
+ const h=await setup(t);const run=await h.reserve('active-codemode-disjoint',{resources:[
+  {key:'file:src/protected.md',mode:'write'},{key:'file:src/disjoint.md',mode:'write'}]});
+ const held=h.approval(run,'held-before-restart');held.files=['src/protected.md'];held.commands=[];
+ held.resources=[{key:'file:src/protected.md',mode:'write'}];held.expected_revisions={'file:src/protected.md':0};
+ await h.stop();
+ const registry=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode','state','cgpt-approval-bridge'));
+ await registry.acquireAuthority();
+ try{
+  const prepared=registry.prepareOperation(run.runId,held);
+  registry.recordDecision(run.runId,prepared.operationId,{status:'approved',requestId:held.requestId,
+   approvalId:held.approval_id,changeId:run.changeId,operationId:held.operation_id,
+   operationDigest:held.operation_digest,identityDigest:prepared.identityDigest,runId:run.runId,
+   version:run.version,sessionId:run.sessionId});
+  const access=registry.acquireAccess(run.runId,{version:run.version,operationId:held.operation_id,
+   operationDigest:held.operation_digest,resources:held.resources,expectedRevisions:held.expected_revisions,
+   operationIds:[held.operation_id]});
+  const native={sessionId:run.sessionId,directory:h.directory,runId:run.runId,operationId:held.operation_id,
+   reservationVersion:run.version,resources:held.resources,expectedRevisions:held.expected_revisions,
+   operationDigest:held.operation_digest,coordinationProtocol:'resource-scoped-v1',accessId:held.operation_id,
+   kind:'edit',target:held.files[0]};
+  registry.nativeStart(run.runId,native,held.requestId,{id:'permission-held-old',tool:{callID:'call-held-old'}});
+  registry.nativeIssued(held.operation_id);
+  registry.completeNative(run.runId,held.operation_id,{sessionId:run.sessionId,permissionId:'permission-held-old',
+   callId:'call-held-old',finishedAt:Date.now()+1,status:'completed'});
+  const completed=registry.resourceState.operations[held.operation_id];
+  registry.recordNativeOutcome(run.runId,held.operation_id,{status:'completed',proofStatus:'completed',exit:null,
+   partDigest:createHash('sha256').update('synthetic-native-part').digest('hex')},completed.completionDigest);
+  assert.equal(access.state,'HELD');
+ }finally{const ended=new Promise(resolve=>registry.lock.once('exit',resolve));registry.close();await ended;}
+ h.native.messages[run.sessionId]=[];
+ await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const before=(await h.get('/runs/'+run.runId+'/status')).body;
+ assert.equal(before.coordination.reason,'access-reconciliation-required');
+ assert.equal(before.coordination.accesses.find(a=>a.accessId===held.operation_id).state,'HELD');
+
+ const approval=h.approval(run,'active-disjoint-request');approval.files=['src/disjoint.md'];approval.commands=[];
+ approval.resources=[{key:'file:src/disjoint.md',mode:'write'}];approval.expected_revisions={'file:src/disjoint.md':0};
+ h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationRunning(approval.requestId,approval,[
+  {tool:'cgpt-validation.request_validation',status:'running',input:structuredClone(approval)},
+ ])];
+ const accepted=await h.post('/validation/request',{approval});
+ assert.equal(accepted.status,202,JSON.stringify(accepted));assert.equal(accepted.body.status,'PENDING');
+ const admission=await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission');
+ assert.equal(admission.status,200);assert.equal(admission.body.owner_registered,true);
+ assert.equal(admission.body.validation_registered,true);assert.equal(admission.body.decision_recorded,false);
+ const registered=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(registered.state,'PREPARED');assert.equal(registered.access,null);
+ const protectedState=(await h.get('/runs/'+run.runId+'/operations?operationId='+held.operation_id)).body.operations[0];
+ assert.equal(protectedState.state,'COMPLETED');assert.equal(protectedState.access.state,'HELD');
+ assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+});
+
+test('request_validation Code Mode en cours refuse les métadonnées actives divergentes',async t=>{
+ for(const variant of ['divergent-input','extra-tool','truncated','executed','call-completed'])await t.test(variant,async t=>{
+  const h=await setup(t);const run=await h.reserve('active-codemode-'+variant);
+  const approval=h.approval(run,'active-codemode-'+variant);
+  let input=structuredClone(approval),calls=[{tool:'cgpt-validation.request_validation',status:'running',input}];
+  const overrides={};
+  if(variant==='divergent-input')calls[0].input.files=['src/other.py'];
+  if(variant==='extra-tool')calls=[{tool:'bash',status:'completed',input:{command:'true'}},...calls];
+  if(variant==='truncated')overrides.truncated=true;
+  if(variant==='executed')overrides.executed=true;
+  if(variant==='call-completed')calls[0].status='completed';
+  h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationRunning(approval.requestId,input,calls,overrides)];
+  const response=await h.post('/validation/request',{approval});
+  assert.equal(response.status,409,JSON.stringify(response));assert.equal(response.body.error,'native-validation-not-correlated');
+  const admission=await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission');
+  assert.equal(admission.status,404);assert.equal(admission.body.owner_registered,false);
+  assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+ });
 });
 
 test('une publication indépendante ne suspend pas le pair ni sa génération', async (t) => {
@@ -1497,7 +1576,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.64');
+  assert.equal(initialized.result.serverInfo.version, '2.1.65');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
