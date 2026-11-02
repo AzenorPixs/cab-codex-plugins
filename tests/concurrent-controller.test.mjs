@@ -1643,7 +1643,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.71');
+  assert.equal(initialized.result.serverInfo.version, '2.1.72');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -2310,6 +2310,39 @@ test('recovery du RUN : permission étrangère ignorée avant lecture de cible, 
   assert.deepEqual(h.native.replies, []);
 });
 
+test('libération run-scoped ignore une permission shell étrangère sans la modifier', async t => {
+  const h = await setup(t); const a = await h.reserve('release-foreign-permission');
+  const { approval, access } = await h.approvedAccess(a, 'release-foreign-permission-op');
+  await h.execute(approval); await h.completeTool(approval);
+  const foreign = { id: 'per_foreign_shell', sessionID: 'ses_foreign', permission: 'shell', messageID: 'msg_foreign',
+    tool: { callID: 'call_foreign' }, metadata: {} };
+  h.native.permissions.push(foreign);
+  h.native.messages.ses_foreign = [{ nativeV2: { id: 'msg_foreign', type: 'assistant', time: { created: 1 },
+    metadata: { parentID: 'msg_parent' }, content: [{ type: 'tool', id: 'call_foreign', name: 'shell', executed: false,
+      time: { created: 1 }, state: { status: 'running', input: { command: '/usr/bin/true', workdir: '/foreign' },
+        content: [], metadata: {} } }] } }];
+  const released = await h.releaseOperation(a, approval, access);
+  assert.equal(released.status, 200, JSON.stringify(released));
+  assert.deepEqual(h.native.permissions, [foreign]);
+});
+
+test('libération run-scoped reste bloquée par une permission de sa propre session', async t => {
+  const h = await setup(t); const a = await h.reserve('release-own-permission');
+  const { approval, access } = await h.approvedAccess(a, 'release-own-permission-op');
+  await h.execute(approval); await h.completeTool(approval);
+  const own = { id: 'per_own_edit', sessionID: a.sessionId, permission: 'edit', messageID: 'msg_own_permission',
+    tool: { callID: 'call_own_permission' }, metadata: { filepath: 'pending.txt' } };
+  h.native.permissions.push(own);
+  h.native.messages[a.sessionId].push({ info: { id: 'msg_own_permission', role: 'assistant' }, parts: [
+    { type: 'tool', callID: 'call_own_permission', tool: 'edit', executed: false,
+      state: { status: 'running', input: { filePath: h.directory + '/pending.txt' } } },
+  ] });
+  const released = await h.releaseOperation(a, approval, access);
+  assert.equal(released.status, 409);
+  assert.equal(released.body.error, 'native-session-not-quiescent');
+  assert.deepEqual(h.native.permissions, [own]);
+});
+
 test('recovery : prepare exige une discovery exacte avant le gel', async t => {
   const h = await setup(t); await h.reserve('recovery-signature');
   const recovery = { jobId: 'job-recovery-signature', expectedSessionId: 'ses_recovery-signature',
@@ -2840,9 +2873,14 @@ test('release-unused HTTP : course de permission et indisponibilité native refu
   h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message' && ++reads===1)
     h.native.permissions=[{id:'late-native',sessionID:a.sessionId,permission:'bash',metadata:{command:'true'}}];};
   assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'native-session-not-quiescent');
-  h.native.permissions=[];h.native.onRequest=async(path)=>{if(path==='/session/ses_a/message')h.native.messages.ses_a=[{nativeV2:{id:'msg_bad',type:'assistant',content:'invalid',time:{created:Date.now()}}}];};
-  assert.equal((await h.post('/runs/a/test-resources/release-unused',p)).body.error,'test-unused-history-unavailable');
-  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');assert.equal(h.native.replies.length,0);
+  const h2=await setup(t);const b=await h2.reserve('b',{resources:[{key:'lxc:host-b/102',mode:'write'}]});
+  const lease2=await unusedHttpLease(h2,b);const p2=await unusedHttpPayload(h2,b,lease2);
+  h2.native.onRequest=async(path)=>{if(path==='/session/ses_b/message')h2.native.messages.ses_b=[
+    {nativeV2:{id:'msg_bad',type:'assistant',content:'invalid',time:{created:Date.now()}}}];};
+  assert.equal((await h2.post('/runs/b/test-resources/release-unused',p2)).body.error,'test-unused-history-unavailable');
+  assert.equal((await h.get('/runs/a/test-resources')).body.reservations[0].state,'HELD');
+  assert.equal((await h2.get('/runs/b/test-resources')).body.reservations[0].state,'HELD');
+  assert.equal(h.native.replies.length,0);assert.equal(h2.native.replies.length,0);
 });
 
 
@@ -3043,6 +3081,71 @@ function appendNativeRejectedTranscript(h, approval, { status='REJECTED', review
  if(extraTool)parts.push(extraTool);
  h.native.messages[approval.session_id].push({parts});
 }
+
+function appendNativeCancelledTranscript(h, approval, { status='CANCELLED', cancelledBy='OC',
+  resultOverrides={}, lookupApprovalId=approval.approval_id, extraTool=null } = {}) {
+ const requestPart=h.native.messages[approval.session_id].flatMap(message=>message.parts||[])
+   .find(part=>part.tool==='cgpt-validation_request_validation'&&part.state?.input?.requestId===approval.requestId);
+ assert.ok(requestPart,'native request exists');requestPart.state.status='completed';
+ requestPart.state.output=JSON.stringify({requestId:approval.requestId,approval_id:approval.approval_id,status:'PENDING'});
+ const result={...structuredClone(approval),status,cancelled_by:cancelledBy,...resultOverrides};
+ h.native.messages[approval.session_id].push({parts:[
+  {type:'tool',tool:'cgpt-validation_get_approval',state:{status:'completed',input:{approval_id:lookupApprovalId},
+   output:JSON.stringify(result),time:{start:Date.now()-2,end:Date.now()-1}}},
+  ...(extraTool?[extraTool]:[]),
+ ]});
+}
+
+test('annulation native OC : clôture préparée sans décision, accès, permission ou once',async t=>{
+ const h=await setup(t);const run=await h.reserve('native-cancelled');const approval=h.approval(run,'native-cancelled-request');
+ assert.equal((await h.post('/runs/native-cancelled/validation/request',{approval})).status,202);
+ appendNativeCancelledTranscript(h,approval);
+ await h.stop();await h.start();
+ assert.equal((await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'})).status,202);
+ await waitFor(async()=>{
+  const status=(await h.get('/runs/native-cancelled/status')).body;
+  const operations=(await h.get('/runs/native-cancelled/operations?operationId='+encodeURIComponent(approval.operation_id))).body;
+  return status.undecidedValidationCount===0&&operations.operations?.[0]?.state==='CANCELLED';
+ });
+ const status=(await h.get('/runs/native-cancelled/status')).body;
+ const decision=await h.get('/runs/native-cancelled/decision/'+approval.requestId);
+ const operation=(await h.get('/runs/native-cancelled/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
+ const state=JSON.parse(readFileSync(join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json'),'utf8'));
+ const durable=state.coordination.operations[approval.operation_id];
+ assert.equal(status.undecidedValidationCount,0);assert.equal(decision.status,404);
+ assert.equal(operation.state,'CANCELLED');assert.equal(operation.decision,null);
+ assert.match(durable.completionDigest,/^[a-f0-9]{64}$/);assert.equal(durable.decision,undefined);assert.equal(durable.native,undefined);
+ assert.equal(operation.completionDigest,undefined);
+ assert.deepEqual((await h.get('/runs/native-cancelled/locks')).body.accesses,[]);
+ assert.equal(h.native.permissions.length,0);assert.deepEqual(h.native.replies,[]);
+ const next=h.approval(run,'native-cancelled-next');
+ assert.equal((await h.post('/runs/native-cancelled/validation/request',{approval:next})).status,202);
+});
+
+test('annulation native OC : divergence ou activité conserve l’opération PREPARED',async t=>{
+ const variants=['pending','wrong-canceller','approval-mismatch','run-mismatch','session-busy','permission','effect'];
+ for(const variant of variants)await t.test(variant,async subtest=>{
+  const h=await setup(subtest);const run=await h.reserve('native-cancelled-'+variant);
+  const approval=h.approval(run,'native-cancelled-request-'+variant);
+  assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+  appendNativeCancelledTranscript(h,approval,{status:variant==='pending'?'PENDING':'CANCELLED',
+   cancelledBy:variant==='wrong-canceller'?'CGPT':'OC',
+   lookupApprovalId:variant==='approval-mismatch'?'other-approval':approval.approval_id,
+   resultOverrides:variant==='run-mismatch'?{run_id:'other-run'}:{},
+   extraTool:variant==='effect'?{type:'tool',tool:'bash',state:{status:'completed',input:{command:'/usr/bin/true'},
+    time:{start:Date.now()-1,end:Date.now()}}}:null});
+  if(variant==='session-busy')h.native.busy[approval.session_id]={type:'busy'};
+  if(variant==='permission')h.native.permissions.push({id:'native-cancelled-pending',sessionID:approval.session_id,
+    permission:'bash',metadata:{command:'/usr/bin/true'}});
+  await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});await delay(60);
+  const status=(await h.get('/runs/'+run.runId+'/status')).body;
+  const operation=(await h.get('/runs/'+run.runId+'/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
+  assert.equal(status.undecidedValidationCount,1,variant);
+  assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404,variant);
+  assert.equal(operation.state,'PREPARED',variant);assert.equal(operation.completionDigest,undefined,variant);
+  assert.deepEqual(h.native.replies,[],variant);
+ });
+});
 
 test('rejet natif : une notification perdue se réconcilie après redémarrage sans rejouer ni créer de permission',async t=>{
  const h=await setup(t);const run=await h.reserve('native-rejection');const approval=h.approval(run,'native-rejection-request');
