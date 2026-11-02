@@ -851,6 +851,38 @@ test('Code Mode : omission input readiness ne généralise aucune valeur implici
   assert.equal((await codeModeFixture(t,wrapped('return await tools["cgpt-validation"].'+method+'({});',[{tool:'cgpt-validation.'+method,status:'completed'}]))).tool,'execute');}
 });
 
+test('journal natif durable : watermark obligatoire, callID corrélé et contenu/chemin filtrés',async t=>{
+ const f=fixture();t.after(f.close);let seen;
+ const tool={type:'session.tool.success',durable:{aggregateID:'ses_log',seq:4},
+  data:{sessionID:'ses_log',assistantMessageID:'msg_log',id:'call_log',name:'edit',
+   input:{filePath:'/workspace/secret.py',content:'PRIVATE_INPUT'},
+   content:[{type:'text',text:'PRIVATE_OUTPUT'}],metadata:{exit:0,status:'completed'},executed:false}};
+ const synced={type:'log.synced',aggregateID:'ses_log',seq:7};
+ const body=`data: ${JSON.stringify(tool)}\n\ndata: ${JSON.stringify(synced)}\n\n`;
+ const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+  fetchImpl:async(input,options={})=>{const url=new URL(input);if(url.pathname==='/api/info')return json(info);
+   seen={url,headers:options.headers};return new Response(body,{headers:{'content-type':'text/event-stream'}});}});
+ const log=await client.sessionEventLog('ses_log','/workspace');
+ assert.equal(log.watermark.seq,7);assert.equal(log.events.length,1);assert.equal(log.events[0].callId,'call_log');
+ assert.equal(log.events[0].type,'session.tool.success');assert.equal(log.events[0].metadata.exit,0);
+ assert.equal(log.events[0].inputDigest,nativeToolInputDigest(tool.data.input));
+ assert.equal(seen.url.searchParams.get('after'),'0');assert.equal(seen.url.searchParams.get('follow'),'false');
+ assert.equal(seen.headers['x-opencode-directory'],'/workspace');
+ assert.ok(!JSON.stringify(log).includes('PRIVATE_INPUT'));assert.ok(!JSON.stringify(log).includes('PRIVATE_OUTPUT'));
+ assert.ok(!JSON.stringify(log).includes('secret.py'));
+});
+
+test('journal natif durable : refuse une lecture sans watermark ou un watermark antérieur',async t=>{
+ const f=fixture();t.after(f.close);let body='';
+ const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+  fetchImpl:async input=>{if(new URL(input).pathname==='/api/info')return json(info);
+   return new Response(body,{headers:{'content-type':'text/event-stream'}});}});
+ body=`data: ${JSON.stringify({type:'session.tool.success',durable:{aggregateID:'ses_log',seq:3},data:{sessionID:'ses_log',id:'call_log'}})}\n\n`;
+ await assert.rejects(client.sessionEventLog('ses_log','/workspace'),{code:'opencode-session-log-watermark-missing'});
+ body+=`data: ${JSON.stringify({type:'log.synced',aggregateID:'ses_log',seq:2})}\n\n`;
+ await assert.rejects(client.sessionEventLog('ses_log','/workspace'),{code:'opencode-session-log-watermark-invalid'});
+});
+
 
 test('mandat natif : instruction explicite sans recopie ni modification du mandat', () => {
  const text='é\nwrite exact "{}"\n';const value=nativeCodingMandate(text);

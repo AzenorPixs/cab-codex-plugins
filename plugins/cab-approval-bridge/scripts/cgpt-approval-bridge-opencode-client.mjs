@@ -5,9 +5,11 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.63';
+export const VERSION = '2.1.64';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
+const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
+const SESSION_LOG_EVENT_LIMIT = 100_000;
 const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
 const SOURCE_FILE_MAX_LIMIT = 2 * 1024 * 1024;
 const CREDENTIAL_LIMIT = 4096;
@@ -1196,7 +1198,70 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     return response;
   }
 
-  return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions,
+  async function sessionEventLog(sessionId, directoryValue = directory, { after = '0' } = {}) {
+    if (typeof sessionId !== 'string' || !/^ses_[A-Za-z0-9_.-]{1,100}$/.test(sessionId) ||
+        typeof directoryValue !== 'string' || !isAbsolute(directoryValue) ||
+        typeof after !== 'string' || !/^(?:0|[1-9][0-9]{0,19})$/.test(after)) fail('opencode-session-log-input-invalid');
+    await info();
+    const url = new URL(`/api/experimental/session/${encodeURIComponent(sessionId)}/log`, origin);
+    url.searchParams.set('after', after);url.searchParams.set('follow','false');
+    const headers = { accept:'text/event-stream', authorization:await authorization(),
+      'x-opencode-directory':directoryValue };
+    let response;
+    try { response = await fetchImpl(url, { headers, redirect:'error', signal }); }
+    catch (cause) { throw Object.assign(new Error('opencode-session-log-unavailable'), { code:'opencode-session-log-unavailable', cause }); }
+    if (response.status === 401) { await response.body?.cancel(); fail('opencode-auth-required'); }
+    if (!response.ok || !response.body || !(response.headers.get('content-type') || '').toLowerCase().includes('text/event-stream')) {
+      await response.body?.cancel(); fail('opencode-session-log-invalid');
+    }
+    const reader=response.body.getReader(),decoder=new TextDecoder();let pending='',bytes=0;const items=[];let watermark=null,afterSync=false,aggregateID=null;
+    const consume=(frame)=>{
+      const data=frame.split(/\r?\n/).filter(line=>line.startsWith('data:')).map(line=>line.slice(5).replace(/^ /,'')).join('\n');
+      if(!data)return;
+      let item;try{item=JSON.parse(data);if(typeof item==='string')item=JSON.parse(item);}catch{fail('opencode-session-log-invalid');}
+      if(!record(item)||typeof item.type!=='string')fail('opencode-session-log-invalid');
+      if(item.type==='log.synced'){
+        if(afterSync||item.aggregateID!==sessionId||!Number.isSafeInteger(item.seq)||item.seq<Number(after)||
+            (aggregateID!==null&&aggregateID!==item.aggregateID))fail('opencode-session-log-invalid');
+        watermark={aggregateID:item.aggregateID,seq:item.seq};afterSync=true;return;
+      }
+      if(afterSync)fail('opencode-session-log-invalid');
+      if(!record(item.durable)||item.durable.aggregateID!==sessionId||
+          !Number.isSafeInteger(item.durable.seq)||item.durable.seq<1||
+          item.durable.seq<=Number(after))fail('opencode-session-log-invalid');
+      if(aggregateID!==null&&aggregateID!==item.durable.aggregateID)fail('opencode-session-log-invalid');
+      aggregateID=item.durable.aggregateID;
+      if(items.length>=SESSION_LOG_EVENT_LIMIT)fail('opencode-session-log-limit');
+      const dataValue=record(item.data)?item.data:{};
+      if(dataValue.sessionID!==undefined&&dataValue.sessionID!==sessionId)fail('opencode-session-log-session-divergent');
+      if(!['session.tool.called','session.tool.success','session.tool.failed'].includes(item.type))return;
+      let inputDigest=null;
+      if(record(dataValue.input)){try{inputDigest=nativeToolInputDigest(dataValue.input);}catch{}}
+      const error=record(dataValue.error)?dataValue.error:null,metadata=record(dataValue.metadata)?dataValue.metadata:{};
+      const contentDigest=Array.isArray(dataValue.content)?createHash('sha256').update(JSON.stringify(dataValue.content)).digest('hex'):null;
+      items.push({type:item.type,sequence:item.durable.seq,sessionId,callId:dataValue.id||null,
+        messageId:dataValue.assistantMessageID||null,toolName:dataValue.name||null,inputDigest,
+        executed:typeof dataValue.executed==='boolean'?dataValue.executed:null,
+        error:error?{type:typeof error.type==='string'?error.type:null,status:Number.isInteger(error.status)?error.status:null}:null,
+        metadata:{status:typeof metadata.status==='string'?metadata.status:null,exit:Number.isInteger(metadata.exit)?metadata.exit:null},
+        contentDigest});
+    };
+    try{
+      for(;;){
+        const next=await reader.read();if(next.done)break;
+        bytes+=next.value.byteLength;if(bytes>SESSION_LOG_LIMIT){await reader.cancel();fail('opencode-session-log-too-large');}
+        pending+=decoder.decode(next.value,{stream:true});const frames=pending.split(/\r?\n\r?\n/);pending=frames.pop()||'';
+        for(const frame of frames)consume(frame);
+      }
+      pending+=decoder.decode();if(pending.trim())consume(pending);
+    }catch(cause){try{await reader.cancel();}catch{};throw cause;}
+    if(!watermark)fail('opencode-session-log-watermark-missing');
+    const maxSeq=items.reduce((max,item)=>Math.max(max,item.sequence),Number(after));
+    if(watermark.aggregateID!==sessionId||watermark.seq<Number(after)||watermark.seq<maxSeq)fail('opencode-session-log-watermark-invalid');
+    return {sessionId,after,watermark,events:items};
+  }
+
+  return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions, sessionEventLog,
     sourceRead, sourceList, sourceFind,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,

@@ -74,13 +74,15 @@ function v2ModelData(legacy) {
 }
 
 function legacyPath(path) {
+  let match = path.match(/^\/api\/experimental\/session\/([^/]+)\/log$/);
+  if (match) return `/session/${match[1]}/log`;
   if (path === '/api/mcp') return '/mcp';
   if (path === '/api/session/active') return '/session/status';
   if (path === '/api/permission/request') return '/permission';
   if (path === '/api/provider' || path === '/api/model') return '/provider';
   const mcp = path.match(/^\/api\/experimental\/mcp\/([^/]+)\/(connect|disconnect)$/);
   if (mcp) return `/mcp/${mcp[1]}/${mcp[2]}`;
-  let match = path.match(/^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/);
+  match = path.match(/^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/);
   if (match) return `/session/${match[1]}/permissions/${match[2]}`;
   match = path.match(/^\/api\/session\/([^/]+)\/prompt$/);
   if (match) return `/session/${match[1]}/message`;

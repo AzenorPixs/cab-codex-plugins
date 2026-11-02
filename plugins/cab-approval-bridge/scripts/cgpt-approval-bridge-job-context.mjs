@@ -12,7 +12,7 @@ import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bri
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.63";
+export const VERSION = "2.1.64";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -320,7 +320,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.63",
+    version: "2.1.64",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1537,6 +1537,43 @@ async function restoreApprovedOperation(approval, approvalResult, requiredNative
   return { requestId, operationId: operation.operationId, restored: true };
 }
 
+async function restoreApprovedTerminalOperation(approval, approvalResult) {
+  if (!run || !approval || !approvalResult || approvalResult.status !== 'APPROVED' ||
+      approvalResult.reviewer !== 'CGPT' || approvalResult.requestId !== approval.requestId ||
+      approvalResult.approval_id !== approval.approval_id) throw decisionError('operation-restore-proof-invalid');
+  const operation = approvedOperation(approval);
+  if (!operation || operation.runId !== run.runId || operation.directory !== workspace ||
+      operation.operationId !== approval.operation_id || operation.operationDigest !== approval.operation_digest ||
+      operation.sessionId !== approval.session_id || approval.change_id !== job?.changeId ||
+      job?.revokedSessions?.includes(operation.sessionId)) throw decisionError('operation-restore-identity-divergent');
+  const requestId = approval.requestId;
+  const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
+  if (previous || priorDecision || answered.has(requestId)) {
+    if (previous?.approvalId !== approval.approval_id || previous?.changeId !== approval.change_id ||
+        !previous?.operationConsumed || !previous?.operationInvalidated || priorDecision?.decision !== 'approved') {
+      throw decisionError('operation-restore-already-present');
+    }
+    return { requestId, operationId: operation.operationId, restored: false };
+  }
+  assertDecisionOperation(operation, requestId);
+  const validation = { requestId, approvalId: approval.approval_id, changeId: approval.change_id,
+    summary: typeof approval.summary === 'string' ? approval.summary : 'Validation terminale réconciliée',
+    operation, receivedAt: new Date().toISOString(), operationConsumed: true,
+    operationInvalidated: true, restoredOperation: true, terminalRecovery: true };
+  const decision = { decision: 'approved', requestId, approval_id: approval.approval_id,
+    change_id: approval.change_id, run_id: run.runId, reservation_version: operation.reservationVersion,
+    operation_id: operation.operationId, operation_digest: operation.operationDigest,
+    expected_revisions: operation.expectedRevisions, coordination_protocol: operation.coordinationProtocol,
+    resources: operation.resources, access_id: operation.accessId,
+    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}) };
+  persistOperationDecision(validation, decision);
+  validations.set(requestId, validation);
+  httpDecisions.set(requestId, decision);
+  answered.add(requestId);
+  updateStatus('operation-terminal-approval-reconciled', { requestId, operationId: operation.operationId });
+  return { requestId, operationId: operation.operationId, restored: true };
+}
+
 function nativePermissionSummary(permission) {
   if (
     !permission ||
@@ -1968,7 +2005,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.63",
+      version: "2.1.64",
     },
   });
 
@@ -3111,6 +3148,7 @@ return {
   isOperationReconciling: (operationId) => [...validations.values()].some((validation) =>
     validation.operation?.operationId === operationId && reconcilingPermissions.has(validation.requestId)),
   restoreApprovedOperation,
+  restoreApprovedTerminalOperation,
   assertNativeShellAsk: () => checkNativeAsk({sessionId:job?.sessionId,directory:workspace,kind:'bash'},'shell'),
   decision: (requestId) => httpDecisions.get(requestId),
   invalidateOperation: (requestId) => {

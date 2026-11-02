@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 2.1.63
+version: 2.1.64
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -41,7 +41,7 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 2.1.63
+## RUN concurrents CAB 2.1.64
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -62,8 +62,11 @@ Pour un diagnostic après redémarrage, utiliser le GET snapshot-only
 l’état durable et `onceAcknowledged`, sans bearer token, commande, chemin ou
 contenu natif. `onceAcknowledged=false` n’établit pas à lui seul l’absence
 d’effet. Le rapprocher de la permission et du transcript natifs en lecture
-seule ; si la fin ou l’accusé reste indéterminé, ne répondre à aucune permission
-et conserver les protections jusqu’à la frontière native vérifiée.
+seule. Si la permission a disparu, lire le journal durable V2 de la session en
+mode fini et exiger `log.synced`. Un unique `session.tool.success` exactement
+corrélé clôt `COMPLETED` sans répondre à la permission ni rejouer `once` ; une
+erreur, une absence ou une divergence reste `UNKNOWN` avec les ressources
+protégées. Le journal ne prouve pas `permission.replied`.
 
 Valider et publier sur les ressources utiles avec /publish, sans /ready de cohorte ni réconciliation générale des pairs. Le reçu est durable ; REPORT est limité au STATISTICS.md propre au change. Rapport vérifié, gate, POST /runs/<run_id>/job/disarm puis /release restent requis. /CAB pause|stop --run <run_id> reste ciblé ; --all demande un gel exceptionnel pour réconciliation commune, maintenance, pause ou arrêt globaux.
 
@@ -405,7 +408,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/identity avec version 2.1.63 et identity.workspace
+Vérifier service actif, GET /api/identity avec version 2.1.64 et identity.workspace
 attendus, puis GET / ; ne pas lire /api/snapshot pour ce contrôle d'identité ;
 terminer cette tentative bornée et rapporter son résultat avant les contrôles amont.
 Afficher l'URL réelle uniquement après ces preuves,
@@ -1068,7 +1071,7 @@ La récupération conserve le même journal et les mêmes destinations. Le jeu W
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs,
 cgpt-approval-bridge-permission-policy.mjs et cgpt-approval-bridge-process-lifecycle.mjs.
 
-Contrat courant CABU 2.1.63 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.64 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -1145,7 +1148,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.63 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.64 ; les preuves 2.1.8 restent historiques.
 
 ## Priorité medium puis high — nouvelles sessions et reprises
 
