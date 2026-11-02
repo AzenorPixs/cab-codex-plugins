@@ -207,7 +207,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
   const nativeClient = createOpenCodeV2Client({ baseUrl:'http://127.0.0.1:'+opencode.address().port, directory,
     passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE });
   return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
-  approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation };
+  approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation, getStderr:()=>stderr };
 }
 
 test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation et chemins exclus refusés', async t => {
@@ -372,7 +372,7 @@ test('un tour assistant terminal exact invalide le mandat et libère NO_EFFECT m
    parts:[{type:'text',text:'État lu.'}]},
  ];
  const callEvent=(type,sequence)=>({type,durable:{aggregateID:run.sessionId,seq:sequence},data:{sessionID:run.sessionId,
-  assistantMessageID:'msg-later-readonly-assistant',id:'call-later-readonly',name:'execute',input:{code:'return await tools["cgpt-validation"].broker_readiness({});'},
+  id:'call-later-readonly',name:'execute',input:{code:'return await tools["cgpt-validation"].broker_readiness({});'},
   content:[],metadata:{status:type==='session.tool.called'?'running':'completed'},executed:false}});
  h.native.sessionLogs[run.sessionId]=`data: ${JSON.stringify(callEvent('session.tool.called',1))}\n\ndata: ${JSON.stringify(callEvent('session.tool.success',2))}\n\ndata: ${JSON.stringify({type:'log.synced',aggregateID:run.sessionId,seq:3})}\n\n`;
  await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:0,infrastructure_status:'BLOCKED'});
@@ -380,7 +380,7 @@ test('un tour assistant terminal exact invalide le mandat et libère NO_EFFECT m
  await waitFor(async()=>{
   observed=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
   return observed.state==='CANCELLED'&&observed.access.state==='RELEASED';
- }).catch(()=>assert.fail('état observé: '+JSON.stringify(observed)));
+ }).catch(()=>assert.fail('état observé: '+JSON.stringify(observed)+' stderr='+h.getStderr()));
  const result=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
  assert.equal(result.state,'CANCELLED');assert.equal(result.nativeRecovery.boundary,'TERMINAL_TURN_NO_EFFECT');
  assert.equal(result.access.state,'RELEASED');
@@ -1808,7 +1808,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.78');
+  assert.equal(initialized.result.serverInfo.version, '2.1.79');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

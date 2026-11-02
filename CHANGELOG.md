@@ -1,3 +1,10 @@
+## 2.1.79 — Ignorer les événements après le watermark terminal NO_EFFECT
+
+- La preuve terminale NO_EFFECT est limitée aux trois messages du tour assistant d’origine.
+- Un événement V2 non corrélé au message est ignoré uniquement s’il porte une séquence durable strictement supérieure au watermark conservé ; les événements à la frontière ou sans séquence restent bloquants.
+- Les gardes d’identité, permissions, session idle, transcript/journal stable et révisions restent inchangées.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.79.
+
 ## 2.1.78 — Borner NO_EFFECT au tour natif d’origine
 
 - Une activité read-only dans un tour ultérieur ne bloque plus la preuve terminale antérieure ; les parties et événements du tour d’origine restent strictement qualifiés.

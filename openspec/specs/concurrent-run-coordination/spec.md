@@ -888,3 +888,8 @@ une opération ni un accès et reste soumise au contrat de preuve terminale.
 
 - **WHEN** une lecture read-only possède son propre message après le tour assistant terminal prouvé
 - **THEN** CAB garde la preuve `NO_EFFECT` limitée au tour d’origine et n’assimile pas l’événement ultérieur à un effet dans ce tour
+
+#### Scenario: Événement ultérieur sans messageId
+
+- **WHEN** le journal contient après le watermark terminal un événement sans messageId, mais à séquence durable strictement supérieure au watermark conservé
+- **THEN** CAB ne l’attribue pas au tour prouvé ; tout événement à la frontière ou sans séquence durable reste ambigu et bloque la clôture
