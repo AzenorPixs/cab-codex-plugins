@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.63';
+export const VERSION = '2.1.64';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -142,9 +142,12 @@ export class ResourceRunRegistry extends RunRegistry {
           op.decision.runId !== op.runId || op.decision.version !== op.version || op.decision.sessionId !== op.sessionId ||
           op.decision.operationDigest !== op.operationDigest || op.decision.identityDigest !== op.identityDigest ||
           !Number.isFinite(Date.parse(op.decision.recordedAt)))) fail();
-      if (op.nativeRecovery !== undefined && (!onlyKeys(op.nativeRecovery, ['permissionId','callId','proofDigest','observedAt']) ||
-          typeof op.nativeRecovery.permissionId !== 'string' || typeof op.nativeRecovery.callId !== 'string' ||
-          !hash(op.nativeRecovery.proofDigest) || !Number.isFinite(Date.parse(op.nativeRecovery.observedAt)))) fail();
+      if (op.nativeRecovery !== undefined && (!onlyKeys(op.nativeRecovery, ['permissionId','callId','proofDigest','observedAt','boundary','logWatermark']) ||
+          (op.nativeRecovery.permissionId !== null && typeof op.nativeRecovery.permissionId !== 'string') ||
+          (op.nativeRecovery.callId !== null && typeof op.nativeRecovery.callId !== 'string') || !hash(op.nativeRecovery.proofDigest) ||
+          !['PERMISSION_PENDING_NO_REPLY','TOOL_TERMINAL_UNCLASSIFIED','TOOL_TERMINAL_SUCCESS'].includes(op.nativeRecovery.boundary) ||
+          (op.nativeRecovery.logWatermark !== null && (!Number.isSafeInteger(op.nativeRecovery.logWatermark) || op.nativeRecovery.logWatermark < 0)) ||
+          !Number.isFinite(Date.parse(op.nativeRecovery.observedAt)))) fail();
       if (op.testReservationId && (!Number.isSafeInteger(op.native?.startSequence) || op.native.startSequence < 1 ||
           op.native.startSequence > state.sequence || (op.state === 'COMPLETED' &&
             (!op.nativeResult || !Number.isSafeInteger(op.finishedSequence) || op.finishedSequence <= op.native.startSequence)))) fail();
@@ -267,8 +270,8 @@ export class ResourceRunRegistry extends RunRegistry {
           decision: op.decision ? { status: op.decision.status, recordedAt: op.decision.recordedAt } : null,
           onceAcknowledged: op.native ? op.native.onceAcknowledged === true : null,
           nativeRecovery: op.nativeRecovery ? { permissionId: op.nativeRecovery.permissionId,
-            callId: op.nativeRecovery.callId, boundary: 'PERMISSION_PENDING_NO_REPLY',
-            observedAt: op.nativeRecovery.observedAt } : null,
+            callId: op.nativeRecovery.callId, boundary: op.nativeRecovery.boundary,
+            logWatermark: op.nativeRecovery.logWatermark, observedAt: op.nativeRecovery.observedAt } : null,
           native: op.native ? { permissionId: op.native.permissionId, callId: op.native.callId ?? null,
             kind: op.native.kind ?? null, startedAt: op.native.startedAt,
             targetDigest: op.native.targetDigest, onceAcknowledged: op.native.onceAcknowledged === true } : null,
@@ -728,7 +731,7 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('native-pending-proof-required');
     }
     op.nativeRecovery = { permissionId: proof.permissionId, callId: proof.callId,
-      proofDigest: proof.proofDigest, observedAt: now() };
+      proofDigest: proof.proofDigest, observedAt: now(), boundary:'PERMISSION_PENDING_NO_REPLY', logWatermark:null };
     delete op.native;
     op.state = 'PREPARED';
     access.state = 'HELD';
@@ -736,6 +739,45 @@ export class ResourceRunRegistry extends RunRegistry {
     delete access.outcome;
     this.persist();
     return copy(op);
+  }
+  markTerminalUnknown(runId, operationId, proof) {
+    this.mutable();
+    const op=this.resourceState.operations[operationId],access=op&&this.resourceState.accesses[op.accessId];
+    if(!op||op.runId!==runId||!['PREPARED','ISSUING','EXECUTING','UNKNOWN'].includes(op.state)||op.decision?.status!=='approved'||
+       op.nativeResult||!access||access.runId!==runId||!access.operationIds.includes(operationId)||
+       !proof||proof.sessionId!==op.sessionId||proof.operationDigest!==op.operationDigest||
+       proof.identityDigest!==op.identityDigest||(proof.callId!==null&&typeof proof.callId!=='string')||
+       op.native?.callId&&proof.callId!==op.native.callId||!active(access)||
+       !['completed','error','absent'].includes(proof.toolStatus)||
+       (proof.executed!==null&&typeof proof.executed!=='boolean')||
+       typeof proof.logSynced!=='boolean'||(proof.logWatermark!==null&&(!Number.isSafeInteger(proof.logWatermark)||proof.logWatermark<0))||
+       !hash(proof.proofDigest))throw new CoordinationError('terminal-native-recovery-proof-required');
+    op.state='UNKNOWN';
+    if(access.state==='HELD'||access.state==='EXECUTING')access.state='UNKNOWN';
+    op.nativeRecovery={permissionId:op.native?.permissionId??null,callId:proof.callId,
+      proofDigest:proof.proofDigest,observedAt:now(),boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:proof.logWatermark};
+    this.persist();return copy(op);
+  }
+  completeLoggedNative(runId, operationId, proof) {
+    this.mutable();
+    const op=this.resourceState.operations[operationId],access=op&&this.resourceState.accesses[op.accessId];
+    if(!op||op.runId!==runId||!['UNKNOWN','PREPARED','ISSUING','EXECUTING'].includes(op.state)||op.decision?.status!=='approved'||
+       op.nativeResult||!access||access.runId!==runId||!['HELD','EXECUTING','UNKNOWN'].includes(access.state)||!access.operationIds.includes(operationId)||
+       !proof||proof.sessionId!==op.sessionId||proof.operationDigest!==op.operationDigest||
+       proof.identityDigest!==op.identityDigest||typeof proof.callId!=='string'||
+       op.native?.callId&&proof.callId!==op.native.callId||proof.status!=='completed'||
+       proof.logSynced!==true||!Number.isSafeInteger(proof.logWatermark)||proof.logWatermark<0||
+       !Number.isFinite(proof.finishedAt)||!hash(proof.proofDigest)||!hash(proof.partDigest)) {
+      throw new CoordinationError('logged-native-completion-proof-required');
+    }
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='COMPLETED';op.finishedAt=proof.finishedAt;
+    op.completionDigest=digest({sessionId:proof.sessionId,callId:proof.callId,finishedAt:proof.finishedAt,
+      status:'completed',logWatermark:proof.logWatermark,proofDigest:proof.proofDigest});
+    op.nativeResult={status:'completed',proofStatus:'completed',exit:null,partDigest:proof.partDigest};
+    op.nativeRecovery={permissionId:op.native?.permissionId??null,callId:proof.callId,
+      proofDigest:proof.proofDigest,observedAt:now(),boundary:'TOOL_TERMINAL_SUCCESS',logWatermark:proof.logWatermark};
+    access.state='HELD';this.persist();return copy(op);
   }
   admitValidation(runId, approval, identityDigest, known, options) {
     const prior = this.checkRequestOwner(runId, approval.requestId, identityDigest, known);
@@ -790,7 +832,6 @@ export class ResourceRunRegistry extends RunRegistry {
     this.grantTests();
     for (const access of Object.values(this.resourceState.accesses).sort((a, b) => a.order - b.order)) {
       if (access.state !== 'WAITING' || this.runs.get(access.runId)?.suspension || this.blockers(access).length) continue;
-      if (Object.values(this.resourceState.accesses).some((other) => other.runId === access.runId && active(other))) continue;
       if (access.resources.some((r) => this.revision(r.key) !== access.expectedRevisions[r.key])) {
         access.state = 'STALE'; access.finishedAt = now(); continue;
       }
@@ -825,12 +866,6 @@ export class ResourceRunRegistry extends RunRegistry {
               payload.expectedRevisions[r.key] !== op.expectedRevisions[r.key]);
         }) || (!operationIds.length && resources.some((r) => r.mode === 'write'))) {
       throw new CoordinationError('access-operation-not-prepared');
-    }
-    if (Object.values(this.resourceState.accesses).some((a) => a.runId === runId && active(a))) {
-      throw new CoordinationError('access-extension-while-held');
-    }
-    if (Object.values(this.resourceState.accesses).some((a) => a.runId === runId && a.state === 'WAITING')) {
-      throw new CoordinationError('access-operation-already-pending');
     }
     if (exclusive && !this.isExclusive(run, resources)) throw new CoordinationError('exclusive-resource-not-proved');
     const access = { accessId: payload.operationId, runId, contextId: run.contextId, version: run.version,

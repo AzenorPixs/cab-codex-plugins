@@ -132,6 +132,7 @@ Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des 
 | code non attribué | fix-native-permission-reply-location-scope | ARCHIVÉ, source 2.1.61 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-fix-native-permission-reply-location-scope/tasks.md) |
 | code non attribué | expose-safe-run-native-operation-state | ARCHIVÉ, source 2.1.62 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-expose-safe-run-native-operation-state/tasks.md) |
 | code non attribué | restore-approved-native-operations | ARCHIVÉ, source 2.1.63 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-restore-approved-native-operations/tasks.md) |
+| code non attribué | reconcile-terminal-native-operations | ARCHIVÉ, source 2.1.64 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-terminal-native-operations/tasks.md) |
 
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
 
@@ -268,3 +269,5 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 | code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
 | code non attribué | fix-native-permission-reply-location-scope | ARCHIVÉ, source 2.1.61 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-fix-native-permission-reply-location-scope/tasks.md) |
 | code non attribué | expose-safe-run-native-operation-state | ARCHIVÉ, source 2.1.62 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-expose-safe-run-native-operation-state/tasks.md) |
+| code non attribué | restore-approved-native-operations | ARCHIVÉ, source 2.1.63 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-restore-approved-native-operations/tasks.md) |
+| code non attribué | reconcile-terminal-native-operations | ARCHIVÉ, source 2.1.64 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-terminal-native-operations/tasks.md) |

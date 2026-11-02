@@ -1,4 +1,4 @@
-# Reprise des incidents de codage natif — CAB 2.1.63
+# Reprise des incidents de codage natif — CAB 2.1.64
 
 ## Opération approuvée interrompue par un redémarrage
 
@@ -13,10 +13,16 @@ permissionId exacte est encore pendante, son callID correspond à l’unique out
 `running` dont `executed` vaut `false`, aucune réponse ou fin native contradictoire
 n’est apparue, et l’accès peut être acquis avec les révisions originales. CAB
 répond alors à cette permission d’origine ; il ne crée pas de nouvelle demande.
-Si une permission est absente, un accusé `once` est déjà durable, un outil a
-démarré, ou une identité/historique diverge, CAB ne réémet rien et conserve
-`UNKNOWN` avec ses ressources protégées. Seule une fin native exacte clôt cette
-opération. Le délai, le silence ou `idle` ne prouvent jamais `NO_EFFECT`.
+Si la permission a disparu, CAB lit `GET /api/experimental/session/{sessionID}/log`
+avec `follow=false`, borne la réponse et exige son watermark `log.synced`.
+Une seule entrée `session.tool.success` correspondant exactement au callID,
+à l’outil natif, à son entrée, à la cible, au mandat et aux empreintes clôt
+`COMPLETED` sans répondre à la permission ni rejouer `once`. Une entrée
+`session.tool.failed`, l’absence d’événement, un outil démarré sans résultat,
+un accusé `once` ou une identité/historique divergent ne prouvent pas l’absence
+d’effet ; CAB ne réémet rien et conserve `UNKNOWN` avec ses ressources
+protégées. Le journal durable ne contient pas `permission.replied`. Le délai,
+le silence ou `idle` ne prouvent jamais `NO_EFFECT`.
 
 Une opération `UNKNOWN` ne bloque pas les accès d’un autre RUN sur des ressources
 sans recouvrement. Toute écriture recouvrante attend la frontière native sûre.

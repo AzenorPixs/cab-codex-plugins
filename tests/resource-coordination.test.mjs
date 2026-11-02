@@ -168,11 +168,13 @@ test('private access promotes safely when a peer declares its parent', async (t)
   assert.equal(h.r.accesses('b')[0].state, 'STALE');
 });
 
-test('no lock extensions or upgrades can wait while holding an access', async (t) => {
+test('un même RUN peut acquérir des ensembles indépendants, mais pas étendre ni recouvrir un accès', async (t) => {
   const h = await fixture(t); const a = h.reserve('a', [file('x'), file('y')]);
-  const first = h.prepare(a, 'first', [file('x')]); h.acquire(a, first);
+  const first = h.prepare(a, 'first', [file('x')]); assert.equal(h.acquire(a, first).state,'HELD');
   const second = h.prepare(a, 'second', [file('y')]);
-  assert.throws(() => h.acquire(a, second), /access-extension-while-held/);
+  assert.equal(h.acquire(a, second).state,'HELD');
+  const overlap=h.prepare(a,'overlap',[file('x')]);
+  assert.equal(h.acquire(a,overlap).state,'WAITING');
   assert.throws(() => h.r.extend('a', { version: a.version, resources: [file('z')] }), /run-accesses-unresolved/);
 });
 
@@ -783,6 +785,48 @@ test('décision native durable, scoppée et restaurée après redémarrage',asyn
  view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
  assert.equal(view.decision.status,'approved');assert.equal(view.onceAcknowledged,null);
  assert.throws(()=>h.r.recordDecision(a.runId,op.operationId,{...decision,status:'rejected'}),/operation-decision-conflict/);
+});
+
+test('une fin native durable exacte termine une opération restaurée sans rejouer once',async t=>{
+ const h=await fixture(t);const a=h.reserve('logged-success-a',[file('a')]);
+ const op=h.prepare(a,'logged-success-operation');const access=h.acquire(a,op);
+ const stored=h.r.resourceState.operations[op.operationId];
+ h.r.recordDecision(a.runId,op.operationId,{status:'approved',requestId:stored.requestId,
+  approvalId:'approval-logged-success',changeId:a.changeId,operationId:op.operationId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:a.runId,
+  version:a.version,sessionId:a.sessionId});
+ const completed=h.r.completeLoggedNative(a.runId,op.operationId,{sessionId:a.sessionId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,callId:'call-logged-success',
+  status:'completed',logSynced:true,logWatermark:37,finishedAt:Date.now(),
+  proofDigest:fingerprint('durable-success'),partDigest:fingerprint('native-part')});
+ assert.equal(completed.state,'COMPLETED');assert.equal(completed.native,undefined);
+ assert.equal(completed.nativeResult.status,'completed');
+ const view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
+ assert.equal(view.onceAcknowledged,null);assert.equal(view.nativeRecovery.boundary,'TOOL_TERMINAL_SUCCESS');
+ assert.equal(view.nativeRecovery.logWatermark,37);assert.equal(view.access.state,'HELD');
+ assert.equal(h.r.resourceState.accesses[access.accessId].token,access.token);
+ await h.restart();
+ assert.equal(h.r.operationSnapshot(a.runId,op.operationId).operations[0].state,'COMPLETED');
+});
+
+test('une frontière absente reste UNKNOWN protégé même avec permission absente',async t=>{
+ const h=await fixture(t);const a=h.reserve('logged-unknown-a',[file('a')]);
+ const op=h.prepare(a,'logged-unknown-operation');h.acquire(a,op);
+ const stored=h.r.resourceState.operations[op.operationId];
+ h.r.recordDecision(a.runId,op.operationId,{status:'approved',requestId:stored.requestId,
+  approvalId:'approval-logged-unknown',changeId:a.changeId,operationId:op.operationId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:a.runId,
+  version:a.version,sessionId:a.sessionId});
+ h.r.markTerminalUnknown(a.runId,op.operationId,{sessionId:a.sessionId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,callId:null,
+  toolStatus:'absent',executed:null,logSynced:true,logWatermark:52,
+  proofDigest:fingerprint('watermarked-no-terminal-event')});
+ const view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
+ assert.equal(view.state,'UNKNOWN');assert.equal(view.access.state,'UNKNOWN');
+ assert.equal(view.onceAcknowledged,null);assert.equal(view.nativeRecovery.callId,null);
+ assert.equal(view.nativeRecovery.boundary,'TOOL_TERMINAL_UNCLASSIFIED');
+ await h.restart();
+ assert.equal(h.r.operationSnapshot(a.runId,op.operationId).operations[0].access.state,'UNKNOWN');
 });
 
 test('reprise once exige une permission encore pendante prouvée et une opération sans accusé',async t=>{

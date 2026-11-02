@@ -25,7 +25,7 @@ async function waitFor(check, timeoutMs = 4000) {
 async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = false, prepareCatalog = false,
   sourceFiles = {}, sourceEntries = [] } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'cab-concurrent-'));
-  const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {} };
+  const native = { permissions: [], replies: [], busy: {}, messages: {}, rules: {}, requests: [], sessions: {}, sessionLogs: {}, sessionLogFailure: false };
   if (codingPolicy) {
     const stamp=new Date(Date.now()-60000).toISOString();
     const catalog={schema_version:2,evaluated_at:stamp,published_at:stamp,selection_status:'selected',selected_mode:'mode1',
@@ -57,6 +57,13 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     if (url.pathname === '/provider') payload = native.providers || {all:[],connected:[]};
     else if (/^\/session\/[^/]+\/message\/[^/]+$/.test(url.pathname)) payload=(native.messages[url.pathname.split('/')[2]] || []).find(m=>m.info?.id===url.pathname.split('/')[4]);
     else if (url.pathname === '/permission') payload = native.permissions;
+    else if (/^\/session\/[^/]+\/log$/.test(url.pathname)) {
+      if(native.sessionLogFailure){response.writeHead(503).end();return;}
+      const sessionId=url.pathname.split('/')[2];
+      response.writeHead(200,{'content-type':'text/event-stream','connection':'close'});
+      response.end(native.sessionLogs[sessionId] || `data: ${JSON.stringify({type:'log.synced',aggregateID:sessionId,seq:0})}\n\n`);
+      return;
+    }
     else if (url.pathname === '/global/health') payload = { healthy: true };
     else if (url.pathname === '/path') payload = { directory };
     else if (url.pathname === '/mcp') payload = { 'cgpt-validation': { status: 'connected' } };
@@ -310,7 +317,7 @@ test('restaure une approbation native exacte après redémarrage et ne répond q
  assert.equal(completed.nativeResult.status,'completed');assert.equal(h.native.replies.length,1);
 });
 
-test('ne restaure pas une approbation si la permission native exacte a disparu',async t=>{
+test('une fin durable exacte restaure la décision et clôt sans rejouer once si la permission a disparu',async t=>{
  const h=await setup(t);const run=await h.reserve('restore-without-pending',{resources:[{key:'file:src/restore.py',mode:'write'}]});
  const approval=h.approval(run,'restore-without-pending');approval.files=['src/restore.py'];approval.commands=[];
  const requestPart=h.native.messages[run.sessionId].at(-1).parts[0];requestPart.state.input=structuredClone(approval);
@@ -318,11 +325,38 @@ test('ne restaure pas une approbation si la permission native exacte a disparu',
  requestPart.state.status='completed';requestPart.state.output=JSON.stringify({requestId:approval.requestId,status:'PENDING'});
  h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',state:{status:'completed',
   input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'})}}]});
+ const callId='call-restored-terminal',stamp=Date.now(),input={filePath:h.directory+'/src/restore.py',content:'replacement'};
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',callID:callId,sessionID:run.sessionId,tool:'edit',executed:false,
+  state:{status:'completed',input,output:'native edit completed',time:{start:stamp,end:stamp+1},metadata:{}}}]});
+ const event={type:'session.tool.success',durable:{aggregateID:run.sessionId,seq:2},data:{sessionID:run.sessionId,
+  assistantMessageID:'msg-native-terminal',id:callId,name:'edit',input,content:[],metadata:{},executed:false}};
+ h.native.sessionLogs[run.sessionId]=`data: ${JSON.stringify(event)}\n\ndata: ${JSON.stringify({type:'log.synced',aggregateID:run.sessionId,seq:3})}\n\n`;
  await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
- await delay(80);
+ await waitFor(async()=> (await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0].state==='COMPLETED');
  assert.equal(h.native.replies.length,0);
  const operation=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
- assert.equal(operation.state,'PREPARED');assert.equal(operation.decision,null);assert.equal(operation.onceAcknowledged,null);
+ assert.equal(operation.state,'COMPLETED');assert.equal(operation.decision.status,'approved');assert.equal(operation.onceAcknowledged,null);
+ assert.equal(operation.nativeRecovery.boundary,'TOOL_TERMINAL_SUCCESS');assert.equal(operation.nativeRecovery.callId,callId);
+ assert.equal(operation.nativeRecovery.logWatermark,3);assert.equal(operation.access.state,'HELD');
+});
+
+test('un journal durable indisponible conserve UNKNOWN et protège le manifeste',async t=>{
+ const h=await setup(t);const run=await h.reserve('restore-log-unavailable',{resources:[{key:'file:src/restore.py',mode:'write'}]});
+ const approval=h.approval(run,'restore-log-unavailable');approval.files=['src/restore.py'];approval.commands=[];
+ const requestPart=h.native.messages[run.sessionId].at(-1).parts[0];requestPart.state.input=structuredClone(approval);
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ requestPart.state.status='completed';requestPart.state.output=JSON.stringify({requestId:approval.requestId,status:'PENDING'});
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',state:{status:'completed',
+  input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'})}}]});
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',callID:'call-log-unavailable',sessionID:run.sessionId,
+  tool:'edit',executed:false,state:{status:'running',input:{filePath:h.directory+'/src/restore.py',content:'replacement'}}}]});
+ h.native.sessionLogFailure=true;
+ await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ await waitFor(async()=> (await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0].state==='UNKNOWN');
+ const operation=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(operation.decision.status,'approved');assert.equal(operation.access.state,'UNKNOWN');
+ assert.equal(operation.nativeRecovery.boundary,'TOOL_TERMINAL_UNCLASSIFIED');
+ assert.equal(operation.nativeRecovery.logWatermark,null);assert.equal(h.native.replies.length,0);
 });
 
 test('une réponse perdue sans permission native restante conserve UNKNOWN sans rejeu',async t=>{
@@ -1463,7 +1497,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.63');
+  assert.equal(initialized.result.serverInfo.version, '2.1.64');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

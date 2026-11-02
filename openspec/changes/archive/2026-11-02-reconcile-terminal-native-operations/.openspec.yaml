@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Une opération terminale corrélée libère uniquement ses ressources après
+  preuve ; toute frontière inconnue reste protégée localement sans empêcher des
+  accès indépendants.

@@ -13,10 +13,10 @@ import { StatisticsMaintenance, statisticsDashboard, guardStatisticsPost, VERSIO
 import { guardManagementPost } from './cgpt-approval-bridge-monitor-management.mjs';
 import { fileURLToPath } from 'node:url';
 import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, verifyBootstrap, transactionValid } from './cgpt-approval-bridge-maintenance-proof.mjs';
-import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
+import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.63";
+const version = "2.1.64";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -438,6 +438,28 @@ function pendingOperationPermission(approval, operation, messages, permissions) 
     toolStatus:state.status, executed:tools[0].executed, startedAt:state.time?.start ?? null })).digest('hex');
   return { permissionId: permission.id, callId, proofDigest, permission, tool: tools[0] };
 }
+function eventMatchesNativePart(event, part, operation, approval) {
+  if (!event || event.sessionId !== operation.sessionId || !event.callId ||
+      event.callId !== (part.callID || part.callId) || event.toolName !== part.tool ||
+      !['session.tool.success','session.tool.failed'].includes(event.type) ||
+      !['completed','error'].includes(part.state?.status) || !part.state?.input ||
+      !event.inputDigest || event.inputDigest !== nativeToolInputDigest(part.state.input)) return false;
+  if ((event.type === 'session.tool.success') !== (part.state.status === 'completed')) return false;
+  if (approval.tool_input_sha256 && event.inputDigest !== approval.tool_input_sha256) return false;
+  if (operation.kind === 'bash') return part.tool === 'bash' && part.state.input.command === approval.commands[0];
+  if (operation.kind !== 'edit' || !['edit','write','apply_patch'].includes(part.tool)) return false;
+  let target = part.state.input.filePath || part.state.input.filepath || part.state.input.path;
+  if (part.tool === 'apply_patch') {
+    const patch = part.state.input.patchText || part.state.input.patch;
+    if (typeof patch !== 'string' || /^\*\*\* Move to:/m.test(patch)) return false;
+    const paths = [...new Set([...patch.matchAll(/^\*\*\* (?:Add|Update|Delete) File: ([^\r\n]+)$/gm)].map((m) => m[1]))];
+    if (paths.length !== 1) return false;
+    target = paths[0];
+  }
+  if (typeof target !== 'string') return false;
+  if (isAbsolute(target)) target = relative(workspace, target);
+  return target === approval.files[0];
+}
 async function restoreApprovedOperations(run, context) {
   if (!run || !context || broker?.status !== 'READY' || restoringOperations.has(run.runId)) return;
   restoringOperations.add(run.runId);
@@ -488,7 +510,60 @@ async function restoreApprovedOperations(run, context) {
           target: approval.files?.length === 1 ? approval.files[0] : approval.commands?.[0],
           kind: approval.files?.length === 1 ? 'edit' : 'bash' };
         const pending = pendingOperationPermission(approval, operation, messages, permissions);
-        if (!pending) continue;
+        if (!pending) {
+          let durableLog=null,logFailure='';
+          try { durableLog=await openCode.sessionEventLog(current.sessionId,run.directory); }
+          catch(cause) { logFailure=/^[a-z][a-z0-9-]{1,90}$/.test(cause?.code||'')?cause.code:'session-log-unavailable'; }
+          if (generation !== (nativeSessionGenerations.get(current.sessionId) || 0)) continue;
+          const logWatermark=Number.isSafeInteger(durableLog?.watermark?.seq)?durableLog.watermark.seq:null;
+          const logEvents=Array.isArray(durableLog?.events)?durableLog.events:[];
+          const terminalParts = parts.filter((part) => part?.type === 'tool' &&
+            (part.callID || part.callId) && ['edit','write','apply_patch','bash'].includes(part.tool) &&
+            ['completed','error'].includes(part.state?.status));
+          const matching = terminalParts.filter((part) => {
+            const callId = part.callID || part.callId;
+            const events = logEvents.filter((event) => event.callId === callId &&
+              ['session.tool.success','session.tool.failed'].includes(event.type));
+            return callId && events.length === 1 && eventMatchesNativePart(events[0], part, operation, approval);
+          });
+          const terminalProof = matching.length === 1 ? (() => {
+            const part = matching[0], callId = part.callID || part.callId;
+            const event = logEvents.find((candidateEvent) => candidateEvent.callId === callId &&
+              ['session.tool.success','session.tool.failed'].includes(candidateEvent.type));
+            const proofDigest = createHash('sha256').update(JSON.stringify({ runId:run.runId,
+              operationId:current.operationId, requestId:current.requestId, approvalId:approval.approval_id,
+              sessionId:current.sessionId, operationDigest:current.operationDigest,
+              identityDigest:current.identityDigest, callId, eventType:event.type,
+              sequence:event.sequence, watermark:logWatermark, inputDigest:event.inputDigest })).digest('hex');
+            return { part, event, callId, proofDigest };
+          })() : null;
+          const access = registry.resourceState.accesses[current.accessId] || registry.acquireAccess(run.runId, {
+            operationId:current.accessId, version:current.version, resources:current.resources,
+            expectedRevisions:current.expectedRevisions, operationDigest:current.operationDigest,
+            operationIds:[current.operationId],
+          }, registry.isExclusive(run, current.resources));
+          if (!['HELD','EXECUTING','UNKNOWN'].includes(access.state)) continue;
+          await context.restoreApprovedTerminalOperation(approval, decision);
+          const baseProof = { sessionId:current.sessionId, operationDigest:current.operationDigest,
+            identityDigest:current.identityDigest, callId:terminalProof?.callId || current.native?.callId || null,
+            toolStatus:terminalProof ? (terminalProof.event.type === 'session.tool.success' ? 'completed' : 'error') : 'absent',
+            executed:terminalProof ? terminalProof.part.executed === true : null, logSynced:logWatermark!==null,
+            logWatermark,
+            proofDigest:terminalProof?.proofDigest || createHash('sha256').update(JSON.stringify({ runId:run.runId,
+              operationId:current.operationId, requestId:current.requestId, approvalId:approval.approval_id,
+              sessionId:current.sessionId, operationDigest:current.operationDigest,
+              identityDigest:current.identityDigest, logWatermark,logFailure,
+              terminalEvents:logEvents.filter((event) => ['session.tool.success','session.tool.failed'].includes(event.type))
+                .map((event) => [event.callId,event.type,event.sequence]) })).digest('hex') };
+          if (terminalProof?.event.type === 'session.tool.success') {
+            registry.completeLoggedNative(run.runId,current.operationId,{...baseProof,
+              callId:terminalProof.callId,status:'completed',finishedAt:Date.now(),
+              partDigest:proofHash(terminalProof.part)});
+          } else {
+            registry.markTerminalUnknown(run.runId,current.operationId,baseProof);
+          }
+          continue;
+        }
         const stableGeneration = nativeSessionGenerations.get(current.sessionId) || 0;
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
         const [messagesAgain, permissionsAgain] = await Promise.all([
