@@ -1,4 +1,4 @@
-# Mise à jour — CAB 2.2.0
+# Mise à jour — CAB 2.2.1
 
 ## `/CAB update`
 
@@ -112,9 +112,14 @@ de retrait de l'ancienne entrée minuscule et de relecture des étapes 11 à 13.
    la même version de base. Un accès manquant ou une divergence arrête la
    préparation avant l'updater. Ne déduis aucune version GitHub d'un fichier
    local, du cache installé ou du reçu de déploiement.
-6. Si le plugin CAB est installé et que la version distante est égale ou antérieure à celle installée, affiche
-   `CAB_PLUGIN_DÉJÀ_À_JOUR` et ne réinstalle pas le plugin.
-7. Si le plugin CAB est absent ou si la version distante est strictement plus récente, exécute une seule fois
+6. Comparer séparément la version de base et l'identifiant complet du paquet.
+   À identifiant complet égal, vérifier les empreintes et conserver le cache
+   conforme. À base égale mais suffixe `+codex` différent, la révision GitHub
+   vérifiée est une nouvelle révision documentaire : l'installer par le
+   gestionnaire Codex, sans modifier manuellement son cache. Une base distante
+   antérieure ne remplace jamais une base locale plus récente.
+
+7. Si le plugin CAB est absent, de base antérieure, ou d’identifiant complet différent sur la même base, exécute une seule fois
    `codex plugin add CAB@cab_codex_plugins`, puis relit les
    métadonnées installées. Affiche `CAB_PLUGIN_MIS_À_JOUR` uniquement si la
    version installée est celle du manifeste distant ; sinon, affiche
@@ -162,15 +167,13 @@ de retrait de l'ancienne entrée minuscule et de relecture des étapes 11 à 13.
 
    L'outil valide et sauvegarde les fichiers CAB dans son journal privé, puis
    arrête seulement les unités du plan vérifié, remplace les artefacts
-   atomiquement, exécute `systemctl --user daemon-reload` et démarre les trois unités. Il ne lit pas le
-   registre des RUN ni la coordination globale avant l'arrêt. Il ne tue pas
-   OpenCode. L'API native doit recharger le broker si OpenCode est actif ; seule son
+   atomiquement, exécute `systemctl --user daemon-reload` et démarre les trois unités. La préparation de transfert suit transport-continuity.md, sans gel métier ni attente des commandes longues. Il ne tue pas
+   OpenCode. L'API native recharge le broker seulement si le plan l'exige ; seule son
    absence prouvée permet une version chargée `INDISPONIBLE`. En cas d'échec de démarrage,
    l'outil restaure les fichiers sauvegardés et redémarre les trois unités ; le
    rapport décrit le repli. Interprète le JSON final et le code de sortie :
    - `completed`, code 0 : `CAB_BRIQUES_MISES_À_JOUR` ;
-   - `up-to-date`, code 0 : `CAB_BRIQUES_DÉJÀ_À_JOUR`, après redémarrage des
-     trois unités ;
+   - `up-to-date`, code 0 : `CAB_BRIQUES_DÉJÀ_À_JOUR`, sans arrêt ni redémarrage ;
    - erreur : `CAB_BRIQUES_MISE_À_JOUR_ÉCHOUÉE`, avec état du repli ;
      `update-recovery-required` exige de conserver les preuves et le gel.
    Une récupération utilise le même outil et les mêmes cibles ; `--rollback`

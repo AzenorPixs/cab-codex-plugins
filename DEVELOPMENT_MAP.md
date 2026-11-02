@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Correctif courant CAB 2.2.1
+
+`reconcile-approved-native-cancellation`, code non attribué : correctif SCM
+sur la validation PREPARED approuvée non consommée et le bootstrap versionné.
+Dépendance vérifiée : CAB 2.2.0 actif, opération PA01 observée PREPARED sans
+native ni accès au 2 novembre 2026. Qualification source réussie : Node 827/858, 31 ignorés, Python 93/93, natif 1/1.
+Publication et activation distinctes ; voir [tâches](openspec/changes/archive/2026-11-02-reconcile-approved-native-cancellation/tasks.md).
+
+
 ## Suivi ciblé SCM — CAB 2.2.0, 2 novembre 2026
 
 Le change archivé [track-background-shell-lifecycle](openspec/changes/archive/2026-11-02-track-background-shell-lifecycle/proposal.md)

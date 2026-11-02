@@ -2121,7 +2121,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.0');
+  assert.equal(initialized.result.serverInfo.version, '2.2.1');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3648,6 +3648,34 @@ test('annulation native OC sous Code Mode : request et cancel imbriqués réconc
  const decision=await h.get('/runs/native-cancelled-codemode/decision/'+approval.requestId);
  assert.equal(op.state,'CANCELLED');assert.equal(op.decision,null);assert.equal(decision.status,404);
  assert.equal(h.native.permissions.length,0);assert.deepEqual(h.native.replies,[]);
+});
+
+for (const restart of [false, true]) test(`annulation native OC approuvée non consommée : historique conservé, restart=${restart}`, async t => {
+ const h=await setup(t), run=await h.reserve('approved-cancel');
+ const approval=h.approval(run,'approved-cancel-request');
+ assert.equal((await h.post('/runs/approved-cancel/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/approved-cancel/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval);
+ if(restart){await h.stop();await h.start();}
+ await delay(60);
+ await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY',root_cause:'DECISION_WAIT_WITHOUT_PROGRESS'});
+ await delay(60);
+ h.native.emit({type:'session.idle',properties:{sessionID:approval.session_id}});
+ await waitFor(async()=>{
+  const ops=(await h.get('/runs/approved-cancel/operations?operationId='+encodeURIComponent(approval.operation_id))).body;
+  return ops.operations?.[0]?.state==='CANCELLED';
+ });
+ const state=JSON.parse(readFileSync(join(h.directory,'.opencode/state/cgpt-approval-bridge/controller-runs.json'),'utf8'));
+ const op=state.coordination.operations[approval.operation_id];
+ assert.equal(op.decision.status,'approved');assert.equal(op.native,undefined);
+ assert.match(op.completionDigest,/^[a-f0-9]{64}$/);
+ assert.equal((await h.get('/runs/approved-cancel/decision/'+approval.requestId)).status,404);
+ assert.deepEqual(h.native.replies,[]);assert.deepEqual((await h.get('/runs/approved-cancel/locks')).body.accesses,[]);
+ await h.stop();await h.start();
+ assert.equal((await h.get('/runs/approved-cancel/decision/'+approval.requestId)).status,404);
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const next=await h.post('/runs/approved-cancel/validation/request',{approval:h.approval(run,'approved-cancel-next')});
+ assert.equal(next.status,202,JSON.stringify(next)+' '+h.getStderr());
 });
 
 test('annulation native OC sous Code Mode : wrappers divergents ou avec appels supplémentaires restent protégés',async t=>{

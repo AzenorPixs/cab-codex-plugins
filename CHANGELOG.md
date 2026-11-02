@@ -1,3 +1,9 @@
+## 2.2.1 — Annulation native après approbation et bootstrap cohérent
+
+- Une validation approuvée encore PREPARED, sans entrée native ni accès, peut être clôturée sur preuve native exacte CANCELLED/OC stable. La décision historique reste conservée, sa réponse exécutable est retirée ; aucune permission once n’est rejouée.
+- Les événements de fin native déclenchent aussi cette réconciliation, sans redémarrage obligatoire.
+- Le bootstrap du moniteur déduit la version attendue du manifeste du paquet installé ; CABU compare également la révision complète des plugins.
+
 ## 2.2.0 — Continuité, récupération et CABU court
 
 - La restitution d’un bail de test nettoyé dépend de ses propres opérations et accès ; une quarantaine sur une ressource disjointe du même RUN conserve ses protections sans retenir ce bail.

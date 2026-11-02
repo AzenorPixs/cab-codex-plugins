@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.0";
+export const VERSION = "2.2.1";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -413,7 +413,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.0",
+    version: "2.2.1",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1789,12 +1789,13 @@ function restoreNativeCancelledValidation(approval, proofDigest) {
       operation.sessionId !== approval.session_id) throw decisionError('native-cancellation-operation-divergent');
   const requestId = approval.requestId;
   const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
-  if (priorDecision || (previous && (previous.approvalId !== approval.approval_id ||
+  if (priorDecision && priorDecision.decision !== 'approved' || (previous && (previous.approvalId !== approval.approval_id ||
       previous.changeId !== approval.change_id || previous.operation?.operationId !== operation.operationId ||
       previous.operationConsumed || previous.operationInvalidated))) {
     throw decisionError('native-cancellation-validation-conflict');
   }
   validations.delete(requestId);
+  httpDecisions.delete(requestId);
   answered.add(requestId);
   persistCommunication();
   wakeDecisionWaiters(requestId);
@@ -2241,7 +2242,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.0",
+      version: "2.2.1",
     },
   });
 

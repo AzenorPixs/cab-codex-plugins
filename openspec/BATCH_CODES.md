@@ -1,5 +1,12 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Entrée provisoire SCM — CAB 2.2.1
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | reconcile-approved-native-cancellation | ARCHIVÉ, source 2.2.1 qualifiée ; publication et activation distinctes, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-approved-native-cancellation/tasks.md) |
+
+
 ## Entrée provisoire SCM — CAB 2.2.0
 
 | Code | Identifiant technique | État documentaire | Source |
