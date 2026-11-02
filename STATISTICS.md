@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 135**
+**NCA — Nombre de changes analysés : 136**
 
 ## Périmètre et durée
 
@@ -8,8 +8,8 @@
 |---|---|---|
 | DGCT — Temps total de développement du projet via l’IA | 7 | 0,192083 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 135 | N/A |
-| NCMA — Changes achevés par jour (NCA / NJT) | 135 | N/A |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 136 | N/A |
+| NCMA — Changes achevés par jour (NCA / NJT) | 136 | N/A |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
@@ -24,13 +24,13 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Nombre de changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 133 | N/A | N/A | 98,52 % |
-| 2 | gpt-6.1-sol | N/A | 1,48 % |
+| 134 | N/A | N/A | 98,53 % |
+| 2 | gpt-6.1-sol | N/A | 1,47 % |
 ### LLM des agents orchestrateurs
 
 | Nombre de changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 5 | GPT-6.1 | high | 3,70 % |
+| 5 | GPT-6.1 | high | 3,68 % |
 ## Performances des LLM de codage OpenCode
 
 N/A
@@ -100,7 +100,7 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 | Mesure | Cumul | Moyenne par change |
 |---|---|---|
 | Écritures exécutées | 73 | 24,333 |
-| Fichiers distincts touchés par change | 2389 | 38,532 |
+| Fichiers distincts touchés par change | 2520 | 40,000 |
 
 | Périmètre | Lignes de code | Lignes de commentaires |
 |---|---|---|
@@ -150,13 +150,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 58691 | 533,555 |
-| Fichiers ayant passé un contrôle syntaxique | 2134 | 56,158 |
-| Tâches OpenSpec prouvées et terminées | 86 | 8,600 |
+| Tests exécutés dans les bilans finaux | 59612 | 537,045 |
+| Fichiers ayant passé un contrôle syntaxique | 2224 | 57,026 |
+| Tâches OpenSpec prouvées et terminées | 92 | 8,364 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 58685 | 99,99 % |
+| Tests finaux réussis | 59606 | 99,99 % |
 | Tests finaux échoués | 6 | 0,01 % |
 
 | Catégorie de tests | Nombre |

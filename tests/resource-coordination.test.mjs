@@ -1079,3 +1079,28 @@ test('UNKNOWN protège les écritures recouvrantes et laisse progresser un RUN i
  const conflicting=h.prepare(c,'conflicting-operation');
  assert.equal(h.acquire(c,conflicting).state,'WAITING');
 });
+
+for(const boundary of ['clean','access','native','once','rejected']) test(`annulation approuvée non consommée : frontière ${boundary}`,async t=>{
+ const h=await fixture(t),run=h.reserve('cancel-approved',[file('cancel-approved')]);
+ const op=h.prepare(run,'cancel-approved-op'),stored=h.r.resourceState.operations[op.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('request-owner'),false);
+ h.r.recordDecision(run.runId,op.operationId,{status:boundary==='rejected'?'rejected':'approved',requestId:stored.requestId,
+  approvalId:'approval-cancel-approved',changeId:run.changeId,operationId:op.operationId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:run.runId,
+  version:run.version,sessionId:run.sessionId});
+ const decision=structuredClone(stored.decision),proof=fingerprint('native-cancel-approved');
+ if(['access','native','once'].includes(boundary))h.acquire(run,op);
+ if(['native','once'].includes(boundary))h.r.nativeStart(run.runId,{...op,kind:'bash',target:'/usr/bin/true'},stored.requestId,
+  {id:'cancel-permission',tool:{callID:'cancel-call'}});
+ if(boundary==='once')h.r.nativeIssued(op.operationId);
+ if(boundary!=='clean'){
+  const before=JSON.stringify(h.r.resourceState);
+  assert.throws(()=>h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof),/native-cancellation-boundary-invalid/);
+  assert.equal(JSON.stringify(h.r.resourceState),before);return;
+ }
+ assert.equal(h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof).state,'CANCELLED');
+ assert.deepEqual(stored.decision,decision);assert.equal(stored.native,undefined);
+ assert.equal(h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof).state,'CANCELLED');
+ assert.throws(()=>h.r.recordNativeCancelledValidation(run.runId,op.operationId,fingerprint('other-proof')),/native-cancellation-boundary-invalid/);
+ await h.restart();assert.deepEqual(h.r.resourceState.operations[op.operationId].decision,decision);
+});

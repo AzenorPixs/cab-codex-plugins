@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.0';
+export const VERSION = '2.2.1';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -884,15 +884,13 @@ export class ResourceRunRegistry extends RunRegistry {
     const linkedAccess = op && Object.values(this.resourceState.accesses).some((access) =>
       access.accessId === op.accessId || access.operationIds.includes(operationId));
     if (!hash(proofDigest) || !op || !run || op.runId !== runId || op.contextId !== run.contextId ||
-        op.native || op.decision || linkedAccess) {
-      if (op?.state === 'CANCELLED' && op.completionDigest === proofDigest && !op.native && !op.decision && !linkedAccess) {
-        return copy(op);
-      }
+        op.native || (op.decision && op.decision.status !== 'approved') || linkedAccess) {
       throw new CoordinationError('native-cancellation-boundary-invalid');
     }
-    if (op.state !== 'PREPARED') throw new CoordinationError('native-cancellation-boundary-invalid');
     const owner = this.requestOwners[op.requestId];
     if (!owner || owner.runId !== runId) throw new CoordinationError('native-cancellation-owner-missing');
+    if (op.state === 'CANCELLED' && op.completionDigest === proofDigest) return copy(op);
+    if (op.state !== 'PREPARED') throw new CoordinationError('native-cancellation-boundary-invalid');
     op.state = 'CANCELLED'; op.finishedAt = now(); op.completionDigest = proofDigest;
     this.persist();
     return copy(op);

@@ -176,7 +176,7 @@ try {
       coordination: { phase: ['WORK', 'WORK', 'REPORT'][i], ...(i === 1 ? { reason: recoveryBlocked ? 'resource-effects-unknown' : 'resource-conflict', blockers: [{ runId: 'RUN-WEB' }] }
         : i === 2 ? { reason: stopped ? 'run-stop' : 'resource-effects-unknown' } : {}) } }])) }
       : request.url === '/monitor/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
-        : target.pathname === '/api/info' ? { version: '2.2.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
+        : target.pathname === '/api/info' ? { version: '2.2.1', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
           : target.pathname === '/api/location' ? { directory: root }
           : target.pathname === '/api/mcp' ? { location: { directory: root }, data: [{ name: 'cgpt-validation', status: { status: brokerConnection } }] }
           : target.pathname === '/api/session/active' ? { data: managementMode ? {} : { ses_0: { type: 'running' } } }
@@ -216,7 +216,7 @@ try {
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-lot-codes-changes.png');
     await browser.evaluate("document.querySelector('#runs-tab').click(); true");
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('Revue · 8/11') && document.querySelector('#work-content').textContent.includes('WAITING')"), true);
-    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.5') && document.querySelector('#health').textContent.includes('v2.2.0')"), true);
+    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.5') && document.querySelector('#health').textContent.includes('v2.2.1')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(229, 239, 255)');

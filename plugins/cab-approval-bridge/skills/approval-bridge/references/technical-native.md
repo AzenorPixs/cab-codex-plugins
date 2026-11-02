@@ -1,4 +1,4 @@
-# Précisions native — CAB 2.2.0
+# Précisions native — CAB 2.2.1
 
 ## Lecture source read-only quand l’outil natif manque
 
@@ -137,7 +137,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.81 ; les preuves 2.1.8 restent historiques.
+La distribution commune est celle du paquet vérifié ; les preuves 2.1.8 restent historiques.
 
 
 ## Priorité medium puis high — nouvelles sessions et reprises

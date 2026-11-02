@@ -1,4 +1,4 @@
-# Démarrage — CAB 2.2.0
+# Démarrage — CAB 2.2.1
 
 ## `/CAB start`
 
@@ -11,7 +11,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/identity avec version 2.1.81 et identity.workspace
+Vérifier service actif, GET /api/identity avec la version de base du plugin CAB installé et identity.workspace
 attendus, puis GET / ; ne pas lire /api/snapshot pour ce contrôle d'identité ;
 terminer cette tentative bornée et rapporter son résultat avant les contrôles amont.
 Afficher l'URL réelle uniquement après ces preuves,

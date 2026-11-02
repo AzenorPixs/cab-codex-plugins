@@ -66,3 +66,15 @@ test('contrat : AGENTS consommateur garde des règles agnostiques et résout le 
   assert.match(read(skill+'references/recovery-policy.md'),/ne crée aucune autorisation métier/);
   assert.match(read(skill+'references/shell-background.md'),/ne devient pas rétroactivement/);
 });
+
+test('monitoring : version attendue résolue depuis le paquet et non figée dans le bootstrap',()=>{
+  const reference=read(skill+'references/monitor-service.md');
+  assert.match(reference,/<plugin>\/\.codex-plugin\/plugin\.json/);
+  assert.match(reference,/retirer le suffixe/);
+  for(const name of ['monitor-service','command-start','technical-startup']){
+    const body=read(skill+'references/'+name+'.md');
+    assert.doesNotMatch(body,/GET \/api\/identity[^\n]*version 2\.1\.81/);
+    assert.doesNotMatch(body,/annoncer version 2\.1\.81/);
+  }
+  assert.match(read(skill+'references/command-update.md'),/sans arrêt ni redémarrage/);
+});

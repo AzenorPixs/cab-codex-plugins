@@ -1,4 +1,4 @@
-# Compléments natifs — CAB 2.2.0
+# Compléments natifs — CAB 2.2.1
 
 ## Récupération contrôlée de session dans le même RUN
 
@@ -219,7 +219,7 @@ La récupération conserve le même journal et les mêmes destinations. Le jeu W
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs,
 cgpt-approval-bridge-permission-policy.mjs et cgpt-approval-bridge-process-lifecycle.mjs.
 
-Contrat courant CABU 2.1.81 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -306,7 +306,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.81 ; les preuves 2.1.8 restent historiques.
+La distribution commune est celle du paquet vérifié ; les preuves 2.1.8 restent historiques.
 
 ## Priorité medium puis high — nouvelles sessions et reprises
 

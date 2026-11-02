@@ -1,4 +1,4 @@
-# Récupération de session — CAB 2.2.0
+# Récupération de session — CAB 2.2.1
 
 ## Récupération contrôlée de session dans le même RUN
 

@@ -145,3 +145,14 @@ identifiante du référentiel source puis de CAB, plutôt qu'à la rétablir à 
 synchronisation. Les renvois partagés gardent également la résolution générique,
 sans ID de projet fixé dans les règles. Les champs d'identité de contexte sont
 les seules différences entre AGENTS.md source et consommateur.
+
+## Révision documentaire après reprise PA01
+
+Le signalement de reprise a établi que le prévol du moniteur exigeait encore
+2.1.81 dans trois références distribuées, malgré l'API conforme en 2.2.0.
+L'attente est maintenant résolue depuis la version de base du manifeste CAB
+installé. Les autres mentions courantes et le compte rendu up-to-date ont été
+alignés ; les mentions explicites de transition historique 2.1.81 restent.
+Un test empêche le retour de cette version figée dans les bootstraps. Les
+scripts runtime restent inchangés ; cette révision documentaire utilise un
+nouveau suffixe de cache pour CAB/CABU et ne nécessite aucun redémarrage.

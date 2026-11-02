@@ -21,7 +21,7 @@ import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from
 import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from './cgpt-approval-bridge-continuity.mjs';
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
 
-const version = "2.2.0";
+const version = "2.2.1";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -180,7 +180,7 @@ function contextFor(run) {
           op.decision && (op.decision.approvalId !== validation.approvalId || op.decision.requestId !== validation.requestId)) {
         throw new CoordinationError('communication-identity-divergent');
       }
-      if (op.state === 'CANCELLED' && !op.decision) return null;
+      if (op.state === 'CANCELLED' && (!op.decision || op.decision.status === 'approved' && !op.native && op.completionDigest)) return null;
       const ledgerDecision = op.decision ? {
         decision: op.decision.status, requestId: validation.requestId, approval_id: validation.approvalId,
         change_id: validation.changeId, run_id: run.runId, reservation_version: operation.reservationVersion,
@@ -507,6 +507,7 @@ async function verifyNativeValidation(approval) {
   }
 }
 const restoringOperations = new Set();
+const queuedOperationRestorations = new Set();
 function nativePermissionCallId(permission) {
   return permission?.tool?.callID || permission?.metadata?.callID || permission?.callID || null;
 }
@@ -559,17 +560,22 @@ function eventMatchesNativePart(event, part, operation, approval) {
   if (isAbsolute(target)) target = relative(workspace, target);
   return target === approval.files[0];
 }
+function nativeCancellationCandidate(op) {
+  return Boolean(op && ['PREPARED','CANCELLED'].includes(op.state) && !op.native &&
+    (!op.decision || op.decision.status === 'approved'));
+}
 async function restoreApprovedOperations(run, context) {
-  if (!run || !context || context.publicStatus().recoveryRequired || restoringOperations.has(run.runId)) return;
+  if (!run || !context || context.publicStatus().recoveryRequired) return;
+  if (restoringOperations.has(run.runId)) { queuedOperationRestorations.add(run.runId); return; }
   const brokerReady=broker?.status==='READY';
   restoringOperations.add(run.runId);
   try {
     const candidates = Object.values(registry.resourceState.operations).filter((op) => op.runId === run.runId &&
       op.contextId === run.contextId && (['PREPARED','ISSUING','UNKNOWN'].includes(op.state) ||
         op.state === 'CANCELLED' && op.completionDigest &&
-          (!op.decision || op.decision.status === 'rejected')) &&
+          (!op.decision || ['approved','rejected'].includes(op.decision.status))) &&
       op.native?.onceAcknowledged !== true && op.rejectionOnly !== true &&
-      (brokerReady || terminalTurnNoEffectCandidate(op)));
+      (brokerReady || terminalTurnNoEffectCandidate(op) || nativeCancellationCandidate(op)));
     for (const stored of candidates) {
       const key = run.runId + ':' + stored.operationId;
       if (restoringOperations.has(key)) continue;
@@ -577,11 +583,12 @@ async function restoreApprovedOperations(run, context) {
       try {
         const current = registry.resourceState.operations[stored.operationId];
         if (!current || current.runId !== run.runId || current.state !== stored.state || current.native?.onceAcknowledged === true) continue;
-        if (current.state === 'PREPARED' && current.decision && context.hasRequest(current.requestId) &&
-            context.decision(current.requestId)?.decision === current.decision.status &&
-            !registry.restoredAccesses.has(current.accessId)) continue;
-        if (!brokerReady && !terminalTurnNoEffectCandidate(current)) continue;
-        if (context.isOperationReconciling(current.operationId)) continue;
+        const cachedPrepared = current.state === 'PREPARED' && current.decision && context.hasRequest(current.requestId) &&
+          context.decision(current.requestId)?.decision === current.decision.status &&
+          !registry.restoredAccesses.has(current.accessId);
+        if (!brokerReady && !terminalTurnNoEffectCandidate(current) && !nativeCancellationCandidate(current)) continue;
+        if (context.isOperationReconciling(current.operationId) &&
+            !(current.state === 'PREPARED' && !current.native)) continue;
         const operationSnapshot = structuredClone(current);
         const generation = nativeSessionGenerations.get(current.sessionId) || 0;
         const [messages, permissions] = await Promise.all([
@@ -614,9 +621,10 @@ async function restoreApprovedOperations(run, context) {
           candidate = registry.operationCandidate(run.runId, approval, { checkCurrentRevisions:false });
         }
         if (candidate.identityDigest !== current.identityDigest || candidate.operationDigest !== current.operationDigest) continue;
-        const alreadyCancelled = current.state === 'CANCELLED' && !current.native && !current.decision &&
+        const alreadyCancelled = current.state === 'CANCELLED' && !current.native && (!current.decision || current.decision.status === 'approved') &&
           current.completionDigest === cancelledProof;
-        if (cancelledProof && (current.state === 'PREPARED' && !current.decision || alreadyCancelled)) {
+        if (cancelledProof && (current.state === 'PREPARED' && !current.native &&
+            (!current.decision || current.decision.status === 'approved') || alreadyCancelled)) {
           if (alreadyCancelled) {
             context.restoreNativeCancelledValidation(approval, cancelledProof);
             continue;
@@ -642,6 +650,8 @@ async function restoreApprovedOperations(run, context) {
           }
           continue;
         }
+        if (!brokerReady && !terminalTurnNoEffectCandidate(current)) continue;
+        if (cachedPrepared) continue;
         if (current.state === 'PREPARED' && !current.decision || alreadyRejected) {
           let reconciled = alreadyRejected && context.decision(current.requestId)?.decision === 'rejected';
           if (!reconciled) {
@@ -772,7 +782,12 @@ async function restoreApprovedOperations(run, context) {
         process.stderr.write('CAB operation restoration deferred: ' + code + '\n');
       } finally { restoringOperations.delete(key); }
     }
-  } finally { restoringOperations.delete(run.runId); }
+  } finally {
+    restoringOperations.delete(run.runId);
+    if (queuedOperationRestorations.delete(run.runId) && !closing) {
+      void restoreApprovedOperations(registry.runs.get(run.runId), context);
+    }
+  }
 }
 function nativePartProof(operation, part, sessionId) {
   if (part?.state?.input?.background === true) return shellLifecycle.proof(operation,part,sessionId);
@@ -2523,6 +2538,7 @@ async function consumeEvents() {
           'session.execution.interrupted'].includes(type)) {
           for (const [runId, context] of activeContexts()) {
             if (context.sessions().includes(session)) {
+              void restoreApprovedOperations(registry.runs.get(runId), context);
               void reconcileNativeCompletionsFromTranscript(runId, session);
               void refreshNativeUsage(runId,session);
             }
