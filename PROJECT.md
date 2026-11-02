@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.62`.
+Version de référence des briques CAB : `2.1.63`.
 
-CAB 2.1.62 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.63 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -27,6 +27,15 @@ CAB est une infrastructure de coordination. Il n'est ni un agent de codage, ni u
 CAB 1.10.7 réserve durablement chaque change et son intention, puis protège les opérations par des accès temporaires aux ressources partagées. Les lectures compatibles coexistent ; une écriture attend les seuls accès recouvrants. Les ensembles sont attribués atomiquement, avec reprise durable et révisions ciblées. Une exclusivité de fichier prouvée évite un verrou partagé supplémentaire.
 
 Validation, synchronisation, archivage, publication et rapport protègent leurs périmètres réels sans demander la stabilité de tous les RUN. Le gel global est réservé à la réconciliation commune, la maintenance partagée, la pause globale ou l'arrêt global explicites. Les décisions unitaires, ask/once, preuves et gates sont conservés. Le contrat détaillé est dans ORCHESTRATED_CODING.md et OpenSpec.
+
+Le contrôleur persiste la décision terminale avant une réponse native. Après
+redémarrage, il ne restaure une approbation qu’à partir de la demande et de la
+réponse natives terminées, corrélées aux mêmes identifiants et empreintes. Il
+continue le même `once` uniquement lorsque deux observations confirment la
+permission exacte encore pendante, son callID et l’outil `running` non exécuté.
+Une preuve absente ou contradictoire maintient `UNKNOWN` et l’accès protégé ;
+aucun timeout ne clôt l’effet. Les RUN indépendants sans recouvrement
+continuent selon leurs règles d’accès.
 
 Les statistiques intégrées distinguent réservations, activité native observée, contention et exceptions. Des fenêtres 24 h/7 j/30 j et des imports filtrés permettent de consulter l'audit arrêté sans réactiver son job ni additionner des sources recouvrantes.
 

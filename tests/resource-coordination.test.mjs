@@ -768,3 +768,50 @@ test('projection opération native : once durable faux puis vrai sans jeton ni c
   assert.equal(bounded.totalOperations,205);assert.equal(bounded.truncated,true);assert.equal(bounded.operations.length,200);
   assert.equal(bounded.operations[0].operationId,'bounded-005');assert.equal(bounded.operations.at(-1).operationId,'bounded-204');
 });
+
+test('décision native durable, scoppée et restaurée après redémarrage',async t=>{
+ const h=await fixture(t);const a=h.reserve('decision-a',[file('a')]);
+ const op=h.prepare(a,'decision-operation');const stored=h.r.resourceState.operations[op.operationId];
+ const decision={status:'approved',requestId:'request-decision-operation',approvalId:'approval-decision-operation',
+  changeId:a.changeId,operationId:op.operationId,operationDigest:op.operationDigest,identityDigest:stored.identityDigest,
+  runId:a.runId,version:a.version,sessionId:a.sessionId};
+ h.r.recordDecision(a.runId,op.operationId,decision);
+ let view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
+ assert.equal(view.state,'PREPARED');assert.equal(view.decision.status,'approved');assert.equal(view.native,null);
+ assert.equal(view.onceAcknowledged,null);
+ await h.restart();
+ view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
+ assert.equal(view.decision.status,'approved');assert.equal(view.onceAcknowledged,null);
+ assert.throws(()=>h.r.recordDecision(a.runId,op.operationId,{...decision,status:'rejected'}),/operation-decision-conflict/);
+});
+
+test('reprise once exige une permission encore pendante prouvée et une opération sans accusé',async t=>{
+ const h=await fixture(t);const a=h.reserve('pending-a',[file('a')]);
+ const op=h.prepare(a,'pending-operation');h.acquire(a,op);
+ h.r.nativeStart(a.runId,{...op,kind:'edit',target:'a'},'request-pending-operation',
+  {id:'permission-pending',tool:{callID:'call-pending'}});
+ h.r.nativeUnknown(op.operationId);
+ const digest=fingerprint(JSON.stringify(['permission-pending','call-pending','running',false]));
+ h.r.restorePendingNative(a.runId,op.operationId,{permissionId:'permission-pending',callId:'call-pending',
+  pending:true,toolStatus:'running',executed:false,proofDigest:digest});
+ let view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
+ assert.equal(view.state,'PREPARED');assert.equal(view.native,null);assert.equal(view.access.state,'HELD');
+ assert.equal(view.nativeRecovery.boundary,'PERMISSION_PENDING_NO_REPLY');assert.equal(view.nativeRecovery.permissionId,'permission-pending');
+ assert.equal(view.decision,null);
+ h.r.nativeStart(a.runId,{...op,kind:'edit',target:'a'},'request-pending-operation',
+  {id:'permission-pending',tool:{callID:'call-pending'}});
+ h.r.nativeIssued(op.operationId);
+ h.r.nativeUnknown(op.operationId);
+ assert.throws(()=>h.r.restorePendingNative(a.runId,op.operationId,{permissionId:'permission-pending',
+  callId:'call-pending',pending:true,toolStatus:'running',executed:false,proofDigest:digest}),/native-pending-proof-required/);
+});
+
+test('UNKNOWN protège les écritures recouvrantes et laisse progresser un RUN indépendant',async t=>{
+ const h=await fixture(t);const a=h.reserve('unknown-a',[file('shared')]);
+ const b=h.reserve('independent-b',[file('other')]);const c=h.reserve('conflicting-c',[file('shared')]);
+ const first=h.prepare(a,'unknown-operation');h.acquire(a,first);h.start(a,first);h.r.nativeUnknown(first.operationId);
+ const independent=h.prepare(b,'independent-operation');
+ assert.equal(h.acquire(b,independent).state,'HELD');
+ const conflicting=h.prepare(c,'conflicting-operation');
+ assert.equal(h.acquire(c,conflicting).state,'WAITING');
+});

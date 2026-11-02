@@ -1,4 +1,4 @@
-export const VERSION = '2.1.62';
+export const VERSION = '2.1.63';
 export const HISTORY_LIMIT = 100;
 export const STEP_STATUSES = Object.freeze(['IN_PROGRESS', 'ALREADY_COVERED', 'NOT_APPLICABLE']);
 export const RUN_STEPS = Object.freeze([
