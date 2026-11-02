@@ -16,7 +16,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.61";
+const version = "2.1.62";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -1218,6 +1218,10 @@ async function handleRequest(request, response) {
       if (request.method === 'GET' && url.pathname === '/locks') {
         json(response, 200, { runId, protocol: COORDINATION_PROTOCOL, accesses: registry.accesses(runId),
           revisions: registry.revisions(run.resources) }); return;
+      }
+      if (request.method === 'GET' && url.pathname === '/operations') {
+        const operationId = url.searchParams.get('operationId') ?? undefined;
+        json(response, 200, registry.operationSnapshot(runId, operationId)); return;
       }
       if (request.method === 'POST' && ['/integration', '/integration-request'].includes(url.pathname)) {
         throw new CoordinationError('coordination-upgrade-required');

@@ -739,3 +739,32 @@ test('projection moniteur : historique volumineux exclu, actives prioritaires et
  const view=ResourceRunRegistry.prototype.monitorRuns.call(source);assert.equal(view.runs.length,200);assert.equal(view.totalRuns,205);assert.equal(view.truncated,true);assert.equal(view.snapshot_only,true);assert.equal(view.runs[0].runId,'run-204');
  assert.ok(JSON.stringify(view).length<100000);assert.ok(!JSON.stringify(view).includes('PRIVATE-'));assert.equal(JSON.stringify([...runs]),before);
 });
+
+test('projection opération native : once durable faux puis vrai sans jeton ni cible',async t=>{
+ const h=await fixture(t);const a=h.reserve('operation-a',[file('a')]);const b=h.reserve('operation-b',[file('b')]);
+ const op=h.prepare(a,'native-operation-a');h.prepare(b,'native-operation-b');const access=h.acquire(a,op);
+ h.r.nativeStart(a.runId,{...op,kind:'edit',target:'private/path'},'request-'+op.operationId,
+  {id:'permission-a',tool:{callID:'call-a'}});
+ const before=JSON.stringify(h.r.resourceState),pending=h.r.operationSnapshot(a.runId);
+ assert.equal(pending.totalOperations,1);assert.equal(pending.operations[0].state,'ISSUING');
+ assert.equal(pending.operations[0].native.onceAcknowledged,false);assert.equal(pending.operations[0].native.permissionId,'permission-a');
+ assert.equal(pending.operations[0].native.callId,'call-a');assert.equal(pending.operations[0].access.state,'EXECUTING');
+ assert.equal(pending.operations[0].access.fencing,access.fencing);assert.ok(!JSON.stringify(pending).includes(access.token));
+ assert.ok(!JSON.stringify(pending).includes('private/path'));assert.deepEqual(h.r.operationSnapshot(a.runId,'native-operation-b').operations,[]);
+ assert.equal(h.r.operationSnapshot(b.runId).operations[0].operationId,'native-operation-b');
+ assert.equal(JSON.stringify(h.r.resourceState),before);
+ h.r.nativeIssued(op.operationId);const issued=h.r.operationSnapshot(a.runId,op.operationId);
+ assert.equal(issued.operations[0].state,'EXECUTING');assert.equal(issued.operations[0].native.onceAcknowledged,true);
+ assert.throws(()=>h.r.operationSnapshot('missing-run'),/run-not-found/);
+ assert.throws(()=>h.r.operationSnapshot(a.runId,'../foreign'),/operation-id-invalid/);
+  const operations=Object.fromEntries(Array.from({length:205},(_,i)=>{
+    const operationId='bounded-'+String(i).padStart(3,'0');
+    return [operationId,{operationId,requestId:'request-'+operationId,runId:'bounded',contextId:1,version:i+1,
+      state:'PREPARED',preparedAt:new Date(1000+i).toISOString(),accessId:operationId,sessionId:'ses_bounded'}];
+  }));
+  const boundedSource={runs:new Map([['bounded',{runId:'bounded',contextId:1}]]),history:[],
+    resourceState:{operations,accesses:{}}};
+  const bounded=ResourceRunRegistry.prototype.operationSnapshot.call(boundedSource,'bounded');
+  assert.equal(bounded.totalOperations,205);assert.equal(bounded.truncated,true);assert.equal(bounded.operations.length,200);
+  assert.equal(bounded.operations[0].operationId,'bounded-005');assert.equal(bounded.operations.at(-1).operationId,'bounded-204');
+});

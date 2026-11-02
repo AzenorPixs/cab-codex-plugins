@@ -1359,7 +1359,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.61');
+  assert.equal(initialized.result.serverInfo.version, '2.1.62');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -2726,4 +2726,19 @@ test('projection moniteur HTTP : navigation exacte sans registre privé ni mutat
  const {status,body}=await h.get('/monitor/runs');assert.equal(status,200);assert.equal(body.snapshot_only,true);assert.equal(body.totalRuns,2);assert.equal(body.truncated,false);
  for(const run of before.runs){const row=body.runs.find(r=>r.runId===run.runId);for(const k of ['runId','changeId','sessionId','version','state','phase'])assert.equal(row[k],run[k]??null);}
  assert.equal(body.coordination,undefined);assert.equal(body.requestOwners,undefined);assert.equal(body.history,undefined);assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
+});
+
+test('GET opérations par RUN retourne une projection sûre sans bearer ni entrée étrangère',async t=>{
+ const h=await setup(t);const a=await h.reserve('operations-a');await h.reserve('operations-b');
+ const {approval,access}=await h.approvedAccess(a,'snapshot-operation');
+ const first=await h.get('/runs/operations-a/operations');assert.equal(first.status,200);
+ assert.equal(first.body.snapshot_only,true);assert.equal(first.body.totalOperations,1);assert.equal(first.body.truncated,false);
+ assert.equal(first.body.operations[0].operationId,approval.operation_id);assert.equal(first.body.operations[0].state,'PREPARED');
+ assert.equal(first.body.operations[0].native,null);assert.equal(first.body.operations[0].access.state,'HELD');
+ assert.ok(!JSON.stringify(first.body).includes(access.token));assert.ok(!JSON.stringify(first.body).includes('isolated command'));
+ const filtered=await h.get('/runs/operations-a/operations?operationId='+encodeURIComponent(approval.operation_id));
+ assert.equal(filtered.status,200);assert.equal(filtered.body.operations.length,1);
+ const foreign=await h.get('/runs/operations-b/operations?operationId='+encodeURIComponent(approval.operation_id));
+ assert.equal(foreign.status,200);assert.equal(foreign.body.operations.length,0);
+ assert.equal((await h.get('/runs/operations-a/operations?operationId=../foreign')).status,400);
 });
