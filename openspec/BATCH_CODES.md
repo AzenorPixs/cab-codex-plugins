@@ -110,6 +110,9 @@ Tous les chemins sont relatifs à openspec/. Pour les 70 nouveaux codes : **Attr
 ## Entrées provisoires sans code
 
 Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code à cette date. Aucune réservation supplémentaire de code à cette date.
+État SCM vérifié le 2 novembre 2026 : 125 archives et aucun change actif. `fix-native-permission-reply-location-scope` est archivé sans code ; cette session n’attribue ni ne réserve de code.
+
+
 
 Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des correspondances attribuées. Attribution ultérieure par ACL, sans réservation de code dans cette session.
 
@@ -119,13 +122,14 @@ Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des 
 | code non attribué | fix-opencode-codemode-native-proof-correlation | ARCHIVÉ, source 5/5 lots validés ; CABU 2.1.8 vérifié ; complément diagnostique en cours | [tâches](changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/tasks.md) |
 | code non attribué | fix-rejected-preflight-recovery-after-restart | ARCHIVÉ, source validée 5/5 ; CABU 2.1.7 vérifié le 29 octobre ; PA01 suspendu au raccord Code Mode | [qualification](changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/QUALIFICATION.md) |
 
-### Entrée provisoire SCM — 1er novembre 2026
+### Entrées provisoires SCM — 1er et 2 novembre 2026
 
 | Code | Change | État | Preuve |
 | --- | --- | --- | --- |
 | code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
 | code non attribué | require-native-recovery-preflight | ARCHIVÉ, source 2.1.37 qualifiée ; CABU et activation font l'objet d'une preuve distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-require-native-recovery-preflight/tasks.md) |
 | code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
+| code non attribué | fix-native-permission-reply-location-scope | ARCHIVÉ, source 2.1.61 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-fix-native-permission-reply-location-scope/tasks.md) |
 
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
 
@@ -253,10 +257,11 @@ Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances document�
 supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 **code non attribué**, attribution ACL ultérieure. [Proposition](changes/archive/2026-10-31-discard-released-access-tokens/proposal.md), [tâches](changes/archive/2026-10-31-discard-released-access-tokens/tasks.md), [statistiques](changes/archive/2026-10-31-discard-released-access-tokens/STATISTICS.md). Activation à vérifier après CABU.
 
-### Entrée provisoire SCM — 1er novembre 2026
+### Entrées provisoires SCM — 1er et 2 novembre 2026
 
 | Code | Change | État | Preuve |
 | --- | --- | --- | --- |
 | code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
 | code non attribué | require-native-recovery-preflight | ARCHIVÉ, source 2.1.37 qualifiée ; CABU et activation font l'objet d'une preuve distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-require-native-recovery-preflight/tasks.md) |
 | code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
+| code non attribué | fix-native-permission-reply-location-scope | ARCHIVÉ, source 2.1.61 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-fix-native-permission-reply-location-scope/tasks.md) |

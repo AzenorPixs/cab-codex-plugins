@@ -1,3 +1,10 @@
+## 2.1.61 — Réponses de permissions natives scoped par location
+
+- Les réponses natives `once`, `always` et `reject` utilisent maintenant la
+  location de la session ciblée, même lorsqu’elle diffère de la location par
+  défaut du client CAB.
+- La version commune CAB/CABU et des quatre briques passe à 2.1.61.
+
 ## 2.1.60 — Instructions MCP persistantes pour le routage Code Mode
 
 - Le broker transmet au handshake MCP et aux descriptions d'outils une consigne OpenCode Code Mode : utiliser `execute` et le nom exact découvert par `search`.

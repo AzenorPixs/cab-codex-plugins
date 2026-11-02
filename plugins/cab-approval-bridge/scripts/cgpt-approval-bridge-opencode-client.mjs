@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.60';
+export const VERSION = '2.1.61';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SOURCE_FILE_DEFAULT_LIMIT = 1024 * 1024;
@@ -1135,7 +1135,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     if (decision !== 'once' && decision !== 'always' && decision !== 'reject') fail('opencode-permission-decision-invalid');
     await info();
     const response = await request(`/api/session/${encodeURIComponent(sessionId)}/permission/${encodeURIComponent(permissionId)}/reply`,
-      { method: 'POST', body: { decision } });
+      { method: 'POST', body: { decision }, locationDirectory: directoryValue });
     if (response.status !== 204) fail('opencode-permission-reply-invalid');
   }
 
