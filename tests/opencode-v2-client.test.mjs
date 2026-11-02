@@ -14,7 +14,7 @@ function fixture() {
   return { root, passwordFile, close: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-const info = { version: '2.2.1', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+const info = { version: '2.2.2', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
 const location = { directory: '/workspace', project: { id: 'fixture', directory: '/workspace', canonical: '/workspace' } };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
@@ -1032,4 +1032,19 @@ test('prompt historique deny inchangé et nouveau contrôle après changement ex
  h.setRules([{action:'shell',resource:'*',effect:'ask'},{action:'edit',resource:'*',effect:'deny'}]);h.changeDenyWithModel();
  await assert.rejects(h.client.prompt('ses_policy','prévol',{directory:'/target',model:{providerID:'fixture',modelID:'fixture'},requiredNativeAsk:['shell']}),{code:'opencode-native-permission-ask-required'});
  assert.equal(h.calls.filter(c=>c.path.endsWith('/model')).length,1);assert.equal(h.calls.filter(c=>c.path.endsWith('/prompt')).length,1);assert.equal(h.calls.filter(c=>c.method==='PATCH').length,0);
+});
+
+test('pagination : une petite page adaptative ne réduit pas toutes les pages suivantes',async t=>{
+ const f=fixture();t.after(f.close);const calls=[];
+ const rows=Array.from({length:230},(_,i)=>({id:'msg_adaptive_'+i,type:'assistant',content:[]}));
+ const c=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+  fetchImpl:async u=>{
+   const url=new URL(u);if(url.pathname==='/api/info')return json(info);
+   const offset=Number(url.searchParams.get('cursor')||0),limit=Number(url.searchParams.get('limit'));calls.push({offset,limit});
+   if(offset===0&&limit>1)return json({padding:'x'.repeat(2*1024*1024)});
+   const data=rows.slice(offset,offset+limit),next=offset+data.length;
+   return json({data,cursor:{next:next<rows.length?String(next):null,previous:null}});
+  }});
+ const result=await c.messages('ses_adaptive');assert.equal(result.length,230);
+ assert.equal(calls.find(x=>x.offset===1).limit,200);assert.ok(calls.length<12);
 });

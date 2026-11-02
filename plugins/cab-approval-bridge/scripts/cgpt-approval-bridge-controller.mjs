@@ -21,7 +21,7 @@ import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from
 import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from './cgpt-approval-bridge-continuity.mjs';
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
 
-const version = "2.2.1";
+const version = "2.2.2";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -569,6 +569,7 @@ async function restoreApprovedOperations(run, context) {
   if (restoringOperations.has(run.runId)) { queuedOperationRestorations.add(run.runId); return; }
   const brokerReady=broker?.status==='READY';
   restoringOperations.add(run.runId);
+  const nativeSnapshots = new Map();
   try {
     const candidates = Object.values(registry.resourceState.operations).filter((op) => op.runId === run.runId &&
       op.contextId === run.contextId && (['PREPARED','ISSUING','UNKNOWN'].includes(op.state) ||
@@ -591,10 +592,12 @@ async function restoreApprovedOperations(run, context) {
             !(current.state === 'PREPARED' && !current.native)) continue;
         const operationSnapshot = structuredClone(current);
         const generation = nativeSessionGenerations.get(current.sessionId) || 0;
-        const [messages, permissions] = await Promise.all([
+        const snapshotKey = current.sessionId + ':' + generation;
+        if (!nativeSnapshots.has(snapshotKey)) nativeSnapshots.set(snapshotKey, Promise.all([
           openCode.messages(current.sessionId, run.directory),
           openCode.permissions(run.directory, { sessionIds:[current.sessionId], verifyInputs:true }),
-        ]);
+        ]));
+        const [messages, permissions] = await nativeSnapshots.get(snapshotKey);
         if (!Array.isArray(messages) || !Array.isArray(permissions) ||
             generation !== (nativeSessionGenerations.get(current.sessionId) || 0)) continue;
         const parts = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []);

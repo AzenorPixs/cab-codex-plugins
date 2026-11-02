@@ -1,4 +1,4 @@
-# Mise à jour autonome des briques CAB — CAB 2.2.1
+# Mise à jour autonome des briques CAB — CAB 2.2.2
 
 ## Association du skill et des commandes
 

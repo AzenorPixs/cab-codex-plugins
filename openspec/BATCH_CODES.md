@@ -1,5 +1,12 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Entrée provisoire SCM — CAB 2.2.2
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-cabu-authority-shutdown | ARCHIVÉ, source 2.2.2 qualifiée ; publication et activation distinctes | [validation](changes/archive/2026-11-02-fix-cabu-authority-shutdown/VALIDATION.md) |
+
+
 ## Entrée provisoire SCM — CAB 2.2.1
 
 | Code | Identifiant | État | Source |

@@ -1,5 +1,15 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Correctif CABU courant 2.2.2
+
+[fix-cabu-authority-shutdown](openspec/changes/archive/2026-11-02-fix-cabu-authority-shutdown/),
+code non attribué : ARCHIVÉ, source 2.2.2 qualifiée (Node 829/860, 31 ignorés ;
+Python 93/93 ; natif 1/1). Arrêt systemd préservant le helper flock et relecture
+adaptative. Deux CABU 2.2.1 ont été rétablis après transfert non scellé ;
+publication et activation 2.2.2 restent distinctes. PA01 reste protégé sur deux
+erreurs natives aborted, sans preuve terminale qualifiée. Attribution ACL ultérieure.
+
+
 ## Correctif courant CAB 2.2.1
 
 `reconcile-approved-native-cancellation`, code non attribué : correctif SCM
