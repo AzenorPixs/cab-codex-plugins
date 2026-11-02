@@ -320,18 +320,36 @@ test('les métadonnées V2 arbitraires ne deviennent pas le champ legacy tools',
   assert.equal(message.info.tools, undefined);
 });
 
-test('le client répond once par la route V2 et attend un HTTP 204', async (context) => {
+test('le client répond once dans la location de la session et attend un HTTP 204', async (context) => {
   const f = fixture(); context.after(f.close);
   const calls = [];
-  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/workspace', passwordFile: f.passwordFile,
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/default-location', passwordFile: f.passwordFile,
     fetchImpl: async (input, init) => {
-      const url = new URL(input); calls.push({ path: url.pathname, body: init.body });
+      const url = new URL(input); calls.push({ path: url.pathname, body: init.body, scope: init.headers['x-opencode-directory'] });
       if (url.pathname === '/api/info') return json(info);
       if (url.pathname.endsWith('/reply')) return new Response(null, { status: 204 });
       return json({ _tag: 'NotFoundError', message: 'not found' }, 404);
     } });
-  await client.replyPermission('ses_1', 'per_1', 'once', '/workspace');
-  assert.deepEqual(calls.at(-1), { path: '/api/session/ses_1/permission/per_1/reply', body: JSON.stringify({ decision: 'once' }) });
+  await client.replyPermission('ses_1', 'per_1', 'once', '/session-location');
+  assert.deepEqual(calls.at(-1), { path: '/api/session/ses_1/permission/per_1/reply', body: JSON.stringify({ decision: 'once' }), scope: '/session-location' });
+});
+
+test('une réponse de permission hors HTTP 204 est refusée sans seconde requête', async (context) => {
+  const f = fixture(); context.after(f.close);
+  const calls = [];
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/default-location', passwordFile: f.passwordFile,
+    fetchImpl: async (input, init) => {
+      const url = new URL(input); calls.push({ path: url.pathname, scope: init.headers['x-opencode-directory'] });
+      if (url.pathname === '/api/info') return json(info);
+      if (url.pathname.endsWith('/reply')) return json({ accepted: true });
+      return json({ _tag: 'NotFoundError', message: 'not found' }, 404);
+    } });
+  await assert.rejects(client.replyPermission('ses_1', 'per_1', 'once', '/session-location'),
+    { code: 'opencode-permission-reply-invalid' });
+  assert.deepEqual(calls, [
+    { path: '/api/info', scope: undefined },
+    { path: '/api/session/ses_1/permission/per_1/reply', scope: '/session-location' },
+  ]);
 });
 
 test('un credential lisible par groupe est refusé avant toute requête', async (context) => {
