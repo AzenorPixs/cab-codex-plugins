@@ -1,4 +1,25 @@
-# Reprise des incidents de codage natif — CAB 2.1.62
+# Reprise des incidents de codage natif — CAB 2.1.63
+
+## Opération approuvée interrompue par un redémarrage
+
+CAB persiste une décision terminale et l’identité de son opération avant toute
+réponse de permission native. À la reprise, il ne restaure la décision qu’à
+partir d’une demande `request_validation` native terminée et d’une réponse
+`APPROVED` exacte, toutes deux liées aux mêmes requestId, approvalId, operationId,
+RUN, session, empreintes, manifeste et révisions.
+
+La continuation du `once` existant exige deux observations natives stables : la
+permissionId exacte est encore pendante, son callID correspond à l’unique outil
+`running` dont `executed` vaut `false`, aucune réponse ou fin native contradictoire
+n’est apparue, et l’accès peut être acquis avec les révisions originales. CAB
+répond alors à cette permission d’origine ; il ne crée pas de nouvelle demande.
+Si une permission est absente, un accusé `once` est déjà durable, un outil a
+démarré, ou une identité/historique diverge, CAB ne réémet rien et conserve
+`UNKNOWN` avec ses ressources protégées. Seule une fin native exacte clôt cette
+opération. Le délai, le silence ou `idle` ne prouvent jamais `NO_EFFECT`.
+
+Une opération `UNKNOWN` ne bloque pas les accès d’un autre RUN sur des ressources
+sans recouvrement. Toute écriture recouvrante attend la frontière native sûre.
 
 ## Prévol avant récupération d'une session adossée à un RUN
 

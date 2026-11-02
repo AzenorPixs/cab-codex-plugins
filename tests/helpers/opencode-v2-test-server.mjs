@@ -31,7 +31,8 @@ function v2Message(message) {
 function v2Permission(permission) {
   return { id: permission.id, sessionID: permission.sessionID, action: permission.permission,
     resources: [permission.metadata?.command || permission.metadata?.filepath].filter(Boolean),
-    metadata: permission.metadata || {}, source: { type: 'tool', messageID: 'msg_fixture', id: permission.tool?.callID || 'call_fixture' } };
+    metadata: permission.metadata || {}, source: { type: 'tool', messageID: permission.messageID || 'msg_fixture',
+      id: permission.tool?.callID || 'call_fixture' } };
 }
 
 function v2Session(session, directory) {

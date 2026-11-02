@@ -1,3 +1,18 @@
+## 2.1.63 — Reprise sûre des permissions natives après redémarrage
+
+- Les décisions terminales d’opération sont persistées avant la réponse native
+  et restaurées uniquement depuis une demande et une approbation natives
+  terminées, avec identités et empreintes concordantes.
+- Le même `once` peut continuer uniquement lorsque deux observations confirment
+  la permissionId et le callID exacts encore pendants, l’outil running non
+  exécuté et les révisions valides. Aucun nouvel envoi n’est tenté si la
+  permission a disparu, si once est acquitté ou si l’état est inconnu.
+- La preuve de reprise est conservée dans le GET scoped par RUN. Une frontière
+  inconnue garde ses ressources protégées ; les RUN indépendants sans
+  recouvrement continuent.
+- La version commune CAB/CABU, des quatre briques, commandes et documents passe
+  à 2.1.63.
+
 ## 2.1.62 — Projection sûre des opérations natives par RUN
 
 - Ajout d’un GET scoped par RUN pour relire l’état durable des opérations et

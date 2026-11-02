@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.62';
+export const VERSION = '2.1.63';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -107,7 +107,7 @@ export class ResourceRunRegistry extends RunRegistry {
       const owner = [...this.runs.values(), ...this.history].find((r) => r.runId === op?.runId && r.contextId === op?.contextId);
       if (!id(key) || !onlyKeys(op, ['operationId','accessId','runId','contextId','version','sessionId','requestId',
           'operationDigest','identityDigest','resources','expectedRevisions','state','preparedAt','native','finishedAt',
-          'completionDigest','maintenancePreflight','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence']) || op.operationId !== key || !id(op.runId) ||
+          'completionDigest','maintenancePreflight','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence','decision','nativeRecovery']) || op.operationId !== key || !id(op.runId) ||
           !owner || !id(op.accessId) || !id(op.requestId) || !hash(op.operationDigest) || !hash(op.identityDigest) ||
           !Number.isSafeInteger(op.contextId) || !Number.isSafeInteger(op.version) ||
           op.version < op.contextId || op.version > owner.version || !Number.isFinite(Date.parse(op.preparedAt)) ||
@@ -135,6 +135,16 @@ export class ResourceRunRegistry extends RunRegistry {
           typeof op.native.permissionId !== 'string' || !Number.isFinite(op.native.startedAt) || !hash(op.native.targetDigest) ||
           (op.native.kind !== undefined && !['bash','edit'].includes(op.native.kind)) ||
           (op.native.onceAcknowledged !== undefined && typeof op.native.onceAcknowledged !== 'boolean'))) fail();
+      if (op.decision !== undefined && (!onlyKeys(op.decision, ['status','requestId','approvalId','changeId','runId','version',
+          'sessionId','operationDigest','identityDigest','recordedAt']) ||
+          !['approved','rejected','needs_clarification'].includes(op.decision.status) ||
+          op.decision.requestId !== op.requestId || !id(op.decision.approvalId) || !id(op.decision.changeId) ||
+          op.decision.runId !== op.runId || op.decision.version !== op.version || op.decision.sessionId !== op.sessionId ||
+          op.decision.operationDigest !== op.operationDigest || op.decision.identityDigest !== op.identityDigest ||
+          !Number.isFinite(Date.parse(op.decision.recordedAt)))) fail();
+      if (op.nativeRecovery !== undefined && (!onlyKeys(op.nativeRecovery, ['permissionId','callId','proofDigest','observedAt']) ||
+          typeof op.nativeRecovery.permissionId !== 'string' || typeof op.nativeRecovery.callId !== 'string' ||
+          !hash(op.nativeRecovery.proofDigest) || !Number.isFinite(Date.parse(op.nativeRecovery.observedAt)))) fail();
       if (op.testReservationId && (!Number.isSafeInteger(op.native?.startSequence) || op.native.startSequence < 1 ||
           op.native.startSequence > state.sequence || (op.state === 'COMPLETED' &&
             (!op.nativeResult || !Number.isSafeInteger(op.finishedSequence) || op.finishedSequence <= op.native.startSequence)))) fail();
@@ -254,6 +264,11 @@ export class ResourceRunRegistry extends RunRegistry {
         const access = this.resourceState.accesses[op.accessId];
         return { operationId: op.operationId, requestId: op.requestId, sessionId: op.sessionId,
           contextId: op.contextId, version: op.version, state: op.state, preparedAt: op.preparedAt,
+          decision: op.decision ? { status: op.decision.status, recordedAt: op.decision.recordedAt } : null,
+          onceAcknowledged: op.native ? op.native.onceAcknowledged === true : null,
+          nativeRecovery: op.nativeRecovery ? { permissionId: op.nativeRecovery.permissionId,
+            callId: op.nativeRecovery.callId, boundary: 'PERMISSION_PENDING_NO_REPLY',
+            observedAt: op.nativeRecovery.observedAt } : null,
           native: op.native ? { permissionId: op.native.permissionId, callId: op.native.callId ?? null,
             kind: op.native.kind ?? null, startedAt: op.native.startedAt,
             targetDigest: op.native.targetDigest, onceAcknowledged: op.native.onceAcknowledged === true } : null,
@@ -672,6 +687,54 @@ export class ResourceRunRegistry extends RunRegistry {
       this.resourceState.operations[op.operationId] = op;
       this.persist();
     }
+    return copy(op);
+  }
+  recordDecision(runId, operationId, decision) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    const run = this.runs.get(runId);
+    if (!op || !run || op.runId !== runId || op.contextId !== run.contextId ||
+        !decision || !['approved','rejected','needs_clarification'].includes(decision.status) ||
+        decision.requestId !== op.requestId || decision.operationId !== op.operationId ||
+        decision.runId !== runId || decision.changeId !== run.changeId || decision.version !== op.version || decision.sessionId !== op.sessionId ||
+        decision.operationDigest !== op.operationDigest || decision.identityDigest !== op.identityDigest) {
+      throw new CoordinationError('operation-decision-identity-divergent');
+    }
+    const value = { status: decision.status, requestId: op.requestId, approvalId: decision.approvalId,
+      changeId: decision.changeId, runId, version: op.version, sessionId: op.sessionId,
+      operationDigest: op.operationDigest, identityDigest: op.identityDigest,
+      recordedAt: typeof decision.recordedAt === 'string' ? decision.recordedAt : now() };
+    if (!id(value.approvalId) || !id(value.changeId) || !Number.isFinite(Date.parse(value.recordedAt))) {
+      throw new CoordinationError('operation-decision-invalid');
+    }
+    if (op.decision) {
+      if (['status','requestId','approvalId','changeId','runId','version','sessionId','operationDigest','identityDigest']
+        .some((key) => op.decision[key] !== value[key])) throw new CoordinationError('operation-decision-conflict');
+      return copy(op.decision);
+    }
+    op.decision = value;
+    this.persist();
+    return copy(value);
+  }
+  restorePendingNative(runId, operationId, proof) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    const access = op && this.resourceState.accesses[op.accessId];
+    if (!op || op.runId !== runId || !['ISSUING','UNKNOWN'].includes(op.state) ||
+        !op.native || op.native.onceAcknowledged === true || !access || access.runId !== runId ||
+        !['EXECUTING','UNKNOWN'].includes(access.state) || !proof ||
+        proof.permissionId !== op.native.permissionId || proof.callId !== op.native.callId ||
+        proof.pending !== true || proof.toolStatus !== 'running' || proof.executed !== false || !hash(proof.proofDigest)) {
+      throw new CoordinationError('native-pending-proof-required');
+    }
+    op.nativeRecovery = { permissionId: proof.permissionId, callId: proof.callId,
+      proofDigest: proof.proofDigest, observedAt: now() };
+    delete op.native;
+    op.state = 'PREPARED';
+    access.state = 'HELD';
+    delete access.finishedAt;
+    delete access.outcome;
+    this.persist();
     return copy(op);
   }
   admitValidation(runId, approval, identityDigest, known, options) {

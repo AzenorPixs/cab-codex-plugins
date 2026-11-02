@@ -45,6 +45,15 @@ POST /runs/<runId>/locks/release porte version, operationId, token, fencing, out
 
 Les écritures connues avancent les révisions des ressources et invalident les lectures de sous-arbre concernées. Les écritures à publier restent suivies après libération. Après crash, les protections sont restaurées mais l'ancien jeton ne permet aucune nouvelle once. /locks/reconcile vérifie la frontière connue, annule les anciennes sous-opérations non commencées et émet un jeton/fencing neufs sans relâcher les fichiers ; les corrections conservent des identités et décisions neuves. Réconcilier les effets sans rejouer une permission consommée. Le prévol de récupération garde ses règles strictes ; terminer/libérer son accès avant transfert de session.
 
+Pour une permission native encore pendante, le contrôleur 2.1.63 peut continuer
+le `once` déjà décidé après redémarrage seulement si l’historique contient la
+demande et l’approbation terminées exactes et que deux lectures natives
+confirment permissionId/callID identiques, outil `running` et `executed=false`.
+L’accès est réacquis sur le manifeste et les révisions d’origine. Si la
+permission a disparu, `once` est acquitté, l’outil a commencé ou une preuve
+diverge, l’opération reste `UNKNOWN` sans rejeu jusqu’à fin native corrélée.
+Les accès non recouvrants d’autres RUN restent disponibles.
+
 ## Environnements de test Docker et LXC
 
 Avant toute préparation, déclarer les environnements dans le manifeste du change, puis vérifier `testResourceProtocol=test-resources-v1` sur le contrôleur. Une identité non secrète stable représente le moteur Docker (`docker:engine-a`) ou l'instance LXC sur son hôte (`lxc:host-a/101`). Employer la même clé pour tous les alias physiques ; si cette identité ne peut être établie, arrêter avant le test. Les clés acceptent des identifiants en minuscules, chiffres, tiret, point ou souligné, sans URL, secret ni accès à project.env. La réservation couvre les RUN d'un même registre CAB ; elle ne constitue pas un verrou hôte entre contrôleurs indépendants.

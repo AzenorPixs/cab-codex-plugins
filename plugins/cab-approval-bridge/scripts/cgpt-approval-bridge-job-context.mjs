@@ -12,7 +12,7 @@ import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bri
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.62";
+export const VERSION = "2.1.63";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -81,7 +81,8 @@ const decisionError = (code) => Object.assign(new Error(code), { code });
 export function createJobContext({ workspace, stateDirectory, run = null,
   currentRun = () => run,
   admitOperation = () => true, inspectOperationAdmission = null, ownsSession = () => true, observe = () => {},
-  nativeLifecycle = {}, openCodeClient = null, modelPolicy = {}, reviewOperation = () => null,
+  nativeLifecycle = {}, persistOperationDecision = () => {}, ensureOperationAccess = () => {},
+  openCodeClient = null, modelPolicy = {}, reviewOperation = () => null,
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
   const transportAbort = new AbortController();
@@ -319,7 +320,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.62",
+    version: "2.1.63",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1436,6 +1437,7 @@ async function recoverJob(payload) {
   }
   if (restored) {
     validations.set(restored.validation.requestId, restored.validation);
+    persistOperationDecision(restored.validation, restored.decision);
     httpDecisions.set(restored.validation.requestId, restored.decision);
     answered.add(restored.validation.requestId);
   }
@@ -1457,6 +1459,8 @@ function matchesApprovedOperation(permission, operation) {
       permission.sessionID !== operation.sessionId) {
     return false;
   }
+  const callId = permission.tool?.callID || permission.metadata?.callID || permission.callID || null;
+  if (operation.requiredNativeCallId && callId !== operation.requiredNativeCallId) return false;
 
   if (operation.kind === "edit" && permission.permission === "edit") {
     const filePath = permission.metadata?.filepath;
@@ -1487,6 +1491,50 @@ function matchesApprovedOperation(permission, operation) {
     (!strictCommands &&
       command === `${operation.target}${opencodeExitStatusSuffix}`)
   );
+}
+
+async function restoreApprovedOperation(approval, approvalResult, requiredNativeCallId) {
+  if (!run || !approval || !approvalResult || approvalResult.status !== 'APPROVED' ||
+      approvalResult.reviewer !== 'CGPT' || approvalResult.requestId !== approval.requestId ||
+      approvalResult.approval_id !== approval.approval_id || typeof requiredNativeCallId !== 'string' ||
+      !requiredNativeCallId) throw decisionError('operation-restore-proof-invalid');
+  const operation = approvedOperation(approval);
+  if (!operation || operation.runId !== run.runId || operation.directory !== workspace ||
+      operation.operationId !== approval.operation_id || operation.operationDigest !== approval.operation_digest ||
+      operation.sessionId !== approval.session_id || approval.change_id !== job?.changeId ||
+      job?.revokedSessions?.includes(operation.sessionId)) throw decisionError('operation-restore-identity-divergent');
+  operation.requiredNativeCallId = requiredNativeCallId;
+  const requestId = approval.requestId;
+  const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
+  if (previous || priorDecision || answered.has(requestId)) {
+    if (previous?.approvalId !== approval.approval_id || previous?.changeId !== approval.change_id ||
+        previous?.operationConsumed || previous?.operationInvalidated || priorDecision?.decision !== 'approved') {
+      throw decisionError('operation-restore-already-present');
+    }
+    previous.operation.requiredNativeCallId = requiredNativeCallId;
+    previous.restoredOperation = true;
+    await transmitApprovedOperation(previous);
+    return { requestId, operationId: operation.operationId, restored: false };
+  }
+  assertDecisionOperation(operation, requestId);
+  const validation = { requestId, approvalId: approval.approval_id, changeId: approval.change_id,
+    summary: typeof approval.summary === 'string' ? approval.summary : 'Validation restaurée', operation,
+    receivedAt: new Date().toISOString(), operationConsumed: false, operationInvalidated: false,
+    restoredOperation: true };
+  const decision = { decision: 'approved', requestId, approval_id: approval.approval_id,
+    change_id: approval.change_id, run_id: run.runId, reservation_version: operation.reservationVersion,
+    operation_id: operation.operationId, operation_digest: operation.operationDigest,
+    expected_revisions: operation.expectedRevisions, coordination_protocol: operation.coordinationProtocol,
+    resources: operation.resources, access_id: operation.accessId,
+    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}) };
+  persistOperationDecision(validation, decision);
+  validations.set(requestId, validation);
+  httpDecisions.set(requestId, decision);
+  answered.add(requestId);
+  updateStatus('operation-approval-restored', { requestId, operationId: operation.operationId });
+  const replied = await transmitApprovedOperation(validation);
+  if (!replied) updateStatus('operation-restore-waiting-boundary', { requestId, operationId: operation.operationId });
+  return { requestId, operationId: operation.operationId, restored: true };
 }
 
 function nativePermissionSummary(permission) {
@@ -1590,7 +1638,7 @@ async function transmitApprovedOperation(validation) {
     !operationAllowed(validation.operation, validation.requestId) ||
     reconcilingPermissions.has(validation.requestId)
   ) {
-    return;
+    return false;
   }
 
   reconcilingPermissions.add(validation.requestId);
@@ -1604,8 +1652,11 @@ async function transmitApprovedOperation(validation) {
       matchesApprovedOperation(candidate, validation.operation)
     );
 
-    if (permission && operationAllowed(validation.operation, validation.requestId, 'permission') &&
-        !validation.operationInvalidated) {
+    if (!permission) {
+      if (validation.restoredOperation) updateStatus('operation-restore-permission-not-found', { requestId: validation.requestId });
+      return false;
+    }
+    if (permission && !validation.operationInvalidated) {
       if (validation.operation.toolInputSha256 !== undefined &&
           (permission.metadata?.nativeSourceVerified !== true ||
            permission.metadata?.nativeToolInputSha256 !== validation.operation.toolInputSha256)) {
@@ -1616,8 +1667,9 @@ async function transmitApprovedOperation(validation) {
         throw cause;
       }
       await checkNativeAsk(validation.operation, permission.nativeAction || validation.operation.kind);
+      if (validation.restoredOperation) ensureOperationAccess(validation.operation);
       if (!operationAllowed(validation.operation, validation.requestId, 'permission') ||
-          validation.operationInvalidated || validation.operationConsumed) return;
+          validation.operationInvalidated || validation.operationConsumed) return false;
       nativeLifecycle.begin?.(validation.operation, validation.requestId, permission);
       await openCode.replyPermission(validation.operation.sessionId, permission.id, 'once', validation.operation.directory);
 
@@ -1628,7 +1680,9 @@ async function transmitApprovedOperation(validation) {
         requestId: validation.requestId,
         permission: permission.permission,
       });
+      return true;
     }
+    return false;
   } catch (cause) {
     if (cause.code !== 'NATIVE_TOOL_INPUT_GUARD') nativeLifecycle.unknown?.(validation.operation, validation.requestId);
     throw cause;
@@ -1914,7 +1968,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.62",
+      version: "2.1.63",
     },
   });
 
@@ -2174,7 +2228,7 @@ async function handleValidation(request) {
         (decision.decision === 'approved' && (request.operationInvalidated ||
           !operationAllowed(request.operation, request.requestId)))) return;
 
-    httpDecisions.set(request.requestId, {
+    const decisionEntry = {
       ...decision,
       requestId: request.requestId,
       approval_id: request.approvalId,
@@ -2185,7 +2239,9 @@ async function handleValidation(request) {
         expected_revisions: request.operation?.expectedRevisions,
         coordination_protocol: request.operation?.coordinationProtocol, resources: request.operation?.resources,
         access_id: request.operation?.accessId } : {}),
-    });
+    };
+    persistOperationDecision(request, decisionEntry);
+    httpDecisions.set(request.requestId, decisionEntry);
 
     answered.add(
       request.requestId
@@ -2930,7 +2986,7 @@ const handle = async (request, response, url) => {
             assertDecisionOperation(validation.operation, requestId);
           }
 
-          httpDecisions.set(requestId, {
+          const decisionEntry = {
             ...decision,
             requestId,
             approval_id:
@@ -2943,7 +2999,9 @@ const handle = async (request, response, url) => {
               expected_revisions: validation.operation?.expectedRevisions,
               coordination_protocol: validation.operation?.coordinationProtocol, resources: validation.operation?.resources,
               access_id: validation.operation?.accessId } : {}),
-          });
+          };
+          persistOperationDecision(validation, decisionEntry);
+          httpDecisions.set(requestId, decisionEntry);
 
           const entry =
             active.get(requestId);
@@ -3050,6 +3108,9 @@ return {
       !httpDecisions.has(v.requestId) || (httpDecisions.get(v.requestId)?.decision === "approved" &&
         !v.operationConsumed && !v.operationInvalidated))),
   operation: (requestId) => validations.get(requestId)?.operation,
+  isOperationReconciling: (operationId) => [...validations.values()].some((validation) =>
+    validation.operation?.operationId === operationId && reconcilingPermissions.has(validation.requestId)),
+  restoreApprovedOperation,
   assertNativeShellAsk: () => checkNativeAsk({sessionId:job?.sessionId,directory:workspace,kind:'bash'},'shell'),
   decision: (requestId) => httpDecisions.get(requestId),
   invalidateOperation: (requestId) => {

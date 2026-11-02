@@ -110,7 +110,7 @@ Tous les chemins sont relatifs à openspec/. Pour les 70 nouveaux codes : **Attr
 ## Entrées provisoires sans code
 
 Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code à cette date. Aucune réservation supplémentaire de code à cette date.
-État SCM vérifié le 2 novembre 2026 : 126 archives et aucun change actif. `fix-native-permission-reply-location-scope` est archivé sans code ; cette session n’attribue ni ne réserve de code.
+État SCM vérifié le 2 novembre 2026 : 127 archives et aucun change actif. `fix-native-permission-reply-location-scope`, `expose-safe-run-native-operation-state` et `restore-approved-native-operations` sont archivés sans code ; cette session n’attribue ni ne réserve de code.
 
 
 
@@ -131,6 +131,7 @@ Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des 
 | code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
 | code non attribué | fix-native-permission-reply-location-scope | ARCHIVÉ, source 2.1.61 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-fix-native-permission-reply-location-scope/tasks.md) |
 | code non attribué | expose-safe-run-native-operation-state | ARCHIVÉ, source 2.1.62 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-expose-safe-run-native-operation-state/tasks.md) |
+| code non attribué | restore-approved-native-operations | ARCHIVÉ, source 2.1.63 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-restore-approved-native-operations/tasks.md) |
 
 Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
 

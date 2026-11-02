@@ -62,7 +62,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.62` pour le broker, le contrôleur et le
+La version source actuelle est `2.1.63` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -808,12 +808,22 @@ POST /runs/reserve attribue change/intention ; resources déclare la portée et 
 
 La projection opérations est limitée au RUN du chemin et à 200 entrées ;
 `operationId` permet un filtre exact. Elle fournit état, callID, permissionId,
-`onceAcknowledged` et état d’accès, mais jamais le bearer token, le contenu ou
-la cible. `onceAcknowledged` décrit l’accusé durable du contrôleur ; un `false`
-peut signifier que l’accusé n’a pas été persisté avant un crash. Il ne remplace
-pas les GET natifs de permission/historique et ne permet ni reply, ni retry, ni
-libération d’accès. Une opération `ISSUING`, `EXECUTING` ou `UNKNOWN` reste
-protégée jusqu’à une fin native corrélée ou une réconciliation sûre.
+`onceAcknowledged`, décision sûre, preuve de reprise d’une permission pendante
+et état d’accès, mais jamais le bearer token, le contenu ou la cible.
+`onceAcknowledged` décrit l’accusé durable du contrôleur ; un `false` ou nul ne
+prouve pas l’absence d’effet. Il doit être croisé aux GET natifs de
+permission/historique.
+
+Après redémarrage, une décision est restaurée uniquement depuis une demande
+native terminée et une réponse `APPROVED` exacte, avec identités et empreintes
+concordantes. CAB ne continue le même `once` que si deux lectures natives
+stables confirment la permissionId et le callID exacts toujours pendants, un
+outil unique `running` avec `executed=false`, et les révisions et accès valides.
+Une réponse acquittée, une permission absente, un outil commencé, un historique
+incomplet ou une identité divergente interdit tout nouvel envoi. Une issue
+inconnue reste protégée jusqu’à une fin native corrélée ; aucun timeout ni idle
+ne prouve `NO_EFFECT`. L’incertitude conserve uniquement les ressources
+recouvrantes, et un RUN indépendant peut progresser sans gel global.
 
 Lors d'une nouvelle réservation, une suspension propre au RUN ne s'applique que si sa réservation précédente est encore RESERVED. Après libération réconciliée en ABANDONED ou DELIVERED, le même propriétaire peut obtenir une génération et un contexte neufs ; le STOP précédent reste dans l'historique sans être hérité. Les contrôles globaux restent systématiques, ainsi que ceux de propriétaire, de change déjà livré, de dépendances et de ressources. Cette transition ne transmet ni décision consommée ni permission native et ne modifie pas le schéma du registre.
 
@@ -1194,7 +1204,7 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.62 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.1.63 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1309,7 +1319,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.62 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.1.63 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1374,7 +1384,7 @@ Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de 
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.62.
+La distribution courante des quatre briques, plugins et commandes est 2.1.63.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

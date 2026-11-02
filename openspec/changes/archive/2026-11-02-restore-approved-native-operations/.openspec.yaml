@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Une permission et son opération CAB atteignent une frontière sûre après
+  redémarrage, tandis que les opérations compatibles hors ressources
+  recouvrantes peuvent continuer.
