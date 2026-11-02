@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.66. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.67. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -14,7 +14,7 @@ des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche 
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
 
-Après un redémarrage du contrôleur, CAB 2.1.66 restaure une décision seulement
+Après un redémarrage du contrôleur, CAB 2.1.67 restaure une décision seulement
 depuis une demande et une approbation natives terminées et corrélées. Il répond
 au même `once` uniquement si deux lectures stables confirment la permission
 exacte encore pendante, le callID correspondant et l’outil `running` avec
@@ -25,8 +25,16 @@ incomplète conserve `UNKNOWN` et les ressources du manifeste protégées. Le
 journal ne prouve jamais `permission.replied`. Les accès complets compatibles
 du même RUN peuvent coexister sans recouvrement ; les conflits attendent.
 
+Après l’échec d’une notification locale, un rejet déjà terminé peut être
+réconcilié depuis deux lectures natives identiques de la demande, du rejet
+`CGPT` et du statut `REJECTED`. La session doit être inactive et sans permission
+ou accès. CAB enregistre le rejet avec une empreinte et annule l’opération
+`PREPARED` dans une seule écriture durable ; le même résultat est restauré après
+redémarrage. Toute divergence conserve la validation indécise. Aucun outil
+natif, commande ou `once` n’est rejoué.
+
 Une demande `request_validation` transportée par Code Mode peut arriver au
-contrôleur avant la fin du wrapper `execute`. CAB 2.1.66 corrèle l’appel MCP
+contrôleur avant la fin du wrapper `execute`. CAB 2.1.67 corrèle l’appel MCP
 natif unique exact lorsqu’il est encore `running`, ainsi qu’un wrapper terminé
 non exécuté dont le seul champ variable `requestId` est résolu depuis cet appel
 natif. Les autres valeurs doivent rester littérales et les identités complètes
@@ -673,7 +681,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, des plugins CAB/CABU et des commandes
-est `2.1.66`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.67`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -794,7 +802,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.66.
+La distribution courante des quatre briques, plugins et commandes est 2.1.67.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

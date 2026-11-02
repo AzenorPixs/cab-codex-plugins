@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.66";
+const version = "2.1.67";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -148,6 +148,15 @@ function contextFor(run) {
         requestId: validation.requestId, approvalId: validation.approvalId, changeId: validation.changeId,
         operationId: op.operationId, operationDigest: op.operationDigest, identityDigest: op.identityDigest,
         runId: run.runId, version: op.version, sessionId: op.sessionId });
+    },
+    persistNativeRejectedDecision: (validation, decision, proofDigest) => {
+      if (!validation?.operation) throw new CoordinationError('operation-decision-operation-missing');
+      const op = registry.resourceState.operations[validation.operation.operationId];
+      if (!op) throw new CoordinationError('operation-decision-operation-missing');
+      registry.recordRejectedNativeDecision(run.runId, op.operationId, { status: 'rejected',
+        requestId: validation.requestId, approvalId: validation.approvalId, changeId: validation.changeId,
+        operationId: op.operationId, operationDigest: op.operationDigest, identityDigest: op.identityDigest,
+        runId: run.runId, version: op.version, sessionId: op.sessionId, nativeProofDigest: proofDigest }, proofDigest);
     },
     ensureOperationAccess: (operation) => {
       const op = registry.resourceState.operations[operation?.operationId];
@@ -467,7 +476,8 @@ async function restoreApprovedOperations(run, context) {
   restoringOperations.add(run.runId);
   try {
     const candidates = Object.values(registry.resourceState.operations).filter((op) => op.runId === run.runId &&
-      op.contextId === run.contextId && ['PREPARED','ISSUING','UNKNOWN'].includes(op.state) &&
+      op.contextId === run.contextId && (['PREPARED','ISSUING','UNKNOWN'].includes(op.state) ||
+        op.state === 'CANCELLED' && op.nativeRejectionProofDigest) &&
       op.native?.onceAcknowledged !== true && op.rejectionOnly !== true);
     for (const stored of candidates) {
       const key = run.runId + ':' + stored.operationId;
@@ -477,6 +487,7 @@ async function restoreApprovedOperations(run, context) {
         const current = registry.resourceState.operations[stored.operationId];
         if (!current || current.runId !== run.runId || current.state !== stored.state || current.native?.onceAcknowledged === true) continue;
         if (context.isOperationReconciling(current.operationId)) continue;
+        const operationSnapshot = structuredClone(current);
         const generation = nativeSessionGenerations.get(current.sessionId) || 0;
         const [messages, permissions] = await Promise.all([
           openCode.messages(current.sessionId, run.directory),
@@ -496,8 +507,43 @@ async function restoreApprovedOperations(run, context) {
         const identityHash = createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex');
         const owner = registry.requestOwners[current.requestId];
         if (owner?.runId !== run.runId || owner.digest !== identityHash) continue;
-        const candidate = registry.operationCandidate(run.runId, approval);
+        const alreadyRejected = current.state === 'CANCELLED' && current.decision?.status === 'rejected' &&
+          typeof current.nativeRejectionProofDigest === 'string' &&
+          current.decision.nativeProofDigest === current.nativeRejectionProofDigest;
+        let candidate;
+        try { candidate = registry.operationCandidate(run.runId, approval); }
+        catch (cause) {
+          if (cause.code !== 'resource-revision-stale' || !nativeRejectedValidationProof(parts, approval)) continue;
+          candidate = registry.operationCandidate(run.runId, approval, { checkCurrentRevisions:false });
+        }
         if (candidate.identityDigest !== current.identityDigest || candidate.operationDigest !== current.operationDigest) continue;
+        if (current.state === 'PREPARED' && !current.decision || alreadyRejected) {
+          let reconciled = alreadyRejected && context.decision(current.requestId)?.decision === 'rejected';
+          if (!reconciled) {
+            const [secondMessages, secondPermissions, activeSessions] = await Promise.all([
+              openCode.messages(current.sessionId, run.directory),
+              openCode.permissions(run.directory, { sessionIds:[current.sessionId], verifyInputs:true }),
+              openCode.sessionStatus(run.directory),
+            ]);
+            const secondParts = Array.isArray(secondMessages)
+              ? secondMessages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []) : [];
+            const firstProof = nativeRejectedValidationProof(parts, approval);
+            const secondProof = nativeRejectedValidationProof(secondParts, approval);
+            const permissionPending = permissions.some((permission) => permission.sessionID === current.sessionId) ||
+              secondPermissions.some((permission) => permission.sessionID === current.sessionId);
+            if (firstProof && firstProof === secondProof && proofHash(messages) === proofHash(secondMessages) &&
+                !permissionPending && !Object.hasOwn(activeSessions, current.sessionId) &&
+                generation === (nativeSessionGenerations.get(current.sessionId) || 0) &&
+                proofHash(registry.resourceState.operations[current.operationId]) === proofHash(operationSnapshot)) {
+              const proofDigest = proofHash({ runId:run.runId, contextId:run.contextId, operationId:current.operationId,
+                requestId:current.requestId, approvalId:approval.approval_id, transcriptDigest:firstProof });
+              if (alreadyRejected && current.nativeRejectionProofDigest !== proofDigest) continue;
+              context.restoreNativeRejectedOperation(approval, proofDigest);
+              reconciled = true;
+            }
+          }
+          if (reconciled || alreadyRejected) continue;
+        }
         const outputs = parts.filter((part) => part?.type === 'tool' &&
           ['cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_poll_approval'].includes(part.tool) &&
           part.state?.status === 'completed').flatMap((part) => {
@@ -687,6 +733,48 @@ function rejectedNativeRequests(parts) {
     }
   }
   return rejected;
+}
+function nativeRejectedValidationProof(parts, approval) {
+  const allowed = new Set(['cgpt-validation.request_validation','cgpt-validation.reject','cgpt-validation.get_approval']);
+  const entries = [];
+  for (const part of parts) {
+    if (part?.type !== 'tool') continue;
+    if (part.tool === 'execute') {
+      if (part.executed !== false || part.state?.metadata?.truncated !== false ||
+          !Array.isArray(part.state?.metadata?.toolCalls) || part.state?.status !== 'completed') {
+        entries.push({ tool:'untrusted-wrapper', status:part.state?.status }); continue;
+      }
+      for (const call of part.state.metadata.toolCalls) {
+        entries.push(call && typeof call === 'object' ? call : { tool:'invalid-call', status:'invalid' });
+      }
+      continue;
+    }
+    const name = ({ 'cgpt-validation_request_validation':'cgpt-validation.request_validation',
+      'cgpt-validation_reject':'cgpt-validation.reject', 'cgpt-validation_get_approval':'cgpt-validation.get_approval' })[part.tool];
+    entries.push({ tool:name || 'unknown', status:part.state?.status, input:part.state?.input, output:part.state?.output });
+  }
+  const requests = entries.map((entry,index) => ({entry,index})).filter(({entry}) =>
+    entry.tool === 'cgpt-validation.request_validation' && entry.input?.requestId === approval.requestId);
+  if (requests.length !== 1 || requests[0].entry.status !== 'completed' ||
+      proofHash(nativeIdentity(requests[0].entry.input)) !== proofHash(nativeIdentity(approval))) return null;
+  const suffix = entries.slice(requests[0].index);
+  if (suffix.length !== 3 || suffix[0]?.tool !== 'cgpt-validation.request_validation' ||
+      suffix[1]?.tool !== 'cgpt-validation.reject' || suffix[2]?.tool !== 'cgpt-validation.get_approval' ||
+      suffix.some((entry) => !allowed.has(entry.tool) || entry.status !== 'completed')) return null;
+  const rejects = suffix.filter((entry) => entry.tool === 'cgpt-validation.reject' &&
+    entry.input?.approval_id === approval.approval_id &&
+    (entry.input.requestId === undefined || entry.input.requestId === approval.requestId));
+  const lookups = suffix.filter((entry) => entry.tool === 'cgpt-validation.get_approval' &&
+    entry.input?.approval_id === approval.approval_id);
+  if (rejects.length !== 1 || lookups.length !== 1) return null;
+  let result;
+  try { result = typeof lookups[0].output === 'string' ? JSON.parse(lookups[0].output) : lookups[0].output; }
+  catch { return null; }
+  if (result?.status !== 'REJECTED' || result.reviewer !== 'CGPT' ||
+      result.requestId !== approval.requestId || result.approval_id !== approval.approval_id ||
+      proofHash(nativeIdentity(result)) !== proofHash(nativeIdentity(approval))) return null;
+  return proofHash({ approval:nativeIdentity(approval), request:requests[0].entry,
+    rejection:rejects[0], terminal:lookups[0], suffix });
 }
 function observeNativeCompletion(runId, part, sessionId) {
   for (const operation of Object.values(registry.resourceState.operations)) {

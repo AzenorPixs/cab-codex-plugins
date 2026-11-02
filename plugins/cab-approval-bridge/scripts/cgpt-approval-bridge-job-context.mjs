@@ -12,7 +12,7 @@ import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bri
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.66";
+export const VERSION = "2.1.67";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -81,7 +81,7 @@ const decisionError = (code) => Object.assign(new Error(code), { code });
 export function createJobContext({ workspace, stateDirectory, run = null,
   currentRun = () => run,
   admitOperation = () => true, inspectOperationAdmission = null, ownsSession = () => true, observe = () => {},
-  nativeLifecycle = {}, persistOperationDecision = () => {}, ensureOperationAccess = () => {},
+  nativeLifecycle = {}, persistOperationDecision = () => {}, persistNativeRejectedDecision = () => {}, ensureOperationAccess = () => {},
   openCodeClient = null, modelPolicy = {}, reviewOperation = () => null,
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
@@ -320,7 +320,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.66",
+    version: "2.1.67",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1574,6 +1574,42 @@ async function restoreApprovedTerminalOperation(approval, approvalResult) {
   return { requestId, operationId: operation.operationId, restored: true };
 }
 
+function restoreNativeRejectedOperation(approval, proofDigest) {
+  if (!run || !approval || !/^[a-f0-9]{64}$/.test(proofDigest || '') ||
+      approval.run_id !== run.runId || approval.change_id !== job?.changeId ||
+      approval.directory !== workspace || !ownsSession(approval.session_id) ||
+      job?.revokedSessions?.includes(approval.session_id)) throw decisionError('native-rejection-identity-divergent');
+  const operation = approvedOperation(approval);
+  if (!operation || operation.runId !== run.runId || operation.directory !== workspace ||
+      operation.operationId !== approval.operation_id || operation.operationDigest !== approval.operation_digest ||
+      operation.sessionId !== approval.session_id) throw decisionError('native-rejection-operation-divergent');
+  const requestId = approval.requestId;
+  const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
+  if (previous || priorDecision || answered.has(requestId)) {
+    if (previous?.approvalId !== approval.approval_id || previous?.changeId !== approval.change_id ||
+        priorDecision?.decision !== 'rejected' || priorDecision?.native_proof_digest !== proofDigest) {
+      throw decisionError('native-rejection-decision-conflict');
+    }
+    return { requestId, operationId: operation.operationId, restored: false };
+  }
+  const validation = { requestId, approvalId: approval.approval_id, changeId: approval.change_id,
+    summary: typeof approval.summary === 'string' ? approval.summary : 'Rejet natif réconcilié',
+    operation, receivedAt: new Date().toISOString(), operationConsumed: false,
+    operationInvalidated: true, nativeRejected: true };
+  const decision = { decision: 'rejected', requestId, approval_id: approval.approval_id,
+    change_id: approval.change_id, run_id: run.runId, reservation_version: operation.reservationVersion,
+    operation_id: operation.operationId, operation_digest: operation.operationDigest,
+    expected_revisions: operation.expectedRevisions, coordination_protocol: operation.coordinationProtocol,
+    resources: operation.resources, access_id: operation.accessId, native_proof_digest: proofDigest,
+    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}) };
+  persistNativeRejectedDecision(validation, decision, proofDigest);
+  validations.set(requestId, validation);
+  httpDecisions.set(requestId, decision);
+  answered.add(requestId);
+  updateStatus('native-rejected-validation-reconciled', { requestId, operationId: operation.operationId });
+  return { requestId, operationId: operation.operationId, restored: true };
+}
+
 function nativePermissionSummary(permission) {
   if (
     !permission ||
@@ -2005,7 +2041,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.66",
+      version: "2.1.67",
     },
   });
 
@@ -3122,7 +3158,7 @@ const handle = async (request, response, url) => {
 
 return {
   handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
-  verifyRejectedRecoveryRelease,
+  verifyRejectedRecoveryRelease, restoreNativeRejectedOperation,
   close: () => {
     if (closePromise) return closePromise;
     closed = true; transportAbort.abort(); clearInterval(permissionTimer);
