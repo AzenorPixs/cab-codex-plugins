@@ -120,6 +120,11 @@ test('Code Mode : projection littérale, provenance et découverte pure', async 
   const bound=await codeModeFixture(t,wrapped(boundCode,
     [{tool:'cgpt-validation.request_validation',status:'completed',input:boundInput}]));
   assert.equal(bound.tool,'cgpt-validation_request_validation');assert.deepEqual(bound.state.input,boundInput);
+  const quotedInput={requestId:'request-quoted-bound',commands:[command]};
+  const quotedCode='const CMD = `python3 -c "print({})"`; return await tools["cgpt-validation"].request_validation({"requestId":"request-quoted-bound","commands":[CMD]});';
+  const quoted=await codeModeFixture(t,wrapped(quotedCode,
+    [{tool:'cgpt-validation.request_validation',status:'completed',input:quotedInput}]));
+  assert.equal(quoted.tool,'cgpt-validation_request_validation');assert.deepEqual(quoted.state.input,quotedInput);
   const changed = structuredClone(raw); changed.state.input.code = ' '+changed.state.input.code;
   assert.notEqual((await codeModeFixture(t, changed)).state.metadata.cabCodeMode.envelopeHash,
     p.state.metadata.cabCodeMode.envelopeHash);
@@ -195,6 +200,7 @@ test('Code Mode : formes ambiguës conservées comme execute bloquant', async t 
     p=>p.state.input.code='return await tools["cgpt-validation"].request_validation({requestId:1+2});',
     p=>p.state.input.code='return await tools["cgpt-validation"].request_validation({requestId:"dynamic",commands:[`echo ${COMMAND}`]});',
     p=>p.state.input.code='const CMD = `literal`; return await tools["cgpt-validation"].request_validation({requestId:"binding-misused",commands:["true"],summary:CMD});',
+    p=>p.state.input.code='const CMD = `literal`; return await tools["cgpt-validation"].request_validation({requestId:"duplicate-commands","commands":[CMD],commands:["/usr/bin/false"]});',
     p=>p.state.input.code='const CMD = `literal`; search({query:"extra"}); return await tools["cgpt-validation"].request_validation({requestId:"extra-effect",commands:[CMD]});',
     p=>p.state.input.code='const tools = search({}); return await tools["cgpt-validation"].request_validation({});',
     p=>p.state.metadata.toolCalls.push({tool:'shell',status:'completed',input:{}}),

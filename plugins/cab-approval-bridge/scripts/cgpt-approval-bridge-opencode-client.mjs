@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.74';
+export const VERSION = '2.1.75';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -334,6 +334,17 @@ function replaceCommandBinding(source, binding) {
   let result = '', braceDepth = 0, matches = 0;
   for (let index = 0; index < source.length;) {
     const character = source[index];
+    const previous = source[index - 1];
+    if (braceDepth === 1 && (previous === '{' || previous === ',' || previous === undefined || /\s/.test(previous))) {
+      const property = /^(?:"commands"|commands)\s*:\s*\[\s*([A-Za-z_$][\w$]*)\s*\]/.exec(source.slice(index));
+      if (property) {
+        if (property[1] !== binding.name || matches !== 0) return null;
+        const identifier = property[0].lastIndexOf(property[1]);
+        result += property[0].slice(0, identifier) + JSON.stringify(binding.value) + property[0].slice(identifier + property[1].length);
+        index += property[0].length; matches++; continue;
+      }
+      if (/^(?:"commands"|commands)\s*:/.test(source.slice(index))) return null;
+    }
     if (character === '"') {
       let end = index + 1, escaped = false;
       for (; end < source.length; end++) {
@@ -352,17 +363,6 @@ function replaceCommandBinding(source, binding) {
     }
     if (character === '{') { braceDepth++; result += character; index++; continue; }
     if (character === '}') { braceDepth--; result += character; index++; continue; }
-    const previous = source[index - 1];
-    if (braceDepth === 1 && /[A-Za-z_$]/.test(character) &&
-        (previous === '{' || previous === ',' || previous === undefined || /\s/.test(previous))) {
-      const key = /^commands\b\s*:\s*\[\s*([A-Za-z_$][\w$]*)\s*\]/.exec(source.slice(index));
-      if (key) {
-        if (key[1] !== binding.name || matches !== 0) return null;
-        const identifier = key[0].lastIndexOf(key[1]);
-        result += key[0].slice(0, identifier) + JSON.stringify(binding.value) + key[0].slice(identifier + key[1].length);
-        index += key[0].length; matches++; continue;
-      }
-    }
     result += character; index++;
   }
   return matches === 1 ? result : null;
