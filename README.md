@@ -6,7 +6,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.1.64. CABU prépare les artefacts avant la coupure,
+La version source courante est CAB 2.1.65. CABU prépare les artefacts avant la coupure,
 redémarre les trois services et exige le broker cible si OpenCode est actif. Le plugin CABU fournit un skill
 d'entrée directe ; `/CABU` reste la commande et délègue à `/CAB update`,
 qui arrête systématiquement les trois unités systemd CAB, remplace les fichiers
@@ -14,7 +14,7 @@ des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche 
 le remplacement des fichiers broker ; sa version chargée est alors rapportée
 `INDISPONIBLE`.
 
-Après un redémarrage du contrôleur, CAB 2.1.64 restaure une décision seulement
+Après un redémarrage du contrôleur, CAB 2.1.65 restaure une décision seulement
 depuis une demande et une approbation natives terminées et corrélées. Il répond
 au même `once` uniquement si deux lectures stables confirment la permission
 exacte encore pendante, le callID correspondant et l’outil `running` avec
@@ -24,6 +24,13 @@ l’opération sans rejouer `once`; une erreur ambiguë, une absence ou une preu
 incomplète conserve `UNKNOWN` et les ressources du manifeste protégées. Le
 journal ne prouve jamais `permission.replied`. Les accès complets compatibles
 du même RUN peuvent coexister sans recouvrement ; les conflits attendent.
+
+Une demande `request_validation` transportée par Code Mode peut arriver au
+contrôleur avant la fin du wrapper `execute`. CAB 2.1.65 corrèle alors l’appel
+MCP natif unique dont les métadonnées exactes sont déjà visibles pendant que le
+wrapper reste `running`. Un accès restauré sur une ressource disjointe ne bloque
+pas cette admission ; la décision, l’acquisition et la permission native
+restent séparées, et les accès recouvrants continuent d’attendre.
 
 CAB 2.1.10 prend en charge OpenCode V2 uniquement. Les API V1 et OpenCode 1.x
 sont refusés sans repli. Le serveur OpenCode V2 utilise Basic Auth avec le nom
@@ -663,7 +670,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, des plugins CAB/CABU et des commandes
-est `2.1.64`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.1.65`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -784,7 +791,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.64.
+La distribution courante des quatre briques, plugins et commandes est 2.1.65.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

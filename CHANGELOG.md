@@ -1,3 +1,14 @@
+## 2.1.65 — Corrélation de request_validation Code Mode en cours
+
+- Le contrôleur peut corréler un appel MCP `request_validation` exact déjà
+  observé dans un wrapper `execute` natif encore `running`, sans attendre la fin
+  du tour qui dépend de la réponse du broker.
+- Le garde exige un appel unique non tronqué, non exécuté et identités exactes ;
+  l’admission ne crée ni décision, ni permission, ni `once`.
+- Un accès restauré `HELD` sur une ressource disjointe ne bloque plus cette
+  admission ; les recouvrements restent soumis à l’acquisition atomique.
+- CAB/CABU, composants, plugins, commandes et cadrages partagent 2.1.65.
+
 ## 2.1.64 — Réconciliation des fins natives depuis le journal durable
 
 - La reprise lit le journal OpenCode V2 fini et exige son watermark `log.synced`.
