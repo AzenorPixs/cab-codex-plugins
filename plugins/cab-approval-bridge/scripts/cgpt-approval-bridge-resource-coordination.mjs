@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.66';
+export const VERSION = '2.1.67';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -107,7 +107,7 @@ export class ResourceRunRegistry extends RunRegistry {
       const owner = [...this.runs.values(), ...this.history].find((r) => r.runId === op?.runId && r.contextId === op?.contextId);
       if (!id(key) || !onlyKeys(op, ['operationId','accessId','runId','contextId','version','sessionId','requestId',
           'operationDigest','identityDigest','resources','expectedRevisions','state','preparedAt','native','finishedAt',
-          'completionDigest','maintenancePreflight','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence','decision','nativeRecovery']) || op.operationId !== key || !id(op.runId) ||
+          'completionDigest','maintenancePreflight','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence','decision','nativeRecovery','nativeRejectionProofDigest']) || op.operationId !== key || !id(op.runId) ||
           !owner || !id(op.accessId) || !id(op.requestId) || !hash(op.operationDigest) || !hash(op.identityDigest) ||
           !Number.isSafeInteger(op.contextId) || !Number.isSafeInteger(op.version) ||
           op.version < op.contextId || op.version > owner.version || !Number.isFinite(Date.parse(op.preparedAt)) ||
@@ -136,12 +136,17 @@ export class ResourceRunRegistry extends RunRegistry {
           (op.native.kind !== undefined && !['bash','edit'].includes(op.native.kind)) ||
           (op.native.onceAcknowledged !== undefined && typeof op.native.onceAcknowledged !== 'boolean'))) fail();
       if (op.decision !== undefined && (!onlyKeys(op.decision, ['status','requestId','approvalId','changeId','runId','version',
-          'sessionId','operationDigest','identityDigest','recordedAt']) ||
+          'sessionId','operationDigest','identityDigest','recordedAt','nativeProofDigest']) ||
           !['approved','rejected','needs_clarification'].includes(op.decision.status) ||
           op.decision.requestId !== op.requestId || !id(op.decision.approvalId) || !id(op.decision.changeId) ||
           op.decision.runId !== op.runId || op.decision.version !== op.version || op.decision.sessionId !== op.sessionId ||
           op.decision.operationDigest !== op.operationDigest || op.decision.identityDigest !== op.identityDigest ||
-          !Number.isFinite(Date.parse(op.decision.recordedAt)))) fail();
+          !Number.isFinite(Date.parse(op.decision.recordedAt)) ||
+          (op.decision.nativeProofDigest !== undefined && !hash(op.decision.nativeProofDigest)))) fail();
+      if (op.nativeRejectionProofDigest !== undefined && (!hash(op.nativeRejectionProofDigest) ||
+          op.state !== 'CANCELLED' || op.native !== undefined || op.decision?.status !== 'rejected' ||
+          op.decision.nativeProofDigest !== op.nativeRejectionProofDigest ||
+          Object.values(state.accesses).some((access) => access.accessId === op.accessId || access.operationIds.includes(key)))) fail();
       if (op.nativeRecovery !== undefined && (!onlyKeys(op.nativeRecovery, ['permissionId','callId','proofDigest','observedAt','boundary','logWatermark']) ||
           (op.nativeRecovery.permissionId !== null && typeof op.nativeRecovery.permissionId !== 'string') ||
           (op.nativeRecovery.callId !== null && typeof op.nativeRecovery.callId !== 'string') || !hash(op.nativeRecovery.proofDigest) ||
@@ -650,7 +655,7 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('resource-revision-stale');
     }
   }
-  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false } = {}) {
+  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false, checkCurrentRevisions = true } = {}) {
     const preflight = Array.isArray(approval.files) && approval.files.length === 0 &&
       approval.commands?.length === 1 && approval.commands[0] === '/usr/bin/true' &&
       Array.isArray(approval.resources) && approval.resources.every((r) => r.mode === 'read');
@@ -665,7 +670,7 @@ export class ResourceRunRegistry extends RunRegistry {
         (approval.tool_input_sha256 !== undefined && !hash(approval.tool_input_sha256))) {
       throw new CoordinationError('coordination-upgrade-required');
     }
-    this.validateExpected(approval.expected_revisions, resources);
+    this.validateExpected(approval.expected_revisions, resources, checkCurrentRevisions);
     if (approval.session_id !== run.sessionId && approval.session_id !== candidateSession) throw new CoordinationError('operation-session-divergent');
     const identityDigest = digest(Object.fromEntries(['run_id', 'reservation_version', 'requestId', 'approval_id',
       'change_id', 'session_id', 'directory', 'title', 'summary', 'files', 'commands', 'resources',
@@ -716,6 +721,51 @@ export class ResourceRunRegistry extends RunRegistry {
       return copy(op.decision);
     }
     op.decision = value;
+    this.persist();
+    return copy(value);
+  }
+  recordRejectedNativeDecision(runId, operationId, decision, proofDigest) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    const run = this.runs.get(runId);
+    if (!hash(proofDigest) || decision?.status !== 'rejected') throw new CoordinationError('native-rejection-decision-invalid');
+    if (op && run && op.runId === runId && op.contextId === run.contextId && op.state === 'CANCELLED' &&
+        decision.runId === runId && decision.changeId === run.changeId && decision.version === op.version &&
+        decision.sessionId === op.sessionId && decision.operationId === op.operationId &&
+        op.nativeRejectionProofDigest === proofDigest && op.decision?.status === 'rejected' &&
+        op.decision.requestId === decision?.requestId && op.decision.approvalId === decision?.approvalId &&
+        op.decision.nativeProofDigest === proofDigest && op.decision.operationDigest === decision?.operationDigest &&
+        op.decision.identityDigest === decision?.identityDigest &&
+        !Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId || access.operationIds.includes(operationId))) {
+      return copy(op.decision);
+    }
+    if (!op || !run || op.runId !== runId || op.contextId !== run.contextId || op.state !== 'PREPARED' || op.native ||
+        !hash(proofDigest) || !decision || decision.status !== 'rejected' || decision.nativeProofDigest !== proofDigest ||
+        decision.requestId !== op.requestId || decision.operationId !== op.operationId || decision.runId !== runId ||
+        decision.changeId !== run.changeId || decision.version !== op.version || decision.sessionId !== op.sessionId ||
+        decision.operationDigest !== op.operationDigest || decision.identityDigest !== op.identityDigest ||
+        Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId || access.operationIds.includes(operationId))) {
+      throw new CoordinationError('native-rejection-decision-boundary-invalid');
+    }
+    const requestOwner = this.requestOwners[op.requestId];
+    if (!requestOwner || requestOwner.runId !== runId) throw new CoordinationError('native-rejection-owner-missing');
+    const value = { status: 'rejected', requestId: op.requestId, approvalId: decision.approvalId,
+      changeId: run.changeId, runId, version: op.version, sessionId: op.sessionId,
+      operationDigest: op.operationDigest, identityDigest: op.identityDigest, nativeProofDigest: proofDigest,
+      recordedAt: typeof decision.recordedAt === 'string' ? decision.recordedAt : now() };
+    if (!id(value.approvalId) || !Number.isFinite(Date.parse(value.recordedAt))) {
+      throw new CoordinationError('native-rejection-decision-invalid');
+    }
+    if (op.decision || op.nativeRejectionProofDigest) {
+      if (op.state === 'CANCELLED' && op.nativeRejectionProofDigest === proofDigest &&
+          op.decision?.status === 'rejected' && op.decision.approvalId === value.approvalId &&
+          op.decision.nativeProofDigest === proofDigest) return copy(op.decision);
+      throw new CoordinationError('native-rejection-decision-conflict');
+    }
+    op.decision = value;
+    op.nativeRejectionProofDigest = proofDigest;
+    op.state = 'CANCELLED';
+    op.finishedAt = value.recordedAt;
     this.persist();
     return copy(value);
   }
