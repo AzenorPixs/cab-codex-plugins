@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.68`.
+Version de référence des briques CAB : `2.1.69`.
 
-CAB 2.1.68 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.69 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -39,6 +39,12 @@ absent ou un watermark incomplet maintient `UNKNOWN` et l’accès protégé. Le
 journal ne prouve pas les réponses de permission. Aucun timeout ne clôt l’effet.
 Les RUN et opérations compatibles sans recouvrement continuent selon leurs
 règles d’accès.
+
+Au redémarrage, le registre conserve les leases actifs même si plusieurs
+accès se recouvrent ou appartiennent au même RUN. Chaque accès restauré reste
+protégé contre une nouvelle permission `once`; les nouveaux conflits attendent
+et les opérations disjointes continuent. Aucun accès n’est supprimé ou fusionné
+pour contourner une frontière de réconciliation.
 
 Si la notification locale a échoué après un rejet natif, le contrôleur peut
 clôturer uniquement la validation déjà enregistrée dont deux lectures

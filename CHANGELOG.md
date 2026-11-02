@@ -1,3 +1,11 @@
+## 2.1.69 — Restaurer sans perdre les leases actives en conflit
+
+- Le contrôleur conserve les accès actifs restaurés, même si leurs ressources
+  se recouvrent ; ils restent protégés contre `once`.
+- Les nouvelles acquisitions conflictuelles restent en `WAITING` et les accès
+  disjoints continuent, sans effacer ou fusionner de lease existante.
+- CAB/CABU, composants, plugins, commandes et cadrages partagent 2.1.69.
+
 ## 2.1.68 — Récupérer CABU en avant après rollback contrôleur incomplet
 
 - Une reprise liée au reçu exact `ROLLBACK_FAILED` peut déployer une source
@@ -7,6 +15,14 @@
 - La reprise préserve OpenCode, les données RUN et l’ancien reçu sans recharger
   toutes les locations.
 - CAB/CABU, les composants, plugins, commandes et cadrages partagent 2.1.68.
+
+## 2.1.69 — Préserver les accès actifs conflictuels après restauration
+
+- Le contrôleur restaure les leases actifs déjà persistés au lieu de refuser
+  l’ensemble du registre lorsqu’ils se chevauchent.
+- Chaque lease restaurée reste protégée contre `once` ; les nouveaux conflits
+  attendent et les ressources disjointes continuent.
+- CAB/CABU, composants, plugins, commandes et cadrages partagent 2.1.69.
 
 ## 2.1.68 — Reprendre CABU après rollback contrôleur incomplet
 
