@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.75';
+export const VERSION = '2.1.76';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -168,7 +168,7 @@ export class ResourceRunRegistry extends RunRegistry {
       if (op.nativeRecovery !== undefined && (!onlyKeys(op.nativeRecovery, ['permissionId','callId','proofDigest','observedAt','boundary','logWatermark']) ||
           (op.nativeRecovery.permissionId !== null && typeof op.nativeRecovery.permissionId !== 'string') ||
           (op.nativeRecovery.callId !== null && typeof op.nativeRecovery.callId !== 'string') || !hash(op.nativeRecovery.proofDigest) ||
-          !['PERMISSION_PENDING_NO_REPLY','TOOL_TERMINAL_UNCLASSIFIED','TOOL_TERMINAL_SUCCESS'].includes(op.nativeRecovery.boundary) ||
+          !['PERMISSION_PENDING_NO_REPLY','TOOL_TERMINAL_UNCLASSIFIED','TOOL_TERMINAL_SUCCESS','TERMINAL_TURN_NO_EFFECT'].includes(op.nativeRecovery.boundary) ||
           (op.nativeRecovery.logWatermark !== null && (!Number.isSafeInteger(op.nativeRecovery.logWatermark) || op.nativeRecovery.logWatermark < 0)) ||
           !Number.isFinite(Date.parse(op.nativeRecovery.observedAt)))) fail();
       if (op.testReservationId && (!Number.isSafeInteger(op.native?.startSequence) || op.native.startSequence < 1 ||
@@ -849,6 +849,38 @@ export class ResourceRunRegistry extends RunRegistry {
     if(access.state==='HELD'||access.state==='EXECUTING')access.state='UNKNOWN';
     op.nativeRecovery={permissionId:op.native?.permissionId??null,callId:proof.callId,
       proofDigest:proof.proofDigest,observedAt:now(),boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:proof.logWatermark};
+    this.persist();return copy(op);
+  }
+  reconcileTerminalTurnNoEffect(runId,operationId,proof){
+    this.mutable();
+    const op=this.resourceState.operations[operationId],run=this.runs.get(runId),access=op&&this.resourceState.accesses[op.accessId];
+    if(op?.state==='CANCELLED'&&op.runId===runId&&op.nativeRecovery?.boundary==='TERMINAL_TURN_NO_EFFECT'&&
+        op.completionDigest===proof?.proofDigest&&access?.state==='RELEASED'&&access.outcome==='NO_EFFECT')return copy(op);
+    if(!op||!run||op.runId!==runId||op.contextId!==run.contextId||op.state!=='UNKNOWN'||run.state!=='RESERVED'||run.phase!=='WORK'||
+        op.decision?.status!=='approved'||op.native||op.nativeResult||op.testReservationId||
+        op.nativeRecovery?.boundary!=='TOOL_TERMINAL_UNCLASSIFIED'||
+        op.nativeRecovery.permissionId!==null||op.nativeRecovery.callId!==null||
+        !access||access.runId!==runId||access.contextId!==run.contextId||access.state!=='UNKNOWN'||
+        access.operationIds.length!==1||access.operationIds[0]!==operationId||
+        op.resources.some(resource=>resource.mode!=='write'||!resource.key.startsWith('file:'))||
+        access.resources.some(resource=>resource.mode!=='write'||!resource.key.startsWith('file:'))||
+        !this.restoredAccesses.has(access.accessId)||run.suspension||
+        !proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.operationId!==operationId||
+        proof.requestId!==op.requestId||proof.sessionId!==op.sessionId||
+        proof.operationDigest!==op.operationDigest||proof.identityDigest!==op.identityDigest||
+        proof.finish!=='stop'||!id(proof.userMessageId)||!id(proof.requestMessageId)||!id(proof.finalMessageId)||
+        !hash(proof.transcriptDigest)||!hash(proof.eventLogDigest)||!hash(proof.proofDigest)||
+        !Number.isSafeInteger(proof.logWatermark)||proof.logWatermark<0||
+        (op.nativeRecovery.logWatermark!==null&&proof.logWatermark<op.nativeRecovery.logWatermark)){
+      throw new CoordinationError('terminal-turn-no-effect-proof-required');
+    }
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='CANCELLED';op.finishedAt=Number.isFinite(proof.finishedAt)?proof.finishedAt:Date.now();
+    op.completionDigest=proof.proofDigest;
+    op.nativeRecovery={permissionId:null,callId:null,proofDigest:proof.proofDigest,observedAt:now(),
+      boundary:'TERMINAL_TURN_NO_EFFECT',logWatermark:proof.logWatermark};
+    this.finishAccess(access,'NO_EFFECT');
+    access.releaseDigest=digest({operationId,outcome:'NO_EFFECT',proofDigest:proof.proofDigest});
     this.persist();return copy(op);
   }
   completeLoggedNative(runId, operationId, proof) {

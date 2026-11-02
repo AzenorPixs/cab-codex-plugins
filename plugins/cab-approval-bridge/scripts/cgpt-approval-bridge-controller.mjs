@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.75";
+const version = "2.1.76";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -473,14 +473,16 @@ function eventMatchesNativePart(event, part, operation, approval) {
   return target === approval.files[0];
 }
 async function restoreApprovedOperations(run, context) {
-  if (!run || !context || broker?.status !== 'READY' || restoringOperations.has(run.runId)) return;
+  if (!run || !context || restoringOperations.has(run.runId)) return;
+  const brokerReady=broker?.status==='READY';
   restoringOperations.add(run.runId);
   try {
     const candidates = Object.values(registry.resourceState.operations).filter((op) => op.runId === run.runId &&
       op.contextId === run.contextId && (['PREPARED','ISSUING','UNKNOWN'].includes(op.state) ||
         op.state === 'CANCELLED' && op.completionDigest &&
           (!op.decision || op.decision.status === 'rejected')) &&
-      op.native?.onceAcknowledged !== true && op.rejectionOnly !== true);
+      op.native?.onceAcknowledged !== true && op.rejectionOnly !== true &&
+      (brokerReady || terminalTurnNoEffectCandidate(op)));
     for (const stored of candidates) {
       const key = run.runId + ':' + stored.operationId;
       if (restoringOperations.has(key)) continue;
@@ -488,6 +490,7 @@ async function restoreApprovedOperations(run, context) {
       try {
         const current = registry.resourceState.operations[stored.operationId];
         if (!current || current.runId !== run.runId || current.state !== stored.state || current.native?.onceAcknowledged === true) continue;
+        if (!brokerReady && !terminalTurnNoEffectCandidate(current)) continue;
         if (context.isOperationReconciling(current.operationId)) continue;
         const operationSnapshot = structuredClone(current);
         const generation = nativeSessionGenerations.get(current.sessionId) || 0;
@@ -495,7 +498,8 @@ async function restoreApprovedOperations(run, context) {
           openCode.messages(current.sessionId, run.directory),
           openCode.permissions(run.directory, { sessionIds:[current.sessionId], verifyInputs:true }),
         ]);
-        if (!Array.isArray(messages) || !Array.isArray(permissions) || generation !== (nativeSessionGenerations.get(current.sessionId) || 0)) continue;
+        if (!Array.isArray(messages) || !Array.isArray(permissions) ||
+            generation !== (nativeSessionGenerations.get(current.sessionId) || 0)) continue;
         const parts = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []);
         const requestParts = nativeRequestValidationEntries(parts,current.requestId)
           .filter((entry)=>entry.status==='completed');
@@ -587,6 +591,21 @@ async function restoreApprovedOperations(run, context) {
         const operation = { ...candidate, native:current.native, toolInputSha256:approval.tool_input_sha256,
           target: approval.files?.length === 1 ? approval.files[0] : approval.commands?.[0],
           kind: approval.files?.length === 1 ? 'edit' : 'bash' };
+        if(terminalTurnNoEffectCandidate(current)){
+          if(permissions.some(permission=>permission.sessionID===current.sessionId))continue;
+          const activeSessions=await openCode.sessionStatus(run.directory);
+          if(!record(activeSessions)||Object.hasOwn(activeSessions,current.sessionId)||
+              generation!==(nativeSessionGenerations.get(current.sessionId)||0))continue;
+          let firstLog;
+          try{firstLog=await openCode.sessionEventLog(current.sessionId,run.directory,{after:'0'});}catch{continue;}
+          const proof=await verifyTerminalTurnNoEffectProof(run,context,current,approval,decision,operationSnapshot,
+            messages,permissions,firstLog,generation);
+          if(!proof)continue;
+          await context.invalidateApprovedTerminalOperation(approval,decision);
+          registry.reconcileTerminalTurnNoEffect(run.runId,current.operationId,proof);
+          continue;
+        }
+        if(!brokerReady)continue;
         const pending = pendingOperationPermission(approval, operation, messages, permissions);
         if (!pending) {
           let durableLog=null,logFailure='';
@@ -900,6 +919,121 @@ function nativeCancelledValidationProof(parts, approval) {
       entry.tool === 'cgpt-validation.request_validation' && entry !== requests[0].entry)) return null;
   return proofHash({ approval:nativeIdentity(approval), request:requests[0].entry,
     cancellation:terminal.at(-1), suffix });
+}
+const noEffectToolNames=new Set(['bash','shell','edit','write','apply_patch','delete','move','rename','install','execute_command']);
+const noEffectReadOnlyToolNames=new Set(['search','read','glob','grep','list','find','webfetch','web_search','websearch',
+  'cgpt-validation.request_validation','cgpt-validation.get_approval','cgpt-validation.poll_approval',
+  'cgpt-validation.broker_readiness','cgpt-validation.broker_health','cgpt-validation.cancel_approval',
+  'cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_poll_approval',
+  'cgpt-validation_broker_readiness','cgpt-validation_broker_health','cgpt-validation_cancel_approval','cab_codemode_discovery']);
+const record=(value)=>value!==null&&typeof value==='object'&&!Array.isArray(value);
+const hash=(value)=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+function nativeTerminalTurnNoEffectProof(messages,approval,operation,run,log,approvedResult){
+  if(!Array.isArray(messages)||!record(log)||log.sessionId!==operation.sessionId||log.after!=='0'||
+      !record(log.watermark)||log.watermark.aggregateID!==operation.sessionId||!Number.isSafeInteger(log.watermark.seq)||
+      !Array.isArray(log.events)||approvedResult?.status!=='APPROVED'||approvedResult.reviewer!=='CGPT'||
+      approvedResult.requestId!==approval.requestId||approvedResult.approval_id!==approval.approval_id||
+      proofHash(nativeIdentity(approvedResult))!==proofHash(nativeIdentity(approval)))return null;
+  const parts=messages.flatMap(message=>Array.isArray(message.parts)?message.parts:[]);
+  const requests=nativeRequestValidationEntries(parts,approval.requestId).filter(entry=>entry.status==='completed');
+  if(requests.length!==1||proofHash(requests[0].input)!==proofHash(approval))return null;
+  const requestPart=requests[0].part,metadata=requestPart?.state?.metadata,calls=metadata?.toolCalls;
+  if(requestPart?.tool!=='cgpt-validation_request_validation'||requestPart.executed!==false||
+      requestPart.state?.status!=='completed'||metadata?.truncated!==false||
+      !record(metadata?.cabCodeMode)||!hash(metadata.cabCodeMode.envelopeHash)||
+      metadata.cabCodeMode.wrapperId!==requestPart.callID||!Array.isArray(calls)||calls.length!==1||
+      calls[0]?.tool!=='cgpt-validation.request_validation'||calls[0]?.status!=='completed'||
+      proofHash(calls[0].input)!==proofHash(approval))return null;
+  let wrapperResult;try{wrapperResult=JSON.parse(requestPart.state.output)}catch{return null;}
+  if(wrapperResult?.status!=='APPROVED'||wrapperResult.reviewer!=='CGPT'||
+      wrapperResult.requestId!==approval.requestId||wrapperResult.approval_id!==approval.approval_id||
+      proofHash(nativeIdentity(wrapperResult))!==proofHash(nativeIdentity(approval))||
+      proofHash(wrapperResult)!==proofHash(approvedResult))return null;
+  const requestMessageIndex=messages.findIndex(message=>Array.isArray(message.parts)&&message.parts.includes(requestPart));
+  if(requestMessageIndex<0)return null;
+  const requestMessage=messages[requestMessageIndex],userId=requestMessage.info?.parentID;
+  if(requestMessage.info?.role!=='assistant'||requestMessage.info?.finish!=='tool-calls'||
+      typeof userId!=='string'||!userId)return null;
+  const userIndices=messages.map((message,index)=>message.info?.role==='user'&&message.info.id===userId?index:-1)
+    .filter(index=>index>=0);
+  const assistantTurns=messages.map((message,index)=>({message,index})).filter(({message})=>
+    message.info?.role==='assistant'&&message.info.parentID===userId);
+  if(userIndices.length!==1||assistantTurns.length!==2||assistantTurns[0].message!==requestMessage)return null;
+  const userIndex=userIndices[0],final=assistantTurns[1].message,finalIndex=assistantTurns[1].index;
+  if(userIndex+1!==requestMessageIndex||finalIndex!==requestMessageIndex+1||
+      final.info?.finish!=='stop'||!Array.isArray(final.parts)||
+      final.parts.some(part=>part?.type==='tool'))return null;
+  const turnIds=new Set([userId,requestMessage.info.id,final.info.id]);
+  const messageIndexById=new Map(messages.map((message,index)=>[message.info?.id,index]).filter(([id])=>typeof id==='string'));
+  for(let index=requestMessageIndex;index<messages.length;index++){
+    const message=messages[index];
+    for(const part of Array.isArray(message.parts)?message.parts:[]){
+      if(part?.type!=='tool')continue;
+      if(index===requestMessageIndex&&part===requestPart)continue;
+      if(noEffectToolNames.has(part.tool))return null;
+      if(part.tool==='execute'){
+        const nested=part.state?.metadata?.toolCalls;
+        if(part.executed!==false||part.state?.status!=='completed'||part.state?.metadata?.truncated!==false||!Array.isArray(nested)||
+            nested.some(call=>noEffectToolNames.has(call?.tool)||!noEffectReadOnlyToolNames.has(call?.tool)))return null;
+      }else if(!noEffectReadOnlyToolNames.has(part.tool))return null;
+    }
+  }
+  for(const event of log.events){
+    const eventIndex=messageIndexById.get(event.messageId);
+    if(noEffectToolNames.has(event.toolName)&&(eventIndex===undefined||eventIndex>=requestMessageIndex))return null;
+    if(turnIds.has(event.messageId)&&!(event.messageId===requestMessage.info.id&&event.callId===requestPart.callID&&
+        event.toolName==='execute'&&['session.tool.called','session.tool.success'].includes(event.type)))return null;
+    if(event.messageId===undefined&&(!noEffectReadOnlyToolNames.has(event.toolName)&&event.toolName!=='execute'))return null;
+    if(event.toolName==='execute'&&event.messageId!==undefined){
+      if(!messageIndexById.has(event.messageId))return null;
+      if(eventIndex>=requestMessageIndex&&event.messageId!==requestMessage.info.id)return null;
+    }
+  }
+  const proof={runId:run.runId,contextId:run.contextId,operationId:operation.operationId,requestId:approval.requestId,
+    approvalId:approval.approval_id,sessionId:operation.sessionId,directory:run.directory,
+    operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+    userMessageId:userId,requestMessageId:requestMessage.info.id,wrapperId:requestPart.callID,
+    finalMessageId:final.info.id,finish:'stop',transcriptDigest:proofHash(messages),
+    eventLogDigest:proofHash(log),logWatermark:log.watermark.seq,finishedAt:Number.isFinite(final.info.time?.completed)
+      ? final.info.time.completed : Number.isFinite(final.info.time?.created) ? final.info.time.created : Date.now()};
+  proof.proofDigest=proofHash(proof);return proof;
+}
+function terminalTurnNoEffectCandidate(operation){
+  return operation?.state==='UNKNOWN'&&operation.decision?.status==='approved'&&!operation.native&&
+    !operation.nativeResult&&operation.nativeRecovery?.boundary==='TOOL_TERMINAL_UNCLASSIFIED'&&
+    operation.nativeRecovery.permissionId===null&&operation.nativeRecovery.callId===null&&
+    operation.onceAcknowledged!==true&&!operation.testReservationId;
+}
+async function verifyTerminalTurnNoEffectProof(run,context,operation,approval,decision,operationSnapshot,
+  messages,permissions,log,generation){
+  const sibling=Object.values(registry.resourceState.operations).some(other=>other.operationId!==operation.operationId&&
+    other.runId===run.runId&&other.sessionId===operation.sessionId&&
+    !['CANCELLED','COMPLETED'].includes(other.state));
+  if(!terminalTurnNoEffectCandidate(operation)||!registry.resourceState.accesses[operation.accessId]||
+      sibling||context.publicJob()?.currentCabMandate||context.publicJob()?.recovery||
+      permissions.some(permission=>permission.sessionID===operation.sessionId))return null;
+  const accessSnapshot=structuredClone(registry.resourceState.accesses[operation.accessId]);
+  if(accessSnapshot.state!=='UNKNOWN'||accessSnapshot.runId!==run.runId||accessSnapshot.operationIds.length!==1||
+      accessSnapshot.operationIds[0]!==operation.operationId)return null;
+  const first=nativeTerminalTurnNoEffectProof(messages,approval,operation,run,log,decision);
+  if(!first||first.logWatermark<(operation.nativeRecovery?.logWatermark??0))return null;
+  const jobDigest=proofHash(context.publicJob());
+  const [secondMessages,secondPermissions,activeSessions,secondLog]=await Promise.all([
+    openCode.messages(operation.sessionId,run.directory),
+    openCode.permissions(run.directory,{sessionIds:[operation.sessionId],verifyInputs:true}),
+    openCode.sessionStatus(run.directory),
+    openCode.sessionEventLog(operation.sessionId,run.directory,{after:'0'}),
+  ]);
+  if(!Array.isArray(secondMessages)||!Array.isArray(secondPermissions)||
+      secondPermissions.some(permission=>permission.sessionID===operation.sessionId)||
+      Object.hasOwn(activeSessions,operation.sessionId)||generation!==(nativeSessionGenerations.get(operation.sessionId)||0)||
+      proofHash(messages)!==proofHash(secondMessages)||proofHash(log)!==proofHash(secondLog)||
+      proofHash(context.publicJob())!==jobDigest||
+      proofHash(registry.resourceState.operations[operation.operationId])!==proofHash(operationSnapshot)||
+      proofHash(registry.resourceState.accesses[operation.accessId])!==proofHash(accessSnapshot))return null;
+  const second=nativeTerminalTurnNoEffectProof(secondMessages,approval,operation,run,secondLog,decision);
+  if(!second||proofHash(first)!==proofHash(second)||second.logWatermark<(operation.nativeRecovery?.logWatermark??0))return null;
+  second.proofDigest=proofHash(second);return second;
 }
 function observeNativeCompletion(runId, part, sessionId) {
   for (const operation of Object.values(registry.resourceState.operations)) {

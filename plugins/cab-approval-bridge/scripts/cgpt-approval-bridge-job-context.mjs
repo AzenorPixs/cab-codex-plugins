@@ -12,7 +12,7 @@ import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bri
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.75";
+export const VERSION = "2.1.76";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -320,7 +320,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.75",
+    version: "2.1.76",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1574,6 +1574,44 @@ async function restoreApprovedTerminalOperation(approval, approvalResult) {
   return { requestId, operationId: operation.operationId, restored: true };
 }
 
+function terminalApprovalIdentity(value){
+  return JSON.stringify(Object.fromEntries(['run_id','reservation_version','requestId','approval_id','change_id','session_id',
+    'directory','title','summary','files','commands','resources','coordination_protocol','operation_id','operation_digest',
+    'expected_revisions','access_id'].map(key=>[key,value?.[key]??(['resources','commands'].includes(key)?[]:key==='summary'?'':null)])));
+}
+async function invalidateApprovedTerminalOperation(approval,approvalResult){
+  if(!run||!approval||approvalResult?.status!=='APPROVED'||approvalResult.reviewer!=='CGPT'||
+      approvalResult.requestId!==approval.requestId||approvalResult.approval_id!==approval.approval_id||
+      terminalApprovalIdentity(approvalResult)!==terminalApprovalIdentity(approval))throw decisionError('operation-restore-proof-invalid');
+  const operation=approvedOperation(approval);
+  if(!operation||operation.runId!==run.runId||operation.directory!==workspace||
+      operation.operationId!==approval.operation_id||operation.operationDigest!==approval.operation_digest||
+      operation.sessionId!==approval.session_id||approval.change_id!==job?.changeId||
+      job?.revokedSessions?.includes(operation.sessionId))throw decisionError('operation-restore-identity-divergent');
+  assertDecisionOperation(operation,approval.requestId);
+  let previous=validations.get(approval.requestId),decision=httpDecisions.get(approval.requestId);
+  if(previous&&(previous.approvalId!==approval.approval_id||previous.changeId!==approval.change_id||
+      previous.operation?.operationId!==operation.operationId||previous.operation?.operationDigest!==operation.operationDigest||
+      previous.operation?.sessionId!==operation.sessionId))throw decisionError('operation-terminal-invalidation-context-divergent');
+  if(decision&&(decision.decision!=='approved'||decision.approval_id!==approval.approval_id||
+      decision.operation_id!==operation.operationId||decision.operation_digest!==operation.operationDigest))
+    throw decisionError('operation-terminal-invalidation-decision-divergent');
+  previous||={requestId:approval.requestId,approvalId:approval.approval_id,changeId:approval.change_id,
+    summary:typeof approval.summary==='string'?approval.summary:'Validation terminale réconciliée',operation,
+    receivedAt:new Date().toISOString(),operationConsumed:false,operationInvalidated:false};
+  decision||={decision:'approved',requestId:approval.requestId,approval_id:approval.approval_id,
+    change_id:approval.change_id,run_id:run.runId,reservation_version:operation.reservationVersion,
+    operation_id:operation.operationId,operation_digest:operation.operationDigest,
+    expected_revisions:operation.expectedRevisions,coordination_protocol:operation.coordinationProtocol,
+    resources:operation.resources,access_id:operation.accessId,
+    ...(operation.toolInputSha256?{tool_input_sha256:operation.toolInputSha256}:{})};
+  previous.operationConsumed=true;previous.operationInvalidated=true;
+  persistOperationDecision(previous,decision);validations.set(approval.requestId,previous);
+  httpDecisions.set(approval.requestId,decision);answered.add(approval.requestId);
+  updateStatus('operation-terminal-approval-invalidated',{requestId:approval.requestId,operationId:operation.operationId});
+  return {requestId:approval.requestId,operationId:operation.operationId,restored:true,invalidated:true};
+}
+
 function restoreNativeRejectedOperation(approval, proofDigest) {
   if (!run || !approval || !/^[a-f0-9]{64}$/.test(proofDigest || '') ||
       approval.run_id !== run.runId || approval.change_id !== job?.changeId ||
@@ -2063,7 +2101,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.75",
+      version: "2.1.76",
     },
   });
 
@@ -3207,6 +3245,7 @@ return {
     validation.operation?.operationId === operationId && reconcilingPermissions.has(validation.requestId)),
   restoreApprovedOperation,
   restoreApprovedTerminalOperation,
+  invalidateApprovedTerminalOperation,
   assertNativeShellAsk: () => checkNativeAsk({sessionId:job?.sessionId,directory:workspace,kind:'bash'},'shell'),
   decision: (requestId) => httpDecisions.get(requestId),
   invalidateOperation: (requestId) => {

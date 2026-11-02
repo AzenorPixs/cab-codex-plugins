@@ -28,7 +28,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/identity avec version 2.1.75 et identity.workspace
+Vérifier service actif, GET /api/identity avec version 2.1.76 et identity.workspace
 attendus, puis GET / ; ne pas lire le snapshot multi-RUN pour ce contrôle d'identité.
 terminer cette tentative bornée et rapporter son résultat
 avant les contrôles amont. Afficher l'URL réelle uniquement après ces preuves,
@@ -708,13 +708,13 @@ Les navigateurs externes de test déclarés dans DEVOPS.md, actuellement Chromiu
 
 ## Modèle du prompt et PLLM automatique
 
-Avant un nouveau job piloté 2.1.75, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, demander high sur le même modèle ; examiner la politique PLLM suivante seulement si les deux niveaux sont indisponibles. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve le contexte et réexamine la priorité medium puis high selon la section de convergence ; aucun changement actif implicite n’est autorisé. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
+Avant un nouveau job piloté 2.1.76, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, demander high sur le même modèle ; examiner la politique PLLM suivante seulement si les deux niveaux sont indisponibles. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve le contexte et réexamine la priorité medium puis high selon la section de convergence ; aucun changement actif implicite n’est autorisé. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
-Pour le raccord courant 2.1.75, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
+Pour le raccord courant 2.1.76, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.
 
-Contrat courant CABU 2.1.75 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.76 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -787,7 +787,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.75 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.76 ; les preuves 2.1.8 restent historiques.
 
 ## Priorité medium puis high — nouvelles sessions et reprises
 
