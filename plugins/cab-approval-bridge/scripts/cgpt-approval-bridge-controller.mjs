@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.76";
+const version = "2.1.77";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -516,7 +516,8 @@ async function restoreApprovedOperations(run, context) {
         const alreadyRejected = current.state === 'CANCELLED' && current.decision?.status === 'rejected' &&
           typeof current.completionDigest === 'string';
         let candidate;
-        try { candidate = registry.operationCandidate(run.runId, approval); }
+        try { candidate = registry.operationCandidate(run.runId, approval,
+          {terminalTurnNoEffect:terminalTurnNoEffectCandidate(current)}); }
         catch (cause) {
           if (cause.code !== 'resource-revision-stale' ||
               (!nativeRejectedValidationProof(parts, approval) && !cancelledProof)) continue;
@@ -1593,7 +1594,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -1697,6 +1698,62 @@ async function handleRequest(request, response) {
       }
       if (request.method === 'GET' && url.pathname === '/test-resources') {
         json(response, 200, { runId, protocol: TEST_RESOURCE_PROTOCOL, reservations: publicTestReservations(runId) }); return;
+      }
+      if (request.method === 'GET' && url.pathname === '/test-resources/reconcile-preview') {
+        const ids=url.searchParams.getAll('transactionId');
+        if(ids.length!==1||[...url.searchParams.keys()].some(key=>key!=='transactionId'))
+          throw new CoordinationError('test-reconciliation-request-invalid',400);
+        const preview=registry.restoredTestReconciliationSnapshot(runId,ids[0]);
+        json(response,200,{protocol:TEST_RESOURCE_PROTOCOL,...preview});return;
+      }
+      if (request.method === 'POST' && url.pathname === '/test-resources/reconcile-restored') {
+        const existing=registry.resourceState.testReservations?.[payload?.transactionId]?.reconciliationReceipts?.[payload?.reconciliationId];
+        if(existing){json(response,200,registry.reconcileRestoredTests(runId,payload,null));return;}
+        const run=registry.runs.get(runId),job=context.publicJob();
+        if(!run||run.state!=='RESERVED'||run.phase!=='WORK'||run.suspension)
+          throw new CoordinationError('test-reconciliation-run-not-quiescent');
+        if(!job?.armed||job.runId!==runId||job.sessionId!==run.sessionId||job.directory!==run.directory||
+            job.currentCabMandate||job.recovery||context.publicStatus().undecidedValidationCount)
+          throw new CoordinationError('test-reconciliation-job-not-quiescent');
+        if(context.pendingEffects())throw new CoordinationError('test-reconciliation-effect-pending');
+        const preview=registry.restoredTestReconciliationSnapshot(runId,payload?.transactionId);
+        if(preview.boundaryDigest!==payload?.boundaryDigest||preview.version!==payload?.version||
+            preview.fencing!==payload?.fencing)throw new CoordinationError('test-reconciliation-boundary-changed');
+        const entry=registry.resourceState.testReservations[payload.transactionId];
+        const linked=registry.operationTests(entry);
+        if(linked.some(op=>!['PREPARED','CANCELLED','COMPLETED'].includes(op.state)||
+            op.state!=='COMPLETED'&&(op.native||op.nativeRecovery||op.onceAcknowledged===true)||
+            op.state==='COMPLETED'&&(!op.nativeResult||!op.completionDigest)))
+          throw new CoordinationError('test-reconciliation-boundary-required');
+        await reconcileTerminalNativeOutcomes(runId,{operationIds:linked.map(op=>op.operationId)});
+        const generation=nativeSessionGenerations.get(run.sessionId)||0;
+        const readBoundary=async()=>{
+          const [messages,permissions,activeSessions]=await Promise.all([
+            openCode.messages(run.sessionId,run.directory),
+            openCode.permissions(run.directory,{sessionIds:[run.sessionId],verifyInputs:true}),
+            openCode.sessionStatus(run.directory),
+          ]);
+          if(!Array.isArray(messages)||!Array.isArray(permissions)||!record(activeSessions)||
+              permissions.some(permission=>permission.sessionID===run.sessionId)||
+              activeSessions[run.sessionId]&&activeSessions[run.sessionId].type!=='idle')
+            throw new CoordinationError('native-session-not-quiescent');
+          return {messages,session:activeSessions[run.sessionId]??null};
+        };
+        const revision=registryRevision,first=await readBoundary();
+        await new Promise(resolveDelay=>setTimeout(resolveDelay,25));
+        const second=await readBoundary();
+        if(generation!==(nativeSessionGenerations.get(run.sessionId)||0)||revision!==registryRevision||
+            proofHash(first.messages)!==proofHash(second.messages)||proofHash(first.session)!==proofHash(second.session))
+          throw new CoordinationError('test-reconciliation-boundary-changed');
+        const current=registry.restoredTestReconciliationSnapshot(runId,payload.transactionId);
+        if(current.boundaryDigest!==preview.boundaryDigest)throw new CoordinationError('test-reconciliation-boundary-changed');
+        const proofBody={runId,contextId:run.contextId,transactionId:entry.transactionId,version:run.version,
+          fencing:entry.fencing,boundaryDigest:current.boundaryDigest,sessionId:run.sessionId,
+          operationsDigest:proofHash(current.operations),sessionIdle:true,pendingPermissions:0,
+          transcriptDigest:proofHash(second.messages),observedAt:new Date().toISOString()};
+        const proof={...proofBody,proofDigest:proofHash(proofBody)};
+        const reconciled=registry.reconcileRestoredTests(runId,payload,proof);
+        json(response,200,reconciled);return;
       }
       if (request.method === 'POST' && url.pathname === '/test-resources/acquire') {
         const result = registry.acquireTests(runId, payload);

@@ -394,6 +394,88 @@ test('le tour terminal sans effet reste UNKNOWN si une permission native est pen
  assert.equal(result.nativeRecovery.boundary,'TOOL_TERMINAL_UNCLASSIFIED');assert.equal(h.native.replies.length,0);
 });
 
+test('NO_EFFECT terminal peut clôturer un accès fichier disjoint d’un bail test restauré',async t=>{
+ const h=await setup(t);const fileResource={key:'file:src/restore.py',mode:'write'};
+ const lxcResource={key:'lxc:host-a/101',mode:'write'};
+ const run=await h.reserve('restore-terminal-turn-disjoint-lease',{resources:[fileResource,lxcResource]});
+ const lease=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,
+  transactionId:'restored-disjoint-lease',resources:[lxcResource],evidence:['LXC identity held']});
+ assert.equal(lease.status,200,JSON.stringify(lease));
+ const approval=h.approval(run,'restore-terminal-turn-disjoint-lease');approval.commands=[];
+ approval.files=['src/restore.py'];approval.resources=[fileResource];approval.expected_revisions={ [fileResource.key]:0 };
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const accessResult=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,
+  operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:[fileResource],
+  expectedRevisions:approval.expected_revisions});
+ assert.equal(accessResult.status,200,JSON.stringify(accessResult));
+ await h.execute(approval);await h.completeTool(approval);
+ await h.stop();
+ const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));
+ const operation=state.coordination.operations[approval.operation_id];operation.state='UNKNOWN';
+ delete operation.native;delete operation.nativeResult;operation.nativeRecovery={permissionId:null,callId:null,
+  boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
+  proofDigest:createHash('sha256').update('terminal-turn-unclassified-with-lease').digest('hex'),observedAt:new Date().toISOString()};
+ state.coordination.accesses[approval.operation_id].state='UNKNOWN';writeFileSync(statePath,JSON.stringify(state));
+ const approved={...approval,status:'APPROVED',reviewer:'CGPT'},wrapperId='call-terminal-turn-disjoint-wrapper';
+ const userId='msg-terminal-turn-disjoint-user',requestId='msg-terminal-turn-disjoint-request',finalId='msg-terminal-turn-disjoint-final';
+ const stamp=Date.now();h.native.messages[run.sessionId]=[
+  {info:{id:userId,sessionID:run.sessionId,role:'user'},parts:[{type:'text',text:'mandat'}]},
+  {info:{id:requestId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'tool-calls'},parts:[{
+   type:'tool',tool:'execute',callID:wrapperId,executed:false,state:{status:'completed',input:{code:
+    'return await tools["cgpt-validation"].request_validation('+JSON.stringify(approval)+');'},
+    output:JSON.stringify(approved),time:{start:stamp-2,end:stamp-1},metadata:{truncated:false,toolCalls:[{
+      tool:'cgpt-validation.request_validation',status:'completed',input:approval}]}}}]},
+  {info:{id:finalId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'stop',time:{completed:stamp}},parts:[
+   {type:'text',text:'Validation terminée.'}]},
+ ];
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY'});
+ await waitFor(async()=>{
+  const row=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+  return row.state==='CANCELLED'&&row.access.state==='RELEASED';
+ });
+ const result=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(result.nativeRecovery.boundary,'TERMINAL_TURN_NO_EFFECT');
+ const testState=(await h.get('/runs/'+run.runId+'/test-resources')).body.reservations[0];
+ assert.equal(testState.state,'HELD');assert.equal(testState.reconciliationRequired,true);
+ assert.equal(h.native.replies.length,1);
+});
+
+test('réconcilie un bail de test USED restauré sans token client et conserve HELD',async t=>{
+ const h=await setup(t);const run=await h.reserve('reconcile-restored-used-controller',
+  {resources:[{key:'lxc:host-a/101',mode:'write'}]});
+ const leaseResult=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,
+  transactionId:'restored-used-controller-lease',resources:run.resources,evidence:['LXC identity checked']});
+ assert.equal(leaseResult.status,200,JSON.stringify(leaseResult));const lease=leaseResult.body;
+ const {approval,access}=await h.approvedAccess(run,'restored-used-controller-command');
+ await h.execute(approval);await h.completeTool(approval);await h.releaseOperation(run,approval,access,'COMPLETED');
+ await h.stop();await h.start();
+ const preview=await h.get('/runs/'+run.runId+'/test-resources/reconcile-preview?transactionId='+lease.transactionId);
+ assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.token,undefined);
+ assert.equal(preview.body.state,'HELD');assert.equal(preview.body.reconciliationRequired,true);
+ assert.equal(preview.body.operations.length,1);assert.equal(preview.body.operations[0].state,'COMPLETED');
+ const payload={version:run.version,transactionId:lease.transactionId,fencing:lease.fencing,
+  reconciliationId:'reconcile-restored-used-controller-1',boundaryDigest:preview.body.boundaryDigest,
+  evidence:['same owner verified','native history terminal','session idle','no pending permissions']};
+ const stale=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',{...payload,boundaryDigest:'0'.repeat(64)});
+ assert.equal(stale.status,409);assert.equal((await h.get('/runs/'+run.runId+'/test-resources')).body.reservations[0].state,'HELD');
+ h.native.busy[run.sessionId]={type:'busy'};
+ assert.equal((await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload)).status,409);
+ h.native.busy={};h.native.permissions.push({id:'pending-restored-test',sessionID:run.sessionId,permission:'edit',tool:{callID:'call-pending'}});
+ assert.equal((await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload)).status,409);
+ h.native.permissions=[];
+ const result=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload);
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'HELD');
+ assert.notEqual(result.body.token,lease.token);assert.ok(result.body.fencing>lease.fencing);
+ const after=(await h.get('/runs/'+run.runId+'/test-resources')).body.reservations[0];
+ assert.equal(after.state,'HELD');assert.equal(after.reconciliationRequired,false);assert.equal(after.token,undefined);
+ assert.deepEqual(after.resources,run.resources);
+ const replay=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload);
+ assert.equal(replay.status,200);assert.equal(replay.body.token,result.body.token);assert.equal(replay.body.fencing,result.body.fencing);
+});
+
 test('un journal durable indisponible conserve UNKNOWN et protège le manifeste',async t=>{
  const h=await setup(t);const run=await h.reserve('restore-log-unavailable',{resources:[{key:'file:src/restore.py',mode:'write'}]});
  const approval=h.approval(run,'restore-log-unavailable');approval.files=['src/restore.py'];approval.commands=[];
@@ -1697,7 +1779,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.76');
+  assert.equal(initialized.result.serverInfo.version, '2.1.77');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

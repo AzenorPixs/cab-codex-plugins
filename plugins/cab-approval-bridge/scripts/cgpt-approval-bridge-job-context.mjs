@@ -12,7 +12,7 @@ import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bri
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.76";
+export const VERSION = "2.1.77";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -320,7 +320,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.76",
+    version: "2.1.77",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1588,7 +1588,8 @@ async function invalidateApprovedTerminalOperation(approval,approvalResult){
       operation.operationId!==approval.operation_id||operation.operationDigest!==approval.operation_digest||
       operation.sessionId!==approval.session_id||approval.change_id!==job?.changeId||
       job?.revokedSessions?.includes(operation.sessionId))throw decisionError('operation-restore-identity-divergent');
-  assertDecisionOperation(operation,approval.requestId);
+  const contextFailure=operationContextFailure(operation,approval.requestId);
+  if(contextFailure)throw decisionError(contextFailure);
   let previous=validations.get(approval.requestId),decision=httpDecisions.get(approval.requestId);
   if(previous&&(previous.approvalId!==approval.approval_id||previous.changeId!==approval.change_id||
       previous.operation?.operationId!==operation.operationId||previous.operation?.operationDigest!==operation.operationDigest||
@@ -2101,7 +2102,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.76",
+      version: "2.1.77",
     },
   });
 
