@@ -791,11 +791,22 @@ test('rollback CABU : dépassement, reprises en échec gardent le même journal 
 test('rollback CABU : reprise avant liée conserve le reçu et rétablit les briques sans reload global',async t=>{
  const h=await fixture(t);h.c.layout='managed-release';h.c.waitMs=500;h.state.controllerDelayMs=1500;
  await chmod(h.scripts,0o755);await chmod(join(h.c.home,'.local/share/cab-approval-bridge-monitor'),0o755);
+ await mkdir(join(h.c.workspace,'plugins'),{recursive:true});
+ await cp(h.c.pluginRoot,join(h.c.workspace,'plugins/cab-approval-bridge'),{recursive:true});
+ await writeFile(join(h.c.workspace,'pyproject.toml'),'[project]\nname = "cab"\n');
+ const sourceBroker=join(h.c.workspace,'src');await cp(h.c.brokerDirectory,sourceBroker,{recursive:true});
+ h.c.brokerDirectory=sourceBroker;h.c.brokerPolicy='cab-source';
  await assert.rejects(updateComponents(h.c,h.options),{code:'update-recovery-required'});
  const failed=await h.receipt();assert.equal(failed.phase,'ROLLBACK_FAILED');
  assert.equal(failed.failureCode,'update-controller-start-unconfirmed');
  failed.version='2.1.67';
+ for(const file of failed.files.filter(item=>item.group==='broker')){
+  const content=(await readFile(join(h.c.pluginRoot,'broker',file.name),'utf8')).replaceAll('2.1.68','2.1.67');
+  file.afterHash=createHash('sha256').update(content).digest('hex');
+  await writeFile(join(sourceBroker,file.name),await readFile(join(h.c.pluginRoot,'broker',file.name)));
+ }
  await writeFile(join(h.c.home,'.local/state/cab-approval-bridge-update/current.json'),JSON.stringify(failed)+'\n');
+ await writeFile(join(h.c.home,'.local/state/cab-approval-bridge-update',failed.id,'receipt.json'),JSON.stringify(failed)+'\n');
  h.state.controllerDelayMs=0;h.c.waitMs=2000;
  const result=await updateComponents({...h.c,resumeForward:failed.id},h.options);
  assert.equal(result.status,'completed');assert.equal(result.version,'2.1.68');
@@ -805,6 +816,14 @@ test('rollback CABU : reprise avant liée conserve le reçu et rétablit les bri
  assert.equal(h.state.brokerVersion,'2.1.68');assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
  assert.ok(!h.state.events.some(event=>event[1]==='/api/location/reload'));
  assert.equal(await readFile(h.runtime,'utf8'),'{"consumedOnce":["once-1"],"run":"a","gate":"OPEN"}\n');
+});
+
+test('reprise avant CABU : un identifiant sans reçu ROLLBACK_FAILED est refusé avant toute coupure',async t=>{
+ const h=await fixture(t);
+ await assert.rejects(updateComponents({...h.c,resumeForward:'update-11111111-1111-4111-8111-111111111111'},h.options),
+  {code:'update-forward-recovery-authorization-invalid'});
+ assert.ok(!h.state.events.some(event=>event[1]==='stop'));
+ assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
 });
 
 function pendingRecovery(h, { transient = 0, at = 'connect' } = {}) {
