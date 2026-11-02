@@ -1,3 +1,12 @@
+## 2.1.70 — Continuer CABU après déconnexion broker confirmée
+
+- Une reprise enfant avec `brokerState=disabled` est admise uniquement via un
+  reçu parent superseded dont l’identité OpenCode et la déconnexion sont
+  vérifiées.
+- Les états MCP incertains et les brokers locaux divergents restent refusés ;
+  aucun reload global ni changement de RUN n’est effectué.
+- CAB/CABU, composants, plugins, commandes et cadrages partagent 2.1.70.
+
 ## 2.1.69 — Restaurer sans perdre les leases actives en conflit
 
 - Le contrôleur conserve les accès actifs restaurés, même si leurs ressources
