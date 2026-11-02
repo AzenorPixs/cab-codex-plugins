@@ -126,7 +126,30 @@ test('rejet natif : les reçus 2.1.67 sont normalisés sans perdre leur empreint
  assert.equal(persisted.completionDigest,proofDigest);assert.equal(persisted.nativeRejectionProofDigest,undefined);
 });
 
-test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.68',async t=>{
+test('restauration conserve les accès actifs conflictuels sans réutiliser once ni geler les ressources disjointes',async t=>{
+ const h=await fixture(t),shared=[file('shared.txt')];
+ const a=h.reserve('restore-conflict-a',shared),b=h.reserve('restore-conflict-b',shared);
+ const opA=h.prepare(a,'restore-conflict-operation-a'),opB=h.prepare(b,'restore-conflict-operation-b');
+ const accessA=h.acquire(a,opA),accessB=h.acquire(b,opB);
+ assert.equal(accessA.state,'HELD');assert.equal(accessB.state,'WAITING');
+ const snapshot=JSON.parse(readFileSync(h.r.path,'utf8'));
+ const restored=snapshot.coordination.accesses[opB.operationId];restored.state='HELD';
+ restored.token='11111111-1111-4111-8111-111111111111';restored.fencing=++snapshot.coordination.sequence;
+ restored.grantedAt=new Date().toISOString();writeFileSync(h.r.path,JSON.stringify(snapshot)+'\n');
+ await h.restart();
+ assert.equal(h.r.resourceState.accesses[opA.operationId].state,'HELD');
+ assert.equal(h.r.resourceState.accesses[opB.operationId].state,'HELD');
+ assert.equal(h.r.restoredAccesses.has(opA.operationId),true);assert.equal(h.r.restoredAccesses.has(opB.operationId),true);
+ assert.throws(()=>h.r.operationAdmission(a.runId,opA,'request-'+opA.operationId,'permission'),/operation-access-not-held/);
+ const disjoint=h.reserve('restore-conflict-disjoint',[file('other.txt')]);
+ const opDisjoint=h.prepare(disjoint,'restore-conflict-operation-disjoint');
+ assert.equal(h.acquire(disjoint,opDisjoint).state,'HELD');
+ const writer=h.reserve('restore-conflict-writer',shared);
+ const opWriter=h.prepare(writer,'restore-conflict-operation-writer');
+ assert.equal(h.acquire(writer,opWriter).state,'WAITING');
+});
+
+test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.69',async t=>{
  const h=await fixture(t);const run=h.reserve('native-reject-migration',[file('rejected.txt')]);
  const op=h.prepare(run,'native-reject-operation');const stored=h.r.resourceState.operations[op.operationId];
  h.r.claimRequest(run.runId,stored.requestId,fingerprint('native-reject-owner'),false);
