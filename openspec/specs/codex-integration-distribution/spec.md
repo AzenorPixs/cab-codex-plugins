@@ -1072,7 +1072,7 @@ Le bootstrap MUST déduire la version CAB attendue du manifeste du plugin vérif
 
 ### Requirement: Arrêt certifié préservant l’autorité du registre
 
-Pour un transfert préparé, CABU MUST arrêter le seul processus principal du contrôleur puis attendre sa fin avant l’arrêt du groupe systemd sélectionné. Le helper d’autorité MUST rester vivant jusqu’au scellement. L’unité distribuée MUST utiliser KillMode=mixed. CABU MUST conserver l’exigence d’adoption du transfert et le repli sur échec ; il MUST NOT arrêter OpenCode ou libérer une ressource métier pour réaliser cette transition.
+Pour un transfert préparé, CABU MUST signaler le seul principal du contrôleur avant le groupe, en préservant le helper jusqu’au scellement. Il MUST confirmer MainPID=0 avec état inactive ou failed ; tout PID vivant ou deactivating MUST rester refusé. L’unité MUST utiliser KillMode=mixed. L’adoption exacte reste obligatoire ; un code de sortie ne la remplace pas. CABU MUST préserver OpenCode et les ressources métier et conserver le repli sur échec.
 
 #### Scenario: Ancienne unité en control-group
 
@@ -1080,7 +1080,12 @@ Pour un transfert préparé, CABU MUST arrêter le seul processus principal du c
 - **WHEN** CABU remplace le contrôleur
 - **THEN** SIGTERM cible d’abord le principal ; le helper reste disponible pour sceller, puis le groupe est arrêté
 
+#### Scenario: Principal arrêté en failed
+
+- **WHEN** le principal est absent, MainPID vaut 0 et l’unité est failed
+- **THEN** CABU peut arrêter le groupe et poursuivre, mais le contrôleur cible doit adopter le certificat exact avant tout succès
+
 #### Scenario: Principal qui ne termine pas
 
-- **WHEN** la fin du principal ne peut pas être confirmée
+- **WHEN** le principal reste vivant ou sa fin ne peut pas être confirmée
 - **THEN** CABU conserve un échec explicite sans inventer un transfert adopté

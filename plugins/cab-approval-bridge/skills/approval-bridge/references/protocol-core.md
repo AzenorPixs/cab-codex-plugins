@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.2.2
+# Noyau du contrat — CAB 2.2.3
 
 ## Champ d'application et autorité
 
