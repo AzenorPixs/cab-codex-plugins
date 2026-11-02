@@ -1,6 +1,6 @@
 ---
 description: Piloter hors sandbox la communication de validation OpenCode–Codex
-version: 2.1.70
+version: 2.1.71
 ---
 
 Réponds en français. Cette commande est globale : elle ne modifie jamais le projet OpenCode suivi, ses fichiers, ses spécifications ou sa configuration.
@@ -41,13 +41,23 @@ pour `resume`, appliquer la section de suspension ciblée/globale sans exécuter
 les procédures start, prévol ou update.
 Les consultations, `pause`, `stop`, `test` et `update` ne déclenchent pas ce bootstrap.
 
-## RUN concurrents CAB 2.1.70
+## RUN concurrents CAB 2.1.71
 
 Lire [le contrat concurrent](references/concurrent-runs.md) et ORCHESTRATED_CODING.md du projet avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
 Le manifeste déclare la portée ; les accès actifs sont temporaires. Les lectures compatibles coexistent, les écritures recouvrantes attendent et /locks/acquire attribue l'ensemble entier ou WAITING sans acquisition partielle. Les fichiers privés prouvés peuvent éviter l'appel de verrou partagé ; leur promotion est coordonnée si un pair les déclare.
 
 Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Préparer le contenu exact, obtenir la décision, acquérir juste avant effet et conserver ask/once. Une base périmée exige une nouvelle demande. Terminer les effets natifs corrélés avant /locks/release ; aucun timeout ni idle ne libère un effet inconnu.
+
+### Réservation d’un environnement de test avec accès disjoints — CAB 2.1.71
+
+`/test-resources/acquire` ne doit pas être bloqué par les seuls accès actifs
+HELD, EXECUTING, UNKNOWN ou WAITING du même RUN lorsque leurs ressources sont
+disjointes de l’environnement demandé. Un accès recouvrant continue de bloquer
+l’acquisition. Conserver sans modification chaque accès, notamment UNKNOWN ;
+garder les contrôles de phase, génération, suspension, conflits FIFO et toute
+réservation de test déjà active du RUN. La progression disjointe ne permet
+aucune permission `once` sans son bail et ses accès natifs corrélés.
 
 CAB 2.1.70 peut aussi normaliser un wrapper `execute` terminé et non exécuté
 qui appelle directement `request_validation` une seule fois : seul un identifiant
@@ -417,7 +427,7 @@ si elle est inactive ou absente dans le périmètre autorisé, installer son jeu
 indépendant, puis exécuter `systemctl --user daemon-reload` et
 `systemctl --user start cgpt-approval-bridge-monitor.service` séparément.
 Réutiliser une instance active conforme sans modification ni redémarrage.
-Vérifier service actif, GET /api/identity avec version 2.1.70 et identity.workspace
+Vérifier service actif, GET /api/identity avec version 2.1.71 et identity.workspace
 attendus, puis GET / ; ne pas lire /api/snapshot pour ce contrôle d'identité ;
 terminer cette tentative bornée et rapporter son résultat avant les contrôles amont.
 Afficher l'URL réelle uniquement après ces preuves,
@@ -1086,7 +1096,7 @@ La récupération conserve le même journal et les mêmes destinations. Le jeu W
 indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs,
 cgpt-approval-bridge-permission-policy.mjs et cgpt-approval-bridge-process-lifecycle.mjs.
 
-Contrat courant CABU 2.1.70 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU 2.1.71 : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -1163,7 +1173,7 @@ exacte, terminée, concordante et non tronquée. La projection reste
 cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
 Une variable, un appel ajouté ou une expression inconnue conserve le refus.
 Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
-La distribution commune est 2.1.70 ; les preuves 2.1.8 restent historiques.
+La distribution commune est 2.1.71 ; les preuves 2.1.8 restent historiques.
 
 ## Priorité medium puis high — nouvelles sessions et reprises
 

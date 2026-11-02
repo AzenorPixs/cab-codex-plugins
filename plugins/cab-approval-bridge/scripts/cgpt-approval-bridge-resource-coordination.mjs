@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.70';
+export const VERSION = '2.1.71';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -357,6 +357,10 @@ export class ResourceRunRegistry extends RunRegistry {
       conflicts(entry.resources, other.resources)).map((r) => ({ runId: r.runId,
         transactionId: r.transactionId, reason: 'test-resource-conflict' }));
   }
+  unresolvedTestAccess(runId, resources) {
+    return Object.values(this.resourceState.accesses).some((access) => access.runId === runId &&
+      (active(access) || access.state === 'WAITING') && conflicts(resources, access.resources));
+  }
   grantTests() {
     if (this.resourceState.global && this.resourceState.global.state !== 'RELEASED') return;
     for (const entry of Object.values(this.resourceState.testReservations || {}).sort((a,b) => a.order - b.order)) {
@@ -376,7 +380,11 @@ export class ResourceRunRegistry extends RunRegistry {
       return this.testReservations(runId).find((r) => r.transactionId === prior.transactionId);
     }
     const { run } = this.scope(runId, payload.version, resources);
-    if (run.phase !== 'WORK' || this.unresolvedAccess(runId)) throw new CoordinationError('test-acquisition-boundary-required');
+    const unresolvedTestReservation = Object.values(this.resourceState.testReservations || {}).some((entry) =>
+      entry.runId === runId && reservedTest(entry));
+    if (run.phase !== 'WORK' || unresolvedTestReservation || this.unresolvedTestAccess(runId, resources)) {
+      throw new CoordinationError('test-acquisition-boundary-required');
+    }
     this.resourceState.testReservations ||= {};
     const entry = { transactionId: payload.transactionId, runId, contextId: run.contextId, version: run.version,
       resources, inputDigest, state: 'WAITING', order: ++this.resourceState.sequence, requestedAt: now() };

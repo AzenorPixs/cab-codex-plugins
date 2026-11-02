@@ -347,6 +347,14 @@ CAB MUST réserver atomiquement l'ensemble déclaré des environnements Docker/L
 - **WHEN** A demande Docker et LXC dont un seul est détenu par B
 - **THEN** A n'obtient aucun des deux environnements avant disponibilité de l'ensemble
 
+#### Scenario: Accès actifs disjoints du même RUN
+- **WHEN** le RUN possède un accès HELD, EXECUTING, UNKNOWN ou WAITING dont les ressources ne recouvrent pas l'environnement de test demandé
+- **THEN** CAB peut réserver cet environnement indépendamment et conserve inchangés tous les accès existants
+
+#### Scenario: Accès actif recouvrant l'environnement demandé
+- **WHEN** le RUN possède un accès actif ou en attente dont les ressources recouvrent l'environnement de test demandé
+- **THEN** CAB refuse ou diffère la réservation de test sans modifier l'accès existant
+
 ### Requirement: Restitution vérifiée des environnements
 CAB MUST conserver la réservation jusqu’à la fin des opérations et la restitution vérifiée. La libération ordinaire MUST exiger nettoyage puis vérification distincts, corrélés et réussis après les tests, avec preuves examinées. Seule la restitution explicite sans effet MAY remplacer ce parcours sans mutation. Une fin de commande ou un booléen seul MUST NOT suffire. Une répétition identique MUST restituer le reçu ; une répétition divergente MUST être refusée.
 

@@ -1,3 +1,9 @@
+## 2.1.71 — Réserver les environnements de test malgré des accès disjoints
+
+- Les réservations LXC/Docker ne sont plus bloquées par les seuls accès actifs disjoints du même RUN.
+- Les accès recouvrants, les réservations de test existantes et leurs gardes restent protégés.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.71.
+
 ## 2.1.70 — Continuer CABU après déconnexion broker confirmée
 
 - Une reprise enfant avec `brokerState=disabled` est admise uniquement via un
