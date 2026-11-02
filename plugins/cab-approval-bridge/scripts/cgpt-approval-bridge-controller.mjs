@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.71";
+const version = "2.1.72";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -372,7 +372,8 @@ async function checkNative(sessionId, idle = false) {
   catch { throw new CoordinationError('native-session-unavailable'); }
   if (session.id !== sessionId || session.directory !== workspace) throw new CoordinationError('native-session-divergent');
   if (idle) {
-    const [busy, permissions] = await Promise.all([openCode.sessionStatus(workspace), openCode.permissions(workspace)]);
+    const [busy, permissions] = await Promise.all([openCode.sessionStatus(workspace),
+      openCode.permissions(workspace, { sessionIds: [sessionId] })]);
     if (!busy || typeof busy !== 'object' || Array.isArray(busy) ||
         !Array.isArray(permissions) || (busy[sessionId] && busy[sessionId].type !== 'idle') ||
         permissions.some((p) => p.sessionID === sessionId)) throw new CoordinationError('native-session-not-quiescent');
@@ -477,7 +478,8 @@ async function restoreApprovedOperations(run, context) {
   try {
     const candidates = Object.values(registry.resourceState.operations).filter((op) => op.runId === run.runId &&
       op.contextId === run.contextId && (['PREPARED','ISSUING','UNKNOWN'].includes(op.state) ||
-        op.state === 'CANCELLED' && op.decision?.status === 'rejected' && op.completionDigest) &&
+        op.state === 'CANCELLED' && op.completionDigest &&
+          (!op.decision || op.decision.status === 'rejected')) &&
       op.native?.onceAcknowledged !== true && op.rejectionOnly !== true);
     for (const stored of candidates) {
       const key = run.runId + ':' + stored.operationId;
@@ -507,15 +509,45 @@ async function restoreApprovedOperations(run, context) {
         const identityHash = createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex');
         const owner = registry.requestOwners[current.requestId];
         if (owner?.runId !== run.runId || owner.digest !== identityHash) continue;
+        const cancelledProof = nativeCancelledValidationProof(parts, approval);
         const alreadyRejected = current.state === 'CANCELLED' && current.decision?.status === 'rejected' &&
           typeof current.completionDigest === 'string';
         let candidate;
         try { candidate = registry.operationCandidate(run.runId, approval); }
         catch (cause) {
-          if (cause.code !== 'resource-revision-stale' || !nativeRejectedValidationProof(parts, approval)) continue;
+          if (cause.code !== 'resource-revision-stale' ||
+              (!nativeRejectedValidationProof(parts, approval) && !cancelledProof)) continue;
           candidate = registry.operationCandidate(run.runId, approval, { checkCurrentRevisions:false });
         }
         if (candidate.identityDigest !== current.identityDigest || candidate.operationDigest !== current.operationDigest) continue;
+        const alreadyCancelled = current.state === 'CANCELLED' && !current.native && !current.decision &&
+          current.completionDigest === cancelledProof;
+        if (cancelledProof && (current.state === 'PREPARED' && !current.decision || alreadyCancelled)) {
+          if (alreadyCancelled) {
+            context.restoreNativeCancelledValidation(approval, cancelledProof);
+            continue;
+          }
+          const [secondMessages, secondPermissions, activeSessions] = await Promise.all([
+            openCode.messages(current.sessionId, run.directory),
+            openCode.permissions(run.directory, { sessionIds:[current.sessionId], verifyInputs:true }),
+            openCode.sessionStatus(run.directory),
+          ]);
+          const secondParts = Array.isArray(secondMessages)
+            ? secondMessages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []) : [];
+          const secondProof = nativeCancelledValidationProof(secondParts, approval);
+          const permissionPending = permissions.some((permission) => permission.sessionID === current.sessionId) ||
+            secondPermissions.some((permission) => permission.sessionID === current.sessionId);
+          const linkedAccess = Object.values(registry.resourceState.accesses).some((access) =>
+            access.accessId === current.accessId || access.operationIds.includes(current.operationId));
+          if (secondProof && secondProof === cancelledProof && proofHash(messages) === proofHash(secondMessages) &&
+              !permissionPending && !linkedAccess && !Object.hasOwn(activeSessions, current.sessionId) &&
+              generation === (nativeSessionGenerations.get(current.sessionId) || 0) &&
+              proofHash(registry.resourceState.operations[current.operationId]) === proofHash(operationSnapshot)) {
+            registry.recordNativeCancelledValidation(run.runId, current.operationId, cancelledProof);
+            context.restoreNativeCancelledValidation(approval, cancelledProof);
+          }
+          continue;
+        }
         if (current.state === 'PREPARED' && !current.decision || alreadyRejected) {
           let reconciled = alreadyRejected && context.decision(current.requestId)?.decision === 'rejected';
           if (!reconciled) {
@@ -774,6 +806,54 @@ function nativeRejectedValidationProof(parts, approval) {
       proofHash(nativeIdentity(result)) !== proofHash(nativeIdentity(approval))) return null;
   return proofHash({ approval:nativeIdentity(approval), request:requests[0].entry,
     rejection:rejects[0], terminal:lookups[0], suffix });
+}
+function nativeCancelledValidationProof(parts, approval) {
+  const allowed = new Set(['cgpt-validation.request_validation','cgpt-validation.cancel_approval',
+    'cgpt-validation.get_approval','cgpt-validation.poll_approval']);
+  const entries = [];
+  for (const part of parts) {
+    if (part?.type !== 'tool') continue;
+    if (part.tool === 'execute') {
+      if (part.executed !== false || part.state?.metadata?.truncated !== false ||
+          !Array.isArray(part.state?.metadata?.toolCalls) || part.state?.status !== 'completed') {
+        entries.push({ tool:'untrusted-wrapper', status:part.state?.status }); continue;
+      }
+      for (const call of part.state.metadata.toolCalls) entries.push(call && typeof call === 'object'
+        ? call : { tool:'invalid-call', status:'invalid' });
+      continue;
+    }
+    const name = ({ 'cgpt-validation_request_validation':'cgpt-validation.request_validation',
+      'cgpt-validation_cancel_approval':'cgpt-validation.cancel_approval',
+      'cgpt-validation_get_approval':'cgpt-validation.get_approval',
+      'cgpt-validation_poll_approval':'cgpt-validation.poll_approval' })[part.tool];
+    entries.push({ tool:name || 'unknown', status:part.state?.status, input:part.state?.input,
+      output:part.state?.output });
+  }
+  const requests = entries.map((entry,index) => ({entry,index})).filter(({entry}) =>
+    entry.tool === 'cgpt-validation.request_validation' && entry.input?.requestId === approval.requestId);
+  if (requests.length !== 1 || requests[0].entry.status !== 'completed' ||
+      proofHash(nativeIdentity(requests[0].entry.input)) !== proofHash(nativeIdentity(approval))) return null;
+  const suffix = entries.slice(requests[0].index);
+  if (suffix.some((entry) => !allowed.has(entry.tool) || entry.status !== 'completed')) return null;
+  const cancels = suffix.filter((entry) => entry.tool === 'cgpt-validation.cancel_approval');
+  if (cancels.some((entry) => entry.input?.approval_id !== approval.approval_id) || cancels.length > 1) return null;
+  const lookups = suffix.filter((entry) => ['cgpt-validation.get_approval','cgpt-validation.poll_approval'].includes(entry.tool));
+  const terminal = [];
+  for (const entry of lookups) {
+    if (entry.input?.approval_id !== approval.approval_id) return null;
+    let result;
+    try { result = typeof entry.output === 'string' ? JSON.parse(entry.output) : entry.output; }
+    catch { return null; }
+    if (result?.status === 'PENDING') continue;
+    if (result?.status !== 'CANCELLED' || result.cancelled_by !== 'OC' ||
+        result.requestId !== approval.requestId || result.approval_id !== approval.approval_id ||
+        proofHash(nativeIdentity(result)) !== proofHash(nativeIdentity(approval))) return null;
+    terminal.push(entry);
+  }
+  if (!terminal.length || suffix.some((entry) =>
+      entry.tool === 'cgpt-validation.request_validation' && entry !== requests[0].entry)) return null;
+  return proofHash({ approval:nativeIdentity(approval), request:requests[0].entry,
+    cancellation:terminal.at(-1), suffix });
 }
 function observeNativeCompletion(runId, part, sessionId) {
   for (const operation of Object.values(registry.resourceState.operations)) {

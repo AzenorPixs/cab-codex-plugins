@@ -179,7 +179,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.1.71', mode: 'concurrent', brokerReadiness: { server_version: '2.1.71' },
+    else if (target.pathname === '/status') value = { version: '2.1.72', mode: 'concurrent', brokerReadiness: { server_version: '2.1.72' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/monitor/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -190,7 +190,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.1.71', supervisor: '1.4.0', broker: '2.1.71', opencode: '2.2.0', monitor: '2.1.71' });
+  assert.deepEqual(result.componentVersions, { controller: '2.1.72', supervisor: '1.4.0', broker: '2.1.72', opencode: '2.2.0', monitor: '2.1.72' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -212,6 +212,18 @@ test('ETAT suit les faits frais et ne modifie aucune étape', () => {
   assert.equal(operationalState({ ...base, pending: 1, readiness: 'HUMAN_REQUIRED' }), 'BLOCKED');
   assert.equal(operationalState(base, { controllerFresh: false }), 'UNKNOWN');
   assert.equal(operationalState(base, { registryFresh: false }), 'UNKNOWN');
+});
+
+test('la sentinelle NONE ne transforme pas un RUN sain en BLOCKED', () => {
+  const runs = normalizeRuns({ mode: 'concurrent', runs: { a: {
+    brokerReadiness: { status: 'READY', root_cause: 'NONE' },
+    coordination: { phase: 'WORK', reason: 'NONE', blockers: [] },
+    job: { armed: false, terminalGate: { status: 'OPEN' } },
+  } } }, { runs: [{ runId: 'a', changeId: 'change-a', state: 'RESERVED', version: 7 }] });
+  assert.equal(runs[0].cause, null);
+  assert.equal(operationalState(runs[0]), 'IDLE');
+  assert.equal(operationalState({ ...runs[0], cause: 'NONE' }), 'IDLE');
+  assert.equal(operationalState({ ...runs[0], cause: 'resource-effects-unknown' }), 'BLOCKED');
 });
 
 test('des champs amont malformés restent inconnus sans arrêter la collecte', () => {

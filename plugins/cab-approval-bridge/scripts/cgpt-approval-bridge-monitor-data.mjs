@@ -7,7 +7,7 @@ import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-mo
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.71';
+export const VERSION = '2.1.72';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -188,11 +188,12 @@ export function normalizeRuns(controller = {}, registry = {}, supervisor = {}, s
     const gate = record(status.terminalGate || job.terminalGate);
     const coordination = record(status.coordination);
     const lifecycle = lifecycleView(job.lifecycle);
+    const causeCode = code(coordination.reason || status.brokerReadiness?.root_cause);
     return { runId, changeId: id(job.changeId) || id(reservation.changeId), sessionId: id(job.sessionId) || id(reservation.sessionId),
       generation: Number.isSafeInteger(reservation.version) ? reservation.version : id(job.jobId),
       state: code(reservation.state), phase: code(coordination.phase || reservation.phase),
       step: lifecycle.current, stepHistory: lifecycle.history, stepSequence: lifecycle.sequence, stepHistoryTruncated: lifecycle.truncated,
-      readiness: code(status.brokerReadiness?.status), cause: code(coordination.reason || status.brokerReadiness?.root_cause),
+      readiness: code(status.brokerReadiness?.status), cause: causeCode === 'NONE' ? null : causeCode,
       lastProvenMilestone: text(job.lastProvenMilestone), currentMandate: code(job.currentCabMandate), hasMandate: Boolean(job.currentCabMandate),
       armed: typeof job.armed === 'boolean' ? job.armed : null, gate: { status: code(gate.status), declaredState: text(gate.declaredState, 40) },
       updatedAt: stamp(job.updatedAt), nativeActivity: code(sessions[job.sessionId || reservation.sessionId]?.type),
@@ -213,7 +214,7 @@ export function operationalState(run, { controllerFresh = true, registryFresh = 
   if (['run-pause', 'global-coordination-suspended'].includes(run.cause)) return 'PAUSED';
   if (run.readiness === 'HUMAN_REQUIRED') return 'BLOCKED';
   if (['resource-conflict','test-resource-conflict'].includes(run.cause)) return 'WAITING';
-  if (run.cause || ['BLOCKED', 'HUMAN_REQUIRED'].includes(run.readiness)) return 'BLOCKED';
+  if ((run.cause && run.cause !== 'NONE') || ['BLOCKED', 'HUMAN_REQUIRED'].includes(run.readiness)) return 'BLOCKED';
   if (run.pending > 0) return 'WAITING';
   if (run.readiness === 'DEGRADED') return 'DEGRADED';
   if (run.state === 'RELEASED') return 'RELEASED';
