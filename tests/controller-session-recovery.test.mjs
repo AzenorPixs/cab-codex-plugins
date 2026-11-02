@@ -684,7 +684,7 @@ test('reconcile-rejected scelle un rejet après redémarrage sans restaurer de d
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.body.recovery.attempts.at(-1).outcome, 'REJECTED_WITHOUT_EFFECT');
   assert.deepEqual(h.native.replies, []);
-  assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 404);
+  assert.equal(await h.httpStatus(`/decision/${a.requestId}`), 200);
   await h.stop(); await h.start();
   assert.deepEqual((await h.get('/job')).recovery, result.body.recovery);
   await h.post('/broker/readiness', { status: 'READY', coordination_protocol: 'resource-scoped-v1', pending_count: 0 });
@@ -898,8 +898,8 @@ test("reconcile après redémarrage utilise les preuves natives sans recréer la
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).status, 409);
   const reconciled = await h.post("/job/recover", payload);
   assert.equal(reconciled.status, 409);
-  assert.equal(reconciled.body.error, "preflight-native-allow-not-proved");
-  assert.equal(await h.httpStatus("/decision/preflight-1"), 404);
+  assert.equal(reconciled.body.error, "preflight-not-executed-without-once");
+  assert.equal(await h.httpStatus("/decision/preflight-1"), 200);
   assert.deepEqual((await h.get("/job")).recovery, before.recovery);
   assert.equal(h.native.replies.length, 0);
 });
@@ -1095,7 +1095,7 @@ test("complete humain restaure le même job bloqué après restart sans nouvelle
   const history = structuredClone(h.native.messages);
   await h.stop(); await h.start();
   await h.post("/broker/readiness", { status: "READY", coordination_protocol: "resource-scoped-v1", pending_count: 0 });
-  assert.equal(await h.httpStatus(`/decision/${h.recovery.preflightRequestId}`), 404);
+  assert.equal(await h.httpStatus(`/decision/${h.recovery.preflightRequestId}`), 200);
   assert.equal((await h.post("/job/recover", { ...h.recovery, phase: "complete" })).body.error,
     "job-not-recoverable");
   const result = await h.post("/job/recover", payload);
@@ -1145,7 +1145,7 @@ test("restauration humaine refuse empreinte, décision, gate ou preuves divergen
     for (const key of ["sessionId", "armed", "recovery", "terminalGate", "lastProvenMilestone"]) {
       assert.deepEqual(after[key], before[key]);
     }
-    assert.equal(await h.httpStatus(`/decision/${h.recovery.preflightRequestId}`), 404);
+    assert.equal(await h.httpStatus(`/decision/${h.recovery.preflightRequestId}`), 200);
     assert.equal(h.native.replies.length, 1);
   }
 });

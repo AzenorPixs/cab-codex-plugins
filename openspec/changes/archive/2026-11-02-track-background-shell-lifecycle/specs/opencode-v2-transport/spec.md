@@ -2,15 +2,16 @@
 
 ### Requirement: Corrélation d’un shell natif background
 
-CAB MAY accepter `background=true` uniquement pour un shell natif exact, doté
-d’une permission `once`, d’un `tool_input_sha256` concordant et d’une ressource
-port en écriture réservée. Il MUST lier le shellID du résultat natif à son RUN,
-opération, session, commande et workspace. Un shellID absent ou divergent MUST
-laisser l’opération protégée.
+CAB MAY accepter background=true uniquement pour un shell déclaré par
+shell_background=true, avec once, tool_input_sha256 concordant, timeout positif
+et port write réservé. Le shellID MUST venir du call natif lié à la session.
+Le GET shell MUST vérifier id, location, commande, cwd et dates. Shell.Info
+ne fournissant pas de session obligatoire, la liaison MUST venir de la chaîne
+native, jamais d’un champ inventé.
 
 #### Scenario: Start background natif corrélé
 
-- **WHEN** le résultat natif complet indique status running et shellID, et que `GET /api/shell/:id` retourne la même session, commande, location et le statut running
+- **WHEN** la partie native approuvée fournit shellID et que GET shell retourne cet id, la commande, la location, le cwd et les dates concordants
 - **THEN** CAB conserve la corrélation du processus sans traiter le lancement comme sa fin
 
 ### Requirement: Fin native d’un serveur background

@@ -4,9 +4,9 @@
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.1.81
+### Distribution courante 2.2.0
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.81. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Seules `/CAB` et `/CABU` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.2.0. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Seules `/CAB` et `/CABU` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui prépare à chaud et ne bascule que les briques nécessaires, avec vérification des versions et de la continuité. Un jeu conforme ne redémarre pas. Aucune activation au login ; OpenCode demeure ouvert.
 
 Le contrôleur persiste chaque décision terminale avant une réponse native. Au
 redémarrage, la restauration d’une approbation exige la demande et la décision
@@ -59,11 +59,16 @@ CAB/
 ├── plugins/cab-approval-bridge/      # plugin Codex distribuable
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
+│   ├── skills/approval-bridge/references/ # noyau et procédures conditionnelles
 │   ├── skills/coding-session-statistics/SKILL.md
 │   ├── systemd/cgpt-approval-bridge-controller.service
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-job-context.mjs
+│       ├── cgpt-approval-bridge-continuity.mjs
+│       ├── cgpt-approval-bridge-recovery.mjs
+│       ├── cgpt-approval-bridge-shell-lifecycle.mjs
+│       ├── cgpt-approval-bridge-efficiency.mjs
 │       ├── cgpt-approval-bridge-model-policy.mjs
 │       ├── cgpt-approval-bridge-runs.mjs
 │       ├── cgpt-approval-bridge-import-observations.mjs
@@ -270,7 +275,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.1.81` pour le broker,
+artefacts distribués. La version de base actuelle est `2.2.0` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -458,14 +463,16 @@ d'un autre commit ou réécrire la configuration OpenCode.
 Le script est exécuté depuis le plugin installé, hors des destinations qu'il
 remplace. Il valide et sauvegarde le jeu complet avant tout effet. Il ne modifie
 ni cache de plugin, secret, environnement, drop-in ni projet piloté. L'invocation
-`/CAB update` arrête systématiquement les trois unités systemd CAB, remplace
-atomiquement les fichiers des quatre briques, exécute `daemon-reload`, puis
-démarre systématiquement les trois unités, sans consulter les états RUN ou de
-coordination en précondition. Aucune unité n'est activée au login. OpenCode
-reste ouvert ; si son API répond après remplacement, les routes natives
-rechargent le broker. En son absence, les fichiers broker sont quand même
-installés et sa version runtime est rapportée `INDISPONIBLE`. Le journal et les
-sauvegardes permettent le retour arrière sans restaurer de données métier.
+CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
+puis ne bascule que les composants nécessaires. Un jeu conforme ne subit
+aucune coupure. Le transfert compatible préserve demandes, décisions, accès et
+baux ; une réponse réseau perdue reprend le même reçu sans rejeu de once.
+OpenCode reste ouvert. Le broker n'est reconnecté que si nécessaire ; sa
+readiness et les versions réelles sont vérifiées. L'absence prouvée d'OpenCode
+permet `INDISPONIBLE` pour sa version chargée, sans en déduire un succès natif.
+Le repli restaure les artefacts, jamais un ancien état métier. Les mesures
+séparent préparation, bascule et indisponibilité observée ; aucune unité
+n'est activée au login.
 
 ### Correctif source de notification orpheline
 
@@ -572,7 +579,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.81 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.2.0 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -619,7 +626,7 @@ Le banc de processus exige une terminaison sous cinq secondes, libération des v
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.81.
+La distribution courante des quatre briques, plugins et commandes est 2.2.0.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

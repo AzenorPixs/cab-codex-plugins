@@ -549,6 +549,46 @@ function cleanupProof(h, run, prefix, resources = run.resources) {
     verificationOperationId: check.operationId, restored: true }));
 }
 
+test('restitution Chromium indépendante : un port quarantiné reste protégé sans retenir le bail nettoyé', async t => {
+  const h = await fixture(t), browser = { key: 'browser:host-a/chromium', mode: 'write' };
+  const port = { key: 'port:host-a/5173', mode: 'write' };
+  const run = h.reserve('scoped-browser-release', [browser, port]);
+  const lease = testLease(h, run, 'scoped-browser-lease', [browser]);
+  const server = h.prepare(run, 'scoped-server', [port]), access = h.acquire(run, server);
+  h.start(run, server);
+  const storedAccess = h.r.resourceState.accesses[access.accessId];
+  storedAccess.state = 'HELD';
+  storedAccess.timeoutQuarantine = { quarantineId: 'scoped-quarantine', operationId: server.operationId,
+    inputDigest: fingerprint('scoped-timeout'), proofDigest: fingerprint('scoped-proof'),
+    fencing: ++h.r.resourceState.sequence, observedAt: new Date().toISOString() };
+  storedAccess.fencing = h.r.resourceState.sequence;
+  h.r.persist();
+  const protectedOperation = structuredClone(h.r.resourceState.operations[server.operationId]);
+  const protectedAccess = structuredClone(storedAccess);
+  finishTestCommand(h, run, 'scoped-browser-check', [browser], 1);
+  const cleanup = cleanupProof(h, run, 'scoped-browser', [browser]);
+  assert.throws(() => h.r.releaseTests(run.runId, testPayload(run, lease)), /test-cleanup-proof-required/);
+  const payload = testPayload(run, lease, { cleanup });
+  assert.equal(h.r.releaseTests(run.runId, payload).state, 'RELEASED');
+  assert.equal(h.r.releaseTests(run.runId, payload).state, 'RELEASED');
+  assert.deepEqual(h.r.resourceState.operations[server.operationId], protectedOperation);
+  assert.deepEqual(h.r.resourceState.accesses[access.accessId], protectedAccess);
+  assert.equal(protectedOperation.native.onceAcknowledged, true);
+});
+
+test('restitution ciblée : un effet lié au bail garde sa protection même sur une ressource distincte', async t => {
+  const h = await fixture(t), browser = { key: 'browser:host-a/chromium', mode: 'write' };
+  const port = { key: 'port:host-a/5173', mode: 'write' };
+  const run = h.reserve('associated-browser-release', [browser, port]);
+  const lease = testLease(h, run, 'associated-browser-lease', [browser]);
+  const cleanup = cleanupProof(h, run, 'associated-browser', [browser]);
+  const op = h.prepare(run, 'associated-process', [port]);
+  h.acquire(run, op); h.start(run, op);
+  h.r.resourceState.operations[op.operationId].testReservationId = lease.transactionId;
+  assert.throws(() => h.r.releaseTests(run.runId, testPayload(run, lease, { cleanup })), /test-effects-unresolved/);
+  assert.equal(h.r.testReservations(run.runId)[0].state, 'HELD');
+});
+
 test('réconciliation restored d’un bail USED garde HELD et renouvelle le token sans exiger l’ancien',async t=>{
  const h=await fixture(t);const a=h.reserve('restored-used',[lxcTest]),lease=testLease(h,a,'restored-used-lease');
  const op=h.prepare(a,'restored-used-operation'),access=h.acquire(a,op);h.start(a,op);h.complete(a,op);h.release(a,access);

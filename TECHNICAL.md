@@ -1,5 +1,13 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+## Continuité 2.2.0 en préparation
+
+Le [contrat de continuité](plugins/cab-approval-bridge/skills/approval-bridge/references/transport-continuity.md)
+décrit les checkpoints de validations/décisions, le curseur des observations
+et le transfert contrôlé. Ces sidecars privés restent distincts du registre
+historique et des statistiques. Les tests locaux HTTP de reprise et de
+transfert sont distincts de la qualification globale et de toute activation.
+
 ## 1. Objet
 
 La maintenance 1.10.7 distingue `expectedUid` (processus broker/OpenCode) des champs privés optionnels `artifactOwnerUid` et `directoryOwnerUid`. Les valeurs sont limitées aux UID de l'acteur ou du broker ; le groupe, les droits et les empreintes restent exacts et aucun artefact broker n'est écrit en mode reuse-readonly.
@@ -13,7 +21,7 @@ Ce document décrit le fonctionnement technique de CAB. Il complète `PROJECT.md
 Avant `/locks/attach`, le contrôleur vérifie l'identité de l'accès et recherche la fin native corrélée des opérations non résolues. Une preuve absente ou divergente refuse le rattachement et conserve la protection ; une fin avec code non nul ne prouve pas une réussite métier. La libération `RECONCILED` existante annule les opérations préparées rattachées et invalide leurs validations non consommées. Vérifier les effets et protections avant cette libération ; une réservation de test distincte ne remplace pas l'accès libéré.
 
 Le déroulement d'une session orchestrateur–agent de codage et ses contrats
-de pilotage sont regroupés dans `ORCHESTRATED_CODING.md` à la racine du projet.
+de pilotage sont regroupés dans `plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md` et son index `references/protocol-index.md` à la racine du projet.
 AGENTS.md conserve les règles générales et impose cette référence aux sessions
 pilotées ; le présent document reste le cadrage technique des composants CAB.
 
@@ -28,10 +36,15 @@ CAB/
 ├── plugins/cab-approval-bridge/
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
+│   ├── skills/approval-bridge/references/ # noyau et procédures conditionnelles
 │   ├── skills/coding-session-statistics/SKILL.md
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-job-context.mjs
+│       ├── cgpt-approval-bridge-continuity.mjs
+│       ├── cgpt-approval-bridge-recovery.mjs
+│       ├── cgpt-approval-bridge-shell-lifecycle.mjs
+│       ├── cgpt-approval-bridge-efficiency.mjs
 │       ├── cgpt-approval-bridge-model-policy.mjs
 │       ├── cgpt-approval-bridge-runs.mjs
 │       ├── cgpt-approval-bridge-import-observations.mjs
@@ -62,7 +75,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.1.81` pour le broker, le contrôleur et le
+La version source actuelle est `2.2.0` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -544,11 +557,11 @@ restent dans cette session visible du développeur.
 
 ### Cadences de la boucle de pilotage
 
-L'orchestrateur consomme le SSE en temps réel et contrôle les demandes et les
-rapports toutes les 3 secondes. Pendant l'analyse ou la rédaction de l'agent
-de codage, les vérifications de progression sont espacées de 7 secondes fixes,
-sans ralentir le contrôle CAB. Ces cadences ne changent pas les délais
-techniques du superviseur, les heartbeats ou les rappels du broker.
+Le suivi consomme les événements SSE en temps réel, avec curseur durable et
+attente HTTP de décision bornée ; un repli technique progressif couvre la perte
+du flux. Aucun tour LLM de polling à cadence fixe n'est imposé. La collecte
+statistique native conserve sa couverture et N/A pour les mesures absentes ;
+les sondes initiale/finale restent vérifiables sans réveils LLM périodiques.
 
 La fraîcheur de huit heures est vérifiée au seul démarrage initial d'une session
 PLLM automatique. Le choix du RUN parent reste conservé pendant les tâches,
@@ -559,10 +572,8 @@ Sans politique admissible, conserver preuves et état puis attendre l'instructio
 du développeur, sans benchmark ni réessai automatique. Une erreur de test métier
 ou de CAB seule ne constitue pas une panne du modèle.
 
-Les sondes statistiques restent prévues toutes les trente minutes sans arrêter
-le travail pour attendre un créneau ; une sonde échouée seule ne suspend pas le
-RUN. Leur calendrier ne déclenche aucune évaluation fournisseur. Les permissions,
-la santé OpenCode, MCP et la readiness CAB réelle restent vérifiés avant reprise.
+La collecte native remplace les tours LLM périodiques. Les mesures ne déclenchent
+aucune évaluation fournisseur ; conserver leur couverture et leurs lacunes.
 
 Ces obligations appartiennent au protocole de l'orchestrateur distribué dans
 la commande et les skills. Elles n'ajoutent pas un ordonnanceur autonome de
@@ -572,23 +583,11 @@ benchmark PLLM au broker, au contrôleur ou au superviseur.
 
 ### Compactage coordonné des contextes
 
-Le protocole impose un cycle commun toutes les 1 h 30 (5 400 secondes), piloté
-par l'orchestrateur à une frontière entre mandats. Après traitement du rapport
-et sauvegarde du checkpoint, il vérifie les API natives réellement exposées.
-Si les deux sont disponibles, il déclenche les compactages en parallèle ;
-sinon, il compacte les seules sessions accessibles et trace les opérations
-non exécutées. Les deux preuves natives sont requises pour déclarer une
-réussite conjointe, pas pour reprendre un RUN dont l'état reste exploitable.
-Une API absente ou un échec avec contexte préservé laisse le cycle incomplet
-avec sa cause. Après réconciliation sûre des contextes, santé OpenCode, MCP,
-readiness CAB et permissions, les mandats déjà autorisés se poursuivent.
-Ce seul écart ne bloque pas le RUN, n'arrête pas CAB, ne requiert pas de
-dérogation et ne diffère pas les statistiques. Un compactage encore en cours,
-un effet inconnu ou une réconciliation impossible suspend les opérations
-concernées, sans rejeu aveugle. Une API absente est réexaminée à la prochaine
-échéance, calculée depuis le déclenchement du cycle courant. L'horloge,
-les sessions disponibles ou non exposées, les résultats et les éventuels
-retards de fin de mandat sont conservés dans le checkpoint.
+Le compactage dépend de la pression native du contexte ou d'une demande
+explicite, à une frontière sûre après checkpoint. Aucun calendrier fixe n'est
+imposé. Une réussite conjointe exige deux preuves natives de fin ; une API
+absente avec contexte intact ne bloque pas à elle seule le RUN. Ne pas rejouer
+un compactage d'effet inconnu et vérifier la continuité avant reprise.
 
 OpenCode expose `POST /api/session/<id>/compact`. Codex App Server expose
 `thread/compact/start` sur la connexion qui possède la session active : sa
@@ -766,13 +765,8 @@ piloté.
   le gate terminal reste ouvert ;
 - `/CAB test` réalise un test non destructif du chemin de validation complet
   dans cette même session ;
-- `/CAB update` compare plugin, skill et commandes de profil à leurs sources
-  validées, puis arrête systématiquement controller, supervisor et monitor,
-  remplace les fichiers des quatre briques et redémarre les unités sans
-  consulter les états RUN ou de coordination en précondition. Si l'API OpenCode
-  répond, elle recharge le broker ; sinon les fichiers broker sont installés et
-  son runtime est rapporté `INDISPONIBLE`. Le bilan distingue versions GitHub,
-  plugin, fichiers et processus actifs ;
+- `/CAB update` prépare à chaud puis bascule les seuls composants modifiés,
+  avec transfert compatible ou repli protégé et bilan des versions réelles.
 - `/CAB stop` retire uniquement les ressources CAB qu'elle a créées. Elle ne
   doit ni arrêter directement le broker géré par OpenCode ni fermer
   arbitrairement OpenCode.
@@ -1217,27 +1211,20 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.1.81 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.2.0 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
-Le flux ordinaire ne lit pas les RUN, les permissions, le verrou global ou les
-états systemd avant de décider de poursuivre. Après validation du paquet, il
-arrête systématiquement controller, supervisor et monitor par systemd
-utilisateur, remplace atomiquement les fichiers du broker, du contrôleur, du
-superviseur et du Web, exécute `daemon-reload`, puis démarre les trois unités.
-Chaque invocation redémarre les services, même si les versions installées sont
-déjà conformes. Aucune unité n'est activée au login.
-
-OpenCode reste ouvert. Après remplacement, l'updater tente les routes natives
-du broker si l'API répond. Si OpenCode ou son API sont absents, les fichiers
-broker sont quand même installés et le processus broker est rapporté
-`INDISPONIBLE` ; cela ne bloque pas les autres briques. Le bilan distingue la
-version du paquet, les versions des fichiers déployés et les versions des
-processus réellement observés. Il rapporte le résultat du redémarrage et de
-tout retour arrière. Si un service ne démarre pas, l'updater restaure les
-fichiers sauvegardés, recharge systemd, redémarre les trois unités et conserve
-le journal si le repli échoue.
+CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
+puis ne bascule que les composants nécessaires. Un jeu conforme ne subit
+aucune coupure. Le transfert compatible préserve demandes, décisions, accès et
+baux ; une réponse réseau perdue reprend le même reçu sans rejeu de once.
+OpenCode reste ouvert. Le broker n'est reconnecté que si nécessaire ; sa
+readiness et les versions réelles sont vérifiées. L'absence prouvée d'OpenCode
+permet `INDISPONIBLE` pour sa version chargée, sans en déduire un succès natif.
+Le repli restaure les artefacts, jamais un ancien état métier. Les mesures
+séparent préparation, bascule et indisponibilité observée ; aucune unité
+n'est activée au login.
 
 Le mode managed-release conserve les liens relatifs internes et les anciennes
 releases, avec bascule atomique après l'arrêt des unités. Le profil
@@ -1332,7 +1319,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.81 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.2.0 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1397,7 +1384,7 @@ Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de 
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.81.
+La distribution courante des quatre briques, plugins et commandes est 2.2.0.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

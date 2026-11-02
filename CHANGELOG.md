@@ -1,3 +1,15 @@
+## 2.2.0 — Continuité, récupération et CABU court
+
+- La restitution d’un bail de test nettoyé dépend de ses propres opérations et accès ; une quarantaine sur une ressource disjointe du même RUN conserve ses protections sans retenir ce bail.
+- Les validations et décisions sont persistées ; les observations reprennent leur curseur et déclarent les lacunes. Une coupure SSE seule ne change plus l’issue de toutes les opérations.
+- Un transfert contrôlé et consommable une seule fois conserve les protections des baux et accès ; un crash ou reçu divergent garde la restauration protégée historique.
+- Les shells background explicitement approuvés sont suivis par leur shellID natif jusqu'à une fin exacte, sans fermeture déduite d'un idle ou d'un timeout historique.
+- La récupération expose portée, preuves et actions qualifiées par propriétaire, avec politique explicite et reçus idempotents ; un défaut privé d'un RUN n'arrête pas les pairs.
+- CABU prépare à chaud, préserve les composants conformes et bascule seulement les groupes nécessaires ; une readiness reprise exige le même broker prouvé et conserve son horodatage natif.
+- Le contrat et les commandes se chargent par branche, AGENTS.md provient du template et les mesures INPUT/OUTPUT/cache conservent leur couverture ; aucune économie de facturation n'est inventée.
+- Un incident récupérable ne crée plus automatiquement un chat de correctif ; les clôtures et autorisations de communication restent respectées.
+- Le programme est qualifié et archivé dans `2026-11-02-track-background-shell-lifecycle` ; les publications et versions opérationnelles restent vérifiées séparément de la qualification source.
+
 ## 2.1.81 — Quarantiner un shell timeout sans libérer son port
 
 - Un timeout shell natif sans shellID/exit garde l’opération et son verrou write en quarantine après double preuve native stable.

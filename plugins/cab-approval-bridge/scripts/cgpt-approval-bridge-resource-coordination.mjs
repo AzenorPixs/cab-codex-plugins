@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.81';
+export const VERSION = '2.2.0';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -500,6 +500,13 @@ export class ResourceRunRegistry extends RunRegistry {
   operationTests(entry) {
     return Object.values(this.resourceState.operations).filter((op) => op.testReservationId === entry.transactionId);
   }
+  unresolvedReservationAccess(entry) {
+    return this.unresolvedTestAccess(entry.runId, entry.resources) ||
+      Object.values(this.resourceState.accesses).some((access) => access.runId === entry.runId &&
+        access.contextId === entry.contextId && (active(access) || access.state === 'WAITING') &&
+        access.operationIds.some((operationId) =>
+          this.resourceState.operations[operationId]?.testReservationId === entry.transactionId));
+  }
   unusedTestOperations(entry) {
     return Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId &&
       op.contextId === entry.contextId && (op.testReservationId === entry.transactionId ||
@@ -625,7 +632,7 @@ export class ResourceRunRegistry extends RunRegistry {
     if (prior?.state === 'RELEASED' && !prior.unusedReleaseReceipt && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
     const entry = this.testHeld(runId, payload);
     const ops = this.operationTests(entry);
-    if (this.unresolvedAccess(runId, false) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {
+    if (this.unresolvedReservationAccess(entry) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {
       throw new CoordinationError('test-effects-unresolved');
     }
     if (!Array.isArray(payload.cleanup) || payload.cleanup.length !== entry.resources.length ||
@@ -776,7 +783,8 @@ export class ResourceRunRegistry extends RunRegistry {
     const identityDigest = digest(Object.fromEntries(['run_id', 'reservation_version', 'requestId', 'approval_id',
       'change_id', 'session_id', 'directory', 'title', 'summary', 'files', 'commands', 'resources',
       'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol',
-      ...(Object.hasOwn(approval,'tool_input_sha256') ? ['tool_input_sha256'] : [])]
+      ...(Object.hasOwn(approval,'tool_input_sha256') ? ['tool_input_sha256'] : []),
+      ...(Object.hasOwn(approval,'shell_background') ? ['shell_background'] : [])]
       .map((key) => [key, approval[key] ?? null])));
     const prior = this.resourceState.operations[approval.operation_id];
     if (prior) {

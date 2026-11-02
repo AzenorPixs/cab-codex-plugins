@@ -41,6 +41,87 @@ class ConcurrentBrokerTest(unittest.TestCase):
                 "title": "Synthetic command", "files": [], "commands": ["/usr/bin/true"],
                 "resources": [{"key": f"resource:{run}", "mode": "read"}]}
 
+    def test_lookup_after_lost_response_preserves_identity_and_never_notifies(self):
+        item = bridge.do_propose(self.args())
+        identity = {key: item[key] for key in ("requestId", "run_id", "session_id", "operation_id", "operation_digest")}
+        bridge.maybe_notify_controller.reset_mock()
+        before = Path(bridge.store_path()).read_bytes()
+        events = bridge.journal.read_events()
+        receipt = bridge.do_lookup_validation(identity)
+        self.assertTrue(receipt["found"])
+        self.assertEqual(receipt["approval_id"], item["approval_id"])
+        self.assertEqual(receipt["status"], "PENDING")
+        self.assertTrue(receipt["snapshot_only"])
+        self.assertNotIn("commands", receipt)
+        for key in ("run_id", "session_id", "operation_id", "operation_digest"):
+            self.assertEqual(bridge.do_lookup_validation({**identity, key: "foreign"}),
+                             {"found": False, "snapshot_only": True})
+        bridge.maybe_notify_controller.assert_not_called()
+        self.assertEqual(Path(bridge.store_path()).read_bytes(), before)
+        self.assertEqual(bridge.journal.read_events(), events)
+
+    def test_temporary_transport_failure_keeps_pending_and_uses_bounded_retry(self):
+        item = bridge.do_propose(self.args())
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        diagnostic = {"http_status": 503, "error_code": None}
+        with patch.object(bridge.time, "time", return_value=1000):
+            bridge.complete_notification_lease(item["approval_id"], "stale", False, diagnostic, 0.1)
+            bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, diagnostic, 0.1)
+        restored = bridge.load_store(bridge.store_path())["approvals"][item["approval_id"]]
+        self.assertEqual(restored["status"], "PENDING")
+        self.assertEqual(restored["notification_transport_retries"], 1)
+        self.assertAlmostEqual(bridge.parse_utc(restored["notification_next_retry_at"]), 1000.1)
+        self.assertEqual(restored["decision_id"], "")
+
+    def test_transport_retry_budget_does_not_disable_normal_backoff(self):
+        item = bridge.do_propose(self.args())
+        with bridge.locked_store(bridge.store_path()):
+            data = bridge.load_store(bridge.store_path())
+            data["approvals"][item["approval_id"]]["notification_transport_retries"] = 10
+            bridge.save_store(bridge.store_path(), data)
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        with patch.object(bridge.time, "time", return_value=1000):
+            bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, None, 0.1)
+        restored = bridge.load_store(bridge.store_path())["approvals"][item["approval_id"]]
+        self.assertAlmostEqual(bridge.parse_utc(restored["notification_next_retry_at"]), 1005)
+        self.assertEqual(restored["status"], "PENDING")
+
+    def test_transport_retry_hint_accepts_only_the_exact_bounded_diagnostic(self):
+        item = bridge.do_propose(self.args())
+        for payload, expected in [
+            ({"error": "transport-update-in-progress", "retry_after_ms": 100}, 0.1),
+            ({"error": "transport-update-in-progress", "retry_after_ms": 1}, None),
+            ({"error": "transport-update-in-progress", "retry_after_ms": True}, None),
+            ({"error": "transport-update-in-progress", "retry_after_ms": 100, "extra": "PRIVATE"}, None),
+            ({"error": "unknown", "retry_after_ms": 100}, None),
+        ]:
+            with self.subTest(payload=payload):
+                failure = bridge.error.HTTPError("http://127.0.0.1/validation", 503, "temporary", {},
+                                                 io.BytesIO(json.dumps(payload).encode()))
+                with patch.object(bridge.request, "urlopen", side_effect=failure):
+                    result = bridge.notify_controller(item, "transport-retry-lease")
+                self.assertEqual(result["transport_retry_seconds"], expected)
+                self.assertFalse(result["delivered"])
+
+    def test_fast_transport_probes_do_not_inflate_the_normal_backoff(self):
+        item = bridge.do_propose(self.args())
+        clock = 1000.0
+        for attempt in range(11):
+            with bridge.locked_store(bridge.store_path()):
+                data = bridge.load_store(bridge.store_path())
+                data["approvals"][item["approval_id"]]["notification_next_retry_at"] = ""
+                bridge.save_store(bridge.store_path(), data)
+            lease = bridge.acquire_notification_lease(item["approval_id"])
+            with patch.object(bridge.time, "time", return_value=clock):
+                bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, None, 0.1)
+            current = bridge.load_store(bridge.store_path())["approvals"][item["approval_id"]]
+            delay = bridge.parse_utc(current["notification_next_retry_at"]) - clock
+            self.assertAlmostEqual(delay, 0.1 if attempt < 10 else 5)
+            clock += 1
+        self.assertEqual(current["notification_attempts"], 11)
+        self.assertEqual(current["notification_standard_attempts"], 1)
+        self.assertEqual(bridge.notification_retry_delay(10**9), bridge.NOTIFICATION_RETRY_MAX_SECONDS)
+
     def test_native_tool_input_digest_is_immutable_and_correlated(self):
         args = {**self.args(), "files": ["one.py"], "commands": [], "tool_input_sha256": "a" * 64}
         item = bridge.do_propose(args)
@@ -60,8 +141,28 @@ class ConcurrentBrokerTest(unittest.TestCase):
         for invalid in [None, "", "z" * 64, "a" * 63]:
             with self.assertRaises(bridge.ValidationError):
                 bridge.do_propose({**args, "tool_input_sha256": invalid})
+        shell = bridge.do_propose({**self.args("command"), "tool_input_sha256": "a" * 64})
+        self.assertEqual(shell["tool_input_sha256"], "a" * 64)
+
+    def test_background_shell_is_explicit_immutable_and_requires_reserved_port(self):
+        args = {**self.args("background"), "shell_background": True,
+                "tool_input_sha256": "c" * 64,
+                "resources": [{"key": "port:fixture/5173", "mode": "write"}],
+                "expected_revisions": {"port:fixture/5173": 0}}
+        item = bridge.do_propose(args)
+        self.assertIs(item["shell_background"], True)
+        for field, value in [("shell_background", False), ("tool_input_sha256", "d" * 64),
+                             ("resources", [{"key": "port:fixture/5173", "mode": "read"}])]:
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose({**args, field: value})
+        omitted = dict(args)
+        omitted.pop("shell_background")
         with self.assertRaises(bridge.ValidationError):
-            bridge.do_propose({**self.args("command"), "tool_input_sha256": "a" * 64})
+            bridge.do_propose(omitted)
+        for resources in [[], None, [{"key": "file:fixture", "mode": "write"}]]:
+            with self.assertRaises(bridge.ValidationError):
+                bridge.do_propose({**args, "resources": resources})
+        self.assertFalse(bridge.validate_controller_decision(item, {"tool_input_sha256": "c" * 64}))
 
     def test_three_parallel_calls_preserve_each_run_identity(self):
         with ThreadPoolExecutor(max_workers=3) as executor:

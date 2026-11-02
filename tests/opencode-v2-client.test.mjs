@@ -236,7 +236,10 @@ test('permissions shell et écriture relative : source native et cible vérifié
     assert.equal(kind==='shell'?p.metadata.command:p.metadata.filepath,kind==='shell'?'/usr/bin/true':'/workspace/fixture.txt');
     corrupt=true;await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
     corrupt=false;wrongMessage=true;await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
-    wrongMessage=false;if(kind==='shell')input.background=true;else input.path='/other/fixture.txt';
+    wrongMessage=false;if(kind==='shell'){input.background=true;input.timeout=500;
+      const projected=(await client.permissions())[0];assert.equal(projected.metadata.shellBackground,true);
+      assert.equal(projected.metadata.shellTimeout,500);assert.match(projected.metadata.nativeToolInputSha256,/^[a-f0-9]{64}$/);
+      input.workdir='/other';}else input.path='/other/fixture.txt';
     await assert.rejects(client.permissions(),{code:'opencode-permission-target-invalid'});
   }
 });

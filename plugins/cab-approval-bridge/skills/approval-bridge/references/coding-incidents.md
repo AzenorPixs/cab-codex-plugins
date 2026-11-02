@@ -1,81 +1,46 @@
-# Incidents pendant le codage CAB
+# Incidents pendant le codage CAB — 2.2.0
 
-## Destination et responsabilité
+## Diagnostic et récupération dans le mandat
 
-Pendant toute session de codage utilisant CAB, l’orchestrateur transmet tout
-problème rencontré avec ce protocole au chat nommé exactement
-**« Correctif CAB - OC »**, afin d’améliorer et d’optimiser CAB. Cette demande
-humaine couvre la coordination des incidents CAB entre la session d’origine
-et ce chat ; elle ne transfère pas les décisions natives ni les mandats métier.
-La procédure est portée par l’orchestrateur, pas par un envoi autonome des services.
+Consigner le symptôme daté, RUN/job/session/demande, version source et version
+active observée, code filtré, ressources affectées et preuve disponible.
+Séparer cause démontrée, hypothèse et information manquante. Ne transmettre
+ni secret, environnement complet, transcript privé ou source métier inutile.
 
-Avec les outils de conversations disponibles, rechercher le titre exact et
-vérifier son contexte CAB. Réutiliser le chat existant et mémoriser son identité
-pour cet incident. Inclure les résultats archivés accessibles dans la recherche
-avant de conclure à l’absence ; conserver le contexte et utiliser les opérations
-prises en charge pour reprendre un chat existant. Si la recherche confirme
-qu’il n’existe pas, créer un seul chat **« Correctif CAB - OC »** dans le projet
-CAB, avec le signalement initial et le mandat de coordination. Résoudre la
-racine CAB depuis les métadonnées du projet, sans chemin de consommateur
-codé en dur. Relire les résultats juste avant création pour éviter un doublon.
+Lire l'aperçu GET /runs/<run_id>/recovery et la référence recovery-policy.md.
+Choisir une récupération qualifiée déjà autorisée, sous sa politique et le
+même reçu ; vérifier son résultat. Une coupure seule n'est ni refus métier,
+ni NO_EFFECT, ni motif de rejeu. Réconcilier un résultat incertain avant effet.
+Une tentative sans nouvelle preuve ne justifie pas des réinitialisations en
+boucle. Conserver les protections concernées et poursuivre les tâches disjointes
+lorsque leur mandat et leurs preuves restent valides.
 
-Si le chat courant est déjà **« Correctif CAB - OC »** dans le contexte CAB,
-consigner et traiter le signalement ici, sans auto-message ni nouveau chat.
-En cas d’homonymes ambigus ou d’outil de recherche/création/messagerie absent,
-indiquer la limite au développeur et conserver le signalement au checkpoint ;
-ne pas déclarer le chat créé ou averti sans résultat positif de l’outil.
+Pour catalogue natif/MCP, erreur fournisseur, conducteur incomplet ou registre
+indisponible, consulter native-coding-recovery.md. Pour réponse perdue et
+bascule, consulter transport-continuity.md. Une récupération réussie peut
+résoudre l'incident sans nouveau correctif, publication ou attente de chat.
+Une décision réservée ou une extension d'autorité réellement nécessaire reste
+présentée au développeur avec le point précis et les alternatives autorisées.
 
-## Signalement factuel et filtré
+## Coordination lorsqu'elle est demandée
 
-Transmettre dès le constat, sans attendre la fin de la session :
+Un problème CAB ne crée pas automatiquement un chat de correction et ne
+transmet aucun message à une autre session. Lorsqu'une telle coordination
+est explicitement demandée, rechercher la cible désignée, y compris les
+résultats archivés accessibles, vérifier son contexte et éviter tout doublon.
+Une création de chat exige la demande explicite correspondante. Une clôture
+ou révocation prévaut sur un ancien routage ; « Correctif CAB - OC » n'est plus
+une destination automatique pour les nouveaux incidents après sa livraison
+finale. Si le chat courant est la cible, consigner directement sans auto-message.
+Une ambiguïté ou un outil indisponible reste signalé sans envoi prétendu.
 
-- le symptôme, l’heure, l’étape et le comportement attendu ;
-- la version source, installée et réellement active lorsqu’elles sont connues,
-  en laissant inconnue une mesure non observée ;
-- les identités RUN/job/session/demande/approbation utiles à la corrélation,
-  le statut HTTP, le code et le motif filtré, ainsi que les preuves accessibles ;
-- les effets prouvés, l’absence d’effet prouvée ou l’incertitude restante,
-  l’état des permissions et le checkpoint de reprise ;
-- une reproduction minimale si elle est sûre, déjà autorisée et isolée.
+## Correction et activation distinctes
 
-Séparer les faits des hypothèses. Ne transmettre ni secret, credential,
-contenu privé, transcript complet ou source métier inutile au diagnostic CAB.
-Un problème local de protocole suffit à ouvrir le signalement ; une cause CAB
-supposée n’est jamais présentée comme démontrée.
-
-## Coordination jusqu’au correctif et à CABU
-
-Conserver un suivi corrélé au même incident et au même chat jusqu’à la fin du
-correctif **et** de la mise à jour effective de CAB via **CABU**. Échanger les
-nouvelles observations utiles, les résultats de reproduction, la proposition
-ciblée, les preuves de qualification et l’état de livraison. Ne pas multiplier
-les messages identiques, les correctifs concurrents ni les relances aveugles.
-La session correctif coordonne le correctif sous son mandat autorisé ; un
-signalement n’étend pas les droits d’édition, de publication ou de maintenance.
-
-La session d’origine reste propriétaire de son RUN, job, session, modèle,
-checkpoint, accès et décisions. Elle traite ou réconcilie ses effets courants
-avant une frontière de maintenance coordonnée. Une demande en attente ou un
-effet inconnu reste préservé et attribué à son propriétaire ; aucune once,
-permission ou décision n’est rejouée pour réparer CAB. Les unités indépendantes
-peuvent continuer dans leur mandat lorsque les preuves permettent de le faire.
-
-Distinguer explicitement : correctif écrit, testé, archivé, publié, puis activé.
-Une source corrigée, un paquet installé ou une publication ne prouvent pas
-l’activation. CABU suit sa procédure canonique et ses autorisations ; préserver
-OpenCode, les RUN et les preuves. Si le correctif ou CABU est bloqué, échoue ou
-est interrompu, conserver l’incident ouvert, ses preuves et les conditions
-vérifiables de reprise ; ne pas annoncer une clôture ou un succès fictif.
-
-Après CABU, le chat correctif communique aux sessions concernées le résultat
-terminal, les versions réellement actives des quatre briques, la readiness
-fraîche du broker, les commandes distribuées et la preuve d’activation. Chaque
-orchestrateur vérifie son contexte, réconcilie les demandes et effectue les
-prévols requis avant de reprendre uniquement ses mandats autorisés. Une session
-clôturée reçoit une information, sans réactivation. Clore le suivi seulement
-après correction qualifiée, activation vérifiée et retour aux sessions
-concernées ; conserver la référence durable de l’incident et de sa résolution.
-
-## Diagnostic et reprise qualifiés
-
-Pour catalogue MCP/natif, erreur fournisseur avec fragment refusé, conducteur incomplet et registry indisponible, appliquer [native-coding-recovery.md](native-coding-recovery.md). Conserver chaque incident séparé, son origine externe ou CAB démontrée, ses preuves et la portée réelle du correctif.
+Lorsqu'un correctif est requis dans son propre mandat, distinguer code écrit,
+qualifié, archivé, publié et réellement activé. CABU suit sa procédure, sans
+modifier l'autorité métier ni rejouer une once. Un échec conserve le reçu,
+les preuves et la prochaine action ; il n'impose pas le gel des autres RUN.
+Les informations vers les sessions concernées respectent l'autorisation de
+communication applicable. Une session close n'est jamais réactivée par une
+notification. Le propriétaire conserve ses identités, modèle, ressources et
+checkpoint ; après activation vérifiée, il reprend le premier jalon non prouvé.
