@@ -13,7 +13,7 @@ import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } fro
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.67';
+export const VERSION = '2.1.68';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -172,6 +172,8 @@ const runIdentity = (registry) => hash(JSON.stringify({
 
 export async function updateComponents(input, options = {}) {
   if (input.recoverMcp !== undefined && (!/^update-[a-f0-9-]{36}$/.test(input.recoverMcp) || input.profile !== undefined || input.brokerPolicy === 'reuse-readonly')) throw error('update-mcp-recovery-authorization-invalid');
+  if (input.resumeForward !== undefined && (!/^update-[a-f0-9-]{36}$/.test(input.resumeForward) || input.recoverMcp !== undefined ||
+      input.profile !== undefined || input.brokerPolicy === 'reuse-readonly')) throw error('update-forward-recovery-authorization-invalid');
   if (input.profile === FROZEN_PROFILE) {
     if (input.brokerPolicy !== undefined || input.brokerProof !== undefined) throw error('update-broker-policy-profile-invalid');
     return maintainFrozenController(input, options);
@@ -237,6 +239,7 @@ export async function updateComponents(input, options = {}) {
   let receiptTrusted = false;
   let recovered = false;
   let forwardRecovery = false;
+  let resumeForwardParent = null;
   let preparedMcpResume = false;
   const currentFile = join(c.state, 'current.json');
   const target = (file) => {
@@ -764,8 +767,11 @@ export async function updateComponents(input, options = {}) {
       try { receipt = JSON.parse(existing.data.toString('utf8')); } catch { throw error('update-journal-invalid'); }
       if (input.recoverMcp !== undefined && (receipt.id !== input.recoverMcp || complete.has(receipt.phase) ||
           !['MCP_RECOVERY_REQUIRED','ROLLBACK_FAILED'].includes(receipt.phase))) throw error('update-mcp-recovery-authorization-invalid');
+      if (input.resumeForward !== undefined && (receipt.id !== input.resumeForward || receipt.phase !== 'ROLLBACK_FAILED')) {
+        throw error('update-forward-recovery-receipt-invalid');
+      }
       if (complete.has(receipt.phase)) receipt = null;
-      else {
+      else receiptProcessing: {
       if (receipt.schema !== 1 || (!complete.has(receipt.phase) && receipt.contextKey !== contextKey) || !/^update-[a-f0-9-]{36}$/.test(receipt.id) ||
           !Array.isArray(receipt.files) || receipt.files.length > 128 || !receipt.active ||
           !['PREPARING', 'PREPARED', 'FREEZING', 'WAITING', 'STOPPING', 'INSTALLING', 'RESTARTING', 'VERIFYING',
@@ -807,6 +813,31 @@ export async function updateComponents(input, options = {}) {
             !validRecoverySnapshot(receipt.mcpRecovery.reload.before) || !Number.isFinite(receipt.mcpRecovery.reload.at)))) throw error('update-journal-invalid');
       if (receipt.phase === 'MCP_RECOVERY_REQUIRED' && !receipt.mcpRecovery) throw error('update-journal-invalid');
       receiptTrusted = true;
+      if (input.resumeForward !== undefined) {
+        if (receipt.failureCode !== 'update-controller-start-unconfirmed' || !receipt.openCodeAvailable ||
+            !receipt.brokerWasConnected || receipt.mcpTransition?.action !== 'disconnect' ||
+            !['CONFIRMED','RECONCILED'].includes(receipt.mcpTransition?.state) || receipt.mcpRecovery?.reload ||
+            !receipt.nativeIdentity || input.layout !== 'managed-release' || !receipt.managed ||
+            !baseVersion(receipt.version) || !newer(VERSION, receipt.version)) {
+          throw error('update-forward-recovery-boundary-invalid');
+        }
+        const info = await openCode.info(true), sharedDirectory = await openCode.sharedMcpDirectory();
+        if (info.pid !== receipt.nativeIdentity.pid || info.version !== receipt.nativeIdentity.version ||
+            sharedDirectory !== receipt.nativeIdentity.sharedDirectory) throw error('update-mcp-recovery-identity-changed');
+        const mcpState = await brokerState();
+        if (!['connected','disabled'].includes(mcpState)) throw error(mcpState === 'needs_auth'
+          ? 'update-broker-needs-auth' : mcpState === 'pending' ? 'update-broker-pending-timeout' : 'update-broker-state-unconfirmed');
+        for (const file of receipt.files) {
+          const actual = await deployed(file), actualHash = actual ? hash(actual.data) : null;
+          if (![file.beforeHash,file.afterHash].includes(actualHash)) throw error('update-installed-artifact-changed');
+        }
+        resumeForwardParent = receipt.id;
+        receipt.supersession = { fromVersion:receipt.version, packageVersion:VERSION,
+          reason:'forward-recovery-after-controller-rollback-failure', failureCode:receipt.failureCode, at:now() };
+        await save('SUPERSEDED');
+        receipt = null; receiptTrusted = false;
+      }
+      if (!receipt) break receiptProcessing;
       if (!readonlyBroker && (receipt.phase === 'MCP_RECOVERY_REQUIRED' || input.recoverMcp !== undefined ||
           receipt.mcpTransition?.state === 'INTENT' && recoveryPhases.includes(receipt.phase))) {
         receipt.mcpRecovery ||= { resumePhase: receipt.phase === 'ROLLBACK_FAILED' ? 'ROLLING_BACK' : receipt.phase };
@@ -876,6 +907,7 @@ export async function updateComponents(input, options = {}) {
           !updateReference.includes('/CAB update') || !updateReference.includes('systemctl --user stop') ||
           !updateReference.includes('INDISPONIBLE')) throw error('update-skill-association-invalid');
       receipt = { schema: 1, contextKey, id: 'update-' + randomUUID(), version, phase: 'PREPARING',
+        ...(resumeForwardParent ? { recoveryOf: resumeForwardParent } : {}),
         active: { controller: true, supervisor: true, monitor: true },
         targetActive: { controller: true, supervisor: true, monitor: true }, servicesObserved: false,
         files: [], brokerConnected: false, startedAtMs: now(), timings: {} };
@@ -1401,7 +1433,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
       '--controller-url': 'controllerUrl', '--supervisor-url': 'supervisorUrl', '--monitor-url': 'monitorUrl', '--opencode-url': 'opencodeUrl', '--wait-ms': 'waitMs',
       '--profile': 'profile', '--frozen-proof-file': 'frozenProofFile', '--layout':'layout',
       '--opencode-password-env-file':'passwordEnvFile','--service-workspace':'serviceWorkspace','--broker-policy':'brokerPolicy','--broker-proof-file':'brokerProofFile',
-      '--recover-mcp':'recoverMcp' };
+      '--recover-mcp':'recoverMcp','--resume-forward':'resumeForward' };
     const input = {}; let rollbackOnly = false;
     for (let i = 2; i < process.argv.length; i++) {
       const argument = process.argv[i];

@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.67`.
+Version de référence des briques CAB : `2.1.68`.
 
-CAB 2.1.67 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.68 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -47,6 +47,14 @@ terminal `REJECTED`. La session doit être inactive, sans permission ni accès.
 Le registre conserve atomiquement le rejet, l’empreinte du transcript et
 `CANCELLED`, puis restaure ce même reçu après redémarrage. Une divergence reste
 indécise ; cette reprise n’émet aucun appel natif, accès ou `once`.
+
+Après un `ROLLBACK_FAILED` dû au démarrage du contrôleur, CABU peut reprendre
+en avant le reçu exact si le paquet publié est au moins aussi récent, les
+identités OpenCode et empreintes installées sont vérifiées et la transition
+MCP est terminale. Il conserve l’ancien reçu et ses sauvegardes, lie une
+nouvelle transaction au reçu d’échec et ne recharge pas globalement OpenCode.
+Les extensions d’empreinte de rejet sont normalisées vers des champs du
+registre déjà compris par la version immédiatement antérieure.
 
 Lorsqu’un wrapper Code Mode `execute` transporte `request_validation`, CAB peut
 admettre la demande quand l’appel natif unique exact est visible dans ses

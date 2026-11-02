@@ -1,3 +1,23 @@
+## 2.1.68 — Récupérer CABU en avant après rollback contrôleur incomplet
+
+- Une reprise liée au reçu exact `ROLLBACK_FAILED` peut déployer une source
+  publiée au moins aussi récente, après vérification d’identité et d’empreintes.
+- Les reçus 2.1.67 de rejet natif sont normalisés vers le schéma compatible ;
+  les nouvelles empreintes restent dans un champ durable déjà supporté.
+- La reprise préserve OpenCode, les données RUN et l’ancien reçu sans recharger
+  toutes les locations.
+- CAB/CABU, les composants, plugins, commandes et cadrages partagent 2.1.68.
+
+## 2.1.68 — Reprendre CABU après rollback contrôleur incomplet
+
+- Une reprise en avant du reçu exact `ROLLBACK_FAILED` vérifie la publication,
+  l’identité OpenCode et les empreintes, conserve les sauvegardes et lie le
+  nouveau reçu sans rechargement global des locations.
+- Les empreintes de rejet 2.1.67 sont normalisées vers un schéma du registre
+  déjà lisible par la version précédente ; les nouvelles écritures y restent
+  compatibles.
+- CAB/CABU, composants, plugins, commandes et cadrages partagent 2.1.68.
+
 ## 2.1.67 — Réconcilier les rejets natifs après échec de notification
 
 - Le contrôleur relit deux fois le transcript exact et quiescent avant de
