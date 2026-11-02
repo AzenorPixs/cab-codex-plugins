@@ -37,7 +37,7 @@ Le paquet CAB, le broker, tous les scripts, commandes, plugins, skills, unités 
 #### Scenario: Vérification des versions distribuées
 
 - **WHEN** les artefacts source et les deux manifestes de plugin sont inspectés
-- **THEN** toutes les briques annoncent la base courante commune `2.1.66` et les manifestes conservent leur cachebuster propre
+- **THEN** toutes les briques annoncent la base courante commune `2.1.67` et les manifestes conservent leur cachebuster propre
 
 #### Scenario: Faux succès HTML
 
