@@ -504,6 +504,52 @@ test('réconcilie un bail de test restauré sans token client et conserve HELD',
  assert.equal(replay.status,200);assert.equal(replay.body.token,result.body.token);assert.equal(replay.body.fencing,result.body.fencing);
 });
 
+test('réconcilie un accès HELD restauré depuis la décision durable sans rejouer once',async t=>{
+ const h=await setup(t);const resource={key:'file:src/restored-edit.py',mode:'write'};
+ const run=await h.reserve('reconcile-restored-held-access',{resources:[resource]});
+ const {approval,access:initialAccess}=await h.approvedAccess(run,'restored-held-terminal');
+ await h.execute(approval);await h.completeTool(approval);
+ const requestPart=h.native.messages[run.sessionId].flatMap(message=>message.parts||[]).find(part=>part.tool==='cgpt-validation_request_validation');
+ requestPart.state.status='completed';requestPart.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const access=initialAccess;
+ const completed=await h.releaseOperation(run,approval,access,'COMPLETED');
+ assert.equal(completed.status,200,JSON.stringify(completed));
+ const repliesBefore=h.native.replies.length;
+ await h.stop();
+ const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));
+ const restored=state.coordination.accesses[access.accessId];
+ restored.state='HELD';restored.token=access.token;delete restored.finishedAt;delete restored.outcome;delete restored.releaseDigest;
+ state.coordination.revisions[resource.key]=0;writeFileSync(statePath,JSON.stringify(state));
+ await h.start();
+ const route='/runs/'+run.runId+'/locks/reconcile-restored';
+ const preview=await h.get('/runs/'+run.runId+'/locks/reconcile-preview?operationId='+access.accessId);
+ assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.state,'HELD');
+ assert.deepEqual(preview.body.operations,[{operationId:approval.operation_id,state:'COMPLETED',decisionStatus:'approved',nativeResultStatus:'completed',onceAcknowledged:true}]);
+ assert.equal(preview.body.snapshot_only,true);assert.equal(preview.body.token,undefined);
+ const payload={version:run.version,operationId:access.accessId,fencing:access.fencing,
+  reconciliationId:'reconcile-restored-held-access-1',boundaryDigest:preview.body.boundaryDigest,
+  evidence:['durable approval verified','native terminal history verified','session idle','no pending permissions']};
+ assert.equal((await h.post(route,{...payload,boundaryDigest:'0'.repeat(64)})).body.error,'access-reconciliation-boundary-changed');
+ assert.equal((await h.get('/runs/'+run.runId+'/locks')).body.accesses[0].state,'HELD');
+ h.native.busy[run.sessionId]={type:'busy'};
+ assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.busy={};
+ h.native.permissions.push({id:'pending-restored-access',sessionID:run.sessionId,permission:'bash',tool:{callID:'call-pending'}});
+ assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.permissions=[];
+ assert.equal((await h.get('/runs/'+run.runId+'/locks/reconcile-preview?operationId='+access.accessId)).body.boundaryDigest,payload.boundaryDigest);
+ const result=await h.post(route,payload);
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.accessId,access.accessId);
+ assert.equal(result.body.state,'HELD');assert.notEqual(result.body.token,access.token);assert.ok(result.body.fencing>access.fencing);
+ assert.equal(h.native.replies.length,repliesBefore);
+ const operation=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(operation.state,'COMPLETED');assert.equal(operation.onceAcknowledged,true);
+ const current=(await h.get('/runs/'+run.runId+'/locks')).body.accesses[0];
+ assert.equal(current.accessId,access.accessId);assert.equal(current.state,'HELD');
+ assert.deepEqual(current.resources,[resource]);assert.equal(current.token,result.body.token);
+ const replay=await h.post(route,payload);
+ assert.equal(replay.status,200);assert.equal(replay.body.token,result.body.token);assert.equal(replay.body.fencing,result.body.fencing);
+});
+
 
 test('un journal durable indisponible conserve UNKNOWN et protège le manifeste',async t=>{
  const h=await setup(t);const run=await h.reserve('restore-log-unavailable',{resources:[{key:'file:src/restore.py',mode:'write'}]});
@@ -1808,7 +1854,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.79');
+  assert.equal(initialized.result.serverInfo.version, '2.1.80');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

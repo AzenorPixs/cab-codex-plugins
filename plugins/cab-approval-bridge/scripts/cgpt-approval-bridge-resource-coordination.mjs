@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.79';
+export const VERSION = '2.1.80';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -407,8 +407,8 @@ export class ResourceRunRegistry extends RunRegistry {
       conflicts(entry.resources, other.resources)).map((r) => ({ runId: r.runId,
         transactionId: r.transactionId, reason: 'test-resource-conflict' }));
   }
-  unresolvedTestAccess(runId, resources) {
-    return Object.values(this.resourceState.accesses).some((access) => access.runId === runId &&
+  unresolvedTestAccess(runId, resources, excludeAccessId = null) {
+    return Object.values(this.resourceState.accesses).some((access) => access.runId === runId && access.accessId !== excludeAccessId &&
       (active(access) || access.state === 'WAITING') && conflicts(resources, access.resources));
   }
   grantTests() {
@@ -1278,6 +1278,76 @@ export class ResourceRunRegistry extends RunRegistry {
   accesses(runId) {
     return Object.values(this.resourceState.accesses).filter((a) => !runId || a.runId === runId).map((a) =>
       ({ ...copy(a), blockers: a.state === 'WAITING' ? this.blockers(a) : [] }));
+  }
+  restoredAccessReconciliationSnapshot(runId,operationId){
+    const access=this.resourceState.accesses[operationId],run=this.runs.get(runId);
+    if(!access||!run||access.runId!==runId||access.contextId!==run.contextId||
+        access.version!==run.version||access.state!=='HELD'||!this.restoredAccesses.has(access.accessId))
+      throw new CoordinationError('access-reconciliation-boundary-required');
+    const operations=access.operationIds.map(id=>this.resourceState.operations[id]).map(op=>({
+      operationId:op.operationId,state:op.state,operationDigest:op.operationDigest,identityDigest:op.identityDigest,
+      decisionStatus:op.decision?.status??null,completionDigest:op.completionDigest??null,
+      nativeResultStatus:op.nativeResult?.status??null,onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null,
+      nativePresent:Boolean(op.native)})).sort((a,b)=>a.operationId.localeCompare(b.operationId));
+    const boundary={runId,contextId:run.contextId,accessId:access.accessId,version:run.version,fencing:access.fencing,
+      state:access.state,resources:access.resources,expectedRevisions:access.expectedRevisions,
+      inputDigest:access.inputDigest,operationIds:access.operationIds,operations};
+    return {runId,contextId:run.contextId,accessId:access.accessId,version:run.version,state:access.state,
+      fencing:access.fencing,resources:copy(access.resources),expectedRevisions:copy(access.expectedRevisions),
+      operations:operations.map(({operationId,state,decisionStatus,nativeResultStatus,onceAcknowledged})=>
+        ({operationId,state,decisionStatus,nativeResultStatus,onceAcknowledged})),
+      boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  reconcileRestoredAccess(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','operationId','fencing','reconciliationId','boundaryDigest','evidence'])||
+        !id(payload.operationId)||!id(payload.reconciliationId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('access-reconciliation-invalid',400);
+    const access=this.resourceState.accesses[payload.operationId],prior=access?.reconciliationReceipts?.[payload.reconciliationId];
+    const inputDigest=digest(payload);
+    if(prior){
+      if(access.runId!==runId||prior.inputDigest!==inputDigest)throw new CoordinationError('access-reconciliation-divergent');
+      return copy(access);
+    }
+    const snapshot=this.restoredAccessReconciliationSnapshot(runId,payload.operationId),run=this.runs.get(runId);
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||
+        snapshot.boundaryDigest!==payload.boundaryDigest)throw new CoordinationError('access-reconciliation-boundary-changed');
+    if(this.blockers(access).length)throw new CoordinationError('access-reconciliation-conflict');
+    if(this.unresolvedTestAccess(runId,access.resources,access.accessId))throw new CoordinationError('access-reconciliation-test-resource-active');
+    if(this.resourceState.global&&this.resourceState.global.state!=='RELEASED')throw new CoordinationError('global-coordination-suspended');
+    if(run.suspension)throw new CoordinationError('run-suspended');
+    if(run.phase!=='WORK')throw new CoordinationError('access-reconciliation-phase-invalid');
+    const operationDetails=access.operationIds.map(id=>this.resourceState.operations[id]).map(op=>({state:op.state,
+      completionDigest:op.completionDigest??null,nativeResultStatus:op.nativeResult?.status??null,
+      decisionStatus:op.decision?.status??null,nativePresent:Boolean(op.native),
+      onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null}));
+    if(operationDetails.some(op=>!['PREPARED','CANCELLED','COMPLETED'].includes(op.state)||
+        op.state!=='COMPLETED'&&(op.nativePresent||op.onceAcknowledged===true)))
+      throw new CoordinationError('access-reconciliation-boundary-required');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&!op.completionDigest))
+      throw new CoordinationError('access-reconciliation-completion-unproved');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&!['completed','error'].includes(op.nativeResultStatus)))
+      throw new CoordinationError('access-reconciliation-native-result-unproved');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&op.decisionStatus!=='approved'))
+      throw new CoordinationError('access-reconciliation-approval-unproved');
+    this.validateExpected(access.expectedRevisions,access.resources);
+    const proofBody={runId,contextId:run.contextId,accessId:access.accessId,version:run.version,
+      fencing:access.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationsDigest:digest(snapshot.operations),sessionIdle:true,pendingPermissions:0,
+      transcriptDigest:proof?.transcriptDigest,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.accessId!==access.accessId||
+        proof.version!==run.version||proof.fencing!==access.fencing||proof.boundaryDigest!==snapshot.boundaryDigest||
+        proof.sessionId!==run.sessionId||proof.sessionIdle!==true||proof.pendingPermissions!==0||
+        !hash(proof.transcriptDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('access-reconciliation-proof-required');
+    for(const id of access.operationIds){
+      const op=this.resourceState.operations[id];
+      if(op.state==='PREPARED')op.state='CANCELLED';
+    }
+    access.token=randomUUID();access.fencing=++this.resourceState.sequence;
+    access.reconciliationReceipts||={};access.reconciliationReceipts[payload.reconciliationId]={inputDigest,fencing:access.fencing};
+    this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
   }
   unresolvedAccess(runId, includeTests = true) {
     return Object.values(this.resourceState.accesses).some((a) => a.runId === runId && (active(a) || a.state === 'WAITING')) ||

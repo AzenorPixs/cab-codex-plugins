@@ -1,3 +1,10 @@
+## 2.1.80 — Récupérer un accès HELD restauré après redémarrage
+
+- Le prévol owner/RUN-scoped expose l’accès HELD sans token ni contenu natif.
+- La réconciliation vérifie les décisions durables, l’historique natif stable, l’inactivité de session, l’absence de permission, les révisions et les conflits avant de renouveler fencing/token sur le même accès.
+- Un reçu idempotent permet la reprise sans réacquisition ni rejeu de `once`; les accès incertains, conflits et effets possibles restent protégés.
+- CAB, CABU, broker, services, plugins, commandes et cadrages partagent 2.1.80.
+
 ## 2.1.79 — Ignorer les événements après le watermark terminal NO_EFFECT
 
 - La preuve terminale NO_EFFECT est limitée aux trois messages du tour assistant d’origine.
