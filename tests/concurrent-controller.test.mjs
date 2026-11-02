@@ -1643,7 +1643,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.66');
+  assert.equal(initialized.result.serverInfo.version, '2.1.67');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3025,4 +3025,84 @@ test('GET opérations par RUN retourne une projection sûre sans bearer ni entr�
  const foreign=await h.get('/runs/operations-b/operations?operationId='+encodeURIComponent(approval.operation_id));
  assert.equal(foreign.status,200);assert.equal(foreign.body.operations.length,0);
  assert.equal((await h.get('/runs/operations-a/operations?operationId=../foreign')).status,400);
+});
+
+function appendNativeRejectedTranscript(h, approval, { status='REJECTED', reviewer='CGPT', extraTool=null,
+ rejectApprovalId=approval.approval_id, rejectRequestId=approval.requestId,
+ lookupApprovalId=approval.approval_id, resultOverrides={}, duplicateReject=false } = {}) {
+ const requestPart=h.native.messages[approval.session_id].flatMap(message=>message.parts||[])
+   .find(part=>part.tool==='cgpt-validation_request_validation'&&part.state?.input?.requestId===approval.requestId);
+ assert.ok(requestPart,'native request exists');requestPart.state.status='completed';
+ requestPart.state.output=JSON.stringify({status:'PENDING',requestId:approval.requestId,approval_id:approval.approval_id});
+ const now=Date.now();const result={...structuredClone(approval),...resultOverrides,status,reviewer};
+ const parts=[
+  {type:'tool',tool:'cgpt-validation_reject',state:{status:'completed',input:{approval_id:rejectApprovalId,requestId:rejectRequestId},output:'{}',time:{start:now-4,end:now-3}}},
+  ...(duplicateReject?[{type:'tool',tool:'cgpt-validation_reject',state:{status:'completed',input:{approval_id:approval.approval_id,requestId:approval.requestId},output:'{}',time:{start:now-3,end:now-2}}}]:[]),
+  {type:'tool',tool:'cgpt-validation_get_approval',state:{status:'completed',input:{approval_id:lookupApprovalId},output:JSON.stringify(result),time:{start:now-2,end:now-1}}},
+ ];
+ if(extraTool)parts.push(extraTool);
+ h.native.messages[approval.session_id].push({parts});
+}
+
+test('rejet natif : une notification perdue se réconcilie après redémarrage sans rejouer ni créer de permission',async t=>{
+ const h=await setup(t);const run=await h.reserve('native-rejection');const approval=h.approval(run,'native-rejection-request');
+ assert.equal((await h.post('/runs/native-rejection/validation/request',{approval})).status,202);
+ appendNativeRejectedTranscript(h,approval);
+ await h.stop();await h.start();
+ assert.equal((await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'})).status,202);
+ await waitFor(async()=>{
+  const decision=await h.get('/runs/native-rejection/decision/'+approval.requestId);
+  const operations=(await h.get('/runs/native-rejection/operations?operationId='+encodeURIComponent(approval.operation_id))).body;
+  return decision.status===200&&operations.operations?.[0]?.state==='CANCELLED';
+ });
+ const decision=await h.get('/runs/native-rejection/decision/'+approval.requestId);
+ assert.equal(decision.status,200);assert.equal(decision.body.decision,'rejected');
+ const duplicate=await h.post('/runs/native-rejection/decision/'+approval.requestId,{decision:'rejected'});
+ assert.equal(duplicate.body.error,'decision-already-recorded');
+ const operations=(await h.get('/runs')).body.coordination;
+ const reconciled=operations.operations[approval.operation_id];
+ assert.equal(reconciled.state,'CANCELLED');
+ assert.match(reconciled.nativeRejectionProofDigest,/^[a-f0-9]{64}$/);
+ assert.equal(reconciled.native,undefined);assert.equal(operations.accesses[approval.operation_id],undefined);
+ assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
+ const before=(await h.get('/runs')).body.coordination.operations[approval.operation_id];
+ await h.stop();await h.start();
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ await waitFor(async()=> (await h.get('/runs/native-rejection/decision/'+approval.requestId)).status===200);
+ await delay(40);
+ const after=(await h.get('/runs')).body.coordination.operations[approval.operation_id];
+ assert.deepEqual(after,before,'repeat reconciliation is idempotent');
+ const next=h.approval(run,'native-rejection-next');
+ assert.equal((await h.post('/runs/native-rejection/validation/request',{approval:next})).status,202,
+  'a fresh request is admitted only after the terminal rejection is reconciled');
+});
+
+test('rejet natif : preuve divergente, outil additionnel, session active ou permission empêchent la clôture',async t=>{
+ const variants=['pending','extra-tool','busy','permission','request-mismatch','approval-mismatch',
+  'lookup-mismatch','reviewer-mismatch','run-mismatch','session-mismatch','change-mismatch','operation-mismatch',
+  'request-input-mismatch','duplicate-reject'];
+ for(const variant of variants){
+  const h=await setup(t);const run=await h.reserve('native-rejection-'+variant);const approval=h.approval(run,'native-rejection-request-'+variant);
+  assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+  appendNativeRejectedTranscript(h,approval,{status:variant==='pending'?'PENDING':'REJECTED',
+   reviewer:variant==='reviewer-mismatch'?'OTHER':'CGPT',
+   extraTool:variant==='extra-tool'?{type:'tool',tool:'bash',state:{status:'completed',input:{command:'/usr/bin/true'},time:{start:Date.now()-1,end:Date.now()}}}:null,
+   rejectRequestId:variant==='request-mismatch'?'other-request':approval.requestId,
+   rejectApprovalId:variant==='approval-mismatch'?'other-approval':approval.approval_id,
+   lookupApprovalId:variant==='lookup-mismatch'?'other-approval':approval.approval_id,
+   resultOverrides:variant==='run-mismatch'?{run_id:'other-run'}:
+    variant==='session-mismatch'?{session_id:'ses_other'}:
+    variant==='change-mismatch'?{change_id:'other-change'}:
+    variant==='operation-mismatch'?{operation_id:'other-operation'}:{},
+   duplicateReject:variant==='duplicate-reject'});
+  if(variant==='request-input-mismatch')h.native.messages[approval.session_id][0].parts[0].state.input.requestId='other-request';
+  if(variant==='busy')h.native.busy[approval.session_id]={type:'busy'};
+  if(variant==='permission')h.native.permissions.push({id:'native-rejection-pending',sessionID:approval.session_id,permission:'bash',metadata:{command:'/usr/bin/true'}});
+  await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});await delay(60);
+  const status=(await h.get('/runs/'+run.runId+'/status')).body;
+  assert.equal(status.undecidedValidationCount,1,variant);
+  assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404,variant);
+  assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0].state,'PREPARED',variant);
+  assert.equal(h.native.replies.length,0,variant);
+ }
 });

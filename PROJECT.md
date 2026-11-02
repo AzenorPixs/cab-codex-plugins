@@ -2,9 +2,9 @@
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.1.66`.
+Version de référence des briques CAB : `2.1.67`.
 
-CAB 2.1.66 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.1.67 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -39,6 +39,14 @@ absent ou un watermark incomplet maintient `UNKNOWN` et l’accès protégé. Le
 journal ne prouve pas les réponses de permission. Aucun timeout ne clôt l’effet.
 Les RUN et opérations compatibles sans recouvrement continuent selon leurs
 règles d’accès.
+
+Si la notification locale a échoué après un rejet natif, le contrôleur peut
+clôturer uniquement la validation déjà enregistrée dont deux lectures
+identiques confirment la chaîne exacte demande, rejet `CGPT`, puis statut
+terminal `REJECTED`. La session doit être inactive, sans permission ni accès.
+Le registre conserve atomiquement le rejet, l’empreinte du transcript et
+`CANCELLED`, puis restaure ce même reçu après redémarrage. Une divergence reste
+indécise ; cette reprise n’émet aucun appel natif, accès ou `once`.
 
 Lorsqu’un wrapper Code Mode `execute` transporte `request_validation`, CAB peut
 admettre la demande quand l’appel natif unique exact est visible dans ses
