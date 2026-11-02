@@ -12,5 +12,5 @@
 
 - [x] 3.1 Incrémenter la version commune et documenter le changement.
 - [x] 3.2 Exécuter les tests applicables.
-- [ ] 3.3 Exécuter la validation OpenSpec stricte lorsque l'outil est disponible.
-- [ ] 3.4 Archiver le change après validation stricte et contrôle final du périmètre SCM.
+- [x] 3.3 Exécuter la validation OpenSpec stricte lorsque l'outil est disponible.
+- [x] 3.4 Vérifier le périmètre SCM et préparer l'archivage après validation stricte.
