@@ -1643,7 +1643,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.72');
+  assert.equal(initialized.result.serverInfo.version, '2.1.73');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3096,6 +3096,38 @@ function appendNativeCancelledTranscript(h, approval, { status='CANCELLED', canc
  ]});
 }
 
+function wrapNativeRequestValidationInCodeMode(h,approval) {
+ const messages=h.native.messages[approval.session_id];let replaced=0;
+ for(const message of messages){
+  if(!Array.isArray(message.parts))continue;
+  message.parts=message.parts.map(part=>{
+   if(part?.tool!=='cgpt-validation_request_validation'||part.state?.input?.requestId!==approval.requestId)return part;
+   replaced++;
+   return {type:'tool',id:'execute-'+approval.requestId,callID:'call-execute-'+approval.requestId,
+    tool:'execute',executed:false,state:{status:'completed',input:{code:'const payload = runtimeInput; return await tools["cgpt-validation"].request_validation(payload);'},
+     output:JSON.stringify({...structuredClone(approval),status:'PENDING'}),
+     time:{start:Date.now()-3,end:Date.now()-2},metadata:{truncated:false,toolCalls:[
+      {tool:'cgpt-validation.request_validation',status:'completed',input:structuredClone(approval)},
+     ]}}};
+  });
+ }
+ assert.equal(replaced,1,'exact native request is represented by one Code Mode wrapper');
+}
+
+function appendNativeCodeModeCancelledTranscript(h,approval,{variant}={}) {
+ const command='const r = await search({query: "cancel_approval", namespace: "cgpt-validation", limit: 20}); if (r.items[0].path !== \'tools["cgpt-validation"].cancel_approval\') throw new Error("UNEXPECTED_PATH"); return await tools["cgpt-validation"].cancel_approval({approval_id: '+JSON.stringify(approval.approval_id)+'});';
+ const result={...structuredClone(approval),status:'CANCELLED',cancelled_by:'OC',...(variant==='wrong-result'?{requestId:'other-request'}:{})};
+ const toolCalls=[
+  {tool:'search',status:'completed',input:{query:'cancel_approval',namespace:'cgpt-validation',limit:20}},
+  {tool:'cgpt-validation.cancel_approval',status:'completed',input:{approval_id:approval.approval_id}},
+ ];
+ if(variant==='extra-tool')toolCalls.push({tool:'bash',status:'completed',input:{command:'/usr/bin/true'}});
+ h.native.messages[approval.session_id].push({parts:[{type:'tool',id:'execute-cancel-'+approval.requestId,
+  callID:'call-execute-cancel-'+approval.requestId,tool:'execute',executed:false,
+  state:{status:'completed',input:{code:variant==='code-divergent'?command+' ':command},output:JSON.stringify(result),
+   time:{start:Date.now()-1,end:Date.now()},metadata:{truncated:variant==='truncated',toolCalls}}}]});
+}
+
 test('annulation native OC : clôture préparée sans décision, accès, permission ou once',async t=>{
  const h=await setup(t);const run=await h.reserve('native-cancelled');const approval=h.approval(run,'native-cancelled-request');
  assert.equal((await h.post('/runs/native-cancelled/validation/request',{approval})).status,202);
@@ -3120,6 +3152,39 @@ test('annulation native OC : clôture préparée sans décision, accès, permiss
  assert.equal(h.native.permissions.length,0);assert.deepEqual(h.native.replies,[]);
  const next=h.approval(run,'native-cancelled-next');
  assert.equal((await h.post('/runs/native-cancelled/validation/request',{approval:next})).status,202);
+});
+
+test('annulation native OC sous Code Mode : request et cancel imbriqués réconciliés exactement',async t=>{
+ const h=await setup(t);const run=await h.reserve('native-cancelled-codemode');
+ const approval=h.approval(run,'native-cancelled-codemode-request');
+ assert.equal((await h.post('/runs/native-cancelled-codemode/validation/request',{approval})).status,202);
+ wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval);
+ await h.stop();await h.start();
+ assert.equal((await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'})).status,202);
+ await waitFor(async()=>{
+  const status=(await h.get('/runs/native-cancelled-codemode/status')).body;
+  const ops=(await h.get('/runs/native-cancelled-codemode/operations?operationId='+encodeURIComponent(approval.operation_id))).body;
+  return status.undecidedValidationCount===0&&ops.operations?.[0]?.state==='CANCELLED';
+ });
+ const op=(await h.get('/runs/native-cancelled-codemode/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
+ const decision=await h.get('/runs/native-cancelled-codemode/decision/'+approval.requestId);
+ assert.equal(op.state,'CANCELLED');assert.equal(op.decision,null);assert.equal(decision.status,404);
+ assert.equal(h.native.permissions.length,0);assert.deepEqual(h.native.replies,[]);
+});
+
+test('annulation native OC sous Code Mode : wrappers divergents ou avec appels supplémentaires restent protégés',async t=>{
+ for(const variant of ['code-divergent','extra-tool','truncated','wrong-result'])await t.test(variant,async subtest=>{
+  const h=await setup(subtest);const run=await h.reserve('native-cancelled-codemode-'+variant);
+  const approval=h.approval(run,'native-cancelled-codemode-request-'+variant);
+  assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+  wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval,{variant});
+  await h.stop();await h.start();
+  await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});await delay(60);
+  const operation=(await h.get('/runs/'+run.runId+'/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
+  assert.equal(operation.state,'PREPARED',variant);assert.equal(operation.completionDigest,undefined,variant);
+  assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404,variant);
+  assert.deepEqual(h.native.replies,[],variant);assert.equal(h.native.permissions.length,0,variant);
+ });
 });
 
 test('annulation native OC : divergence ou activité conserve l’opération PREPARED',async t=>{

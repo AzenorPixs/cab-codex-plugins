@@ -17,7 +17,7 @@ import { FROZEN_CAPABILITY, moduleManifest, proofHash, maintenanceDirectory, ver
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputDigest } from './cgpt-approval-bridge-opencode-client.mjs';
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 
-const version = "2.1.72";
+const version = "2.1.73";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -497,11 +497,10 @@ async function restoreApprovedOperations(run, context) {
         ]);
         if (!Array.isArray(messages) || !Array.isArray(permissions) || generation !== (nativeSessionGenerations.get(current.sessionId) || 0)) continue;
         const parts = messages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []);
-        const requestParts = parts.filter((part) => part?.type === 'tool' &&
-          part.tool === 'cgpt-validation_request_validation' && part.state?.input?.requestId === current.requestId &&
-          part.state?.status === 'completed');
+        const requestParts = nativeRequestValidationEntries(parts,current.requestId)
+          .filter((entry)=>entry.status==='completed');
         if (requestParts.length !== 1) continue;
-        const approval = requestParts[0].state.input;
+        const approval = requestParts[0].input;
         if (approval.operation_id !== current.operationId || approval.operation_digest !== current.operationDigest ||
             approval.run_id !== run.runId || approval.reservation_version !== current.version ||
             approval.session_id !== current.sessionId || approval.directory !== run.directory ||
@@ -807,9 +806,35 @@ function nativeRejectedValidationProof(parts, approval) {
   return proofHash({ approval:nativeIdentity(approval), request:requests[0].entry,
     rejection:rejects[0], terminal:lookups[0], suffix });
 }
+function nativeRequestValidationEntries(parts, requestId) {
+  const entries=[];
+  for(const part of parts){
+    if(part?.type!=='tool')continue;
+    if(part.tool==='cgpt-validation_request_validation'&&part.state?.input?.requestId===requestId){
+      entries.push({input:part.state.input,status:part.state.status,part});continue;
+    }
+    if(part.tool!=='execute'||part.executed!==false||part.state?.status!=='completed'||
+        part.state?.metadata?.truncated!==false||!Array.isArray(part.state?.metadata?.toolCalls))continue;
+    for(const call of part.state.metadata.toolCalls)if(call?.tool==='cgpt-validation.request_validation'&&
+        call.input?.requestId===requestId)entries.push({input:call.input,status:call.status,part,call});
+  }
+  return entries;
+}
+function exactCancelApprovalWrapper(wrapper, approval) {
+  if(!wrapper||wrapper.tool!=='execute'||wrapper.executed!==false||wrapper.status!=='completed'||
+      wrapper.truncated!==false||!Array.isArray(wrapper.toolCalls)||wrapper.toolCalls.length!==2)return false;
+  const [search,cancel]=wrapper.toolCalls;
+  if(search?.tool!=='search'||search.status!=='completed'||
+      JSON.stringify(search.input)!==JSON.stringify({query:'cancel_approval',namespace:'cgpt-validation',limit:20})||
+      cancel?.tool!=='cgpt-validation.cancel_approval'||cancel.status!=='completed'||
+      JSON.stringify(cancel.input)!==JSON.stringify({approval_id:approval.approval_id}))return false;
+  const code=typeof wrapper.code==='string'?wrapper.code:'';
+  const expected=`const r = await search({query: "cancel_approval", namespace: "cgpt-validation", limit: 20}); if (r.items[0].path !== 'tools["cgpt-validation"].cancel_approval') throw new Error("UNEXPECTED_PATH"); return await tools["cgpt-validation"].cancel_approval({approval_id: ${JSON.stringify(approval.approval_id)}});`;
+  return code===expected;
+}
 function nativeCancelledValidationProof(parts, approval) {
   const allowed = new Set(['cgpt-validation.request_validation','cgpt-validation.cancel_approval',
-    'cgpt-validation.get_approval','cgpt-validation.poll_approval']);
+    'cgpt-validation.get_approval','cgpt-validation.poll_approval','search']);
   const entries = [];
   for (const part of parts) {
     if (part?.type !== 'tool') continue;
@@ -818,8 +843,11 @@ function nativeCancelledValidationProof(parts, approval) {
           !Array.isArray(part.state?.metadata?.toolCalls) || part.state?.status !== 'completed') {
         entries.push({ tool:'untrusted-wrapper', status:part.state?.status }); continue;
       }
+      const wrapper={tool:'execute',callID:part.callID,code:part.state?.input?.code,output:part.state?.output,
+        status:part.state.status,executed:part.executed,truncated:part.state.metadata.truncated,
+        toolCalls:part.state.metadata.toolCalls};
       for (const call of part.state.metadata.toolCalls) entries.push(call && typeof call === 'object'
-        ? call : { tool:'invalid-call', status:'invalid' });
+        ? {...call,wrapper} : { tool:'invalid-call', status:'invalid',wrapper });
       continue;
     }
     const name = ({ 'cgpt-validation_request_validation':'cgpt-validation.request_validation',
@@ -835,16 +863,34 @@ function nativeCancelledValidationProof(parts, approval) {
       proofHash(nativeIdentity(requests[0].entry.input)) !== proofHash(nativeIdentity(approval))) return null;
   const suffix = entries.slice(requests[0].index);
   if (suffix.some((entry) => !allowed.has(entry.tool) || entry.status !== 'completed')) return null;
+  const searches=suffix.filter((entry)=>entry.tool==='search');
+  if(searches.some((entry)=>!exactCancelApprovalWrapper(entry.wrapper,approval)))return null;
   const cancels = suffix.filter((entry) => entry.tool === 'cgpt-validation.cancel_approval');
   if (cancels.some((entry) => entry.input?.approval_id !== approval.approval_id) || cancels.length > 1) return null;
-  const lookups = suffix.filter((entry) => ['cgpt-validation.get_approval','cgpt-validation.poll_approval'].includes(entry.tool));
   const terminal = [];
+  for(const entry of cancels){
+    let result;
+    if(entry.wrapper){
+      if(!exactCancelApprovalWrapper(entry.wrapper,approval))return null;
+      try{result=typeof entry.wrapper.output==='string'?JSON.parse(entry.wrapper.output):entry.wrapper.output;}catch{return null;}
+    }else{
+      try{result=typeof entry.output==='string'?JSON.parse(entry.output):entry.output;}catch{return null;}
+    }
+    if(result?.status!=='CANCELLED'||result.cancelled_by!=='OC'||result.requestId!==approval.requestId||
+        result.approval_id!==approval.approval_id||proofHash(nativeIdentity(result))!==proofHash(nativeIdentity(approval)))return null;
+    terminal.push(entry);
+  }
+  const lookups = suffix.filter((entry) => ['cgpt-validation.get_approval','cgpt-validation.poll_approval'].includes(entry.tool));
   for (const entry of lookups) {
     if (entry.input?.approval_id !== approval.approval_id) return null;
     let result;
     try { result = typeof entry.output === 'string' ? JSON.parse(entry.output) : entry.output; }
     catch { return null; }
-    if (result?.status === 'PENDING') continue;
+    if (result?.status === 'PENDING') {
+      if(result.requestId!==approval.requestId||result.approval_id!==approval.approval_id||
+          proofHash(nativeIdentity(result))!==proofHash(nativeIdentity(approval)))return null;
+      continue;
+    }
     if (result?.status !== 'CANCELLED' || result.cancelled_by !== 'OC' ||
         result.requestId !== approval.requestId || result.approval_id !== approval.approval_id ||
         proofHash(nativeIdentity(result)) !== proofHash(nativeIdentity(approval))) return null;
