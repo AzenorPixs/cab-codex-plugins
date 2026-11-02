@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { ResourceRunRegistry, COORDINATION_PROTOCOL } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 import { RunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs';
+import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 
 const fingerprint = (value) => createHash('sha256').update(value).digest('hex');
 const file = (key, mode = 'write') => ({ key: 'file:' + key, mode });
@@ -525,6 +526,43 @@ function cleanupProof(h, run, prefix, resources = run.resources) {
   return resources.map((r) => ({ resourceKey: r.key, cleanupOperationId: cleanup.operationId,
     verificationOperationId: check.operationId, restored: true }));
 }
+
+test('réconciliation restored d’un bail USED garde HELD et renouvelle le token sans exiger l’ancien',async t=>{
+ const h=await fixture(t);const a=h.reserve('restored-used',[lxcTest]),lease=testLease(h,a,'restored-used-lease');
+ const op=h.prepare(a,'restored-used-operation'),access=h.acquire(a,op);h.start(a,op);h.complete(a,op);h.release(a,access);
+ const oldToken=lease.token,oldFencing=lease.fencing;await h.restart();
+ const preview=h.r.restoredTestReconciliationSnapshot(a.runId,lease.transactionId);
+ assert.equal(preview.state,'HELD');assert.equal(preview.reconciliationRequired,true);
+ assert.equal(preview.token,undefined);assert.deepEqual(preview.operations.map(item=>item.state),['COMPLETED']);
+ assert.deepEqual(preview.operations.map(item=>({onceAcknowledged:item.onceAcknowledged,nativePresent:item.nativePresent,
+  completionProved:item.completionProved,nativeResultStatus:item.nativeResultStatus})),
+  [{onceAcknowledged:true,nativePresent:true,completionProved:true,nativeResultStatus:'completed'}]);
+ const payload={version:a.version,transactionId:lease.transactionId,fencing:oldFencing,
+  reconciliationId:'restored-used-reconcile-1',boundaryDigest:preview.boundaryDigest,
+  evidence:['session owner verified','native operations terminal','test environment remains held']};
+ const proofBody={runId:a.runId,contextId:a.contextId,transactionId:lease.transactionId,version:a.version,
+  fencing:oldFencing,boundaryDigest:preview.boundaryDigest,sessionId:a.sessionId,
+  operationsDigest:proofHash(preview.operations),sessionIdle:true,pendingPermissions:0,
+  transcriptDigest:proofHash('stable complete transcript'),observedAt:new Date().toISOString()};
+ const result=h.r.reconcileRestoredTests(a.runId,payload,{...proofBody,proofDigest:proofHash(proofBody)});
+ assert.equal(result.state,'HELD');assert.notEqual(result.token,oldToken);assert.ok(result.fencing>oldFencing);
+ assert.equal(h.r.testReservations(a.runId)[0].reconciliationRequired,false);
+ assert.equal(h.r.resourceState.testReservations[lease.transactionId].state,'HELD');
+ assert.equal(h.r.resourceState.testReservations[lease.transactionId].resources[0].key,'lxc:host-a/101');
+ assert.equal(h.r.reconcileRestoredTests(a.runId,payload,null).token,result.token);
+});
+
+test('réconciliation restored refuse un bail USED tant qu’une opération native reste UNKNOWN',async t=>{
+ const h=await fixture(t);const a=h.reserve('restored-unknown',[lxcTest]),lease=testLease(h,a,'restored-unknown-lease');
+ const op=h.prepare(a,'restored-unknown-operation'),access=h.acquire(a,op);h.start(a,op);h.r.nativeUnknown(op.operationId);
+ assert.equal(access.state,'HELD');await h.restart();
+ const preview=h.r.restoredTestReconciliationSnapshot(a.runId,lease.transactionId);
+ const payload={version:a.version,transactionId:lease.transactionId,fencing:lease.fencing,
+  reconciliationId:'restored-unknown-reconcile',boundaryDigest:preview.boundaryDigest,evidence:['native state reviewed']};
+ assert.throws(()=>h.r.reconcileRestoredTests(a.runId,payload,null),/test-reconciliation-boundary-(?:changed|required)/);
+ assert.equal(h.r.testReservations(a.runId)[0].state,'HELD');
+ assert.equal(h.r.testReservations(a.runId)[0].reconciliationRequired,true);
+});
 
 test('Les réservations Docker/LXC sont atomiques, FIFO et indépendantes des verrous de commandes', async (t) => {
   const h = await fixture(t);

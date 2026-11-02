@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.76';
+export const VERSION = '2.1.77';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -351,6 +351,56 @@ export class ResourceRunRegistry extends RunRegistry {
         blockers: r.state === 'WAITING' ? this.testBlockers(r) : [],
         ...(r.state === 'HELD' ? { unusedReleaseBoundary: this.unusedTestBoundary(r) } : {}) }));
   }
+  restoredTestReconciliationSnapshot(runId,transactionId){
+    const entry=this.resourceState.testReservations?.[transactionId],run=this.runs.get(runId);
+    if(!entry||!run||entry.runId!==runId||entry.contextId!==run.contextId||entry.version!==run.version||
+        entry.state!=='HELD'||!this.restoredTests.has(transactionId))throw new CoordinationError('test-reconciliation-boundary-required');
+    const operations=this.operationTests(entry).map(op=>({operationId:op.operationId,state:op.state,
+      operationDigest:op.operationDigest,identityDigest:op.identityDigest,
+      onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null,nativePresent:Boolean(op.native),
+      completionDigest:op.completionDigest??null,completionProved:hash(op.completionDigest),nativeResultStatus:op.nativeResult?.status??null,
+      nativeProofDigest:op.native?.proofDigest??null})).sort((a,b)=>a.operationId.localeCompare(b.operationId));
+    const boundary={runId,contextId:run.contextId,transactionId,version:run.version,fencing:entry.fencing,
+      state:entry.state,resources:entry.resources,inputDigest:entry.inputDigest,operations};
+    return {runId,contextId:run.contextId,transactionId,version:run.version,state:entry.state,
+      reconciliationRequired:true,fencing:entry.fencing,resources:copy(entry.resources),
+      operations:operations.map(({operationId,state,onceAcknowledged,nativePresent,completionProved,nativeResultStatus})=>
+        ({operationId,state,onceAcknowledged,nativePresent,completionProved,nativeResultStatus})),boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  reconcileRestoredTests(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','transactionId','fencing','reconciliationId','boundaryDigest','evidence'])||
+        !id(payload.transactionId)||!id(payload.reconciliationId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('test-reconciliation-invalid',400);
+    const entry=this.resourceState.testReservations?.[payload.transactionId];
+    const inputDigest=digest(payload),prior=entry?.reconciliationReceipts?.[payload.reconciliationId];
+    if(prior){
+      if(entry.runId!==runId||prior.inputDigest!==inputDigest)throw new CoordinationError('test-reconciliation-divergent');
+      return copy(entry);
+    }
+    const snapshot=this.restoredTestReconciliationSnapshot(runId,payload.transactionId),run=this.runs.get(runId);
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||
+        snapshot.boundaryDigest!==payload.boundaryDigest||this.unresolvedTestAccess(runId,snapshot.resources))
+      throw new CoordinationError('test-reconciliation-boundary-changed');
+    if(snapshot.operations.some(op=>!['PREPARED','CANCELLED','COMPLETED'].includes(op.state)||
+        op.state!=='COMPLETED'&&(op.onceAcknowledged===true||op.nativePresent)||
+        op.state==='COMPLETED'&&(!op.completionProved||
+          !['completed','error'].includes(op.nativeResultStatus))))
+      throw new CoordinationError('test-reconciliation-boundary-required');
+    const proofBody={runId,contextId:run.contextId,transactionId:entry.transactionId,version:entry.version,
+      fencing:entry.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationsDigest:digest(snapshot.operations),sessionIdle:true,pendingPermissions:0,
+      transcriptDigest:proof?.transcriptDigest,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.transactionId!==entry.transactionId||
+        proof.version!==entry.version||proof.fencing!==entry.fencing||proof.boundaryDigest!==snapshot.boundaryDigest||
+        proof.sessionId!==run.sessionId||proof.sessionIdle!==true||proof.pendingPermissions!==0||
+        !hash(proof.transcriptDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('test-reconciliation-proof-required');
+    entry.token=randomUUID();entry.fencing=++this.resourceState.sequence;
+    entry.reconciliationReceipts||={};entry.reconciliationReceipts[payload.reconciliationId]={inputDigest,fencing:entry.fencing};
+    this.restoredTests.delete(entry.transactionId);this.persist();return copy(entry);
+  }
   testBlockers(entry) {
     return Object.values(this.resourceState.testReservations || {}).filter((other) => other !== entry &&
       reservedTest(other) && (other.state === 'HELD' || other.order < entry.order) &&
@@ -679,13 +729,29 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('resource-revision-stale');
     }
   }
-  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false, checkCurrentRevisions = true } = {}) {
+  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false, checkCurrentRevisions = true,
+    terminalTurnNoEffect = false } = {}) {
     const preflight = Array.isArray(approval.files) && approval.files.length === 0 &&
       approval.commands?.length === 1 && approval.commands[0] === '/usr/bin/true' &&
       Array.isArray(approval.resources) && approval.resources.every((r) => r.mode === 'read');
     if (rejectionOnly) {
       this.mutable();
       if (this.runs.get(runId)?.suspension?.action !== 'PAUSE') throw new CoordinationError('notification-reconciliation-pause-required');
+    } else if(terminalTurnNoEffect){
+      this.mutable();
+      const prior=this.resourceState.operations[approval?.operation_id],access=prior&&this.resourceState.accesses[prior.accessId];
+      const run=this.runs.get(runId);
+      if(!run||run.state!=='RESERVED'||run.phase!=='WORK'||run.suspension||prior?.runId!==runId||
+          prior.contextId!==run.contextId||prior.state!=='UNKNOWN'||prior.decision?.status!=='approved'||
+          prior.native||prior.nativeResult||prior.onceAcknowledged===true||prior.testReservationId||
+          prior.nativeRecovery?.boundary!=='TOOL_TERMINAL_UNCLASSIFIED'||
+          prior.nativeRecovery.permissionId!==null||prior.nativeRecovery.callId!==null||
+          !access||access.runId!==runId||access.contextId!==run.contextId||access.state!=='UNKNOWN'||
+          access.operationIds.length!==1||access.operationIds[0]!==prior.operationId||
+          !this.restoredAccesses.has(access.accessId)||prior.resources.some(resource=>resource.mode!=='write'||
+            !resource.key.startsWith('file:'))){
+        throw new CoordinationError('terminal-turn-no-effect-candidate-required');
+      }
     } else this.admission(runId, preflight);
     const { run, resources } = this.scope(runId, approval.reservation_version, approval.resources);
     if (approval.coordination_protocol !== COORDINATION_PROTOCOL || !id(approval.operation_id) ||
