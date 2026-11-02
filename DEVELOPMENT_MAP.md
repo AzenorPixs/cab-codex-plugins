@@ -1,5 +1,15 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Correctif CABU courant 2.2.3
+
+[fix-cabu-stopped-controller-status](openspec/changes/archive/2026-11-02-fix-cabu-stopped-controller-status/),
+code non attribué : ARCHIVÉ, source 2.2.3 qualifiée. CABU ciblé 87/87 ; 830 cas
+Node uniques validés après reprise isolée d’un démarrage fixture, 31 ignorés ;
+Python 93/93 ; natif 1/1. MainPID=0 confirme inactive ou failed ; adoption
+certifiée toujours obligatoire. Publication et activation distinctes. Le cas
+PA01 demeure protégé sur deux erreurs natives aborted. Attribution ACL ultérieure.
+
+
 ## Correctif CABU courant 2.2.2
 
 [fix-cabu-authority-shutdown](openspec/changes/archive/2026-11-02-fix-cabu-authority-shutdown/),

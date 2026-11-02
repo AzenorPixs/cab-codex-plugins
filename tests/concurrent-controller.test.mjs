@@ -673,7 +673,11 @@ test('réconcilie un bail de test restauré sans token client et conserve HELD',
  h.native.busy={};h.native.permissions.push({id:'pending-restored-test',sessionID:run.sessionId,permission:'edit',tool:{callID:'call-pending'}});
  assert.equal((await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload)).status,409);
  h.native.permissions=[];
- const result=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload);
+ let result;
+ await waitFor(async()=>{
+  result=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload);
+  return !(result.status===409&&result.body.error==='test-reconciliation-effect-pending');
+ });
  assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'HELD');
  assert.notEqual(result.body.token,lease.token);assert.ok(result.body.fencing>lease.fencing);
  const after=(await h.get('/runs/'+run.runId+'/test-resources')).body.reservations[0];
@@ -2121,7 +2125,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.2');
+  assert.equal(initialized.result.serverInfo.version, '2.2.3');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',

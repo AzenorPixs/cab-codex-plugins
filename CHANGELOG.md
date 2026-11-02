@@ -1,3 +1,8 @@
+## 2.2.3 — Confirmation de l’arrêt réel du contrôleur
+
+- CABU reconnaît un contrôleur arrêté avec MainPID=0, que systemd le classe inactive ou failed. L’ancien code de sortie 78 ne fait plus expirer un transfert déjà scellé.
+- L’adoption du certificat reste obligatoire ; ni failed avec PID vivant, ni deactivating, ni un transfert absent ou divergent ne prouvent une transition réussie.
+
 ## 2.2.2 — Arrêt CABU préservant l’autorité du registre
 
 - CABU termine d’abord le seul processus principal du contrôleur avant l’arrêt du groupe systemd, pour permettre le scellement du transfert avec son helper flock encore vivant. L’unité distribuée utilise KillMode=mixed.
