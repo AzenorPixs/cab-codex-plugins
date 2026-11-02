@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 
-export const VERSION = '2.1.73';
+export const VERSION = '2.1.74';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -911,6 +911,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   async function messages(sessionId, directoryValue = directory) {
+    if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     const result = [];
     let cursor;
     let pageSize = 200;
@@ -920,7 +921,8 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       for (;;) {
         try {
           response = await json(`/api/session/${encodeURIComponent(sessionId)}/message`,
-            { query: { order: cursor === undefined ? 'asc' : undefined, limit: String(pageSize), cursor } });
+            { query: { order: cursor === undefined ? 'asc' : undefined, limit: String(pageSize), cursor },
+              locationDirectory: directoryValue });
           break;
         } catch (cause) {
           if (cause.code !== 'opencode-response-too-large' || pageSize === 1) throw cause;
