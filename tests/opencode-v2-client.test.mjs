@@ -318,6 +318,33 @@ test('le client suit les pages V2 et normalise les messages et permissions', asy
   assert.equal(calls.filter((call) => call.path === '/api/session').length, 2);
 });
 
+test('chaque page d’historique cible la location explicite de session', async (context) => {
+  const f = fixture(); context.after(f.close);
+  const calls = [];
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/controller-workspace', passwordFile: f.passwordFile,
+    fetchImpl: async (input, init) => {
+      const url = new URL(input);
+      calls.push({ path: url.pathname, cursor: url.searchParams.get('cursor'), order: url.searchParams.get('order'),
+        directory: init.headers['x-opencode-directory'] });
+      if (url.pathname === '/api/info') return json(info);
+      if (url.pathname !== '/api/session/ses_remote/message') return json({}, 404);
+      if (url.searchParams.get('cursor') === 'history-next') return json({ data: [
+        { id: 'msg_assistant', type: 'assistant', content: [{ type: 'text', text: 'résultat' }], time: { created: 2 } },
+      ], cursor: { next: null, previous: 'history-next' } });
+      return json({ data: [{ id: 'msg_user', type: 'user', text: 'demande', time: { created: 1 } }],
+        cursor: { next: 'history-next', previous: null } });
+    } });
+
+  const messages = await client.messages('ses_remote', '/session-workspace');
+  const pages = calls.filter((call) => call.path === '/api/session/ses_remote/message');
+  assert.equal(messages.length, 2);
+  assert.equal(pages.length, 2);
+  assert.ok(pages.every((page) => page.directory === '/session-workspace'));
+  assert.equal(pages[0].order, 'asc');
+  assert.equal(pages[1].order, null);
+  await assert.rejects(client.messages('ses_remote', 'relative-workspace'), { code: 'opencode-location-invalid' });
+});
+
 test('la création de session traduit les permissions internes vers les règles V2', async (context) => {
   const f = fixture(); context.after(f.close);
   const calls = [];

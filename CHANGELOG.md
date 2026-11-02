@@ -1,3 +1,9 @@
+## 2.1.74 — Cibler l’historique natif dans la location de session
+
+- Chaque page de messages V2 reçoit explicitement la location de la session dans `x-opencode-directory`.
+- Les tests vérifient la pagination lorsque la location de session diffère de la location par défaut du client.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.74.
+
 ## 2.1.73 — Réconcilier l’annulation native imbriquée Code Mode
 
 - Le contrôleur retrouve `request_validation` dans un wrapper Code Mode complet et non tronqué.
@@ -5,13 +11,13 @@
 - Les appels supplémentaires, contenus divergents et wrappers incomplets restent protégés sans décision ni `once`.
 - CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.73.
 
-## 2.1.73 — Fiabiliser le suivi des permissions et validations
+## 2.1.72 — Fiabiliser le suivi des permissions et validations
 
 - La cause `NONE` est normalisée comme absence de cause et ne bloque plus un RUN sain.
 - Le contrôle d’inactivité ne lit que les permissions de la session concernée ; une permission étrangère mal formée n’empêche plus sa libération.
 - Une validation annulée par OpenCode peut être close après preuve terminale stable, sans créer de décision ni libérer un effet natif.
 - Les causes réelles et les gardes de readiness restent inchangées.
-- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.73.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.72.
 
 ## 2.1.71 — Réserver les environnements de test malgré des accès disjoints
 
