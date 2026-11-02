@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Permettre de réconcilier onceAcknowledged et l’état d’accès sans révéler
+  de jeton ou de contenu.

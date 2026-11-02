@@ -1,3 +1,11 @@
+## 2.1.62 — Projection sûre des opérations natives par RUN
+
+- Ajout d’un GET scoped par RUN pour relire l’état durable des opérations et
+  l’accusé `onceAcknowledged` sans exposer les jetons d’accès ou le contenu natif.
+- La valeur `onceAcknowledged=false` n’est pas une preuve d’absence d’effet ;
+  la procédure conserve la protection jusqu’à la frontière native vérifiée.
+- La version commune CAB/CABU et des quatre briques passe à 2.1.62.
+
 ## 2.1.61 — Réponses de permissions natives scoped par location
 
 - Les réponses natives `once`, `always` et `reject` utilisent maintenant la

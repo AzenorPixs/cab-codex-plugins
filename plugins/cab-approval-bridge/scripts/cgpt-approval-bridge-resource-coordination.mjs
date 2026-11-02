@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.61';
+export const VERSION = '2.1.62';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -240,6 +240,27 @@ export class ResourceRunRegistry extends RunRegistry {
         ['runId', 'changeId', 'sessionId', 'version', 'state', 'phase'].map(key => [key, run[key] ?? null]))) };
   }
 
+  operationSnapshot(runIdValue, operationId = undefined) {
+    const run = this.runs.get(runIdValue) || this.history.find((item) => item.runId === runIdValue);
+    if (!id(runIdValue) || !run) throw new CoordinationError('run-not-found', 404);
+    if (operationId !== undefined && !id(operationId)) throw new CoordinationError('operation-id-invalid', 400);
+    const values = Object.values(this.resourceState.operations)
+      .filter((op) => op.runId === runIdValue && op.contextId === run.contextId &&
+        (operationId === undefined || op.operationId === operationId))
+      .sort((a, b) => Date.parse(a.preparedAt) - Date.parse(b.preparedAt) || a.operationId.localeCompare(b.operationId));
+    const limit = operationId === undefined ? 200 : 1;
+    return { version: VERSION, runId: runIdValue, snapshot_only: true, totalOperations: values.length,
+      truncated: values.length > limit, operations: values.slice(-limit).map((op) => {
+        const access = this.resourceState.accesses[op.accessId];
+        return { operationId: op.operationId, requestId: op.requestId, sessionId: op.sessionId,
+          contextId: op.contextId, version: op.version, state: op.state, preparedAt: op.preparedAt,
+          native: op.native ? { permissionId: op.native.permissionId, callId: op.native.callId ?? null,
+            kind: op.native.kind ?? null, startedAt: op.native.startedAt,
+            targetDigest: op.native.targetDigest, onceAcknowledged: op.native.onceAcknowledged === true } : null,
+          access: access ? { accessId: access.accessId, state: access.state, fencing: access.fencing ?? null } : null,
+          nativeResult: op.nativeResult ? { status: op.nativeResult.status, exit: op.nativeResult.exit ?? null } : null };
+      }) };
+  }
   snapshot() {
     return { ...super.snapshot(), version: VERSION,
       coordinationProtocol: this.migrationRequired ? 'migration-required' : COORDINATION_PROTOCOL,

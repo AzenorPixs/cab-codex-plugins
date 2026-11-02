@@ -41,7 +41,7 @@ version de base 1.x.
 #### Scenario: Vérification des versions distribuées
 
 - **WHEN** les artefacts source et les deux manifestes de plugin sont inspectés
-- **THEN** toutes les briques annoncent la base courante commune `2.1.61` et les
+- **THEN** toutes les briques annoncent la base courante commune `2.1.62` et les
   manifestes conservent leur cachebuster propre
 
 #### Scenario: Faux succès HTML
