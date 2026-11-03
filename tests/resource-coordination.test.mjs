@@ -1104,3 +1104,60 @@ for(const boundary of ['clean','access','native','once','rejected']) test(`annul
  assert.throws(()=>h.r.recordNativeCancelledValidation(run.runId,op.operationId,fingerprint('other-proof')),/native-cancellation-boundary-invalid/);
  await h.restart();assert.deepEqual(h.r.resourceState.operations[op.operationId].decision,decision);
 });
+
+const handoffPayload = (run, overrides = {}) => ({handoffId:'handoff-1',ownerId:run.ownerId,version:run.version,
+  jobId:'job-handoff',expectedSessionId:run.sessionId,sessionId:'ses_candidate',checkpointDigest:fingerprint('checkpoint'),
+  boundaryDigest:fingerprint('native boundary'),reason:'Continue disjoint work with historical protection',evidence:['synthetic verified boundary'],...overrides});
+
+test('pilot handoff preserves historical once, accesses and reservation version; disjoint work gets fresh once', async t => {
+  const h = await fixture(t), run = h.reserve('handoff',[file('old'),file('new')]);
+  const old = h.prepare(run,'old-operation',[file('old')]); h.acquire(run,old); h.start(run,old);
+  const before = structuredClone(h.r.resourceState.operations[old.operationId]);
+  const accesses = structuredClone(h.r.resourceState.accesses);
+  assert.throws(() => h.r.transfer(run.runId,'ses_candidate'),/run-accesses-unresolved/);
+  const payload = handoffPayload(run), prepared = h.r.prepareSessionHandoff(run.runId,payload);
+  assert.equal(prepared.state,'PREPARED'); assert.equal(h.r.runs.get(run.runId).sessionId,run.sessionId);
+  const committed = h.r.commitSessionHandoff(run.runId,payload.handoffId);
+  assert.equal(committed.state,'COMMITTED'); h.r.completeSessionHandoff(run.runId,payload.handoffId);
+  const current = h.r.runs.get(run.runId);
+  assert.equal(current.sessionId,payload.sessionId); assert.equal(current.version,run.version);
+  assert.throws(() => h.r.reserve({runId:'foreign',ownerId:'other',sessionId:run.sessionId,directory:h.directory,changeId:'foreign',selectionKey:'foreign',resources:[file('foreign')],dependsOn:[]}),/session-handoff-session-reserved/); assert.equal(current.contextId,run.contextId);
+  assert.deepEqual(h.r.resourceState.operations[old.operationId],before); assert.deepEqual(h.r.resourceState.accesses,accesses);
+  assert.throws(() => h.r.operationAdmission(run.runId,old,'request-old-operation','permission'),/session-handoff-permission-revoked/);
+  const fresh = h.prepare(current,'new-operation',[file('new')]); assert.equal(h.acquire(current,fresh).state,'HELD');
+  h.start(current,fresh); assert.equal(h.r.resourceState.operations[fresh.operationId].native.onceAcknowledged,true);
+  const overlapping = h.prepare(current,'overlapping',[file('old')]); assert.equal(h.acquire(current,overlapping).state,'WAITING');
+  assert.throws(() => h.start(current,overlapping),/operation-access-not-held/);
+  assert.throws(() => h.r.release(run.runId,current.version,true),/run-accesses-unresolved/);
+  assert.equal(h.r.sessionHandoffReplay(run.runId,payload).state,'DONE');
+  assert.throws(() => h.r.sessionHandoffReplay(run.runId,{...payload,reason:'different'}),/session-handoff-replay-divergent/);
+  const restarted = await h.restart(); assert.equal(restarted.runs.get(run.runId).sessionId,payload.sessionId);
+  assert.deepEqual(restarted.resourceState.operations[old.operationId],before);
+});
+
+test('handoff COMMITTED survives restart; PREPARED can only abort before identity changes', async t => {
+  const h = await fixture(t), run = h.reserve('handoff-crash',[file('x')]), payload = handoffPayload(run);
+  h.r.prepareSessionHandoff(run.runId,payload); await h.restart();
+  assert.equal(h.r.sessionHandoffs(run.runId)[0].state,'PREPARED');
+  h.r.commitSessionHandoff(run.runId,payload.handoffId); await h.restart();
+  assert.equal(h.r.sessionHandoffs(run.runId)[0].state,'COMMITTED');
+  assert.equal(h.r.runs.get(run.runId).sessionId,payload.sessionId);
+  assert.throws(() => h.r.abortSessionHandoff(run.runId,{handoffId:payload.handoffId,ownerId:run.ownerId,version:run.version,evidence:['abort']}),/abort-forbidden/);
+  h.r.completeSessionHandoff(run.runId,payload.handoffId);
+  assert.equal(h.r.sessionHandoffs(run.runId)[0].state,'DONE');
+});
+
+test('handoff intent uncertainty, changed inventory and foreign owner fail closed', async t => {
+  const h = await fixture(t), run = h.reserve('handoff-guards',[file('x')]);
+  const op = h.prepare(run,'uncertain'); h.acquire(run,op);
+  h.r.nativeStart(run.runId,{...op,kind:'bash'},'request-uncertain',{id:'permission-uncertain',tool:{callID:'call-uncertain'}});
+  assert.throws(() => h.r.prepareSessionHandoff(run.runId,handoffPayload(run)),/native-intent-unresolved/);
+  h.r.nativeIssued(op.operationId);
+  assert.throws(() => h.r.prepareSessionHandoff(run.runId,handoffPayload(run,{ownerId:'foreign'})),/contract-invalid/);
+  h.r.prepareSessionHandoff(run.runId,handoffPayload(run));
+  h.r.resourceState.operations[op.operationId].native.startedAt += 1;
+  assert.throws(() => h.r.commitSessionHandoff(run.runId,'handoff-1'),/inventory-divergent/);
+  const aborted = h.r.abortSessionHandoff(run.runId,{handoffId:'handoff-1',ownerId:run.ownerId,version:run.version,evidence:['abandon before commit']});
+  assert.equal(aborted.state,'ABORTED'); assert.equal(h.r.runs.get(run.runId).sessionId,run.sessionId);
+  await h.restart(); assert.equal(h.r.sessionHandoffs(run.runId)[0].state,'ABORTED');
+});

@@ -1,4 +1,8 @@
-# Précisions recovery — CAB 2.2.12
+# Précisions recovery — CAB 2.2.13
+
+Pour changer le SID courant tout en conservant des effets et accès historiques
+protégés, utiliser la voie distincte [session-handoff](session-handoff.md).
+Le transfert ordinaire décrit ci-dessous reste strict.
 
 ## Récupération contrôlée de session dans le même RUN
 

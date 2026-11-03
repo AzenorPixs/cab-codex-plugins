@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.12";
+export const VERSION = "2.2.13";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -359,6 +359,7 @@ function publicJob() {
     disarmedAt: job.disarmedAt || null,
     recovery: job.recovery || null,
     recoveryHistory: job.recoveryHistory || [],
+    sessionHandoffHistory: structuredClone(job.sessionHandoffHistory || []),
     revokedSessions: job.revokedSessions || [],
     terminalGate: { ...terminalGate },
   };
@@ -428,7 +429,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.12",
+    version: "2.2.13",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -561,7 +562,88 @@ function validPersistedJob(payload) {
   if (payload.recoveryHistory !== undefined &&
       (!Array.isArray(payload.recoveryHistory) || !payload.recoveryHistory.every(recoveryRecord))) return false;
   if (payload.revokedSessions !== undefined && !strings(payload.revokedSessions)) return false;
+  if (payload.sessionHandoffHistory !== undefined && (!Array.isArray(payload.sessionHandoffHistory) ||
+      !payload.sessionHandoffHistory.every(h => record(h) && text(h.handoffId) && text(h.sourceSessionId) &&
+        text(h.sessionId) && /^[a-f0-9]{64}$/.test(h.checkpointDigest) && text(h.committedAt)))) return false;
   return true;
+}
+
+function sessionHandoffCheckpoint() {
+  if (!job) recoveryFailure('session-handoff-job-unavailable');
+  const checkpoint = structuredClone(job);
+  delete checkpoint.updatedAt;
+  return canonicalRecoveryHash(checkpoint);
+}
+
+async function inspectSessionHandoff(sessionId, historicalCalls = []) {
+  if (!run || !sessionId || sessionId === job?.sessionId || job?.revokedSessions?.includes(sessionId) ||
+      !communicationStorageReady() || recoveryTransitionInFlight || lifecycleTransitionInFlight || modelTransitions.inFlight)
+    recoveryFailure('session-handoff-not-quiescent');
+  await checkRecoveryContext({sessionId});
+  const checkpointDigest = sessionHandoffCheckpoint();
+  const [health, oldSession, candidate, oldMessages, messages] = await Promise.all([
+    openCode.info(true), openCode.session(job.sessionId,job.directory), openCode.session(sessionId,job.directory),
+    openCode.messages(job.sessionId,job.directory), openCode.messages(sessionId,job.directory),
+  ]);
+  if (!hasNativeAsk(oldSession,'bash',['ask','deny']) || !hasNativeAsk(oldSession,'edit',['ask','deny']))
+    recoveryFailure('session-handoff-source-native-ask-required');
+  if (!Number.isSafeInteger(health.pid) || health.pid <= 0) recoveryFailure('session-handoff-native-identity-missing');
+  const oldParts = recoveryTools(oldMessages), parts = recoveryTools(messages);
+  if (oldParts.some(p => !['completed','error'].includes(p.state?.status) && !historicalCalls.some(h =>
+      h.sessionId === job.sessionId && h.callId === p.callID && h.kind === 'bash' && p.tool === 'bash' &&
+      h.targetDigest === canonicalRecoveryHash(['bash',p.state?.input?.command]))))
+    recoveryFailure('session-handoff-new-call-active');
+  let ready = false;
+  for (const part of parts) {
+    if (part.state?.status !== 'completed') recoveryFailure('session-handoff-candidate-not-read-only');
+    if (part.tool === 'cab_codemode_discovery' && requestValidationSignatureDiscovery(part)) continue;
+    if (part.tool !== 'cgpt-validation_broker_readiness' || !part.state.metadata?.cabCodeMode?.wrapperId)
+      recoveryFailure('session-handoff-candidate-not-read-only');
+    let result;
+    try { result = JSON.parse(part.state.output); } catch { recoveryFailure('session-handoff-readiness-invalid'); }
+    if (result.status !== 'READY' || result.pending_count !== 0 || result.run_id !== run.runId || result.server_version !== VERSION)
+      recoveryFailure('session-handoff-readiness-invalid');
+    ready = true;
+  }
+  if (!ready) recoveryFailure('session-handoff-readiness-missing');
+  if (job.codingModel) {
+    const observed = messages.filter(m => m.info?.role === 'assistant' && m.parts?.some(p => p.tool === 'cgpt-validation_broker_readiness')).at(-1)?.info;
+    if (!observed || observed.providerID !== job.codingModel.providerID || observed.modelID !== job.codingModel.modelID || observed.variant !== job.codingModel.reasoning ||
+        (candidate.model && (candidate.model.providerID !== job.codingModel.providerID || candidate.model.modelID !== job.codingModel.modelID || candidate.model.variant !== job.codingModel.reasoning)))
+      recoveryFailure('session-handoff-model-divergent');
+  }
+  // Only hashes and native identity leave this inspection; no transcript or permission payload is persisted in the receipt.
+  const boundary = {checkpointDigest,nativePid:health.pid,nativeVersion:health.version,
+    oldSessionHash:canonicalRecoveryHash(oldSession),sessionHash:canonicalRecoveryHash(candidate),
+    oldHistoryHash:canonicalRecoveryHash(oldMessages),historyHash:canonicalRecoveryHash(messages)};
+  return {checkpointDigest,boundaryDigest:canonicalRecoveryHash(boundary),nativePid:health.pid};
+}
+
+async function applySessionHandoff(receipt) {
+  if (!run || !job || receipt.runId !== run.runId || receipt.contextId !== run.contextId || receipt.jobId !== job.jobId ||
+      !['COMMITTED','DONE'].includes(receipt.state)) recoveryFailure('session-handoff-checkpoint-divergent');
+  const prior = job.sessionHandoffHistory?.find(h => h.handoffId === receipt.handoffId);
+  if (prior) {
+    if (job.sessionId !== receipt.sessionId || prior.sourceSessionId !== receipt.sourceSessionId ||
+        prior.checkpointDigest !== receipt.checkpointDigest || prior.committedAt !== receipt.committedAt)
+      recoveryFailure('session-handoff-checkpoint-divergent');
+  } else {
+    if (job.sessionId !== receipt.sourceSessionId || sessionHandoffCheckpoint() !== receipt.checkpointDigest)
+      recoveryFailure('session-handoff-checkpoint-divergent');
+    const snapshot = structuredClone(job);
+    snapshot.sessionId = receipt.sessionId;
+    snapshot.revokedSessions = [...new Set([...(snapshot.revokedSessions || []), receipt.sourceSessionId])];
+    snapshot.sessionHandoffHistory = [...(snapshot.sessionHandoffHistory || []),
+      {handoffId:receipt.handoffId,sourceSessionId:receipt.sourceSessionId,sessionId:receipt.sessionId,
+        checkpointDigest:receipt.checkpointDigest,committedAt:receipt.committedAt}];
+    await persistJob(snapshot);
+    job = snapshot;
+  }
+  for (const validation of validations.values()) if (job.revokedSessions?.includes(validation.operation?.sessionId))
+    validation.operationInvalidated = true;
+  persistCommunication();
+  updateStatus('session-handoff-completed', {handoffId:receipt.handoffId});
+  return publicJob();
 }
 
 function approvedOperation(approval) {
@@ -2309,7 +2391,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.12",
+      version: "2.2.13",
     },
   });
 
@@ -3441,6 +3523,7 @@ const handle = async (request, response, url) => {
 
 return {
   handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
+  inspectSessionHandoff, applySessionHandoff, sessionHandoffCheckpoint,
   freezeTransport: () => { transportPaused = true; wakeDecisionWaiters(); },
   resumeTransport: () => { if (!closed) transportPaused = false; },
   transportHandoffReady: () => communicationStorageReady() && reconcilingPermissions.size === 0 &&
@@ -3473,6 +3556,8 @@ return {
       !httpDecisions.has(v.requestId) || (httpDecisions.get(v.requestId)?.decision === "approved" &&
         !v.operationConsumed && !v.operationInvalidated))),
   sessions: () => [job?.sessionId || run?.sessionId, job?.recovery?.sessionId].filter(Boolean),
+  observedSessions: () => [...new Set([job?.sessionId || run?.sessionId, job?.recovery?.sessionId,
+    ...(job?.sessionHandoffHistory || []).map(h => h.sourceSessionId)].filter(Boolean))],
   unresolved: () => Boolean(job?.armed || job?.currentCabMandate || reconcilingPermissions.size ||
     unmatchedNativePermissions.size || [...validations.values()].some((v) =>
       !httpDecisions.has(v.requestId) || (httpDecisions.get(v.requestId)?.decision === "approved" &&

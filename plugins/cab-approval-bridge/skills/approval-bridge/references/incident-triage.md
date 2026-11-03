@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.12
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.13
 
 ## Avant de solliciter une correction
 
