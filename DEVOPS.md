@@ -3,8 +3,8 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-03T10:59:23Z
-Environnement d'exécution DIU : PROXMOX
+Début du relevé (UTC) : 2026-11-03T13:42:10Z
+Environnement d'exécution DIU : PHYSICAL
 
 ## Configuration locale — project.env
 
@@ -43,7 +43,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 # Système d'exploitation
 
   * Debian GNU/Linux 13 (trixie)
-  * hvp1.pixs.fr
+  * pcl-25-013.ch-nontron.fr
 
 
 # Matériel
@@ -52,29 +52,10 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
   * Chemin : /dev/tpmrm0
   * Version : 2.0
-  * Fabricant : INTC
-  * Identifiant fournisseur : 0x494E5443
-  * Révision de spécification : 1.38
-  * Registres PCR : sha1: [] ; sha256: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] ; sha384: [] ; sm3_256: []
-
-
-# Conteneur Docker, pour tests nécessitant des droits root
-
-  * 29.9.2
-  * /usr/bin/docker
-  * /var/run/docker.sock
-  * debian:stable-slim
-  * Accès TPM OK
-  * Les agents de codage et les agents orchestrateurs sont autorisés à préparer, exécuter, répéter et nettoyer les tests du projet dans ce conteneur, y compris avec les droits root, sans demander d’approbation supplémentaire. Cette autorisation couvre le conteneur et les ressources dédiées aux tests.
-
-
-# Conteneur LXC, pour tests nécessitant des droits root accessible en SSH
-
-  * Variables d'accès disponible dans project.env pour l'accès SSH
-  * Debian 13
-  * Accès TPM OK
-  * Les agents de codage et les agents orchestrateurs sont autorisés à préparer, exécuter, répéter et nettoyer les tests du projet dans ce conteneur, y compris avec les droits root, sans demander d’approbation supplémentaire. Cette autorisation couvre le conteneur et les ressources dédiées aux tests.
-  * Binaires et bibliothèques installés pour les tests ne sont pas à désinstaller après tests.
+  * Fabricant : NTC
+  * Identifiant fournisseur : 0x4E544300
+  * Révision de spécification : 1.59
+  * Registres PCR : sha1: [] ; sha256: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23] ; sha384: []
 
 
 # OpenSSH & SSHPASS
