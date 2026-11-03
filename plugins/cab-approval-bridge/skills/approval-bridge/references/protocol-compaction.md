@@ -1,4 +1,4 @@
-# Compaction et continuité — CAB 2.2.6
+# Compaction et continuité — CAB 2.2.7
 
 ## Compactage coordonné selon le contexte
 

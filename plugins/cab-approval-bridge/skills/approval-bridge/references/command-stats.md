@@ -1,4 +1,4 @@
-# Statistiques — CAB 2.2.6
+# Statistiques — CAB 2.2.7
 
 ## `/CAB stats`
 

@@ -5,7 +5,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "2.2.6";
+export const VERSION = "2.2.7";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -208,11 +208,11 @@ export class RunRegistry {
     }
   }
 
-  async acquireAuthority() {
+  async acquireAuthority({additionalLockPath,beforeRestore}={}) {
     if (this.lock) return;
     mkdirSync(this.stateDirectory, { recursive: true, mode: 0o700 });
     const helper = fileURLToPath(new URL("./cgpt-approval-bridge-registry-lock.py", import.meta.url));
-    const child = spawn("python3", [helper, join(this.stateDirectory, "registry.instance.lock")],
+    const child = spawn("python3", [helper, join(this.stateDirectory, "registry.instance.lock"), ...(additionalLockPath?[additionalLockPath]:[])],
       { stdio: ["pipe", "pipe", "ignore"] });
     await new Promise((resolveReady, reject) => {
       let ready = false;
@@ -223,12 +223,12 @@ export class RunRegistry {
         clearTimeout(timer);
         if (!ready) reject(new CoordinationError("registry-already-owned"));
       });
-      child.stdout.once("data", (data) => {
+      child.stdout.once("data", async (data) => {
         if (data.toString().trim() !== "READY") return;
         ready = true;
         clearTimeout(timer);
         this.lock = child;
-        try { this.restore(); } catch (cause) { this.failed = true; child.stdin.end(); reject(cause); return; }
+        try { if(beforeRestore)await beforeRestore();this.restore(); } catch (cause) { this.failed = true; child.stdin.end(); reject(cause); return; }
         resolveReady();
       });
     });

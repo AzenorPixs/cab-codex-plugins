@@ -1,4 +1,29 @@
-# Mise à jour autonome des briques CAB — CAB 2.2.6
+# Mise à jour autonome des briques CAB — CAB 2.2.7
+
+## États privés CAB2.2.7 et fichiers projet0775
+
+Les fichiers de projet conservent leurs droits0775, y compris après DIU.
+Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
+`<home exécution>/.local/state/cab-approval-bridge/<SHA256 du workspace résolu>/cgpt-approval-bridge/`.
+Les répertoires privés sont0700 et les fichiers0600. La racine optionnelle
+`OC_Codex_RUNTIME_STATE_ROOT` (alias historique `OC_CGPT_RUNTIME_STATE_ROOT`
+seulement si le nom principal est absent) remplace `.local/state` ; elle doit
+être absolue, hors projet et protégée. Le broker conserve son magasin de profil
+hors projet. `/status` expose `runtimeStateDirectory` ; ne pas deviner ce chemin.
+Seul le verrou public de coordination reste dans le projet en0775, pour
+exclure une ancienne instance ; il ne contient aucune décision ou secret.
+
+Le premier CABU depuis2.2.6 vérifie le registre source et le transcript des
+validations actives, puis copie les seuls états CAB connus sans changer les
+anciens fichiers. Le reçu `cab-private-state-migration-v1` garde explicitement
+la continuité LEGACY, sans certificat source inventé. Le contrôleur démarre
+avec les mutations et permissions suspendues ; CABU vérifie versions, identité
+native, RUN, opérations et once, puis active le reçu exact de façon idempotente.
+Une interruption après copie reprend en avant avec le même reçu et le même
+stockage privé ; revenir aux anciens fichiers de projet est interdit. Les
+anciennes protections incertaines restent en place, sans once ni commande rejouée.
+Les mises à jour suivantes utilisent de nouveau le transfert certifié ordinaire.
+
 
 ## Association du skill et des commandes
 

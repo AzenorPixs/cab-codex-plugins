@@ -70,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.2.6"
+SERVER_VERSION = "2.2.7"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
@@ -2211,6 +2211,7 @@ def journal_controller_event(
 
 
 CONTROLLER_NOTIFICATION_ERROR_CODES = {
+    503: frozenset(("native-validation-evidence-unavailable",)),
     400: frozenset(("expected-revisions-invalid", "command-too-long")),
     409: frozenset((
         "resource-revision-stale", "reservation-version-stale",
@@ -2268,7 +2269,7 @@ def pre_admission_refusal(item):
     if item.get("status") != "PENDING" or item.get("notification_status") != "FAILED":
         return None
     diagnostic = filtered_notification_diagnostic(item.get("notification_diagnostic"))
-    return diagnostic if diagnostic is not None and diagnostic.get("error_code") is not None else None
+    return diagnostic if diagnostic is not None and diagnostic.get("http_status") in (400, 409) and diagnostic.get("error_code") is not None and diagnostic.get("error_code") != "run-transition-in-flight" else None
 
 
 def mark_not_admitted(item):

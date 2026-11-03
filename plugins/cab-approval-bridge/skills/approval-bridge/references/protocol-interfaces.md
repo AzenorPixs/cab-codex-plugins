@@ -1,4 +1,4 @@
-# Interfaces et persistance — CAB 2.2.6
+# Interfaces et persistance — CAB 2.2.7
 
 ## Architecture et interfaces techniques CAB
 
@@ -160,8 +160,10 @@ textuelle seule ne constitue pas ce verrou technique.
 
 Le broker utilise par défaut le home du processus OpenCode qui le lance :
 `$HOME/.opencode/state/cgpt-approval-bridge/`. Le contrôleur et le
-superviseur utilisent par défaut l'espace du workspace :
-`<racine projet>/.opencode/state/cgpt-approval-bridge/`.
+superviseur utilisent un espace privé hors projet, exposé par
+`runtimeStateDirectory` dans `/status` :
+`<home exécution>/.local/state/cab-approval-bridge/<SHA256 workspace>/cgpt-approval-bridge/`.
+Les fichiers du projet restent en0775 ; les checkpoints privés sont0600.
 Les chemins personnalisés doivent être réellement résolus ; ces exemples
 ne désignent pas un espace à purger automatiquement.
 

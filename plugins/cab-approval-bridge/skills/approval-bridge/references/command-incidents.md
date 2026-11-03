@@ -1,4 +1,4 @@
-# Incidents — CAB 2.2.6
+# Incidents — CAB 2.2.7
 
 ## Problèmes de codage et coordination du correctif CAB
 

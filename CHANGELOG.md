@@ -1,3 +1,12 @@
+## 2.2.7 — Admissions résilientes et stockage privé hors projet
+
+- Une enveloppe Code Mode brute completed/error=true avec request_validation completed conserve la corrélation de son input exact, sans décision, accès ou permission implicite.
+- Un résultat natif NOT_ADMITTED de la même identité reste terminal et ne peut être réadmis. Les inputs divergents, troncatures et appels exécutants supplémentaires restent refusés.
+- Le mandat natif recommande le retour direct du payload littéral ; les identités refusées ne sont jamais réutilisées. Le résultat final d’un wrapper ne suffit pas à attribuer la cause de sa première notification.
+
+- Une visibilité native retardée conserve le même PENDING avec503 transitoire et un diagnostic filtré ; les phases connues du wrapper et de l’appel MCP restent indépendantes.
+- Les états privés quittent les projets ; DIU et les fichiers projet restent en0775. CABU migre les checkpoints et validations attestées, vérifie RUN/opérations/once, puis active le nouveau stockage. Le premier reçu reste explicitement LEGACY ; une interruption après copie reprend en avant sans rejouer la commande ni restaurer un ancien registre.
+
 ## 2.2.6 — Réutiliser les preuves closes dans un historique long
 
 - Une validation PREPARED/approved jamais émise peut être retirée par son propriétaire, avec double frontière stable et sans fabriquer de refus natif ou NO_EFFECT.

@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
 import assert from "node:assert/strict";
@@ -20,11 +21,11 @@ const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function fixture(context) {
   const directory = mkdtempSync(join(tmpdir(), "cab-job-restoration-"));
-  const stateDirectory = join(directory, ".opencode", "state", "cgpt-approval-bridge");
+  const stateDirectory = join(runtimeStateDirectory(directory));
   const jobPath = join(stateDirectory, "controller-job.json");
   const codexMarker = join(directory, "codex-started");
   const fakeCodex = join(directory, "fake-codex.cjs");
-  mkdirSync(stateDirectory, { recursive: true });
+  mkdirSync(stateDirectory, { recursive: true, mode: 0o700 });
   writeFileSync(fakeCodex, [
     "#!/usr/bin/env node",
     "const { writeFileSync } = require('node:fs');",

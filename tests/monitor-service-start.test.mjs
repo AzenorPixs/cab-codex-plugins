@@ -40,7 +40,7 @@ async function installedFixture(t) {
     await mkdir(dirname(destination), { recursive: true });
     await copyFile(new URL(relative, plugin), destination); copied.push(relative);
   }
-  assert.equal(copied.length, 16);
+  assert.equal(copied.length, 17);
   const unit = await readFile(new URL('systemd/cgpt-approval-bridge-monitor.service', plugin), 'utf8');
   const entry = unit.match(/^ExecStart=\/usr\/bin\/env node (.+)$/m)[1].replace('%h', home);
   await mkdir(workspace, { recursive: true });
@@ -73,10 +73,10 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '2.2.6');
+  assert.equal(snapshot.version, '2.2.7');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
   const identity = await (await fetch(base + '/api/identity')).json();
-  assert.deepEqual(identity, { version: '2.2.6', identity: { workspace: await realpath(h.workspace) } });
+  assert.deepEqual(identity, { version: '2.2.7', identity: { workspace: await realpath(h.workspace) } });
   assert.equal((await fetch(base)).status, 200);
   for (const route of ['/app.mjs', '/stats.mjs', '/style.css']) assert.equal((await fetch(base + route)).status, 200);
   await wait(async () => (await (await fetch(base + '/api/snapshot')).json()).sources.controller?.available === false);

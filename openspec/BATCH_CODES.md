@@ -1,5 +1,14 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Correctif SCM courant2.2.7
+
+[correlate-completed-mcp-call-with-outer-error](changes/archive/2026-11-03-correlate-completed-mcp-call-with-outer-error/), code non attribué : ARCHIVÉ, source2.2.7 qualifiée.
+Admission transitoire et états privés hors projet compatibles0775.
+937cas Node uniques qualifiés,94Python,1natif ;31ignorés. Une dernière
+fixture en timeout passe isolément ; pas de passe globale entièrement verte.
+OpenSpec20/20avant puis19/19après. Publication et activation séparées.
+
+
 ## Correctif SCM courant2.2.6
 
 [reuse-closed-validation-review-evidence](changes/archive/2026-11-03-reuse-closed-validation-review-evidence/), code non attribué : ARCHIVÉ, source2.2.6 qualifiée.

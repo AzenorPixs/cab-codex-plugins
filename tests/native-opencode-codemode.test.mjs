@@ -84,7 +84,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
         OPENCODE_DISABLE_PROJECT_CONFIG: '1', OPENCODE_DISABLE_DEFAULT_PLUGINS: '1', OPENCODE_DISABLE_CLAUDE_CODE: '1',
         OPENCODE_DISABLE_MODELS_FETCH: '1', OPENCODE_DISABLE_AUTOUPDATE: '1', OPENCODE_DISABLE_LSP_DOWNLOAD: '1' } });
     native.stderr.on('data', chunk => nativeLog += chunk);
-    const client = createOpenCodeV2Client({ baseUrl: base, directory: workspace, passwordFile });
+    const client = createOpenCodeV2Client({ baseUrl: base, directory: workspace, passwordFile, permissionReceiptDirectory:join(root,'private-replies') });
     await until(async () => { if (native.exitCode !== null) throw Error('native startup: ' + nativeLog.replaceAll(password, '[synthetic]'));
       try { return (await client.info()).version.startsWith('2.2.'); } catch { return false; } }, 'native startup');
     eventReader = (await client.events()).body.getReader();
@@ -107,7 +107,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     writeFileSync(controllerWrapper,`import {ShellStageStore} from ${JSON.stringify(stageEntry)};const original=ShellStageStore.prototype.get;ShellStageStore.prototype.get=function(id){const s=original.call(this,id);return id==='stage-corrupt-fixture'&&s?{...s,payload:s.payload.replace('CAB_LONG_EXACT_OK','CAB_LONG_WRONG_OK')}:s};await import(${JSON.stringify(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs',import.meta.url).href)});`);
     function startController() {
       controller = spawn(process.execPath, [controllerWrapper],
-      { stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, OC_Codex_WORKSPACE: workspace,
+      { stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, OC_Codex_WORKSPACE: workspace, OC_Codex_RUNTIME_STATE_ROOT:join(root,'private-state'),
         OC_Codex_OUTSIDE_SANDBOX: '1', OC_Codex_OPENCODE_URL: base, OC_Codex_OPENCODE_PASSWORD_FILE: passwordFile,
         OC_Codex_STATUS_PORT: String(controllerPort), OC_Codex_DECISION_MODE: 'manual', CODEX_COMMAND: 'cab-test-unused' } });
       controller.stderr.on('data', chunk => controlLog += chunk);

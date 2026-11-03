@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.6";
+export const VERSION = "2.2.7";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -174,6 +174,7 @@ let permissionTimer;
 let closed = false;
 let closePromise;
 let communicationFailed = false;
+let communicationError = null;
 let transportPaused = false;
 
 try {
@@ -258,10 +259,24 @@ function persistCommunication(additionalValidation, additionalDecision) {
   try {
     communication.write({ ...communicationScope, validations: retained,
       decisions: [...stagedDecisions].filter(([requestId]) => retainedIds.has(requestId)) });
+    communicationFailed=false;communicationError=null;
   } catch (cause) {
+    communicationError=/^continuity-[a-z-]{1,80}$/.test(cause.code||'')||['EACCES','EPERM','EIO','ENOSPC','EROFS'].includes(cause.code)
+      ?cause.code:'communication-write-unavailable';
     communicationFailed = true;
     throw cause;
   }
+}
+
+function communicationStorageReady() {
+  if(!communicationFailed)return true;
+  if(communication.sequence===0)return false;
+  try {
+    const observed=new ContinuityStore(communication.path,'communication',value=>validCommunicationState(value,communicationScope));
+    if(observed.sequence!==communication.sequence||observed.instanceId!==communication.instanceId||
+      JSON.stringify(observed.snapshot())!==JSON.stringify(communication.snapshot()))return false;
+    communicationFailed=false;communicationError=null;return true;
+  } catch {return false;}
 }
 
 function recordDecisionDurably(validation, decision, record = persistOperationDecision) {
@@ -413,7 +428,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.6",
+    version: "2.2.7",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -423,7 +438,7 @@ function publicStatus() {
     activeValidationCount: status.activeValidations.length,
     decisionWaiterCount,
     communicationPersistence: { protocol: 'cab-continuity-v1', available: !communicationFailed,
-      sequence: communication.sequence },
+      sequence: communication.sequence, error:communicationError },
     undecidedValidationCount: [...validations.values()].filter((v) => !httpDecisions.has(v.requestId)).length,
     pendingReminderCount: reminderNotifications.size,
     activeValidations: status.activeValidations.map(
@@ -2294,7 +2309,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.6",
+      version: "2.2.7",
     },
   });
 
@@ -3428,7 +3443,7 @@ return {
   handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
   freezeTransport: () => { transportPaused = true; wakeDecisionWaiters(); },
   resumeTransport: () => { if (!closed) transportPaused = false; },
-  transportHandoffReady: () => !communicationFailed && reconcilingPermissions.size === 0 &&
+  transportHandoffReady: () => communicationStorageReady() && reconcilingPermissions.size === 0 &&
     !recoveryTransitionInFlight && !lifecycleTransitionInFlight && !modelTransitions.inFlight,
   flushCommunication: async () => { await jobPersistence; persistCommunication(); },
   restorePendingValidation, pendingRestorationProof, completeReviewedTerminal, withdrawUnissuedValidation,

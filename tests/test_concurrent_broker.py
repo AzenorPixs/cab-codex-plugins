@@ -251,6 +251,22 @@ class ConcurrentBrokerTest(unittest.TestCase):
             self.assertEqual(bridge.load_store(bridge.store_path())["approvals"], {})
         self.assertEqual(bridge.do_propose(self.args())["status"], "PENDING")
 
+    def test_transient_native_visibility_and_busy_keep_same_pending(self):
+        for status, code in ((503, "native-validation-evidence-unavailable"), (409, "run-transition-in-flight")):
+            args = self.args()
+            args["requestId"] = "transient-" + str(status)
+            args["approval_id"] = "approval-transient-" + str(status)
+            args["operation_id"] = "operation-transient-" + str(status)
+            item = bridge.do_propose(args)
+            lease = bridge.acquire_notification_lease(item["approval_id"])
+            diagnostic = {"http_status": status, "error_code": code}
+            bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, diagnostic)
+            restored = bridge.do_get({"approval_id": item["approval_id"]})
+            self.assertEqual(restored["status"], "PENDING")
+            self.assertEqual(restored["notification_diagnostic"], diagnostic)
+            self.assertEqual(restored["decision_id"], "")
+            self.assertFalse(any(event["event_type"] == "APPROVAL_NOT_ADMITTED" for event in bridge.journal.read_events(approval_id=item["approval_id"])))
+
     def test_notification_diagnostic_closes_deterministic_refusal_without_decision(self):
         args = self.args()
         item = bridge.do_propose(args)

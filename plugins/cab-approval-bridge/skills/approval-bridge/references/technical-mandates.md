@@ -1,4 +1,4 @@
-# Précisions mandates — CAB 2.2.6
+# Précisions mandates — CAB 2.2.7
 
 ## RUN concurrents CAB 2.1.75
 

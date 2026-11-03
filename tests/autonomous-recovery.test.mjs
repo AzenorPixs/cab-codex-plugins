@@ -11,7 +11,7 @@ import {nativeEvidenceView,validateReadOnlyReview,commandDigest} from '../plugin
 import {createOpenCodeV2Client} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 const hash=x=>createHash('sha256').update(x).digest('hex');
 function directory(t){const root=mkdtempSync(join(tmpdir(),'cab-autonomous-'));t.after(()=>rmSync(root,{recursive:true,force:true}));return root;}
-const identity={sessionId:'ses_review',permissionId:'per_review',directory:'/workspace',decision:'reject',nativePid:42,nativeVersion:'2.2.6',callId:'call_review',targetDigest:hash('target')};
+const identity={sessionId:'ses_review',permissionId:'per_review',directory:'/workspace',decision:'reject',nativePid:42,nativeVersion:'2.2.7',callId:'call_review',targetDigest:hash('target')};
 
 test('refus natif : intention indéterminée, ACK relisible et identité immuable',t=>{
  const root=directory(t),j=new PermissionReplyJournal(join(root,'receipts'));
@@ -30,7 +30,7 @@ function nativeFixture(t,{loseResponse=false}={}){
  const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile,permissionReceiptDirectory:journal,
   fetchImpl:async(url,opt)=>{
    const path=new URL(url).pathname;
-   if(path==='/api/info')return Response.json({version:'2.2.6',pid:42,hostname:'127.0.0.1',urls:[],paths:{}});
+   if(path==='/api/info')return Response.json({version:'2.2.7',pid:42,hostname:'127.0.0.1',urls:[],paths:{}});
    if(path==='/api/permission/request')return Response.json({location:{directory:'/workspace'},data:[{id:'per_review',sessionID:'ses_review',action:'bash',resources:[command],source:{type:'tool',id:'call_review'}}]});
    if(path.endsWith('/reply')){posts++;if(loseResponse)throw new Error('synthetic network failure');return new Response(null,{status:204});}
    throw new Error('unexpected request');
@@ -95,7 +95,7 @@ test('extension : crash après mutation se réconcilie depuis le même reçu san
 function reviewedBoundary(){
  const command='/usr/bin/id -u',run={runId:'a',ownerId:'owner-a',contextId:1,version:1};
  const calls=['call_a','call_b'].map(callID=>({type:'tool',tool:'bash',callID,nativeFormat:'opencode-v2',nativeErrorType:'aborted',executed:false,state:{status:'error',input:{command}}}));
- const view=nativeEvidenceView({run,operation:{operationId:'op-a',operationDigest:hash('op-a'),sessionId:'ses_a'},approval:{commands:[command],files:[]},parts:calls,native:{pid:42,version:'2.2.6'},activeSessions:{},permissions:[],journal:{watermark:{aggregateID:'ses_a',seq:12},events:[]},replies:{receipts:[]}});
+ const view=nativeEvidenceView({run,operation:{operationId:'op-a',operationDigest:hash('op-a'),sessionId:'ses_a'},approval:{commands:[command],files:[]},parts:calls,native:{pid:42,version:'2.2.7'},activeSessions:{},permissions:[],journal:{watermark:{aggregateID:'ses_a',seq:12},events:[]},replies:{receipts:[]}});
  const review={ownerId:run.ownerId,effect:'READ_ONLY',commandSha256:commandDigest(command),sourceFiles:[],evidenceRefs:['audit/review-a'],rejectedCalls:calls.map((call,i)=>({callId:call.callID,permissionId:'per_'+i,auditExecutionId:'exec-'+i,ackStatus:204}))};
  return {run,view,review,command};
 }
