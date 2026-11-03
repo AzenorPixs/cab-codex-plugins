@@ -44,6 +44,39 @@ Le SSE et les états HTTP ne remplacent pas un appel MCP réel de
 `broker_readiness` dans la session de codage ciblée. L'état `connected` de
 `GET /api/mcp` ne constitue ni une readiness métier ni une décision.
 
+## HTTP401 et client authentifié du pilote
+
+Une requête GET sans Authorization vers OpenCode peut retourner401 alors que
+le serveur, son MCP et le SID existant sont accessibles. Ce seul résultat
+ne prouve ni panne du serveur ni session inutilisable. Un nouveau SID ne
+répare pas un chemin d’authentification absent.
+
+Résoudre le module `scripts/cgpt-approval-bridge-opencode-client.mjs` du plugin
+actuellement installé ;ne pas conserver un chemin de cache d’ancienne version.
+L’orchestrateur utilise le client distribué depuis son outil d’exécution local :
+
+```javascript
+const { createOpenCodeV2ClientFromEnv } = await import(clientModuleUrl);
+const client = createOpenCodeV2ClientFromEnv({ directory: workspace, baseUrl });
+const server = await client.info(true);
+const session = await client.session(existingSessionId, workspace);
+```
+
+Ces deux contrôles sont des GET, sans prompt, nouveau SID ou effet métier.
+Le client fournit l’authentification en consommant localement le credential
+privé du profil d’exécution. Sa valeur n’est ni demandée au développeur,
+ouverte par l’agent, affichée, copiée dans un prompt ou transmise au modèle.
+Utiliser ce mécanisme ne signifie pas transmettre le secret au LLM.
+Ne pas remplacer le client par un curl avec secret en argument ni ajouter
+une nouvelle configuration lorsque le credential existant fonctionne.
+
+Si le client authentifié échoue aussi, conserver son code filtré et vérifier
+la configuration/identité du service selon technical-startup.md. Ne pas
+supposer que tout401 vient d’un header absent. Si l’outil d’exécution local
+est réellement absent, nommer cette capacité manquante ;l’absence d’un outil
+MCP nommé CAB dans Codex ne suffit pas à établir ce manque. Ne pas désactiver
+l’authentification, changer le credential ou migrer le SID sur ce seul constat.
+
 ## Initialisation technique et identité du RUN
 
 1. Fixer le projet, le répertoire absolu, le change, les critères, les limites
