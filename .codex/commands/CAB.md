@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.12
+version: 2.2.13
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -42,3 +42,7 @@ si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
 par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
 
 Pour un diagnostic ou une demande de correctif, lire `references/incident-triage.md` ;un signalement n’autorise pas implicitement un prévol ou un effet supplémentaire.
+
+Pour un changement explicite de SID dans le même RUN avec historique protégé,
+lire `references/session-handoff.md`. Les commandes run/resume ne réalisent
+pas cette transition implicitement.

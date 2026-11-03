@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.12
+# Index du protocole CAB 2.2.13
 
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées
@@ -27,3 +27,5 @@ une décision réservée ne justifie pas le gel de ressources indépendantes.
 Reprises dans le périmètre du change : [autonomous-recovery](autonomous-recovery.md), autorité de revue, reçus de refus, sondes de port et extension disjointe.
 
 Avant une demande de correctif, appliquer le [triage des incidents](incident-triage.md). Un faux positif établi complète la référence canonique si nécessaire, sans nouvelle autorisation métier.
+
+Changement de session de pilotage avec historique protégé : [session-handoff](session-handoff.md).

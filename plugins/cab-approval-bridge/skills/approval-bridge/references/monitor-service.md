@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 2.2.12
+# Service web de monitoring — CAB 2.2.13
 
 Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace

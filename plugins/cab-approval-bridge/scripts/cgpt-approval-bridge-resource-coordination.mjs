@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.12';
+export const VERSION = '2.2.13';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -99,7 +99,7 @@ export class ResourceRunRegistry extends RunRegistry {
   validateResourceState(state) {
     const fail = () => { throw new CoordinationError('registry-restoration-invalid'); };
     if (record(state)) { state.legacySources ??= []; state.legacyHandoffs ??= []; }
-    if (!onlyKeys(state, ['protocol','sequence','revisions','operations','accesses','publications','global','globalHistory','legacy','legacySources','legacyHandoffs','testReservations']) || state.protocol !== COORDINATION_PROTOCOL ||
+    if (!onlyKeys(state, ['protocol','sequence','revisions','operations','accesses','publications','global','globalHistory','legacy','legacySources','legacyHandoffs','testReservations','sessionHandoffs']) || state.protocol !== COORDINATION_PROTOCOL ||
         !Number.isSafeInteger(state.sequence) || state.sequence < 0 ||
         !['revisions', 'operations', 'accesses', 'publications'].every((key) => record(state[key])) ||
         !Array.isArray(state.globalHistory) || (state.global !== null && !record(state.global))) fail();
@@ -110,6 +110,28 @@ export class ResourceRunRegistry extends RunRegistry {
         !id(receipt.transactionId) || !hash(receipt.inputDigest) || !hash(receipt.sourceDigest) || !hash(receipt.authorizationDigest) ||
         !hash(receipt.evidenceDigest) || !Number.isSafeInteger(receipt.globalGeneration) || !Number.isFinite(Date.parse(receipt.at))) ||
       (state.legacySources.length && [...this.runs.values()].some((run) => run.state === 'RESERVED'))) fail();
+    if (state.sessionHandoffs !== undefined) {
+      if (!record(state.sessionHandoffs)) fail();
+      for (const [key, receipt] of Object.entries(state.sessionHandoffs)) {
+        const owner = [...this.runs.values(), ...this.history].find(r => r.runId === receipt?.runId && r.contextId === receipt?.contextId);
+        if (!onlyKeys(receipt, ['handoffId','runId','contextId','version','jobId','sourceSessionId','sessionId',
+            'inputDigest','checkpointDigest','boundaryDigest','inventoryDigest','reason','evidenceDigest',
+            'state','preparedAt','committedAt','completedAt','abortedAt','abortDigest']) || !id(key) || receipt.handoffId !== key || !owner ||
+            !id(receipt.jobId) || !Number.isSafeInteger(receipt.version) || receipt.version < receipt.contextId || receipt.version > owner.version ||
+            ![receipt.sourceSessionId, receipt.sessionId].every(s => typeof s === 'string' && /^ses_[A-Za-z0-9_-]+$/.test(s)) ||
+            receipt.sourceSessionId === receipt.sessionId ||
+            !['inputDigest','checkpointDigest','boundaryDigest','inventoryDigest','evidenceDigest'].every(k => hash(receipt[k])) ||
+            typeof receipt.reason !== 'string' || !receipt.reason.length || receipt.reason.length > 500 ||
+            !['PREPARED','COMMITTED','DONE','ABORTED'].includes(receipt.state) || !Number.isFinite(Date.parse(receipt.preparedAt)) ||
+            (['COMMITTED','DONE'].includes(receipt.state) && !Number.isFinite(Date.parse(receipt.committedAt))) ||
+            (receipt.state === 'ABORTED' && (!hash(receipt.abortDigest) || !Number.isFinite(Date.parse(receipt.abortedAt)) || receipt.committedAt !== undefined)) ||
+            (receipt.state === 'DONE' && !Number.isFinite(Date.parse(receipt.completedAt)))) fail();
+        if (['PREPARED','COMMITTED'].includes(receipt.state) && (owner.state !== 'RESERVED' ||
+            owner.sessionId !== (receipt.state === 'PREPARED' ? receipt.sourceSessionId : receipt.sessionId))) fail();
+      }
+      const pending = Object.values(state.sessionHandoffs).filter(h => ['PREPARED','COMMITTED'].includes(h.state));
+      if (pending.some((h,i) => pending.slice(i+1).some(other => h.runId === other.runId && h.contextId === other.contextId))) fail();
+    }
     for (const run of this.runs.values()) if (run.pendingWrites !== undefined &&
       (!record(run.pendingWrites) || Object.entries(run.pendingWrites).some(([key, value]) =>
         typeof key !== 'string' || !Number.isSafeInteger(value) || value < 0 || value > state.sequence))) fail();
@@ -671,6 +693,10 @@ export class ResourceRunRegistry extends RunRegistry {
       run.changeId === dependency && run.state === 'DELIVERED')) throw new CoordinationError('dependency-not-delivered');
   }
   reserve(payload) {
+    if (Object.values(this.resourceState.sessionHandoffs || {}).some(h => h.state !== 'ABORTED' &&
+        this.runs.get(h.runId)?.state === 'RESERVED' &&
+        (h.sourceSessionId === payload?.sessionId || h.state === 'PREPARED' && h.sessionId === payload?.sessionId)))
+      throw new CoordinationError('session-handoff-session-reserved');
     const previous = this.runs.get(payload?.runId);
     // A closed generation keeps its suspension as history, not as a new admission guard.
     this.admission(previous?.state === 'RESERVED' ? payload.runId : undefined);
@@ -1054,6 +1080,8 @@ export class ResourceRunRegistry extends RunRegistry {
       if (!(requested.mode === 'write' || held.mode === 'write') || !overlaps(requested.key, held.key)) continue;
       const timeoutQuarantineRead = candidate.runId === existing.runId &&
         candidate.contextId === existing.contextId && requested.mode === 'read' && held.mode === 'write' &&
+        candidate.operationIds.every(id => this.resourceState.operations[id]?.sessionId ===
+          this.resourceState.operations[existing.timeoutQuarantine?.operationId]?.sessionId) &&
         requested.key === held.key && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(requested.key) &&
         this.validTimeoutQuarantine(existing);
       if (!timeoutQuarantineRead) return true;
@@ -1119,6 +1147,11 @@ export class ResourceRunRegistry extends RunRegistry {
   operationAdmission(runId, operation, requestId, stage = 'prepare') {
     const op = this.resourceState.operations[operation.operationId];
     this.admission(runId, op?.maintenancePreflight && operation.kind === 'bash' && operation.target === '/usr/bin/true');
+    if (Object.values(this.resourceState.sessionHandoffs || {}).some(h => h.runId === runId &&
+        h.contextId === this.runs.get(runId)?.contextId &&
+        h.state !== 'ABORTED' && (h.state !== 'DONE' || h.sourceSessionId === operation.sessionId))) {
+      throw new CoordinationError('session-handoff-permission-revoked');
+    }
     this.scope(runId, operation.reservationVersion, operation.resources);
     this.testsForOperation(runId, operation.resources);
     if (!op || op.requestId !== requestId || op.operationDigest !== operation.operationDigest ||
@@ -1128,6 +1161,8 @@ export class ResourceRunRegistry extends RunRegistry {
     if (stage === 'prepare') return true;
     if (op.rejectionOnly) throw new CoordinationError('notification-reconciliation-rejection-only');
     let access = this.resourceState.accesses[op.accessId];
+    if (access?.operationIds.some(id => this.resourceState.operations[id]?.sessionId !== op.sessionId))
+      throw new CoordinationError('session-handoff-historical-access-protected');
     if (!access && op.accessId === op.operationId && this.isExclusive(this.runs.get(runId), op.resources)) {
       access = this.acquireAccess(runId, { operationId: op.accessId, version: op.version, resources: op.resources,
         expectedRevisions: op.expectedRevisions, operationDigest: op.operationDigest, operationIds: [op.operationId] }, true);
@@ -1615,6 +1650,95 @@ export class ResourceRunRegistry extends RunRegistry {
     this.mutable();
     if (this.unresolvedAccess(runId)) throw new CoordinationError('run-accesses-unresolved');
     return super.transfer(runId, sessionId);
+  }
+  sessionHandoffs(runId) {
+    const run = this.runs.get(runId);
+    return copy(Object.values(this.resourceState.sessionHandoffs || {}).filter(h =>
+      h.runId === runId && h.contextId === run?.contextId));
+  }
+  sessionHandoffInventory(runId) {
+    const run = this.runs.get(runId);
+    const scoped = entries => Object.values(entries || {}).filter(e => e.runId === runId && e.contextId === run?.contextId);
+    return digest({run, operations:scoped(this.resourceState.operations), accesses:scoped(this.resourceState.accesses),
+      tests:scoped(this.resourceState.testReservations)});
+  }
+  prepareSessionHandoff(runId, payload) {
+    this.admission(runId);
+    const run = this.owned(runId, payload.version);
+    if (!onlyKeys(payload,['handoffId','ownerId','version','jobId','expectedSessionId','sessionId','checkpointDigest','boundaryDigest','reason','evidence']) ||
+        !id(payload.handoffId) || !id(payload.jobId) || payload.ownerId !== run.ownerId ||
+        payload.expectedSessionId !== run.sessionId || !/^ses_[A-Za-z0-9_-]+$/.test(payload.sessionId || '') ||
+        payload.sessionId === run.sessionId || !hash(payload.checkpointDigest) || !hash(payload.boundaryDigest) ||
+        typeof payload.reason !== 'string' || !payload.reason.length || payload.reason.length > 500) {
+      throw new CoordinationError('session-handoff-contract-invalid',400);
+    }
+    evidence(payload.evidence);
+    const prior = this.resourceState.sessionHandoffs?.[payload.handoffId];
+    if (prior) {
+      if (prior.runId !== runId || prior.contextId !== run.contextId || prior.inputDigest !== digest(payload))
+        throw new CoordinationError('session-handoff-replay-divergent');
+      return copy(prior);
+    }
+    if (this.sessionHandoffs(runId).some(h => !['DONE','ABORTED'].includes(h.state))) throw new CoordinationError('session-handoff-pending');
+    if ([...this.runs.values(), ...this.history].some(r => r.sessionId === payload.sessionId) ||
+        Object.values(this.resourceState.operations).some(o => o.sessionId === payload.sessionId) ||
+        Object.values(this.resourceState.sessionHandoffs || {}).some(h =>
+          [h.sessionId,h.sourceSessionId].includes(payload.sessionId))) throw new CoordinationError('session-handoff-session-reused');
+    for (const op of Object.values(this.resourceState.operations).filter(o => o.runId === runId && o.contextId === run.contextId)) {
+      if (op.native && !op.native.onceAcknowledged || ['ISSUING','UNKNOWN'].includes(op.state) && !op.native?.onceAcknowledged)
+        throw new CoordinationError('session-handoff-native-intent-unresolved');
+      if (op.native?.onceAcknowledged && !['COMPLETED','CANCELLED'].includes(op.state) &&
+          !Object.values(this.resourceState.accesses).some(a => active(a) && a.operationIds.includes(op.operationId)))
+        throw new CoordinationError('session-handoff-effect-unprotected');
+    }
+    const receipt = {handoffId:payload.handoffId,runId,contextId:run.contextId,version:run.version,jobId:payload.jobId,
+      sourceSessionId:run.sessionId,sessionId:payload.sessionId,inputDigest:digest(payload),checkpointDigest:payload.checkpointDigest,
+      boundaryDigest:payload.boundaryDigest,inventoryDigest:this.sessionHandoffInventory(runId),reason:payload.reason,
+      evidenceDigest:digest(payload.evidence),state:'PREPARED',preparedAt:now()};
+    (this.resourceState.sessionHandoffs ||= {})[receipt.handoffId] = receipt;
+    this.persist(); return copy(receipt);
+  }
+  sessionHandoffReplay(runId, payload) {
+    const receipt = this.resourceState.sessionHandoffs?.[payload.handoffId];
+    if (!receipt) return null;
+    const run = this.runs.get(runId);
+    if (receipt.runId !== runId || receipt.contextId !== run?.contextId || receipt.inputDigest !== digest(payload))
+      throw new CoordinationError('session-handoff-replay-divergent');
+    return copy(receipt);
+  }
+  commitSessionHandoff(runId, handoffId) {
+    this.admission(runId);
+    const receipt = this.resourceState.sessionHandoffs?.[handoffId];
+    const run = this.runs.get(runId);
+    if (!receipt || receipt.runId !== runId || receipt.contextId !== run?.contextId) throw new CoordinationError('session-handoff-not-prepared');
+    if (receipt.state !== 'PREPARED') return copy(receipt);
+    if (run.sessionId !== receipt.sourceSessionId || this.sessionHandoffInventory(runId) !== receipt.inventoryDigest)
+      throw new CoordinationError('session-handoff-inventory-divergent');
+    // One registry write commits pilot identity and receipt. Historical identities and fences do not move.
+    run.sessionId = receipt.sessionId;
+    receipt.state = 'COMMITTED'; receipt.committedAt = now();
+    this.persist(); return copy(receipt);
+  }
+  completeSessionHandoff(runId, handoffId) {
+    this.mutable();
+    const receipt = this.resourceState.sessionHandoffs?.[handoffId];
+    const run = this.runs.get(runId);
+    if (!receipt || receipt.runId !== runId || receipt.contextId !== run?.contextId || !['COMMITTED','DONE'].includes(receipt.state) ||
+        run.sessionId !== receipt.sessionId) throw new CoordinationError('session-handoff-not-committed');
+    if (receipt.state !== 'DONE') { receipt.state = 'DONE'; receipt.completedAt = now(); this.persist(); }
+    return copy(receipt);
+  }
+  abortSessionHandoff(runId, payload) {
+    this.mutable(); evidence(payload.evidence);
+    const run = this.owned(runId,payload.version), receipt = this.resourceState.sessionHandoffs?.[payload.handoffId];
+    if (!onlyKeys(payload,['handoffId','ownerId','version','evidence']) || payload.ownerId !== run.ownerId ||
+        !receipt || receipt.runId !== runId || receipt.contextId !== run.contextId ||
+        !['PREPARED','ABORTED'].includes(receipt.state) || run.sessionId !== receipt.sourceSessionId)
+      throw new CoordinationError('session-handoff-abort-forbidden');
+    if (receipt.state === 'ABORTED') {
+      if (receipt.abortDigest !== digest(payload)) throw new CoordinationError('session-handoff-replay-divergent');
+    } else { receipt.state = 'ABORTED'; receipt.abortedAt = now(); receipt.abortDigest = digest(payload); this.persist(); }
+    return copy(receipt);
   }
   suspend(runId, payload) {
     this.mutable(); evidence(payload.evidence);

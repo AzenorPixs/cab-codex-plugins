@@ -644,5 +644,35 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.equal(client.permissionReplies(splitSession.id).receipts.find(r=>r.permissionId===split.id).state,'ACKNOWLEDGED');
     console.log(JSON.stringify({multipartShellRejection:true,resources:split.resources.length,noEffect:true,privateAck:true,noOnce:true}));
 
+    // Same-RUN pilot handoff with a real V2 candidate. Historical approved mismatch/access stays protected.
+    await http('/runs/native-code/job/progress',{jobId:'job-code',currentCabMandate:'',lastProvenMilestone:'native handoff checkpoint'});
+    const pilotCandidate=await makeSession('same RUN handoff candidate'),pilotEnd=dispatched+1;
+    queue.push(mcp('broker_readiness',{run_id:run.runId}));
+    await client.prompt(pilotCandidate.id,'Only read the CAB readiness for this RUN.');
+    await until(async()=>!(await client.activeSessions())[pilotCandidate.id]&&dispatched===pilotEnd,'pilot candidate readiness');
+    const handoffBefore=await http('/runs'), historicalOperation=handoffBefore.coordination.operations[mismatch.operation_id];
+    let pilotPreview;
+    await until(async()=>{try{pilotPreview=await http('/runs/native-code/session-handoff?sessionId='+pilotCandidate.id);return true;}catch{return false;}},
+      'pilot handoff preview',async()=>({status:await http('/runs/native-code/status'),controller:controlLog.slice(-1000)}));
+    const pilotPayload={handoffId:'native-pilot-handoff',ownerId:run.ownerId,version:pilotPreview.version,jobId:'job-code',
+      expectedSessionId:retryCandidate.id,sessionId:pilotCandidate.id,checkpointDigest:pilotPreview.checkpointDigest,
+      boundaryDigest:pilotPreview.boundaryDigest,reason:'Synthetic same RUN continuation',evidence:['real V2 native readiness and retained historical access']};
+    const pilotReceipt=await http('/runs/native-code/session-handoff',pilotPayload);assert.equal(pilotReceipt.state,'DONE');
+    assert.deepEqual(await http('/runs/native-code/session-handoff',pilotPayload),pilotReceipt);
+    const handoffAfter=await http('/runs'),pilotJob=await http('/runs/native-code/job');
+    assert.equal(pilotJob.sessionId,pilotCandidate.id);assert.equal(pilotJob.lastProvenMilestone,'native handoff checkpoint');
+    assert.ok(pilotJob.revokedSessions.includes(retryCandidate.id));
+    assert.deepEqual(handoffAfter.coordination.operations[mismatch.operation_id],historicalOperation);
+    assert.deepEqual(handoffAfter.coordination.accesses,handoffBefore.coordination.accesses);
+    assert.deepEqual(handoffAfter.coordination.testReservations,handoffBefore.coordination.testReservations);
+    assert.equal((await client.info(true)).pid,serverPidBeforeProbe);
+    await http('/transport/prepare',{transactionId:'native-after-pilot-handoff'});
+    const afterPilotStopped=once(controller,'exit');controller.kill('SIGTERM');await afterPilotStopped;startController();
+    await until(async()=>{try{return (await http('/transport/status')).adopted===true;}catch{return false;}},'adopt registry containing pilot receipt');
+    assert.equal((await http('/runs/native-code/job')).sessionId,pilotCandidate.id);
+    assert.deepEqual((await http('/runs/native-code/session-handoff/receipts')).receipts.at(-1),pilotReceipt);
+    assert.equal(dispatched,pilotEnd,'restart and replay issue no provider or native effect');
+    console.log(JSON.stringify({sameRunPilotHandoff:true,historicalApprovalsAndAccessesPreserved:true,idempotentReceipt:true,noHandoffNativePermission:true,certifiedRestartWithHandoffReceipt:true}));
+
 
   });

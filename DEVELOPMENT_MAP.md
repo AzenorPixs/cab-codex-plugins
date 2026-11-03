@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Changement de session SCM 2.2.13
+
+[handoff-pilot-session-with-protected-history](openspec/changes/archive/2026-11-03-handoff-pilot-session-with-protected-history/), code non attribué : ARCHIVÉ, source 2.2.13 qualifiée.
+Même RUN/job/change/checkpoint ; 461 cas uniques réussis, historique protégé.
+Publication et activation distinctes.
+
 ## Correctif SCM courant2.2.12
 
 [withdraw-rejected-unissued-native-edit](openspec/changes/archive/2026-11-03-withdraw-rejected-unissued-native-edit/), code non attribué :ARCHIVÉ, source2.2.12 qualifiée.

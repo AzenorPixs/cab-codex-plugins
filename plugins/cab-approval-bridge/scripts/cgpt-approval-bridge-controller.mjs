@@ -27,7 +27,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedEditWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.12";
+const version = "2.2.13";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -331,6 +331,7 @@ function contextFor(run) {
     context.freezeTransport();
   }
   contexts.set(run.runId, context);
+  if (registry.sessionHandoffs(run.runId).some(h => !['DONE','ABORTED'].includes(h.state))) context.freezeTransport();
   context.start();
   if (sseState === 'connected') context.onConnect();
   return context;
@@ -407,8 +408,8 @@ function localIntegrationBlockers(runId) {
   return blockers;
 }
 async function nativeCohort() {
-  const entries = activeContexts().map(([runId, context]) => ({ runId, context,
-    directory: workspace, sessionId: context.publicJob()?.sessionId || registry.runs.get(runId).sessionId }));
+  const entries = activeContexts().flatMap(([runId, context]) =>
+    (context.observedSessions?.() || context.sessions()).map(sessionId => ({runId,context,directory:workspace,sessionId})));
   for (const source of registry.resourceState.legacySources) entries.push({ runId: null, context: null, ...source });
   for (const sessionId of legacy.sessions()) if (!entries.some((entry) => entry.sessionId === sessionId)) {
     entries.push({ runId: null, context: legacy, sessionId, directory: legacy.publicJob()?.directory || workspace });
@@ -439,7 +440,7 @@ async function nativeCohort() {
     const session = sessions[index];
     const {busy, permissions} = observations.find((observation) => observation.directory === entry.directory);
     if (session?.id !== entry.sessionId || session.directory !== entry.directory) throw new CoordinationError('native-session-divergent');
-    if (entry.context && !entry.context.sessions().includes(entry.sessionId)) throw new CoordinationError('native-observation-changed');
+    if (entry.context && !(entry.context.observedSessions?.() || entry.context.sessions()).includes(entry.sessionId)) throw new CoordinationError('native-observation-changed');
     if (busy[entry.sessionId] && busy[entry.sessionId].type !== 'idle') {
       blockers.push({ runId: entry.runId, sessionId: entry.sessionId, reason: 'native-session-busy' });
     }
@@ -676,6 +677,7 @@ async function restoreApprovedOperations(run, context) {
   const nativeSnapshots = new Map();
   try {
     const candidates = Object.values(registry.resourceState.operations).filter((op) => op.runId === run.runId &&
+      !context.publicJob()?.revokedSessions?.includes(op.sessionId) &&
       op.contextId === run.contextId && (['PREPARED','ISSUING','UNKNOWN'].includes(op.state) ||
         op.state === 'CANCELLED' && op.completionDigest &&
           (!op.decision || ['approved','rejected'].includes(op.decision.status))) &&
@@ -1892,6 +1894,17 @@ async function provedCodingModel(input, proof) {
 }
 for (const run of registry.runs.values()) if (run.state === 'RESERVED') {
   const context = contextFor(run);
+  const pending = registry.sessionHandoffs(run.runId).find(h => h.state === 'COMMITTED');
+  if (pending) {
+    try {
+      await context.applySessionHandoff(pending);
+      registry.completeSessionHandoff(run.runId,pending.handoffId);
+      if (runtimeMigration?.phase !== 'PREPARED') context.resumeTransport();
+    } catch {
+      context.freezeTransport();
+      observations.record('session-handoff-recovery-required',{runId:run.runId,handoffId:pending.handoffId});
+    }
+  }
   if(runtimeMigration?.phase!=='PREPARED')void restoreApprovedOperations(run, context);
 }
 if (contexts.size && legacy.publicJob()?.armed) throw new Error('Legacy job must be reconciled before concurrent RUNs.');
@@ -2237,6 +2250,69 @@ async function handleRequest(request, response) {
       const run = registry.runs.get(runId);
       if (!run || run.state !== 'RESERVED') throw new CoordinationError('run-not-reserved');
       observedRun = run;
+      if (request.method === 'POST' && registry.sessionHandoffs(runId).some(h => !['DONE','ABORTED'].includes(h.state)) &&
+          !['/session-handoff','/session-handoff/abort'].includes(url.pathname)) throw new CoordinationError('session-handoff-pending');
+      if (request.method === 'POST' && url.pathname === '/session-handoff/abort') {
+        guardContinuityRequest(request,new URL(request.url,'http://' + request.headers.host),server.address().port);
+        if (transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
+        const receipt = registry.abortSessionHandoff(runId,payload);
+        if (runtimeMigration?.phase !== 'PREPARED') context.resumeTransport();
+        json(response,200,receipt); return;
+      }
+      if (request.method === 'GET' && url.pathname === '/session-handoff/receipts') {
+        json(response,200,{runId,receipts:registry.sessionHandoffs(runId)}); return;
+      }
+      if (['GET','POST'].includes(request.method) && url.pathname === '/session-handoff') {
+        if (handoffIntent || runtimeMigration?.phase === 'PREPARED') throw new CoordinationError('transport-update-in-progress');
+        if (transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
+        if (request.method === 'POST') guardContinuityRequest(request,
+          new URL(request.url,'http://' + request.headers.host),server.address().port);
+        transitions.add(runId); transitionRun = runId;
+        context.freezeTransport();
+        try {
+          await context.flushCommunication();
+          const replay = request.method === 'POST' ? registry.sessionHandoffReplay(runId,payload) : null;
+          if (['DONE','ABORTED'].includes(replay?.state)) { json(response,200,replay); return; }
+          if (replay?.state === 'COMMITTED') {
+            await context.applySessionHandoff(replay);
+            json(response,200,registry.completeSessionHandoff(runId,replay.handoffId)); return;
+          }
+          const sessionId = request.method === 'GET' ? url.searchParams.get('sessionId') : payload.sessionId;
+          if (request.method === 'GET' && (url.searchParams.getAll('sessionId').length !== 1 ||
+              [...url.searchParams.keys()].some(k => k !== 'sessionId'))) throw new CoordinationError('session-handoff-query-invalid',400);
+          if ([...registry.runs.values(),...registry.history].some(r => r.runId !== runId && r.sessionId === sessionId) ||
+              activeContexts().some(([id,c]) => id !== runId && c.sessions().includes(sessionId)))
+            throw new CoordinationError('session-handoff-session-reused');
+          registry.admission(runId);
+          const job = context.publicJob();
+          if (!job || job.sessionId !== run.sessionId || request.method === 'POST' && job.jobId !== payload.jobId)
+            throw new CoordinationError('session-handoff-job-divergent');
+          const inventoryDigest = registry.sessionHandoffInventory(runId);
+          const historicalCalls = Object.values(registry.resourceState.operations).filter(o => o.runId === runId &&
+            o.contextId === run.contextId && o.native?.onceAcknowledged === true && !['COMPLETED','CANCELLED'].includes(o.state) &&
+            registry.accesses(runId).some(a => ['HELD','EXECUTING','UNKNOWN'].includes(a.state) && a.operationIds.includes(o.operationId)))
+            .map(o => ({...o.native,sessionId:o.sessionId}));
+          const first = await context.inspectSessionHandoff(sessionId,historicalCalls);
+          const second = await context.inspectSessionHandoff(sessionId,historicalCalls);
+          if (first.boundaryDigest !== second.boundaryDigest || inventoryDigest !== registry.sessionHandoffInventory(runId))
+            throw new CoordinationError('session-handoff-boundary-changed');
+          if (request.method === 'GET') {
+            json(response,200,{runId,jobId:job.jobId,ownerId:run.ownerId,version:run.version,
+              expectedSessionId:run.sessionId,sessionId,...second,inventoryDigest,
+              protectedAccesses:registry.accesses(runId).filter(a => ['HELD','WAITING','EXECUTING','UNKNOWN','STALE'].includes(a.state))
+                .map(a => ({accessId:a.accessId,state:a.state,resources:a.resources,fencing:a.fencing}))}); return;
+          }
+          if (payload.checkpointDigest !== second.checkpointDigest || payload.boundaryDigest !== second.boundaryDigest)
+            throw new CoordinationError('session-handoff-boundary-divergent');
+          registry.prepareSessionHandoff(runId,payload);
+          const committed = registry.commitSessionHandoff(runId,payload.handoffId);
+          await context.applySessionHandoff(committed);
+          json(response,201,registry.completeSessionHandoff(runId,payload.handoffId)); return;
+        } finally {
+          if (!registry.sessionHandoffs(runId).some(h => !['DONE','ABORTED'].includes(h.state)) && runtimeMigration?.phase !== 'PREPARED')
+            context.resumeTransport();
+        }
+      }
       if (request.method === 'GET' && url.pathname === '/recovery/port-probe-command') {
         if ([...url.searchParams.keys()].some(key => !['operationId','nonce','runtimeDirectory'].includes(key)) ||
             url.searchParams.getAll('operationId').length !== 1 || url.searchParams.getAll('nonce').length !== 1)
@@ -2963,7 +3039,7 @@ async function consumeEvents() {
       context.onConnect();
       const run = registry.runs.get(runId);
       if(runtimeMigration?.phase!=='PREPARED')void restoreApprovedOperations(run, context);
-      for (const session of context.sessions()) {void refreshBackgroundShells(runId,session);void refreshNativeUsage(runId,session);}
+      for (const session of (context.observedSessions?.() || context.sessions())) {void refreshBackgroundShells(runId,session);void refreshNativeUsage(runId,session);}
     }
     const decoder = new TextDecoder();
     let buffer = '';
@@ -2983,27 +3059,27 @@ async function consumeEvents() {
         const props = event.payload?.properties || event.properties || {};
         const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID || props.info?.id;
         const type = event.payload?.type || event.type;
-        if (session && activeContexts().some(([, context]) => context.sessions().includes(session))) {
+        if (session && activeContexts().some(([, context]) => (context.observedSessions?.() || context.sessions()).includes(session))) {
           nativeSessionGenerations.set(session, (nativeSessionGenerations.get(session) || 0) + 1);
         }
         if (['session.status', 'session.idle', 'session.updated', 'session.deleted', 'session.inbox.enqueued', 'session.execution.started', 'session.execution.succeeded', 'session.execution.failed', 'session.execution.interrupted', 'permission.asked', 'permission.replied'].includes(type) &&
             (legacy.sessions().includes(session) || registry.resourceState.legacySources.some((source) => source.sessionId === session) ||
-              activeContexts().some(([, context]) => context.sessions().includes(session)))) nativeGeneration++;
+              activeContexts().some(([, context]) => (context.observedSessions?.() || context.sessions()).includes(session)))) nativeGeneration++;
         for (const [, context] of activeContexts()) {
           if (context.sessions().includes(session)) context.onEvent(event);
         }
         if (props.part) for (const [runId, context] of activeContexts()) {
-          if (context.sessions().includes(session)) observeNativeCompletion(runId, props.part, session);
+          if ((context.observedSessions?.() || context.sessions()).includes(session)) observeNativeCompletion(runId, props.part, session);
         }
         if (['shell.exited','session.shell.ended'].includes(type)) {
           for (const [runId,context] of activeContexts()) {
-            for (const ownedSession of context.sessions()) void refreshBackgroundShells(runId,ownedSession);
+            for (const ownedSession of (context.observedSessions?.() || context.sessions())) void refreshBackgroundShells(runId,ownedSession);
           }
         }
         if (['session.idle', 'session.execution.succeeded', 'session.execution.failed',
           'session.execution.interrupted'].includes(type)) {
           for (const [runId, context] of activeContexts()) {
-            if (context.sessions().includes(session)) {
+            if ((context.observedSessions?.() || context.sessions()).includes(session)) {
               void restoreApprovedOperations(registry.runs.get(runId), context);
               void reconcileNativeCompletionsFromTranscript(runId, session);
               void refreshNativeUsage(runId,session);
