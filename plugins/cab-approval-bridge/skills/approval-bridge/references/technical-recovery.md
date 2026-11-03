@@ -1,4 +1,4 @@
-# Précisions recovery — CAB 2.2.3
+# Précisions recovery — CAB 2.2.4
 
 ## Récupération contrôlée de session dans le même RUN
 
@@ -33,8 +33,9 @@ n'invente aucun gate terminal. Un prévol divergent suit la procédure sans
 purge décrite dans
 « Prévol de récupération divergent dans la même session » ci-dessous.
 Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
-locale du prévol : si elles sont perdues, la récupération reste refusée et
-nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
+locale du prévol : si elles sont perdues, le périmètre reste protégé et
+l’orchestrateur instruit les voies de réconciliation qualifiées dans son mandat.
+Une décision du développeur est demandée seulement si la suite sort du change validé. L'API ne remplace ni une session révoquée ni
 un prévol échoué par une nouvelle tentative implicite.
 
 

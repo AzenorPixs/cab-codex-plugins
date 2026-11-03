@@ -2,7 +2,7 @@ import { EfficiencyLedger } from './cgpt-approval-bridge-efficiency.mjs';
 import { ShellLifecycle } from './cgpt-approval-bridge-shell-lifecycle.mjs';
 import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, processIdentity, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { existsSync, realpathSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { createJobContext, commandLengthLimit, checkCommandLength, VERSION as JOB_CONTEXT_VERSION } from './cgpt-approval-bridge-job-context.mjs';
@@ -20,8 +20,12 @@ import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent, nativeToolInputD
 import {ShellStageStore,assertShellDelivery,VERSION as SHELL_STAGE_VERSION} from './cgpt-approval-bridge-shell-stage.mjs';
 import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from './cgpt-approval-bridge-continuity.mjs';
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
+import { NativeInstances } from './cgpt-approval-bridge-native-instances.mjs';
+import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.mjs';
+import { nativeEvidenceView, validateReadOnlyReview, reviewedValidationProjection } from './cgpt-approval-bridge-recovery-evidence.mjs';
+import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.3";
+const version = "2.2.4";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -118,6 +122,8 @@ const shellStages=new ShellStageStore(join(stateDirectory,'shell-stages.json'));
 const efficiency = new EfficiencyLedger(join(stateDirectory,'protocol-efficiency.json'));
 const usageRefreshes = new Set();
 const recovery = new RecoveryCoordinator(registry, join(stateDirectory, 'recovery-policies.json'));
+const manifestExtensions = new ManifestExtensions(registry, join(stateDirectory, 'manifest-extensions.json'));
+const nativeInstances = new NativeInstances(workspace, join(stateDirectory, 'native-instances.json'));
 statistics.registry(registry.snapshot());
 const statisticsMaintenance = new StatisticsMaintenance(statistics, { referenced: () => registry.snapshot().runs });
 const contexts = new Map();
@@ -330,8 +336,11 @@ function statusFor(runId, context) {
             : accesses.some((a) => ['HELD','EXECUTING'].includes(a.state) && registry.restoredAccesses.has(a.accessId))
               ? 'access-reconciliation-required'
               : accesses.some((a) => a.state === 'STALE' && a.version === run.version) ? 'resource-revision-stale' : null;
+  const unresolvedOperations = Object.values(registry.resourceState.operations).filter(op =>
+    op.runId === runId && op.contextId === run.contextId && !['COMPLETED','CANCELLED'].includes(op.state));
   return { ...status, admission:admissionSnapshot(runId), frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
-    notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation(), coordination: { reason, integrationReady: run.integrationReady,
+    notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation() || unresolvedOperations.length > 0,
+    hasUnresolvedValidation: context.hasUnresolvedValidation(), unresolvedOperationCount: unresolvedOperations.length, coordination: { reason, integrationReady: run.integrationReady,
     referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion,
     phase: run.phase, protocol: registry.snapshot().coordinationProtocol, global, suspension: run.suspension || null,
     accesses, testResourceProtocol: TEST_RESOURCE_PROTOCOL, testReservations,
@@ -457,6 +466,7 @@ async function checkNative(sessionId, idle = false) {
   try { session = await openCode.session(sessionId, workspace); }
   catch { throw new CoordinationError('native-session-unavailable'); }
   if (session.id !== sessionId || session.directory !== workspace) throw new CoordinationError('native-session-divergent');
+  try { await nativeInstances.observe(await openCode.info(true)); } catch { observations.record('native-instance-observation-unavailable', {}); }
   if (idle) {
     const [busy, permissions] = await Promise.all([openCode.sessionStatus(workspace),
       openCode.permissions(workspace, { sessionIds: [sessionId] })]);
@@ -983,7 +993,7 @@ function exactCancelApprovalWrapper(wrapper, approval) {
   const expected=`const r = await search({query: "cancel_approval", namespace: "cgpt-validation", limit: 20}); if (r.items[0].path !== 'tools["cgpt-validation"].cancel_approval') throw new Error("UNEXPECTED_PATH"); return await tools["cgpt-validation"].cancel_approval({approval_id: ${JSON.stringify(approval.approval_id)}});`;
   return code===expected;
 }
-function nativeCancelledValidationProof(parts, approval) {
+function nativeCancelledValidationProof(parts, approval, { allowApprovedHistory = false } = {}) {
   const allowed = new Set(['cgpt-validation.request_validation','cgpt-validation.cancel_approval',
     'cgpt-validation.get_approval','cgpt-validation.poll_approval','search']);
   const entries = [];
@@ -1042,6 +1052,10 @@ function nativeCancelledValidationProof(parts, approval) {
           proofHash(nativeIdentity(result))!==proofHash(nativeIdentity(approval)))return null;
       continue;
     }
+    if (allowApprovedHistory && result?.status === 'APPROVED' && result.reviewer === 'CGPT' &&
+        result.requestId === approval.requestId && result.approval_id === approval.approval_id &&
+        proofHash(nativeIdentity(result)) === proofHash(nativeIdentity(approval)) &&
+        cancels.some(cancel => suffix.indexOf(cancel) > suffix.indexOf(entry))) continue;
     if (result?.status !== 'CANCELLED' || result.cancelled_by !== 'OC' ||
         result.requestId !== approval.requestId || result.approval_id !== approval.approval_id ||
         proofHash(nativeIdentity(result)) !== proofHash(nativeIdentity(approval))) return null;
@@ -1137,6 +1151,175 @@ function terminalTurnNoEffectCandidate(operation){
     !operation.nativeResult&&operation.nativeRecovery?.boundary==='TOOL_TERMINAL_UNCLASSIFIED'&&
     operation.nativeRecovery.permissionId===null&&operation.nativeRecovery.callId===null&&
     operation.onceAcknowledged!==true&&!operation.testReservationId;
+}
+async function collectRecoveryEvidence(run, operation) {
+  if (!operation || operation.runId !== run.runId || operation.contextId !== run.contextId)
+    throw new CoordinationError('recovery-target-divergent');
+  const generation = nativeSessionGenerations.get(operation.sessionId) || 0;
+  const native = await openCode.info(true);
+  const [session, messages, permissions, activeSessions] = await Promise.all([
+    openCode.session(operation.sessionId, run.directory), openCode.messages(operation.sessionId, run.directory),
+    openCode.permissions(run.directory, { sessionIds: [operation.sessionId] }), openCode.sessionStatus(run.directory),
+  ]);
+  if (session.id !== operation.sessionId || session.directory !== run.directory ||
+      generation !== (nativeSessionGenerations.get(operation.sessionId) || 0))
+    throw new CoordinationError('recovery-native-boundary-changed');
+  const allParts = messages.flatMap(message => Array.isArray(message.parts) ? message.parts : []);
+  const entries = nativeRequestValidationEntries(allParts, operation.requestId).filter(entry => entry.status === 'completed');
+  if (entries.length !== 1) throw new CoordinationError('recovery-native-request-unverified');
+  const approval = entries[0].input;
+  const owner = registry.requestOwners[operation.requestId];
+  const identity = createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex');
+  if (approval.operation_id !== operation.operationId || approval.operation_digest !== operation.operationDigest ||
+      approval.run_id !== run.runId || approval.change_id !== run.changeId || approval.directory !== run.directory ||
+      approval.session_id !== operation.sessionId || approval.reservation_version !== operation.version ||
+      owner?.runId !== run.runId || owner.digest !== identity) throw new CoordinationError('recovery-native-identity-divergent');
+  const parts = allParts.slice(allParts.indexOf(entries[0].part));
+  let journal = null, journalError = null, replies = { receipts: [], truncated: false }, replyError = null;
+  try { journal = await openCode.sessionEventLog(operation.sessionId, run.directory); }
+  catch (cause) { journalError = /^[a-z][a-z0-9-]{1,99}$/.test(cause.code || '') ? cause.code : 'native-journal-unavailable'; }
+  try { replies = openCode.permissionReplies(operation.sessionId, run.directory); }
+  catch { replyError = 'permission-reply-journal-unavailable'; }
+  const view = nativeEvidenceView({ run, operation, approval, parts, native, activeSessions, permissions, journal, replies });
+  // Availability errors are part of the boundary, never evidence of an absent effect.
+  let nativeInstanceEvidence = null;
+  if (operation.native) { try { nativeInstanceEvidence = await nativeInstances.proof(native, operation.native.startedAt); } catch { /* An unavailable instance record never proves a boundary. */ } }
+  const publicView = { ...view, journalError, replyError, nativeInstanceEvidence,
+    nativeInstanceEvidenceStatus: operation.native ? nativeInstanceEvidence ? 'AVAILABLE' : 'PRIOR_INSTANCE_EVIDENCE_MISSING' : 'NOT_REQUIRED_FOR_UNISSUED_VALIDATION' };
+  publicView.nativeBoundaryDigest = proofHash(publicView);
+  return { view: publicView, approval, parts, messages, generation };
+}
+
+async function cancelReviewedValidation(run, context, payload) {
+  registry.admission(run.runId);
+  if (!record(payload) || !payload.review || !/^[a-f0-9]{64}$/.test(payload.nativeBoundaryDigest || '') ||
+      typeof payload.operationId !== 'string') throw new CoordinationError('recovery-readonly-review-invalid');
+  const operation = registry.resourceState.operations[payload.operationId];
+  const linkedAccess = operation && Object.values(registry.resourceState.accesses).some(access =>
+    access.accessId === operation.accessId || access.operationIds.includes(operation.operationId));
+  if (operation?.runId !== run.runId || operation.contextId !== run.contextId || operation.state !== 'PREPARED' ||
+      operation.decision?.status !== 'approved' || operation.native || linkedAccess)
+    throw new CoordinationError('recovery-readonly-review-boundary-invalid');
+  const operationSnapshot = proofHash(operation);
+  const first = await collectRecoveryEvidence(run, operation);
+  if (first.view.nativeBoundaryDigest !== payload.nativeBoundaryDigest)
+    throw new CoordinationError('recovery-native-boundary-changed');
+  const review = validateReadOnlyReview(first.view, payload.review, run);
+  for (const source of payload.review.sourceFiles) {
+    const resource = { key: 'file:' + source.path, mode: 'read' };
+    if (!operation.resources.some(scope => (scope.key === resource.key || scope.key === 'project:*' ||
+        scope.key.startsWith('file:') && resource.key.startsWith(scope.key + '/'))))
+      throw new CoordinationError('recovery-readonly-review-source-outside-operation');
+    registry.scope(run.runId, run.version, [resource]);
+    const observed = await openCode.sourceRead(operation.sessionId, source.path, { directory: run.directory });
+    if (observed.sha256 !== source.sha256) throw new CoordinationError('recovery-readonly-review-source-divergent');
+  }
+  const rejected = new Set(review.callIds);
+  const filtered = first.parts.filter(part => !rejected.has(part.callID || part.callId));
+  const projected = reviewedValidationProjection(filtered, first.approval, payload.review.wrapperReviews, {
+    run, sameApproval: value => proofHash(nativeIdentity(value)) === proofHash(nativeIdentity(first.approval)),
+    notAdmitted: requestId => !registry.requestOwners[requestId],
+  });
+  const cancellation = nativeCancelledValidationProof(projected, first.approval, { allowApprovedHistory: true });
+  if (!cancellation) throw new CoordinationError('recovery-native-cancellation-unverified');
+  const second = await collectRecoveryEvidence(run, operation);
+  if (first.view.nativeBoundaryDigest !== second.view.nativeBoundaryDigest ||
+      proofHash(first.messages) !== proofHash(second.messages) || first.generation !== second.generation ||
+      proofHash(registry.resourceState.operations[operation.operationId]) !== operationSnapshot ||
+      generationChanged(operation.sessionId, first.generation))
+    throw new CoordinationError('recovery-native-boundary-changed');
+  validateReadOnlyReview(second.view, payload.review, run);
+  if (typeof context.verifyNativeCancelledValidation !== 'function' || context.publicStatus().recoveryRequired)
+    throw new CoordinationError('recovery-context-unavailable');
+  context.verifyNativeCancelledValidation(first.approval, cancellation);
+  const proofDigest = proofHash(payload);
+  registry.recordNativeCancelledValidation(run.runId, operation.operationId, proofDigest);
+  registry.reviewedReadOnlyOperations ||= new Set(); registry.reviewedReadOnlyOperations.add(operation.operationId);
+  context.restoreNativeCancelledValidation(first.approval, cancellation);
+  return { state: 'CANCELLED', operationId: operation.operationId, runId: run.runId, proofDigest,
+    evidenceAuthority: review.evidenceAuthority, executionOutcome: review.executionOutcome };
+}
+function generationChanged(sessionId, generation) {
+  return generation !== (nativeSessionGenerations.get(sessionId) || 0);
+}
+function portRecoveryCandidate(run, operationId) {
+  const op = registry.resourceState.operations[operationId], access = op && registry.resourceState.accesses[op.accessId];
+  if (!op || op.runId !== run.runId || op.contextId !== run.contextId || !['EXECUTING','UNKNOWN'].includes(op.state) ||
+      op.native?.onceAcknowledged !== true || op.nativeResult || op.resources.length !== 1 ||
+      op.resources[0].mode !== 'write' || !op.resources[0].key.startsWith('port:') ||
+      access?.timeoutQuarantine?.operationId !== operationId || access.operationIds.length !== 1)
+    throw new CoordinationError('port-recovery-boundary-invalid');
+  const port = Number(op.resources[0].key.split('/').at(-1));
+  if (!Number.isInteger(port) || port < 1 || port > 65535) throw new CoordinationError('port-recovery-boundary-invalid');
+  return { op, access, port, resourceKey: op.resources[0].key };
+}
+async function portProbeInfrastructure() {
+  if (!broker?.broker_process?.pid) return [];
+  const identity = await processIdentity(broker.broker_process.pid);
+  if (!identity || identity.state === 'Z') throw new CoordinationError('port-recovery-broker-identity-unavailable');
+  return [{ pid: identity.pid, startTime: identity.startTime }];
+}
+async function reconcilePortFromProbes(run, payload, actionId) {
+  registry.admission(run.runId); validatePortReview(payload.review, run.ownerId);
+  const { op, access, port, resourceKey } = portRecoveryCandidate(run, payload.operationId);
+  if (!Array.isArray(payload.probeOperationIds) || payload.probeOperationIds.length !== 2 ||
+      payload.probeOperationIds[0] === payload.probeOperationIds[1]) throw new CoordinationError('port-recovery-probes-invalid');
+  const operationSnapshot = proofHash({ op, access });
+  const first = await collectRecoveryEvidence(run, op);
+  if (payload.nativeBoundaryDigest !== first.view.nativeBoundaryDigest || !first.view.sessionIdle ||
+      first.view.pendingPermissionCount || payload.review.commandSha256 !== first.view.commandSha256)
+    throw new CoordinationError('port-recovery-native-boundary-changed');
+  const instance = first.view.nativeInstanceEvidence;
+  if (!instance) throw new CoordinationError('port-recovery-native-instance-unverified');
+  const originalParts = first.parts.filter(part => (part.callID || part.callId) === op.native.callId);
+  if (originalParts.length !== 1 || originalParts[0].state?.input?.background === true || !nativeTimedOutShellPart(op, originalParts[0], op.sessionId))
+    throw new CoordinationError('port-recovery-timeout-unverified');
+  if (!payload.review.sourceFiles.some(source => source.path === 'package.json' || source.path.endsWith('/package.json')))
+    throw new CoordinationError('port-recovery-source-scope-unverified');
+  for (const source of payload.review.sourceFiles) {
+    registry.scope(run.runId, run.version, [{ key: 'file:' + source.path, mode: 'read' }]);
+    const observed = await openCode.sourceRead(op.sessionId, source.path, { directory: run.directory });
+    if (observed.sha256 !== source.sha256) throw new CoordinationError('port-recovery-source-divergent');
+  }
+  const nativeIdentity = await processIdentity(first.view.nativePid);
+  if (!nativeIdentity) throw new CoordinationError('port-recovery-native-identity-unavailable');
+  const nativeUid = statSync('/proc/' + first.view.nativePid).uid;
+  const allParts = first.messages.flatMap(message => Array.isArray(message.parts) ? message.parts : []);
+  const captures = [];
+  for (const id of payload.probeOperationIds) {
+    const probe = registry.resourceState.operations[id], probeAccess = probe && registry.resourceState.accesses[probe.accessId];
+    if (!probe || probe.runId !== run.runId || probe.contextId !== run.contextId || probe.sessionId !== op.sessionId ||
+        probe.state !== 'COMPLETED' || probe.native?.onceAcknowledged !== true || probe.decision?.status !== 'approved' ||
+        probe.nativeResult?.status !== 'completed' || probe.nativeResult.exit !== 0 ||
+        probeAccess?.state !== 'RELEASED' || probe.resources.length !== 1 || probe.resources[0].key !== resourceKey ||
+        probe.resources[0].mode !== 'read') throw new CoordinationError('port-recovery-probe-operation-unverified');
+    const expected = { workspace: run.directory, nativePid: first.view.nativePid, port,
+      runtimeDirectories: payload.review.runtimeDirectories, nonce: probe.operationId, resourceKey, excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: instance.observedAt,
+      instanceStartTime: instance.startTime, instanceEvidenceKind: instance.kind };
+    const command = portProbeCommand(expected);
+    if (probe.native.targetDigest !== createHash('sha256').update(JSON.stringify(['bash', command])).digest('hex'))
+      throw new CoordinationError('port-recovery-probe-command-divergent');
+    const matches = allParts.filter(part => (part.callID || part.callId) === probe.native.callId);
+    if (matches.length !== 1) throw new CoordinationError('port-recovery-probe-operation-unverified');
+    const capture = parsePortCapture(matches[0], expected);
+    if (capture.cgroupDigest !== instance.cgroupDigest || capture.nativeStartTime !== nativeIdentity.startTime || capture.nativeUid !== nativeUid ||
+        capture.observedAt < Date.parse(access.timeoutQuarantine.observedAt) ||
+        Date.now() - capture.observedAt > 120000 || capture.observedAt > Date.now() + 5000)
+      throw new CoordinationError('port-recovery-probe-expired-or-divergent');
+    captures.push(capture);
+  }
+  if (captures[0].cgroupDigest !== captures[1].cgroupDigest || captures[0].netnsDigest !== captures[1].netnsDigest)
+    throw new CoordinationError('port-recovery-namespace-divergent');
+  const second = await collectRecoveryEvidence(run, op), identityAfter = await processIdentity(first.view.nativePid);
+  if (first.view.nativeBoundaryDigest !== second.view.nativeBoundaryDigest || proofHash(first.messages) !== proofHash(second.messages) ||
+      generationChanged(op.sessionId, first.generation) || proofHash({ op, access }) !== operationSnapshot ||
+      identityAfter?.startTime !== nativeIdentity.startTime) throw new CoordinationError('port-recovery-native-boundary-changed');
+  recovery.observeAction(actionId, { kind: 'QUIESCENT_PORT', nativeInstanceEvidence: instance, captures });
+  const proofDigest = proofHash(payload);
+  const result = registry.reconcileQuiescentPort(run.runId, op.operationId, proofDigest);
+  return { state: result.access.state, operationState: result.operation.state, operationId: op.operationId,
+    accessId: access.accessId, proofDigest, evidenceAuthority: 'VERIFIED_NATIVE_PORT_PROBES',
+    executionOutcome: 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT' };
 }
 async function verifyTerminalTurnNoEffectProof(run,context,operation,approval,decision,operationSnapshot,
   messages,permissions,log,generation){
@@ -1828,6 +2011,35 @@ async function handleRequest(request, response) {
       const run = registry.runs.get(runId);
       if (!run || run.state !== 'RESERVED') throw new CoordinationError('run-not-reserved');
       observedRun = run;
+      if (request.method === 'GET' && url.pathname === '/recovery/port-probe-command') {
+        if ([...url.searchParams.keys()].some(key => !['operationId','nonce','runtimeDirectory'].includes(key)) ||
+            url.searchParams.getAll('operationId').length !== 1 || url.searchParams.getAll('nonce').length !== 1)
+          throw new CoordinationError('recovery-request-invalid', 400);
+        const { op, port, resourceKey } = portRecoveryCandidate(run, url.searchParams.get('operationId'));
+        const evidence = await collectRecoveryEvidence(run, op);
+        if (!evidence.view.nativeInstanceEvidence) throw new CoordinationError('port-recovery-native-instance-unverified');
+        const input = { workspace: run.directory, nativePid: evidence.view.nativePid, port,
+          runtimeDirectories: url.searchParams.getAll('runtimeDirectory'), nonce: url.searchParams.get('nonce'), resourceKey,
+          excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: evidence.view.nativeInstanceEvidence.observedAt,
+          instanceStartTime: evidence.view.nativeInstanceEvidence.startTime, instanceEvidenceKind: evidence.view.nativeInstanceEvidence.kind };
+        if (!input.runtimeDirectories.includes('.')) throw new CoordinationError('port-recovery-complete-project-scope-required');
+        for (const directory of input.runtimeDirectories) if (directory !== '.')
+          registry.scope(runId, run.version, [{ key: 'file:' + directory, mode: 'read' }]);
+        json(response, 200, portProbeDescription(input)); return;
+      }
+      if (request.method === 'GET' && url.pathname === '/recovery/native-evidence') {
+        if ([...url.searchParams.keys()].some(key => key !== 'operationId') || url.searchParams.getAll('operationId').length !== 1)
+          throw new CoordinationError('recovery-request-invalid', 400);
+        const operation = registry.resourceState.operations[url.searchParams.get('operationId')];
+        const evidence = await collectRecoveryEvidence(run, operation);
+        json(response, 200, evidence.view); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/extend-compatible') {
+        guardContinuityRequest(request, new URL(request.url, 'http://' + request.headers.host), server.address().port);
+        if (transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
+        transitions.add(runId); transitionRun = runId;
+        json(response, 201, manifestExtensions.extend(runId, payload)); return;
+      }
       if (request.method === 'GET' && url.pathname === '/recovery') {
         json(response, 200, recovery.plan(runId)); return;
       }
@@ -1860,7 +2072,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile', '/validation/cancel-reviewed', '/locks/reconcile-quiescent-port'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -2109,7 +2321,9 @@ async function handleRequest(request, response) {
       }
       if (request.method === 'GET' && url.pathname === '/operations') {
         const operationId = url.searchParams.get('operationId') ?? undefined;
-        json(response, 200, registry.operationSnapshot(runId, operationId)); return;
+        const snapshot = registry.operationSnapshot(runId, operationId);
+        for (const op of snapshot.operations) Object.assign(op, recovery.operationReview(runId, op.operationId) || {});
+        json(response, 200, snapshot); return;
       }
       if (request.method === 'POST' && ['/integration', '/integration-request'].includes(url.pathname)) {
         throw new CoordinationError('coordination-upgrade-required');
@@ -2413,6 +2627,14 @@ async function handleRequest(request, response) {
         context.installReconciledValidation(inspection);
         json(response, 201, receipt); return;
       }
+      if (request.method === 'POST' && url.pathname === '/locks/reconcile-quiescent-port') {
+        if (!response.cabRecoveryActionId) throw new CoordinationError('recovery-policy-required', 403);
+        json(response, 200, await reconcilePortFromProbes(run, payload, response.cabRecoveryActionId)); return;
+      }
+      if (request.method === 'POST' && url.pathname === '/validation/cancel-reviewed') {
+        if (!response.cabRecoveryActionId) throw new CoordinationError('recovery-policy-required', 403);
+        json(response, 200, await cancelReviewedValidation(run, context, payload)); return;
+      }
       if (request.method === 'POST' && ['/validation/request', '/validation/reminder'].includes(url.pathname)) {
         if (broker?.coordination_protocol !== COORDINATION_PROTOCOL) throw new CoordinationError('coordination-upgrade-required');
         if (context.publicJob() && !context.publicJob().armed) throw new CoordinationError('job-disarmed');
@@ -2486,6 +2708,7 @@ async function consumeEvents() {
   if (closing) return;
   try {
     const response = await openCode.events();
+    try { await nativeInstances.observe(await openCode.info()); } catch { observations.record('native-instance-observation-unavailable', {}); }
     sseState = 'connected';
     nativeGeneration++;
     const generation = ++sseGeneration;

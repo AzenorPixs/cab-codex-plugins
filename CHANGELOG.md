@@ -1,3 +1,11 @@
+## 2.2.4 — Reprises autonomes dans le périmètre validé
+
+- L’orchestrateur décide, revoit et valide les reprises dans le change ; l’aperçu distingue politique à installer et décision réellement hors périmètre, sans sollicitation humaine automatique pour une preuve technique manquante.
+- Les refus natifs programmatiques conservent intention et ACK204 privés, sans commandes ni secrets ; une réponse incertaine n’est pas renvoyée.
+- Une validation non consommée peut être annulée sur revue bornée de lecture, refus audités et annulation native stable, en conservant approved et l’issue historique indéterminée. Les wrappers de transport relus ne masquent ni admission réelle ni outil exécutant.
+- Un port quarantiné peut être réconcilié sur deux sondes natives indépendantes, instance antérieure prouvée et scope relu, sans sortie historique ni NO_EFFECT fabriqué ; l’ancienne once reste acquittée.
+- Une extension additive disjointe du manifeste conserve les générations, jetons et protections existants. Les nouvelles opérations gardent leurs propres mandats et permissions.
+
 ## 2.2.3 — Confirmation de l’arrêt réel du contrôleur
 
 - CABU reconnaît un contrôleur arrêté avec MainPID=0, que systemd le classe inactive ou failed. L’ancien code de sortie 78 ne fait plus expirer un transfert déjà scellé.

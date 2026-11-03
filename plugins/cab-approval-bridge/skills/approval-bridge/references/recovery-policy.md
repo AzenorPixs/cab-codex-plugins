@@ -1,4 +1,10 @@
-# Récupération par RUN — CAB 2.2.3
+# Récupération par RUN — CAB 2.2.4
+
+Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
+développeur est sollicité uniquement pour une décision hors de ce périmètre.
+Une preuve technique manquante reste à diagnostiquer. Voir les voies qualifiées
+et leurs reçus dans [autonomous-recovery](autonomous-recovery.md).
+
 
 Un incident de transport n'est pas un résultat métier. Lire d'abord
 GET /runs/<run_id>/recovery : cet aperçu ne décide ni ne libère rien. Il expose
@@ -16,6 +22,8 @@ politique neuve. Aucun accès d'un autre propriétaire n'est délégué implicit
 
 | Action qualifiée | Route existante et preuve conservées |
 |---|---|
+| cancel-reviewed-validation | /validation/cancel-reviewed ; revue bornée, aucune once consommée |
+| reconcile-quarantined-port | /locks/reconcile-quiescent-port ; deux sondes natives et historique non observé conservé |
 | reconcile-test | /test-resources/reconcile-restored |
 | reconcile-access | /locks/reconcile-restored ; la cible est accessId |
 | quarantine-port | /locks/quarantine-timeout ; aucun effet déclaré terminé |

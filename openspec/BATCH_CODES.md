@@ -1,5 +1,12 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Entrée provisoire SCM — CAB 2.2.4
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-autonomous-scoped-recovery | ARCHIVÉ, source 2.2.4 qualifiée ; attribution ACL ultérieure | [validation](changes/archive/2026-11-03-fix-autonomous-scoped-recovery/VALIDATION.md) |
+
+
 ## Entrée provisoire SCM — CAB 2.2.3
 
 | Code | Identifiant | État | Source |

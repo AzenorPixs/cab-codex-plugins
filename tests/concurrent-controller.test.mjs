@@ -13,6 +13,8 @@ import test from 'node:test';
 import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
+import { portProbeCommand } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-port-recovery.mjs';
+import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 
@@ -137,6 +139,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     const r = await fetch(base + path, { method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close',
       ...(path.startsWith('/transport/') || /^\/runs\/[^/]+\/recovery\//.test(path)
+        || /^\/runs\/[^/]+\/extend-compatible$/.test(path)
         ? { 'x-cab-continuity': 'cab-continuity-v1' } : {}) },
     body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
     const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
@@ -183,13 +186,14 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       metadata: value.commands.length ? { command: value.commands[0] } : { filepath: directory + '/' + value.files[0] } });
     await waitFor(() => native.replies.some((r) => r.path.endsWith('/perm-' + value.requestId)));
   }
-  async function completeTool(value, exit = 0, { error = false, output = 'synthetic native result' } = {}) {
+  async function completeTool(value, exit = 0, { error = false, output = 'synthetic native result', nativeShell = false } = {}) {
     const op = (await get('/runs')).body.coordination.operations[value.operation_id];
     const stamp = Math.max(Date.now(), op.native.startedAt) + 1;
     const part = { type: 'tool', id: 'part-' + value.requestId, callID: 'call-' + value.requestId,
-      sessionID: value.session_id, tool: value.commands.length ? 'bash' : 'edit', state: { status: 'completed',
+      sessionID: value.session_id, tool: value.commands.length ? (nativeShell ? 'shell' : 'bash') : 'edit',
+      ...(nativeShell ? { executed: false } : {}), state: { status: 'completed',
         input: value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] },
-        output, time: { start: stamp, end: stamp + 1 }, metadata: { exit, ...(error ? { error: true } : {}) } } };
+        output, time: { start: stamp, end: stamp + 1 }, metadata: { exit, ...(nativeShell ? { status: 'completed' } : {}), ...(error ? { error: true } : {}) } } };
     native.messages[value.session_id].push({ parts: [part] });
     native.emit({ type: 'message.part.updated', properties: { part } });
   }
@@ -2125,7 +2129,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.3');
+  assert.equal(initialized.result.serverInfo.version, '2.2.4');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3783,4 +3787,162 @@ test('rejet natif : preuve divergente, outil additionnel, session active ou perm
   assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0].state,'PREPARED',variant);
   assert.equal(h.native.replies.length,0,variant);
  }
+});
+
+
+async function reviewedCancellationFixture(t) {
+ const h=await setup(t,{sourceFiles:{'src/reviewed-cancel.py':'# reviewed pure helper\n'}}),run=await h.reserve('reviewed-cancel'),approval=h.approval(run,'reviewed-cancel-request');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);
+ for(const id of ['review-call-a','review-call-b'])h.native.messages[run.sessionId].push({nativeV2:{
+  id:'msg_'+id,type:'assistant',time:{created:Date.now()},finish:'error',content:[{type:'tool',id,name:'shell',executed:false,
+   time:{created:Date.now()-3,ran:Date.now()-2,completed:Date.now()-1},state:{status:'error',input:{command:approval.commands[0]},
+   error:{type:'aborted',message:'synthetic programmatic rejection'},metadata:{},content:[]}}]}});
+ appendNativeCodeModeCancelledTranscript(h,approval);
+ const evidence=await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id);
+ assert.equal(evidence.status,200,JSON.stringify(evidence));assert.equal(evidence.body.calls.length,2);
+ assert.equal(evidence.body.journal.coverage,'MISSING_RELEVANT_CALLS');
+ const policy={policyId:'review-policy',ownerId:run.ownerId,version:run.version,actions:['cancel-reviewed-validation'],
+  resources:run.resources,authorization:'developer approved autonomous change; code and audit review by orchestrator'};
+ assert.equal((await h.post('/runs/'+run.runId+'/recovery/policy',policy)).status,201);
+ const plan=(await h.get('/runs/'+run.runId+'/recovery')).body;
+ const payload={actionId:'review-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,
+  action:'cancel-reviewed-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.body.nativeBoundaryDigest,
+  review:{ownerId:run.ownerId,effect:'READ_ONLY',commandSha256:evidence.body.commandSha256,sourceFiles:[{path:'src/reviewed-cancel.py',sha256:createHash('sha256').update('# reviewed pure helper\n').digest('hex')}],evidenceRefs:['audit/code-review'],
+  rejectedCalls:evidence.body.calls.map((call,i)=>({callId:call.callId,permissionId:'per_review_'+i,auditExecutionId:'exec-audit-'+i,ackStatus:204}))}}};
+ return {h,run,approval,payload};
+}
+test('revue orchestrateur : annule une validation sans once, conserve approved et issue native indéterminée',async t=>{
+ const {h,run,approval,payload}=await reviewedCancellationFixture(t);
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ assert.equal(result.body.executionOutcome,'UNDETERMINED_READ_ONLY');assert.equal(result.body.evidenceAuthority,'ORCHESTRATOR_AUDIT_REVIEW');
+ assert.deepEqual((await h.post('/runs/'+run.runId+'/recovery/action',payload)).body,result.body);
+ assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404);
+ let op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,'CANCELLED');assert.equal(op.decision.status,'approved');assert.equal(op.onceAcknowledged,null);
+ assert.equal(op.native,null);assert.equal(op.access,null);assert.equal(op.executionOutcome,'UNDETERMINED_READ_ONLY');
+ assert.deepEqual(h.native.replies,[]);assert.ok(!JSON.stringify(result.body).includes('NO_EFFECT'));
+ await h.stop();await h.start();
+ op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.executionOutcome,'UNDETERMINED_READ_ONLY');
+});
+for(const variant of ['write','digest','stale-native','source-outside','source-hash','uncovered-native','consumed'])test('revue HTTP refuse '+variant,async t=>{
+ const {h,run,approval,payload}=await reviewedCancellationFixture(t);
+ if(variant==='write')payload.input.review.effect='WRITE';
+ if(variant==='digest')payload.input.review.commandSha256='0'.repeat(64);
+ if(variant==='stale-native')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ if(variant==='source-hash')payload.input.review.sourceFiles[0].sha256='0'.repeat(64);
+ if(variant==='consumed'){
+  const acquired=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions});
+  assert.equal(acquired.status,200,JSON.stringify(acquired));await h.execute(approval);
+ }
+ if(variant==='source-outside')payload.input.review.sourceFiles=[{path:'outside.py',sha256:'0'.repeat(64)}];
+ if(variant==='uncovered-native')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',executed:true,callID:'unreviewed-effect',state:{status:'completed',input:{command:'/usr/bin/true'},output:''}}]});
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.ok([400,403,409].includes(result.status),JSON.stringify(result));
+ const op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,variant==='consumed'?'EXECUTING':'PREPARED');assert.equal(op.decision.status,'approved');
+ assert.equal(h.native.replies.length,variant==='consumed'?1:0);
+});
+test('extension HTTP additive : held conservé, génération stable, scope CAS et aucun effet natif',async t=>{
+ const h=await setup(t),run=await h.reserve('extend-compatible',{resources:[{key:'port:host-a/5173',mode:'write'}]}),approval=h.approval(run,'held-before-extension');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const acquired=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:approval.operation_id,
+  operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions});
+ assert.equal(acquired.status,200,JSON.stringify(acquired));
+ const plan=(await h.get('/runs/'+run.runId+'/recovery')).body;
+ assert.equal(plan.decisionOwner,'orchestrator');assert.equal(plan.humanDecisionRequired,false);
+ const input={extensionId:'http-compatible-extension',ownerId:run.ownerId,version:run.version,
+  expectedManifestDigest:plan.manifestDigest,resources:[{key:'port:host-a/5174',mode:'write'}],
+  authorization:'same approved change; independent test origin',evidence:['audit/new-port-review']};
+ const result=await h.post('/runs/'+run.runId+'/extend-compatible',input);assert.equal(result.status,201,JSON.stringify(result));
+ assert.equal(result.body.version,run.version);
+ assert.deepEqual((await h.post('/runs/'+run.runId+'/extend-compatible',input)).body,result.body);
+ const access=(await h.get('/runs/'+run.runId+'/locks')).body.accesses[0];
+ assert.equal(access.token,acquired.body.token);assert.equal(access.fencing,acquired.body.fencing);assert.equal(access.state,'HELD');
+ assert.deepEqual(h.native.replies,[]);
+});
+
+
+test('revue : transport NOT_ADMITTED audité ignoré sans masquer une admission ou un effet',async t=>{
+ const {h,run,approval,payload}=await reviewedCancellationFixture(t);
+ const input={...structuredClone(approval),requestId:'unadmitted-retry',approval_id:'approval-unadmitted',operation_id:'op-unadmitted'};
+ const wrapper={type:'tool',tool:'execute',callID:'retry-wrapper',executed:false,state:{status:'completed',input:{code:'const result = await tools["cgpt-validation"].request_validation(retry); return result;'},
+  output:JSON.stringify({...input,status:'NOT_ADMITTED'}),metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',status:'completed',input}]}}};
+ h.native.messages[run.sessionId].splice(-1,0,{parts:[wrapper]});
+ const evidence=await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id);
+ payload.input.nativeBoundaryDigest=evidence.body.nativeBoundaryDigest;
+ payload.input.review.wrapperReviews=[{callId:wrapper.callID,codeSha256:createHash('sha256').update(wrapper.state.input.code).digest('hex'),effect:'VALIDATION_TRANSPORT_ONLY',returnsNativeResult:true}];
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'CANCELLED');assert.equal(result.body.executionOutcome,'UNDETERMINED_READ_ONLY');
+});
+
+async function portReconciliationFixture(t) {
+ const packageContent=JSON.stringify({scripts:{dev:'vite'}}),port={key:'port:host-a/5173',mode:'write'},file={key:'file:frontend',mode:'write'};
+ const h=await setup(t,{sourceFiles:{'frontend/package.json':packageContent}}),run=await h.reserve('reconcile-port',{resources:[port,file]});
+ const approval=h.approval(run,'reconcile-port-original');approval.resources=[port];approval.expected_revisions={[port.key]:0};
+ approval.commands=['cd frontend && npm run dev -- --port 5173'];
+ const requestPart=h.native.messages[run.sessionId].at(-1).parts[0];requestPart.state.input=structuredClone(approval);
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const acquire=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:[port],expectedRevisions:approval.expected_revisions});
+ assert.equal(acquire.status,200,JSON.stringify(acquire));await h.execute(approval);
+ requestPart.state.status='completed';requestPart.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const stamp=Date.now()+1;
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'shell',callID:'call-'+approval.requestId,executed:false,state:{status:'completed',input:{command:approval.commands[0]},output:'Command timed out',time:{start:stamp,end:stamp+100},metadata:{timeout:true}}}]});
+ await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const preview=await h.get('/runs/'+run.runId+'/locks/timeout-quarantine-preview?operationId='+approval.operation_id);
+ assert.equal(preview.status,200,JSON.stringify(preview));
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',{version:run.version,operationId:approval.operation_id,fencing:preview.body.fencing,
+  quarantineId:'port-recovery-quarantine',boundaryDigest:preview.body.boundaryDigest,evidence:['native timeout observed']})).status,200);
+ const probes=[];const native=(await h.nativeClient.info()).pid,identity=await processIdentity(native);
+ const initialEvidence=(await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id)).body;
+ assert.ok(initialEvidence.nativeInstanceEvidence);const instance=initialEvidence.nativeInstanceEvidence;
+ for(const nonce of ['probe-port-a','probe-port-b']) {
+  const params={workspace:h.directory,nativePid:native,port:5173,runtimeDirectories:['.'],nonce:'op-'+nonce,resourceKey:port.key,excludedInfrastructure:[],instanceObservedAt:instance.observedAt,instanceStartTime:instance.startTime,instanceEvidenceKind:instance.kind};
+  const probe=h.approval(run,nonce);probe.commands=[portProbeCommand(params)];probe.resources=[{...port,mode:'read'}];probe.expected_revisions={[port.key]:0};
+  h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(probe);
+  assert.equal((await h.post('/validation/request',{approval:probe})).status,202);
+  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+probe.requestId,{decision:'approved'})).status,201);
+  const acquired=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:probe.operation_id,operationDigest:probe.operation_digest,resources:probe.resources,expectedRevisions:probe.expected_revisions});
+  assert.equal(acquired.status,200,JSON.stringify(acquired));await h.execute(probe);
+  const capture={protocol:'cab-port-boundary-v1',nonce:params.nonce,nativePid:native,port:5173,runtimeDirectories:['.'],workspace:h.directory,
+   observedAt:Date.now(),instanceObservedAt:instance.observedAt,instanceEvidenceKind:instance.kind,nativeStartedAtMs:instance.observedAt-1000,nativeStartedAtUpperBound:instance.observedAt,complete:true,quiescent:true,nativeUid:process.getuid(),nativeStartTime:identity.startTime,cgroupDigest:instance.cgroupDigest,netnsDigest:'d'.repeat(64),
+   listening:false,matchingProcessCount:0,matchingProcesses:[],matchingProcessesDigest:proofHash([])};
+  capture.captureDigest=proofHash(capture);
+  await h.completeTool(probe,0,{nativeShell:true,output:'CAB_PORT_BOUNDARY_V1:'+Buffer.from(JSON.stringify(capture)).toString('base64')+'\n'});
+  const released=await h.releaseOperation(run,probe,acquired.body,'NO_EFFECT');assert.equal(released.status,200,JSON.stringify(released));
+  assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+probe.operation_id)).body.operations[0].state,'COMPLETED');probes.push(probe.operation_id);
+ }
+ const evidence=await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id);
+ assert.equal(evidence.status,200,JSON.stringify(evidence));
+ const policy={policyId:'port-recovery-policy',ownerId:run.ownerId,version:run.version,actions:['reconcile-quarantined-port'],resources:[port],authorization:'same change; orchestrator reviewed Vite boundary'};
+ assert.equal((await h.post('/runs/'+run.runId+'/recovery/policy',policy)).status,201);
+ const plan=(await h.get('/runs/'+run.runId+'/recovery')).body;
+ const payload={actionId:'port-recovery-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'reconcile-quarantined-port',targetId:approval.operation_id,
+  input:{nativeBoundaryDigest:evidence.body.nativeBoundaryDigest,probeOperationIds:probes,review:{ownerId:run.ownerId,serverKind:'VITE_LOCAL_DEV_SERVER',
+   commandSha256:evidence.body.commandSha256,runtimeDirectories:['.'],sourceFiles:[{path:'frontend/package.json',sha256:createHash('sha256').update(packageContent).digest('hex')}],
+   noDetachedWorkOutsideDirectories:true,noProcessIsolationOrCredentialChange:true,evidenceRefs:['audit/vite-scope-review']}}};
+ return {h,run,approval,payload};
+}
+test('port quarantiné : deux sondes natives clôturent RECONCILED sans exit historique ni once rejouée',async t=>{
+ const {h,run,approval,payload}=await portReconciliationFixture(t),before=h.native.replies.length;
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'RELEASED');assert.equal(result.body.executionOutcome,'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT');
+ const op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,'CANCELLED');assert.equal(op.onceAcknowledged,true);assert.equal(op.nativeResult,null);assert.equal(op.executionOutcome,result.body.executionOutcome);
+ assert.equal(h.native.replies.length,before);assert.deepEqual((await h.post('/runs/'+run.runId+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ const restored=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(restored.executionOutcome,result.body.executionOutcome);
+});
+for(const variant of ['same-probe','source','command','owner'])test('port quarantiné : refuse '+variant,async t=>{
+ const {h,run,approval,payload}=await portReconciliationFixture(t);
+ if(variant==='same-probe')payload.input.probeOperationIds[1]=payload.input.probeOperationIds[0];
+ if(variant==='source')payload.input.review.sourceFiles[0].sha256='0'.repeat(64);
+ if(variant==='command')payload.input.review.commandSha256='0'.repeat(64);
+ if(variant==='owner')payload.input.review.ownerId='foreign';
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ const op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'EXECUTING');assert.equal(op.onceAcknowledged,true);assert.equal(op.access.state,'HELD');
 });

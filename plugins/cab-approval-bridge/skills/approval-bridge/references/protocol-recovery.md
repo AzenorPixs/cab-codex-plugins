@@ -1,4 +1,10 @@
-# Récupération de session — CAB 2.2.3
+# Récupération de session — CAB 2.2.4
+
+Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
+développeur est sollicité uniquement pour une décision hors de ce périmètre.
+Une preuve technique manquante reste à diagnostiquer. Voir les voies qualifiées
+et leurs reçus dans [autonomous-recovery](autonomous-recovery.md).
+
 
 ## Récupération contrôlée de session dans le même RUN
 
@@ -33,8 +39,9 @@ n'invente aucun gate terminal. En cas de prévol divergent ou incomplet, appliqu
 « Prévol de récupération divergent dans la même session » ci-dessous,
 qui conserve la candidate, le job, le RUN et le runtime sans purge.
 Un redémarrage conserve ce gel mais ne recrée pas la décision ou la preuve
-locale du prévol : si elles sont perdues, la récupération reste refusée et
-nécessite une décision humaine. L'API ne remplace ni une session révoquée ni
+locale du prévol : si elles sont perdues, le périmètre reste protégé et
+l’orchestrateur instruit les voies de réconciliation qualifiées dans son mandat.
+Une décision du développeur est demandée seulement si la suite sort du change validé. L'API ne remplace ni une session révoquée ni
 un prévol échoué par une nouvelle tentative implicite.
 
 ## Prévol de récupération divergent dans la même session

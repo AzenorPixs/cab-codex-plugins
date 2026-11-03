@@ -1,10 +1,24 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Récupération autonome 2.2.4
+
+Dans le périmètre validé du change, l’orchestrateur décide, revoit et valide ;
+l’agent de codage réalise le travail. La décision humaine est réservée à une
+extension hors périmètre. Les diagnostics, revues bornées et récupérations
+qualifiées sont décrits dans
+[autonomous-recovery](plugins/cab-approval-bridge/skills/approval-bridge/references/autonomous-recovery.md).
+Ils conservent les historiques, permissions once et protections incertaines.
+Les ports anciens peuvent être réconciliés sur deux sondes natives sans
+inventer leur exit ; un ajout de ressource disjointe garde les anciens jetons
+et générations. Le helper utilise Node, Linux /proc et getconf de libc-bin,
+déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajouté.
+
+
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.3`.
+Version de référence des briques CAB : `2.2.4`.
 
-CAB 2.2.3 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.4 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune

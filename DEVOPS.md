@@ -3,7 +3,7 @@
 Version : 0.7
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-02T19:57:18Z
+Début du relevé (UTC) : 2026-11-03T04:41:33Z
 Environnement d'exécution DIU : PROXMOX
 
 Les sondes système concernent le contexte d'exécution DIU.
@@ -169,7 +169,7 @@ La détection ne vérifie pas le fonctionnement du mode headless.
 
 ## Chromium
 
-  * 156.0.8078.73
+  * 156.0.8078.79
   * /usr/bin/chromium
   * Mode headless : --headless
 

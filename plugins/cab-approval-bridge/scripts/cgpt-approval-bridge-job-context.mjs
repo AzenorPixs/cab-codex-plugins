@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.3";
+export const VERSION = "2.2.4";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -413,7 +413,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.3",
+    version: "2.2.4",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1778,7 +1778,7 @@ function restoreNativeRejectedOperation(approval, proofDigest) {
   return { requestId, operationId: operation.operationId, restored: true };
 }
 
-function restoreNativeCancelledValidation(approval, proofDigest) {
+function verifyNativeCancelledValidation(approval, proofDigest) {
   if (!run || !approval || !/^[a-f0-9]{64}$/.test(proofDigest || '') ||
       approval.run_id !== run.runId || approval.change_id !== job?.changeId ||
       approval.directory !== workspace || !ownsSession(approval.session_id) ||
@@ -1791,16 +1791,20 @@ function restoreNativeCancelledValidation(approval, proofDigest) {
   const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
   if (priorDecision && priorDecision.decision !== 'approved' || (previous && (previous.approvalId !== approval.approval_id ||
       previous.changeId !== approval.change_id || previous.operation?.operationId !== operation.operationId ||
-      previous.operationConsumed || previous.operationInvalidated))) {
+      previous.operationConsumed))) {
     throw decisionError('native-cancellation-validation-conflict');
   }
+  return { requestId, operationId: operation.operationId };
+}
+function restoreNativeCancelledValidation(approval, proofDigest) {
+  const { requestId, operationId } = verifyNativeCancelledValidation(approval, proofDigest);
   validations.delete(requestId);
   httpDecisions.delete(requestId);
   answered.add(requestId);
   persistCommunication();
   wakeDecisionWaiters(requestId);
-  updateStatus('native-cancelled-validation-reconciled', { requestId, operationId: operation.operationId });
-  return { requestId, operationId: operation.operationId, cancelled: true };
+  updateStatus('native-cancelled-validation-reconciled', { requestId, operationId });
+  return { requestId, operationId, cancelled: true };
 }
 
 function nativePermissionSummary(permission) {
@@ -2242,7 +2246,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.3",
+      version: "2.2.4",
     },
   });
 
@@ -3379,7 +3383,7 @@ return {
   transportHandoffReady: () => !communicationFailed && reconcilingPermissions.size === 0 &&
     !recoveryTransitionInFlight && !lifecycleTransitionInFlight && !modelTransitions.inFlight,
   flushCommunication: async () => { await jobPersistence; persistCommunication(); },
-  verifyRejectedRecoveryRelease, restoreNativeRejectedOperation, restoreNativeCancelledValidation,
+  verifyRejectedRecoveryRelease, restoreNativeRejectedOperation, restoreNativeCancelledValidation, verifyNativeCancelledValidation,
   close: () => {
     if (closePromise) return closePromise;
     closed = true; transportAbort.abort(); clearInterval(permissionTimer);

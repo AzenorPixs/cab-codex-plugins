@@ -1,4 +1,10 @@
-# Noyau du contrat — CAB 2.2.3
+# Noyau du contrat — CAB 2.2.4
+
+Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
+développeur est sollicité uniquement pour une décision hors de ce périmètre.
+Une preuve technique manquante reste à diagnostiquer. Voir les voies qualifiées
+et leurs reçus dans [autonomous-recovery](autonomous-recovery.md).
+
 
 ## Champ d'application et autorité
 

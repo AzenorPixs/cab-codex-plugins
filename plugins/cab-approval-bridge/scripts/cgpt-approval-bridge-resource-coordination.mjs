@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.3';
+export const VERSION = '2.2.4';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -523,7 +523,8 @@ export class ResourceRunRegistry extends RunRegistry {
         access.operationIds.includes(op.operationId)));
   }
   unusedTestOperationClassification(op, decision = null) {
-    if (op.state === 'CANCELLED' && !op.native) return 'cancelled-without-execution';
+    if (op.state === 'CANCELLED' && !op.native) return this.reviewedReadOnlyOperations?.has(op.operationId)
+      ? 'read-only-no-effect' : 'cancelled-without-execution';
     if (this.isRejectionOnlyOperation(op)) return 'rejected-validation-no-native-effect';
     if (op.state === 'PREPARED' && !op.native && decision === 'rejected') return 'rejected-validation-no-native-effect';
     if (op.state === 'PREPARED' && !op.native && decision === 'cancelled') return 'cancelled-validation-no-native-effect';
@@ -1312,6 +1313,25 @@ export class ResourceRunRegistry extends RunRegistry {
     this.finishAccess(access, payload.outcome); access.releaseDigest = digest(payload);
     this.grantWaiting(); this.persist(); return copy(access);
   }
+  reconcileQuiescentPort(runId, operationId, proofDigest) {
+    this.admission(runId);
+    const run = this.runs.get(runId), op = this.resourceState.operations[operationId];
+    const access = op && this.resourceState.accesses[op.accessId];
+    if (!hash(proofDigest) || !run || !op || op.runId !== runId || op.contextId !== run.contextId ||
+        !['EXECUTING','UNKNOWN'].includes(op.state) || op.native?.onceAcknowledged !== true || op.nativeResult ||
+        op.testReservationId || op.resources.length !== 1 || op.resources[0].mode !== 'write' ||
+        !/^port:[A-Za-z0-9_.-]+\/[1-9][0-9]{0,4}$/.test(op.resources[0].key) ||
+        !access || access.runId !== runId || access.contextId !== run.contextId ||
+        !['HELD','UNKNOWN'].includes(access.state) || access.operationIds.length !== 1 || access.operationIds[0] !== operationId ||
+        access.timeoutQuarantine?.operationId !== operationId || access.resources.length !== 1 ||
+        access.resources[0].key !== op.resources[0].key || access.resources[0].mode !== 'write')
+      throw new CoordinationError('port-recovery-boundary-invalid');
+    op.state = 'CANCELLED'; op.finishedAt = now(); op.completionDigest = proofDigest;
+    this.resourceState.revisions[op.resources[0].key] = ++this.resourceState.sequence;
+    this.finishAccess(access, 'RECONCILED'); access.releaseDigest = proofDigest;
+    this.grantWaiting(); this.persist();
+    return { operation: copy(op), access: copy(access) };
+  }
   accesses(runId) {
     return Object.values(this.resourceState.accesses).filter((a) => !runId || a.runId === runId).map((a) =>
       ({ ...copy(a), blockers: a.state === 'WAITING' ? this.blockers(a) : [] }));
@@ -1465,6 +1485,48 @@ export class ResourceRunRegistry extends RunRegistry {
     this.admission(runId);
     if (this.unresolvedAccess(runId)) throw new CoordinationError('run-accesses-unresolved');
     this.resources(payload.resources); return super.extend(runId, payload);
+  }
+  manifestDigest(runId) {
+    const run = this.runs.get(runId);
+    if (!run) throw new CoordinationError('run-not-reserved');
+    return digest(run.resources);
+  }
+  compatibleExtension(runId, payload, apply = false) {
+    this.admission(runId);
+    const run = this.owned(runId, payload.version);
+    if (run.phase !== 'WORK' || payload.ownerId !== run.ownerId ||
+        typeof payload.authorization !== 'string' || !payload.authorization.trim() || payload.authorization.length > 500 ||
+        !hash(payload.expectedManifestDigest) || payload.expectedManifestDigest !== this.manifestDigest(runId))
+      throw new CoordinationError('compatible-extension-boundary-invalid');
+    if (this.integrationOwner && this.integrationOwner !== runId ||
+        !this.integrationOwner && this.integrationQueue.length && run.integrationReady)
+      throw new CoordinationError('integration-suspended');
+    evidence(payload.evidence);
+    const additions = this.resources(payload.resources);
+    const namespace = key => key.startsWith('file:') ? 'file:' + key.slice(5).split('/').slice(0,-1).join('/')
+      : key.includes('/') ? key.slice(0,key.lastIndexOf('/')) : key;
+    if (additions.some(resource => !run.resources.some(existing => namespace(existing.key) === namespace(resource.key) &&
+        (existing.mode === 'write' || resource.mode === 'read'))))
+      throw new CoordinationError('compatible-extension-outside-namespace');
+    if (additions.some(resource => run.resources.some(existing => covers(existing, resource) || overlaps(existing.key, resource.key))))
+      throw new CoordinationError('compatible-extension-not-additive');
+    const protectedResources = [
+      ...Object.values(this.resourceState.accesses).filter(access => active(access) || access.state === 'WAITING' || access.state === 'STALE'),
+      ...Object.values(this.resourceState.testReservations || {}).filter(reservedTest),
+      ...Object.values(this.resourceState.operations).filter(op => ['ISSUING','EXECUTING','UNKNOWN'].includes(op.state)),
+    ].flatMap(item => item.resources);
+    if (additions.some(resource => protectedResources.some(existing => overlaps(existing.key, resource.key))))
+      throw new CoordinationError('compatible-extension-overlap');
+    const resources = this.validate({ ...run, resources: [...run.resources, ...additions] }).resources;
+    this.checkConflicts({ ...run, resources });
+    const result = { beforeDigest: this.manifestDigest(runId), afterDigest: digest(resources), resources, additions };
+    if (apply) {
+      run.resources = resources; run.requiresPublication ||= additions.some(resource => resource.mode === 'write');
+      run.integrationReady = false;
+      // An additive manifest CAS does not invalidate already issued effects or lease tokens.
+      this.persist();
+    }
+    return copy(result);
   }
   reduce(runId, payload) {
     this.admission(runId);
