@@ -1,3 +1,9 @@
+## 2.2.5 — Réconcilier les frontières de validation manquantes
+
+- Le propriétaire peut restaurer la même validation PENDING après une lecture native fraîche, sans décision, nouvelle demande ou permission créée.
+- Une lecture native terminée peut être clôturée en coordination après revue épinglée, avec issue explicite NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED : aucune once, nativeResult ou absence d’effet inventée.
+- Les intentions et reçus permettent les reprises après réponse perdue et redémarrage ; les identités, sources, révisions et effets contradictoires restent protégés.
+
 ## 2.2.4 — Reprises autonomes dans le périmètre validé
 
 - L’orchestrateur décide, revoit et valide les reprises dans le change ; l’aperçu distingue politique à installer et décision réellement hors périmètre, sans sollicitation humaine automatique pour une preuve technique manquante.

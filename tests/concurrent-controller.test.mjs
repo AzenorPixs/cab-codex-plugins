@@ -2129,7 +2129,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.4');
+  assert.equal(initialized.result.serverInfo.version, '2.2.5');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3945,4 +3945,122 @@ for(const variant of ['same-probe','source','command','owner'])test('port quaran
  if(variant==='owner')payload.input.review.ownerId='foreign';
  const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
  const op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'EXECUTING');assert.equal(op.onceAcknowledged,true);assert.equal(op.access.state,'HELD');
+});
+
+async function boundaryRecoveryFixture(t,{terminal=false}={}) {
+ const content='console.log("syntax fixture");\n',file='src/boundary.js';
+ const h=await setup(t,{nativeShellFixtures:true,sourceFiles:{[file]:content}});
+ const run=await h.reserve('boundary-'+(terminal?'terminal':'pending'),{resources:[{key:'file:src',mode:'write'}]});
+ const approval=h.approval(run,'boundary-request');approval.commands=['node --check '+file];
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ const base='/runs/'+run.runId;
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ if(terminal)assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);
+ const request=h.native.messages[run.sessionId].at(-1).parts[0];request.state.status='completed';
+ request.state.output=JSON.stringify({...approval,status:terminal?'APPROVED':'PENDING',...(terminal?{reviewer:'CGPT'}:{})});
+ if(terminal) {
+  const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'shell',callID:'boundary-terminal-call',executed:false,
+   state:{status:'completed',input:{command:approval.commands[0],workdir:h.directory,background:false},output:'(no output)',
+    metadata:{truncated:false,exit:0},time:{start:stamp-1,end:stamp}}}]});
+ } else {
+  await h.stop();
+  unlinkSync(join(h.directory,'.opencode/state/cgpt-approval-bridge/runs',run.runId,String(run.contextId),'controller-communication.json'));
+  await h.start();
+  const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',callID:'boundary-pending-read',
+   state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'PENDING',expires_at:new Date(stamp+600000).toISOString()}),
+    metadata:{truncated:false},time:{start:stamp-1,end:stamp}}}]});
+ }
+ await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY',by_run:{[run.runId]:{status:'READY',root_cause:'NONE',pending_count:terminal?0:1}}});
+ const action=terminal?'reconcile-reviewed-terminal':'restore-pending-validation';
+ const policy={policyId:'boundary-policy',ownerId:run.ownerId,version:run.version,actions:[action],resources:run.resources,authorization:'approved change; autonomous orchestrator boundary review'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const evidence=await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id);assert.equal(evidence.status,200,JSON.stringify(evidence));
+ const plan=(await h.get(base+'/recovery')).body;
+ const payload={actionId:'boundary-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,
+  action,targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.body.nativeBoundaryDigest}};
+ if(terminal)payload.input.review={ownerId:run.ownerId,effect:'READ_ONLY',commandSha256:evidence.body.commandSha256,
+  sourceFiles:[{path:file,sha256:createHash('sha256').update(content).digest('hex')}],evidenceRefs:['audit/read-only-node-syntax'],
+  callId:evidence.body.calls[0].callId,partDigest:evidence.body.calls[0].partDigest};
+ return{h,run,approval,payload,base};
+}
+test('frontière PENDING : restaure même identité sans décision, permission ou nouvelle demande',async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t);
+ const before=(await h.get('/runs')).body.coordination.operations[approval.operation_id];
+ assert.equal((await h.get(base+'/decision/'+approval.requestId)).status,404);
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'PENDING');
+ assert.deepEqual((await h.get('/runs')).body.coordination.operations[approval.operation_id],before);
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,1);assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,1);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY'});
+ const decided=await h.post(base+'/decision/'+approval.requestId,{decision:'approved'});assert.equal(decided.status,201,JSON.stringify(decided));
+ assert.equal(h.native.replies.length,0);
+});
+for(const variant of ['expired','stale-read','identity','busy','permission','conflict','effect','owner','boundary'])test('frontière PENDING : refuse '+variant,async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t);
+ if(variant==='expired'){
+  const p=h.native.messages[run.sessionId].at(-1).parts[0];const v=JSON.parse(p.state.output);v.expires_at=new Date(Date.now()-1).toISOString();p.state.output=JSON.stringify(v);
+ }if(variant==='conflict'){
+  const p=h.native.messages[run.sessionId].at(-1).parts[0],v=JSON.parse(p.state.output);v.status='APPROVED';p.state.output=JSON.stringify(v);
+ }if(variant==='effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'shell',callID:'unexpected-effect',state:{status:'completed',input:{command:approval.commands[0],workdir:h.directory},metadata:{exit:0},time:{start:Date.now()-1,end:Date.now()}}}]});
+ if(variant==='stale-read')h.native.messages[run.sessionId].at(-1).parts[0].state.time.end=Date.now()-300001;
+ if(variant==='identity'){const p=h.native.messages[run.sessionId].at(-1).parts[0],v=JSON.parse(p.state.output);v.operation_digest='0'.repeat(64);p.state.output=JSON.stringify(v);}
+ if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ if(variant==='permission')h.native.permissions.push({id:'unexpected-pending',sessionID:run.sessionId,permission:'bash',metadata:{command:approval.commands[0]}});
+ if(variant==='owner')payload.ownerId='foreign-owner';
+ if(variant==='boundary')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ if(['expired','stale-read','identity','busy','permission','conflict','effect'].includes(variant))payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.ok([403,409].includes(result.status),JSON.stringify(result));
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,0);assert.equal(h.native.replies.length,0);
+});
+test('terminal revu : clôt coordination sans once/nativeResult et sans rejeu, survit au redémarrage',async t=>{
+ const{h,approval,payload,base}=await boundaryRecoveryFixture(t,{terminal:true});
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'COMPLETED');assert.equal(result.body.executionOutcome,'NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED');
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'COMPLETED');assert.equal(op.native,null);assert.equal(op.nativeResult,null);assert.notEqual(op.onceAcknowledged,true);
+ assert.equal((await h.get(base+'/status')).body.hasUnresolvedValidation,false);assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ const after=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(after.executionOutcome,result.body.executionOutcome);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);assert.equal(h.native.replies.length,0);
+});
+for(const variant of ['source','call','part','write','duplicate','extra-effect'])test('terminal revu : refuse '+variant,async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t,{terminal:true});
+ if(variant==='source')payload.input.review.sourceFiles[0].sha256='0'.repeat(64);
+ if(variant==='call')payload.input.review.callId='foreign-call';
+ if(variant==='part')payload.input.review.partDigest='0'.repeat(64);
+ if(variant==='write')payload.input.review.effect='WRITE';
+ if(variant==='duplicate')h.native.messages[run.sessionId].push(structuredClone(h.native.messages[run.sessionId].at(-1)));
+ if(variant==='extra-effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'edit',callID:'extra-edit',state:{status:'completed',input:{filePath:'other'},output:''}}]});
+ if(['duplicate','extra-effect'].includes(variant))payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'PREPARED');assert.equal(op.native,null);assert.equal(h.native.replies.length,0);
+});
+for(const terminal of [false,true])test('frontière validée : reprise causale après réponse perdue '+(terminal?'terminal':'PENDING'),async t=>{
+ const{h,approval,payload,base}=await boundaryRecoveryFixture(t,{terminal});
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ await h.stop();
+ const file=join(h.directory,'.opencode/state/cgpt-approval-bridge/recovery-policies.json'),env=JSON.parse(readFileSync(file,'utf8'));
+ const row=env.value.receipts.find(r=>r.actionId===payload.actionId);row.state='PREPARED';delete row.result;delete row.httpStatus;
+ env.digest=createHash('sha256').update(JSON.stringify(env.value)).digest('hex');writeFileSync(file,JSON.stringify(env)+'\n');
+ await h.start();
+ const replay=await h.post(base+'/recovery/action',payload);assert.equal(replay.status,200,JSON.stringify(replay));assert.equal(replay.body.recoveredFrom,'qualified-receipt');
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,terminal?'COMPLETED':'PREPARED');assert.equal(op.native,null);assert.equal(op.nativeResult,null);assert.equal(h.native.replies.length,0);
+});
+test('frontière PENDING : intention avant écriture reprend la même identité après crash',async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t);
+ assert.equal((await h.post(base+'/recovery/action',payload)).status,200);
+ await h.stop();
+ const root=join(h.directory,'.opencode/state/cgpt-approval-bridge');
+ const file=join(root,'recovery-policies.json'),env=JSON.parse(readFileSync(file,'utf8')),row=env.value.receipts.find(r=>r.actionId===payload.actionId);
+ row.state='PREPARED';delete row.result;delete row.httpStatus;delete row.observation;
+ env.digest=createHash('sha256').update(JSON.stringify(env.value)).digest('hex');writeFileSync(file,JSON.stringify(env)+'\n');
+ unlinkSync(join(root,'runs',run.runId,String(run.contextId),'controller-communication.json'));
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY'});
+ const replay=await h.post(base+'/recovery/action',payload);assert.equal(replay.status,200,JSON.stringify(replay));
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,1);assert.equal(h.native.replies.length,0);
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].native,null);
 });

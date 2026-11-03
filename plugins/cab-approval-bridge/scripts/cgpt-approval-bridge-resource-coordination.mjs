@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.4';
+export const VERSION = '2.2.5';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -895,6 +895,18 @@ export class ResourceRunRegistry extends RunRegistry {
     op.state = 'CANCELLED'; op.finishedAt = now(); op.completionDigest = proofDigest;
     this.persist();
     return copy(op);
+  }
+  completeReviewedReadOnly(runId, operationId, proofDigest) {
+    this.admission(runId);
+    const op=this.resourceState.operations[operationId];
+    if (!op || op.runId!==runId || !hash(proofDigest) || op.native || op.nativeResult || op.decision?.status!=='approved' ||
+        Object.values(this.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(operationId)))
+      throw new CoordinationError('terminal-review-boundary-invalid');
+    if(op.state==='COMPLETED'&&op.completionDigest===proofDigest)return copy(op);
+    if(op.state!=='PREPARED')throw new CoordinationError('terminal-review-boundary-invalid');
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='COMPLETED';op.finishedAt=now();op.completionDigest=proofDigest;
+    this.persist();return copy(op);
   }
   restorePendingNative(runId, operationId, proof) {
     this.mutable();

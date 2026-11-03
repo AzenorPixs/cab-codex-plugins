@@ -1,6 +1,12 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Récupération autonome 2.2.4
+## Récupération autonome 2.2.5
+
+Les frontières PENDING sans contexte et terminal de lecture sans reçu once
+possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
+la clôture du terminal garde explicitement l’autorisation native non prouvée.
+Aucune commande ni once historique n’est rejouée. Les mêmes identités et reçus
+survivent à la perte de réponse et au redémarrage.
 
 Dans le périmètre validé du change, l’orchestrateur décide, revoit et valide ;
 l’agent de codage réalise le travail. La décision humaine est réservée à une
@@ -16,9 +22,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.4`.
+Version de référence des briques CAB : `2.2.5`.
 
-CAB 2.2.4 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.5 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune

@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.2.4
+# Noyau du contrat — CAB 2.2.5
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
