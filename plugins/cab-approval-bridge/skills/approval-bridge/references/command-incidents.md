@@ -1,4 +1,6 @@
-# Incidents — CAB 2.2.10
+# Incidents — CAB 2.2.11
+
+Commencer par le [triage des observations](incident-triage.md) avant de conclure à une panne.
 
 ## Problèmes de codage et coordination du correctif CAB
 

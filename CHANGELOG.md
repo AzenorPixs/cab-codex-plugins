@@ -1,3 +1,11 @@
+## 2.2.11 — Transformer les faux positifs qualifiés en cadrage durable
+
+- Une référence canonique distingue catalogue Codex/OpenCode, preuve historique,
+  statut agrégé, versions chargées, échec métier et garde de sécurité légitime.
+- Le skill, l’index et la commande orientent vers cette référence au diagnostic.
+  Les enseignements généralisables complètent le contrat sous SCM ;aucune
+  hypothèse, garde contournée ou autorisation métier supplémentaire introduite.
+
 ## 2.2.10 — Refuser une permission shell décomposée avec un reçu privé
 
 - Le rejet vérifie son identité native indépendamment de la garde d’exécution.

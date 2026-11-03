@@ -7,7 +7,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.2.10';
+export const VERSION = '2.2.11';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
