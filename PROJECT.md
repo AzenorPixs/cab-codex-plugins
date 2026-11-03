@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Récupération autonome 2.2.5
+## Récupération autonome 2.2.6
 
 Les frontières PENDING sans contexte et terminal de lecture sans reçu once
 possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
@@ -22,9 +22,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.5`.
+Version de référence des briques CAB : `2.2.6`.
 
-CAB 2.2.5 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.6 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -813,3 +813,16 @@ CAB2.1.32 partage le prédicat de permissions natives entre client et contrôleu
 
 
 CAB2.1.32 ferme les imports relatifs statiquement déclarés selon leurs destinations réelles, et inclut permission-policy dans le groupe du moniteur. Une dépendance seulement présente dans un autre groupe est refusée avant coupure ; les contrôles de permissions restent ceux du correctif29.
+
+## Priorité d’efficacité et d’autonomie
+
+Les évolutions CAB optimisent le temps, les tokens d’entrée/sortie et surtout
+le cache de prompts côté fournisseur LLM, avec autonomie maximale de
+l’orchestrateur dans le change. Stabiliser les instructions communes, placer
+les données variables après le préfixe réutilisable et transmettre des preuves
+compactes. Les observations de sécurité restent fraîches ; un cache local de
+fichiers ne prouve pas une lecture en cache LLM. Exploiter tokens.cache.read/write,
+latence et coût lorsqu’ils sont exposés ; indiquer N/A sinon. Aucun hit ou gain
+n’est déduit de la seule stabilité du prompt. Cette livraison réutilise des
+preuves et fixe cette priorité, sans modifier une politique de cache fournisseur
+ni revendiquer un benchmark LLM facturé.

@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.2.5. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.2.6. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -35,3 +35,8 @@ versions du paquet, des fichiers et des processus sont rapportées séparément.
 Une indisponibilité de télémétrie ne prouve pas un effet métier. Une protection
 pour effet incertain demeure jusqu'à preuve exacte ; les travaux disjoints
 autorisés peuvent continuer.
+
+Pour un mandat de codage, le contrôleur est seul à acquérir/lier l’accès,
+transmettre once et persister intention/ACK. L’orchestrateur décide via CAB ;
+il ne répond jamais once directement avec le client HTTP. Un ACK externe ne
+devient pas un reçu CAB par déclaration ou copie après l’exécution.

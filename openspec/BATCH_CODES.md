@@ -1,5 +1,13 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Correctif SCM courant2.2.6
+
+[reuse-closed-validation-review-evidence](changes/archive/2026-11-03-reuse-closed-validation-review-evidence/), code non attribué : ARCHIVÉ, source2.2.6 qualifiée.
+Réemploi des revues closes et retrait avant émission, sans effet ni once
+inventés. Qualification :920Node,93Python,1natif,1014réussites ;31ignorés.
+Index final15/15 ; OpenSpec20/20avant puis19/19après archive. Activation séparée.
+
+
 ## Correctif SCM courant 2.2.5
 
 [restore-proven-validation-boundaries](changes/archive/2026-11-03-restore-proven-validation-boundaries/), code non attribué : ARCHIVÉ, source 2.2.5 qualifiée.

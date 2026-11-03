@@ -1,4 +1,4 @@
-# Incidents pendant le codage CAB — 2.2.5
+# Incidents pendant le codage CAB — 2.2.6
 
 ## Diagnostic et récupération dans le mandat
 

@@ -1,4 +1,4 @@
-# Lecture source — CAB 2.2.5
+# Lecture source — CAB 2.2.6
 
 ## `/CAB source`
 
