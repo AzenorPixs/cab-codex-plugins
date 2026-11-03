@@ -1,3 +1,11 @@
+## 2.2.8 — Lire le registre réel pendant la migration
+
+- Le précontrôle de migration utilise le lecteur JSON runtime borné à64Mio,
+  plutôt que le lecteur d’artefacts4Mio. Les limites HTTP ne changent pas.
+- La première tentative2.2.7 a échoué avant coupure ; aucune migration ou
+  activation n’a été déclarée. Le correctif conserve les mêmes garanties,
+  les états pendants et les fichiers projet0775.
+
 ## 2.2.7 — Admissions résilientes et stockage privé hors projet
 
 - Une enveloppe Code Mode brute completed/error=true avec request_validation completed conserve la corrélation de son input exact, sans décision, accès ou permission implicite.

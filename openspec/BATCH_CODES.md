@@ -1,5 +1,13 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Correctif SCM courant2.2.8
+
+[read-large-legacy-registry-for-private-migration](changes/archive/2026-11-03-read-large-legacy-registry-for-private-migration/), code non attribué :ARCHIVÉ, source2.2.8 qualifiée.
+Registre réel lu à la borne runtime64Mio après refus sûr avant coupure.
+153Node,94Python,1natif :248réussites ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier restent séparées.
+
+
 ## Correctif SCM courant2.2.7
 
 [correlate-completed-mcp-call-with-outer-error](changes/archive/2026-11-03-correlate-completed-mcp-call-with-outer-error/), code non attribué : ARCHIVÉ, source2.2.7 qualifiée.

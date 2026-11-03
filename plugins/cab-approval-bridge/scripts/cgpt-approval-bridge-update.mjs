@@ -16,7 +16,7 @@ import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credentia
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.7';
+export const VERSION = '2.2.8';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -276,10 +276,10 @@ export async function updateComponents(input, options = {}) {
   async function prepareRuntimeMigration(status) {
     if(status?.version!=='2.2.6'||status.runtimeStateDirectory||status.workspace!==c.serviceWorkspace)return false;
     const path=join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json');
-    const file=await optional(path);if(!file)return false;
+    let file;try{file=readRuntimeJson(path,{legacy:true});}catch(cause){if(cause.code==='ENOENT')return false;throw cause;}
     legacyRuntimeFiles(c.serviceWorkspace);
     const before=await request(c.controllerUrl,'/runs');
-    if(migrationRegistryDigest(JSON.parse(file.data))!==migrationRegistryDigest(before))throw error('update-migration-source-divergent');
+    if(migrationRegistryDigest(file.value)!==migrationRegistryDigest(before))throw error('update-migration-source-divergent');
     const messages=new Map();
     for(const [id,context] of Object.entries(status.runs||{}))if(context.activeValidations?.length) {
       const run=before.runs.find(run=>run.runId===id);if(!run)throw error('update-migration-source-divergent');

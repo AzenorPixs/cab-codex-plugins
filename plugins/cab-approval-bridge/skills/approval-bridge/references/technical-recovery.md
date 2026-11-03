@@ -1,4 +1,4 @@
-# Précisions recovery — CAB 2.2.7
+# Précisions recovery — CAB 2.2.8
 
 ## Récupération contrôlée de session dans le même RUN
 
