@@ -1,3 +1,12 @@
+## 2.2.13 — Changement de session de pilotage avec historique protégé
+
+- API distincte de handoff dans le même RUN, liée au propriétaire, au checkpoint
+  et à deux frontières natives stables ; journal durable et rejeu idempotent.
+- Les opérations, décisions, once, accès et réservations historiques conservent
+  leurs identités ; les anciens SID deviennent non exécutables.
+- Reprise du checkpoint après interruption sans effet natif. Après utilisation
+  du nouveau journal, reprise en avant ; pas de downgrade du registre.
+
 ## 2.2.12 — Retirer une validation après refus natif edit vérifié
 
 - Le diagnostic expose les edits et leurs reçus ;le retrait non émis accepte
