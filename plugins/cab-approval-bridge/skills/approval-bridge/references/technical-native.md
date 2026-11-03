@@ -1,4 +1,4 @@
-# Précisions native — CAB 2.2.16
+# Précisions native — CAB 2.2.17
 
 ## Lecture source read-only quand l’outil natif manque
 
@@ -261,7 +261,7 @@ Appliquer la [procédure du transport scellé](exact-shell-carrier.md) pour un n
 
 Appliquer [la reprise des permissions natives](native-permission-resume.md) : une revue peut laisser shell/edit deny, sans mutation par CABU. Avant tout prompt de prévol ou opération permissionnée, utiliser client.prompt(...,{directory,requiredNativeAsk:['shell']}), ou ['edit'] pour write/edit. Inspection nativePermissionPolicy en lecture seule ; aucun rétablissement automatique. Le propriétaire lève explicitement le seul droit nécessaire après revue terminée et frontière sûre, avec preuve avant/après, autres deny conservés. Les prompts de revue sans outil restent possibles sous deny. Le contrôleur revérifie indépendamment ; allow, règle absente/spécifique, mauvais SID et policy changée ne permettent aucun contournement.
 
-## Appel MCP terminé avec erreur du wrapper —2.2.16
+## Appel MCP terminé avec erreur du wrapper —2.2.17
 
 Le chemin brut corrèle completed/error=true avec un request_validation interne
 completed sur son input natif exact ; cette observation n’est pas une réussite
@@ -281,3 +281,19 @@ partie outil corrélée. Après admission seulement, décider via CAB, acquérir
 l’accès exact et laisser le contrôleur transmettre/journaliser once ; aucun
 edit natif direct. Le préfixe commun du mandat reste stable, les valeurs
 variables appartiennent à son suffixe ; aucun cache hit n’est supposé.
+
+
+## Préambule readonly attendu — CAB2.2.17
+
+La projection qualifie `const schema = search({...}); return await tools[...]...({...});`
+et sa forme `const schema = await search({...}); return await tools[...]...({...});`,
+avec arguments littéraux et un seul retour MCP autorisé. Pendant running,
+l’identité peut ainsi être corrélée avant les metadata finales ; cela ne
+constitue ni décision ni permission. Les metadata complètes doivent rester
+exactement concordantes ; code supplémentaire, expression dynamique, ombrage
+de tools/search et troncature conservent le wrapper opaque.
+En16, await dans ce binding pouvait attendre la fin du call, son timeout,
+puis un poll sur la même identité. Ne pas réémettre une demande déjà admise
+pour reformater son wrapper ; observer admission et corrélation fraîches.
+Cette reconnaissance ne promet pas une projection anticipée de JavaScript
+arbitraire et ne ferme pas les coordinations REJECTED historiques.

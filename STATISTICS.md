@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 152**
+**NCA — Nombre de changes analysés : 153**
 
 ## Périmètre et durée
 
@@ -8,8 +8,8 @@
 |---|---|---|
 | DGCT — Temps total de développement du projet via l’IA | 12 | 0,235279 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 152 | 28,288171 |
-| NCMA — Changes achevés par jour (NCA / NJT) | 152 | 5,373271 |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 153 | 28,288171 |
+| NCMA — Changes achevés par jour (NCA / NJT) | 153 | 5,408621 |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
@@ -24,14 +24,14 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 150 | N/A | N/A | 98,68 % |
-| 2 | gpt-6.1-sol | N/A | 1,32 % |
+| 151 | N/A | N/A | 98,69 % |
+| 2 | gpt-6.1-sol | N/A | 1,31 % |
 
 ### LLM des agents orchestrateurs
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 5 | N/A | N/A | 3,29 % |
+| 5 | N/A | N/A | 3,27 % |
 
 ## Performances des LLM de codage OpenCode
 
@@ -150,13 +150,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 77323 | 544,528 |
+| Tests exécutés dans les bilans finaux | 77655 | 543,042 |
 | Fichiers ayant passé un contrôle syntaxique | 2710 | 61,591 |
-| Tâches OpenSpec prouvées et terminées | 150 | 6,250 |
+| Tâches OpenSpec prouvées et terminées | 153 | 6,120 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 77314 | 99,99 % |
+| Tests finaux réussis | 77646 | 99,99 % |
 | Tests finaux échoués | 9 | 0,01 % |
 
 | Catégorie de tests | Nombre |

@@ -14,7 +14,7 @@ function fixture() {
   return { root, passwordFile, close: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-const info = { version: '2.2.16', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+const info = { version: '2.2.17', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
 const location = { directory: '/workspace', project: { id: 'fixture', directory: '/workspace', canonical: '/workspace' } };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
@@ -1047,4 +1047,24 @@ test('pagination : une petite page adaptative ne réduit pas toutes les pages su
   }});
  const result=await c.messages('ses_adaptive');assert.equal(result.length,230);
  assert.equal(calls.find(x=>x.offset===1).limit,200);assert.ok(calls.length<12);
+});
+
+test('CodeMode awaited search : projection running avant metadata finale, entrée littérale exacte',async t=>{
+ const query={query:'request_validation',namespace:'cgpt-validation',limit:20};
+ const input={requestId:'await-search-request',run_id:'run-await',session_id:'ses_await',reservation_version:9,
+  operation_id:'op-await',operation_digest:'a'.repeat(64),resources:[{key:'resource:preflight',mode:'read'}],
+  expected_revisions:{'resource:preflight':0},commands:['/usr/bin/true']};
+ const code='const schema = await search('+JSON.stringify(query)+'); return await tools["cgpt-validation"].request_validation('+JSON.stringify(input)+');';
+ const pending=await codeModeFixture(t,wrapped(code,[],'running'));
+ assert.equal(pending.tool,'cgpt-validation_request_validation');assert.deepEqual(pending.state.input,input);
+ assert.ok(pending.state.metadata.cabCodeMode.wrapperId);
+ const completed=await codeModeFixture(t,wrapped(code,[{tool:'search',status:'completed',input:query},{tool:'cgpt-validation.request_validation',status:'completed',input}]));
+ assert.equal(completed.tool,'cgpt-validation_request_validation');assert.deepEqual(completed.state.input,input);
+ for(const altered of [
+  wrapped(code,[{tool:'search',status:'completed',input:query},{tool:'cgpt-validation.request_validation',status:'completed',input:{...input,requestId:'other'}}]),
+  wrapped(code+' await tools["cgpt-validation"].reject({});',[],'running'),
+  wrapped(code.replace('const schema','const tools'),[],'running'),
+  wrapped(code.replace(JSON.stringify(query),'query'),[],'running'),
+  {...wrapped(code,[],'running'),state:{...wrapped(code,[],'running').state,metadata:{toolCalls:[],truncated:true}}},
+ ])assert.equal((await codeModeFixture(t,altered)).tool,'execute');
 });

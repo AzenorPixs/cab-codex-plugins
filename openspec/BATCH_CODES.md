@@ -1,5 +1,10 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Projection native SCM2.2.17
+
+[recognize-awaited-codemode-discovery](changes/archive/2026-11-04-recognize-awaited-codemode-discovery/), code non attribué : ARCHIVÉ, source 2.2.17 qualifiée.
+Projection anticipée prouvée sur OpenCode isolé ;332 tests uniques réussis. Livraison distincte.
+
 ## Shell sans accès SCM 2.2.16
 
 [document-approved-shell-retirement](changes/archive/2026-11-03-document-approved-shell-retirement/), code non attribué : ARCHIVÉ, source2.2.16qualifiée.

@@ -1,4 +1,4 @@
-# Shell APPROVED refusé avant once, sans accès lié — CAB 2.2.16
+# Shell APPROVED refusé avant once, sans accès lié — CAB 2.2.17
 
 Dans son change déjà autorisé, l’orchestrateur propriétaire traite lui-même
 ce cas. Il conserve RUN, SID, décision et identifiants ; il ne sollicite pas

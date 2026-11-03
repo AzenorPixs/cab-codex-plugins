@@ -4,12 +4,12 @@ Les signalements CAB suivent le [triage canonique](plugins/cab-approval-bridge/s
 Les ambiguïtés établies complètent la documentation sous SCM ;la qualification
 ne crée aucune autorisation métier et conserve les protections légitimes.
 
-Les états privés CAB2.2.16 résident dans le profil d’exécution hors projet.
+Les états privés CAB2.2.17 résident dans le profil d’exécution hors projet.
 Les fichiers projet restent en0775 ; CABU vérifie et migre les identités,
 décisions et once, sans remettre les fichiers projet en0600. Le premier reçu
 de migration est distingué du transfert certifié ordinaire.
 
-## Récupération autonome 2.2.16
+## Récupération autonome 2.2.17
 
 Les frontières PENDING sans contexte et terminal de lecture sans reçu once
 possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
@@ -31,9 +31,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.16`.
+Version de référence des briques CAB : `2.2.17`.
 
-CAB 2.2.16 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.17 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -836,13 +836,13 @@ n’est déduit de la seule stabilité du prompt. Cette livraison réutilise des
 preuves et fixe cette priorité, sans modifier une politique de cache fournisseur
 ni revendiquer un benchmark LLM facturé.
 
-La corrélation2.2.16 distingue l’input d’un appel MCP terminé et la réussite
+La corrélation2.2.17 distingue l’input d’un appel MCP terminé et la réussite
 métier de son wrapper. Elle conserve NOT_ADMITTED terminal et les gardes
 indépendantes de décision/accès/once. La procédure canonique à payload
 littéral est détaillée dans technical-native ; aucune dépendance nouvelle.
 
 
-## Changement de session de pilotage — CAB 2.2.16
+## Changement de session de pilotage — CAB 2.2.17
 
 Une API distincte `/runs/<run>/session-handoff` change le SID courant sans
 transférer les anciennes autorisations ni libérer les protections historiques.
@@ -853,7 +853,7 @@ reste strict. Procédure, préconditions et absence de downgrade après usage :
 Publication/CABU et utilisation métier restent des preuves séparées.
 
 
-## Retrait autonome d’une unité approuvée — CAB 2.2.16
+## Retrait autonome d’une unité approuvée — CAB 2.2.17
 
 Le skill, l’index et la commande dirigent le propriétaire vers la procédure
 [APPROVED avec accès HELD](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-held-retirement.md).
@@ -866,7 +866,7 @@ restent dans le traitement local privé ; publication/CABU et action métier
 sont vérifiées séparément.
 
 
-## Shell approuvé sans accès — CAB2.2.16
+## Shell approuvé sans accès — CAB2.2.17
 
 Le [parcours autonome sans accès lié](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-shell-retirement.md)
 complète les entrées du skill, de la commande et du triage. Un manifeste
@@ -875,3 +875,12 @@ clôture RECONCILED avant émission native. La branche de retrait edit n’est
 pas forcée pour un shell ; aucun moteur, endpoint ou garde n’est modifié.
 Une protection incompatible, une base périmée ou un effet incertain reste
 opposable. Distribution/CABU et résultat métier sont vérifiés séparément.
+
+
+## Corrélation du préambule await search — CAB2.2.17
+
+Le client reconnaît await optionnel dans la discovery readonly liée par const
+avant un retour MCP littéral. Cette projection pendant running évite le cycle
+de timeout/poll pour cette forme, sous les mêmes comparaisons et gardes.
+[Contrat natif](plugins/cab-approval-bridge/skills/approval-bridge/references/technical-native.md).
+La clôture des anciennes coordinations REJECTED est un périmètre distinct.
