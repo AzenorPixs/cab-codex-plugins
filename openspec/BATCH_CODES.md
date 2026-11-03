@@ -1,5 +1,10 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Garde de handoff SCM 2.2.14
+
+[guard-persisted-transitions-during-session-handoff](changes/archive/2026-11-03-guard-persisted-transitions-during-session-handoff/), code non attribué : ARCHIVÉ, source 2.2.14 qualifiée.
+Transitions persistées opposables ; 367 cas uniques réussis. Publication/activation distinctes.
+
 ## Changement de session SCM 2.2.13
 
 [handoff-pilot-session-with-protected-history](changes/archive/2026-11-03-handoff-pilot-session-with-protected-history/), code non attribué : ARCHIVÉ, source 2.2.13 qualifiée.

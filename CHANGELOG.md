@@ -1,3 +1,11 @@
+## 2.2.14 — Gardes persistés du changement de session
+
+- Une récupération ou transition modèle déjà persistée interdit le handoff,
+  y compris après redémarrage sans requête en cours.
+- Une candidate readonly peut actualiser sa readiness après mise à jour dans
+  le même SID ; seule la dernière observation qualifiée fait preuve.
+- Aucun changement des décisions, accès, once ou effets historiques.
+
 ## 2.2.13 — Changement de session de pilotage avec historique protégé
 
 - API distincte de handoff dans le même RUN, liée au propriétaire, au checkpoint
