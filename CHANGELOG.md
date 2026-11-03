@@ -1,3 +1,10 @@
+## 2.2.12 — Retirer une validation après refus natif edit vérifié
+
+- Le diagnostic expose les edits et leurs reçus ;le retrait non émis accepte
+  un unique edit avorté lié au reçu privé ACK204 et à deux frontières stables.
+- La décision APPROVED historique reste conservée. Aucun nativeResult, once
+  ou NO_EFFECT inventé ;aucune empreinte approuvée corrigée rétroactivement.
+
 ## 2.2.11+codex.20261103164239 — Clarifier l’authentification du pilote
 
 - GET sans authentification401 et client CAB authentifié200 sont distingués.

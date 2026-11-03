@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.11
+# Reprise autonome dans le change — CAB 2.2.12
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -246,7 +246,7 @@ disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
 supposition. La clôture historique reste non prouvée ; aucune procédure ne
 peut effacer cette incertitude sans preuve supplémentaire.
 
-## Permission shell décomposée — CAB2.2.11
+## Permission shell décomposée — CAB2.2.12
 
 Une permission shell peut porter plusieurs ressources ;elle autoriserait
 l’appel entier, pas une once par fragment. CAB ne déduit aucune équivalence
@@ -268,3 +268,30 @@ propriétaire examine les preuves et applique la récupération existante ;les
 anciennes identités et permissions ne sont pas réutilisées. Aucun reçu absent
 ne se fabrique rétroactivement. Des mandats unitaires ou le transport shell
 scellé existant permettent d’éviter une décomposition non qualifiée.
+
+## Retirer un edit refusé avant once — CAB2.2.12
+
+Utiliser la policy propriétaire withdraw-unissued-validation et la même route
+recovery/action, targetId de l’opération, input={nativeBoundaryDigest,evidence}.
+Relire le plan et le diagnostic natif après activation de la version applicable.
+Le diagnostic expose désormais edit, inputSha256 et les reçus liés au call.
+
+L’exception accepte un seul edit natif V2, error/aborted et executed=false,
+visant le seul fichier de la validation. Elle exige le reçu privé exact
+reject/ACKNOWLEDGED/HTTP204 CAB_CLIENT_PROGRAMMATIC, même SID, call, cible et
+PID/version, avec chronologie cohérente. L’input réel est haché et conservé
+dans le reçu de récupération ;son empreinte peut différer de l’empreinte
+approuvée précisément parce que l’exécution a été refusée. L’empreinte
+historique n’est jamais remplacée pour rendre l’ancien input exécutable.
+
+Deux observations stables doivent confirmer session idle, zéro permission,
+aucun accès/native/nativeResult/once de l’opération, et aucun autre effet
+après la demande, y compris dans son wrapper. Un reçu manquant, une erreur
+non typée aborted, une cible étrangère ou une histoire divergente refuse le
+retrait. Ne pas faire passer cet edit dans une revue de commande READ_ONLY.
+
+Seule la coordination devient CANCELLED ;APPROVED reste historique, avec
+COORDINATION_WITHDRAWN_BEFORE_ISSUANCE / OWNER_NATIVE_BOUNDARY_REVIEW. Aucun
+NO_EFFECT, résultat natif, once ou reçu de rejet rétroactif n’est créé.
+Relire le même actionId après réponse perdue. La nouvelle proposition aura
+ses propres identités, révisions et empreinte, après revue du fichier actuel.
