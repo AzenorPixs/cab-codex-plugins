@@ -7,7 +7,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.2.17';
+export const VERSION = '2.2.18';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -471,6 +471,15 @@ function literalObject(source, commandBinding = null, nativeRequestId = null) {
   return null;
 }
 
+function discoveryAssertionStringAt(source, start) {
+  if (source[start] !== "'") return literalStringAt(source, start);
+  const end = source.indexOf("'", start + 1);
+  if (end < 0) return null;
+  const value = source.slice(start + 1, end);
+  if (/[\\\r\n]/.test(value)) return null;
+  return { value, end: end + 1 };
+}
+
 function codeModePart(content, part) {
   if (typeof part.state.input?.code !== 'string' || content.executed !== false || part.state.metadata?.truncated === true) return null;
   const observed = part.state.metadata?.toolCalls;
@@ -478,7 +487,7 @@ function codeModePart(content, part) {
     observed[0]?.tool === 'cgpt-validation.request_validation' && typeof observed[0]?.input?.requestId === 'string'
     ? observed[0].input.requestId : null;
   let code = part.state.input.code.trim(), discovery;
-  let commandBinding = null;
+  let commandBinding = null, assertedDiscoveryPath = null;
   const declaration = /^const\s+([A-Za-z_$][\w$]*)\s*=\s*/.exec(code);
   if (declaration) {
     const literal = literalStringAt(code, declaration[0].length);
@@ -512,6 +521,23 @@ function codeModePart(content, part) {
     if (!literal || !/^\)\s*;/.test(literal.rest)) return null;
     code = literal.rest.replace(/^\)\s*;/, '').trim();
     discovery = { tool: 'search', input: literal.value };
+    const variable = prefix[1].replace(/[$]/g, '\\$&');
+    const assertion = new RegExp('^if\\s*\\(\\s*' + variable +
+      '\\.items\\s*\\[\\s*0\\s*\\]\\.path\\s*!==\\s*').exec(code);
+    if (assertion) {
+      if (prefix[1] === 'Error') return null;
+      if (commandBinding && [prefix[1], 'Error', 'tools', 'search'].includes(commandBinding.name)) return null;
+      const path = discoveryAssertionStringAt(code, assertion[0].length);
+      if (!path) return null;
+      const throwing = /^\s*\)\s*throw\s+new\s+Error\s*\(\s*/.exec(code.slice(path.end));
+      if (!throwing) return null;
+      const message = discoveryAssertionStringAt(code, path.end + throwing[0].length);
+      if (!message) return null;
+      const end = /^\s*\)\s*;\s*/.exec(code.slice(message.end));
+      if (!end) return null;
+      assertedDiscoveryPath = path.value;
+      code = code.slice(message.end + end[0].length);
+    }
     if (new RegExp('^return\\s+' + prefix[1].replace(/[$]/g, '\\$&') + '\\s*;?$').test(code)) code = '';
   }
   const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
@@ -524,6 +550,7 @@ function codeModePart(content, part) {
     call = { tool: 'cgpt-validation.' + match[2], input: literal.value };
     requestIdBound = literal.requestIdBound;
   } else if (code || !discovery) return null;
+  if (assertedDiscoveryPath !== null && (!call || assertedDiscoveryPath !== 'tools["cgpt-validation"].' + match[2])) return null;
   const expected = [discovery, call].filter(Boolean);
   const failureTool = call?.tool === 'cgpt-validation.request_validation' ||
     (!discovery && call?.tool === 'cgpt-validation.get_approval');

@@ -1,4 +1,4 @@
-# Clôture — CAB 2.2.17
+# Clôture — CAB 2.2.18
 
 ## Clôture et bilan documentaire
 
