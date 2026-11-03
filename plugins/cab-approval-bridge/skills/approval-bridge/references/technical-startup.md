@@ -1,4 +1,4 @@
-# Précisions startup — CAB 2.2.8
+# Précisions startup — CAB 2.2.9
 
 ## Bootstrap prioritaire du monitoring
 

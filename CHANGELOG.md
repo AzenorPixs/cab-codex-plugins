@@ -1,3 +1,15 @@
+## 2.2.9 — Préserver la reprise et les créations privées
+
+- Le contrôleur et le superviseur démarrent avec un umask privé0077, même si
+  le shell utilise0002. Les checkpoints recréés restent0600 ;le verrou public
+  explicitement0775 conserve la coordination avec les anciens contrôleurs.
+- Les répertoires privés0700 protégeaient déjà ces données. Ce correctif
+  n’ajoute aucune barrière métier ni changement de droits projet.
+
+- Une renotification identique ne remplace plus l’objet restauré et ses preuves.
+  Après décision du propriétaire, la validation restaurée peut acquérir son
+  accès normal et transmettre once à la permission exacte, sans rejeu du mandat.
+
 ## 2.2.8 — Lire le registre réel pendant la migration
 
 - Le précontrôle de migration utilise le lecteur JSON runtime borné à64Mio,

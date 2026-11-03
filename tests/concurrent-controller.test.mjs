@@ -2131,7 +2131,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.8');
+  assert.equal(initialized.result.serverInfo.version, '2.2.9');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4252,7 +4252,7 @@ test('persistance : contenu ou séquence contradictoires ne sont pas écrasés p
 });
 
 test('migration privée : PENDING absent du checkpoint restauré avant activation, projet0775 inchangé',async t=>{
- const h=await setup(t),run=await h.reserve('private-migration');
+ const h=await setup(t),run=await h.reserve('private-migration',{resources:[{key:'file:src/private-read.md',mode:'read'}]});
  const directory=runtimeStateDirectory(h.directory),file=join(directory,'runs',run.runId,String(run.contextId),'controller-communication.json');
  await h.post('/transport/prepare',{transactionId:'empty-migration-checkpoint'});await h.post('/transport/cancel',{transactionId:'empty-migration-checkpoint'});
  const previous=readFileSync(file),approval=h.approval(run,'private-pending');
@@ -4272,11 +4272,24 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.8'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.9'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ await h.execute(approval);
+ assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].native.onceAcknowledged,true);
  for(const [path,bytes] of files){assert.equal(statSync(path).mode&0o777,0o775);assert.deepEqual(readFileSync(path),bytes);}
- assert.equal(statSync(file).mode&0o777,0o600);assert.equal(h.native.replies.length,0);
+ assert.equal(statSync(file).mode&0o777,0o600);assert.equal(h.native.replies.length,1);
  await h.stop();await h.start();assert.equal((await h.get('/runtime/migration')).body.migration.phase,'ACTIVE');
+});
+
+test('création privée : job0600 et verrou public de projet0775 sous umask parent002',async t=>{
+ const h=await setup(t),run=await h.reserve('private-create-mode');
+ const job=join(runtimeStateDirectory(h.directory),'runs',run.runId,String(run.contextId),'controller-job.json');
+ assert.equal(statSync(job).mode&0o777,0o600);
+ assert.equal(statSync(join(legacyStateDirectory(h.directory),'registry.instance.lock')).mode&0o777,0o775);
+ const approval=h.approval(run,'private-create-mode');assert.equal((await h.post('/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ assert.equal(statSync(job).mode&0o777,0o600);assert.equal(h.native.replies.length,0);
 });

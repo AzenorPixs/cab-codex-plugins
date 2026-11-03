@@ -5,9 +5,11 @@ import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.2.8";
+const version = "2.2.9";
 if ([CONTEXT_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB supervisor component version mismatch');
 
+// Private checkpoints must not inherit a group-writable shell umask.
+process.umask(process.umask() | 0o077);
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspace = envValue('OC_Codex_WORKSPACE');
 if (!workspace || !isAbsolute(workspace)) throw new Error('OC_Codex_WORKSPACE doit désigner une racine de projet absolue.');

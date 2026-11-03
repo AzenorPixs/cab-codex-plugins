@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.8";
+export const VERSION = "2.2.9";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -428,7 +428,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.8",
+    version: "2.2.9",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1727,7 +1727,7 @@ function restorePendingValidation(approval, proofDigest) {
     throw decisionError('pending-restore-another-validation');
   const validation = {requestId,approvalId:approval.approval_id,changeId:approval.change_id,
     sourceApproval:structuredClone(approval),summary:approval.summary || 'Validation PENDING restaurée',operation,
-    receivedAt:new Date().toISOString(),operationConsumed:false,operationInvalidated:false,pendingRestorationProof:proofDigest};
+    receivedAt:new Date().toISOString(),operationConsumed:false,operationInvalidated:false,restoredOperation:true,pendingRestorationProof:proofDigest};
   persistCommunication(validation);
   validations.set(requestId,validation);refreshPendingValidationStatus();
   updateStatus('pending-validation-restored',{requestId,operationId:operation.operationId});
@@ -2309,7 +2309,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.8",
+      version: "2.2.9",
     },
   });
 
@@ -3079,7 +3079,7 @@ const handle = async (request, response, url) => {
                 ? approval.title
                 : "Validation OpenCode";
 
-          const validation = {
+          const validation = previous || {
             requestId,
             approvalId,
             changeId,
