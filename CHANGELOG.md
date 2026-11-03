@@ -1,3 +1,12 @@
+## 2.2.15 — Retrait autonome APPROVED avec accès HELD
+
+- Le contrat distribué dirige le propriétaire vers locks/release RECONCILED
+  pour une unité obsolète approuvée, protégée par HELD mais jamais émise.
+- Procédure conditionnelle reliée au skill, à la commande, à l’index et aux
+  références de reprise ; preuve fraîche, jeton privé et résultat vérifié.
+- Distinction avec withdraw-unissued, WAITING/STALE, effet incertain et ancien
+  PENDING ; aucun changement de route, de moteur, de once ou de protection.
+
 ## 2.2.14 — Gardes persistés du changement de session
 
 - Une récupération ou transition modèle déjà persistée interdit le handoff,
