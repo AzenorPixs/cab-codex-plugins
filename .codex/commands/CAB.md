@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.15
+version: 2.2.16
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -47,8 +47,8 @@ Pour un changement explicite de SID dans le même RUN avec historique protégé,
 lire `references/session-handoff.md`. Les commandes run/resume ne réalisent
 pas cette transition implicitement.
 
-Si une unité APPROVED doit être retirée avec accès HELD avant once, charger
-`references/approved-held-retirement.md`. L’orchestrateur propriétaire examine
-la frontière et applique la clôture ordinaire RECONCILED dans son mandat ;
-il ne délègue pas ce retrait au correcteur CAB et ne demande pas un nouvel
-accord humain dans ce périmètre. Aucun nouvel argument de commande n’est créé.
+Pour retirer une unité APPROVED avant once, le propriétaire suit
+`references/approved-held-retirement.md` si l’accès est HELD ; pour un shell
+refusé sans accès, `references/approved-shell-retirement.md`. Il examine la
+frontière et agit dans son mandat, sans solliciter le correcteur pour ces
+voies qualifiées. Aucun nouvel argument ni aucune garde contournée.

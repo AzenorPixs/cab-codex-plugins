@@ -1,4 +1,4 @@
-# Retirer une unité APPROVED avec accès HELD — CAB 2.2.15
+# Retirer une unité APPROVED avec accès HELD — CAB 2.2.16
 
 ## Décideur et choix de la voie
 
@@ -11,7 +11,8 @@ applicable ; un effet incertain conserve ses protections.
 | État observé | Voie applicable |
 |---|---|
 | Ancien retour PENDING | Relire `/decision/<requestId>/admission`, `/decision/<requestId>` et la corrélation ; conserver les mêmes identifiants. |
-| PREPARED/APPROVED, aucun accès lié | `withdraw-unissued-validation`, selon [reprise autonome](autonomous-recovery.md). |
+| Shell APPROVED refusé avant once, aucun accès lié | [shell approuvé sans accès](approved-shell-retirement.md) ; acquisition/clôture ordinaires conditionnelles. |
+| PREPARED/APPROVED, aucun accès lié sans ce refus shell | `withdraw-unissued-validation`, selon [reprise autonome](autonomous-recovery.md). |
 | PREPARED/APPROVED, accès HELD, aucune émission native | Clôture ordinaire de cet accès par `/locks/release`, `outcome: RECONCILED`, décrite ici. |
 | WAITING ou STALE | `/locks/cancel`, selon ses gardes ; cette route ne retire pas HELD. |
 | ISSUING, EXECUTING, UNKNOWN, intention sans ACK ou résultat manquant après émission | Réconciliation native qualifiée ; cette procédure de retrait avant émission est inadmissible. |
