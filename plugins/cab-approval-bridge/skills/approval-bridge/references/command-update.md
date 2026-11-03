@@ -1,4 +1,4 @@
-# Mise à jour — CAB 2.2.9
+# Mise à jour — CAB 2.2.10
 
 ## `/CAB update`
 

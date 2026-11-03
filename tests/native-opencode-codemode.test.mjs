@@ -631,5 +631,18 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.equal(mismatchDiagnostic.available,true);assert.equal(mismatchDiagnostic.inputMismatchCount,1);assert.equal(mismatchDiagnostic.requiresReconciliation,true);assert.equal(mismatchDiagnostic.effectStatus,'unverified');
     console.log(JSON.stringify({nativeInputGuard:true,exactWrite:true,exactEdit:true,mismatchBeforeOnce:true,filePreserved:true}));
 
+    const splitSession=await makeSession('multipart rejection only'),splitTarget=join(workspace,'split-must-not-exist');
+    queue.push({tool:'shell',input:{command:'/usr/bin/touch '+splitTarget+' && /usr/bin/printf CAB_SPLIT_NOT_EXECUTED && /usr/bin/test -f '+splitTarget,workdir:workspace}});
+    await client.prompt(splitSession.id,'Execute the queued synthetic shell only.');
+    let split;
+    await until(async()=>{const data=await client.request('/api/permission/request',{query:{directory:workspace}});split=data.data.find(p=>p.sessionID===splitSession.id);return Boolean(split);},'multipart native permission');
+    assert.equal(split.resources.length,3);assert.equal(existsSync(splitTarget),false);
+    await assert.rejects(client.permissions(workspace,{sessionIds:[splitSession.id]}),{code:'opencode-permission-target-invalid'});
+    await client.replyPermission(splitSession.id,split.id,'reject');
+    await until(async()=>!(await client.activeSessions())[splitSession.id],'multipart rejection terminal');
+    assert.equal(existsSync(splitTarget),false);
+    assert.equal(client.permissionReplies(splitSession.id).receipts.find(r=>r.permissionId===split.id).state,'ACKNOWLEDGED');
+    console.log(JSON.stringify({multipartShellRejection:true,resources:split.resources.length,noEffect:true,privateAck:true,noOnce:true}));
+
 
   });

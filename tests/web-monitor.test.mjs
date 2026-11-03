@@ -138,7 +138,7 @@ test('collecte : limite effective, RUN isolés, aucune décision ou mutation et 
       b: { job: { changeId: 'change-b', sessionId: 'ses_b', armed: true }, terminalGate: { status: 'OPEN' } } } });
     if (request.url === '/monitor/runs') return json(response, { runs: [{ runId: 'a', state: 'RESERVED' }, { runId: 'b', state: 'RESERVED' }], privateToken: 'PRIVATE-SENTINEL' });
     if (request.url === '/monitor/events') return json(response, journal.snapshot());
-    if (request.url.startsWith('/api/info')) return json(response, { version: '2.2.9', pid: 42,
+    if (request.url.startsWith('/api/info')) return json(response, { version: '2.2.10', pid: 42,
       hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } });
     if (request.url.startsWith('/api/mcp')) return json(response, { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] });
@@ -174,12 +174,12 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const fetcher = async (url) => {
     const target = new URL(url); let value;
     if (target.port === '10002') value = { version: '1.4.0' };
-    else if (target.pathname === '/api/info') value = { version: '2.2.9', pid: 42,
+    else if (target.pathname === '/api/info') value = { version: '2.2.10', pid: 42,
       hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
     else if (target.pathname === '/api/mcp') value = { location: { directory: workspace },
       data: [{ name: 'cgpt-validation', status: { status: 'connected' } }] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
-    else if (target.pathname === '/status') value = { version: '2.2.9', mode: 'concurrent', brokerReadiness: { server_version: '2.2.9' },
+    else if (target.pathname === '/status') value = { version: '2.2.10', mode: 'concurrent', brokerReadiness: { server_version: '2.2.10' },
       runs: { a: { job: { changeId: 'change-a', armed: true, lifecycle }, undecidedValidationCount: 1,
         coordination: { phase: 'WORK' }, terminalGate: { status: 'OPEN' } } } };
     else if (target.pathname === '/monitor/runs') value = { runs: [{ runId: 'a', state: 'RESERVED' }] };
@@ -190,7 +190,7 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
     supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.2.9', supervisor: '1.4.0', broker: '2.2.9', opencode: '2.2.9', monitor: '2.2.9' });
+  assert.deepEqual(result.componentVersions, { controller: '2.2.10', supervisor: '1.4.0', broker: '2.2.10', opencode: '2.2.10', monitor: '2.2.10' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -241,7 +241,7 @@ test('collectes non chevauchantes et réponses amont bornées', async () => {
   const paths = [];
   const state = new MonitorState(config(), { fetcher: async (url) => {
     requests++; const target = new URL(url); paths.push(target.pathname); await pending; let value = {};
-    if (target.pathname === '/api/info') value = { version: '2.2.9', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+    if (target.pathname === '/api/info') value = { version: '2.2.10', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
     else if (target.pathname === '/api/mcp') value = { location: { directory: process.cwd() }, data: [] };
     else if (target.pathname === '/api/session/active') value = { data: {} };
     return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });

@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.9
+# Reprise autonome dans le change — CAB 2.2.10
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -245,3 +245,26 @@ accès libérés avant reconcile-quarantined-port. Sinon poursuivre les travaux
 disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
 supposition. La clôture historique reste non prouvée ; aucune procédure ne
 peut effacer cette incertitude sans preuve supplémentaire.
+
+## Permission shell décomposée — CAB2.2.10
+
+Une permission shell peut porter plusieurs ressources ;elle autoriserait
+l’appel entier, pas une once par fragment. CAB ne déduit aucune équivalence
+par concaténation. Une forme non qualifiée par la garde d’exécution reste
+sans once, même si le mandat porte une commande composite.
+
+Le pilote refuse la permission par
+`client.replyPermission(sessionId, permissionId, 'reject', workspace)` du
+client CAB applicable. Pour une cible shell refusée par le validateur, le
+client vérifie séparément workspace, session, permission et source/message/call
+natifs, puis le PID/version. Il écrit INTENT avant POST et ACKNOWLEDGED après
+HTTP204 et contrôle d’identité, dans permission-replies du runtime privé.
+Une réponse incertaine n’est pas rejouée ;un ACK relu est idempotent.
+
+Ce reçu CAB_CLIENT_PROGRAMMATIC de refus natif n’est pas une décision de mandat
+REJECTED. La décision historique APPROVED reste distincte de la réconciliation
+CANCELLED et de la libération. Le reçu seul ne prouve pas NO_EFFECT. Le
+propriétaire examine les preuves et applique la récupération existante ;les
+anciennes identités et permissions ne sont pas réutilisées. Aucun reçu absent
+ne se fabrique rétroactivement. Des mandats unitaires ou le transport shell
+scellé existant permettent d’éviter une décomposition non qualifiée.

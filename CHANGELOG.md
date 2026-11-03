@@ -1,3 +1,11 @@
+## 2.2.10 — Refuser une permission shell décomposée avec un reçu privé
+
+- Le rejet vérifie son identité native indépendamment de la garde d’exécution.
+  Une cible shell multipartie reste refusée pour once ;son rejet conserve
+  INTENT/ACK204, identité de processus et protection contre le rejeu incertain.
+- Le refus natif ne modifie pas rétroactivement la décision du mandat ;la
+  réconciliation et la libération restent des étapes propriétaires distinctes.
+
 ## 2.2.9 — Préserver la reprise et les créations privées
 
 - Le contrôleur et le superviseur démarrent avec un umask privé0077, même si

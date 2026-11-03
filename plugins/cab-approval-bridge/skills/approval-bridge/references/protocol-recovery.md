@@ -1,4 +1,4 @@
-# Récupération de session — CAB 2.2.9
+# Récupération de session — CAB 2.2.10
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.

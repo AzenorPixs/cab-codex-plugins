@@ -7,7 +7,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.2.9';
+export const VERSION = '2.2.10';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -1219,6 +1219,28 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     }
   }
 
+  async function shellPermissionForRejection(sessionId, permissionId, directoryValue) {
+    const response = await json('/api/permission/request', { query: { directory: directoryValue } });
+    if (!record(response) || response.location?.directory !== directoryValue || !Array.isArray(response.data)) fail('opencode-permissions-invalid');
+    const matches = response.data.filter(raw => raw?.id === permissionId);
+    if (matches.length !== 1 || matches[0].sessionID !== sessionId) fail('opencode-permission-receipt-pending-required');
+    const raw = matches[0], permission = normalizePermission(raw);
+    if (raw.action !== 'shell') fail('opencode-permission-target-invalid');
+    if (raw.source?.type !== 'tool' || typeof raw.source.id !== 'string' || !raw.source.id ||
+        typeof raw.source.messageID !== 'string' || !raw.source.messageID) fail('opencode-permission-source-invalid');
+    const observedSession = await session(sessionId, directoryValue);
+    if (observedSession.directory !== directoryValue) fail('opencode-permission-source-invalid');
+    const envelope = await json(`/api/session/${encodeURIComponent(sessionId)}/message/${encodeURIComponent(raw.source.messageID)}`);
+    const message = normalizeMessage(unwrapData(envelope, 'opencode-message-invalid'), sessionId);
+    const parts = message.parts.filter(p => p.type === 'tool' && p.callID === raw.source.id);
+    if (message.info.id !== raw.source.messageID || parts.length !== 1 || parts[0].nativeTool !== 'shell' ||
+        !['running', 'completed'].includes(parts[0].state.status) || !record(parts[0].state.input) ||
+        typeof parts[0].state.input.command !== 'string' || !parts[0].state.input.command.trim()) fail('opencode-permission-source-invalid');
+    // This observation is private to reject; it must never authorize execution.
+    permission.metadata.command = parts[0].state.input.command;
+    return permission;
+  }
+
   async function replyPermission(sessionId, permissionId, decision, directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     if (decision !== 'once' && decision !== 'always' && decision !== 'reject') fail('opencode-permission-decision-invalid');
@@ -1234,9 +1256,18 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
         if (existing.state === 'ACKNOWLEDGED') return;
         fail('opencode-permission-outcome-unverified');
       }
-      const pending = (await permissions(directoryValue, { sessionIds: [sessionId] })).filter(item => item.id === permissionId);
-      if (pending.length !== 1) fail('opencode-permission-receipt-pending-required');
-      const permission = pending[0], target = permission.permission === 'bash' ? permission.metadata.command : permission.metadata.filepath;
+      let permission;
+      try {
+        const pending = (await permissions(directoryValue, { sessionIds: [sessionId] })).filter(item => item.id === permissionId);
+        if (pending.length !== 1) fail('opencode-permission-receipt-pending-required');
+        permission = pending[0];
+      } catch (cause) {
+        if (cause.code !== 'opencode-permission-target-invalid') throw cause;
+        permission = await shellPermissionForRejection(sessionId, permissionId, directoryValue);
+      }
+      const checked = await info(true);
+      if (checked.pid !== native.pid || checked.version !== native.version) fail('opencode-permission-receipt-identity-divergent');
+      const target = permission.permission === 'bash' ? permission.metadata.command : permission.metadata.filepath;
       intent = journal.begin({ ...identity, nativePid: native.pid, nativeVersion: native.version,
         callId: permission.tool?.callID || null, targetDigest: typeof target === 'string'
           ? createHash('sha256').update(JSON.stringify([permission.permission, target])).digest('hex') : null });
