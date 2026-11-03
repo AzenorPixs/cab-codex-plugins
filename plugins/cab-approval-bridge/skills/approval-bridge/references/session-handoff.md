@@ -1,4 +1,4 @@
-# Changer le SID de pilotage dans le même RUN — CAB 2.2.17
+# Changer le SID de pilotage dans le même RUN — CAB 2.2.18
 
 Cette voie appartient à l’orchestrateur propriétaire dans le change autorisé.
 Elle ne corrige pas un HTTP401 : utiliser d’abord le client CAB authentifié.

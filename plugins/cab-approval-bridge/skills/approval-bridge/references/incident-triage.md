@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.17
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.18
 
 ## Avant de solliciter une correction
 
@@ -17,7 +17,7 @@ par défaut. Une garde justifiée reste en place, même si elle retarde un effet
 
 | Constat | Interprétation et parcours supporté |
 |---|---|
-| Notification503 puis MATCHED après timeout/poll | Distinguer instant du snapshot et forme du wrapper ; le binding const avec await search est qualifié depuis17, voir [native](technical-native.md). Garder les mêmes identifiants et relire la corrélation. |
+| Notification503 puis MATCHED après timeout/poll | Distinguer instant du snapshot et forme du wrapper ; le binding const avec await search est qualifié depuis17, l’assertion de chemin fixe depuis18, voir [native](technical-native.md). Garder les mêmes identifiants et relire la corrélation. |
 | Shell APPROVED refusé, aucun accès, retrait direct non qualifié | [shell approuvé sans accès](approved-shell-retirement.md) ; vérifier manifeste/révisions/disjonction avant toute acquisition de coordination. Un recouvrement ne se contourne pas. |
 | Ancien PENDING, décision désormais APPROVED, accès HELD | Relire admission et décision sur les mêmes identifiants ; si l’unité devient obsolète avant émission, suivre [retrait APPROVED/HELD](approved-held-retirement.md) sans solliciter le correcteur pour la clôture ordinaire. |
 | HTTP401 sur un GET direct | Tester les GET info/session avec le client CAB authentifié localement, sans exposer le credential ;voir [interfaces](protocol-interfaces.md). Un401 sans auth ne prouve pas un SID défaillant. |

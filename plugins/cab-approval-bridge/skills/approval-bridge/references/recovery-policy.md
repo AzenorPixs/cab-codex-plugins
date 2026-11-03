@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.17
+# Récupération par RUN — CAB 2.2.18
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.

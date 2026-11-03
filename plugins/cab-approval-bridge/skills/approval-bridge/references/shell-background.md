@@ -1,4 +1,4 @@
-# Shell durable en arrière-plan — CAB 2.2.17
+# Shell durable en arrière-plan — CAB 2.2.18
 
 Déclarer explicitement shell_background=true dans la demande unitaire, avec
 une commande, un port write réservé et tool_input_sha256 calculé sur tous les
