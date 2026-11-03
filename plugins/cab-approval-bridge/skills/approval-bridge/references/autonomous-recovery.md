@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.6
+# Reprise autonome dans le change — CAB 2.2.7
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les

@@ -1,9 +1,11 @@
+import {migrationPendingValidations,migrationRegistryDigest,RUNTIME_MIGRATION_PROTOCOL} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-migration.mjs';
+import {legacyStateDirectory,initializeRuntimeState,writeRuntimeJson,runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { openCodeV2TestHandler, v2ProviderResponseBytes, v2NormalizedToolPart } from './helpers/opencode-v2-test-server.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
+import { cpSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -138,7 +140,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     }
     const r = await fetch(base + path, { method: 'POST',
     headers: { 'content-type': 'application/json', connection: 'close',
-      ...(path.startsWith('/transport/') || /^\/runs\/[^/]+\/recovery\//.test(path)
+      ...(path.startsWith('/transport/') || path.startsWith('/runtime/migration') || /^\/runs\/[^/]+\/recovery\//.test(path)
         || /^\/runs\/[^/]+\/extend-compatible$/.test(path)
         ? { 'x-cab-continuity': 'cab-continuity-v1' } : {}) },
     body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
@@ -247,7 +249,7 @@ test('frontière de décision : une intention privée non engagée ne devient pa
   const approval = h.approval(run, 'uncommitted-request');
   assert.equal((await h.post('/validation/request', { approval })).status, 202);
   await h.stop();
-  const path = join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', run.runId, String(run.contextId), 'controller-communication.json');
+  const path = join(runtimeStateDirectory(h.directory), 'runs', run.runId, String(run.contextId), 'controller-communication.json');
   const store = new ContinuityStore(path, 'communication', () => true), value = store.snapshot();
   value.decisions.push([approval.requestId, { decision: 'approved', requestId: approval.requestId,
     approval_id: approval.approval_id, change_id: approval.change_id }]);
@@ -262,7 +264,7 @@ test('frontière de décision : le registre engagé restaure la décision si son
   const h = await setup(t), run = await h.reserve('committed-decision');
   const { approval } = await h.approvedAccess(run, 'committed-request');
   await h.stop();
-  const path = join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', run.runId, String(run.contextId), 'controller-communication.json');
+  const path = join(runtimeStateDirectory(h.directory), 'runs', run.runId, String(run.contextId), 'controller-communication.json');
   const store = new ContinuityStore(path, 'communication', () => true), value = store.snapshot();
   value.decisions = []; store.write(value);
   await h.start();
@@ -384,7 +386,7 @@ test('checkpoint privé corrompu : diagnostic du RUN atteint et communication du
   const approval = h.approval(a, 'corrupt-private-request');
   assert.equal((await h.post('/validation/request', { approval })).status, 202);
   await h.stop();
-  const path = join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', a.runId, String(a.contextId), 'controller-communication.json');
+  const path = join(runtimeStateDirectory(h.directory), 'runs', a.runId, String(a.contextId), 'controller-communication.json');
   writeFileSync(path, 'invalid private checkpoint\n');
   await h.start(); await h.post('/broker/readiness', { status: 'READY', pending_count: 1, infrastructure_status: 'READY' });
   assert.equal((await h.get('/runs/' + a.runId + '/status')).body.recoveryRequired, 'continuity-state-invalid');
@@ -423,7 +425,7 @@ test('locks/release accepte NO_EFFECT après erreur native edit vérifiée et re
  const {approval,access}=await h.approvedEditAccess(run,'edit-no-effect','src/theme.css');
  await h.execute(approval);await h.completeTool(approval,0,{error:true,output:'newString is already in the file'});
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));delete state.coordination.operations[approval.operation_id].nativeResult;
  writeFileSync(statePath,JSON.stringify(state));
  await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
@@ -530,7 +532,7 @@ test('un tour assistant terminal exact invalide le mandat et libère NO_EFFECT m
   {resources:[{key:'file:src/restore.py',mode:'write'}]});
  const {approval,access}=await h.approvedEditAccess(run,'restore-terminal-turn-no-effect','src/restore.py');
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));
  const op=state.coordination.operations[approval.operation_id];op.state='UNKNOWN';
  op.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
@@ -578,7 +580,7 @@ test('le tour terminal sans effet reste UNKNOWN si une permission native est pen
   {resources:[{key:'file:src/restore.py',mode:'write'}]});
  const {approval,access}=await h.approvedEditAccess(run,'restore-terminal-turn-pending','src/restore.py');
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));const op=state.coordination.operations[approval.operation_id];
  op.state='UNKNOWN';op.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
   proofDigest:createHash('sha256').update('terminal-turn-unclassified').digest('hex'),observedAt:new Date().toISOString()};
@@ -608,7 +610,7 @@ test('NO_EFFECT terminal peut clôturer un accès fichier disjoint d’un bail t
  assert.equal(accessResult.status,200,JSON.stringify(accessResult));
  await h.execute(approval);await h.completeTool(approval);
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));
  const operation=state.coordination.operations[approval.operation_id];operation.state='UNKNOWN';
  delete operation.native;delete operation.nativeResult;operation.nativeRecovery={permissionId:null,callId:null,
@@ -656,7 +658,7 @@ test('réconcilie un bail de test restauré sans token client et conserve HELD',
   expectedRevisions:fileApproval.expected_revisions});
  assert.equal(fileAccess.status,200,JSON.stringify(fileAccess));
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));
  const unresolved=state.coordination.operations[fileApproval.operation_id];unresolved.state='UNKNOWN';
  unresolved.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
@@ -705,7 +707,7 @@ test('réconcilie un accès HELD restauré depuis la décision durable sans rejo
  assert.equal(completed.status,200,JSON.stringify(completed));
  const repliesBefore=h.native.replies.length;
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));
  const restored=state.coordination.accesses[access.accessId];
  restored.state='HELD';restored.token=access.token;delete restored.finishedAt;delete restored.outcome;delete restored.releaseDigest;
@@ -857,7 +859,7 @@ test('une réponse perdue sans permission native restante conserve UNKNOWN sans 
     state:{status:'running',input:{filePath:h.directory+'/src/restore.py',content:'replacement'},time:{start:stamp}}},
  ]});
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));
  const operation=state.coordination.operations[approval.operation_id];
  operation.state='UNKNOWN';operation.native.onceAcknowledged=false;
@@ -873,7 +875,7 @@ test('refuse une permission pendante dont le callID diverge de l’opération du
  const h=await setup(t);const run=await h.reserve('restore-callid-mismatch',{resources:[{key:'file:src/restore.py',mode:'write'}]});
  const {approval}=await h.approvedEditAccess(run,'restore-callid-mismatch','src/restore.py');
  await h.execute(approval);assert.equal(h.native.replies.length,1);
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  await h.stop();
  const state=JSON.parse(readFileSync(statePath,'utf8'));const operation=state.coordination.operations[approval.operation_id];
  operation.state='UNKNOWN';operation.native.onceAcknowledged=false;operation.native.callId='call-original';
@@ -1043,7 +1045,7 @@ test('deux déclarations concurrentes ne perdent aucun passage et une persistanc
   const before = (await h.get('/runs/steps/job')).body.lifecycle;
   assert.equal(before.sequence, 1);
   const target = before.history[0].id === 'REVIEW' ? 'IMPLEMENTATION' : 'REVIEW';
-  const temporary = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'steps',
+  const temporary = join(runtimeStateDirectory(h.directory), 'runs', 'steps',
     String(run.contextId || run.version), 'controller-job.json.tmp');
   mkdirSync(temporary);
   assert.equal((await progress(target, 1)).status, 400);
@@ -1281,7 +1283,7 @@ test('reprise historique sans checkpoint : une décision perdue ne sert qu’au 
   request.state.output = JSON.stringify({ ...diagnostic, status: 'APPROVED', reviewer: 'CGPT',
     decision_applied_at: new Date().toISOString() });
   await h.stop();
-  unlinkSync(join(h.directory, '.opencode/state/cgpt-approval-bridge/runs', a.runId, String(a.contextId), 'controller-communication.json'));
+  unlinkSync(join(runtimeStateDirectory(h.directory), 'runs', a.runId, String(a.contextId), 'controller-communication.json'));
   await h.start();
   const decision = await h.get('/runs/' + a.runId + '/decision/' + diagnostic.requestId);
   assert.equal(decision.body, null, JSON.stringify(decision));
@@ -1441,7 +1443,7 @@ async function orphanedPreflight(t, mutate = () => {}) {
     output: JSON.stringify({ ...approval, status: 'PENDING', notification_status: 'FAILED' }) };
   await h.stop();
   // Reproduire l'état durable produit par l'ancienne admission, uniquement dans la fixture arrêtée.
-  const registry = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  const registry = new ResourceRunRegistry(h.directory, join(runtimeStateDirectory(h.directory)));
   await registry.acquireAuthority();
   try {
     registry.prepareOperation(a.runId, approval, { candidateSession: recovery.sessionId });
@@ -1484,7 +1486,7 @@ for(const timeout of [false,true])test(`demande orpheline en pause : admission a
   for(const decision of ['approved','needs_clarification'])assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision})).status,400);
   const after=(await h.get('/runs')).body;
   assert.equal(after.requestOwners[approval.requestId].reconciliation.outcome,'REJECTION_ONLY');
-  const restored=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode/state/cgpt-approval-bridge'));
+  const restored=new ResourceRunRegistry(h.directory,join(runtimeStateDirectory(h.directory)));
   assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly,true);
   assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,201);
   assert.deepEqual(h.native.replies,[]);
@@ -1542,7 +1544,7 @@ test('prévol orphelin : rejet seul durable, notifications répétées, pair act
   const after = (await h.get('/runs')).body;
   assert.deepEqual(after.runs.find((r) => r.runId === 'b'), before.runs.find((r) => r.runId === 'b'));
   assert.deepEqual(after.coordination.accesses, before.coordination.accesses);
-  const restored = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  const restored = new ResourceRunRegistry(h.directory, join(runtimeStateDirectory(h.directory)));
   assert.deepEqual(restored.requestOwners[approval.requestId].reconciliation, receipt.body);
   assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly, true);
   assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
@@ -1707,8 +1709,8 @@ test('une identité déclarée ne remplace pas le tool part natif de la session 
   const claimed = { ...h.approval(a, 'forged-request'), run_id: b.runId, change_id: b.changeId,
     session_id: b.sessionId, reservation_version: b.version, resources: b.resources };
   const response = await h.post('/validation/request', { approval: claimed });
-  assert.equal(response.status, 409);
-  assert.equal(response.body.error, 'native-validation-not-correlated');
+  assert.equal(response.status, 503);
+  assert.equal(response.body.error, 'native-validation-evidence-unavailable');
   assert.equal(h.native.replies.length, 0);
 });
 
@@ -1818,7 +1820,7 @@ test('request_validation Code Mode lie le requestId natif et compare les cartes 
  const held=h.approval(run,'held-before-bound-request-id');held.files=['src/protected.md'];held.commands=[];
  held.resources=[{key:'file:src/protected.md',mode:'write'}];held.expected_revisions={'file:src/protected.md':0};
  await h.stop();
- const registry=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode','state','cgpt-approval-bridge'));
+ const registry=new ResourceRunRegistry(h.directory,join(runtimeStateDirectory(h.directory)));
  await registry.acquireAuthority();
  try{
   const prepared=registry.prepareOperation(run.runId,held);
@@ -1873,7 +1875,7 @@ test('request_validation Code Mode lie le requestId mais refuse une identité na
    output:'request_validation terminé',metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',
     status:'completed',input:nativeInput}]}}}];
  const response=await h.post('/validation/request',{approval});
- assert.equal(response.status,409);assert.equal(response.body.error,'native-validation-not-correlated');
+ assert.equal(response.status,503);assert.equal(response.body.error,'native-validation-evidence-unavailable');
  const admission=await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission');
  assert.equal(admission.status,404);assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
 });
@@ -1888,7 +1890,7 @@ test('request_validation Code Mode brut terminé refuse les métadonnées non ex
    h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
    h.native.messages[run.sessionId].at(-1).parts[0].state.metadata.truncated=true;
   }else if(variant==='call-status'){
-   calls=[{...calls[0],status:'error'}];
+   calls=[{...calls[0],status:'unknown-phase'}];
    h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
   }else h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
   const response=await h.post('/validation/request',{approval});
@@ -1904,7 +1906,7 @@ test('request_validation Code Mode en cours est admis sur ressource disjointe av
  const held=h.approval(run,'held-before-restart');held.files=['src/protected.md'];held.commands=[];
  held.resources=[{key:'file:src/protected.md',mode:'write'}];held.expected_revisions={'file:src/protected.md':0};
  await h.stop();
- const registry=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode','state','cgpt-approval-bridge'));
+ const registry=new ResourceRunRegistry(h.directory,join(runtimeStateDirectory(h.directory)));
  await registry.acquireAuthority();
  try{
   const prepared=registry.prepareOperation(run.runId,held);
@@ -1952,7 +1954,7 @@ test('request_validation Code Mode en cours est admis sur ressource disjointe av
 });
 
 test('request_validation Code Mode en cours refuse les métadonnées actives divergentes',async t=>{
- for(const variant of ['divergent-input','extra-tool','truncated','executed','call-completed'])await t.test(variant,async t=>{
+ for(const variant of ['divergent-input','extra-tool','truncated','executed','call-status-unknown'])await t.test(variant,async t=>{
   const h=await setup(t);const run=await h.reserve('active-codemode-'+variant);
   const approval=h.approval(run,'active-codemode-'+variant);
   let input=structuredClone(approval),calls=[{tool:'cgpt-validation.request_validation',status:'running',input}];
@@ -1961,7 +1963,7 @@ test('request_validation Code Mode en cours refuse les métadonnées actives div
   if(variant==='extra-tool')calls=[{tool:'bash',status:'completed',input:{command:'true'}},...calls];
   if(variant==='truncated')overrides.truncated=true;
   if(variant==='executed')overrides.executed=true;
-  if(variant==='call-completed')calls[0].status='completed';
+  if(variant==='call-status-unknown')calls[0].status='unknown';
   h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationRunning(approval.requestId,input,calls,overrides)];
   const response=await h.post('/validation/request',{approval});
   assert.equal(response.status,409,JSON.stringify(response));assert.equal(response.body.error,'native-validation-not-correlated');
@@ -1991,7 +1993,7 @@ test('récupération de A avec B actif : réservation conservée et génération
   let stamp;
   const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new', recoveryId: 'recovery-a', preflightRequestId: 'preflight-a' };
   assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
-  const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'a');
+  const runStateDirectory = join(runtimeStateDirectory(h.directory), 'runs', 'a');
   const runContext = readdirSync(runStateDirectory)[0];
   const jobStatePath = join(runStateDirectory, runContext, 'controller-job.json');
   const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
@@ -2038,7 +2040,7 @@ for (const invalidDiscovery of ['duplicate', 'truncated', 'untimed', 'divergent'
     const recovery = { jobId: 'job-legacy-invalid', expectedSessionId: 'ses_legacy-invalid',
       sessionId: 'ses_legacy-invalid_new', recoveryId: 'recovery-legacy-invalid', preflightRequestId: 'preflight-legacy-invalid' };
     assert.equal((await h.post('/runs/legacy-invalid/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
-    const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'legacy-invalid');
+    const runStateDirectory = join(runtimeStateDirectory(h.directory), 'runs', 'legacy-invalid');
     const jobStatePath = join(runStateDirectory, readdirSync(runStateDirectory)[0], 'controller-job.json');
     const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
     delete persistedJob.recovery.preparationHistory.requestValidationSignatureHash;
@@ -2129,7 +2131,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.6');
+  assert.equal(initialized.result.serverInfo.version, '2.2.7');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -2380,7 +2382,7 @@ test('migration HTTP conserve les RUN et exige once exact avant leur reprise mé
   const legacy = (await h.get('/runs')).body; legacy.schemaVersion = 3;
   delete legacy.coordination; delete legacy.coordinationProtocol;
   await h.stop();
-  const state = join(h.directory,'.opencode','state','cgpt-approval-bridge');
+  const state = join(runtimeStateDirectory(h.directory));
   writeFileSync(join(state,'controller-runs.json'),JSON.stringify(legacy)+'\n');
   await h.start();
   // A nominal cohort proof requires the initial SSE connection to be established.
@@ -3628,7 +3630,7 @@ test('annulation native OC : clôture préparée sans décision, accès, permiss
  const status=(await h.get('/runs/native-cancelled/status')).body;
  const decision=await h.get('/runs/native-cancelled/decision/'+approval.requestId);
  const operation=(await h.get('/runs/native-cancelled/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
- const state=JSON.parse(readFileSync(join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json'),'utf8'));
+ const state=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory),'controller-runs.json'),'utf8'));
  const durable=state.coordination.operations[approval.operation_id];
  assert.equal(status.undecidedValidationCount,0);assert.equal(decision.status,404);
  assert.equal(operation.state,'CANCELLED');assert.equal(operation.decision,null);
@@ -3673,7 +3675,7 @@ for (const restart of [false, true]) test(`annulation native OC approuvée non c
   const ops=(await h.get('/runs/approved-cancel/operations?operationId='+encodeURIComponent(approval.operation_id))).body;
   return ops.operations?.[0]?.state==='CANCELLED';
  });
- const state=JSON.parse(readFileSync(join(h.directory,'.opencode/state/cgpt-approval-bridge/controller-runs.json'),'utf8'));
+ const state=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory), 'controller-runs.json'),'utf8'));
  const op=state.coordination.operations[approval.operation_id];
  assert.equal(op.decision.status,'approved');assert.equal(op.native,undefined);
  assert.match(op.completionDigest,/^[a-f0-9]{64}$/);
@@ -3965,7 +3967,7 @@ async function boundaryRecoveryFixture(t,{terminal=false}={}) {
     metadata:{truncated:false,exit:0},time:{start:stamp-1,end:stamp}}}]});
  } else {
   await h.stop();
-  unlinkSync(join(h.directory,'.opencode/state/cgpt-approval-bridge/runs',run.runId,String(run.contextId),'controller-communication.json'));
+  unlinkSync(join(runtimeStateDirectory(h.directory), 'runs',run.runId,String(run.contextId),'controller-communication.json'));
   await h.start();
   const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',callID:'boundary-pending-read',
    state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'PENDING',expires_at:new Date(stamp+600000).toISOString()}),
@@ -4043,7 +4045,7 @@ for(const terminal of [false,true])test('frontière validée : reprise causale a
  const{h,approval,payload,base}=await boundaryRecoveryFixture(t,{terminal});
  const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
  await h.stop();
- const file=join(h.directory,'.opencode/state/cgpt-approval-bridge/recovery-policies.json'),env=JSON.parse(readFileSync(file,'utf8'));
+ const file=join(runtimeStateDirectory(h.directory), 'recovery-policies.json'),env=JSON.parse(readFileSync(file,'utf8'));
  const row=env.value.receipts.find(r=>r.actionId===payload.actionId);row.state='PREPARED';delete row.result;delete row.httpStatus;
  env.digest=createHash('sha256').update(JSON.stringify(env.value)).digest('hex');writeFileSync(file,JSON.stringify(env)+'\n');
  await h.start();
@@ -4054,7 +4056,7 @@ test('frontière PENDING : intention avant écriture reprend la même identité 
  const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t);
  assert.equal((await h.post(base+'/recovery/action',payload)).status,200);
  await h.stop();
- const root=join(h.directory,'.opencode/state/cgpt-approval-bridge');
+ const root=join(runtimeStateDirectory(h.directory));
  const file=join(root,'recovery-policies.json'),env=JSON.parse(readFileSync(file,'utf8')),row=env.value.receipts.find(r=>r.actionId===payload.actionId);
  row.state='PREPARED';delete row.result;delete row.httpStatus;delete row.observation;
  env.digest=createHash('sha256').update(JSON.stringify(env.value)).digest('hex');writeFileSync(file,JSON.stringify(env)+'\n');
@@ -4094,7 +4096,7 @@ test('historique clos : deux aborted déjà réconciliés permettent un terminal
  assert.equal(ops.find(x=>x.operationId===old.operation_id).state,'CANCELLED');assert.equal(ops.find(x=>x.operationId===old.operation_id).executionOutcome,'UNDETERMINED_READ_ONLY');
  assert.equal(ops.find(x=>x.operationId===approval.operation_id).state,'COMPLETED');assert.equal(h.native.replies.length,0);
  assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
- const store=JSON.parse(readFileSync(join(h.directory,'.opencode/state/cgpt-approval-bridge/recovery-policies.json'),'utf8'));
+ const store=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory), 'recovery-policies.json'),'utf8'));
  assert.equal(store.value.receipts.find(r=>r.actionId===payload.actionId).observation.excludedPriorReviews.length,4);
  await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
 });
@@ -4153,4 +4155,128 @@ for(const variant of ['effect','permission','busy','access','once','boundary','o
  }
  const result=await h.post(base+'/recovery/action',payload);assert.ok([403,409].includes(result.status),JSON.stringify(result));
  assert.notEqual((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'CANCELLED');
+});
+
+test('Code Mode brut : requête terminée avec erreur externe conserve sa corrélation sans décision',async t=>{
+ const h=await setup(t),run=await h.reserve('outer-error-completed'),approval=h.approval(run,'outer-error-completed');
+ approval.commands=[];approval.files=['src/outer-error-completed.py'];approval.tool_input_sha256='d'.repeat(64);
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,[{tool:'cgpt-validation.request_validation',status:'completed',input:approval}]);
+ part.state.output=JSON.stringify({...approval,status:'PENDING'});
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const response=await h.post('/validation/request',{approval});assert.equal(response.status,202,JSON.stringify(response));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,1);
+ assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404);
+ assert.equal(h.native.replies.length,0);
+});
+for(const variant of ['input','extra-tool','truncated','invalid-error-type'])test('Code Mode brut erreur externe : refuse '+variant,async t=>{
+ const h=await setup(t),run=await h.reserve('outer-error-'+variant),approval=h.approval(run,'outer-error-'+variant);
+ let calls=[{tool:'cgpt-validation.request_validation',status:'completed',input:structuredClone(approval)}];
+ if(variant==='input')calls[0].input.operation_digest='0'.repeat(64);
+ if(variant==='extra-tool')calls.unshift({tool:'bash',status:'completed',input:{command:'/usr/bin/true'}});
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,calls);
+ if(variant==='truncated')part.state.metadata.truncated=true;
+ if(variant==='invalid-error-type'){part.state.status='error';part.state.metadata.error='invalid';}
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const response=await h.post('/validation/request',{approval});assert.equal(response.status,409,JSON.stringify(response));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,0);assert.equal(h.native.replies.length,0);
+});
+
+test('Code Mode : résultat NOT_ADMITTED exact reste terminal malgré une corrélation d’input',async t=>{
+ const h=await setup(t),run=await h.reserve('outer-error-terminal'),approval=h.approval(run,'outer-error-terminal');
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,[{tool:'cgpt-validation.request_validation',status:'completed',input:approval}]);
+ part.state.output=JSON.stringify({...approval,status:'NOT_ADMITTED'});
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const response=await h.post('/validation/request',{approval});assert.equal(response.status,409);
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,0);assert.equal(h.native.replies.length,0);
+});
+test('Code Mode canonique : retour littéral direct reste projeté malgré l’erreur externe',async t=>{
+ const h=await setup(t),run=await h.reserve('canonical-outer-error'),approval=h.approval(run,'canonical-outer-error');
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,[{tool:'cgpt-validation.request_validation',status:'completed',input:approval}]);
+ part.state.input.code='return await tools["cgpt-validation"].request_validation('+JSON.stringify(approval)+');';part.state.output=JSON.stringify({...approval,status:'PENDING'});
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const observed=await h.nativeClient.messages(run.sessionId,h.directory);assert.equal(observed.at(-1).parts[0].tool,'cgpt-validation_request_validation');
+ assert.equal((await h.post('/validation/request',{approval})).status,202);assert.equal(h.native.replies.length,0);
+});
+
+test('Code Mode brut : matrice des phases observées ne crée aucune autorisation',async t=>{
+ for(const outer of ['running','completed','error'])for(const nested of ['running','completed','error'])for(const flag of [undefined,false,true]){
+  const h=await setup(t),id='matrix-'+outer+'-'+nested+'-'+String(flag),run=await h.reserve(id),approval=h.approval(run,id);
+  const p=rawCodeModeValidationFailure(id,approval,[{tool:'cgpt-validation.request_validation',status:nested,input:approval}]);
+  p.state.status=outer;if(flag===undefined)delete p.state.metadata.error;else p.state.metadata.error=flag;
+  p.state.output=JSON.stringify({...approval,status:'PENDING'});h.native.messages[run.sessionId].at(-1).parts=[p];
+  const result=await h.post('/validation/request',{approval});assert.equal(result.status,202,id+JSON.stringify(result));
+  assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404);assert.equal(h.native.replies.length,0);await h.stop();
+ }
+});
+test('visibilité native : attente bornée sur même notification puis admission sans requête neuve',async t=>{
+ const h=await setup(t),run=await h.reserve('visibility'),approval=h.approval(run,'visibility-request'),saved=h.native.messages[run.sessionId];
+ h.native.messages[run.sessionId]=[];
+ const first=await h.post('/runs/'+run.runId+'/validation/request',{approval});assert.equal(first.status,503,JSON.stringify(first));assert.equal(first.body.error,'native-validation-evidence-unavailable');
+ const diagnostic=(await h.get('/runs/'+run.runId+'/validation/correlation?requestId='+approval.requestId)).body.evidence;
+ assert.equal(diagnostic.first.outcome,'EVIDENCE_UNAVAILABLE');assert.ok(diagnostic.first.snapshots.length<=4);assert.equal(diagnostic.first.snapshots[0].identifiedParts,0);
+ assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission')).body.owner_registered,false);
+ h.native.messages[run.sessionId]=saved;
+ const retry=await h.post('/runs/'+run.runId+'/validation/request',{approval});assert.equal(retry.status,202,JSON.stringify(retry));
+ const after=(await h.get('/runs/'+run.runId+'/validation/correlation?requestId='+approval.requestId)).body.evidence;
+ assert.equal(after.first.outcome,'EVIDENCE_UNAVAILABLE');assert.equal(after.latest.outcome,'MATCHED');assert.equal(after.notificationCount,2);assert.equal(h.native.replies.length,0);
+ assert.equal(JSON.stringify(after).includes(approval.commands[0]),false);
+});
+test('visibilité native : preuve qui apparaît pendant le même POST ne provoque pas de refus terminal',async t=>{
+ const h=await setup(t),run=await h.reserve('visibility-delayed'),approval=h.approval(run,'visibility-delayed'),saved=h.native.messages[run.sessionId];h.native.messages[run.sessionId]=[];
+ const timer=setTimeout(()=>{h.native.messages[run.sessionId]=saved;},60);t.after(()=>clearTimeout(timer));
+ const response=await h.post('/runs/'+run.runId+'/validation/request',{approval});assert.equal(response.status,202,JSON.stringify(response));
+ const evidence=(await h.get('/runs/'+run.runId+'/validation/correlation?requestId='+approval.requestId)).body.evidence;
+ assert.equal(evidence.first.outcome,'MATCHED');assert.ok(evidence.first.snapshots.length>=2);assert.equal(h.native.replies.length,0);
+});
+test('persistance : mode privé dérivé expose la cause et permet la même décision après restauration sûre',async t=>{
+ const h=await setup(t),run=await h.reserve('communication-mode'),approval=h.approval(run,'communication-mode');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ const file=join(runtimeStateDirectory(h.directory), 'runs',run.runId,String(run.contextId),'controller-communication.json');
+ const {chmodSync}=await import('node:fs');chmodSync(file,0o644);
+ const failed=await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'});assert.equal(failed.status,400);
+ const status=(await h.get('/runs/'+run.runId+'/status')).body;assert.equal(status.communicationPersistence.available,false);assert.equal(status.communicationPersistence.error,'continuity-file-unsafe');
+ assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0].decision,null);
+ chmodSync(file,0o600);
+ const prepared=await h.post('/transport/prepare',{transactionId:'update-communication-repaired'});assert.equal(prepared.status,200,JSON.stringify(prepared));
+ assert.equal((await h.post('/transport/cancel',{transactionId:'update-communication-repaired'})).status,200);
+ const retry=await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'});assert.equal(retry.status,201,JSON.stringify(retry));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.communicationPersistence.available,true);assert.equal(h.native.replies.length,0);
+});
+test('persistance : contenu ou séquence contradictoires ne sont pas écrasés par un réarmement',async t=>{
+ const h=await setup(t),run=await h.reserve('communication-drift'),approval=h.approval(run,'communication-drift');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ const file=join(runtimeStateDirectory(h.directory), 'runs',run.runId,String(run.contextId),'controller-communication.json'),env=JSON.parse(readFileSync(file,'utf8'));env.sequence++;const changed=JSON.stringify(env)+'\n';writeFileSync(file,changed);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,400);
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.communicationPersistence.error,'continuity-state-changed');
+ assert.equal((await h.post('/transport/prepare',{transactionId:'update-communication-drift'})).status,409);assert.equal(readFileSync(file,'utf8'),changed);assert.equal(h.native.replies.length,0);
+});
+
+test('migration privée : PENDING absent du checkpoint restauré avant activation, projet0775 inchangé',async t=>{
+ const h=await setup(t),run=await h.reserve('private-migration');
+ const directory=runtimeStateDirectory(h.directory),file=join(directory,'runs',run.runId,String(run.contextId),'controller-communication.json');
+ await h.post('/transport/prepare',{transactionId:'empty-migration-checkpoint'});await h.post('/transport/cancel',{transactionId:'empty-migration-checkpoint'});
+ const previous=readFileSync(file),approval=h.approval(run,'private-pending');
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ const snapshot=(await h.get('/runs')).body,status=(await h.get('/status')).body;
+ const pending=migrationPendingValidations(snapshot,status,new Map([[run.sessionId,h.native.messages[run.sessionId]]]));
+ assert.equal(pending.length,1);await h.stop();writeFileSync(file,previous);
+ const legacy=legacyStateDirectory(h.directory);cpSync(directory,legacy,{recursive:true});
+ const files=[];const modes=path=>{chmodSync(path,0o775);for(const item of readdirSync(path,{withFileTypes:true})){const next=join(path,item.name);if(item.isDirectory())modes(next);else {chmodSync(next,0o775);files.push([next,readFileSync(next)]);}}};modes(legacy);
+ rmSync(directory,{recursive:true});initializeRuntimeState(h.directory,directory);
+ const transactionId='update-11111111-1111-4111-8111-111111111111';
+ writeRuntimeJson(join(directory,'runtime-migration.json'),{protocol:RUNTIME_MIGRATION_PROTOCOL,transactionId,workspace:h.directory,
+  phase:'PREPARED',registryDigest:migrationRegistryDigest(snapshot),nativeIdentity:{pid:process.pid,version:'2.2.0',directory:h.directory},pending});
+ await h.start();
+ const restored=(await h.get('/runs/'+run.runId+'/status')).body;
+ assert.equal(restored.undecidedValidationCount,1);assert.equal(restored.communicationPersistence.available,true);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
+ assert.equal(h.native.replies.length,0);
+ assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.7'});
+ assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
+ assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ for(const [path,bytes] of files){assert.equal(statSync(path).mode&0o777,0o775);assert.deepEqual(readFileSync(path),bytes);}
+ assert.equal(statSync(file).mode&0o777,0o600);assert.equal(h.native.replies.length,0);
+ await h.stop();await h.start();assert.equal((await h.get('/runtime/migration')).body.migration.phase,'ACTIVE');
 });

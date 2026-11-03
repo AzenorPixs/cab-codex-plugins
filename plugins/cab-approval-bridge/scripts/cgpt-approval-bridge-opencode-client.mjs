@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.2.6';
+export const VERSION = '2.2.7';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -218,6 +219,7 @@ export function nativeCodingMandate(instruction) {
     'Pour les méthodes MCP CAB broker_readiness, request_validation, lookup_validation, poll_approval, get_approval et reject, ' +
     'utiliser uniquement Code Mode execute avec le nom exact découvert par search, sous la forme ' +
     'tools["cgpt-validation"].request_validation(...). Ne pas appeler directement une entrée MCP native. ' +
+    'Pour request_validation, retourner directement await avec le payload littéral complet ; ne pas utiliser runtimeInput ou transformer le retour. ' +
     'Si execute ou la méthode découverte est indisponible, signaler le blocage sans appel direct ou repli. ' +
     'Une recherche MCP vide ne prouve pas leur absence. Utiliser directement l’outil natif disponible prescrit, ' +
     'avec les arguments exacts approuvés, seulement après les étapes CAB requises. ' +
@@ -1224,7 +1226,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     let journal, intent;
     if (decision === 'reject') {
       journal = new PermissionReplyJournal(permissionReceiptDirectory ||
-        join(directoryValue, '.opencode/state/cgpt-approval-bridge/permission-replies'));
+        join(runtimeStateDirectory(directoryValue),'permission-replies'));
       const identity = { sessionId, permissionId, directory: directoryValue, decision };
       const existing = journal.read(journal.path(identity));
       if (existing) {
@@ -1262,7 +1264,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   function permissionReplies(sessionId, directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     return new PermissionReplyJournal(permissionReceiptDirectory ||
-      join(directoryValue, '.opencode/state/cgpt-approval-bridge/permission-replies')).snapshot(sessionId, directoryValue);
+      join(runtimeStateDirectory(directoryValue),'permission-replies')).snapshot(sessionId, directoryValue);
   }
 
   async function mcpRecoverySnapshot() {

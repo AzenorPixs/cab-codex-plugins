@@ -1,4 +1,4 @@
-# Précisions native — CAB 2.2.6
+# Précisions native — CAB 2.2.7
 
 ## Lecture source read-only quand l’outil natif manque
 
@@ -260,3 +260,24 @@ Appliquer la [procédure du transport scellé](exact-shell-carrier.md) pour un n
 ## Permissions avant prévol — CAB2.1.32
 
 Appliquer [la reprise des permissions natives](native-permission-resume.md) : une revue peut laisser shell/edit deny, sans mutation par CABU. Avant tout prompt de prévol ou opération permissionnée, utiliser client.prompt(...,{directory,requiredNativeAsk:['shell']}), ou ['edit'] pour write/edit. Inspection nativePermissionPolicy en lecture seule ; aucun rétablissement automatique. Le propriétaire lève explicitement le seul droit nécessaire après revue terminée et frontière sûre, avec preuve avant/après, autres deny conservés. Les prompts de revue sans outil restent possibles sous deny. Le contrôleur revérifie indépendamment ; allow, règle absente/spécifique, mauvais SID et policy changée ne permettent aucun contournement.
+
+## Appel MCP terminé avec erreur du wrapper —2.2.7
+
+Le chemin brut corrèle completed/error=true avec un request_validation interne
+completed sur son input natif exact ; cette observation n’est pas une réussite
+métier. Une demande cohérente peut être admise, sans décision ou permission.
+Un NOT_ADMITTED natif complet de la même identité reste terminal : ne pas
+réutiliser requestId/approvalId/operationId ni redélivrer validation/request.
+La forme finale ne prouve pas l’état lu lors de la notification initiale ;
+ne pas attribuer une course ou une panne fournisseur sans observation.
+
+Procédure propriétaire : revue des révisions actuelles et de l’unique input
+natif d’édition complet ; calcul de tool_input_sha256 par nativeToolInputDigest
+sur cet objet exact, pas sur le seul contenu du fichier ; nouveau mandat avec
+identités neuves et operation_digest selon son contrat. Utiliser Code Mode
+return await tools["cgpt-validation"].request_validation({...littéraux exacts...});
+sans runtimeInput, variable de payload ou transformation du retour. Lire la
+partie outil corrélée. Après admission seulement, décider via CAB, acquérir
+l’accès exact et laisser le contrôleur transmettre/journaliser once ; aucun
+edit natif direct. Le préfixe commun du mandat reste stable, les valeurs
+variables appartiennent à son suffixe ; aucun cache hit n’est supposé.

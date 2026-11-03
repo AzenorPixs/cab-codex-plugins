@@ -1,6 +1,11 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Récupération autonome 2.2.6
+Les états privés CAB2.2.7 résident dans le profil d’exécution hors projet.
+Les fichiers projet restent en0775 ; CABU vérifie et migre les identités,
+décisions et once, sans remettre les fichiers projet en0600. Le premier reçu
+de migration est distingué du transfert certifié ordinaire.
+
+## Récupération autonome 2.2.7
 
 Les frontières PENDING sans contexte et terminal de lecture sans reçu once
 possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
@@ -22,9 +27,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.6`.
+Version de référence des briques CAB : `2.2.7`.
 
-CAB 2.2.6 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.7 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -826,3 +831,8 @@ latence et coût lorsqu’ils sont exposés ; indiquer N/A sinon. Aucun hit ou g
 n’est déduit de la seule stabilité du prompt. Cette livraison réutilise des
 preuves et fixe cette priorité, sans modifier une politique de cache fournisseur
 ni revendiquer un benchmark LLM facturé.
+
+La corrélation2.2.7 distingue l’input d’un appel MCP terminé et la réussite
+métier de son wrapper. Elle conserve NOT_ADMITTED terminal et les gardes
+indépendantes de décision/accès/once. La procédure canonique à payload
+littéral est détaillée dans technical-native ; aucune dépendance nouvelle.

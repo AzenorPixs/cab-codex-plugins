@@ -1,6 +1,6 @@
 # CAB 1.10.4 — coordination atomique par ressource
 
-## Restitution ciblée d’un bail — évolution 2.2.6
+## Restitution ciblée d’un bail — évolution 2.2.7
 
 La restitution ordinaire examine les opérations liées au bail et les accès
 qui recouvrent ses ressources. Après cleanup et vérification natifs distincts
@@ -196,3 +196,11 @@ concerne ni une intégration courante ni un prévol commencé ou incertain.
 Le contrat, les versions mixtes qualifiées et les limites du repli sont
 définis par references/component-update.md ; aucune activation n'est déduite
 du travail source ou de la disponibilité de ce profil.
+
+Un état d’opération COMPLETED ne signifie pas que son accès est RELEASED :
+la libération est une action explicite, après examen de toutes ses opérations.
+Si reconcile-preview répond access-reconciliation-boundary-required et que
+l’accès n’est pas marqué restauré, utiliser la libération normale locks/release
+avec le token/fencing actuels et outcomeCOMPLETED lorsque toutes les fins sont
+qualifiées. Le token reste dans le processus local, sans copie au chat ou
+checkpoint. Ne pas traiter cet état comme une fuite ou forcer une réconciliation.

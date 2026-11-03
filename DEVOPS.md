@@ -1,10 +1,32 @@
 # DEVOPS.md — cab
 
-Version : 0.7
+Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-03T04:41:33Z
+Début du relevé (UTC) : 2026-11-03T10:59:23Z
 Environnement d'exécution DIU : PROXMOX
+
+## Configuration locale — project.env
+
+Le fichier `project.env`, situé à la racine du projet, est une configuration
+locale protégée. Sa consultation par les agents relève des sections 9 et 10
+d’AGENTS.md.
+
+Pour le travail autorisé, l’agent peut extraire localement les variables
+non secrètes nécessaires, notamment `PROJECT_*`, `LOCAL_DEFAULT_BRANCH`,
+`GIT_*` et `REMOTE_*`, sans limitation à ces familles. Seul un processus
+local parcourt le fichier et restitue les noms et valeurs validés comme
+non secrets.
+
+La lecture brute, l’exécution du fichier et son chargement dans
+l’environnement par l’agent sont interdits. L’agent ne doit ni créer,
+ni modifier, ni régénérer ce fichier. Aucun secret ne doit être restitué,
+affiché, journalisé ou transmis au modèle.
+
+Les mentions de chargement de variables dans cet inventaire décrivent
+leur utilisation par les outils locaux. Elles n’accordent aucun droit
+supplémentaire de consultation à l’agent, notamment pour les variables
+d’authentification SSH, OpenCode ou PostgreSQL.
 
 Les sondes système concernent le contexte d'exécution DIU.
 Les outils DevOps sont interrogés avec les binaires indiqués dans leurs rubriques.

@@ -1,3 +1,5 @@
+import {migrationRegistryDigest,validateRuntimeMigration,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
+import {runtimeStateDirectory,legacyStateDirectory,projectAuthorityPath,initializeRuntimeState,readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
 import { EfficiencyLedger } from './cgpt-approval-bridge-efficiency.mjs';
 import { ShellLifecycle } from './cgpt-approval-bridge-shell-lifecycle.mjs';
 import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, processIdentity, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
@@ -25,7 +27,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.6";
+const version = "2.2.7";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -43,20 +45,24 @@ const loadedBuildDigest = proofHash(await moduleManifest(controllerEntry));
 const workspace = realpathSync(workspaceInput);
 const transportAbort = new AbortController();
 const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace, signal: transportAbort.signal });
-const stateDirectory = join(workspace, '.opencode', 'state', 'cgpt-approval-bridge');
-const observations = createObservationJournal({ path: join(stateDirectory, 'protocol-observations.json') });
+const stateDirectory = runtimeStateDirectory(workspace);
+const migrationPath=join(stateDirectory,'runtime-migration.json');
+let runtimeMigration=null;
+let runtimeLayout;
+let observations;
 const port = Number(envValue('OC_Codex_STATUS_PORT') || 8788);
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
-const statistics = new SessionStatistics(stateDirectory, { project: workspace });
+let statistics;
 let registryRevision = 0;
 let nativeGeneration = 0;
 const nativeSessionGenerations = new Map();
+const validationCorrelationEvidence = new Map();
 let lifecycleLease = null;
 let lifecycleMutations = 0;
 let observedOperations = new Map();
 const nativeCompletionReconciliations = new Set();
 function observeStatistics(callback) {
-  try { callback(); } catch { statistics.error = 'statistics-observation-unavailable'; }
+  try { callback(); } catch { if(statistics)statistics.error = 'statistics-observation-unavailable'; }
 }
 const registry = new ResourceRunRegistry(workspace, stateDirectory, {
   onUnavailable: () => {
@@ -70,7 +76,7 @@ const registry = new ResourceRunRegistry(workspace, stateDirectory, {
     for (const operation of Object.values(snapshot.coordination?.operations || {}).slice(-500)) {
       current.set(operation.operationId, operation.state);
       if (observedOperations.get(operation.operationId) !== operation.state) {
-        observations.record('operation-state-observed', { runId: operation.runId, sessionId: operation.sessionId,
+        observations?.record('operation-state-observed', { runId: operation.runId, sessionId: operation.sessionId,
           changeId: snapshot.runs?.find((run) => run.runId === operation.runId)?.changeId,
           operationId: operation.operationId, requestId: operation.requestId, operationState: operation.state });
       }
@@ -78,7 +84,17 @@ const registry = new ResourceRunRegistry(workspace, stateDirectory, {
     observedOperations = current;
   },
 });
-await registry.acquireAuthority();
+await registry.acquireAuthority({additionalLockPath:projectAuthorityPath(workspace),
+ beforeRestore:()=>{
+  const legacyRegistry=join(legacyStateDirectory(workspace),'controller-runs.json');
+  if(existsSync(legacyRegistry)&&!existsSync(join(stateDirectory,'runtime-layout.json'))&&!existsSync(migrationPath))
+    throw new Error('runtime-migration-required');
+  if(existsSync(migrationPath)) {
+    const proof=readRuntimeJson(migrationPath).value;
+    if(proof.phase==='PREPARED'&&migrationRegistryDigest(readRuntimeJson(legacyRegistry,{legacy:true}).value)!==proof.registryDigest)
+      throw new Error('runtime-migration-source-divergent');
+  }
+  runtimeLayout=initializeRuntimeState(workspace,stateDirectory);observations=createObservationJournal({path:join(stateDirectory,'protocol-observations.json')});statistics=new SessionStatistics(stateDirectory,{project:workspace});}});
 let broker = null;
 let handoffJournal;
 let transportAdoption = { adopted: false, reason: 'handoff-not-sealed' };
@@ -113,6 +129,11 @@ try {
     } catch { broker=null; }
   }
 } catch { transportAdoption = { adopted: false, reason: 'handoff-storage-or-identity-unavailable' }; }
+try {
+ runtimeMigration=readRuntimeJson(migrationPath).value;
+ validateRuntimeMigration(runtimeMigration,{workspace,registry:registry.snapshot(),nativeIdentity:runtimeMigration.phase==='ACTIVE'?runtimeMigration.nativeIdentity:await transportNativeIdentity()});
+} catch(cause) {if(cause.code!=='ENOENT')throw cause;}
+function migrationStatus(){return runtimeMigration?{protocol:RUNTIME_MIGRATION_PROTOCOL,transactionId:runtimeMigration.transactionId,phase:runtimeMigration.phase,pendingCount:runtimeMigration.pending.length}:null;}
 function transportStatus() {
   return { protocol: CONTINUITY_PROTOCOL, ...transportAdoption, receipt: handoffJournal?.snapshot() ?? null };
 }
@@ -299,6 +320,14 @@ function contextFor(run) {
     context = unavailableRunContext(run, reason);
     observations.record('run-recovery-required', { runId: run.runId, sessionId: run.sessionId, changeId: run.changeId });
   }
+  if(runtimeMigration?.phase==='PREPARED') {
+    for(const item of runtimeMigration.pending.filter(item=>item.runId===run.runId)) {
+      if(item.contextId!==run.contextId||item.version!==run.version||item.jobId!==context.publicJob()?.jobId)
+        throw new CoordinationError('runtime-migration-pending-owner-divergent');
+      if(!context.operation(item.approval.requestId))context.restorePendingValidation(item.approval,proofHash(item));
+    }
+    context.freezeTransport();
+  }
   contexts.set(run.runId, context);
   context.start();
   if (sseState === 'connected') context.onConnect();
@@ -352,7 +381,7 @@ function statusFor(runId, context) {
               : accesses.some((a) => a.state === 'STALE' && a.version === run.version) ? 'resource-revision-stale' : null;
   const unresolvedOperations = Object.values(registry.resourceState.operations).filter(op =>
     op.runId === runId && op.contextId === run.contextId && !['COMPLETED','CANCELLED'].includes(op.state));
-  return { ...status, admission:admissionSnapshot(runId), frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
+  return { ...status, runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), admission:admissionSnapshot(runId), frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
     notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation() || unresolvedOperations.length > 0,
     hasUnresolvedValidation: context.hasUnresolvedValidation(), unresolvedOperationCount: unresolvedOperations.length, coordination: { reason, integrationReady: run.integrationReady,
     referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion,
@@ -503,8 +532,17 @@ function nativeIdentity(approval) {
     .map((key) => [key, approval[key] ?? (['resources', 'commands'].includes(key) ? [] : key === 'summary' ? '' : null)]));
 }
 async function verifyNativeValidation(approval) {
-  const messages = await openCode.messages(approval.session_id, workspace);
   const expected = nativeIdentity(approval);
+  const nativeCalls=part=>Array.isArray(part.state?.metadata?.toolCalls)?part.state.metadata.toolCalls:[];
+  const terminalRefusal=part=>{
+    if(part?.type!=='tool'||typeof part.state?.output!=='string'||!part.state.output.includes('NOT_ADMITTED'))return false;
+    const requestInput=part.tool==='cgpt-validation_request_validation'?part.state.input:
+      part.tool==='execute'?nativeCalls(part).find(call=>call.tool==='cgpt-validation.request_validation'&&
+        call.input?.requestId===approval.requestId)?.input:null;
+    if(!requestInput||!isDeepStrictEqual(nativeIdentity(requestInput),expected))return false;
+    let value;try{value=JSON.parse(part.state.output);}catch{return false;}
+    return value?.status==='NOT_ADMITTED'&&value.requestId===approval.requestId&&value.approval_id===approval.approval_id;
+  };
   const correlated = (part) => {
     if (part?.type !== 'tool') return false;
     if (part.tool === 'cgpt-validation_request_validation' &&
@@ -518,17 +556,57 @@ async function verifyNativeValidation(approval) {
         typeof part.state?.input?.code !== 'string' || !['running','completed', 'error'].includes(part.state?.status) ||
         metadata?.truncated !== false || !Array.isArray(calls) || calls.length < 1 || calls.length > 2) return false;
     const request = calls.at(-1);
-    const nativeRunning = part.state.status === 'running' && metadata.error !== true && request?.status === 'running';
-    const nativeError = metadata.error === true && ['completed', 'error'].includes(part.state.status) && request?.status === 'error';
-    const nativeSuccess = part.state.status === 'completed' && (metadata.error === undefined || metadata.error === false) &&
-      request?.status === 'completed';
-    if (request?.tool !== 'cgpt-validation.request_validation' || (!nativeRunning && !nativeError && !nativeSuccess) || !request.input ||
+    // Both state machines report observation phases, not business authority.
+    // Their updates may be asynchronous; only the attested input is correlated.
+    const nativeCallObserved = ['running','completed','error'].includes(request?.status) &&
+      (metadata.error === undefined || typeof metadata.error === 'boolean');
+    if (request?.tool !== 'cgpt-validation.request_validation' || !nativeCallObserved || !request.input ||
         !isDeepStrictEqual(nativeIdentity(request.input), expected)) return false;
     return calls.length === 1 || calls[0]?.tool === 'search' && calls[0]?.status === 'completed';
   };
-  if (!Array.isArray(messages) || !messages.some((message) => Array.isArray(message.parts) && message.parts.some(correlated))) {
-    throw new CoordinationError('native-validation-not-correlated');
+  const snapshots=[],started=Date.now(),deadline=started+750;
+  const key=approval.run_id+'\0'+approval.requestId,prior=validationCorrelationEvidence.get(key);
+  const required=['run_id','reservation_version','requestId','approval_id','change_id','session_id','directory',
+    'resources','coordination_protocol','operation_id','operation_digest','expected_revisions'];
+  const requestInput=part=>part.tool==='cgpt-validation_request_validation'?part.state?.input:
+    part.tool==='execute'?nativeCalls(part).find(call=>call.tool==='cgpt-validation.request_validation'&&call.input?.requestId===approval.requestId)?.input:null;
+  const record=outcome=>{
+    const notification={startedAt:new Date(started).toISOString(),finishedAt:new Date().toISOString(),outcome,snapshots};
+    const value={runId:approval.run_id,requestId:approval.requestId,sessionId:approval.session_id,
+      contextId:registry.runs.get(approval.run_id)?.contextId??null,version:approval.reservation_version,
+      snapshot_only:true,notificationCount:(prior?.notificationCount||0)+1,first:prior?.first||notification,
+      ...(prior?{latest:notification}:{})};
+    validationCorrelationEvidence.delete(key);validationCorrelationEvidence.set(key,value);
+    while(validationCorrelationEvidence.size>500)validationCorrelationEvidence.delete(validationCorrelationEvidence.keys().next().value);
+    observeStatistics(()=>observations.record('validation-correlation-observed',{runId:approval.run_id,requestId:approval.requestId,
+      outcome,snapshotCount:snapshots.length,identifiedParts:snapshots.at(-1)?.identifiedParts||0}));
+  };
+  for(const delay of [0,50,100,200]) {
+    if(delay){const remaining=deadline-Date.now();if(remaining<=0)break;await new Promise(resolve=>setTimeout(resolve,Math.min(delay,remaining)));}
+    const messages=await openCode.messages(approval.session_id,workspace);
+    const parts=messages.flatMap(message=>Array.isArray(message.parts)?message.parts:[]).filter(part=>part?.type==='tool');
+    const identified=parts.filter(part=>requestInput(part)?.requestId===approval.requestId);
+    const candidates=(identified.length?identified:parts.filter(part=>part.tool==='execute'||part.tool==='cgpt-validation_request_validation')).slice(-4);
+    snapshots.push({observedAt:new Date().toISOString(),messages:messages.length,toolParts:parts.length,identifiedParts:identified.length,
+      candidates:candidates.map(part=>{
+        const input=requestInput(part),identity=input?nativeIdentity(input):null;
+        return {callId:typeof part.callID==='string'&&/^[A-Za-z0-9_.-]{1,160}$/.test(part.callID)?part.callID:null,
+          tool:part.tool==='execute'?'execute':'request_validation',phase:['running','completed','error'].includes(part.state?.status)?part.state.status:'unknown',
+          error:typeof part.state?.metadata?.error==='boolean'?part.state.metadata.error:null,
+          truncated:part.state?.metadata?.truncated===true,executed:part.executed===true,
+          nestedPhases:nativeCalls(part).slice(0,3).map(call=>['running','completed','error'].includes(call?.status)?call.status:'unknown'),
+          missingFields:input?required.filter(field=>input[field]===undefined):required,
+          mismatchFields:identity?Object.keys(expected).filter(field=>!isDeepStrictEqual(identity[field],expected[field])):[]};
+      })});
+    if(parts.some(terminalRefusal)){record('TERMINAL_REFUSAL');throw new CoordinationError('native-validation-not-correlated');}
+    if(parts.some(correlated)){record('MATCHED');return;}
+    if(identified.some(part=>required.every(field=>requestInput(part)[field]!==undefined))) {
+      record('DIVERGENT');throw new CoordinationError('native-validation-not-correlated');
+    }
+    if(Date.now()>=deadline)break;
   }
+  record('EVIDENCE_UNAVAILABLE');
+  throw new CoordinationError('native-validation-evidence-unavailable',503);
 }
 const restoringOperations = new Set();
 const queuedOperationRestorations = new Set();
@@ -1810,9 +1888,10 @@ async function provedCodingModel(input, proof) {
 }
 for (const run of registry.runs.values()) if (run.state === 'RESERVED') {
   const context = contextFor(run);
-  void restoreApprovedOperations(run, context);
+  if(runtimeMigration?.phase!=='PREPARED')void restoreApprovedOperations(run, context);
 }
 if (contexts.size && legacy.publicJob()?.armed) throw new Error('Legacy job must be reconciled before concurrent RUNs.');
+if(runtimeMigration?.phase==='PREPARED')legacy.freezeTransport();
 legacy.start();
 if(broker){
   await publishTo(legacy,broker);
@@ -1851,6 +1930,27 @@ async function handleRequest(request, response) {
       const run=registry.runs.get(efficiencyRoute[1]);
       if(!run)throw new CoordinationError('run-not-found',404);
       json(response,200,efficiency.view(run));return;
+    }
+    if(request.method==='GET'&&url.pathname==='/runtime/migration') {
+      json(response,200,{version:VERSION,workspace,runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(),migration:migrationStatus()});return;
+    }
+    if(request.method==='POST'&&url.pathname==='/runtime/migration/activate') {
+      guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+      const payload=await readJson(request,4096);
+      if(Object.keys(payload).length!==1||!runtimeMigration||payload.transactionId!==runtimeMigration.transactionId)
+        throw new CoordinationError('runtime-migration-transaction-divergent');
+      if(proofHash(await transportNativeIdentity())!==proofHash(runtimeMigration.nativeIdentity))
+        throw new CoordinationError('runtime-migration-native-divergent');
+      if(runtimeMigration.phase!=='ACTIVE') {
+        const next={...runtimeMigration,phase:'ACTIVE',activatedAt:new Date().toISOString()};
+        writeRuntimeJson(migrationPath,next);runtimeMigration=next;
+        for(const context of transportContexts())context.resumeTransport();
+        for(const [runId,context] of activeContexts())void restoreApprovedOperations(registry.runs.get(runId),context);
+      }
+      json(response,200,{migration:migrationStatus()});return;
+    }
+    if(runtimeMigration?.phase==='PREPARED'&&request.method==='POST'&&url.pathname!=='/broker/readiness') {
+      response.setHeader('retry-after','1');json(response,503,{error:'transport-update-in-progress',retry_after_ms:100});return;
     }
     if (request.method === 'GET' && url.pathname === '/transport/status') {
       json(response, 200, { version: VERSION, workspace, pid: process.pid, ...transportStatus(),
@@ -2052,12 +2152,12 @@ async function handleRequest(request, response) {
     }
     if (request.method === 'GET' && url.pathname === '/status' && !url.searchParams.has('runId')) {
       const entries = activeContexts();
-      if (!entries.length) { json(response, 200, { ...legacy.publicStatus(), transportContinuity: transportStatus(), frozenRecoveryMaintenance: FROZEN_CAPABILITY,
+      if (!entries.length) { json(response, 200, { ...legacy.publicStatus(), runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), transportContinuity: transportStatus(), frozenRecoveryMaintenance: FROZEN_CAPABILITY,
         maintenanceBuildDigest: loadedBuildDigest, notificationReconciliation: 'rejection-only-v1', testResourceProtocol: TEST_RESOURCE_PROTOCOL,
         modelSelectionProtocol: MODEL_SELECTION_PROTOCOL, workspace, pid: process.pid }); return; }
       json(response, 200, { version: VERSION, mode: 'concurrent', frozenRecoveryMaintenance: FROZEN_CAPABILITY,
         maintenanceBuildDigest: loadedBuildDigest, notificationReconciliation: 'rejection-only-v1', workspace, pid: process.pid,
-        configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' }, transportContinuity: transportStatus(), coordinationProtocol: registry.snapshot().coordinationProtocol,
+        runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' }, transportContinuity: transportStatus(), coordinationProtocol: registry.snapshot().coordinationProtocol,
         testResourceProtocol: TEST_RESOURCE_PROTOCOL,
         modelSelectionProtocol: MODEL_SELECTION_PROTOCOL,
         globalCoordination: registry.resourceState.global, opencodeSse: sseState,
@@ -2161,6 +2261,14 @@ async function handleRequest(request, response) {
         if (transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
         transitions.add(runId); transitionRun = runId;
         json(response, 201, manifestExtensions.extend(runId, payload)); return;
+      }
+      if(request.method==='GET'&&url.pathname==='/validation/correlation') {
+        if([...url.searchParams.keys()].some(key=>key!=='requestId')||url.searchParams.getAll('requestId').length!==1||
+          !/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(url.searchParams.get('requestId')||''))throw new CoordinationError('correlation-query-invalid',400);
+        const id=url.searchParams.get('requestId'),value=validationCorrelationEvidence.get(runId+'\0'+id);
+        json(response,200,{version:VERSION,runId,requestId:id,snapshot_only:true,
+          retention:'current-controller-last-500-requests',absenceMeaning:'no-observation-retained',
+          evidence:value?.contextId===run.contextId?value:null});return;
       }
       if (request.method === 'GET' && url.pathname === '/recovery') {
         json(response, 200, recovery.plan(runId)); return;
@@ -2818,6 +2926,7 @@ async function handleRequest(request, response) {
     const newSession = context.publicJob()?.sessionId;
     if (runId && oldSession && newSession !== oldSession) registry.transfer(runId, newSession);
   } catch (cause) {
+    if(cause.code==='native-validation-evidence-unavailable')response.setHeader('retry-after','1');
     request.cabObserveHttpFailure(cause.code);
     observeStatistics(() => statistics.admissionFailure(attemptedReservation, cause.code));
     if (!response.headersSent) json(response, cause.status || 409,
@@ -2849,7 +2958,7 @@ async function consumeEvents() {
     for (const [runId, context] of activeContexts()) {
       context.onConnect();
       const run = registry.runs.get(runId);
-      void restoreApprovedOperations(run, context);
+      if(runtimeMigration?.phase!=='PREPARED')void restoreApprovedOperations(run, context);
       for (const session of context.sessions()) {void refreshBackgroundShells(runId,session);void refreshNativeUsage(runId,session);}
     }
     const decoder = new TextDecoder();

@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { openCodeV2TestHandler } from './helpers/opencode-v2-test-server.mjs';
 import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
@@ -1159,7 +1160,7 @@ test("complete humain accepte une récupération héritée avec diagnostics pré
   const before = await h.get("/job");
   // Fixture historique antérieure au champ preparationHistory, jamais le runtime réel.
   await h.stop();
-  const path = join(h.contract.directory, ".opencode/state/cgpt-approval-bridge/controller-job.json");
+  const path = join(runtimeStateDirectory(h.contract.directory), 'controller-job.json');
   const persisted = JSON.parse(readFileSync(path, "utf8"));
   delete persisted.recovery.preparationHistory;
   writeFileSync(path, JSON.stringify(persisted));

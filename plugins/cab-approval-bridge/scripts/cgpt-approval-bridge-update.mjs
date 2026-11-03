@@ -1,3 +1,5 @@
+import {migrationPendingValidations,migrationRegistryDigest,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
+import {runtimeStateDirectory,legacyStateDirectory,legacyRuntimeFiles,initializeRuntimeState,readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, realpath, readdir, rename, unlink, readlink, symlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -14,7 +16,7 @@ import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credentia
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.6';
+export const VERSION = '2.2.7';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -84,7 +86,7 @@ async function http(base, path, body) {
   try {
     response = await fetch(base + path, { method: body === undefined ? 'GET' : 'POST',
       redirect: 'error', signal: AbortSignal.timeout(5000), headers: { 'content-type': 'application/json',
-        ...(path.startsWith('/transport/') ? { 'x-cab-continuity': CONTINUITY_PROTOCOL } : {}) },
+        ...((path.startsWith('/transport/')||path.startsWith('/runtime/migration')) ? { 'x-cab-continuity': CONTINUITY_PROTOCOL } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const limit = body === undefined && ['/runs', '/status'].includes(path) ? REGISTRY_MAX_BYTES : 2 * 1024 * 1024;
     const chunks = []; let bytes = 0;
@@ -271,6 +273,81 @@ export async function updateComponents(input, options = {}) {
     }
     return request(base, compact && component === 'controller' ? '/transport/status' : '/status');
   }
+  async function prepareRuntimeMigration(status) {
+    if(status?.version!=='2.2.6'||status.runtimeStateDirectory||status.workspace!==c.serviceWorkspace)return false;
+    const path=join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json');
+    const file=await optional(path);if(!file)return false;
+    legacyRuntimeFiles(c.serviceWorkspace);
+    const before=await request(c.controllerUrl,'/runs');
+    if(migrationRegistryDigest(JSON.parse(file.data))!==migrationRegistryDigest(before))throw error('update-migration-source-divergent');
+    const messages=new Map();
+    for(const [id,context] of Object.entries(status.runs||{}))if(context.activeValidations?.length) {
+      const run=before.runs.find(run=>run.runId===id);if(!run)throw error('update-migration-source-divergent');
+      messages.set(run.sessionId,await openCode.messages(run.sessionId,c.serviceWorkspace));
+    }
+    const pending=migrationPendingValidations(before,status,messages);
+    const info=await openCode.info(true),directory=await openCode.sharedMcpDirectory();
+    if((await openCode.permissions(directory)).length)throw error('update-migration-native-permission-pending');
+    const after=await request(c.controllerUrl,'/runs'),latest=await request(c.controllerUrl,'/status');
+    if(migrationRegistryDigest(before)!==migrationRegistryDigest(after)||
+      jobsIdentity(status)!==jobsIdentity(latest)||
+      proofHash(Object.entries(status.runs).map(([id,v])=>[id,v.activeValidations]))!==
+      proofHash(Object.entries(latest.runs).map(([id,v])=>[id,v.activeValidations])))throw error('update-migration-source-changed');
+    const destination=runtimeStateDirectory(c.serviceWorkspace,{home:c.home});
+    if(await optional(join(destination,'controller-runs.json')))throw error('update-migration-destination-exists');
+    const proof={protocol:RUNTIME_MIGRATION_PROTOCOL,transactionId:receipt.id,workspace:c.serviceWorkspace,phase:'PREPARED',
+      registryDigest:migrationRegistryDigest(before),nativeIdentity:{pid:info.pid,version:info.version,directory},pending,
+      inventory:{runIdentity:runIdentity(before),operationIds:Object.keys(before.coordination.operations),
+        onceAcknowledged:Object.values(before.coordination.operations).filter(op=>op.native?.onceAcknowledged===true).map(op=>op.operationId)}};
+    await atomic(join(transaction(),'runtime-migration.json'),JSON.stringify(proof)+'\n');
+    receipt.runtimeMigration={protocol:RUNTIME_MIGRATION_PROTOCOL,destination,state:'CAPTURED',pendingCount:pending.length};
+    receipt.continuity={protocol:CONTINUITY_PROTOCOL,state:'LEGACY',reason:'private-runtime-migration',transactionId:receipt.id};
+    await save('PREPARED');return true;
+  }
+  async function finishRuntimeMigration() {
+    const m=receipt.runtimeMigration;
+    if(!m||m.protocol!==RUNTIME_MIGRATION_PROTOCOL||m.destination!==runtimeStateDirectory(c.serviceWorkspace,{home:c.home}))throw error('update-migration-journal-invalid');
+    if(receipt.mcpTransition?.state==='INTENT') {
+      const expected=receipt.mcpTransition.action==='connect'?'connected':'disabled';
+      if(await brokerState()!==expected)throw error('update-broker-pending-timeout');
+      receipt.mcpTransition.state='RECONCILED';await save(receipt.phase);
+    }
+    const proof=readRuntimeJson(join(transaction(),'runtime-migration.json')).value;
+    if(proof.transactionId!==receipt.id||proof.workspace!==c.serviceWorkspace)throw error('update-migration-journal-invalid');
+    const info=await openCode.info(true);
+    if(info.pid!==proof.nativeIdentity.pid||info.version!==proof.nativeIdentity.version||
+      await openCode.sharedMcpDirectory()!==proof.nativeIdentity.directory)throw error('update-migration-native-changed');
+    if(m.state==='CAPTURED') {
+      if((await metadata('controller')).ActiveState==='active')throw error('update-migration-source-still-active');
+      const source=readRuntimeJson(join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json'),{legacy:true}).value;
+      if(migrationRegistryDigest(source)!==proof.registryDigest)throw error('update-migration-source-changed');
+      initializeRuntimeState(c.serviceWorkspace,m.destination);
+      const copied=readRuntimeJson(join(m.destination,'controller-runs.json')).value;
+      if(migrationRegistryDigest(copied)!==proof.registryDigest)throw error('update-migration-copy-divergent');
+      writeRuntimeJson(join(m.destination,'runtime-migration.json'),proof);
+      m.state='COPIED';await save('INSTALLING');
+    }
+    if(input.layout!=='managed-release')throw error('update-migration-managed-release-required');
+    await installManagedFiles();
+    if(receipt.files.some(f=>f.group==='units'&&f.beforeHash!==f.afterHash))await service(['daemon-reload']);
+    await save('RESTARTING');receipt.brokerReconnectedAt=now();await startAll(targetActive());await save('VERIFYING');
+    if(!await wait(()=>verified(desiredVersions(),targetActive()),30000))throw error('update-active-version-unconfirmed');
+    const observed=await request(c.controllerUrl,'/runtime/migration');
+    if(observed.runtimeStateDirectory!==m.destination||observed.migration?.transactionId!==receipt.id)throw error('update-migration-target-divergent');
+    const current=await request(c.controllerUrl,'/runs');
+    if(observed.migration.phase==='PREPARED'&&runIdentity(current)!==proof.inventory.runIdentity||
+      proof.inventory.operationIds.some(id=>!Object.hasOwn(current.coordination.operations,id))||
+      proof.inventory.onceAcknowledged.some(id=>current.coordination.operations[id]?.native?.onceAcknowledged!==true))
+      throw error('update-migration-continuity-divergent');
+    const activated=await request(c.controllerUrl,'/runtime/migration/activate',{transactionId:receipt.id});
+    if(activated.migration?.phase!=='ACTIVE'||activated.migration.transactionId!==receipt.id)throw error('update-migration-activation-unconfirmed');
+    m.state='ACTIVE';
+    receipt.timings={...receipt.timings,cutoverMs:now()-receipt.cutoverAtMs,unavailableMs:now()-receipt.cutoverAtMs,
+      measurement:'cutover-to-verified-upper-bound',totalMs:now()-receipt.startedAtMs};
+    await save('COMPLETED');await saveDeployment();
+    return {status:'completed',version:receipt.version,transactionId:receipt.id,active:targetActive(),brokerConnected:receipt.brokerConnected,
+      activeVersions:desiredVersions(),runtimeMigration:m,...brokerResult()};
+  }
   async function planOrdinaryUpdate() {
     const rows = await Promise.all(['controller', 'supervisor', 'monitor'].map(async component => {
       const meta = await metadata(component);
@@ -354,7 +431,7 @@ export async function updateComponents(input, options = {}) {
     }
   }
   async function requireStoredHeld() {
-    const file = await regular(join(c.workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json'), REGISTRY_MAX_BYTES);
+    const file = await regular(join(runtimeStateDirectory(c.workspace),'controller-runs.json'), REGISTRY_MAX_BYTES);
     if (file.uid !== process.getuid() || (file.mode & 0o077)) throw error('update-broker-registry-untrusted');
     const snapshot = JSON.parse(file.data), global=snapshot.coordination?.global;
     if (snapshot.schemaVersion !== 4 || snapshot.coordinationProtocol !== 'resource-scoped-v1' || snapshot.project !== c.workspace ||
@@ -804,6 +881,7 @@ export async function updateComponents(input, options = {}) {
     return true;
   }
   async function rollback() {
+    if(receipt.runtimeMigration?.state==='COPIED'||receipt.runtimeMigration?.state==='ACTIVE')throw error('update-migration-forward-recovery-required');
     if (readonlyBroker) {
       if (receipt.externalBroker.disconnectIntentAt !== null) throw error('update-broker-forward-recovery-required');
       await brokerArtifactsUnchanged();
@@ -895,6 +973,10 @@ export async function updateComponents(input, options = {}) {
             !validRecoverySnapshot(receipt.mcpRecovery.reload.before) || !Number.isFinite(receipt.mcpRecovery.reload.at)))) throw error('update-journal-invalid');
       if (receipt.phase === 'MCP_RECOVERY_REQUIRED' && !receipt.mcpRecovery) throw error('update-journal-invalid');
       receiptTrusted = true;
+      if(receipt.runtimeMigration&&['STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
+        if(receipt.phase==='STOPPING')await stopAll();
+        return await finishRuntimeMigration();
+      }
       if (input.resumeForward !== undefined) {
         const transitionSafe = receipt.mcpTransition?.action === 'disconnect' &&
           ['CONFIRMED','RECONCILED'].includes(receipt.mcpTransition?.state);
@@ -1049,7 +1131,7 @@ export async function updateComponents(input, options = {}) {
         for (const name of brokerFiles) await validate(join(c.pluginRoot,'broker',name),transaction());
       }
       const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
-      const required = ['controller.mjs', 'job-context.mjs', 'continuity.mjs', 'recovery.mjs', 'recovery-evidence.mjs', 'port-recovery.mjs', 'native-instances.mjs', 'permission-replies.mjs', 'manifest-extensions.mjs', 'model-policy.mjs', 'model-transition.mjs', 'provider-connect.mjs', 'context-portability.mjs', 'shell-stage.mjs', 'permission-policy.mjs', 'runs.mjs', 'resource-coordination.mjs',
+      const required = ['runtime-migration.mjs', 'state-layout.mjs', 'controller.mjs', 'job-context.mjs', 'continuity.mjs', 'recovery.mjs', 'recovery-evidence.mjs', 'port-recovery.mjs', 'native-instances.mjs', 'permission-replies.mjs', 'manifest-extensions.mjs', 'model-policy.mjs', 'model-transition.mjs', 'provider-connect.mjs', 'context-portability.mjs', 'shell-stage.mjs', 'permission-policy.mjs', 'runs.mjs', 'resource-coordination.mjs',
         'statistics.mjs', 'observation-statistics.mjs', 'statistics-maintenance.mjs', 'import-observations.mjs',
         'registry-lock.py', 'supervisor.mjs', 'supervisor-context.mjs', 'opencode-sse-client.mjs', 'healthcheck.mjs',
         'reset.py', 'prompts.py', 'monitor.mjs', 'monitor-data.mjs', 'monitor-events.mjs', 'monitor-management.mjs',
@@ -1057,7 +1139,7 @@ export async function updateComponents(input, options = {}) {
       if (scripts.length > 64 || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
       const artifacts = [
         ...scripts.map((name) => ({ group: 'scripts', name, source: join(c.pluginRoot, 'scripts', name) })),
-        ...['monitor', 'monitor-data', 'monitor-events', 'continuity', 'permission-replies', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'permission-policy', 'process-lifecycle']
+        ...['state-layout', 'monitor', 'monitor-data', 'monitor-events', 'continuity', 'permission-replies', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'permission-policy', 'process-lifecycle']
           .map((name) => ({ group: 'monitorScripts', name: 'cgpt-approval-bridge-' + name + '.mjs', source: join(c.pluginRoot, 'scripts/cgpt-approval-bridge-' + name + '.mjs') })),
         ...(readonlyBroker ? [] : brokerFiles.map((name) => ({ group: 'broker', name, source: join(c.pluginRoot, 'broker', name) }))),
         ...['index.html', 'app.mjs', 'stats.mjs', 'style.css'].map((name) => ({ group: 'web', name, source: join(c.pluginRoot, 'web-monitor', name) })),
@@ -1087,7 +1169,7 @@ export async function updateComponents(input, options = {}) {
               !source.split('\n').includes('ExecStart=/usr/bin/env node ' + entry) || /^\[Install\]/m.test(source)) throw error('update-unit-invalid');
         }
         const file = { ...entry, afterHash: hash(content.data),
-          beforeHash: before ? hash(before.data) : null, mode: before?.mode ?? content.mode };
+          beforeHash: before ? hash(before.data) : null, mode: artifact.group==='broker'&&input.brokerPolicy==='cab-source'?0o775:before?.mode ?? content.mode };
         if (before) await atomic(join(transaction(), 'backup', String(i)), before.data);
         await atomic(join(transaction(), 'stage', String(i)), content.data);
         receipt.files.push(file);
@@ -1184,7 +1266,9 @@ export async function updateComponents(input, options = {}) {
         return { status: 'up-to-date', version: receipt.version, transactionId: receipt.id,
           active: targetActive(), brokerConnected: receipt.brokerConnected, ...brokerResult() };
       }
-      if (receipt.restartComponents.includes('controller') && sourceStatus?.transportContinuity?.protocol === CONTINUITY_PROTOCOL) {
+      const migrating=receipt.restartComponents.includes('controller')&&await prepareRuntimeMigration(sourceStatus);
+      if(migrating&&input.layout!=='managed-release')throw error('update-migration-managed-release-required');
+      if (!migrating && receipt.restartComponents.includes('controller') && sourceStatus?.transportContinuity?.protocol === CONTINUITY_PROTOCOL) {
         receipt.continuity = { protocol: CONTINUITY_PROTOCOL, state: 'INTENT', transactionId: receipt.id };
         await save('PREPARED');
         try {
@@ -1218,6 +1302,7 @@ export async function updateComponents(input, options = {}) {
     receipt.cutoverAtMs = now();
     receipt.timings.preparationMs = receipt.cutoverAtMs - (receipt.startedAtMs || receipt.cutoverAtMs);
     await save('STOPPING'); await stopAll(); await save('INSTALLING');
+    if(receipt.runtimeMigration)return await finishRuntimeMigration();
     if(input.layout==='managed-release')await installManagedFiles();
     else for (let i = 0; i < receipt.files.length; i++) {
       const file = receipt.files[i], data = (await regular(join(transaction(), 'stage', String(i)))).data;
@@ -1255,6 +1340,10 @@ export async function updateComponents(input, options = {}) {
       activeVersions: Object.fromEntries(Object.keys(desired).map((name) => [name,
         (name === 'broker' ? receipt.brokerConnected : targetActive()[name]) ? desired[name] : null])) };
   } catch (cause) {
+    if(receiptTrusted&&receipt?.runtimeMigration&&['STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
+      receipt.failureCode=safeCauseCode(cause.code);await captureServiceFailures();await save(receipt.phase);
+      throw reported(error('update-migration-forward-recovery-required'));
+    }
     if (options.onPhase && cause.code === 'SIMULATED_CRASH') throw cause;
     if (receiptTrusted && !readonlyBroker && cause.code === 'update-broker-pending-timeout' && recoveryPhases.includes(receipt.phase)) {
       receipt.failureCode ||= cause.code;
@@ -1406,7 +1495,7 @@ export async function maintainFrozenController(input, options = {}) {
     const fd=await open(installation.root,'r'); try { await fd.sync(); } finally { await fd.close(); }
   }
   async function registryUnchanged() {
-    const state = JSON.parse((await regular(join(c.workspace, '.opencode/state/cgpt-approval-bridge/controller-runs.json'))).data);
+    const state = JSON.parse((await regular(join(runtimeStateDirectory(c.workspace),'controller-runs.json'))).data);
     if (state.requestOwners?.[spec.target.preflightRequestId]?.reconciliation) throw error('update-rollback-incompatible-receipt');
     const stable = { ...state, version: null, coordination: { ...state.coordination, global: null } };
     if (proofHash(stable) !== journal.seal.proof.registryHash) throw error('update-registry-changed');
@@ -1522,7 +1611,7 @@ export async function maintainFrozenController(input, options = {}) {
       await save('STOPPED');
     }
     if (!reached('INSTALLED')) {
-      registryLock = await authority(join(c.workspace,'.opencode/state/cgpt-approval-bridge/registry.instance.lock'));
+      registryLock = await authority(join(runtimeStateDirectory(c.workspace),'registry.instance.lock'));
       await registryUnchanged(); await nativeUnchanged();
       if (journal.installation.layout === 'managed-release') await directories(journal.deployment.directory,true);
       for (let i=0; i<journal.files.length; i++) {

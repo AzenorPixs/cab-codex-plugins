@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import { constants } from 'node:fs';
 import { lstat, open, writeFile, mkdir, rename, unlink, readlink, symlink } from 'node:fs/promises';
 import { join, resolve, dirname, relative, isAbsolute, basename } from 'node:path';
@@ -11,7 +12,7 @@ import { ResourceRunRegistry } from './cgpt-approval-bridge-resource-coordinatio
 import { publicLifecycle } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.2.6';
+export const VERSION = '2.2.7';
 const exec = promisify(execFile);
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -80,7 +81,7 @@ export async function repairForwardRelease(input,options={}) {
     if(proofHash(await processIdentity(proof.opencodeProcess.pid))!==proofHash(proof.opencodeProcess))fail('forward-opencode-changed');
     const artifacts=await inspectBrokerArtifacts(c.brokerDirectory,proof,join(c.pluginRoot,'broker'));
     if(proofHash(artifacts)!==proofHash(receipt.externalBroker.artifacts))fail('forward-broker-artifact-changed');
-    const registryPath=join(c.workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json');
+    const registryPath=join(runtimeStateDirectory(c.workspace),'controller-runs.json');
     const registryRaw=(await regular(registryPath,16*1024*1024,true)).data;const registry=JSON.parse(registryRaw),global=registry.coordination?.global;
     if(registry.project!==c.workspace||registry.schemaVersion!==4||registry.coordinationProtocol!=='resource-scoped-v1'||global?.state!=='HELD'||
       global.cause!=='SHARED_MAINTENANCE'||global.transactionId!==receipt.id||global.generation!==receipt.maintenance.generation||
@@ -93,7 +94,7 @@ export async function repairForwardRelease(input,options={}) {
     for(const run of registry.runs.filter(r=>r.state==='RESERVED')){const s=await openCode.session(run.sessionId,c.workspace);if(s.id!==run.sessionId||s.directory!==c.workspace)fail('forward-native-session-divergent');}
     const jobViews=[];
     for(const run of registry.runs.filter(r=>r.state==='RESERVED').sort((a,b)=>a.runId.localeCompare(b.runId))){
-      const path=join(c.workspace,'.opencode/state/cgpt-approval-bridge/runs',run.runId,String(run.contextId||run.version),'controller-job.json');
+      const path=join(runtimeStateDirectory(c.workspace),'runs',run.runId,String(run.contextId||run.version),'controller-job.json');
       const stored=await regular(path);
       if(stored.stat.uid!==process.getuid())fail('forward-job-not-owned');
       const job=JSON.parse(stored.data);

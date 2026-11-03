@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from '../../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
@@ -159,12 +160,12 @@ async function scenario(dropReply){
     }
     if(historicalRecovery){
       await stop(processes.controller);
-      const path=join(workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json');
+      const path=join(runtimeStateDirectory(workspace), 'controller-runs.json');
       const stored=JSON.parse(await readFile(path));stored.coordination.revisions['browser:c14-headless-test-profiles']=0;
       await writeFile(path,JSON.stringify(stored,null,2)+'\n');await start('controller');
     }
     const publicRegistryBytes=Buffer.byteLength(JSON.stringify(await fixtureRegistry(controllerUrl)));
-    const privateRegistryBytes=(await lstat(join(workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json'))).size;
+    const privateRegistryBytes=(await lstat(join(runtimeStateDirectory(workspace), 'controller-runs.json'))).size;
     if(largeRegistry){assert.ok(publicRegistryBytes>2*1024*1024);assert.ok(privateRegistryBytes>4*1024*1024);}
     await start('supervisor');await start('monitor');
     await maintenanceHttp(opencodeUrl,'/fixture/replace',{});
@@ -217,7 +218,7 @@ async function scenario(dropReply){
       const failed=await update();assert.ok(failed.error,JSON.stringify(failed));
       const originalRaw=await readFile(journalFile),receipt=JSON.parse(originalRaw);assert.equal(receipt.phase,'READONLY_RECOVERY_REQUIRED');
       await stop(processes.controller);await stop(processes.supervisor);
-      const registryPath=join(workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json');
+      const registryPath=join(runtimeStateDirectory(workspace), 'controller-runs.json');
       const originalRegistry=await readFile(registryPath),tx=join(dirname(journalFile),receipt.id);
       const repairInput={pluginRoot,transactionId:receipt.id,authorization:'isolated historical reader forward recovery'};
       const unauthorized=await update('repair',{...repairInput,transactionId:'update-00000000-0000-0000-0000-000000000000'});assert.equal(unauthorized.error,'forward-phase-refused');

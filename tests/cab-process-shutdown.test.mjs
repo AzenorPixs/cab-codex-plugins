@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { fork, spawn } from 'node:child_process';
@@ -63,7 +64,7 @@ async function setup(t, { initialOutage = false, codingServer = false } = {}) {
 for (const signal of ['normal', 'SIGKILL']) {
   test(`fin serveur ${signal} : services et helper terminent, deux RUN conservés`, { timeout: 15000 }, async (t) => {
     const f = await setup(t);
-    const state = join(f.directory, '.opencode/state/cgpt-approval-bridge');
+    const state = join(runtimeStateDirectory(f.directory));
     const helperPids = (await readFile(`/proc/${f.services.controller.pid}/task/${f.services.controller.pid}/children`, 'utf8')).trim().split(/\s+/).filter(Boolean);
     assert.equal(helperPids.length, 1);
     for (const id of ['a', 'b']) {
