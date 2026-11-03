@@ -96,3 +96,27 @@ test('handoff preserves a qualified model contract and refuses a different reaso
   assert.equal(h.context.publicJob().codingModel.reasoning,'high');assert.equal(h.context.publicJob().sessionId,'ses_old');
   assert.equal(h.native.parts,original);
 });
+
+for(const phase of ['recovery','PREPARED','APPLYING','NATIVE_UNCONFIRMED']) test('handoff refuses persisted '+phase+' after restart without an inFlight request',async t=>{
+  const h=await fixture(t),stored=JSON.parse(readFileSync(h.jobPath)),now=new Date().toISOString();
+  if(phase==='recovery')stored.recovery={jobId:h.job.jobId,expectedSessionId:'ses_old',sessionId:'ses_recovery',recoveryId:'recovery-pending',preflightRequestId:'preflight-pending',preparedAt:now};
+  else {
+    const {modelContractHash,MODEL_TRANSITION_PROTOCOL}=await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-transition.mjs');
+    const candidate={protocol:'pllm-auto-v1',source:'prompt',providerID:'fixture',modelID:'fixture',reasoning:'high',selectedAt:now,mode:null,priority:null,catalogDigest:null,evaluatedAt:null};
+    stored.modelTransition={protocol:MODEL_TRANSITION_PROTOCOL,transactionId:'persisted-model',developerAuthorization:'synthetic owner mandate',
+      jobId:h.job.jobId,sessionId:'ses_old',runVersion:1,contextId:1,preparedAt:now,phase,expectedModelHash:modelContractHash(null),
+      before:null,selection:{model:'fixture/fixture',reasoning:'high'},candidate,connection:null,
+      ...(phase!=='PREPARED'?{verifiedModel:{...candidate,preflight:{sessionId:'ses_old',messageId:'msg_preflight',verifiedAt:now}},previousNativeModel:null}:{})};
+  }
+  writeFileSync(h.jobPath,JSON.stringify(stored));h.context=await h.restart();
+  const before=readFileSync(h.jobPath,'utf8');
+  await assert.rejects(h.context.inspectSessionHandoff('ses_new'),/session-handoff-not-quiescent/);
+  assert.equal(readFileSync(h.jobPath,'utf8'),before);assert.deepEqual(h.context.sessions().slice(0,1),['ses_old']);
+});
+
+test('handoff refreshes readonly readiness in the same candidate without reusing an old version as fresh proof',async t=>{
+  const h=await fixture(t),old=structuredClone(h.native.parts[0]);old.callID='call_old_ready';
+  old.state.output=JSON.stringify({status:'BLOCKED',pending_count:1,run_id:h.run.runId,server_version:'2.2.12'});
+  h.native.parts.unshift(old);assert.ok((await h.context.inspectSessionHandoff('ses_new')).boundaryDigest);
+  h.native.parts.pop();await assert.rejects(h.context.inspectSessionHandoff('ses_new'),/readiness-invalid/);
+});

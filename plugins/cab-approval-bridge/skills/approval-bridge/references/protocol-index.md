@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.13
+# Index du protocole CAB 2.2.14
 
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées

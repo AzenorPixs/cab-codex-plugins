@@ -1,4 +1,4 @@
-# Changer le SID de pilotage dans le même RUN — CAB 2.2.13
+# Changer le SID de pilotage dans le même RUN — CAB 2.2.14
 
 Cette voie appartient à l’orchestrateur propriétaire dans le change autorisé.
 Elle ne corrige pas un HTTP401 : utiliser d’abord le client CAB authentifié.
@@ -13,7 +13,7 @@ Conserver le checkpoint métier et identifier les effets historiques protégés.
 Les anciennes approbations PREPARED restent historiques et non exécutables ;
 un changement de SID ne vaut ni retrait de coordination ni libération d’accès.
 Les deux sessions doivent être idle, sans permission native en attente,
-validation indécise, transition de modèle/recovery ou contrôle en cours.
+validation indécise, transition de modèle/recovery (y compris persistée hors requête en cours) ou contrôle en cours.
 Une ancienne partie bash encore active n’est admise que si son call et sa
 cible correspondent exactement à un once acquitté et un accès conservé.
 Un nouveau call actif ou une intention sans ACK interdit le transfert.
@@ -24,8 +24,9 @@ reste sous ask/deny pour ces effets. Ne confier aucun travail métier à la
 candidate. Lui faire appeler uniquement la readiness native scellée CodeMode :
 `return await tools["cgpt-validation"].broker_readiness({"run_id":"<run>"});`
 Une découverte exacte de la signature request_validation est également admise.
-La readiness doit être READY, pending_count0, liée au RUN et à la version
-courante. Les autres outils, y compris une commande de prévol, sont refusés.
+La dernière readiness doit être READY, pending_count0, liée au RUN et à la
+version courante. Les anciennes observations readonly de ce RUN restent
+historiques ; une mise à jour permet leur actualisation dans la même candidate. Les autres outils, y compris une commande de prévol, sont refusés.
 Le transfert conserve le contrat modèle ; il ne lance pas de nouvelle PLLM.
 
 ## Décision et preuve

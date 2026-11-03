@@ -18,7 +18,7 @@ function fixture(t) {
     callID:'call_fixture',state:{status:'completed',input,metadata:{shellID:'sh_fixture',status:'running'},time:{start:1000,end:1200}}};
   const info={shellId:'sh_fixture',status:'running',command:input.command,cwd:root,
     sessionId:null,startedAt:1100,finishedAt:null,exit:null};
-  const identity={pid:123,version:'2.2.13',directory:root};
+  const identity={pid:123,version:'2.2.14',directory:root};
   return {root,path,approved,op,part,info,identity,create:()=>new ShellLifecycle(path)};
 }
 

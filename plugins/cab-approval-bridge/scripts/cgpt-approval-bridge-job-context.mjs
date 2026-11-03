@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.13";
+export const VERSION = "2.2.14";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -429,7 +429,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.13",
+    version: "2.2.14",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -577,7 +577,7 @@ function sessionHandoffCheckpoint() {
 
 async function inspectSessionHandoff(sessionId, historicalCalls = []) {
   if (!run || !sessionId || sessionId === job?.sessionId || job?.revokedSessions?.includes(sessionId) ||
-      !communicationStorageReady() || recoveryTransitionInFlight || lifecycleTransitionInFlight || modelTransitions.inFlight)
+      !communicationStorageReady() || job?.recovery || job?.modelTransition || recoveryTransitionInFlight || lifecycleTransitionInFlight || modelTransitions.inFlight)
     recoveryFailure('session-handoff-not-quiescent');
   await checkRecoveryContext({sessionId});
   const checkpointDigest = sessionHandoffCheckpoint();
@@ -593,7 +593,7 @@ async function inspectSessionHandoff(sessionId, historicalCalls = []) {
       h.sessionId === job.sessionId && h.callId === p.callID && h.kind === 'bash' && p.tool === 'bash' &&
       h.targetDigest === canonicalRecoveryHash(['bash',p.state?.input?.command]))))
     recoveryFailure('session-handoff-new-call-active');
-  let ready = false;
+  let ready = null;
   for (const part of parts) {
     if (part.state?.status !== 'completed') recoveryFailure('session-handoff-candidate-not-read-only');
     if (part.tool === 'cab_codemode_discovery' && requestValidationSignatureDiscovery(part)) continue;
@@ -601,11 +601,13 @@ async function inspectSessionHandoff(sessionId, historicalCalls = []) {
       recoveryFailure('session-handoff-candidate-not-read-only');
     let result;
     try { result = JSON.parse(part.state.output); } catch { recoveryFailure('session-handoff-readiness-invalid'); }
-    if (result.status !== 'READY' || result.pending_count !== 0 || result.run_id !== run.runId || result.server_version !== VERSION)
+    if (result.run_id !== run.runId)
       recoveryFailure('session-handoff-readiness-invalid');
-    ready = true;
+    ready = result;
   }
   if (!ready) recoveryFailure('session-handoff-readiness-missing');
+  if (ready.status !== 'READY' || ready.pending_count !== 0 || ready.server_version !== VERSION)
+    recoveryFailure('session-handoff-readiness-invalid');
   if (job.codingModel) {
     const observed = messages.filter(m => m.info?.role === 'assistant' && m.parts?.some(p => p.tool === 'cgpt-validation_broker_readiness')).at(-1)?.info;
     if (!observed || observed.providerID !== job.codingModel.providerID || observed.modelID !== job.codingModel.modelID || observed.variant !== job.codingModel.reasoning ||
@@ -2391,7 +2393,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.13",
+      version: "2.2.14",
     },
   });
 
