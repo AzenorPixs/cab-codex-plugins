@@ -1,4 +1,4 @@
-# Précisions native — CAB 2.2.17
+# Précisions native — CAB 2.2.18
 
 ## Lecture source read-only quand l’outil natif manque
 
@@ -261,7 +261,7 @@ Appliquer la [procédure du transport scellé](exact-shell-carrier.md) pour un n
 
 Appliquer [la reprise des permissions natives](native-permission-resume.md) : une revue peut laisser shell/edit deny, sans mutation par CABU. Avant tout prompt de prévol ou opération permissionnée, utiliser client.prompt(...,{directory,requiredNativeAsk:['shell']}), ou ['edit'] pour write/edit. Inspection nativePermissionPolicy en lecture seule ; aucun rétablissement automatique. Le propriétaire lève explicitement le seul droit nécessaire après revue terminée et frontière sûre, avec preuve avant/après, autres deny conservés. Les prompts de revue sans outil restent possibles sous deny. Le contrôleur revérifie indépendamment ; allow, règle absente/spécifique, mauvais SID et policy changée ne permettent aucun contournement.
 
-## Appel MCP terminé avec erreur du wrapper —2.2.17
+## Appel MCP terminé avec erreur du wrapper —2.2.18
 
 Le chemin brut corrèle completed/error=true avec un request_validation interne
 completed sur son input natif exact ; cette observation n’est pas une réussite
@@ -283,17 +283,41 @@ edit natif direct. Le préfixe commun du mandat reste stable, les valeurs
 variables appartiennent à son suffixe ; aucun cache hit n’est supposé.
 
 
-## Préambule readonly attendu — CAB2.2.17
+## Préambule readonly attendu — CAB2.2.18
 
 La projection qualifie `const schema = search({...}); return await tools[...]...({...});`
 et sa forme `const schema = await search({...}); return await tools[...]...({...});`,
 avec arguments littéraux et un seul retour MCP autorisé. Pendant running,
 l’identité peut ainsi être corrélée avant les metadata finales ; cela ne
 constitue ni décision ni permission. Les metadata complètes doivent rester
-exactement concordantes ; code supplémentaire, expression dynamique, ombrage
+exactement concordantes ; instruction non qualifiée, expression dynamique, ombrage
 de tools/search et troncature conservent le wrapper opaque.
 En16, await dans ce binding pouvait attendre la fin du call, son timeout,
 puis un poll sur la même identité. Ne pas réémettre une demande déjà admise
 pour reformater son wrapper ; observer admission et corrélation fraîches.
 Cette reconnaissance ne promet pas une projection anticipée de JavaScript
 arbitraire et ne ferme pas les coordinations REJECTED historiques.
+
+
+## Assertion de chemin de discovery — CAB 2.2.18
+
+Après le binding const de search (avec await optionnel), une seule assertion
+readonly peut vérifier le résultat avant le retour MCP littéral :
+
+```js
+if (r.items[0].path !== 'tools["cgpt-validation"].request_validation') throw new Error('Unexpected method');
+```
+
+`r` doit être la variable exacte de cette discovery ; l’index est0 et la
+propriété path. Le chemin de catalogue est littéral et doit nommer le même
+MCP que le retour qui suit. Le message Error est littéral ; les quotes simples
+sans échappements et les chaînes JSON sont qualifiées. Aucun appel, expression
+dynamique ou code ajouté n’est évalué par le client. Toute autre forme reste
+opaque avec corrélation par les metadata natives lorsqu’elles sont disponibles.
+
+Cette précision complète17 : await seul ne couvrait pas l’assertion ajoutée
+par le wrapper PA01. La projection est vérifiée sur ce wrapper réel en lecture
+seule, puis pendant running dans un OpenCode isolé. Une demande déjà admise ou
+terminée ne doit pas être rejouée pour changer sa forme. APPROVED ne dispense
+pas de demander l’accès partagé prévu par le manifeste ; ce correctif ne change
+ni cette étape ni les anciens états REJECTED/PREPARED.

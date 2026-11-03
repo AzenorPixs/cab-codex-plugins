@@ -1,3 +1,12 @@
+## 2.2.18 — Assertion readonly du chemin de discovery
+
+- Une assertion unique sur variable.items[0].path peut précéder le retour MCP
+  littéral, si son chemin de catalogue fixe correspond exactement à ce call.
+- Le client qualifie aussi les messages simples entre quotes simples, sans
+  interpréter du JavaScript arbitraire ni modifier les données du mandat.
+- La structure réelle PA01 est vérifiée par GET ; le scénario natif isolé
+  prouve la projection anticipée sans réémettre une demande métier.
+
 ## 2.2.17 — Projection native du préambule await search
 
 - Le binding const d’une discovery readonly accepte await optionnel avant

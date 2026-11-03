@@ -1,6 +1,6 @@
 # CAB 1.10.4 — coordination atomique par ressource
 
-## Restitution ciblée d’un bail — évolution 2.2.17
+## Restitution ciblée d’un bail — évolution 2.2.18
 
 La restitution ordinaire examine les opérations liées au bail et les accès
 qui recouvrent ses ressources. Après cleanup et vérification natifs distincts

@@ -14,7 +14,7 @@ function fixture() {
   return { root, passwordFile, close: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-const info = { version: '2.2.17', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+const info = { version: '2.2.18', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
 const location = { directory: '/workspace', project: { id: 'fixture', directory: '/workspace', canonical: '/workspace' } };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
@@ -1067,4 +1067,32 @@ test('CodeMode awaited search : projection running avant metadata finale, entré
   wrapped(code.replace(JSON.stringify(query),'query'),[],'running'),
   {...wrapped(code,[],'running'),state:{...wrapped(code,[],'running').state,metadata:{toolCalls:[],truncated:true}}},
  ])assert.equal((await codeModeFixture(t,altered)).tool,'execute');
+});
+
+test('CodeMode path assertion : même discovery et même MCP, sans exécution de JavaScript arbitraire',async t=>{
+ const query={query:'request_validation',namespace:'cgpt-validation',limit:20};
+ const input={requestId:'path-assert-request',commands:['/usr/bin/true']};
+ const prefix='const r = await search('+JSON.stringify(query)+'); ';
+ const path=JSON.stringify('tools["cgpt-validation"].request_validation');
+ const singlePath="'"+'tools["cgpt-validation"].request_validation'+"'";
+ const check='if (r.items[0].path !== '+path+') throw new Error("Unexpected method"); ';
+ const call='return await tools["cgpt-validation"].request_validation('+JSON.stringify(input)+');';
+ for(const guard of [check,check.replace(path,singlePath).replace('"Unexpected method"',"'Unexpected method'")]){
+  const projected=await codeModeFixture(t,wrapped(prefix+guard+call,[],'running'));
+  assert.equal(projected.tool,'cgpt-validation_request_validation');assert.deepEqual(projected.state.input,input);
+ }
+ const complete=await codeModeFixture(t,wrapped(prefix+check+call,[{tool:'search',status:'completed',input:query},{tool:'cgpt-validation.request_validation',status:'completed',input}]));
+ assert.equal(complete.tool,'cgpt-validation_request_validation');
+ for(const code of [
+  prefix+check.replace('r.items','other.items')+call,
+  prefix.replace('const r','const Error')+check.replace('r.items','Error.items')+call,
+  prefix+check.replace('[0]','[1]')+call,
+  prefix+check.replace(path,'expectedPath')+call,
+  prefix+check.replace(path,JSON.stringify('tools["cgpt-validation"].reject'))+call,
+  prefix+check.replace('new Error','new Function')+call,
+  prefix+check.replace('"Unexpected method"','message')+call,
+  prefix+check+call+' await tools["cgpt-validation"].reject({});',
+ ])assert.equal((await codeModeFixture(t,wrapped(code,[],'running'))).tool,'execute');
+ const wrongMetadata=await codeModeFixture(t,wrapped(prefix+check+call,[{tool:'search',status:'completed',input:query},{tool:'cgpt-validation.request_validation',status:'completed',input:{...input,requestId:'different'}}]));
+ assert.equal(wrongMetadata.tool,'execute');
 });

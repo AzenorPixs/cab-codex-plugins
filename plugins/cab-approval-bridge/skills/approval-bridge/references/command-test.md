@@ -1,4 +1,4 @@
-# Test du raccord — CAB 2.2.17
+# Test du raccord — CAB 2.2.18
 
 ## `/CAB test`
 

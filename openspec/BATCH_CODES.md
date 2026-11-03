@@ -1,5 +1,10 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Assertion native SCM 2.2.18
+
+[recognize-literal-discovery-path-assertion](changes/archive/2026-11-04-recognize-literal-discovery-path-assertion/), code non attribué : ARCHIVÉ, source 2.2.18 qualifiée.
+Wrapper réel reconnu ; admission anticipée prouvée sur native isolée ;333 tests réussis. Livraison distincte.
+
 ## Projection native SCM2.2.17
 
 [recognize-awaited-codemode-discovery](changes/archive/2026-11-04-recognize-awaited-codemode-discovery/), code non attribué : ARCHIVÉ, source 2.2.17 qualifiée.

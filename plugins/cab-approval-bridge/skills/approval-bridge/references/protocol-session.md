@@ -1,4 +1,4 @@
-# Mandats et rapports — CAB 2.2.17
+# Mandats et rapports — CAB 2.2.18
 
 ## Protocole de communication OpenCode ↔ CGPT via CAB
 
