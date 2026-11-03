@@ -1,3 +1,11 @@
+## 2.2.6 — Réutiliser les preuves closes dans un historique long
+
+- Une validation PREPARED/approved jamais émise peut être retirée par son propriétaire, avec double frontière stable et sans fabriquer de refus natif ou NO_EFFECT.
+
+- La clôture revue d’un terminal peut réutiliser les anciens reçus DONE du même RUN/contexte/propriétaire : les deux refus aborted déjà réconciliés ne bloquent plus automatiquement la nouvelle lecture.
+- Les anciennes parties sont revérifiées par identité, commande, code et antériorité, puis référencées dans le nouveau reçu ; une partie inconnue, modifiée ou non réconciliée reste refusée. Aucun once ou NO_EFFECT n’est fabriqué.
+- Le protocole précise que le contrôleur transmet et journalise once, et détaille la continuation sur un port compatible quand une ancienne sonde n’établit pas la quiescence. Priorité explicite à l’autonomie et au cache de prompts LLM mesuré.
+
 ## 2.2.5 — Réconcilier les frontières de validation manquantes
 
 - Le propriétaire peut restaurer la même validation PENDING après une lecture native fraîche, sans décision, nouvelle demande ou permission créée.

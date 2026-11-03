@@ -1,4 +1,4 @@
-# Précisions native — CAB 2.2.5
+# Précisions native — CAB 2.2.6
 
 ## Lecture source read-only quand l’outil natif manque
 

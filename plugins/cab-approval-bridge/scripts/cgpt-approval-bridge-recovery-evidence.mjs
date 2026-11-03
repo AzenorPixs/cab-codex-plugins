@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.5';
+export const VERSION = '2.2.6';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -164,6 +164,58 @@ export function validateTerminalReview(review, ownerId) {
   }
 }
 
+export function excludeClosedValidationParts(parts, retirements, run, terminalCallId) {
+  const terminal=parts.find(p=>(p.callID||p.callId)===terminalCallId);
+  const start=terminal?.state?.time?.start;
+  if(!Number.isFinite(start))fail('terminal-review-native-divergent');
+  const excluded=new Map(),claims=new Set(),byCall=new Map();
+  for(const part of parts){const id=part.callID||part.callId;if(id){const matches=byCall.get(id)||[];matches.push(part);byCall.set(id,matches);}}
+  const remember=(part,old)=>{
+    const callId=part.callID||part.callId;
+    if(excluded.has(part)||claims.has(callId))fail('terminal-prior-review-duplicate');
+    const end=part.state?.time?.end;
+    if(!Number.isFinite(end)||end>=start)fail('terminal-prior-review-not-earlier');
+    excluded.set(part,{callId,partDigest:digest(part),actionId:old.actionId,proofDigest:old.proofDigest});claims.add(callId);
+  };
+  for(const old of retirements) {
+    const approval=old.approval;
+    if(!approval||approval.run_id!==run.runId||approval.requestId!==old.requestId||approval.approval_id!==old.approvalId||
+      approval.operation_id!==old.operationId||old.review?.ownerId!==run.ownerId)fail('terminal-prior-review-identity-divergent');
+    const priorCallIds=new Set(old.review.rejectedCalls.map(x=>x.callId));
+    for(const callId of priorCallIds) for(const part of byCall.get(callId)||[]) {
+      if(part.tool!=='bash'||part.nativeFormat!=='opencode-v2'||part.executed!==false||part.state?.status!=='error'||
+        part.nativeErrorType!=='aborted'||typeof part.state.input?.command!=='string'||
+        commandDigest(part.state.input.command)!==old.review.commandSha256)fail('terminal-prior-review-native-divergent');
+      remember(part,old);
+    }
+    const source=byCall.get(old.sourceCallId)||[];
+    if(source.length!==1)fail('terminal-prior-review-source-unverified');
+    const part=source[0];
+    if(part.tool==='execute') {
+      const calls=part.state?.metadata?.toolCalls;
+      if(part.executed!==false||part.state?.status!=='completed'||part.state.metadata.truncated!==false||
+        !Array.isArray(calls)||calls.length<1||calls.length>2||calls.at(-1)?.tool!=='cgpt-validation.request_validation'||
+        calls.at(-1).status!=='completed'||digest(calls.at(-1).input)!==digest(approval)||
+        calls.length===2&&(calls[0]?.tool!=='search'||calls[0]?.status!=='completed'||calls[0].input?.namespace!=='cgpt-validation'||
+          !/^(?:cgpt-validation\.)?request_validation$/.test(calls[0].input?.query||'')))fail('terminal-prior-review-source-unverified');
+    } else if(part.tool!=='cgpt-validation_request_validation'||part.state?.status!=='completed'||digest(part.state.input)!==digest(approval))
+      fail('terminal-prior-review-source-unverified');
+    remember(part,old);
+    for(const claim of old.review.wrapperReviews||[]) {
+      const matches=byCall.get(claim.callId)||[];
+      if(matches.length!==1)fail('terminal-prior-review-wrapper-unverified');
+      const wrapper=matches[0];
+      reviewedValidationProjection([wrapper],approval,[claim],{run,sameApproval:value=>old.sameIdentity(value),notAdmitted:old.notAdmitted});
+      remember(wrapper,old);
+    }
+    for(const claim of old.cancelParts||[]){const matches=byCall.get(claim.callId)||[];
+      if(matches.length!==1||digest(matches[0])!==claim.partDigest)fail('terminal-prior-review-wrapper-unverified');
+      remember(matches[0],old);
+    }
+  }
+  return {parts:parts.filter(p=>!excluded.has(p)),excluded:[...excluded.values()]};
+}
+
 export function reviewedTerminalProof(parts, approval, review, run, sameIdentity, notAdmitted = () => false) {
   validateTerminalReview(review,run.ownerId);
   if (approval.commands?.length !== 1 || approval.files?.length !== 0 ||
@@ -187,11 +239,22 @@ export function reviewedTerminalProof(parts, approval, review, run, sameIdentity
   const transportOutputs=[];
   for(const p of transportParts) {
     const calls=p.state?.metadata?.toolCalls;
+    if(p.executed===false && ['completed','error'].includes(p.state?.status) && p.state.metadata?.error===true &&
+      p.state.metadata.truncated===false && Array.isArray(calls) && calls.length===1 &&
+      calls[0]?.tool==='cgpt-validation.request_validation' && calls[0].status==='error' &&
+      calls[0].input?.requestId!==approval.requestId && calls[0].input?.run_id===run.runId &&
+      calls[0].input?.session_id===approval.session_id && notAdmitted(calls[0].input.requestId)) continue;
     if(p.executed!==false || p.state?.status!=='completed' || p.state.metadata?.truncated!==false ||
       !Array.isArray(calls) || !calls.length || calls.length>2 || calls.some(c=>c.status!=='completed'||
-        !['cgpt-validation.request_validation','cgpt-validation.get_approval','cgpt-validation.poll_approval','cgpt-validation.broker_readiness'].includes(c.tool)))
+        !['cgpt-validation.request_validation','cgpt-validation.get_approval','cgpt-validation.poll_approval','cgpt-validation.broker_readiness','cgpt-validation.lookup_validation','cgpt-validation.broker_health'].includes(c.tool)))
       fail('terminal-review-effects-uncovered');
     const last=calls.at(-1);
+    if(calls.every(c=>['cgpt-validation.get_approval','cgpt-validation.poll_approval','cgpt-validation.lookup_validation',
+      'cgpt-validation.broker_health','cgpt-validation.broker_readiness'].includes(c.tool))) {
+      // Diagnostic transformations are not authoritative approval results.
+      // Their exact known MCP calls have no project execution capability.
+      continue;
+    }
     if(calls.length!==1)fail('terminal-review-effects-uncovered');
     if(last.tool==='cgpt-validation.broker_readiness')continue;
     let value;try{value=JSON.parse(p.state.output);}catch{fail('terminal-review-effects-uncovered');}

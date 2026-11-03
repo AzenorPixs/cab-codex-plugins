@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.5
+# Reprise autonome dans le change — CAB 2.2.6
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -178,3 +178,70 @@ Pour ces deux actions, relire le même actionId après réponse perdue. Une
 intention préparée peut reprendre les écritures techniques manquantes après
 relecture des gardes ; une preuve périmée exige un diagnostic frais, sans purge
 ou répétition native. Les erreurs conservent leur reçu et leurs protections.
+
+## Historique long et anciennes revues closes
+
+La clôture reconcile-reviewed-terminal réutilise uniquement les revues
+cancel-reviewed-validation DONE/HTTP200 du même owner/RUN/contexte/version,
+si l’ancienne opération reste CANCELLED sans native et avec completionDigest
+concordant. La demande native exacte, les calls aborted et les wrappers déjà
+revus sont revérifiés : mêmes identités, commande/code, format natif, antériorité.
+Le nouveau reçu conserve actionId/proofDigest/partDigest de ces anciennes
+parties ; le diagnostic complet reste visible. Aucune liste fournie par
+l’appelant ne peut rendre un call ignorable. Les parties inconnues, dupliquées,
+modifiées ou portant un effet non couvert restent refusées.
+
+Les diagnostics MCP connus sans capacité d’exécution dans le projet restent
+consultables, même quand leur retour est transformé. Un tel retour n’est pas
+une preuve d’approbation. Un request_validation MCP échoué sans propriétaire
+local n’est pas déclaré NOT_ADMITTED par supposition : sa seule observation
+de transport ne constitue pas un effet natif et reste dans le transcript.
+Les snapshots complets restent indépendants ; l’indexation des identités
+évite les reparcours du transcript pour chaque call déjà revu.
+
+## Retirer une validation approuvée jamais émise
+
+La policy propriétaire autorise withdraw-unissued-validation sur les ressources
+exactes de l’opération. Faire les lectures fraîches du plan et du diagnostic,
+puis POST recovery/action avec cette action, targetId=operationId,
+input={nativeBoundaryDigest,evidence:[référence de revue et de retrait]}.
+Aucun rejectedCalls ou refus natif n’est à fabriquer : la route est distincte
+de cancel-reviewed-validation, dont les gardes restent inchangées.
+
+Le serveur exige PREPARED/approved, aucun native/nativeResult/accès lié,
+session idle, zéro permission, aucun appel à effet après la demande native
+exacte, job/contexte/version exacts et deux observations stables. Il retire
+la réponse exécutable locale et clôt seulement la coordination CANCELLED,
+avec COORDINATION_WITHDRAWN_BEFORE_ISSUANCE / OWNER_NATIVE_BOUNDARY_REVIEW.
+L’approved historique reste conservé. Ni once, nativeResult, annulation native
+ou NO_EFFECT n’est fabriqué ; les autres accès/leases restent protégés.
+La commande de remplacement exige une nouvelle identité et son cycle normal.
+Relire le même actionId après réponse perdue.
+
+## once : responsabilité du contrôleur
+
+L’orchestrateur décide via CAB puis laisse le contrôleur acquérir/lier l’accès,
+écrire l’intention, répondre once et journaliser l’ACK. Il ne répond pas
+once directement par client.replyPermission. Un HTTP204 externe ne prouve
+pas un reçu CAB, l’accès ou son fencing ; ne pas les reconstruire après coup.
+La clôture revue d’une lecture conserve explicitement la permission non
+qualifiée ; les autres effets restent protégés.
+
+## Port sans listener avec processus candidats
+
+listening=false ne suffit pas si quiescent=false ou matchingProcessCount>0.
+Des candidats changeants ne prouvent ni un lien à l’ancien Vite ni sa fin ;
+cgroup/netns stables indiquent un contexte commun. Deux captures espacées de
+plus de120s sont aussi hors fenêtre. Augmenter la borne seule ne rend pas
+une capture non quiescente valide. Conserver once, port et issue incertaine.
+
+Continuation : relire plan/manifeste ; utiliser extend-compatible pour un
+port disjoint du même hôte et des mêmes droits couverts par le change ;
+mandater ensuite un nouveau serveur background explicite avec shellID, accès
+et once propres, puis le test. L’extension ne libère pas l’ancien port et ne
+vaut pas permission d’exécution. Préparer les sondes/mandats avant une fenêtre
+naturellement calme ; vérifier exit0, quiescent=true, identité, fraîcheur et
+accès libérés avant reconcile-quarantined-port. Sinon poursuivre les travaux
+disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
+supposition. La clôture historique reste non prouvée ; aucune procédure ne
+peut effacer cette incertitude sans preuve supplémentaire.

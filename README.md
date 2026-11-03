@@ -1,6 +1,6 @@
 # Codex Approval Bridge — CAB - 100% IA
 
-## Récupération autonome 2.2.5
+## Récupération autonome 2.2.6
 
 Les frontières PENDING sans contexte et terminal de lecture sans reçu once
 possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
@@ -26,7 +26,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.2.5. CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
+La version source courante est CAB 2.2.6. CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
 puis ne bascule que les composants nécessaires. Un jeu conforme ne subit
 aucune coupure. Le transfert compatible préserve demandes, décisions, accès et
 baux ; une réponse réseau perdue reprend le même reçu sans rejeu de once.
@@ -716,7 +716,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, des plugins CAB/CABU et des commandes
-est `2.2.5`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.2.6`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -836,7 +836,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.2.5.
+La distribution courante des quatre briques, plugins et commandes est 2.2.6.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -1110,3 +1110,10 @@ CAB2.1.32 partage le prédicat de permissions natives entre client et contrôleu
 
 
 CAB2.1.32 ferme les imports relatifs statiquement déclarés selon leurs destinations réelles, et inclut permission-policy dans le groupe du moniteur. Une dépendance seulement présente dans un autre groupe est refusée avant coupure ; les contrôles de permissions restent ceux du correctif29.
+
+Les reprises2.2.6 réutilisent les revues closes dans un historique long et
+permettent le retrait propriétaire avant toute émission native. Elles ne
+fabriquent ni permission, reçu once ou NO_EFFECT ; voir autonomous-recovery.
+La responsabilité du contrôleur pour la chaîne accès/intention/once/ACK est
+explicite. Les ports historiques non prouvés restent protégés pendant une
+continuation disjointe ; aucune dépendance n’est ajoutée.

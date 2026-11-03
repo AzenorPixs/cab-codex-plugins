@@ -22,10 +22,10 @@ import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from '.
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
 import { NativeInstances } from './cgpt-approval-bridge-native-instances.mjs';
 import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.mjs';
-import { nativeEvidenceView, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof } from './cgpt-approval-bridge-recovery-evidence.mjs';
+import { nativeEvidenceView, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.5";
+const version = "2.2.6";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
@@ -133,6 +133,10 @@ recovery.validationBoundaryReplay = (receipt,op) => {
       receipt.observation.approval?.reservation_version!==run.version) return false;
   if(receipt.action==='restore-pending-validation')
     return context.pendingRestorationProof?.(op.requestId)===receipt.effectDigest;
+  if(receipt.action==='withdraw-unissued-validation') {
+    if(op.state!=='CANCELLED'||op.completionDigest!==receipt.effectDigest||op.native||op.nativeResult)return false;
+    context.withdrawUnissuedValidation(receipt.observation.approval,receipt.effectDigest);return true;
+  }
   if(op.state!=='COMPLETED' || op.completionDigest!==receipt.effectDigest || op.native || op.nativeResult) return false;
   context.completeReviewedTerminal(receipt.observation.approval,receipt.effectDigest);
   return true;
@@ -1200,11 +1204,11 @@ async function collectRecoveryEvidence(run, operation) {
   return { view: publicView, approval, parts, messages, generation };
 }
 
-async function reconcileValidationBoundary(run,context,payload,actionId,terminal) {
+async function reconcileValidationBoundary(run,context,payload,actionId,terminal,withdraw=false) {
   registry.admission(run.runId);
   const op=registry.resourceState.operations[payload.operationId];
   if(!op || op.runId!==run.runId || op.contextId!==run.contextId || op.state!=='PREPARED' || op.native || op.nativeResult ||
-      (terminal ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
+      (terminal||withdraw ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
       Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId)))
     throw new CoordinationError('validation-boundary-recovery-invalid');
   if(context.publicStatus().recoveryRequired || !context.publicJob()?.armed ||
@@ -1214,10 +1218,47 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   if(first.view.nativeBoundaryDigest!==payload.nativeBoundaryDigest || !first.view.sessionIdle || first.view.pendingPermissionCount)
     throw new CoordinationError('recovery-native-boundary-changed');
   const same=value=>proofHash(nativeIdentity(value))===proofHash(nativeIdentity(first.approval));
-  registry.operationCandidate(run.runId,first.approval);
+  registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw});
+  const closedReviews=terminal?recovery.closedValidationReviews(run.runId).filter(old=>old.operationId!==op.operationId):[];
+  const requested=new Set(closedReviews.map(old=>old.requestId)),requestIndex=new Map(),cancelIndex=new Map();
+  const addEntry=(id,entry)=>{if(requested.has(id)){const entries=requestIndex.get(id)||[];entries.push(entry);requestIndex.set(id,entries);}};
+  for(const part of terminal?first.parts:[]) {
+    if(part.tool==='cgpt-validation_cancel_approval'||part.tool==='execute'&&
+      part.state?.metadata?.toolCalls?.some(call=>call.tool==='cgpt-validation.cancel_approval')) {
+      let output;try{output=JSON.parse(part.state?.output);}catch{}
+      if(output?.status==='CANCELLED'&&typeof output.approval_id==='string') {
+        const list=cancelIndex.get(output.approval_id)||[];list.push({part,output});cancelIndex.set(output.approval_id,list);
+      }
+    }
+    if(part.tool==='cgpt-validation_request_validation'&&part.state?.status==='completed')addEntry(part.state.input?.requestId,{input:part.state.input,part});
+    else if(part.tool==='execute'&&part.executed===false&&part.state?.status==='completed'&&part.state.metadata?.truncated===false)
+      for(const call of part.state.metadata.toolCalls||[])if(call?.tool==='cgpt-validation.request_validation'&&call.status==='completed')
+        addEntry(call.input?.requestId,{input:call.input,part});
+  }
+  const priorReviews=closedReviews.flatMap(old=>{
+    const entries=requestIndex.get(old.requestId)||[];
+    if(entries.length!==1)return [];
+    const approval=entries[0].input,owner=registry.requestOwners[old.requestId];
+    if(owner?.runId!==run.runId||owner.digest!==createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex'))return [];
+    const sameOld=value=>proofHash(nativeIdentity(value))===proofHash(nativeIdentity(approval));
+    const wrappers=[...(old.review.wrapperReviews||[])],cancelParts=[];
+    for(const {part,output} of cancelIndex.get(approval.approval_id)||[]) {
+      const wrapper={tool:part.tool,executed:part.executed,status:part.state?.status,code:part.state?.input?.code,
+        truncated:part.state?.metadata?.truncated,toolCalls:part.state?.metadata?.toolCalls};
+      if(!sameOld(output))continue;
+      if(exactCancelApprovalWrapper(wrapper,approval)&&!wrappers.some(w=>w.callId===(part.callID||part.callId)))
+        wrappers.push({callId:part.callID||part.callId,codeSha256:createHash('sha256').update(wrapper.code).digest('hex'),effect:'VALIDATION_TRANSPORT_ONLY',returnsNativeResult:true});
+      if(part.tool==='cgpt-validation_cancel_approval'&&part.state?.status==='completed'&&part.state.input?.approval_id===approval.approval_id)
+        cancelParts.push({callId:part.callID||part.callId,partDigest:proofHash(part)});
+    }
+    return [{...old,review:{...old.review,wrapperReviews:wrappers},approval,cancelParts,
+      sourceCallId:entries[0].part.callID||entries[0].part.callId,sameIdentity:sameOld,notAdmitted:id=>!registry.requestOwners[id]}];
+  });
   let observation;
   if(terminal) {
-    observation=reviewedTerminalProof(first.parts,first.approval,payload.review,run,same,id=>!registry.requestOwners[id]);
+    const history=excludeClosedValidationParts(first.parts,priorReviews,run,payload.review.callId);
+    observation={...reviewedTerminalProof(history.parts,first.approval,payload.review,run,same,id=>!registry.requestOwners[id]),
+      excludedPriorReviews:history.excluded};
     for(const source of payload.review.sourceFiles) {
       if(!op.resources.some(r=>r.key==='project:*'||r.key==='file:'+source.path||r.key.startsWith('file:')&&('file:'+source.path).startsWith(r.key+'/')))
         throw new CoordinationError('terminal-review-source-outside-operation');
@@ -1225,6 +1266,12 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
       const file=await openCode.sourceRead(op.sessionId,source.path,{directory:run.directory});
       if(file.sha256!==source.sha256)throw new CoordinationError('terminal-review-source-divergent');
     }
+  } else if(withdraw) {
+    proofReferences(payload);
+    if(first.parts.slice(1).some(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p)))
+      throw new CoordinationError('withdraw-unissued-native-effect-observed');
+    context.verifyNativeCancelledValidation(first.approval,proofHash(payload));
+    observation={kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
   } else {
     if(context.hasRequest(op.requestId) && !context.pendingRestorationProof(op.requestId))throw new CoordinationError('pending-restore-already-present');
     observation=pendingValidationProof(first.parts,first.approval,same);
@@ -1234,24 +1281,35 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   if(first.view.nativeBoundaryDigest!==second.view.nativeBoundaryDigest || proofHash(first.messages)!==proofHash(second.messages) ||
       generationChanged(op.sessionId,first.generation) || proofHash(op)!==original)
     throw new CoordinationError('recovery-native-boundary-changed');
-  if(terminal)reviewedTerminalProof(second.parts,second.approval,payload.review,run,same,id=>!registry.requestOwners[id]);
-  else pendingValidationProof(second.parts,second.approval,same);
+  if(terminal) {
+    const history=excludeClosedValidationParts(second.parts,priorReviews,run,payload.review.callId);
+    if(proofHash(history.excluded)!==proofHash(observation.excludedPriorReviews))throw new CoordinationError('terminal-prior-review-boundary-changed');
+    reviewedTerminalProof(history.parts,second.approval,payload.review,run,same,id=>!registry.requestOwners[id]);
+  }
+  else if(withdraw) {
+    if(second.parts.slice(1).some(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p)))
+      throw new CoordinationError('withdraw-unissued-native-effect-observed');
+  } else pendingValidationProof(second.parts,second.approval,same);
   if(terminal) for(const source of payload.review.sourceFiles) {
     const file=await openCode.sourceRead(op.sessionId,source.path,{directory:run.directory});
     if(file.sha256!==source.sha256)throw new CoordinationError('terminal-review-source-divergent');
   }
   if(generationChanged(op.sessionId,first.generation)||proofHash(op)!==original)throw new CoordinationError('recovery-native-boundary-changed');
-  registry.operationCandidate(run.runId,first.approval);
+  registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw});
   const proofDigest=proofHash(payload);
   recovery.observeAction(actionId,{...observation,approval:structuredClone(first.approval)});
   if(terminal) {
     // Invalidate the local executable answer before closing coordination.
     context.completeReviewedTerminal(first.approval,proofDigest);
     registry.completeReviewedReadOnly(run.runId,op.operationId,proofDigest);
+  } else if(withdraw) {
+    context.withdrawUnissuedValidation(first.approval,proofDigest);
+    registry.recordNativeCancelledValidation(run.runId,op.operationId,proofDigest);
+    registry.withdrawnUnissuedOperations ||= new Set();registry.withdrawnUnissuedOperations.add(op.operationId);
   } else context.restorePendingValidation(first.approval,proofDigest);
-  return {state:terminal?'COMPLETED':'PENDING',operationState:terminal?'COMPLETED':'PREPARED',
+  return {state:terminal?'COMPLETED':withdraw?'CANCELLED':'PENDING',operationState:terminal?'COMPLETED':withdraw?'CANCELLED':'PREPARED',
     runId:run.runId,operationId:op.operationId,proofDigest,
-    ...(terminal?{executionOutcome:observation.executionOutcome,evidenceAuthority:observation.evidenceAuthority}:{})};
+    ...(terminal||withdraw?{executionOutcome:observation.executionOutcome,evidenceAuthority:observation.evidenceAuthority}:{})};
 }
 
 async function cancelReviewedValidation(run, context, payload) {
@@ -2136,7 +2194,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile', '/validation/cancel-reviewed', '/validation/restore-pending', '/validation/reconcile-reviewed-terminal', '/locks/reconcile-quiescent-port'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile', '/validation/cancel-reviewed', '/validation/restore-pending', '/validation/withdraw-unissued', '/validation/reconcile-reviewed-terminal', '/locks/reconcile-quiescent-port'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -2691,10 +2749,10 @@ async function handleRequest(request, response) {
         context.installReconciledValidation(inspection);
         json(response, 201, receipt); return;
       }
-      if(request.method==='POST' && ['/validation/restore-pending','/validation/reconcile-reviewed-terminal'].includes(url.pathname)) {
+      if(request.method==='POST' && ['/validation/restore-pending','/validation/withdraw-unissued','/validation/reconcile-reviewed-terminal'].includes(url.pathname)) {
         if(!response.cabRecoveryActionId)throw new CoordinationError('recovery-policy-required',403);
         json(response,200,await reconcileValidationBoundary(run,context,payload,response.cabRecoveryActionId,
-          url.pathname==='/validation/reconcile-reviewed-terminal'));return;
+          url.pathname==='/validation/reconcile-reviewed-terminal',url.pathname==='/validation/withdraw-unissued'));return;
       }
       if (request.method === 'POST' && url.pathname === '/locks/reconcile-quiescent-port') {
         if (!response.cabRecoveryActionId) throw new CoordinationError('recovery-policy-required', 403);

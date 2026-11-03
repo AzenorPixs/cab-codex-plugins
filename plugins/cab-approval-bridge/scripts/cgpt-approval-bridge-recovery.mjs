@@ -2,13 +2,14 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.2.5';
+export const VERSION = '2.2.6';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const fail = (code, status = 409) => { throw Object.assign(new Error(code), { code, status }); };
-const validationBoundaryActions = new Set(['restore-pending-validation','reconcile-reviewed-terminal']);
+const validationBoundaryActions = new Set(['restore-pending-validation','reconcile-reviewed-terminal','withdraw-unissued-validation']);
 const actions = {
+  'withdraw-unissued-validation': '/validation/withdraw-unissued',
   'restore-pending-validation': '/validation/restore-pending',
   'reconcile-reviewed-terminal': '/validation/reconcile-reviewed-terminal',
   'reconcile-quarantined-port': '/locks/reconcile-quiescent-port',
@@ -37,6 +38,8 @@ export function projectRecoveryReceipt(value) {
   if (['CANCELLED','COMPLETED','PREPARED'].includes(value.operationState)) result.operationState = value.operationState;
   if (value.executionOutcome === 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT') result.executionOutcome = value.executionOutcome;
   if (value.evidenceAuthority === 'VERIFIED_NATIVE_PORT_PROBES') result.evidenceAuthority = value.evidenceAuthority;
+  if (value.executionOutcome === 'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE') result.executionOutcome=value.executionOutcome;
+  if (value.evidenceAuthority === 'OWNER_NATIVE_BOUNDARY_REVIEW') result.evidenceAuthority=value.evidenceAuthority;
   if (value.executionOutcome === 'NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED') result.executionOutcome = value.executionOutcome;
   if (value.executionOutcome === 'UNDETERMINED_READ_ONLY') result.executionOutcome = value.executionOutcome;
   if (value.evidenceAuthority === 'ORCHESTRATOR_AUDIT_REVIEW') result.evidenceAuthority = value.evidenceAuthority;
@@ -72,6 +75,12 @@ export class RecoveryCoordinator {
       this.policies = this.store.snapshot()?.policies || [];
       this.receipts = this.store.snapshot()?.receipts || [];
       this.registry.reviewedReadOnlyOperations ||= new Set();
+      this.registry.withdrawnUnissuedOperations ||= new Set();
+      for(const receipt of this.receipts)if(receipt.action==='withdraw-unissued-validation') {
+        const op=registry.resourceState.operations[receipt.entityId];
+        if(op?.state==='CANCELLED'&&op.completionDigest===receipt.effectDigest&&!op.native)
+          this.registry.withdrawnUnissuedOperations.add(op.operationId);
+      }
       for (const receipt of this.receipts) if (receipt.action === 'cancel-reviewed-validation') {
         const op = registry.resourceState.operations[receipt.entityId];
         if (op?.state === 'CANCELLED' && op.completionDigest === receipt.effectDigest)
@@ -170,8 +179,10 @@ export class RecoveryCoordinator {
       !boundary.accesses.some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId))) {
       if (!op.decision) offer('restore-pending-validation',op.operationId,op.resources,
         '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
-      if (op.decision?.status==='approved') offer('reconcile-reviewed-terminal',op.operationId,op.resources,
-        '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
+      if (op.decision?.status==='approved') {
+        offer('reconcile-reviewed-terminal',op.operationId,op.resources,'/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
+        offer('withdraw-unissued-validation',op.operationId,op.resources,'/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
+      }
     }
     const unresolved = boundary.operations.filter(op => !['COMPLETED', 'CANCELLED'].includes(op.state));
     return { protocol: RECOVERY_PROTOCOL, runId, contextId: run.contextId, version: run.version,
@@ -250,7 +261,8 @@ export class RecoveryCoordinator {
     if (!previous) fail('recovery-receipt-unknown');
     if (previous.state === 'DONE') return publicActionResult(previous.result);
     const result = { ...projectRecoveryReceipt(value), ...(validationBoundaryActions.has(previous.action) && httpStatus===200
-      ? {state:previous.action==='restore-pending-validation'?'PENDING':'COMPLETED',operationState:previous.action==='restore-pending-validation'?'PREPARED':'COMPLETED',operationId:previous.targetId,proofDigest:previous.effectDigest,
+      ? {state:previous.action==='restore-pending-validation'?'PENDING':previous.action==='withdraw-unissued-validation'?'CANCELLED':'COMPLETED',operationState:previous.action==='restore-pending-validation'?'PREPARED':previous.action==='withdraw-unissued-validation'?'CANCELLED':'COMPLETED',operationId:previous.targetId,proofDigest:previous.effectDigest,
+        ...(previous.action==='withdraw-unissued-validation'?{executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'}:{}),
         ...(previous.action==='reconcile-reviewed-terminal'?{executionOutcome:'NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED',evidenceAuthority:'ORCHESTRATOR_AUDIT_REVIEW'}:{})}:{}), ...(previous.action === 'reconcile-quarantined-port' && httpStatus === 200
       ? { state: 'RELEASED', operationState: 'CANCELLED', operationId: previous.targetId, proofDigest: previous.effectDigest } : {}), ...(previous.action === 'reconcile-quarantined-port' && httpStatus === 200
       ? { executionOutcome: 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT', evidenceAuthority: 'VERIFIED_NATIVE_PORT_PROBES' } : {}), ...(previous.action === 'cancel-reviewed-validation' && httpStatus === 200
@@ -290,10 +302,26 @@ export class RecoveryCoordinator {
     if (!previous || !['reconcile-quarantined-port',...validationBoundaryActions].includes(previous.action) || previous.state !== 'PREPARED') fail('recovery-receipt-unknown');
     this.persist(this.policies, this.receipts.map(receipt => receipt === previous ? { ...receipt, observation } : receipt));
   }
+  closedValidationReviews(runId) {
+    const run=this.run(runId),result=[];
+    for(const receipt of this.receipts) {
+      const op=this.registry.resourceState.operations[receipt.entityId];
+      if(receipt.action!=='cancel-reviewed-validation'||receipt.state!=='DONE'||receipt.httpStatus!==200||
+        receipt.ownerId!==run.ownerId||receipt.runId!==runId||receipt.contextId!==run.contextId||
+        receipt.result?.executionOutcome!=='UNDETERMINED_READ_ONLY'||
+        op?.state!=='CANCELLED'||op.runId!==runId||op.contextId!==run.contextId||op.version!==run.version||
+        op.native||op.nativeResult||op.decision?.status!=='approved'||op.completionDigest!==receipt.effectDigest)continue;
+      try {validateReviewStructure(receipt.review,run.ownerId);} catch {continue;}
+      result.push({actionId:receipt.actionId,proofDigest:receipt.effectDigest,operationId:op.operationId,
+        requestId:op.requestId,approvalId:op.decision.approvalId,review:structuredClone(receipt.review)});
+    }
+    return result;
+  }
   operationReview(runId, operationId) {
     const op = this.registry.resourceState.operations[operationId];
     const receipt = this.receipts.findLast(row => row.runId === runId && row.entityId === operationId &&
-      ['cancel-reviewed-validation','reconcile-quarantined-port','reconcile-reviewed-terminal'].includes(row.action) && row.effectDigest === op?.completionDigest);
+      ['cancel-reviewed-validation','reconcile-quarantined-port','reconcile-reviewed-terminal','withdraw-unissued-validation'].includes(row.action) && row.effectDigest === op?.completionDigest);
+    if(receipt?.action==='withdraw-unissued-validation'&&op.state==='CANCELLED')return {executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',recoveryActionId:receipt.actionId};
     if(receipt?.action==='reconcile-reviewed-terminal' && op.state==='COMPLETED') return {executionOutcome:'NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED',evidenceAuthority:'ORCHESTRATOR_AUDIT_REVIEW',recoveryActionId:receipt.actionId};
     return receipt && op.state === 'CANCELLED' && receipt.action === 'reconcile-quarantined-port'
       ? { executionOutcome: 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT', evidenceAuthority: 'VERIFIED_NATIVE_PORT_PROBES', recoveryActionId: receipt.actionId }

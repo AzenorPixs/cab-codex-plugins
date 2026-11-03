@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.5';
+export const VERSION = '2.2.6';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -523,6 +523,7 @@ export class ResourceRunRegistry extends RunRegistry {
         access.operationIds.includes(op.operationId)));
   }
   unusedTestOperationClassification(op, decision = null) {
+    if(this.withdrawnUnissuedOperations?.has(op.operationId))return null;
     if (op.state === 'CANCELLED' && !op.native) return this.reviewedReadOnlyOperations?.has(op.operationId)
       ? 'read-only-no-effect' : 'cancelled-without-execution';
     if (this.isRejectionOnlyOperation(op)) return 'rejected-validation-no-native-effect';

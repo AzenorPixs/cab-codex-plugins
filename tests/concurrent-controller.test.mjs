@@ -2129,7 +2129,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.5');
+  assert.equal(initialized.result.serverInfo.version, '2.2.6');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4063,4 +4063,94 @@ test('frontière PENDING : intention avant écriture reprend la même identité 
  const replay=await h.post(base+'/recovery/action',payload);assert.equal(replay.status,200,JSON.stringify(replay));
  assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,1);assert.equal(h.native.replies.length,0);
  assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].native,null);
+});
+async function closedHistoryTerminalFixture(t) {
+ const {h,run,approval:old,payload:cancel}=await reviewedCancellationFixture(t),base='/runs/'+run.runId;
+ assert.equal((await h.post(base+'/recovery/action',cancel)).status,200);
+ const approval=h.approval(run,'after-closed-review');approval.commands=['/usr/bin/head src/reviewed-cancel.py'];
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);
+ const source=h.native.messages[run.sessionId].pop();source.parts[0].state.time={start:Date.now()-60000,end:Date.now()-59000};
+ h.native.messages[run.sessionId].unshift(source);
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'execute',callID:'closed-failed-coordination',executed:false,state:{status:'completed',input:{code:'const payload=runtimeInput; return await tools["cgpt-validation"].request_validation(payload);'},output:'MCP notification failed',metadata:{error:true,truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',status:'error',input:{...approval,requestId:'unowned-failed-coordination'}}]},time:{start:Date.now()-2,end:Date.now()-1}}}]});
+ for(const tool of ['broker_health','get_approval'])h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'execute',callID:'closed-diagnostic-'+tool,executed:false,
+  state:{status:'completed',input:{code:tool==='get_approval'?'const r=await tools["cgpt-validation"].get_approval(input); return {status:r.status};':'return await tools["cgpt-validation"].broker_health({});'},output:JSON.stringify({status:'APPROVED'}),metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.'+tool,status:'completed',input:tool==='get_approval'?{approval_id:approval.approval_id}:{}}]},time:{start:Date.now()-2,end:Date.now()-1}}}]});
+ const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',callID:'get-after-closed-review',state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'}),metadata:{truncated:false},time:{start:stamp-2,end:stamp-1}}}]});
+ h.native.messages[run.sessionId].push({nativeV2:{id:'msg_terminal_after_closed',type:'assistant',time:{created:stamp},finish:'stop',content:[{type:'tool',id:'call-terminal-after-closed',name:'shell',executed:false,time:{created:stamp,ran:stamp+1,completed:stamp+2},state:{status:'completed',input:{command:approval.commands[0],workdir:h.directory,background:false},metadata:{exit:0,truncated:false},content:[{type:'text',text:'reviewed pure helper'}]}}]}});
+ const policy={policyId:'after-closed-policy',ownerId:run.ownerId,version:run.version,actions:['reconcile-reviewed-terminal'],resources:run.resources,authorization:'same approved change; retain prior closed audit receipts'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body;
+ const call=evidence.calls.find(c=>c.callId==='call-terminal-after-closed');assert.equal(evidence.calls.length,3);
+ const plan=(await h.get(base+'/recovery')).body;
+ const payload={actionId:'after-closed-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'reconcile-reviewed-terminal',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,review:{ownerId:run.ownerId,effect:'READ_ONLY',commandSha256:evidence.commandSha256,callId:call.callId,partDigest:call.partDigest,sourceFiles:[{path:'src/reviewed-cancel.py',sha256:createHash('sha256').update('# reviewed pure helper\n').digest('hex')}],evidenceRefs:['audit/current-read-after-closed-history']}}};
+ return {h,run,old,approval,base,payload};
+}
+test('historique clos : deux aborted déjà réconciliés permettent un terminal unique sans transformer leur issue',async t=>{
+ const{h,old,approval,base,payload}=await closedHistoryTerminalFixture(t);
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ const ops=(await h.get(base+'/operations')).body.operations;
+ assert.equal(ops.find(x=>x.operationId===old.operation_id).state,'CANCELLED');assert.equal(ops.find(x=>x.operationId===old.operation_id).executionOutcome,'UNDETERMINED_READ_ONLY');
+ assert.equal(ops.find(x=>x.operationId===approval.operation_id).state,'COMPLETED');assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ const store=JSON.parse(readFileSync(join(h.directory,'.opencode/state/cgpt-approval-bridge/recovery-policies.json'),'utf8'));
+ assert.equal(store.value.receipts.find(r=>r.actionId===payload.actionId).observation.excludedPriorReviews.length,4);
+ await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+});
+for(const variant of ['unknown-call','changed-command','no-aborted','duplicate','changed-wrapper'])test('historique clos : refuse '+variant,async t=>{
+ const{h,run,approval,base,payload}=await closedHistoryTerminalFixture(t);
+ const oldShell=h.native.messages[run.sessionId].find(m=>m.nativeV2?.content?.[0]?.id==='review-call-a').nativeV2.content[0];
+ if(variant==='unknown-call')oldShell.id='unknown-unreviewed-call';
+ if(variant==='changed-command')oldShell.state.input.command='/usr/bin/false';
+ if(variant==='no-aborted')oldShell.state.error={type:'unknown',message:'not a reviewed aborted boundary'};
+ if(variant==='duplicate')h.native.messages[run.sessionId].push({nativeV2:{id:'msg_duplicate_old',type:'assistant',time:{created:Date.now()},content:[structuredClone(oldShell)]}});
+ if(variant==='changed-wrapper'){
+  const wrapper=h.native.messages[run.sessionId].flatMap(m=>m.parts||[]).find(p=>p.tool==='execute'&&p.state.input.code.includes('cancel_approval'));
+  wrapper.state.input.code+=' return "changed";';
+ }
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'PREPARED');assert.equal(h.native.replies.length,0);
+});
+async function unissuedWithdrawalFixture(t) {
+ const h=await setup(t),run=await h.reserve('withdraw-unissued'),approval=h.approval(run,'withdraw-future-server'),base='/runs/'+run.runId;
+ approval.commands=['node future-server.js'];h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const source=h.native.messages[run.sessionId].at(-1).parts[0];source.state.status='completed';source.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const policy={policyId:'withdraw-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation'],resources:run.resources,authorization:'same change; replace future server before issuing any native command'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body,plan=(await h.get(base+'/recovery')).body;
+ assert.deepEqual(evidence.calls,[]);
+ const payload={actionId:'withdraw-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/future-server-withdrawal']}};
+ return{h,run,approval,base,payload};
+}
+test('retrait non émis : aucun refus à fabriquer, approved conservé, aucune once/nativeResult/NO_EFFECT',async t=>{
+ const{h,approval,base,payload}=await unissuedWithdrawalFixture(t);
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'CANCELLED');assert.equal(result.body.executionOutcome,'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE');
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'CANCELLED');assert.equal(op.decision.status,'approved');assert.equal(op.native,null);assert.equal(op.nativeResult,null);assert.notEqual(op.onceAcknowledged,true);
+ assert.equal((await h.get(base+'/status')).body.hasUnresolvedValidation,false);assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].executionOutcome,result.body.executionOutcome);
+});
+for(const variant of ['effect','permission','busy','access','once','boundary','owner','missing-evidence'])test('retrait non émis : refuse '+variant,async t=>{
+ const{h,run,approval,base,payload}=await unissuedWithdrawalFixture(t);
+ if(variant==='effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',callID:'unissued-unexpected-effect',state:{status:'completed',input:{command:approval.commands[0]},metadata:{exit:0},output:'started'}}]});
+ if(variant==='permission')h.native.permissions.push({id:'unissued-pending-permission',sessionID:run.sessionId,permission:'bash',metadata:{command:'/usr/bin/false'}});
+ if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ if(['access','once'].includes(variant))assert.equal((await h.post(base+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions})).status,200);
+ if(variant==='once')await h.execute(approval);
+ if(variant==='boundary')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ if(variant==='owner')payload.ownerId='foreign-owner';
+ if(variant==='missing-evidence')delete payload.input.evidence;
+ if(['effect','permission','busy','access','once'].includes(variant)){
+  payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+  payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ }
+ const result=await h.post(base+'/recovery/action',payload);assert.ok([403,409].includes(result.status),JSON.stringify(result));
+ assert.notEqual((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'CANCELLED');
 });

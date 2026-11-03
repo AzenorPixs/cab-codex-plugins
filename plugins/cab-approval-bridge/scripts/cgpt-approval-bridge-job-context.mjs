@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.5";
+export const VERSION = "2.2.6";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -413,7 +413,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.5",
+    version: "2.2.6",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1837,6 +1837,13 @@ function verifyNativeCancelledValidation(approval, proofDigest) {
   }
   return { requestId, operationId: operation.operationId };
 }
+function withdrawUnissuedValidation(approval,proofDigest) {
+  const {requestId,operationId}=verifyNativeCancelledValidation(approval,proofDigest);
+  validations.delete(requestId);httpDecisions.delete(requestId);answered.add(requestId);
+  persistCommunication();wakeDecisionWaiters(requestId);
+  updateStatus('unissued-validation-withdrawn',{requestId,operationId});
+  return {requestId,operationId};
+}
 function restoreNativeCancelledValidation(approval, proofDigest) {
   const { requestId, operationId } = verifyNativeCancelledValidation(approval, proofDigest);
   validations.delete(requestId);
@@ -2287,7 +2294,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.5",
+      version: "2.2.6",
     },
   });
 
@@ -3424,7 +3431,7 @@ return {
   transportHandoffReady: () => !communicationFailed && reconcilingPermissions.size === 0 &&
     !recoveryTransitionInFlight && !lifecycleTransitionInFlight && !modelTransitions.inFlight,
   flushCommunication: async () => { await jobPersistence; persistCommunication(); },
-  restorePendingValidation, pendingRestorationProof, completeReviewedTerminal,
+  restorePendingValidation, pendingRestorationProof, completeReviewedTerminal, withdrawUnissuedValidation,
   verifyRejectedRecoveryRelease, restoreNativeRejectedOperation, restoreNativeCancelledValidation, verifyNativeCancelledValidation,
   close: () => {
     if (closePromise) return closePromise;
