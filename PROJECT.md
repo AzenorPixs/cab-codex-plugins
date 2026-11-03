@@ -4,12 +4,12 @@ Les signalements CAB suivent le [triage canonique](plugins/cab-approval-bridge/s
 Les ambiguïtés établies complètent la documentation sous SCM ;la qualification
 ne crée aucune autorisation métier et conserve les protections légitimes.
 
-Les états privés CAB2.2.14 résident dans le profil d’exécution hors projet.
+Les états privés CAB2.2.15 résident dans le profil d’exécution hors projet.
 Les fichiers projet restent en0775 ; CABU vérifie et migre les identités,
 décisions et once, sans remettre les fichiers projet en0600. Le premier reçu
 de migration est distingué du transfert certifié ordinaire.
 
-## Récupération autonome 2.2.14
+## Récupération autonome 2.2.15
 
 Les frontières PENDING sans contexte et terminal de lecture sans reçu once
 possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
@@ -31,9 +31,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.14`.
+Version de référence des briques CAB : `2.2.15`.
 
-CAB 2.2.14 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.15 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -836,13 +836,13 @@ n’est déduit de la seule stabilité du prompt. Cette livraison réutilise des
 preuves et fixe cette priorité, sans modifier une politique de cache fournisseur
 ni revendiquer un benchmark LLM facturé.
 
-La corrélation2.2.14 distingue l’input d’un appel MCP terminé et la réussite
+La corrélation2.2.15 distingue l’input d’un appel MCP terminé et la réussite
 métier de son wrapper. Elle conserve NOT_ADMITTED terminal et les gardes
 indépendantes de décision/accès/once. La procédure canonique à payload
 littéral est détaillée dans technical-native ; aucune dépendance nouvelle.
 
 
-## Changement de session de pilotage — CAB 2.2.14
+## Changement de session de pilotage — CAB 2.2.15
 
 Une API distincte `/runs/<run>/session-handoff` change le SID courant sans
 transférer les anciennes autorisations ni libérer les protections historiques.
@@ -851,3 +851,16 @@ admission ; les événements historiques restent observés. Le transfert ordinai
 reste strict. Procédure, préconditions et absence de downgrade après usage :
 [session-handoff](plugins/cab-approval-bridge/skills/approval-bridge/references/session-handoff.md).
 Publication/CABU et utilisation métier restent des preuves séparées.
+
+
+## Retrait autonome d’une unité approuvée — CAB 2.2.15
+
+Le skill, l’index et la commande dirigent le propriétaire vers la procédure
+[APPROVED avec accès HELD](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-held-retirement.md).
+Après revue de frontière, l’accès d’une unité PREPARED jamais émise se clôture
+par la route existante locks/release avec RECONCILED. La décision APPROVED
+reste historique ; aucune once ou absence d’effet n’est fabriquée. Cette
+clarification distribuée ne change ni les routes ni les gardes et n’exige
+pas le correcteur pour une reprise déjà comprise dans le mandat. Les jetons
+restent dans le traitement local privé ; publication/CABU et action métier
+sont vérifiées séparément.

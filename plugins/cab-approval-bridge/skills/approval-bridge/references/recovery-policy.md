@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.14
+# Récupération par RUN — CAB 2.2.15
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -19,6 +19,10 @@ actions, resources et référence authorization de l'accord applicable. Cette
 politique ne crée aucune autorisation métier ni dérogation aux permissions.
 Elle reste liée au RUN, contexte et version ; un changement requiert une
 politique neuve. Aucun accès d'un autre propriétaire n'est délégué implicitement.
+
+Le [retrait APPROVED/HELD](approved-held-retirement.md) utilise la clôture ordinaire `/locks/release` avec
+RECONCILED, sous décision du propriétaire. Ce n’est pas une nouvelle action
+de cette policy ; ne pas la remplacer par withdraw-unissued ou cancel-waiting.
 
 | Action qualifiée | Route existante et preuve conservées |
 |---|---|

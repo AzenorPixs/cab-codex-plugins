@@ -1,4 +1,4 @@
-# Statistiques et nettoyage final — CAB 2.2.14
+# Statistiques et nettoyage final — CAB 2.2.15
 
 ## Statistiques des sessions pilotées
 

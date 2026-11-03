@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.14
+# Index du protocole CAB 2.2.15
 
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées
@@ -13,6 +13,7 @@ pour un incident ou une migration restent des faits historiques.
 | Mandat, preuves, clôture différée | [protocol-session](protocol-session.md), [technical-mandates](technical-mandates.md), [run-lifecycle](run-lifecycle.md) |
 | API et persistance | [protocol-interfaces](protocol-interfaces.md), [transport-continuity](transport-continuity.md) |
 | Shell durable | [shell-background](shell-background.md) |
+| Unité approuvée avec accès HELD avant once | [retrait APPROVED/HELD](approved-held-retirement.md) ; clôture par le propriétaire dans son mandat |
 | Récupération autorisée | [recovery-policy](recovery-policy.md), [protocol-recovery](protocol-recovery.md), [technical-recovery](technical-recovery.md) |
 | Adaptations OpenCode V2 | [technical-native](technical-native.md) ; suivre ses références spécialisées uniquement selon l'incident |
 | Attente et mesures | [protocol-cadences](protocol-cadences.md) |
