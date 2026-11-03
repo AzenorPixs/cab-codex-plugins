@@ -17,6 +17,7 @@ par défaut. Une garde justifiée reste en place, même si elle retarde un effet
 
 | Constat | Interprétation et parcours supporté |
 |---|---|
+| HTTP401 sur un GET direct | Tester les GET info/session avec le client CAB authentifié localement, sans exposer le credential ;voir [interfaces](protocol-interfaces.md). Un401 sans auth ne prouve pas un SID défaillant. |
 | broker_readiness absent du catalogue Codex | Le broker MCP appartient à OpenCode. Vérifier search/execute dans la session OpenCode ciblée lors d’une reprise mandatée ;voir [interfaces](protocol-interfaces.md) et [native](technical-native.md). Son absence réelle côté OpenCode reste à diagnostiquer. |
 | evidence=null pour une ancienne demande | Comparer dates du call, démarrage du contrôleur, contexte et rétention. Un get_approval historique n’est pas une notification neuve. L’absence ne prouve ni effet ni cause initiale ;voir [admission](admission-state.md). Un NOT_ADMITTED demeure terminal. |
 | RUN marqué BLOCKED, ressource de test restaurée | Le résumé agrégé n’identifie pas à lui seul la garde d’une opération disjointe. Relire ses ressources, accès et retour exact ;suivre l’acquisition CAB normale du mandat autorisé. Aucun bail incertain n’est libéré pour contourner le résumé ;voir [concurrence](concurrent-runs.md). |

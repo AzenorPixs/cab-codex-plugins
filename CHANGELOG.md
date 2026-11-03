@@ -1,3 +1,10 @@
+## 2.2.11+codex.20261103164239 — Clarifier l’authentification du pilote
+
+- GET sans authentification401 et client CAB authentifié200 sont distingués.
+- Le credential est consommé localement sans valeur transmise au modèle ;le
+  SID existant est vérifié avant d’envisager une récupération.
+- Révision documentaire :aucun fichier runtime ou commande canonique modifié.
+
 ## 2.2.11 — Transformer les faux positifs qualifiés en cadrage durable
 
 - Une référence canonique distingue catalogue Codex/OpenCode, preuve historique,

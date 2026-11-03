@@ -1,5 +1,11 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Clarification documentaire authentification
+
+[clarify-authenticated-opencode-access](changes/archive/2026-11-03-clarify-authenticated-opencode-access/), code non attribué :ARCHIVÉ.
+GET401 sans authentification versus client local ;base2.2.11 inchangée.
+37tests etOpenSpec20/20puis19/19 ;publication/CABU séparés.
+
 ## Cadrage SCM courant2.2.11
 
 [clarify-incident-triage-and-feedback](changes/archive/2026-11-03-clarify-incident-triage-and-feedback/), code non attribué :ARCHIVÉ, source2.2.11 qualifiée.

@@ -211,3 +211,5 @@ reste N/A motivé ; aucun relevé rétrospectif n'est fabriqué. Si les modalit�
 ou une mesure ne sont pas couvertes nativement, lire la procédure ciblée du
 skill voisin ../../coding-session-statistics/SKILL.md. La collecte continue
 ne nécessite pas de tour LLM périodique ; les rapports d'archive restent requis.
+
+Pour un401 observé par le pilote, appliquer [HTTP401 et client authentifié](protocol-interfaces.md) avant de modifier un credential ou de remplacer une session.

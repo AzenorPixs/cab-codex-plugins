@@ -657,7 +657,7 @@
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-compaction.md": "a5c5bbf675924e7567be564eed7ed45c276e58adc710608e04014c591e8fa593",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-coordination.md": "a052c75ada1fd91d434f2fd88b14c1b16aa753caf5708addc0e38fdbf30d32b4",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-core.md": "cc455530a47ffcf62e000e6bc5f19c0e7104f6afce4526d28898b527fa4eef22",
-    "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-interfaces.md": "e44041adf0e5edc206e59b9aae2ef8132371f36a7e5bffbabedc6e8212864367",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-interfaces.md": "fff17ccaaa5535822bb0a1f1e9c8e70a1cabc8648f522a540dcbb6768ad3077d",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-lifecycle.md": "5cc11f4af550eeec83d0286022f2918eac710b3228428586beefae6c9db9b2bc",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-model.md": "43249539b250150969767b199c9727c89788c185f7881a5d532902a60be2db64",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-recovery.md": "081430088b199a2dfa435fbe5e193572c8a75251585cbe8b028a55722029a4b5",
@@ -666,6 +666,6 @@
     "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-mandates.md": "bedc626ecd2b2adb86b92bd99dc972f34e70946b3b0442f95cc4e5ebfc98d52a",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-native.md": "a9368dddcd349e0a391e39c13081d48ff0bf7526b815cae761942d1961003b26",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-recovery.md": "4eefaf2cd6227c45028d90be5b381e2be9092c8730032745ee98599d15161aaf",
-    "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-startup.md": "09c0d5396ec251f8fe02c1ec06911e6ff90fa0e2a33248b8657a62ac95341102"
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-startup.md": "2045c069a8fe2926399e4fc95edd955b48035916c44c39a71f7aacab56ad4961"
   }
 }
