@@ -1,5 +1,12 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Correctif SCM courant2.2.9
+
+[enforce-private-runtime-creation-modes](changes/archive/2026-11-03-enforce-private-runtime-creation-modes/), code non attribué :ARCHIVÉ, source2.2.9 qualifiée.
+Objet restauré conservé après renotification ;créations privées0600 et verrou
+projet0775.154Node,94Python,1natif :249cas qualifiés ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier sont attestées séparément.
+
 ## Correctif SCM courant2.2.8
 
 [read-large-legacy-registry-for-private-migration](changes/archive/2026-11-03-read-large-legacy-registry-for-private-migration/), code non attribué :ARCHIVÉ, source2.2.8 qualifiée.

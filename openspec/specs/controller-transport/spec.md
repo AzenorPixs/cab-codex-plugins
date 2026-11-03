@@ -1273,6 +1273,11 @@ Le broker conserve son stockage de profil déjà hors projet par défaut.
 - **WHEN** CAB persiste une validation ou une décision
 - **THEN** il écrit son état privé hors projet et ne change pas le mode des fichiers du projet
 
+#### Scenario: Recréation privée après migration sous umask de shell0002
+- **GIVEN** les services lancés depuis un profil dont l’umask est0002
+- **WHEN** un job ou état de supervision est recréé après migration
+- **THEN** son mode reste0600 dans le répertoire privé0700 et le verrou public de projet reste0775
+
 ### Requirement: Migrer le runtime historique sans réémettre de mandat
 CABU SHALL vérifier les copies privées, conserver RUN/job/SID, décisions,
 once et protections incertaines, et laisser les fichiers historiques inchangés.
@@ -1301,3 +1306,15 @@ des artefacts à ce registre ni relever les limites des réponses HTTP.
 - **GIVEN** un registre disque valide de plus de16Mio mais inférieur à64Mio et son snapshot HTTP cohérent
 - **WHEN** la migration est préparée
 - **THEN** le précontrôle accepte sa lecture et conserve la même migration protégée, sans changer les fichiers historiques
+
+### Requirement: Continuer une validation restaurée après renotification identique
+Une renotification identique SHALL préserver l’objet de validation et ses
+marqueurs de reprise. Une validation PENDING restaurée SHALL rester indécise
+et sans permission ;après approbation explicite, le contrôleur SHALL pouvoir
+acquérir l’accès par les contrôles ordinaires et répondre à la permission
+exacte une seule fois. Un conflit ou effet incertain SHALL garder sa protection.
+
+#### Scenario: Permission non exclusive après migration et renotification
+- **GIVEN** un PENDING restauré puis renotifié avec la même identité
+- **WHEN** le propriétaire approuve et la permission native exacte apparaît
+- **THEN** le contrôleur acquiert l’accès normal et journalise once, sans nouvelle demande ni réponse native par l’orchestrateur

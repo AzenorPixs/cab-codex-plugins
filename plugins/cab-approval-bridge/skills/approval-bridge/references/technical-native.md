@@ -1,4 +1,4 @@
-# Précisions native — CAB 2.2.8
+# Précisions native — CAB 2.2.9
 
 ## Lecture source read-only quand l’outil natif manque
 
@@ -261,7 +261,7 @@ Appliquer la [procédure du transport scellé](exact-shell-carrier.md) pour un n
 
 Appliquer [la reprise des permissions natives](native-permission-resume.md) : une revue peut laisser shell/edit deny, sans mutation par CABU. Avant tout prompt de prévol ou opération permissionnée, utiliser client.prompt(...,{directory,requiredNativeAsk:['shell']}), ou ['edit'] pour write/edit. Inspection nativePermissionPolicy en lecture seule ; aucun rétablissement automatique. Le propriétaire lève explicitement le seul droit nécessaire après revue terminée et frontière sûre, avec preuve avant/après, autres deny conservés. Les prompts de revue sans outil restent possibles sous deny. Le contrôleur revérifie indépendamment ; allow, règle absente/spécifique, mauvais SID et policy changée ne permettent aucun contournement.
 
-## Appel MCP terminé avec erreur du wrapper —2.2.8
+## Appel MCP terminé avec erreur du wrapper —2.2.9
 
 Le chemin brut corrèle completed/error=true avec un request_validation interne
 completed sur son input natif exact ; cette observation n’est pas une réussite

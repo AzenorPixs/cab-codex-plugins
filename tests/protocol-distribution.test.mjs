@@ -60,7 +60,8 @@ test('contrat : AGENTS consommateur garde des règles agnostiques et résout le 
   assert.match(agents,/La propagation des règles générales vers un projet consommateur/);
   assert.doesNotMatch(agents,/Le projet `[^`]+` est le référentiel de ces règles générales/);
   assert.match(agents,/Pour une session pilotée via CAB/);
-  assert.match(agents,/son absence ne constitue pas un blocage CAB/);
+  assert.match(agents,/Une session de codage directe ne nécessite aucun protocole de pilotage/);
+  assert.match(agents,/contrat CAB distribué/);
   assert.match(agents,/les travaux indépendants et\ndéjà autorisés peuvent continuer/i);
   assert.match(read(skill+'references/protocol-core.md'),/aucun fichier local/i);
   assert.match(read(skill+'references/recovery-policy.md'),/ne crée aucune autorisation métier/);
