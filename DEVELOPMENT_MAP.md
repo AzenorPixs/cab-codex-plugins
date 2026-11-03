@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Shell sans accès SCM 2.2.16
+
+[document-approved-shell-retirement](openspec/changes/archive/2026-11-03-document-approved-shell-retirement/), code non attribué : ARCHIVÉ, source2.2.16qualifiée.
+Composition conditionnelle documentée ;298cas uniques réussis. Livraison distincte.
+
 ## Documentation de reprise SCM 2.2.15
 
 [document-approved-held-retirement](openspec/changes/archive/2026-11-03-document-approved-held-retirement/), code non attribué : ARCHIVÉ, source 2.2.15 qualifiée.

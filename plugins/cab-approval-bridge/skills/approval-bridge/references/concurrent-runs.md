@@ -1,6 +1,6 @@
 # CAB 1.10.4 — coordination atomique par ressource
 
-## Restitution ciblée d’un bail — évolution 2.2.15
+## Restitution ciblée d’un bail — évolution 2.2.16
 
 La restitution ordinaire examine les opérations liées au bail et les accès
 qui recouvrent ses ressources. Après cleanup et vérification natifs distincts
@@ -62,6 +62,10 @@ Les lectures coexistent ; toute écriture exclut les accès recouvrants. La FIFO
 Pour un groupe cohérent, annoncer les sous-opérations, leur access_id commun et operationIds à l'acquisition. Chaque édition/commande garde sa décision et once. Après un effet connu, /locks/attach peut rattacher une correction nouvellement approuvée dans le même ensemble détenu, sans ressource nouvelle ni permission réutilisée. Un drainage global interdit aussi les nouvelles sous-opérations.
 
 ## Fin et reprise des effets
+
+Un [shell approuvé sans accès](approved-shell-retirement.md) peut composer acquisition et clôture RECONCILED
+uniquement à la frontière documentée, avec manifeste courant et ressources
+disjointes. Aucun nouvel effet ni permission native n’en découle.
 
 Une unité PREPARED/APPROVED devenue obsolète avec accès HELD et aucune
 émission native se retire par la clôture ordinaire RECONCILED de son accès :

@@ -1,3 +1,11 @@
+## 2.2.16 — Shell APPROVED sans accès lié
+
+- Le contrat distribué décrit la composition ordinaire acquisition/clôture
+  RECONCILED pour un shell refusé avant once, si le manifeste reste courant
+  et disjoint ; pas de sollicitation du correcteur pour ce parcours qualifié.
+- Scope, révisions, identités, preuves natives et protections restent opposables.
+  Aucun moteur, endpoint, annulation broker ou permission n’est ajouté.
+
 ## 2.2.15 — Retrait autonome APPROVED avec accès HELD
 
 - Le contrat distribué dirige le propriétaire vers locks/release RECONCILED

@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.15
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.16
 
 ## Avant de solliciter une correction
 
@@ -17,6 +17,7 @@ par défaut. Une garde justifiée reste en place, même si elle retarde un effet
 
 | Constat | Interprétation et parcours supporté |
 |---|---|
+| Shell APPROVED refusé, aucun accès, retrait direct non qualifié | [shell approuvé sans accès](approved-shell-retirement.md) ; vérifier manifeste/révisions/disjonction avant toute acquisition de coordination. Un recouvrement ne se contourne pas. |
 | Ancien PENDING, décision désormais APPROVED, accès HELD | Relire admission et décision sur les mêmes identifiants ; si l’unité devient obsolète avant émission, suivre [retrait APPROVED/HELD](approved-held-retirement.md) sans solliciter le correcteur pour la clôture ordinaire. |
 | HTTP401 sur un GET direct | Tester les GET info/session avec le client CAB authentifié localement, sans exposer le credential ;voir [interfaces](protocol-interfaces.md). Un401 sans auth ne prouve pas un SID défaillant. |
 | broker_readiness absent du catalogue Codex | Le broker MCP appartient à OpenCode. Vérifier search/execute dans la session OpenCode ciblée lors d’une reprise mandatée ;voir [interfaces](protocol-interfaces.md) et [native](technical-native.md). Son absence réelle côté OpenCode reste à diagnostiquer. |
