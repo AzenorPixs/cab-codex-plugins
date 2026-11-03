@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.4";
+export const VERSION = "2.2.5";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -413,7 +413,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.4",
+    version: "2.2.5",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1694,6 +1694,47 @@ async function restoreApprovedTerminalOperation(approval, approvalResult) {
   return { requestId, operationId: operation.operationId, restored: true };
 }
 
+function restorePendingValidation(approval, proofDigest) {
+  if (!/^[a-f0-9]{64}$/.test(proofDigest || '') || !run || approval.run_id !== run.runId ||
+      approval.change_id !== job?.changeId || approval.directory !== workspace || !ownsSession(approval.session_id))
+    throw decisionError('pending-restore-identity-divergent');
+  const operation = approvedOperation(approval), requestId = approval.requestId;
+  if (!operation || operationContextFailure(operation,requestId) || communicationFailed || transportPaused ||
+      httpDecisions.has(requestId) || answered.has(requestId) || job.currentCabMandate && job.currentCabMandate !== requestId) throw decisionError('pending-restore-context-divergent');
+  const previous = validations.get(requestId);
+  if (previous) {
+    if (previous.pendingRestorationProof !== proofDigest || terminalApprovalIdentity(previous.sourceApproval) !== terminalApprovalIdentity(approval))
+      throw decisionError('pending-restore-already-present');
+    return {requestId,restored:false};
+  }
+  if ([...validations.values()].some(v => !httpDecisions.has(v.requestId) ||
+      httpDecisions.get(v.requestId)?.decision === 'approved' && !v.operationConsumed && !v.operationInvalidated))
+    throw decisionError('pending-restore-another-validation');
+  const validation = {requestId,approvalId:approval.approval_id,changeId:approval.change_id,
+    sourceApproval:structuredClone(approval),summary:approval.summary || 'Validation PENDING restaurée',operation,
+    receivedAt:new Date().toISOString(),operationConsumed:false,operationInvalidated:false,pendingRestorationProof:proofDigest};
+  persistCommunication(validation);
+  validations.set(requestId,validation);refreshPendingValidationStatus();
+  updateStatus('pending-validation-restored',{requestId,operationId:operation.operationId});
+  return {requestId,restored:true};
+}
+function pendingRestorationProof(requestId) { return validations.get(requestId)?.pendingRestorationProof; }
+function completeReviewedTerminal(approval,proofDigest) {
+  const prior=validations.get(approval.requestId);
+  if(prior?.terminalReviewProof===proofDigest && prior.operationInvalidated &&
+    terminalApprovalIdentity(prior.sourceApproval)===terminalApprovalIdentity(approval)) return {requestId:approval.requestId};
+  verifyNativeCancelledValidation(approval,proofDigest);
+  const validation=validations.get(approval.requestId),decision=httpDecisions.get(approval.requestId);
+  if (!validation) return {requestId:approval.requestId};
+  if (decision?.decision !== 'approved') throw decisionError('terminal-review-context-unavailable');
+  validation.operationInvalidated=true;
+  validation.terminalReviewProof=proofDigest;
+  // Local invalidation prevents another permission; it never claims native once.
+  persistCommunication();wakeDecisionWaiters(approval.requestId);
+  updateStatus('read-only-terminal-coordination-completed',{requestId:approval.requestId,operationId:approval.operation_id});
+  return {requestId:approval.requestId};
+}
+
 function terminalApprovalIdentity(value){
   return JSON.stringify(Object.fromEntries(['run_id','reservation_version','requestId','approval_id','change_id','session_id',
     'directory','title','summary','files','commands','resources','coordination_protocol','operation_id','operation_digest',
@@ -2246,7 +2287,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.4",
+      version: "2.2.5",
     },
   });
 
@@ -3383,6 +3424,7 @@ return {
   transportHandoffReady: () => !communicationFailed && reconcilingPermissions.size === 0 &&
     !recoveryTransitionInFlight && !lifecycleTransitionInFlight && !modelTransitions.inFlight,
   flushCommunication: async () => { await jobPersistence; persistCommunication(); },
+  restorePendingValidation, pendingRestorationProof, completeReviewedTerminal,
   verifyRejectedRecoveryRelease, restoreNativeRejectedOperation, restoreNativeCancelledValidation, verifyNativeCancelledValidation,
   close: () => {
     if (closePromise) return closePromise;

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.4';
+export const VERSION = '2.2.5';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -130,4 +130,89 @@ export function validateReadOnlyReview(view, review, run) {
   }
   return { evidenceAuthority: 'ORCHESTRATOR_AUDIT_REVIEW', executionOutcome: 'UNDETERMINED_READ_ONLY',
     commandSha256: review.commandSha256, callIds: [...seen], reviewDigest: digest(review) };
+}
+
+export function pendingValidationProof(parts, approval, sameIdentity, now = Date.now()) {
+  const outputs = parts.filter(part => part.type === 'tool' &&
+    ['cgpt-validation_get_approval','cgpt-validation_poll_approval','cgpt-validation_request_validation'].includes(part.tool) &&
+    part.state?.status === 'completed').flatMap(part => {
+      try { return [{part,value:JSON.parse(part.state.output)}]; } catch { return []; }
+    }).filter(({value}) => value?.requestId === approval.requestId || value?.approval_id === approval.approval_id);
+  if (outputs.some(({value}) => value.status !== 'PENDING' || !sameIdentity(value))) fail('pending-validation-result-conflict');
+  const reads = outputs.filter(({part,value}) => part.tool === 'cgpt-validation_get_approval' &&
+    part.state.input?.approval_id === approval.approval_id && part.state.metadata?.truncated !== true &&
+    Number.isFinite(part.state.time?.end) && part.state.time.end <= now && now - part.state.time.end <= 300000 &&
+    Number.isFinite(Date.parse(value.expires_at)) && Date.parse(value.expires_at) > now);
+  if (!reads.length) fail('pending-validation-fresh-read-required');
+  const latest = reads.reduce((a,b) => a.part.state.time.end > b.part.state.time.end ? a : b);
+  return {kind:'PENDING_VALIDATION',callId:latest.part.callID || latest.part.callId,
+    partDigest:digest(latest.part),observedAt:latest.part.state.time.end,expiresAt:Date.parse(latest.value.expires_at)};
+}
+
+export function validateTerminalReview(review, ownerId) {
+  if (!review || Object.keys(review).some(key => !['ownerId','effect','commandSha256','sourceFiles','evidenceRefs','callId','partDigest'].includes(key)) ||
+      review.ownerId !== ownerId || review.effect !== 'READ_ONLY' || !hash(review.commandSha256) ||
+      !id(review.callId) || !hash(review.partDigest) || !Array.isArray(review.sourceFiles) || !review.sourceFiles.length || review.sourceFiles.length > 20 ||
+      !Array.isArray(review.evidenceRefs) || !review.evidenceRefs.length || review.evidenceRefs.length > 20 ||
+      review.evidenceRefs.some(ref => typeof ref !== 'string' || !/^[A-Za-z0-9_.:/@-]{1,240}$/.test(ref))) fail('terminal-review-invalid');
+  const paths = new Set();
+  for (const source of review.sourceFiles) {
+    if (!source || Object.keys(source).some(key => !['path','sha256'].includes(key)) || typeof source.path !== 'string' ||
+        !source.path || source.path.startsWith('/') || source.path.split('/').some(x => !x || x === '.' || x === '..') ||
+        source.path.includes('\\') || !hash(source.sha256) || paths.has(source.path)) fail('terminal-review-source-invalid');
+    paths.add(source.path);
+  }
+}
+
+export function reviewedTerminalProof(parts, approval, review, run, sameIdentity, notAdmitted = () => false) {
+  validateTerminalReview(review,run.ownerId);
+  if (approval.commands?.length !== 1 || approval.files?.length !== 0 ||
+      commandDigest(approval.commands[0]) !== review.commandSha256) fail('terminal-review-command-divergent');
+  const shells = parts.filter(part => part.type === 'tool' && part.tool === 'bash');
+  if (shells.length !== 1) fail('terminal-review-effects-uncovered');
+  const part = shells[0], state = part.state;
+  if ((part.callID || part.callId) !== review.callId || digest(part) !== review.partDigest ||
+      part.nativeFormat !== 'opencode-v2' || state?.status !== 'completed' ||
+      state.metadata?.truncated !== false || state.metadata?.timeout === true || state.metadata?.error === true ||
+      !Number.isInteger(state.metadata?.exit) || state.input?.command !== approval.commands[0] ||
+      state.input?.background === true || state.metadata?.shellID || state.input?.workdir !== run.directory ||
+      !Number.isFinite(state.time?.start) || !Number.isFinite(state.time?.end) || state.time.end < state.time.start)
+    fail('terminal-review-native-divergent');
+  for(const p of parts.filter(p=>p.tool==='cgpt-validation_request_validation'&&p.state?.input?.requestId!==approval.requestId)) {
+    let value;try{value=JSON.parse(p.state?.output);}catch{fail('terminal-review-effects-uncovered');}
+    if(p.state.status!=='completed'||value?.status!=='NOT_ADMITTED'||value.requestId!==p.state.input.requestId||
+      !notAdmitted(value.requestId))fail('terminal-review-effects-uncovered');
+  }
+  const transportParts=parts.filter(p=>p.type==='tool'&&p.tool==='execute');
+  const transportOutputs=[];
+  for(const p of transportParts) {
+    const calls=p.state?.metadata?.toolCalls;
+    if(p.executed!==false || p.state?.status!=='completed' || p.state.metadata?.truncated!==false ||
+      !Array.isArray(calls) || !calls.length || calls.length>2 || calls.some(c=>c.status!=='completed'||
+        !['cgpt-validation.request_validation','cgpt-validation.get_approval','cgpt-validation.poll_approval','cgpt-validation.broker_readiness'].includes(c.tool)))
+      fail('terminal-review-effects-uncovered');
+    const last=calls.at(-1);
+    if(calls.length!==1)fail('terminal-review-effects-uncovered');
+    if(last.tool==='cgpt-validation.broker_readiness')continue;
+    let value;try{value=JSON.parse(p.state.output);}catch{fail('terminal-review-effects-uncovered');}
+    if(last.tool==='cgpt-validation.request_validation'&&last.input?.requestId!==approval.requestId) {
+      if(value?.status!=='NOT_ADMITTED'||value.requestId!==last.input?.requestId||!notAdmitted(value.requestId))fail('terminal-review-effects-uncovered');
+      continue;
+    }
+    if(last.tool==='cgpt-validation.request_validation' ? !sameIdentity(last.input) : last.input?.approval_id!==approval.approval_id)
+      fail('terminal-review-effects-uncovered');
+    transportOutputs.push(value);
+  }
+  const allowed = new Set(['cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_poll_approval',
+    'cgpt-validation_broker_readiness','cgpt-validation_broker_health','cgpt-validation_lookup_validation','cab_codemode_discovery']);
+  if (parts.some(p => p.type === 'tool' && p !== part && p.tool!=='execute' && !allowed.has(p.tool))) fail('terminal-review-effects-uncovered');
+  const outputs = parts.filter(p => ['cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_poll_approval'].includes(p.tool) &&
+    p.state?.status === 'completed').flatMap(p => { try { return [JSON.parse(p.state.output)]; } catch { return []; } })
+    .filter(value => value?.requestId === approval.requestId || value?.approval_id === approval.approval_id);
+  outputs.push(...transportOutputs);
+  if (!outputs.some(value => value.status === 'APPROVED' && value.reviewer === 'CGPT' && sameIdentity(value)) ||
+      outputs.some(value => !sameIdentity(value) || !['PENDING','APPROVED'].includes(value.status))) fail('terminal-review-approval-unverified');
+  return {kind:'REVIEWED_READ_ONLY_TERMINAL',callId:review.callId,partDigest:review.partDigest,
+    observedExit:state.metadata.exit,finishedAt:state.time.end,commandSha256:review.commandSha256,
+    executionOutcome:'NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED',evidenceAuthority:'ORCHESTRATOR_AUDIT_REVIEW'};
 }

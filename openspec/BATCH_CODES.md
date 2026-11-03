@@ -1,5 +1,14 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Correctif SCM courant 2.2.5
+
+[restore-proven-validation-boundaries](changes/archive/2026-11-03-restore-proven-validation-boundaries/), code non attribué : ARCHIVÉ, source 2.2.5 qualifiée.
+Deux frontières : PENDING perdu par le contexte et terminal de lecture sans
+preuve once. Actions propriétaires bornées ; aucun rejeu ou résultat natif
+inventé. Qualification finale : 904 Node, 93 Python et 1 native, 998 réussites ;
+31 ignorés ; OpenSpec strict 20/20 avant puis 19/19 après archive. Publication
+et activation distinctes.
+
 ## Entrée provisoire SCM — CAB 2.2.4
 
 | Code | Identifiant | État | Source |

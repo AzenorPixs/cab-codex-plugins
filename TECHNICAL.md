@@ -1,6 +1,12 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
-## Récupération autonome 2.2.4
+## Récupération autonome 2.2.5
+
+Les frontières PENDING sans contexte et terminal de lecture sans reçu once
+possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
+la clôture du terminal garde explicitement l’autorisation native non prouvée.
+Aucune commande ni once historique n’est rejouée. Les mêmes identités et reçus
+survivent à la perte de réponse et au redémarrage.
 
 Dans le périmètre validé du change, l’orchestrateur décide, revoit et valide ;
 l’agent de codage réalise le travail. La décision humaine est réservée à une
@@ -14,7 +20,7 @@ et générations. Le helper utilise Node, Linux /proc et getconf de libc-bin,
 déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajouté.
 
 
-## Continuité et réconciliation 2.2.4
+## Continuité et réconciliation 2.2.5
 
 Le [contrat de continuité](plugins/cab-approval-bridge/skills/approval-bridge/references/transport-continuity.md)
 décrit les checkpoints de validations/décisions, le curseur des observations
@@ -89,7 +95,7 @@ CAB/
 Le broker utilise MCP `stdio` et JSON-RPC 2.0. Il est lancé localement par OpenCode et n'expose aucun port MCP réseau.
 OpenCode V2 déclare le broker sous `mcp.servers.cgpt-validation` avec `type: "local"` ; les serveurs placés directement sous `mcp` sont une configuration V1 refusée.
 
-La version source actuelle est `2.2.4` pour le broker, le contrôleur et le
+La version source actuelle est `2.2.5` pour le broker, le contrôleur et le
 superviseur, ainsi que CAB Monitor et ses modules. Le plugin utilise cette même version de base, complétée d'un
 cachebuster Codex pour les installations locales. L'implémentation Python
 utilise uniquement la bibliothèque standard.
@@ -1225,7 +1231,7 @@ journal et refuse une preuve expirée ou altérée.
 `/CABU` charge CAB.md et déclenche `/CAB update`, seule procédure de mise à
 jour. Le plugin valide manifeste, skill, référence, updater, versions, imports,
 syntaxe, destinations et empreintes, puis prépare un journal privé et des
-sauvegardes atomiques. La version courante est 2.2.4 ; tout downgrade reste
+sauvegardes atomiques. La version courante est 2.2.5 ; tout downgrade reste
 refusé. Les fichiers d'environnement, secrets, drop-ins et sources du projet
 piloté ne sont jamais modifiés.
 
@@ -1333,7 +1339,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.2.4 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.2.5 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -1398,7 +1404,7 @@ Le sceau de maintenance BOOTSTRAP_HELD utilise désormais une capture unique de 
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.2.4.
+La distribution courante des quatre briques, plugins et commandes est 2.2.5.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve

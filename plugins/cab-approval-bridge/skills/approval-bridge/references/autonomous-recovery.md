@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.4
+# Reprise autonome dans le change — CAB 2.2.5
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -133,3 +133,48 @@ fixture), sans changer la location HTTP. Il écrit l’intention avant POST et
 ACKNOWLEDGED après HTTP204 avec replyOrigin=`CAB_CLIENT_PROGRAMMATIC`.
 Une intention sans ACK reste indéterminée et ne renvoie aucun second POST.
 Le diagnostic distingue ces reçus des attestations de revue historiques.
+
+## Restaurer une notification PENDING perdue par le contexte
+
+La policy propriétaire autorise restore-pending-validation. L’opération doit
+être PREPARED sans décision, native, résultat ou accès ; le job courant et la
+session doivent être exacts, idle et sans permission. Faire un get_approval
+natif sur l’approval existante, puis relire la part outil réelle : PENDING,
+identité exacte et non expirée. Cette lecture doit dater de moins de cinq
+minutes au moment de l’action. Le diagnostic native-evidence et le plan
+recovery fournissent leurs digests frais.
+
+POST recovery/action avec action restore-pending-validation, targetId de
+l’opération et input={nativeBoundaryDigest}. Le serveur restaure seulement
+la communication de cette même identité. Une décision propriétaire distincte
+reste obligatoire ; aucune request_validation neuve ou permission n’est créée.
+Une fois la décision prise, relire son reçu puis demander au même SID de lire
+cette approval avant toute suite. Une demande expirée ou un effet correspondant
+observé n’est pas réactivé par cette voie.
+
+## Clôturer un terminal de lecture sans reçu once local
+
+La policy autorise reconcile-reviewed-terminal. Le candidat est PREPARED avec
+décision approved durable, sans native, nativeResult ou accès. Une seule commande
+shell de même identité doit être terminée dans le transcript V2, sans background
+ni troncature, avec exit entier. Les autres effets ou admissions sont refusés.
+L’orchestrateur revoit réellement la lecture, la commande complète, l’environnement
+pertinent et les sources historiques avant de déclarer effect READ_ONLY.
+
+L’input de recovery/action contient nativeBoundaryDigest et review : ownerId,
+effect="READ_ONLY", commandSha256, callId et partDigest du terminal fournis par
+le diagnostic, sourceFiles=[{path,sha256}] épinglés dans les ressources de
+l’opération et evidenceRefs. Cette déclaration ne remplace pas la revue.
+Les deux observations natives, le contexte et les sources doivent concorder.
+
+Seule la coordination devient COMPLETED. Le reçu porte
+NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED / ORCHESTRATOR_AUDIT_REVIEW.
+Le nativeResult et la native once demeurent absents ; aucun NO_EFFECT n’est
+inventé. La réponse exécutable locale est invalidée sans rejouer la commande.
+Ce terminal relu ne qualifie pas rétroactivement le fonctionnement des permissions.
+Le mandat suivant exige sa propre demande, sa revue, son accès et sa once.
+
+Pour ces deux actions, relire le même actionId après réponse perdue. Une
+intention préparée peut reprendre les écritures techniques manquantes après
+relecture des gardes ; une preuve périmée exige un diagnostic frais, sans purge
+ou répétition native. Les erreurs conservent leur reçu et leurs protections.
