@@ -25,3 +25,9 @@ Cette garde ne remplace pas le contrôle du fichier après effet : un formatter 
 Banc exact2.2.0 : broker réel, contrôleur, write et edit exacts avec une once corrélée ; même chemin mais contenu divergent après APPROVED, accès acquis, aucune once et fichier inchangé, puis rejet natif explicite. Tests de métadonnées fabriquées, Unicode/CRLF, tri des clés, retry changé/supprimé et persistance. Les gardes existantes de cible, ask, accès, révisions et fin native restent actives.
 
 Après SCM/publication/CABU vérifiés, chaque propriétaire adopte le champ sur ses prochains mandats en préservant RUN/job/SID, choix PLLM et travaux acquis. Aucun redémarrage d’OpenCode ni installation parallèle du plugin de contexte n’est requis pour ce contrôle de permission.
+
+## Permission shell décomposée — CAB2.2.10
+
+La garde d’exécution reste stricte. La procédure canonique de rejet journalisé
+est dans [la reprise autonome](autonomous-recovery.md), section «Permission
+shell décomposée» ;elle ne transforme pas un refus natif en décision de mandat.

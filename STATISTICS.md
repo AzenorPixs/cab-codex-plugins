@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 144**
+**NCA — Nombre de changes analysés : 145**
 
 ## Périmètre et durée
 
@@ -8,8 +8,8 @@
 |---|---|---|
 | DGCT — Temps total de développement du projet via l’IA | 7 | 0,192083 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 144 | N/A |
-| NCMA — Changes achevés par jour (NCA / NJT) | 144 | N/A |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 145 | N/A |
+| NCMA — Changes achevés par jour (NCA / NJT) | 145 | N/A |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
@@ -24,13 +24,13 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Nombre de changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 142 | N/A | N/A | 98,61 % |
-| 2 | gpt-6.1-sol | N/A | 1,39 % |
+| 143 | N/A | N/A | 98,62 % |
+| 2 | gpt-6.1-sol | N/A | 1,38 % |
 ### LLM des agents orchestrateurs
 
 | Nombre de changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 5 | GPT-6.1 | high | 3,47 % |
+| 5 | GPT-6.1 | high | 3,45 % |
 ## Performances des LLM de codage OpenCode
 
 N/A
@@ -150,13 +150,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 65978 | 554,437 |
+| Tests exécutés dans les bilans finaux | 66309 | 552,575 |
 | Fichiers ayant passé un contrôle syntaxique | 2710 | 61,591 |
-| Tâches OpenSpec prouvées et terminées | 135 | 7,105 |
+| Tâches OpenSpec prouvées et terminées | 138 | 6,900 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 65972 | 99,99 % |
+| Tests finaux réussis | 66303 | 99,99 % |
 | Tests finaux échoués | 6 | 0,01 % |
 
 | Catégorie de tests | Nombre |

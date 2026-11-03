@@ -1,5 +1,11 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Correctif SCM courant2.2.10
+
+[journal-rejection-of-multipart-shell-permissions](changes/archive/2026-11-03-journal-rejection-of-multipart-shell-permissions/), code non attribué :ARCHIVÉ, source2.2.10 qualifiée.
+Rejet shell journalisé, garde once inchangée.236Node,94Python,1natif :331cas ;
+OpenSpec20/20puis19/19. Publication et activation attestées séparément.
+
 ## Correctif SCM courant2.2.9
 
 [enforce-private-runtime-creation-modes](changes/archive/2026-11-03-enforce-private-runtime-creation-modes/), code non attribué :ARCHIVÉ, source2.2.9 qualifiée.

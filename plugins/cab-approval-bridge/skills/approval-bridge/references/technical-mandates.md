@@ -1,4 +1,4 @@
-# Précisions mandates — CAB 2.2.9
+# Précisions mandates — CAB 2.2.10
 
 ## RUN concurrents CAB 2.1.75
 
@@ -214,3 +214,9 @@ correspondante et la consomme. Une seconde permission, même identique, exige
 un nouveau mandat. Une demande non corrélée, `rejected`,
 `needs_clarification`, `BLOCKED`, `HUMAN_REQUIRED` ou divergente suspend le
 job et reste signalée dans la session persistante.
+
+## Permission shell décomposée — CAB2.2.10
+
+La garde d’exécution reste stricte. La procédure canonique de rejet journalisé
+est dans [la reprise autonome](autonomous-recovery.md), section «Permission
+shell décomposée» ;elle ne transforme pas un refus natif en décision de mandat.
