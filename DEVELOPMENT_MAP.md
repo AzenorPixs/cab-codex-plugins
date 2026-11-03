@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Documentation de reprise SCM 2.2.15
+
+[document-approved-held-retirement](openspec/changes/archive/2026-11-03-document-approved-held-retirement/), code non attribué : ARCHIVÉ, source 2.2.15 qualifiée.
+Retrait autonome documenté, moteur conservé ;298cas uniques réussis.
+Procédure PA01 déjà confirmée sous2.2.14 ; livraison2.2.15distincte.
+
 ## Garde de handoff SCM 2.2.14
 
 [guard-persisted-transitions-during-session-handoff](openspec/changes/archive/2026-11-03-guard-persisted-transitions-during-session-handoff/), code non attribué : ARCHIVÉ, source 2.2.14 qualifiée.
