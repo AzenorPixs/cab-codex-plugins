@@ -24,10 +24,10 @@ import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from '.
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
 import { NativeInstances } from './cgpt-approval-bridge-native-instances.mjs';
 import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.mjs';
-import { nativeEvidenceView, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
+import { nativeEvidenceView, rejectedEditWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.11";
+const version = "2.2.12";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -965,7 +965,7 @@ function recordNativeEffectOutcome(runId, operation, part, proof) {
   registry.recordNativeOutcome(runId, operation.operationId, proof.shellId ?
     {status:proof.status,proofStatus:proof.status,exit:proof.exit,partDigest:proofHash(part)} : nativeEffectOutcome(part), proofHash(proof));
 }
-const noEnvironmentMcpTools = new Set(['cgpt-validation.request_validation', 'cgpt-validation.poll_approval',
+const noEnvironmentMcpTools = new Set(['search', 'cgpt-validation.request_validation', 'cgpt-validation.poll_approval',
   'cgpt-validation.get_approval', 'cgpt-validation.lookup_validation', 'cgpt-validation.reject', 'cgpt-validation.list_pending',
   'cgpt-validation.cancel_approval', 'cgpt-validation.broker_readiness', 'cgpt-validation.broker_health']);
 function nativeNoEnvironmentObservation(part) {
@@ -1348,10 +1348,10 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     }
   } else if(withdraw) {
     proofReferences(payload);
-    if(first.parts.slice(1).some(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p)))
-      throw new CoordinationError('withdraw-unissued-native-effect-observed');
+    const effects=first.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
+    observation=effects.length?rejectedEditWithdrawalProof(first.view,effects,first.approval):
+      {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
     context.verifyNativeCancelledValidation(first.approval,proofHash(payload));
-    observation={kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
   } else {
     if(context.hasRequest(op.requestId) && !context.pendingRestorationProof(op.requestId))throw new CoordinationError('pending-restore-already-present');
     observation=pendingValidationProof(first.parts,first.approval,same);
@@ -1367,8 +1367,10 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     reviewedTerminalProof(history.parts,second.approval,payload.review,run,same,id=>!registry.requestOwners[id]);
   }
   else if(withdraw) {
-    if(second.parts.slice(1).some(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p)))
-      throw new CoordinationError('withdraw-unissued-native-effect-observed');
+    const effects=second.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
+    if(effects.length){const repeated=rejectedEditWithdrawalProof(second.view,effects,second.approval);
+      if(proofHash(repeated)!==proofHash(observation))throw new CoordinationError('recovery-native-boundary-changed');}
+    else if(observation.kind!=='UNISSUED_COORDINATION')throw new CoordinationError('recovery-native-boundary-changed');
   } else pendingValidationProof(second.parts,second.approval,same);
   if(terminal) for(const source of payload.review.sourceFiles) {
     const file=await openCode.sourceRead(op.sessionId,source.path,{directory:run.directory});

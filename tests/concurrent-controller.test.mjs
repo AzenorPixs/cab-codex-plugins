@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import test from 'node:test';
 import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
-import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { nativeToolInputDigest, createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 import { portProbeCommand } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-port-recovery.mjs';
 import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
@@ -2131,7 +2131,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.11');
+  assert.equal(initialized.result.serverInfo.version, '2.2.12');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4272,7 +4272,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.11'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.12'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4292,4 +4292,47 @@ test('création privée : job0600 et verrou public de projet0775 sous umask pare
  const approval=h.approval(run,'private-create-mode');assert.equal((await h.post('/validation/request',{approval})).status,202);
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
  assert.equal(statSync(job).mode&0o777,0o600);assert.equal(h.native.replies.length,0);
+});
+
+async function rejectedEditFixture(t){
+ const h=await setup(t),file='src/refused.md',run=await h.reserve('refused-edit',{resources:[{key:'file:'+file,mode:'write'}]}),base='/runs/'+run.runId;
+ const approval=h.approval(run,'refused-edit-request'),input={path:join(h.directory,file),oldString:'old',newString:'new'};
+ approval.commands=[];approval.files=[file];approval.tool_input_sha256=nativeToolInputDigest({...input,replaceAll:false});h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);const request=h.native.messages[run.sessionId].at(-1).parts[0];request.state.status='completed';request.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const stamp=Date.now();h.native.messages[run.sessionId].push({nativeV2:{id:'msg_refused_edit',type:'assistant',time:{created:stamp},content:[{type:'tool',id:'call_refused_edit',name:'edit',executed:false,time:{created:stamp,ran:stamp},state:{status:'running',input,content:[],metadata:{}}}]}});
+ h.native.permissions.push({id:'per_refused_edit',sessionID:run.sessionId,permission:'edit',messageID:'msg_refused_edit',tool:{callID:'call_refused_edit'},metadata:{filepath:input.path}});
+ await h.nativeClient.replyPermission(run.sessionId,'per_refused_edit','reject',h.directory);
+ const part=h.native.messages[run.sessionId].at(-1).nativeV2.content[0];part.state.status='error';part.state.error={type:'aborted',message:'synthetic explicit permission rejection'};part.time.completed=Date.now()+1;
+ await h.post(base+'/recovery/policy',{policyId:'refused-edit-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation'],resources:run.resources,authorization:'approved change; retire rejected edit only'});
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body,plan=(await h.get(base+'/recovery')).body;
+ const payload={actionId:'withdraw-refused-edit',ownerId:run.ownerId,policyId:'refused-edit-policy',boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/rejected-edit']}};
+ return{h,run,base,approval,payload,evidence};
+}
+test('retrait edit refusé : CANCELLED coordonnée, APPROVED conservé, reprise idempotente après redémarrage',async t=>{
+ const{h,run,base,approval,payload,evidence}=await rejectedEditFixture(t);assert.equal(evidence.calls[0].tool,'edit');assert.equal(evidence.replyReceipts[0].state,'ACKNOWLEDGED');
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ const op=(await h.get('/runs')).body.coordination.operations[approval.operation_id];assert.equal(op.state,'CANCELLED');assert.equal(op.decision.status,'approved');assert.equal(op.native,undefined);assert.equal(op.nativeResult,undefined);assert.equal(h.native.replies.length,1);assert.equal(h.native.replies[0].body.response,'reject');
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const next=h.approval(run,'after-refused-edit');assert.equal((await h.post(base+'/validation/request',{approval:next})).status,202);
+});
+
+for(const kind of ['missing-ack','wrong-native-error','extra-request-effect'])test('retrait edit refusé : garde '+kind+' sans mutation',async t=>{
+ const{h,base,approval,payload}=await rejectedEditFixture(t);
+ if(kind==='missing-ack'){
+  const dir=join(runtimeStateDirectory(h.directory),'permission-replies');for(const file of readdirSync(dir))unlinkSync(join(dir,file));
+ }else if(kind==='wrong-native-error')h.native.messages[approval.session_id].at(-1).nativeV2.content[0].state.error.type='ToolError';
+ else h.native.messages[approval.session_id][0].parts[0].state.metadata.toolCalls.push({tool:'opencode.shell',status:'completed',input:{command:'unknown extra effect'}});
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ const op=(await h.get('/runs')).body.coordination.operations[approval.operation_id];assert.equal(op.state,'PREPARED');assert.equal(op.decision.status,'approved');assert.equal(op.native,undefined);assert.equal(h.native.replies.length,1);
+});
+
+test('retrait edit refusé : recherche de catalogue dans le wrapper reste une observation',async t=>{
+ const{h,base,approval,payload}=await rejectedEditFixture(t);const request=h.native.messages[approval.session_id][0].parts[0];request.state.metadata.toolCalls.unshift({tool:'search',status:'completed',input:{namespace:'cgpt-validation',query:'request_validation'}});
+ request.state.input.code='const schema=search({namespace:"cgpt-validation",query:"request_validation"}); '+request.state.input.code;
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');assert.equal(h.native.replies.length,1);
 });

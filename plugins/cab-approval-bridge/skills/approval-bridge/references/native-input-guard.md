@@ -26,8 +26,15 @@ Banc exact2.2.0 : broker réel, contrôleur, write et edit exacts avec une once 
 
 Après SCM/publication/CABU vérifiés, chaque propriétaire adopte le champ sur ses prochains mandats en préservant RUN/job/SID, choix PLLM et travaux acquis. Aucun redémarrage d’OpenCode ni installation parallèle du plugin de contexte n’est requis pour ce contrôle de permission.
 
-## Permission shell décomposée — CAB2.2.11
+## Permission shell décomposée — CAB2.2.12
 
 La garde d’exécution reste stricte. La procédure canonique de rejet journalisé
 est dans [la reprise autonome](autonomous-recovery.md), section «Permission
 shell décomposée» ;elle ne transforme pas un refus natif en décision de mandat.
+
+Après un edit refusé et journalisé, la reprise de coordination est décrite
+par [retirer un edit refusé avant once](autonomous-recovery.md). Une clé
+optionnelle absente et une clé false explicite produisent des empreintes
+différentes :ne pas modifier l’ancienne approbation pour les égaliser. Pour
+un nouvel edit dont replaceAll est faux par défaut, omettre cette clé du
+payload revu et calculer l’empreinte de cet objet effectivement transmis.

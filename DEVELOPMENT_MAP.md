@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Correctif SCM courant2.2.12
+
+[withdraw-rejected-unissued-native-edit](openspec/changes/archive/2026-11-03-withdraw-rejected-unissued-native-edit/), code non attribué :ARCHIVÉ, source2.2.12 qualifiée.
+Retrait borné après refus natif edit ;aucun SID ou lease modifié.
+266Node,94Python,1natif :361cas ;OpenSpec20/20puis19/19. Activation séparée.
+
 ## Clarification documentaire authentification
 
 [clarify-authenticated-opencode-access](openspec/changes/archive/2026-11-03-clarify-authenticated-opencode-access/), code non attribué :ARCHIVÉ.
