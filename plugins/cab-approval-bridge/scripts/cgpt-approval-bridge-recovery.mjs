@@ -1,11 +1,15 @@
 import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-bridge-continuity.mjs';
+import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
+import { validateReviewStructure } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.2.3';
+export const VERSION = '2.2.4';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const fail = (code, status = 409) => { throw Object.assign(new Error(code), { code, status }); };
 const actions = {
+  'reconcile-quarantined-port': '/locks/reconcile-quiescent-port',
+  'cancel-reviewed-validation': '/validation/cancel-reviewed',
   'reconcile-test': '/test-resources/reconcile-restored',
   'reconcile-access': '/locks/reconcile-restored',
   'quarantine-port': '/locks/quarantine-timeout',
@@ -27,6 +31,11 @@ export function projectRecoveryReceipt(value) {
   for (const key of ['proofDigest', 'releaseDigest']) if (/^[a-f0-9]{64}$/.test(value[key] || '')) result[key] = value[key];
   if (typeof value.finishedAt === 'string' && Number.isFinite(Date.parse(value.finishedAt))) result.finishedAt = value.finishedAt;
   if (value.error) result.error = /^[a-z][a-z0-9-]{0,99}$/.test(value.error) ? value.error : 'recovery-action-failed';
+  if (value.operationState === 'CANCELLED') result.operationState = value.operationState;
+  if (value.executionOutcome === 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT') result.executionOutcome = value.executionOutcome;
+  if (value.evidenceAuthority === 'VERIFIED_NATIVE_PORT_PROBES') result.evidenceAuthority = value.evidenceAuthority;
+  if (value.executionOutcome === 'UNDETERMINED_READ_ONLY') result.executionOutcome = value.executionOutcome;
+  if (value.evidenceAuthority === 'ORCHESTRATOR_AUDIT_REVIEW') result.evidenceAuthority = value.evidenceAuthority;
   if (record(value.timeoutQuarantine)) result.quarantined = true;
   return result;
 }
@@ -58,6 +67,12 @@ export class RecoveryCoordinator {
               receipt.httpStatus >= 100 && receipt.httpStatus <= 599 && record(receipt.result)))));
       this.policies = this.store.snapshot()?.policies || [];
       this.receipts = this.store.snapshot()?.receipts || [];
+      this.registry.reviewedReadOnlyOperations ||= new Set();
+      for (const receipt of this.receipts) if (receipt.action === 'cancel-reviewed-validation') {
+        const op = registry.resourceState.operations[receipt.entityId];
+        if (op?.state === 'CANCELLED' && op.completionDigest === receipt.effectDigest)
+          this.registry.reviewedReadOnlyOperations.add(op.operationId);
+      }
     } catch { this.error = 'recovery-policy-unavailable'; this.policies = []; this.receipts = []; }
   }
   persist(policies, receipts) {
@@ -114,7 +129,7 @@ export class RecoveryCoordinator {
     const offers = [];
     const offer = (action, targetId, resources, preview = null) => offers.push({ action, targetId, preview,
       authority: policy?.actions.includes(action) && resources.every(resource =>
-        policy.resources.some(scope => covered(scope, resource))) ? 'orchestrator' : 'human',
+        policy.resources.some(scope => covered(scope, resource))) ? 'orchestrator' : 'orchestrator-policy-required',
       requiredProof: ['reconcile-test', 'reconcile-access', 'quarantine-port'].includes(action)
         ? 'native-boundary-and-revisions' : 'qualified-route-guards' });
     for (const access of boundary.accesses.filter(active).slice(-200)) {
@@ -130,6 +145,11 @@ export class RecoveryCoordinator {
           offer('quarantine-port', op.operationId, access.resources,
             '/locks/timeout-quarantine-preview?operationId=' + encodeURIComponent(op.operationId));
         }
+        if (access.timeoutQuarantine?.operationId === op.operationId && op.native?.onceAcknowledged === true &&
+            access.operationIds.length === 1 && op.resources.length === 1 && op.resources[0].key.startsWith('port:')) {
+          offer('reconcile-quarantined-port', op.operationId, op.resources,
+            '/recovery/native-evidence?operationId=' + encodeURIComponent(op.operationId));
+        }
       }
     }
     for (const lease of boundary.tests.filter(active).slice(-200)) {
@@ -138,16 +158,23 @@ export class RecoveryCoordinator {
         '/test-resources/reconcile-preview?transactionId=' + encodeURIComponent(lease.transactionId));
       else offer('release-test', lease.transactionId, lease.resources);
     }
+    for (const op of boundary.operations) if (op.state === 'PREPARED' && op.decision?.status === 'approved' && !op.native &&
+      !boundary.accesses.some(access => access.accessId === op.accessId || access.operationIds.includes(op.operationId)))
+      offer('cancel-reviewed-validation', op.operationId, op.resources,
+        '/recovery/native-evidence?operationId=' + encodeURIComponent(op.operationId));
     const unresolved = boundary.operations.filter(op => !['COMPLETED', 'CANCELLED'].includes(op.state));
     return { protocol: RECOVERY_PROTOCOL, runId, contextId: run.contextId, version: run.version,
       snapshot_only: true, nativeObservation: 'unverified', policyId: policy?.policyId || null,
+      decisionOwner: 'orchestrator', humanDecisionRequired: false, policySetupRequired: !policy,
+      manifestDigest: this.registry.manifestDigest(runId),
+      compatibleExtension: { path: '/extend-compatible', authorization: 'same-approved-change-owner-review', constraints: 'existing-resource-namespace-and-rights', preservesExistingProtections: true },
       policyError: this.error, boundaryDigest: canonicalContinuityDigest(boundary),
       totalUnresolved: unresolved.length, truncated: boundary.accesses.length > 200 || boundary.tests.length > 200 || unresolved.length > 200,
       operations: unresolved.slice(-200).map(op => ({ operationId: op.operationId, state: op.state,
         nextAction: op.state === 'PREPARED' ? 'review-existing-validation' : 'observe-correlated-native-effect',
-        diagnostic: '/operations?operationId=' + encodeURIComponent(op.operationId) })),
+        diagnostic: '/recovery/native-evidence?operationId=' + encodeURIComponent(op.operationId) })),
       actions: offers, continuation: 'continue-only-proved-compatible-work',
-      outsidePolicy: 'request-explicit-authorization-or-a-new-business-mandate' };
+      outsidePolicy: 'orchestrator-reviews-delegation-within-change;developer-only-for-out-of-scope-decision' };
   }
   authorize(runId, input) {
     const run = this.run(runId);
@@ -168,12 +195,18 @@ export class RecoveryCoordinator {
       action.authority === 'orchestrator');
     if (!offered || !record(input.input)) fail('recovery-action-not-authorized', 403);
     const body = { ...input.input };
+    const reviewAction = input.action === 'cancel-reviewed-validation', portAction = input.action === 'reconcile-quarantined-port';
+    if (portAction) validatePortReview(body.review, run.ownerId);
+    if (reviewAction) validateReviewStructure(body.review, run.ownerId);
+    if ((reviewAction || portAction) && !/^[a-f0-9]{64}$/.test(body.nativeBoundaryDigest || '')) fail('recovery-input-divergent');
+    if (portAction && (!Array.isArray(body.probeOperationIds) || body.probeOperationIds.length !== 2 ||
+        body.probeOperationIds[0] === body.probeOperationIds[1] || body.probeOperationIds.some(value => !id(value)))) fail('recovery-input-divergent');
     if (Object.keys(body).some(key => !['version', 'fencing', 'transactionId', 'operationId', 'evidence',
-      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest'].includes(key))) fail('recovery-input-divergent');
+      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest', ...(reviewAction || portAction ? ['review','nativeBoundaryDigest'] : []), ...(portAction ? ['probeOperationIds'] : [])].includes(key))) fail('recovery-input-divergent');
     if (Object.hasOwn(body, 'token') || body.version !== undefined && body.version !== run.version) fail('recovery-input-divergent');
     body.version = run.version;
     const leaseAction = ['reconcile-test', 'release-test', 'cancel-waiting-test'].includes(input.action);
-    const entity = leaseAction ? this.registry.resourceState.testReservations[input.targetId] :
+    const entity = reviewAction || portAction ? this.registry.resourceState.operations[input.targetId] : leaseAction ? this.registry.resourceState.testReservations[input.targetId] :
       this.registry.resourceState.accesses[input.action === 'quarantine-port'
         ? this.registry.resourceState.operations[input.targetId]?.accessId : input.targetId];
     if (!entity || entity.runId !== runId || entity.contextId !== run.contextId) fail('recovery-target-divergent');
@@ -185,7 +218,8 @@ export class RecoveryCoordinator {
     if (['release-test', 'cancel-waiting-test', 'cancel-waiting-access'].includes(input.action) && entity.token) body.token = entity.token;
     const receipt = { actionId: input.actionId, runId, contextId: run.contextId, ownerId: run.ownerId,
       policyId: policy.policyId, action: input.action, targetId: input.targetId,
-      entityId: leaseAction ? entity.transactionId : entity.accessId,
+      entityId: reviewAction || portAction ? entity.operationId : leaseAction ? entity.transactionId : entity.accessId,
+      ...(reviewAction || portAction ? { review: structuredClone(body.review), nativeBoundaryDigest: body.nativeBoundaryDigest } : {}),
       receiptId: body.reconciliationId || body.quarantineId || null,
       state: 'PREPARED', inputDigest, effectDigest: canonicalContinuityDigest(body) };
     this.persist(this.policies, [...this.receipts, receipt]);
@@ -195,7 +229,10 @@ export class RecoveryCoordinator {
     const previous = this.receipts.find(receipt => receipt.actionId === actionId);
     if (!previous) fail('recovery-receipt-unknown');
     if (previous.state === 'DONE') return publicActionResult(previous.result);
-    const result = { ...projectRecoveryReceipt(value), recoveryActionId: actionId, policyId: previous.policyId,
+    const result = { ...projectRecoveryReceipt(value), ...(previous.action === 'reconcile-quarantined-port' && httpStatus === 200
+      ? { state: 'RELEASED', operationState: 'CANCELLED', operationId: previous.targetId, proofDigest: previous.effectDigest } : {}), ...(previous.action === 'reconcile-quarantined-port' && httpStatus === 200
+      ? { executionOutcome: 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT', evidenceAuthority: 'VERIFIED_NATIVE_PORT_PROBES' } : {}), ...(previous.action === 'cancel-reviewed-validation' && httpStatus === 200
+      ? { executionOutcome: 'UNDETERMINED_READ_ONLY', evidenceAuthority: 'ORCHESTRATOR_AUDIT_REVIEW' } : {}), recoveryActionId: actionId, policyId: previous.policyId,
       ...(recoveredFrom ? { recoveredFrom } : {}) };
     this.persist(this.policies, this.receipts.map(receipt => receipt === previous
       ? { ...receipt, state: 'DONE', httpStatus, result } : receipt));
@@ -205,10 +242,17 @@ export class RecoveryCoordinator {
     if (receipt.state === 'DONE') return { replay: true, status: receipt.httpStatus, result: publicActionResult(receipt.result) };
     const lease = this.registry.resourceState.testReservations?.[receipt.entityId];
     const access = this.registry.resourceState.accesses[receipt.entityId];
-    const entity = ['reconcile-test', 'release-test', 'cancel-waiting-test'].includes(receipt.action) ? lease : access;
+    const entity = ['cancel-reviewed-validation','reconcile-quarantined-port'].includes(receipt.action) ? this.registry.resourceState.operations[receipt.entityId] :
+      ['reconcile-test', 'release-test', 'cancel-waiting-test'].includes(receipt.action) ? lease : access;
     let proof = false, recoveredFrom = 'qualified-receipt';
     if (entity?.runId === receipt.runId && entity.contextId === receipt.contextId) {
-      if (receipt.action === 'release-test') proof = entity.state === 'RELEASED' && entity.releaseDigest === receipt.effectDigest;
+      if (receipt.action === 'reconcile-quarantined-port') proof = entity.state === 'CANCELLED' &&
+        entity.native?.onceAcknowledged === true && entity.completionDigest === receipt.effectDigest &&
+        this.registry.resourceState.accesses[entity.accessId]?.state === 'RELEASED' &&
+        this.registry.resourceState.accesses[entity.accessId].outcome === 'RECONCILED' && !!receipt.observation;
+      else if (receipt.action === 'cancel-reviewed-validation') proof = entity.state === 'CANCELLED' &&
+        entity.completionDigest === receipt.effectDigest && !entity.native && entity.decision?.status === 'approved';
+      else if (receipt.action === 'release-test') proof = entity.state === 'RELEASED' && entity.releaseDigest === receipt.effectDigest;
       else if (receipt.action.startsWith('reconcile-')) proof = entity.reconciliationReceipts?.[receipt.receiptId]?.inputDigest === receipt.effectDigest;
       else if (receipt.action === 'quarantine-port') proof = entity.timeoutQuarantine?.quarantineId === receipt.receiptId &&
         entity.timeoutQuarantine.inputDigest === receipt.effectDigest;
@@ -217,6 +261,20 @@ export class RecoveryCoordinator {
     if (!proof) return { replay: true, status: 409, result: { error: 'recovery-action-outcome-unverified',
       recoveryActionId: receipt.actionId, nextAction: 'inspect-current-authoritative-state' } };
     return { replay: true, status: 200, result: this.complete(receipt.actionId, 200, entity, recoveredFrom) };
+  }
+  observeAction(actionId, observation) {
+    const previous = this.receipts.find(receipt => receipt.actionId === actionId);
+    if (!previous || previous.action !== 'reconcile-quarantined-port' || previous.state !== 'PREPARED') fail('recovery-receipt-unknown');
+    this.persist(this.policies, this.receipts.map(receipt => receipt === previous ? { ...receipt, observation } : receipt));
+  }
+  operationReview(runId, operationId) {
+    const op = this.registry.resourceState.operations[operationId];
+    const receipt = this.receipts.findLast(row => row.runId === runId && row.entityId === operationId &&
+      ['cancel-reviewed-validation','reconcile-quarantined-port'].includes(row.action) && row.effectDigest === op?.completionDigest);
+    return receipt && op.state === 'CANCELLED' && receipt.action === 'reconcile-quarantined-port'
+      ? { executionOutcome: 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT', evidenceAuthority: 'VERIFIED_NATIVE_PORT_PROBES', recoveryActionId: receipt.actionId }
+      : receipt && op.state === 'CANCELLED' ? { executionOutcome: 'UNDETERMINED_READ_ONLY',
+      evidenceAuthority: 'ORCHESTRATOR_AUDIT_REVIEW', recoveryActionId: receipt.actionId } : null;
   }
   receiptSnapshot(runId, actionId) {
     const run = this.run(runId);

@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.3
+# Index du protocole CAB 2.2.4
 
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées
@@ -23,3 +23,5 @@ pour un incident ou une migration restent des faits historiques.
 Une lacune de distribution se diagnostique sans inventer d'autorité. L'aperçu
 recovery indique les preuves et actions disponibles dans le mandat ; attendre
 une décision réservée ne justifie pas le gel de ressources indépendantes.
+
+Reprises dans le périmètre du change : [autonomous-recovery](autonomous-recovery.md), autorité de revue, reçus de refus, sondes de port et extension disjointe.

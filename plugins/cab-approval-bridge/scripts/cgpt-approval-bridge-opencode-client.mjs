@@ -4,8 +4,9 @@ import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
+import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.2.3';
+export const VERSION = '2.2.4';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -637,6 +638,8 @@ function normalizeMessage(message, sessionId) {
       state: { status: state.status, input: state.input, output, error,
         metadata: directError ? { ...nativeMetadata, cabDirectMcpError: directError } : nativeMetadata, time: { start: content.time?.ran ?? content.time?.created,
           end: content.time?.completed } } };
+    if (record(state.error) && typeof state.error.type === 'string')
+      Object.defineProperty(part, 'nativeErrorType', { value: state.error.type, enumerable: false });
     normalized.parts.push(content.name === 'execute' ? codeModePart(content, part) || part : part);
   }
   return normalized;
@@ -657,7 +660,7 @@ export function normalizeOpenCodeEvent(envelope) {
   return { type: event.type, properties, ...(directories.length ? { directory: directories[0] } : {}) };
 }
 
-export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, fetchImpl = fetch, timeoutMs = 10000, signal }) {
+export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, permissionReceiptDirectory, fetchImpl = fetch, timeoutMs = 10000, signal }) {
   const origin = loopbackUrl(baseUrl);
   const user = username || 'opencode';
   const credentialPath = passwordFile || (process.env.CREDENTIALS_DIRECTORY
@@ -1217,10 +1220,49 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   async function replyPermission(sessionId, permissionId, decision, directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     if (decision !== 'once' && decision !== 'always' && decision !== 'reject') fail('opencode-permission-decision-invalid');
-    await info();
+    const native = await info(decision === 'reject');
+    let journal, intent;
+    if (decision === 'reject') {
+      journal = new PermissionReplyJournal(permissionReceiptDirectory ||
+        join(directoryValue, '.opencode/state/cgpt-approval-bridge/permission-replies'));
+      const identity = { sessionId, permissionId, directory: directoryValue, decision };
+      const existing = journal.read(journal.path(identity));
+      if (existing) {
+        if (existing.nativePid !== native.pid || existing.nativeVersion !== native.version) fail('opencode-permission-receipt-identity-divergent');
+        if (existing.state === 'ACKNOWLEDGED') return;
+        fail('opencode-permission-outcome-unverified');
+      }
+      const pending = (await permissions(directoryValue, { sessionIds: [sessionId] })).filter(item => item.id === permissionId);
+      if (pending.length !== 1) fail('opencode-permission-receipt-pending-required');
+      const permission = pending[0], target = permission.permission === 'bash' ? permission.metadata.command : permission.metadata.filepath;
+      intent = journal.begin({ ...identity, nativePid: native.pid, nativeVersion: native.version,
+        callId: permission.tool?.callID || null, targetDigest: typeof target === 'string'
+          ? createHash('sha256').update(JSON.stringify([permission.permission, target])).digest('hex') : null });
+      if (intent.replay) return;
+    }
     const response = await request(`/api/session/${encodeURIComponent(sessionId)}/permission/${encodeURIComponent(permissionId)}/reply`,
       { method: 'POST', body: { decision }, locationDirectory: directoryValue });
     if (response.status !== 204) fail('opencode-permission-reply-invalid');
+    if (journal) {
+      let after;
+      try { after = await info(true); } catch (cause) {
+        throw Object.assign(new Error('opencode-permission-reply-confirmed-identity-unavailable'),
+          { code: 'opencode-permission-reply-confirmed-identity-unavailable', replyConfirmed: true, httpStatus: 204, cause });
+      }
+      if (after.pid !== native.pid || after.version !== native.version) throw Object.assign(new Error('opencode-permission-reply-identity-changed'),
+        { code: 'opencode-permission-reply-identity-changed', replyConfirmed: true, httpStatus: 204 });
+      try { journal.acknowledge(intent.value); }
+      catch (cause) {
+        throw Object.assign(new Error('opencode-permission-reply-confirmed-receipt-unavailable'), {
+          code: 'opencode-permission-reply-confirmed-receipt-unavailable', replyConfirmed: true, httpStatus: 204, cause });
+      }
+    }
+  }
+
+  function permissionReplies(sessionId, directoryValue = directory) {
+    if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
+    return new PermissionReplyJournal(permissionReceiptDirectory ||
+      join(directoryValue, '.opencode/state/cgpt-approval-bridge/permission-replies')).snapshot(sessionId, directoryValue);
   }
 
   async function mcpRecoverySnapshot() {
@@ -1362,7 +1404,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     sourceRead, sourceList, sourceFind,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,
-    replyPermission, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy, events, request: json });
+    replyPermission, permissionReplies, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {

@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 2.2.3
+# Service web de monitoring — CAB 2.2.4
 
 Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace
@@ -74,6 +74,7 @@ scripts/
   cgpt-approval-bridge-statistics-maintenance.mjs
   cgpt-approval-bridge-observation-statistics.mjs
   cgpt-approval-bridge-opencode-client.mjs
+  cgpt-approval-bridge-permission-replies.mjs
   cgpt-approval-bridge-permission-policy.mjs
   cgpt-approval-bridge-process-lifecycle.mjs
 web-monitor/

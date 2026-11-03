@@ -1,5 +1,18 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Correctif autonome courant 2.2.4
+
+[fix-autonomous-scoped-recovery](openspec/changes/archive/2026-11-03-fix-autonomous-scoped-recovery/),
+code non attribué : ARCHIVÉ, source 2.2.4 qualifiée. Autorité de l’orchestrateur dans
+le change, reçus de refus natifs, diagnostic filtré, revue de validation non
+consommée, réconciliation bornée d’un port et extension additive disjointe.
+Qualification finale : Node 884/915, 31 ignorés, zéro échec ; Python 93/93 ;
+natif 1/1, soit 978 réussites exécutées. OpenSpec strict avant archive 20/20.
+Précontrôles réels sans mutation : revue PA01 structurellement admissible ;
+instance Vite antérieure retrouvée dans un reçu CABU de même contexte.
+Aucune activation 2.2.4 ni clôture métier des deux RUN revendiquée ici.
+
+
 ## Correctif CABU courant 2.2.3
 
 [fix-cabu-stopped-controller-status](openspec/changes/archive/2026-11-02-fix-cabu-stopped-controller-status/),
