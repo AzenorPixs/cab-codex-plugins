@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.15
+# Reprise autonome dans le change — CAB 2.2.16
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -21,6 +21,7 @@ Un agrégat historique non nul ne gèle pas les ressources prouvées compatibles
 | Frontière | Suite dans le mandat |
 |---|---|
 | Politique absente | L’orchestrateur qualifie sa délégation et installe une policy neuve liée au RUN/contexte/version et aux ressources ; aucun nouveau consentement humain si le mandat couvre déjà l’action. |
+| Shell PREPARED/APPROVED refusé avant once sans accès | [shell approuvé sans accès](approved-shell-retirement.md) ; composition acquisition puis clôture, uniquement si le manifeste reste admissible. |
 | PREPARED/APPROVED avec accès HELD, avant émission native | [retrait APPROVED/HELD](approved-held-retirement.md) ; le propriétaire clôt l’accès avec RECONCILED sous les gardes existantes. |
 | Validation PREPARED/approved non consommée sans accès lié | Revue de lecture et annulation native exacte selon la section suivante. |
 | Port de serveur local sous quarantaine, once consommée | Deux sondes natives indépendantes, puis réconciliation bornée ; aucune once historique rejouée. |
@@ -202,6 +203,9 @@ Les snapshots complets restent indépendants ; l’indexation des identités
 
 ## Retirer une validation approuvée jamais émise
 
+Pour un shell refusé sans accès que la branche edit ne couvre pas, consulter
+[shell approuvé sans accès](approved-shell-retirement.md) ; ne pas forcer une preuve d’annulation broker.
+
 Si un accès est déjà HELD, suivre [retrait APPROVED/HELD](approved-held-retirement.md) ; la voie ci-dessous
 exige l’absence d’accès lié. Ne pas demander au correcteur d’effectuer
 une clôture ordinaire déjà couverte par le mandat propriétaire.
@@ -252,7 +256,7 @@ disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
 supposition. La clôture historique reste non prouvée ; aucune procédure ne
 peut effacer cette incertitude sans preuve supplémentaire.
 
-## Permission shell décomposée — CAB2.2.15
+## Permission shell décomposée — CAB2.2.16
 
 Une permission shell peut porter plusieurs ressources ;elle autoriserait
 l’appel entier, pas une once par fragment. CAB ne déduit aucune équivalence
@@ -275,7 +279,7 @@ anciennes identités et permissions ne sont pas réutilisées. Aucun reçu absen
 ne se fabrique rétroactivement. Des mandats unitaires ou le transport shell
 scellé existant permettent d’éviter une décomposition non qualifiée.
 
-## Retirer un edit refusé avant once — CAB2.2.15
+## Retirer un edit refusé avant once — CAB2.2.16
 
 Utiliser la policy propriétaire withdraw-unissued-validation et la même route
 recovery/action, targetId de l’opération, input={nativeBoundaryDigest,evidence}.

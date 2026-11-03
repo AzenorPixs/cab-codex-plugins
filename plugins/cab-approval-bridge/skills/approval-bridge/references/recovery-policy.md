@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.15
+# Récupération par RUN — CAB 2.2.16
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -61,3 +61,7 @@ Si le contrôleur est indisponible, vérifier son service et l'identité du paqu
 par la procédure CAB autorisée. Ne pas éditer le registre privé pour simuler
 la récupération. Conserver l'intention, les preuves et les effets connus ;
 un simple redémarrage n'autorise pas le rejeu d'une opération.
+
+Le [shell approuvé sans accès](approved-shell-retirement.md) emploie, lorsque ses préconditions sont prouvées,
+les routes ordinaires acquire/release ; aucune nouvelle action policy
+n’est créée et les gardes d’accès restent opposables.
