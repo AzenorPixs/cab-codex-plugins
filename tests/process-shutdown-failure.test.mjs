@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -24,9 +25,9 @@ test('un échec du callback de fermeture reste diagnostiqué', async (t) => {
 
 test('écriture statistique impossible : échec explicite 78 et sortie du helper', { timeout: 10000 }, async (t) => {
   const directory = await mkdtemp(join(tmpdir(), 'cab-shutdown-failure-'));
-  const state = join(directory, '.opencode/state/cgpt-approval-bridge');
+  const state = join(runtimeStateDirectory(directory));
   // A directory cannot be atomically replaced by the statistics file.
-  await mkdir(join(state, 'controller-statistics.json'), { recursive: true });
+  await mkdir(join(state, 'controller-statistics.json'), { recursive: true, mode:0o700 });
   const listener = createServer(); await new Promise((r) => listener.listen(0, '127.0.0.1', r));
   const port = listener.address().port; await new Promise((r) => listener.close(r));
   const child = spawn(process.execPath, [fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url))],

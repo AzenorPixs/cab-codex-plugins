@@ -14,7 +14,7 @@ function fixture() {
   return { root, passwordFile, close: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-const info = { version: '2.2.0', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+const info = { version: '2.2.12', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
 const location = { directory: '/workspace', project: { id: 'fixture', directory: '/workspace', canonical: '/workspace' } };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
@@ -120,6 +120,11 @@ test('Code Mode : projection littérale, provenance et découverte pure', async 
   const bound=await codeModeFixture(t,wrapped(boundCode,
     [{tool:'cgpt-validation.request_validation',status:'completed',input:boundInput}]));
   assert.equal(bound.tool,'cgpt-validation_request_validation');assert.deepEqual(bound.state.input,boundInput);
+  const quotedInput={requestId:'request-quoted-bound',commands:[command]};
+  const quotedCode='const CMD = `python3 -c "print({})"`; return await tools["cgpt-validation"].request_validation({"requestId":"request-quoted-bound","commands":[CMD]});';
+  const quoted=await codeModeFixture(t,wrapped(quotedCode,
+    [{tool:'cgpt-validation.request_validation',status:'completed',input:quotedInput}]));
+  assert.equal(quoted.tool,'cgpt-validation_request_validation');assert.deepEqual(quoted.state.input,quotedInput);
   const changed = structuredClone(raw); changed.state.input.code = ' '+changed.state.input.code;
   assert.notEqual((await codeModeFixture(t, changed)).state.metadata.cabCodeMode.envelopeHash,
     p.state.metadata.cabCodeMode.envelopeHash);
@@ -195,6 +200,7 @@ test('Code Mode : formes ambiguës conservées comme execute bloquant', async t 
     p=>p.state.input.code='return await tools["cgpt-validation"].request_validation({requestId:1+2});',
     p=>p.state.input.code='return await tools["cgpt-validation"].request_validation({requestId:"dynamic",commands:[`echo ${COMMAND}`]});',
     p=>p.state.input.code='const CMD = `literal`; return await tools["cgpt-validation"].request_validation({requestId:"binding-misused",commands:["true"],summary:CMD});',
+    p=>p.state.input.code='const CMD = `literal`; return await tools["cgpt-validation"].request_validation({requestId:"duplicate-commands","commands":[CMD],commands:["/usr/bin/false"]});',
     p=>p.state.input.code='const CMD = `literal`; search({query:"extra"}); return await tools["cgpt-validation"].request_validation({requestId:"extra-effect",commands:[CMD]});',
     p=>p.state.input.code='const tools = search({}); return await tools["cgpt-validation"].request_validation({});',
     p=>p.state.metadata.toolCalls.push({tool:'shell',status:'completed',input:{}}),
@@ -230,7 +236,10 @@ test('permissions shell et écriture relative : source native et cible vérifié
     assert.equal(kind==='shell'?p.metadata.command:p.metadata.filepath,kind==='shell'?'/usr/bin/true':'/workspace/fixture.txt');
     corrupt=true;await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
     corrupt=false;wrongMessage=true;await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
-    wrongMessage=false;if(kind==='shell')input.background=true;else input.path='/other/fixture.txt';
+    wrongMessage=false;if(kind==='shell'){input.background=true;input.timeout=500;
+      const projected=(await client.permissions())[0];assert.equal(projected.metadata.shellBackground,true);
+      assert.equal(projected.metadata.shellTimeout,500);assert.match(projected.metadata.nativeToolInputSha256,/^[a-f0-9]{64}$/);
+      input.workdir='/other';}else input.path='/other/fixture.txt';
     await assert.rejects(client.permissions(),{code:'opencode-permission-target-invalid'});
   }
 });
@@ -316,6 +325,33 @@ test('le client suit les pages V2 et normalise les messages et permissions', asy
   assert.equal(messages[0].parts[0].text, 'prévol');
   assert.equal(messages[1].parts[0].executed, true);
   assert.equal(calls.filter((call) => call.path === '/api/session').length, 2);
+});
+
+test('chaque page d’historique cible la location explicite de session', async (context) => {
+  const f = fixture(); context.after(f.close);
+  const calls = [];
+  const client = createOpenCodeV2Client({ baseUrl: 'http://127.0.0.1:4096', directory: '/controller-workspace', passwordFile: f.passwordFile,
+    fetchImpl: async (input, init) => {
+      const url = new URL(input);
+      calls.push({ path: url.pathname, cursor: url.searchParams.get('cursor'), order: url.searchParams.get('order'),
+        directory: init.headers['x-opencode-directory'] });
+      if (url.pathname === '/api/info') return json(info);
+      if (url.pathname !== '/api/session/ses_remote/message') return json({}, 404);
+      if (url.searchParams.get('cursor') === 'history-next') return json({ data: [
+        { id: 'msg_assistant', type: 'assistant', content: [{ type: 'text', text: 'résultat' }], time: { created: 2 } },
+      ], cursor: { next: null, previous: 'history-next' } });
+      return json({ data: [{ id: 'msg_user', type: 'user', text: 'demande', time: { created: 1 } }],
+        cursor: { next: 'history-next', previous: null } });
+    } });
+
+  const messages = await client.messages('ses_remote', '/session-workspace');
+  const pages = calls.filter((call) => call.path === '/api/session/ses_remote/message');
+  assert.equal(messages.length, 2);
+  assert.equal(pages.length, 2);
+  assert.ok(pages.every((page) => page.directory === '/session-workspace'));
+  assert.equal(pages[0].order, 'asc');
+  assert.equal(pages[1].order, null);
+  await assert.rejects(client.messages('ses_remote', 'relative-workspace'), { code: 'opencode-location-invalid' });
 });
 
 test('la création de session traduit les permissions internes vers les règles V2', async (context) => {
@@ -996,4 +1032,19 @@ test('prompt historique deny inchangé et nouveau contrôle après changement ex
  h.setRules([{action:'shell',resource:'*',effect:'ask'},{action:'edit',resource:'*',effect:'deny'}]);h.changeDenyWithModel();
  await assert.rejects(h.client.prompt('ses_policy','prévol',{directory:'/target',model:{providerID:'fixture',modelID:'fixture'},requiredNativeAsk:['shell']}),{code:'opencode-native-permission-ask-required'});
  assert.equal(h.calls.filter(c=>c.path.endsWith('/model')).length,1);assert.equal(h.calls.filter(c=>c.path.endsWith('/prompt')).length,1);assert.equal(h.calls.filter(c=>c.method==='PATCH').length,0);
+});
+
+test('pagination : une petite page adaptative ne réduit pas toutes les pages suivantes',async t=>{
+ const f=fixture();t.after(f.close);const calls=[];
+ const rows=Array.from({length:230},(_,i)=>({id:'msg_adaptive_'+i,type:'assistant',content:[]}));
+ const c=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+  fetchImpl:async u=>{
+   const url=new URL(u);if(url.pathname==='/api/info')return json(info);
+   const offset=Number(url.searchParams.get('cursor')||0),limit=Number(url.searchParams.get('limit'));calls.push({offset,limit});
+   if(offset===0&&limit>1)return json({padding:'x'.repeat(2*1024*1024)});
+   const data=rows.slice(offset,offset+limit),next=offset+data.length;
+   return json({data,cursor:{next:next<rows.length?String(next):null,previous:null}});
+  }});
+ const result=await c.messages('ses_adaptive');assert.equal(result.length,230);
+ assert.equal(calls.find(x=>x.offset===1).limit,200);assert.ok(calls.length<12);
 });

@@ -1,5 +1,106 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Correctif SCM courant2.2.12
+
+[withdraw-rejected-unissued-native-edit](changes/archive/2026-11-03-withdraw-rejected-unissued-native-edit/), code non attribué :ARCHIVÉ, source2.2.12 qualifiée.
+Retrait borné après refus natif edit ;aucun SID ou lease modifié.
+266Node,94Python,1natif :361cas ;OpenSpec20/20puis19/19. Activation séparée.
+
+## Clarification documentaire authentification
+
+[clarify-authenticated-opencode-access](changes/archive/2026-11-03-clarify-authenticated-opencode-access/), code non attribué :ARCHIVÉ.
+GET401 sans authentification versus client local ;base2.2.11 inchangée.
+37tests etOpenSpec20/20puis19/19 ;publication/CABU séparés.
+
+## Cadrage SCM courant2.2.11
+
+[clarify-incident-triage-and-feedback](changes/archive/2026-11-03-clarify-incident-triage-and-feedback/), code non attribué :ARCHIVÉ, source2.2.11 qualifiée.
+Qualification/capitalisation canonique des faux positifs ;aucune garde modifiée.
+236Node et94Python :330cas ;OpenSpec20/20puis19/19. Activation séparée.
+
+## Correctif SCM courant2.2.10
+
+[journal-rejection-of-multipart-shell-permissions](changes/archive/2026-11-03-journal-rejection-of-multipart-shell-permissions/), code non attribué :ARCHIVÉ, source2.2.10 qualifiée.
+Rejet shell journalisé, garde once inchangée.236Node,94Python,1natif :331cas ;
+OpenSpec20/20puis19/19. Publication et activation attestées séparément.
+
+## Correctif SCM courant2.2.9
+
+[enforce-private-runtime-creation-modes](changes/archive/2026-11-03-enforce-private-runtime-creation-modes/), code non attribué :ARCHIVÉ, source2.2.9 qualifiée.
+Objet restauré conservé après renotification ;créations privées0600 et verrou
+projet0775.154Node,94Python,1natif :249cas qualifiés ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier sont attestées séparément.
+
+## Correctif SCM courant2.2.8
+
+[read-large-legacy-registry-for-private-migration](changes/archive/2026-11-03-read-large-legacy-registry-for-private-migration/), code non attribué :ARCHIVÉ, source2.2.8 qualifiée.
+Registre réel lu à la borne runtime64Mio après refus sûr avant coupure.
+153Node,94Python,1natif :248réussites ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier restent séparées.
+
+
+## Correctif SCM courant2.2.7
+
+[correlate-completed-mcp-call-with-outer-error](changes/archive/2026-11-03-correlate-completed-mcp-call-with-outer-error/), code non attribué : ARCHIVÉ, source2.2.7 qualifiée.
+Admission transitoire et états privés hors projet compatibles0775.
+937cas Node uniques qualifiés,94Python,1natif ;31ignorés. Une dernière
+fixture en timeout passe isolément ; pas de passe globale entièrement verte.
+OpenSpec20/20avant puis19/19après. Publication et activation séparées.
+
+
+## Correctif SCM courant2.2.6
+
+[reuse-closed-validation-review-evidence](changes/archive/2026-11-03-reuse-closed-validation-review-evidence/), code non attribué : ARCHIVÉ, source2.2.6 qualifiée.
+Réemploi des revues closes et retrait avant émission, sans effet ni once
+inventés. Qualification :920Node,93Python,1natif,1014réussites ;31ignorés.
+Index final15/15 ; OpenSpec20/20avant puis19/19après archive. Activation séparée.
+
+
+## Correctif SCM courant 2.2.5
+
+[restore-proven-validation-boundaries](changes/archive/2026-11-03-restore-proven-validation-boundaries/), code non attribué : ARCHIVÉ, source 2.2.5 qualifiée.
+Deux frontières : PENDING perdu par le contexte et terminal de lecture sans
+preuve once. Actions propriétaires bornées ; aucun rejeu ou résultat natif
+inventé. Qualification finale : 904 Node, 93 Python et 1 native, 998 réussites ;
+31 ignorés ; OpenSpec strict 20/20 avant puis 19/19 après archive. Publication
+et activation distinctes.
+
+## Entrée provisoire SCM — CAB 2.2.4
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-autonomous-scoped-recovery | ARCHIVÉ, source 2.2.4 qualifiée ; attribution ACL ultérieure | [validation](changes/archive/2026-11-03-fix-autonomous-scoped-recovery/VALIDATION.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.3
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-cabu-stopped-controller-status | ARCHIVÉ, source 2.2.3 qualifiée ; publication et activation distinctes | [validation](changes/archive/2026-11-02-fix-cabu-stopped-controller-status/VALIDATION.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.2
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-cabu-authority-shutdown | ARCHIVÉ, source 2.2.2 qualifiée ; publication et activation distinctes | [validation](changes/archive/2026-11-02-fix-cabu-authority-shutdown/VALIDATION.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.1
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | reconcile-approved-native-cancellation | ARCHIVÉ, source 2.2.1 qualifiée ; publication et activation distinctes, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-approved-native-cancellation/tasks.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.0
+
+| Code | Identifiant technique | État documentaire | Source |
+|---|---|---|---|
+| code non attribué | track-background-shell-lifecycle | ARCHIVÉ, source CAB 2.2.0 qualifiée le 2 novembre 2026 ; activation distincte | [proposition](changes/archive/2026-11-02-track-background-shell-lifecycle/proposal.md), [tâches](changes/archive/2026-11-02-track-background-shell-lifecycle/tasks.md), [validation](changes/archive/2026-11-02-track-background-shell-lifecycle/VALIDATION.md), [statistiques](changes/archive/2026-11-02-track-background-shell-lifecycle/STATISTICS.md) |
+
+Cette entrée ne crée aucun code ni réservation ; l’attribution relève d’ACL.
+
 Relevé et application : 28 octobre 2026 (Europe/Paris). Plan CAB-ACL-R1 explicitement validé par le développeur pour les trois volets.
 
 ## Périmètre et convention

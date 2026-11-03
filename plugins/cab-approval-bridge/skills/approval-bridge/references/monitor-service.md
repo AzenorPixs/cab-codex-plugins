@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 2.1.72
+# Service web de monitoring — CAB 2.2.12
 
 Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace
@@ -28,6 +28,15 @@ Si les options non secrètes connues ne suffisent pas à vérifier une instance
 existante, signaler cette limite et demander les seules valeurs manquantes,
 sans tenter de les deviner ni réécrire le fichier.
 
+## Version attendue du jeu installé
+
+Résoudre la version de base du plugin CAB installé depuis
+`<plugin>/.codex-plugin/plugin.json` : retirer le suffixe `+codex.…` de son
+champ `version`. Cette valeur est la version attendue pour le jeu source et
+l'API du moniteur. Ne pas la remplacer par une ancienne version copiée dans
+une procédure. Une version de manifeste absente ou invalide donne un diagnostic
+borné et ne justifie aucun arrêt d'une instance active.
+
 ## 2. Réutilisation d'une instance active
 
 L'unité attendue est `cgpt-approval-bridge-monitor.service`. Consulter ses
@@ -37,7 +46,7 @@ attendue dans le profil utilisateur et son appartenance à cette installation.
 
 Si elle est active, interroger uniquement l'URL loopback attendue :
 
-- GET /api/identity doit réussir et annoncer version 2.1.72 ainsi que
+- GET /api/identity doit réussir et annoncer la version de base attendue du plugin installé ainsi que
   identity.workspace exactement égal au workspace canonique attendu ;
 - GET / doit servir la page CAB Monitor ;
 - l'unité doit utiliser Restart=on-failure.
@@ -60,10 +69,13 @@ scripts/
   cgpt-approval-bridge-monitor-data.mjs
   cgpt-approval-bridge-monitor-management.mjs
   cgpt-approval-bridge-monitor-events.mjs
+  cgpt-approval-bridge-continuity.mjs
   cgpt-approval-bridge-run-steps.mjs
   cgpt-approval-bridge-statistics-maintenance.mjs
   cgpt-approval-bridge-observation-statistics.mjs
+  cgpt-approval-bridge-state-layout.mjs
   cgpt-approval-bridge-opencode-client.mjs
+  cgpt-approval-bridge-permission-replies.mjs
   cgpt-approval-bridge-permission-policy.mjs
   cgpt-approval-bridge-process-lifecycle.mjs
 web-monitor/
@@ -74,7 +86,7 @@ web-monitor/
 ```
 
 Conserver ces deux dossiers frères : les imports et ressources sont résolus
-relativement aux modules. Vérifier la version 2.1.72 et la présence de chaque
+relativement aux modules. Vérifier la version de base attendue et la présence de chaque
 fichier avant publication du jeu. Provisionner le credential OpenCode partagé
 dans `~/.config/cab-approval-bridge/opencode.password` avec les permissions
 `0600`; l'unité le charge via `LoadCredential`. Aucune dépendance tierce n'est installée.

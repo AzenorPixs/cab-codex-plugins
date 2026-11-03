@@ -1,5 +1,16 @@
 # CAB 1.10.4 — coordination atomique par ressource
 
+## Restitution ciblée d’un bail — évolution 2.2.12
+
+La restitution ordinaire examine les opérations liées au bail et les accès
+qui recouvrent ses ressources. Après cleanup et vérification natifs distincts
+et réussis, un accès disjoint du même RUN ne retient plus le bail nettoyé.
+Une opération encore incertaine liée au bail, ou un accès recouvrant actif,
+reste bloquant pour cette restitution. Le port d’un shell quarantiné distinct
+garde intégralement son accès, son opération et sa once. Cette règle ne
+dispense ni des preuves de nettoyage ni des contrôles de propriétaire et de
+fencing ; elle ne s’applique pas à une libération sans effet non prouvée.
+
 Ce profil est la référence du pilotage concurrent. Les anciens blocs techniques
 copiés dans les prompts ne font plus autorité. Les barrières ordinaires `/ready`,
 `/integration` et `/reconcile` issues de ces blocs ne sont pas utilisées à leur
@@ -58,7 +69,44 @@ POST /runs/<runId>/locks/release porte version, operationId, token, fencing, out
 
 Les écritures connues avancent les révisions des ressources et invalident les lectures de sous-arbre concernées. Les écritures à publier restent suivies après libération. Après crash, les protections sont restaurées mais l'ancien jeton ne permet aucune nouvelle once. /locks/reconcile vérifie la frontière connue, annule les anciennes sous-opérations non commencées et émet un jeton/fencing neufs sans relâcher les fichiers ; les corrections conservent des identités et décisions neuves. Réconcilier les effets sans rejouer une permission consommée. Le prévol de récupération garde ses règles strictes ; terminer/libérer son accès avant transfert de session.
 
-Pour une permission native encore pendante, le contrôleur 2.1.72 peut continuer
+Si le payload d'acquisition d'un accès de commande est perdu après redémarrage
+et que le registre conserve le même accès `HELD` avec des opérations terminales,
+ne pas répéter `/locks/acquire`. Le propriétaire lit
+`GET /runs/<runId>/locks/reconcile-preview?operationId=...`, puis vérifie le
+RUN, l'accès, les ressources, les révisions, les décisions durables et le digest
+de frontière. Il peut envoyer `POST /runs/<runId>/locks/reconcile-restored` avec
+ce digest, la version, le fencing, un `reconciliationId` neuf et des références
+de preuve. CAB relit l'historique natif, vérifie deux observations identiques,
+l'inactivité de la session, l'absence de permission et l'absence de conflit ou
+de changement de révision. Le reçu renouvelle le token et le fencing du même
+accès `HELD` ; il ne crée aucun accès et ne rejoue aucune permission ou `once`.
+Un reçu identique est idempotent. Une opération `ISSUING`, `EXECUTING` ou
+`UNKNOWN`, une preuve terminale absente, une permission, un conflit, une
+divergence ou une session active conserve l'accès protégé.
+
+Pour un shell foreground timeouté sans shellID ni exit, le prévol
+`GET /runs/<runId>/locks/timeout-quarantine-preview?operationId=...` scelle le
+port et le tool part natif exact. Le POST
+`/runs/<runId>/locks/quarantine-timeout` exige deux lectures natives identiques,
+la décision durable, une session inactive et zéro permission. Il garde le shell
+`EXECUTING`, `once` inchangé et le port write `HELD`; il ne prouve aucune fin et
+ne libère rien. Sous cette quarantine, le même RUN peut acquérir un accès
+`read` au même port avec une nouvelle décision CAB. Toute écriture et tout RUN
+étranger restent bloqués ; gate et libération attendent toujours une preuve
+native terminale.
+
+Pour un shell foreground timeouté sans shellID ni exit, le prévol
+`GET /runs/<runId>/locks/timeout-quarantine-preview?operationId=...` scelle le
+port et le tool part natif exact. Le POST
+`/runs/<runId>/locks/quarantine-timeout` exige deux lectures natives identiques,
+la décision durable, une session inactive et zéro permission. Il garde le shell
+`EXECUTING`, `once` inchangé et le port write `HELD`; il ne prouve aucune fin et
+ne libère rien. Sous cette quarantine, le même RUN peut acquérir un accès
+`read` au même port avec une nouvelle décision CAB. Toute écriture et tout RUN
+étranger restent bloqués ; gate et libération attendent toujours une preuve
+native terminale.
+
+Pour une permission native encore pendante, le contrôleur 2.1.81 peut continuer
 le `once` déjà décidé après redémarrage seulement si l’historique contient la
 demande et l’approbation terminées exactes et que deux lectures natives
 confirment permissionId/callID identiques, outil `running` et `executed=false`.
@@ -76,7 +124,11 @@ Avant toute préparation, déclarer les environnements dans le manifeste du chan
 
 1. Appeler `POST /runs/<runId>/test-resources/acquire` avec `version`, `transactionId`, `resources` (clés en `write`) et `evidence`. Demander l'ensemble complet sans accès temporaire détenu ni autre réservation de test. `HELD` fournit `token` et `fencing` ; HTTP 202 `WAITING` n'attribue aucune partie de l'ensemble. Répéter la même transaction consulte son état ; un contenu divergent est refusé.
 
-Après un redémarrage, si le jeton est absent du contexte propriétaire mais que le payload d'acquisition d'origine complet existe encore, répéter exactement le même POST `acquire` avec le même RUN, `transactionId`, version, ressources, evidence et tout champ initial. Le POST idempotent renvoie le bail HELD existant au demandeur avec le même token/fencing ; `reconciliationRequired` reste vrai et aucune nouvelle réservation ni permission n'est créée. Ne reconstruis pas le payload depuis un GET et ne conserve jamais le jeton retourné dans un checkpoint ou un journal. Si le payload exact est perdu, ne tente pas une acquisition divergente : utilise uniquement `GET /test-resources/release-unused-preview`, puis `POST /test-resources/release-unused-lost-token` lorsque le RUN est réservé et son job armé dans le même change, avec preview native complète prouvant l'absence d'effet. Ce scope déjà validé ne demande pas d'autorisation humaine supplémentaire. Cette voie ne libère qu'un bail prouvé inutilisé ; aucun GET ne révèle le jeton. Une permission, un effet, une opération inconnue, un historique incomplet ou un scope divergent conserve HELD.
+Après un redémarrage, si le jeton est absent du contexte propriétaire mais que le payload d'acquisition d'origine complet existe encore, répéter exactement le même POST `acquire` avec le même RUN, `transactionId`, version, ressources, evidence et tout champ initial. Le POST idempotent renvoie le bail HELD existant au demandeur avec le même token/fencing ; `reconciliationRequired` reste vrai et aucune nouvelle réservation ni permission n'est créée. Ne reconstruis pas le payload depuis un GET et ne conserve jamais le jeton retourné dans un checkpoint ou un journal.
+
+Si ce bail USED est restauré et que son payload d'acquisition est perdu, utiliser le prévol read-only `GET /runs/<runId>/test-resources/reconcile-preview?transactionId=...`. Après vérification de son propriétaire, ressources, opérations et `boundaryDigest`, le même RUN peut envoyer `POST /runs/<runId>/test-resources/reconcile-restored` avec version, fencing, reconciliationId neuf, digest et evidence. Le contrôleur relit les fins natives, les messages complets et la quiescence de session, puis renouvelle le token/fencing et conserve le même bail HELD. Le POST retourne le token au seul propriétaire courant ; ne jamais le recopier au chat, dans un checkpoint ou un journal. Une opération active ou inconnue, permission pendante, session active ou frontière divergente garde le bail HELD/reconciliationRequired. Cette voie ne lance ni commande, ni test, ni permission `once` et ne libère pas l'environnement.
+
+Si le bail est réellement inutilisé, utiliser uniquement `GET /test-resources/release-unused-preview`, puis `POST /test-resources/release-unused-lost-token` lorsque le RUN est réservé et son job armé dans le même change, avec preview native complète prouvant l'absence d'effet. Ce scope déjà validé ne demande pas d'autorisation humaine supplémentaire. Cette voie ne libère qu'un bail prouvé inutilisé ; aucun GET ne révèle le jeton. Une permission, un effet, une opération inconnue, un historique incomplet ou un scope divergent conserve HELD.
 2. Préparer et faire approuver séparément chaque commande de préparation, de test, de nettoyage et de vérification. Chacune déclare les clés Docker/LXC réellement touchées et ses autres ressources. Acquérir/libérer ses accès `/locks/...` normalement. La réservation de test reste détenue entre les commandes ; chaque permission conserve son unique `once`.
 3. Vérifier la fin native de tous les tests, y compris processus détachés et ressources temporaires. Exécuter un nettoyage puis une commande distincte vérifiant la restitution de chaque environnement, avec des identités d'opérations neuves et exit 0. L'orchestrateur examine les commandes et preuves : CAB contrôle leur corrélation et leur ordre durable, sans interpréter leurs sorties ni deviner l'état Docker/LXC. Ne jamais utiliser un simple `/usr/bin/true` comme preuve d'un nettoyage réel.
 4. Après libération des accès temporaires, appeler `POST /runs/<runId>/test-resources/release` avec `version`, `transactionId`, `token`, `fencing`, `evidence` et `cleanup`. Ce tableau contient une entrée par clé : `resourceKey`, `cleanupOperationId`, `verificationOperationId`, `restored: true`. Les opérations appartiennent au même cycle ; nettoyage et vérification sont postérieurs à tous les autres tests de leur environnement. Un booléen seul, un nettoyage échoué, une fin inconnue ou une opération encore active refuse la libération. Un test échoué peut libérer un environnement restitué sans devenir un succès. Le reçu est idempotent.
@@ -144,3 +196,11 @@ concerne ni une intégration courante ni un prévol commencé ou incertain.
 Le contrat, les versions mixtes qualifiées et les limites du repli sont
 définis par references/component-update.md ; aucune activation n'est déduite
 du travail source ou de la disponibilité de ce profil.
+
+Un état d’opération COMPLETED ne signifie pas que son accès est RELEASED :
+la libération est une action explicite, après examen de toutes ses opérations.
+Si reconcile-preview répond access-reconciliation-boundary-required et que
+l’accès n’est pas marqué restauré, utiliser la libération normale locks/release
+avec le token/fencing actuels et outcomeCOMPLETED lorsque toutes les fins sont
+qualifiées. Le token reste dans le processus local, sans copie au chat ou
+checkpoint. Ne pas traiter cet état comme une fuite ou forcer une réconciliation.

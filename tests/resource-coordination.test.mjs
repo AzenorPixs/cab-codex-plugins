@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { ResourceRunRegistry, COORDINATION_PROTOCOL } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 import { RunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs';
+import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 
 const fingerprint = (value) => createHash('sha256').update(value).digest('hex');
 const file = (key, mode = 'write') => ({ key: 'file:' + key, mode });
@@ -147,6 +148,28 @@ test('restauration conserve les accès actifs conflictuels sans réutiliser once
  const writer=h.reserve('restore-conflict-writer',shared);
  const opWriter=h.prepare(writer,'restore-conflict-operation-writer');
  assert.equal(h.acquire(writer,opWriter).state,'WAITING');
+});
+
+test('quarantine timeout port : read same-RUN only, writes et RUN étrangers restent bloqués après restart',async t=>{
+ const h=await fixture(t),port={key:'port:host-a/5173',mode:'write'},portRead={key:port.key,mode:'read'};
+ const run=h.reserve('timeout-quarantine-owner',[port]),operation=h.prepare(run,'timeout-quarantine-shell');
+ const access=h.acquire(run,operation);assert.equal(access.state,'HELD');h.start(run,operation);
+ const state=h.r.resourceState,storedAccess=state.accesses[access.accessId];
+ storedAccess.state='HELD';storedAccess.timeoutQuarantine={quarantineId:'timeout-quarantine-receipt',
+  operationId:operation.operationId,inputDigest:fingerprint('timeout-input'),proofDigest:fingerprint('timeout-proof'),
+  fencing:++state.sequence,observedAt:new Date().toISOString()};
+ storedAccess.fencing=state.sequence;storedAccess.token='11111111-1111-4111-8111-111111111111';
+ h.r.restoredAccesses.delete(access.accessId);h.r.persist();await h.restart();
+ const sameRunRead=h.prepare(run,'timeout-quarantine-same-run-read',[portRead]);
+ assert.equal(h.acquire(run,sameRunRead).state,'HELD');
+ const sameRunWriter=h.prepare(run,'timeout-quarantine-same-run-write',[port]);
+ assert.equal(h.acquire(run,sameRunWriter).state,'WAITING');
+ const other=h.reserve('timeout-quarantine-other-run',[portRead]),otherRead=h.prepare(other,'timeout-quarantine-other-read',[portRead]);
+ assert.equal(h.acquire(other,otherRead).state,'WAITING');
+ const unmarkedRun=h.reserve('timeout-unmarked-owner',[{key:'port:host-a/5174',mode:'write'}]);
+ const unmarkedOperation=h.prepare(unmarkedRun,'timeout-unmarked-shell'),unmarkedAccess=h.acquire(unmarkedRun,unmarkedOperation);
+ h.start(unmarkedRun,unmarkedOperation);const normalRead=h.prepare(unmarkedRun,'timeout-unmarked-read',[{key:'port:host-a/5174',mode:'read'}]);
+ assert.equal(h.acquire(unmarkedRun,normalRead).state,'WAITING');
 });
 
 test('rejet natif persiste son empreinte dans le schéma compatible et migre les champs 2.1.72',async t=>{
@@ -525,6 +548,83 @@ function cleanupProof(h, run, prefix, resources = run.resources) {
   return resources.map((r) => ({ resourceKey: r.key, cleanupOperationId: cleanup.operationId,
     verificationOperationId: check.operationId, restored: true }));
 }
+
+test('restitution Chromium indépendante : un port quarantiné reste protégé sans retenir le bail nettoyé', async t => {
+  const h = await fixture(t), browser = { key: 'browser:host-a/chromium', mode: 'write' };
+  const port = { key: 'port:host-a/5173', mode: 'write' };
+  const run = h.reserve('scoped-browser-release', [browser, port]);
+  const lease = testLease(h, run, 'scoped-browser-lease', [browser]);
+  const server = h.prepare(run, 'scoped-server', [port]), access = h.acquire(run, server);
+  h.start(run, server);
+  const storedAccess = h.r.resourceState.accesses[access.accessId];
+  storedAccess.state = 'HELD';
+  storedAccess.timeoutQuarantine = { quarantineId: 'scoped-quarantine', operationId: server.operationId,
+    inputDigest: fingerprint('scoped-timeout'), proofDigest: fingerprint('scoped-proof'),
+    fencing: ++h.r.resourceState.sequence, observedAt: new Date().toISOString() };
+  storedAccess.fencing = h.r.resourceState.sequence;
+  h.r.persist();
+  const protectedOperation = structuredClone(h.r.resourceState.operations[server.operationId]);
+  const protectedAccess = structuredClone(storedAccess);
+  finishTestCommand(h, run, 'scoped-browser-check', [browser], 1);
+  const cleanup = cleanupProof(h, run, 'scoped-browser', [browser]);
+  assert.throws(() => h.r.releaseTests(run.runId, testPayload(run, lease)), /test-cleanup-proof-required/);
+  const payload = testPayload(run, lease, { cleanup });
+  assert.equal(h.r.releaseTests(run.runId, payload).state, 'RELEASED');
+  assert.equal(h.r.releaseTests(run.runId, payload).state, 'RELEASED');
+  assert.deepEqual(h.r.resourceState.operations[server.operationId], protectedOperation);
+  assert.deepEqual(h.r.resourceState.accesses[access.accessId], protectedAccess);
+  assert.equal(protectedOperation.native.onceAcknowledged, true);
+});
+
+test('restitution ciblée : un effet lié au bail garde sa protection même sur une ressource distincte', async t => {
+  const h = await fixture(t), browser = { key: 'browser:host-a/chromium', mode: 'write' };
+  const port = { key: 'port:host-a/5173', mode: 'write' };
+  const run = h.reserve('associated-browser-release', [browser, port]);
+  const lease = testLease(h, run, 'associated-browser-lease', [browser]);
+  const cleanup = cleanupProof(h, run, 'associated-browser', [browser]);
+  const op = h.prepare(run, 'associated-process', [port]);
+  h.acquire(run, op); h.start(run, op);
+  h.r.resourceState.operations[op.operationId].testReservationId = lease.transactionId;
+  assert.throws(() => h.r.releaseTests(run.runId, testPayload(run, lease, { cleanup })), /test-effects-unresolved/);
+  assert.equal(h.r.testReservations(run.runId)[0].state, 'HELD');
+});
+
+test('réconciliation restored d’un bail USED garde HELD et renouvelle le token sans exiger l’ancien',async t=>{
+ const h=await fixture(t);const a=h.reserve('restored-used',[lxcTest]),lease=testLease(h,a,'restored-used-lease');
+ const op=h.prepare(a,'restored-used-operation'),access=h.acquire(a,op);h.start(a,op);h.complete(a,op);h.release(a,access);
+ const oldToken=lease.token,oldFencing=lease.fencing;await h.restart();
+ const preview=h.r.restoredTestReconciliationSnapshot(a.runId,lease.transactionId);
+ assert.equal(preview.state,'HELD');assert.equal(preview.reconciliationRequired,true);
+ assert.equal(preview.token,undefined);assert.deepEqual(preview.operations.map(item=>item.state),['COMPLETED']);
+ assert.deepEqual(preview.operations.map(item=>({onceAcknowledged:item.onceAcknowledged,nativePresent:item.nativePresent,
+  completionProved:item.completionProved,nativeResultStatus:item.nativeResultStatus})),
+  [{onceAcknowledged:true,nativePresent:true,completionProved:true,nativeResultStatus:'completed'}]);
+ const payload={version:a.version,transactionId:lease.transactionId,fencing:oldFencing,
+  reconciliationId:'restored-used-reconcile-1',boundaryDigest:preview.boundaryDigest,
+  evidence:['session owner verified','native operations terminal','test environment remains held']};
+ const proofBody={runId:a.runId,contextId:a.contextId,transactionId:lease.transactionId,version:a.version,
+  fencing:oldFencing,boundaryDigest:preview.boundaryDigest,sessionId:a.sessionId,
+  operationsDigest:proofHash(preview.operations),sessionIdle:true,pendingPermissions:0,
+  transcriptDigest:proofHash('stable complete transcript'),observedAt:new Date().toISOString()};
+ const result=h.r.reconcileRestoredTests(a.runId,payload,{...proofBody,proofDigest:proofHash(proofBody)});
+ assert.equal(result.state,'HELD');assert.notEqual(result.token,oldToken);assert.ok(result.fencing>oldFencing);
+ assert.equal(h.r.testReservations(a.runId)[0].reconciliationRequired,false);
+ assert.equal(h.r.resourceState.testReservations[lease.transactionId].state,'HELD');
+ assert.equal(h.r.resourceState.testReservations[lease.transactionId].resources[0].key,'lxc:host-a/101');
+ assert.equal(h.r.reconcileRestoredTests(a.runId,payload,null).token,result.token);
+});
+
+test('réconciliation restored refuse un bail USED tant qu’une opération native reste UNKNOWN',async t=>{
+ const h=await fixture(t);const a=h.reserve('restored-unknown',[lxcTest]),lease=testLease(h,a,'restored-unknown-lease');
+ const op=h.prepare(a,'restored-unknown-operation'),access=h.acquire(a,op);h.start(a,op);h.r.nativeUnknown(op.operationId);
+ assert.equal(access.state,'HELD');await h.restart();
+ const preview=h.r.restoredTestReconciliationSnapshot(a.runId,lease.transactionId);
+ const payload={version:a.version,transactionId:lease.transactionId,fencing:lease.fencing,
+  reconciliationId:'restored-unknown-reconcile',boundaryDigest:preview.boundaryDigest,evidence:['native state reviewed']};
+ assert.throws(()=>h.r.reconcileRestoredTests(a.runId,payload,null),/test-reconciliation-boundary-(?:changed|required)/);
+ assert.equal(h.r.testReservations(a.runId)[0].state,'HELD');
+ assert.equal(h.r.testReservations(a.runId)[0].reconciliationRequired,true);
+});
 
 test('Les réservations Docker/LXC sont atomiques, FIFO et indépendantes des verrous de commandes', async (t) => {
   const h = await fixture(t);
@@ -927,6 +1027,28 @@ test('une frontière absente reste UNKNOWN protégé même avec permission absen
  assert.equal(h.r.operationSnapshot(a.runId,op.operationId).operations[0].access.state,'UNKNOWN');
 });
 
+test('NO_EFFECT terminal refuse une permission consommée ou un callID natif',async t=>{
+ const h=await fixture(t);const a=h.reserve('terminal-native-effect-a',[file('a')]);
+ const op=h.prepare(a,'terminal-native-effect-op');h.acquire(a,op);
+ const stored=h.r.resourceState.operations[op.operationId];
+ h.r.recordDecision(a.runId,op.operationId,{status:'approved',requestId:stored.requestId,
+  approvalId:'approval-terminal-native-effect',changeId:a.changeId,operationId:op.operationId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:a.runId,
+  version:a.version,sessionId:a.sessionId});
+ h.r.nativeStart(a.runId,{...op,kind:'edit',target:'a'},stored.requestId,
+  {id:'permission-terminal-native-effect',tool:{callID:'call-terminal-native-effect'}});
+ h.r.nativeIssued(op.operationId);h.r.nativeUnknown(op.operationId);await h.restart();
+ const proof={runId:a.runId,contextId:a.contextId,operationId:op.operationId,requestId:stored.requestId,
+  sessionId:a.sessionId,operationDigest:op.operationDigest,identityDigest:stored.identityDigest,
+  finish:'stop',userMessageId:'user-terminal-effect',requestMessageId:'request-terminal-effect',
+  finalMessageId:'final-terminal-effect',transcriptDigest:fingerprint('transcript'),eventLogDigest:fingerprint('log'),
+  logWatermark:40,proofDigest:fingerprint('proof'),finishedAt:Date.now()};
+ assert.throws(()=>h.r.reconcileTerminalTurnNoEffect(a.runId,op.operationId,proof),/terminal-turn-no-effect-proof-required/);
+ const view=h.r.operationSnapshot(a.runId,op.operationId).operations[0];
+ assert.equal(view.state,'UNKNOWN');assert.equal(view.access.state,'UNKNOWN');
+ assert.equal(view.onceAcknowledged,true);assert.equal(view.native.callId,'call-terminal-native-effect');
+});
+
 test('reprise once exige une permission encore pendante prouvée et une opération sans accusé',async t=>{
  const h=await fixture(t);const a=h.reserve('pending-a',[file('a')]);
  const op=h.prepare(a,'pending-operation');h.acquire(a,op);
@@ -956,4 +1078,29 @@ test('UNKNOWN protège les écritures recouvrantes et laisse progresser un RUN i
  assert.equal(h.acquire(b,independent).state,'HELD');
  const conflicting=h.prepare(c,'conflicting-operation');
  assert.equal(h.acquire(c,conflicting).state,'WAITING');
+});
+
+for(const boundary of ['clean','access','native','once','rejected']) test(`annulation approuvée non consommée : frontière ${boundary}`,async t=>{
+ const h=await fixture(t),run=h.reserve('cancel-approved',[file('cancel-approved')]);
+ const op=h.prepare(run,'cancel-approved-op'),stored=h.r.resourceState.operations[op.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('request-owner'),false);
+ h.r.recordDecision(run.runId,op.operationId,{status:boundary==='rejected'?'rejected':'approved',requestId:stored.requestId,
+  approvalId:'approval-cancel-approved',changeId:run.changeId,operationId:op.operationId,
+  operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:run.runId,
+  version:run.version,sessionId:run.sessionId});
+ const decision=structuredClone(stored.decision),proof=fingerprint('native-cancel-approved');
+ if(['access','native','once'].includes(boundary))h.acquire(run,op);
+ if(['native','once'].includes(boundary))h.r.nativeStart(run.runId,{...op,kind:'bash',target:'/usr/bin/true'},stored.requestId,
+  {id:'cancel-permission',tool:{callID:'cancel-call'}});
+ if(boundary==='once')h.r.nativeIssued(op.operationId);
+ if(boundary!=='clean'){
+  const before=JSON.stringify(h.r.resourceState);
+  assert.throws(()=>h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof),/native-cancellation-boundary-invalid/);
+  assert.equal(JSON.stringify(h.r.resourceState),before);return;
+ }
+ assert.equal(h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof).state,'CANCELLED');
+ assert.deepEqual(stored.decision,decision);assert.equal(stored.native,undefined);
+ assert.equal(h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof).state,'CANCELLED');
+ assert.throws(()=>h.r.recordNativeCancelledValidation(run.runId,op.operationId,fingerprint('other-proof')),/native-cancellation-boundary-invalid/);
+ await h.restart();assert.deepEqual(h.r.resourceState.operations[op.operationId].decision,decision);
 });

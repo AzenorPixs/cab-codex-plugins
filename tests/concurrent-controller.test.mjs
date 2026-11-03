@@ -1,9 +1,11 @@
+import {migrationPendingValidations,migrationRegistryDigest,RUNTIME_MIGRATION_PROTOCOL} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-migration.mjs';
+import {legacyStateDirectory,initializeRuntimeState,writeRuntimeJson,runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { openCodeV2TestHandler, v2ProviderResponseBytes, v2NormalizedToolPart } from './helpers/opencode-v2-test-server.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { cpSync, chmodSync, mkdirSync, mkdtempSync, readdirSync, rmSync, readFileSync, statSync, writeFileSync, unlinkSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,9 +13,12 @@ import { fileURLToPath } from 'node:url';
 import readline from 'node:readline';
 import test from 'node:test';
 import { prepareControllerModelPolicy } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs';
-import { createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import { nativeToolInputDigest, createOpenCodeV2Client } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
+import { portProbeCommand } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-port-recovery.mjs';
+import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
+import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -43,6 +48,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
   }
   const eventStreams = new Set();
   native.emit = (event) => { for (const stream of eventStreams) stream.write('data: ' + JSON.stringify(event) + '\n\n'); };
+  native.disconnectEvents = () => { for (const stream of eventStreams) stream.end(); };
   const children = [];
   const opencode = createServer(openCodeV2TestHandler(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -55,6 +61,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     }
     let payload;
     if (url.pathname === '/provider') payload = native.providers || {all:[],connected:[]};
+    else if (url.pathname === '/shell') payload = { location: { directory }, data: native.shells || [] };
     else if (/^\/session\/[^/]+\/message\/[^/]+$/.test(url.pathname)) payload=(native.messages[url.pathname.split('/')[2]] || []).find(m=>m.info?.id===url.pathname.split('/')[4]);
     else if (url.pathname === '/permission') payload = native.permissions;
     else if (/^\/session\/[^/]+\/log$/.test(url.pathname)) {
@@ -132,7 +139,11 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       }
     }
     const r = await fetch(base + path, { method: 'POST',
-    headers: { 'content-type': 'application/json', connection: 'close' }, body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
+    headers: { 'content-type': 'application/json', connection: 'close',
+      ...(path.startsWith('/transport/') || path.startsWith('/runtime/migration') || /^\/runs\/[^/]+\/recovery\//.test(path)
+        || /^\/runs\/[^/]+\/extend-compatible$/.test(path)
+        ? { 'x-cab-continuity': 'cab-continuity-v1' } : {}) },
+    body: JSON.stringify(path === '/broker/readiness' ? { coordination_protocol: 'resource-scoped-v1', ...data } : data) });
     const text = await r.text(); return { status: r.status, body: text ? JSON.parse(text) : null }; };
   const candidate = (id) => ({ runId: id, ownerId: 'codex-' + id, sessionId: 'ses_' + id, directory,
     changeId: 'change-' + id, selectionKey: 'requirement-' + id, dependsOn: [],
@@ -177,13 +188,14 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       metadata: value.commands.length ? { command: value.commands[0] } : { filepath: directory + '/' + value.files[0] } });
     await waitFor(() => native.replies.some((r) => r.path.endsWith('/perm-' + value.requestId)));
   }
-  async function completeTool(value, exit = 0, { error = false, output = 'synthetic native result' } = {}) {
+  async function completeTool(value, exit = 0, { error = false, output = 'synthetic native result', nativeShell = false } = {}) {
     const op = (await get('/runs')).body.coordination.operations[value.operation_id];
     const stamp = Math.max(Date.now(), op.native.startedAt) + 1;
     const part = { type: 'tool', id: 'part-' + value.requestId, callID: 'call-' + value.requestId,
-      sessionID: value.session_id, tool: value.commands.length ? 'bash' : 'edit', state: { status: 'completed',
+      sessionID: value.session_id, tool: value.commands.length ? (nativeShell ? 'shell' : 'bash') : 'edit',
+      ...(nativeShell ? { executed: false } : {}), state: { status: 'completed',
         input: value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] },
-        output, time: { start: stamp, end: stamp + 1 }, metadata: { exit, ...(error ? { error: true } : {}) } } };
+        output, time: { start: stamp, end: stamp + 1 }, metadata: { exit, ...(nativeShell ? { status: 'completed' } : {}), ...(error ? { error: true } : {}) } } };
     native.messages[value.session_id].push({ parts: [part] });
     native.emit({ type: 'message.part.updated', properties: { part } });
   }
@@ -207,8 +219,183 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
   const nativeClient = createOpenCodeV2Client({ baseUrl:'http://127.0.0.1:'+opencode.address().port, directory,
     passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE });
   return { native, nativeClient, children, directory, base, get, post, candidate, reserve, approval, start, stop,
-    approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation };
+  approvedAccess, approvedEditAccess, execute, completeTool, releaseOperation, getStderr:()=>stderr };
 }
+
+test('continuité HTTP : demandes admises et décisions survivent au redémarrage sans once dupliquée', async t => {
+  const h = await setup(t);
+  const pendingRun = await h.reserve('communication-pending');
+  const pending = h.approval(pendingRun, 'communication-pending-request');
+  assert.equal((await h.post('/validation/request', { approval: pending })).status, 202);
+  const run = await h.reserve('communication-approved');
+  const { approval } = await h.approvedAccess(run, 'communication-approved-request');
+  await h.execute(approval);
+  const before = (await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body;
+  const replies = h.native.replies.length;
+  await h.stop(); await h.start();
+  await h.post('/broker/readiness', { status: 'READY', pending_count: 1, infrastructure_status: 'READY' });
+  assert.deepEqual((await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body, before);
+  assert.equal((await h.get('/runs/' + pendingRun.runId + '/decision/' + pending.requestId)).body, null);
+  assert.equal((await h.get('/runs/' + pendingRun.runId + '/status')).body.undecidedValidationCount, 1);
+  const duplicate = await h.post('/runs/' + run.runId + '/decision/' + approval.requestId, { decision: 'approved' });
+  assert.equal(duplicate.status, 400); assert.equal(duplicate.body.error, 'decision-already-recorded');
+  const operation = (await h.get('/runs/' + run.runId + '/operations?operationId=' + approval.operation_id)).body.operations[0];
+  assert.equal(operation.onceAcknowledged, true);
+  assert.equal(h.native.replies.length, replies);
+});
+
+test('frontière de décision : une intention privée non engagée ne devient pas APPROVED', async t => {
+  const h = await setup(t), run = await h.reserve('uncommitted-decision');
+  const approval = h.approval(run, 'uncommitted-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  await h.stop();
+  const path = join(runtimeStateDirectory(h.directory), 'runs', run.runId, String(run.contextId), 'controller-communication.json');
+  const store = new ContinuityStore(path, 'communication', () => true), value = store.snapshot();
+  value.decisions.push([approval.requestId, { decision: 'approved', requestId: approval.requestId,
+    approval_id: approval.approval_id, change_id: approval.change_id }]);
+  store.write(value);
+  await h.start(); await h.post('/broker/readiness', { status: 'READY', pending_count: 1, infrastructure_status: 'READY' });
+  assert.equal((await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body, null);
+  assert.equal((await h.post('/runs/' + run.runId + '/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('frontière de décision : le registre engagé restaure la décision si son acquittement privé manque', async t => {
+  const h = await setup(t), run = await h.reserve('committed-decision');
+  const { approval } = await h.approvedAccess(run, 'committed-request');
+  await h.stop();
+  const path = join(runtimeStateDirectory(h.directory), 'runs', run.runId, String(run.contextId), 'controller-communication.json');
+  const store = new ContinuityStore(path, 'communication', () => true), value = store.snapshot();
+  value.decisions = []; store.write(value);
+  await h.start();
+  const decision = (await h.get('/runs/' + run.runId + '/decision/' + approval.requestId)).body;
+  assert.equal(decision.decision, 'approved'); assert.equal(decision.operation_id, approval.operation_id);
+  assert.equal(decision.operation_digest, approval.operation_digest); assert.equal(decision.restored_from, 'operation-ledger');
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('continuité transport : une coupure SSE conserve une exécution acquittée et les observations reprennent leur séquence', async t => {
+  const h = await setup(t);
+  const run = await h.reserve('sse-continuity');
+  const { approval } = await h.approvedAccess(run, 'sse-continuity-operation');
+  await h.execute(approval);
+  const operationPath = '/runs/' + run.runId + '/operations?operationId=' + approval.operation_id;
+  const before = (await h.get(operationPath)).body.operations[0];
+  const observations = (await h.get('/monitor/events')).body;
+  assert.equal(observations.durable, true, JSON.stringify({ error: observations.error }));
+  h.native.disconnectEvents();
+  await waitFor(() => h.native.requests.filter(path => path === '/global/event').length > 1);
+  assert.equal((await h.get(operationPath)).body.operations[0].state, before.state);
+  assert.equal(h.native.replies.length, 1);
+  await h.stop(); await h.start();
+  const after = (await h.get('/monitor/events')).body;
+  assert.equal(after.durable, true, JSON.stringify({ error: after.error, diagnosticCode: after.diagnosticCode }));
+  assert.equal(after.instanceId, observations.instanceId);
+  assert.ok(after.sequence >= observations.sequence);
+  assert.equal(after.durable, true);
+  const replay = (await h.get('/monitor/events?cursor=' + encodeURIComponent(observations.cursor))).body;
+  assert.equal(replay.replay, 'complete');
+  assert.ok(replay.events.every(event => event.sequence > observations.sequence));
+});
+
+test('transfert HTTP certifié : baux et accès sains restent valides, crash suivant protégé', async t => {
+  const h = await setup(t), resources = [{ key: 'browser:host-a/chromium', mode: 'write' }];
+  const run = await h.reserve('transport-handoff', { resources });
+  const leaseResponse = await h.post('/runs/' + run.runId + '/test-resources/acquire', {
+    version: run.version, transactionId: 'transport-chromium', resources, evidence: ['isolated lease'] });
+  assert.equal(leaseResponse.status, 200, JSON.stringify(leaseResponse));
+  const { access } = await h.approvedAccess(run, 'transport-held-access');
+  const prepared = await h.post('/transport/prepare', { transactionId: 'update-http-handoff' });
+  assert.equal(prepared.status, 200, JSON.stringify(prepared)); assert.equal(prepared.body.ready, true);
+  const blocked = await h.post('/runs/' + run.runId + '/job/disarm', { jobId: 'job-' + run.runId });
+  assert.equal(blocked.status, 503); assert.equal(blocked.body.error, 'transport-update-in-progress');
+  await h.stop(); await h.start();
+  const transport = (await h.get('/transport/status')).body;
+  assert.equal(transport.adopted, true, JSON.stringify(transport));
+  assert.equal(transport.transactionId, 'update-http-handoff');
+  const leases = (await h.get('/runs/' + run.runId + '/test-resources')).body;
+  assert.equal(leases.reservations[0].reconciliationRequired, false);
+  const current = (await h.get('/runs/' + run.runId + '/locks')).body.accesses.find(item => item.accessId === access.accessId);
+  assert.equal(current.token, access.token); assert.equal(current.fencing, access.fencing);
+  assert.equal(h.native.replies.length, 0);
+  await h.stop(); await h.start();
+  assert.equal((await h.get('/transport/status')).body.adopted, false);
+  const coldLeases = (await h.get('/runs/' + run.runId + '/test-resources')).body;
+  assert.equal(coldLeases.reservations[0].reconciliationRequired, true);
+});
+
+test('récupération HTTP propriétaire : annulation qualifiée, reçu filtré et répétition sans effet', async t => {
+  const h = await setup(t), resources = [{ key: 'browser:host-a/chromium', mode: 'write' }];
+  const a = await h.reserve('recovery-a', { resources }), b = await h.reserve('recovery-b', { resources });
+  for (const run of [a, b]) {
+    const lease = await h.post('/runs/' + run.runId + '/test-resources/acquire', {
+      version: run.version, transactionId: 'lease-' + run.runId, resources, evidence: ['isolated lease'] });
+    assert.equal(lease.status, run === a ? 200 : 202, JSON.stringify(lease));
+  }
+  const base = '/runs/' + b.runId;
+  assert.equal((await h.post(base + '/recovery/policy', { policyId: 'http-recovery-policy', ownerId: b.ownerId,
+    version: b.version, actions: ['cancel-waiting-test'], resources, authorization: 'validated change recovery-b' })).status, 201);
+  await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 0, infrastructure_status: 'READY' });
+  const plan = (await h.get(base + '/recovery')).body;
+  assert.equal(plan.actions[0].authority, 'orchestrator');
+  const payload = { actionId: 'http-recovery-cancel', ownerId: b.ownerId, policyId: plan.policyId,
+    boundaryDigest: plan.boundaryDigest, action: 'cancel-waiting-test', targetId: 'lease-' + b.runId,
+    input: { evidence: ['owner cancels waiting lease'] } };
+  const result = await h.post(base + '/recovery/action', payload);
+  assert.equal(result.status, 200, JSON.stringify(result)); assert.equal(result.body.state, 'CANCELLED');
+  assert.equal(result.body.token, undefined);
+  const repeated = await h.post(base + '/recovery/action', payload);
+  assert.deepEqual(repeated, result);
+  assert.equal((await h.get(base + '/recovery/receipts?actionId=' + payload.actionId)).body.receipts[0].state, 'DONE');
+  assert.equal((await h.get('/runs/' + a.runId + '/test-resources')).body.reservations[0].state, 'HELD');
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('attente de décision : réveil après engagement durable et consultation ordinaire immédiate', async t => {
+  const h = await setup(t), run = await h.reserve('decision-wait');
+  const approval = h.approval(run, 'decision-wait-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  const path = '/runs/' + run.runId + '/decision/' + approval.requestId;
+  assert.equal((await h.get(path)).status, 404);
+  assert.equal((await h.get(path + '?wait_ms=1001')).body.error, 'decision-wait-invalid');
+  const waiting = h.get(path + '?wait_ms=1000');
+  await waitFor(async () => (await h.get('/runs/' + run.runId + '/status')).body.decisionWaiterCount === 1);
+  assert.equal((await h.post(path, { decision: 'rejected' })).status, 201);
+  const response = await waiting;
+  assert.equal(response.status, 200); assert.equal(response.body.decision, 'rejected');
+  assert.equal((await h.get('/runs/' + run.runId + '/status')).body.decisionWaiterCount, 0);
+  assert.equal(h.native.replies.length, 0);
+});
+
+test('attente de décision : la préparation CABU libère l’attente sans décision ni perte de demande', async t => {
+  const h = await setup(t), run = await h.reserve('decision-wait-handoff');
+  const approval = h.approval(run, 'decision-wait-handoff-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  const path = '/runs/' + run.runId + '/decision/' + approval.requestId;
+  const waiting = h.get(path + '?wait_ms=1000');
+  await waitFor(async () => (await h.get('/runs/' + run.runId + '/status')).body.decisionWaiterCount === 1);
+  assert.equal((await h.post('/transport/prepare', { transactionId: 'update-decision-wait' })).status, 200);
+  assert.equal((await waiting).status, 404);
+  assert.equal((await h.post('/transport/cancel', { transactionId: 'update-decision-wait' })).status, 200);
+  assert.equal((await h.get('/runs/' + run.runId + '/status')).body.undecidedValidationCount, 1);
+  assert.equal((await h.get(path)).body, null); assert.equal(h.native.replies.length, 0);
+});
+
+test('checkpoint privé corrompu : diagnostic du RUN atteint et communication du pair indépendant conservés', async t => {
+  const h = await setup(t), a = await h.reserve('corrupt-private-a'), b = await h.reserve('healthy-private-b');
+  const approval = h.approval(a, 'corrupt-private-request');
+  assert.equal((await h.post('/validation/request', { approval })).status, 202);
+  await h.stop();
+  const path = join(runtimeStateDirectory(h.directory), 'runs', a.runId, String(a.contextId), 'controller-communication.json');
+  writeFileSync(path, 'invalid private checkpoint\n');
+  await h.start(); await h.post('/broker/readiness', { status: 'READY', pending_count: 1, infrastructure_status: 'READY' });
+  assert.equal((await h.get('/runs/' + a.runId + '/status')).body.recoveryRequired, 'continuity-state-invalid');
+  assert.equal((await h.get('/runs/' + a.runId + '/recovery')).status, 200);
+  const next = h.approval(b, 'healthy-private-request');
+  assert.equal((await h.post('/validation/request', { approval: next })).status, 202);
+  assert.equal((await h.post('/runs/' + b.runId + '/decision/' + next.requestId, { decision: 'rejected' })).status, 201);
+  assert.equal(h.native.replies.length, 0);
+});
 
 test('source read-only fallback : OpenCode V2, session RUN liée, sans mutation et chemins exclus refusés', async t => {
   const h=await setup(t,{sourceFiles:{'src/example.py':'value = 42\n'},sourceEntries:[
@@ -238,7 +425,7 @@ test('locks/release accepte NO_EFFECT après erreur native edit vérifiée et re
  const {approval,access}=await h.approvedEditAccess(run,'edit-no-effect','src/theme.css');
  await h.execute(approval);await h.completeTool(approval,0,{error:true,output:'newString is already in the file'});
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));delete state.coordination.operations[approval.operation_id].nativeResult;
  writeFileSync(statePath,JSON.stringify(state));
  await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
@@ -340,6 +527,305 @@ test('une fin durable exacte restaure la décision et clôt sans rejouer once si
  assert.equal(operation.nativeRecovery.logWatermark,3);assert.equal(operation.access.state,'HELD');
 });
 
+test('un tour assistant terminal exact invalide le mandat et libère NO_EFFECT même si le broker est BLOCKED',async t=>{
+ const h=await setup(t);const run=await h.reserve('restore-terminal-turn-no-effect',
+  {resources:[{key:'file:src/restore.py',mode:'write'}]});
+ const {approval,access}=await h.approvedEditAccess(run,'restore-terminal-turn-no-effect','src/restore.py');
+ await h.stop();
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));
+ const op=state.coordination.operations[approval.operation_id];op.state='UNKNOWN';
+ op.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
+  proofDigest:createHash('sha256').update('terminal-turn-unclassified').digest('hex'),observedAt:new Date().toISOString()};
+ state.coordination.accesses[access.accessId].state='UNKNOWN';writeFileSync(statePath,JSON.stringify(state));
+ const approved={...approval,status:'APPROVED',reviewer:'CGPT'};
+ const wrapperId='call-terminal-turn-wrapper',userId='msg-terminal-turn-user',requestId='msg-terminal-turn-request',finalId='msg-terminal-turn-final';
+ const stamp=Date.now();
+ h.native.messages[run.sessionId]=[
+  {info:{id:userId,sessionID:run.sessionId,role:'user'},parts:[{type:'text',text:'mandat'}]},
+  {info:{id:requestId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'tool-calls'},parts:[{
+   type:'tool',tool:'execute',callID:wrapperId,executed:false,state:{status:'completed',input:{code:
+    'return await tools["cgpt-validation"].request_validation('+JSON.stringify(approval)+');'},
+    output:JSON.stringify(approved),time:{start:stamp-2,end:stamp-1},metadata:{truncated:false,toolCalls:[{
+      tool:'cgpt-validation.request_validation',status:'completed',input:approval}]}}}]},
+  {info:{id:finalId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'stop',time:{completed:stamp}},parts:[
+   {type:'text',text:'Validation terminée.'}]},
+  {info:{id:'msg-later-readonly-user',sessionID:run.sessionId,role:'user'},parts:[{type:'text',text:'état'}]},
+  {info:{id:'msg-later-readonly-assistant',sessionID:run.sessionId,role:'assistant',parentID:'msg-later-readonly-user',
+   finish:'tool-calls'},parts:[{type:'tool',tool:'execute',callID:'call-later-readonly',executed:false,state:{status:'completed',
+    input:{code:'return await tools["cgpt-validation"].broker_readiness({});'},output:JSON.stringify({status:'BLOCKED'}),
+    metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{}}]}}}]},
+  {info:{id:'msg-later-readonly-final',sessionID:run.sessionId,role:'assistant',parentID:'msg-later-readonly-user',finish:'stop'},
+   parts:[{type:'text',text:'État lu.'}]},
+ ];
+ const callEvent=(type,sequence)=>({type,durable:{aggregateID:run.sessionId,seq:sequence},data:{sessionID:run.sessionId,
+  id:'call-later-readonly',name:'execute',input:{code:'return await tools["cgpt-validation"].broker_readiness({});'},
+  content:[],metadata:{status:type==='session.tool.called'?'running':'completed'},executed:false}});
+ h.native.sessionLogs[run.sessionId]=`data: ${JSON.stringify(callEvent('session.tool.called',1))}\n\ndata: ${JSON.stringify(callEvent('session.tool.success',2))}\n\ndata: ${JSON.stringify({type:'log.synced',aggregateID:run.sessionId,seq:3})}\n\n`;
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:0,infrastructure_status:'BLOCKED'});
+ let observed;
+ await waitFor(async()=>{
+  observed=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+  return observed.state==='CANCELLED'&&observed.access.state==='RELEASED';
+ }).catch(()=>assert.fail('état observé: '+JSON.stringify(observed)+' stderr='+h.getStderr()));
+ const result=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(result.state,'CANCELLED');assert.equal(result.nativeRecovery.boundary,'TERMINAL_TURN_NO_EFFECT');
+ assert.equal(result.access.state,'RELEASED');
+ assert.equal(result.onceAcknowledged,null);assert.equal(result.native,null);assert.equal(h.native.replies.length,0);
+ assert.equal((await h.get('/runs/'+run.runId+'/locks')).body.revisions['file:src/restore.py'],0);
+});
+
+test('le tour terminal sans effet reste UNKNOWN si une permission native est pendante',async t=>{
+ const h=await setup(t);const run=await h.reserve('restore-terminal-turn-pending',
+  {resources:[{key:'file:src/restore.py',mode:'write'}]});
+ const {approval,access}=await h.approvedEditAccess(run,'restore-terminal-turn-pending','src/restore.py');
+ await h.stop();
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));const op=state.coordination.operations[approval.operation_id];
+ op.state='UNKNOWN';op.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
+  proofDigest:createHash('sha256').update('terminal-turn-unclassified').digest('hex'),observedAt:new Date().toISOString()};
+ state.coordination.accesses[access.accessId].state='UNKNOWN';writeFileSync(statePath,JSON.stringify(state));
+ h.native.permissions.push({id:'pending-terminal-turn',sessionID:run.sessionId,permission:'edit',tool:{callID:'call-effect'}});
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:0,infrastructure_status:'BLOCKED'});await delay(120);
+ const result=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(result.state,'UNKNOWN');assert.equal(result.access.state,'UNKNOWN');
+ assert.equal(result.nativeRecovery.boundary,'TOOL_TERMINAL_UNCLASSIFIED');assert.equal(h.native.replies.length,0);
+});
+
+test('NO_EFFECT terminal peut clôturer un accès fichier disjoint d’un bail test restauré',async t=>{
+ const h=await setup(t);const fileResource={key:'file:src/restore.py',mode:'write'};
+ const lxcResource={key:'lxc:host-a/101',mode:'write'};
+ const run=await h.reserve('restore-terminal-turn-disjoint-lease',{resources:[fileResource,lxcResource]});
+ const lease=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,
+  transactionId:'restored-disjoint-lease',resources:[lxcResource],evidence:['LXC identity held']});
+ assert.equal(lease.status,200,JSON.stringify(lease));
+ const approval=h.approval(run,'restore-terminal-turn-disjoint-lease');approval.commands=[];
+ approval.files=['src/restore.py'];approval.resources=[fileResource];approval.expected_revisions={ [fileResource.key]:0 };
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const accessResult=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,
+  operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:[fileResource],
+  expectedRevisions:approval.expected_revisions});
+ assert.equal(accessResult.status,200,JSON.stringify(accessResult));
+ await h.execute(approval);await h.completeTool(approval);
+ await h.stop();
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));
+ const operation=state.coordination.operations[approval.operation_id];operation.state='UNKNOWN';
+ delete operation.native;delete operation.nativeResult;operation.nativeRecovery={permissionId:null,callId:null,
+  boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
+  proofDigest:createHash('sha256').update('terminal-turn-unclassified-with-lease').digest('hex'),observedAt:new Date().toISOString()};
+ state.coordination.accesses[approval.operation_id].state='UNKNOWN';writeFileSync(statePath,JSON.stringify(state));
+ const approved={...approval,status:'APPROVED',reviewer:'CGPT'},wrapperId='call-terminal-turn-disjoint-wrapper';
+ const userId='msg-terminal-turn-disjoint-user',requestId='msg-terminal-turn-disjoint-request',finalId='msg-terminal-turn-disjoint-final';
+ const stamp=Date.now();h.native.messages[run.sessionId]=[
+  {info:{id:userId,sessionID:run.sessionId,role:'user'},parts:[{type:'text',text:'mandat'}]},
+  {info:{id:requestId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'tool-calls'},parts:[{
+   type:'tool',tool:'execute',callID:wrapperId,executed:false,state:{status:'completed',input:{code:
+    'return await tools["cgpt-validation"].request_validation('+JSON.stringify(approval)+');'},
+    output:JSON.stringify(approved),time:{start:stamp-2,end:stamp-1},metadata:{truncated:false,toolCalls:[{
+      tool:'cgpt-validation.request_validation',status:'completed',input:approval}]}}}]},
+  {info:{id:finalId,sessionID:run.sessionId,role:'assistant',parentID:userId,finish:'stop',time:{completed:stamp}},parts:[
+   {type:'text',text:'Validation terminée.'}]},
+ ];
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY'});
+ await waitFor(async()=>{
+  const row=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+  return row.state==='CANCELLED'&&row.access.state==='RELEASED';
+ });
+ const result=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(result.nativeRecovery.boundary,'TERMINAL_TURN_NO_EFFECT');
+ const testState=(await h.get('/runs/'+run.runId+'/test-resources')).body.reservations[0];
+ assert.equal(testState.state,'HELD');assert.equal(testState.reconciliationRequired,true);
+ assert.equal(h.native.replies.length,1);
+});
+
+test('réconcilie un bail de test restauré sans token client et conserve HELD',async t=>{
+ const h=await setup(t);const lxcResource={key:'lxc:host-a/101',mode:'write'};
+ const fileResource={key:'file:src/independent.py',mode:'write'};
+ const run=await h.reserve('reconcile-restored-used-controller',{resources:[lxcResource,fileResource]});
+ const leaseResult=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,
+  transactionId:'restored-used-controller-lease',resources:[lxcResource],evidence:['LXC identity checked']});
+ assert.equal(leaseResult.status,200,JSON.stringify(leaseResult));const lease=leaseResult.body;
+ const fileApproval=h.approval(run,'reconcile-restored-disjoint-file-op');fileApproval.files=['src/independent.py'];
+ fileApproval.commands=[];fileApproval.resources=[fileResource];fileApproval.expected_revisions={[fileResource.key]:0};
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(fileApproval);
+ assert.equal((await h.post('/validation/request',{approval:fileApproval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+fileApproval.requestId,{decision:'approved'})).status,201);
+ const fileAccess=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,
+  operationId:fileApproval.operation_id,operationDigest:fileApproval.operation_digest,resources:[fileResource],
+  expectedRevisions:fileApproval.expected_revisions});
+ assert.equal(fileAccess.status,200,JSON.stringify(fileAccess));
+ await h.stop();
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));
+ const unresolved=state.coordination.operations[fileApproval.operation_id];unresolved.state='UNKNOWN';
+ unresolved.nativeRecovery={permissionId:null,callId:null,boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:0,
+  proofDigest:createHash('sha256').update('disjoint-file-access-restored').digest('hex'),observedAt:new Date().toISOString()};
+ state.coordination.accesses[fileApproval.operation_id].state='UNKNOWN';writeFileSync(statePath,JSON.stringify(state));
+ await h.start();
+ const preview=await h.get('/runs/'+run.runId+'/test-resources/reconcile-preview?transactionId='+lease.transactionId);
+ assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.token,undefined);
+ assert.equal(preview.body.state,'HELD');assert.equal(preview.body.reconciliationRequired,true);
+ assert.equal(preview.body.operations.length,0);
+ const payload={version:run.version,transactionId:lease.transactionId,fencing:lease.fencing,
+  reconciliationId:'reconcile-restored-used-controller-1',boundaryDigest:preview.body.boundaryDigest,
+  evidence:['same owner verified','native history terminal','session idle','no pending permissions']};
+ const stale=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',{...payload,boundaryDigest:'0'.repeat(64)});
+ assert.equal(stale.status,409);assert.equal((await h.get('/runs/'+run.runId+'/test-resources')).body.reservations[0].state,'HELD');
+ h.native.busy[run.sessionId]={type:'busy'};
+ assert.equal((await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload)).status,409);
+ h.native.busy={};h.native.permissions.push({id:'pending-restored-test',sessionID:run.sessionId,permission:'edit',tool:{callID:'call-pending'}});
+ assert.equal((await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload)).status,409);
+ h.native.permissions=[];
+ let result;
+ await waitFor(async()=>{
+  result=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload);
+  return !(result.status===409&&result.body.error==='test-reconciliation-effect-pending');
+ });
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'HELD');
+ assert.notEqual(result.body.token,lease.token);assert.ok(result.body.fencing>lease.fencing);
+ const after=(await h.get('/runs/'+run.runId+'/test-resources')).body.reservations[0];
+ assert.equal(after.state,'HELD');assert.equal(after.reconciliationRequired,false);assert.equal(after.token,undefined);
+ assert.deepEqual(after.resources,[lxcResource]);
+ const unrelated=(await h.get('/runs/'+run.runId+'/locks')).body.accesses.find(item=>item.accessId===fileApproval.operation_id);
+ assert.equal(unrelated.state,'UNKNOWN');assert.deepEqual(unrelated.resources,[fileResource]);
+ const replay=await h.post('/runs/'+run.runId+'/test-resources/reconcile-restored',payload);
+ assert.equal(replay.status,200);assert.equal(replay.body.token,result.body.token);assert.equal(replay.body.fencing,result.body.fencing);
+});
+
+test('réconcilie un accès HELD restauré depuis la décision durable sans rejouer once',async t=>{
+ const h=await setup(t);const resource={key:'file:src/restored-edit.py',mode:'write'};
+ const run=await h.reserve('reconcile-restored-held-access',{resources:[resource]});
+ const {approval,access:initialAccess}=await h.approvedAccess(run,'restored-held-terminal');
+ await h.execute(approval);await h.completeTool(approval);
+ const requestPart=h.native.messages[run.sessionId].flatMap(message=>message.parts||[]).find(part=>part.tool==='cgpt-validation_request_validation');
+ requestPart.state.status='completed';requestPart.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const access=initialAccess;
+ const completed=await h.releaseOperation(run,approval,access,'COMPLETED');
+ assert.equal(completed.status,200,JSON.stringify(completed));
+ const repliesBefore=h.native.replies.length;
+ await h.stop();
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
+ const state=JSON.parse(readFileSync(statePath,'utf8'));
+ const restored=state.coordination.accesses[access.accessId];
+ restored.state='HELD';restored.token=access.token;delete restored.finishedAt;delete restored.outcome;delete restored.releaseDigest;
+ state.coordination.revisions[resource.key]=0;writeFileSync(statePath,JSON.stringify(state));
+ await h.start();
+ const route='/runs/'+run.runId+'/locks/reconcile-restored';
+ const preview=await h.get('/runs/'+run.runId+'/locks/reconcile-preview?operationId='+access.accessId);
+ assert.equal(preview.status,200,JSON.stringify(preview));assert.equal(preview.body.state,'HELD');
+ assert.deepEqual(preview.body.operations,[{operationId:approval.operation_id,state:'COMPLETED',decisionStatus:'approved',nativeResultStatus:'completed',onceAcknowledged:true}]);
+ assert.equal(preview.body.snapshot_only,true);assert.equal(preview.body.token,undefined);
+ const payload={version:run.version,operationId:access.accessId,fencing:access.fencing,
+  reconciliationId:'reconcile-restored-held-access-1',boundaryDigest:preview.body.boundaryDigest,
+  evidence:['durable approval verified','native terminal history verified','session idle','no pending permissions']};
+ assert.equal((await h.post(route,{...payload,boundaryDigest:'0'.repeat(64)})).body.error,'access-reconciliation-boundary-changed');
+ assert.equal((await h.get('/runs/'+run.runId+'/locks')).body.accesses[0].state,'HELD');
+ h.native.busy[run.sessionId]={type:'busy'};
+ assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.busy={};
+ h.native.permissions.push({id:'pending-restored-access',sessionID:run.sessionId,permission:'bash',tool:{callID:'call-pending'}});
+ assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.permissions=[];
+ await waitFor(async()=>{const status=(await h.get('/runs/'+run.runId+'/status')).body,job=status.job||{};
+  return !job.currentCabMandate&&!job.recovery&&!job.modelTransition&&status.undecidedValidationCount===0&&
+   status.unmatchedNativePermissionCount===0;});
+ assert.equal((await h.get('/runs/'+run.runId+'/locks/reconcile-preview?operationId='+access.accessId)).body.boundaryDigest,payload.boundaryDigest);
+ const result=await h.post(route,payload);
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.accessId,access.accessId);
+ assert.equal(result.body.state,'HELD');assert.notEqual(result.body.token,access.token);assert.ok(result.body.fencing>access.fencing);
+ assert.equal(h.native.replies.length,repliesBefore);
+ const operation=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(operation.state,'COMPLETED');assert.equal(operation.onceAcknowledged,true);
+ const current=(await h.get('/runs/'+run.runId+'/locks')).body.accesses[0];
+ assert.equal(current.accessId,access.accessId);assert.equal(current.state,'HELD');
+ assert.deepEqual(current.resources,[resource]);assert.equal(current.token,result.body.token);
+ const replay=await h.post(route,payload);
+ assert.equal(replay.status,200);assert.equal(replay.body.token,result.body.token);assert.equal(replay.body.fencing,result.body.fencing);
+});
+
+test('quarantine un timeout port sans libérer le verrou et laisse lire au même RUN',async t=>{
+ const h=await setup(t),portWrite={key:'port:host-a/5173',mode:'write'},fileRead={key:'file:frontend/tests/browser-check.mjs',mode:'read'},
+  browserWrite={key:'browser:host-a/chromium',mode:'write'};
+ const run=await h.reserve('timeout-port-quarantine',{resources:[portWrite,fileRead,browserWrite]});
+ const start=h.approval(run,'timeout-port-start');start.files=[];start.commands=['npm run dev'];start.resources=[portWrite];
+ start.expected_revisions={[portWrite.key]:0};h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(start);
+ assert.equal((await h.post('/validation/request',{approval:start})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+start.requestId,{decision:'approved'})).status,201);
+ const accessResult=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:start.operation_id,
+  operationDigest:start.operation_digest,resources:[portWrite],expectedRevisions:start.expected_revisions});
+ assert.equal(accessResult.status,200,JSON.stringify({status:accessResult.status,error:accessResult.body?.error,state:accessResult.body?.state}));
+ await h.execute(start);assert.equal(h.native.replies.length,1);
+ const operationState=(await h.get('/runs/'+run.runId+'/operations?operationId='+start.operation_id)).body.operations[0];
+ assert.equal(operationState.state,'EXECUTING');assert.equal(operationState.onceAcknowledged,true);
+ const requestPart=h.native.messages[run.sessionId].flatMap(message=>message.parts||[])
+  .find(part=>part.tool==='cgpt-validation_request_validation'&&part.state?.input?.requestId===start.requestId);
+ requestPart.state.status='completed';requestPart.state.output=JSON.stringify({requestId:start.requestId,
+  approval_id:start.approval_id,status:'PENDING'});
+ const timeoutStarted=Math.max(Date.now(),operationState.native?.startedAt||0)+1;
+ h.native.messages[run.sessionId].push({info:{id:'msg-timeout-port',sessionID:run.sessionId,role:'assistant'},parts:[{
+  type:'tool',tool:'shell',nativeTool:'shell',nativeFormat:'opencode-v2',id:'call-'+start.requestId,
+  callID:'call-'+start.requestId,executed:false,state:{status:'completed',input:{command:start.commands[0]},
+   output:'Command timed out',time:{start:timeoutStarted,end:timeoutStarted+120000},metadata:{timeout:true}}}]});
+ const repliesBefore=h.native.replies.length;await h.stop();
+ await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const preview=await h.get('/runs/'+run.runId+'/locks/timeout-quarantine-preview?operationId='+encodeURIComponent(start.operation_id));
+ assert.equal(preview.status,200,JSON.stringify(preview));assert.ok(['EXECUTING','UNKNOWN'].includes(preview.body.state));
+ assert.equal(preview.body.snapshot_only,true);assert.equal(preview.body.timeoutQuarantineRequired,true);
+ const payload={version:run.version,operationId:start.operation_id,fencing:preview.body.fencing,
+  quarantineId:'timeout-port-quarantine-1',boundaryDigest:preview.body.boundaryDigest,
+  evidence:['native shell call timed out','native callID and command matched','session idle','no pending permissions','port lock retained']};
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',{...payload,boundaryDigest:'0'.repeat(64)})).body.error,
+  'timeout-quarantine-boundary-changed');
+ h.native.busy[run.sessionId]={type:'busy'};
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload)).body.error,'native-session-not-quiescent');
+ h.native.busy={};
+ h.native.permissions.push({id:'pending-timeout-port',sessionID:run.sessionId,permission:'bash',tool:{callID:'call-pending'}});
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload)).body.error,'native-session-not-quiescent');
+ h.native.permissions=[];
+ const quarantined=await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload);
+ assert.equal(quarantined.status,200,JSON.stringify({status:quarantined.status,error:quarantined.body?.error,
+  accessId:quarantined.body?.accessId,state:quarantined.body?.state}));assert.equal(quarantined.body.accessId,start.operation_id);
+ assert.equal(quarantined.body.state,'HELD');assert.notEqual(quarantined.body.fencing,accessResult.body.fencing);
+ assert.equal(h.native.replies.length,repliesBefore);
+ const parent=(await h.get('/runs/'+run.runId+'/locks')).body.accesses.find(access=>access.accessId===start.operation_id);
+ assert.equal(parent.state,'HELD');assert.equal(parent.timeoutQuarantine.operationId,start.operation_id);
+ const unchanged=(await h.get('/runs/'+run.runId+'/operations?operationId='+start.operation_id)).body.operations[0];
+ assert.equal(unchanged.state,'EXECUTING');assert.equal(unchanged.onceAcknowledged,true);assert.equal(unchanged.nativeResult,null);
+ await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const locksAfterRestart=await h.get('/runs/'+run.runId+'/locks');
+ const afterRestart=await h.get('/runs/'+run.runId+'/locks/timeout-quarantine-preview?operationId='+encodeURIComponent(start.operation_id));
+ const safeLocks=(locksAfterRestart.body.accesses||[]).map(access=>({accessId:access.accessId,state:access.state,
+  resources:access.resources,timeoutQuarantine:access.timeoutQuarantine}));
+ assert.equal(afterRestart.status,200,JSON.stringify({afterRestart:afterRestart.body,locks:safeLocks}));
+ assert.equal(afterRestart.body.timeoutQuarantineRequired,false);
+ assert.equal(afterRestart.body.timeoutQuarantine.quarantineId,payload.quarantineId);
+ const parentAfterRestart=(await h.get('/runs/'+run.runId+'/locks')).body.accesses.find(access=>access.accessId===start.operation_id);
+ assert.ok(['HELD','UNKNOWN'].includes(parentAfterRestart.state));
+ assert.equal(parentAfterRestart.timeoutQuarantine.quarantineId,payload.quarantineId);
+
+ const lease=await h.post('/runs/'+run.runId+'/test-resources/acquire',{version:run.version,
+  transactionId:'timeout-port-browser-lease',resources:[browserWrite],evidence:['same-run browser lease']});
+ assert.equal(lease.status,200,JSON.stringify({status:lease.status,error:lease.body?.error,state:lease.body?.state}));
+ const browser=h.approval(run,'timeout-port-browser-read');browser.files=[];browser.commands=['node frontend/tests/browser-check.mjs'];
+ browser.resources=[fileRead,{key:portWrite.key,mode:'read'},browserWrite];
+ browser.expected_revisions={[fileRead.key]:0,[portWrite.key]:0,[browserWrite.key]:0};
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(browser);
+ const browserRequest=await h.post('/validation/request',{approval:browser});assert.equal(browserRequest.status,202,
+  JSON.stringify({status:browserRequest.status,error:browserRequest.body?.error}));
+ const browserDecision=await h.post('/runs/'+run.runId+'/decision/'+browser.requestId,{decision:'approved'});
+ assert.equal(browserDecision.status,201,JSON.stringify({status:browserDecision.status,error:browserDecision.body?.error}));
+ const readAccess=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:browser.operation_id,
+  operationDigest:browser.operation_digest,resources:browser.resources,expectedRevisions:browser.expected_revisions});
+ assert.equal(readAccess.status,200,JSON.stringify({status:readAccess.status,error:readAccess.body?.error,state:readAccess.body?.state}));
+ assert.equal(readAccess.body.state,'HELD');
+ assert.deepEqual(readAccess.body.resources,[...browser.resources].sort((a,b)=>a.key.localeCompare(b.key)));
+ assert.equal(h.native.replies.length,repliesBefore);
+ const replay=await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',payload);
+ assert.equal(replay.status,200);assert.equal(replay.body.timeoutQuarantine.quarantineId,payload.quarantineId);
+});
+
+
 test('un journal durable indisponible conserve UNKNOWN et protège le manifeste',async t=>{
  const h=await setup(t);const run=await h.reserve('restore-log-unavailable',{resources:[{key:'file:src/restore.py',mode:'write'}]});
  const approval=h.approval(run,'restore-log-unavailable');approval.files=['src/restore.py'];approval.commands=[];
@@ -373,7 +859,7 @@ test('une réponse perdue sans permission native restante conserve UNKNOWN sans 
     state:{status:'running',input:{filePath:h.directory+'/src/restore.py',content:'replacement'},time:{start:stamp}}},
  ]});
  await h.stop();
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  const state=JSON.parse(readFileSync(statePath,'utf8'));
  const operation=state.coordination.operations[approval.operation_id];
  operation.state='UNKNOWN';operation.native.onceAcknowledged=false;
@@ -389,7 +875,7 @@ test('refuse une permission pendante dont le callID diverge de l’opération du
  const h=await setup(t);const run=await h.reserve('restore-callid-mismatch',{resources:[{key:'file:src/restore.py',mode:'write'}]});
  const {approval}=await h.approvedEditAccess(run,'restore-callid-mismatch','src/restore.py');
  await h.execute(approval);assert.equal(h.native.replies.length,1);
- const statePath=join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json');
+ const statePath=join(runtimeStateDirectory(h.directory),'controller-runs.json');
  await h.stop();
  const state=JSON.parse(readFileSync(statePath,'utf8'));const operation=state.coordination.operations[approval.operation_id];
  operation.state='UNKNOWN';operation.native.onceAcknowledged=false;operation.native.callId='call-original';
@@ -559,7 +1045,7 @@ test('deux déclarations concurrentes ne perdent aucun passage et une persistanc
   const before = (await h.get('/runs/steps/job')).body.lifecycle;
   assert.equal(before.sequence, 1);
   const target = before.history[0].id === 'REVIEW' ? 'IMPLEMENTATION' : 'REVIEW';
-  const temporary = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'steps',
+  const temporary = join(runtimeStateDirectory(h.directory), 'runs', 'steps',
     String(run.contextId || run.version), 'controller-job.json.tmp');
   mkdirSync(temporary);
   assert.equal((await progress(target, 1)).status, 400);
@@ -784,7 +1270,7 @@ test('attach sérialise la libération concurrente pendant la lecture native', a
   assert.equal(h.native.replies.length, 1);
 });
 
-test('une décision approuvée perdue après redémarrage ne sert qu’au rattachement pour annulation', async (t) => {
+test('reprise historique sans checkpoint : une décision perdue ne sert qu’au rattachement pour annulation', async (t) => {
   const h = await setup(t); const a = await h.reserve('attach-restart');
   const { approval, access } = await h.approvedAccess(a, 'restart-parent'); await h.execute(approval);
   const diagnostic = h.approval(a, 'restart-diagnostic'); diagnostic.access_id = access.accessId;
@@ -796,7 +1282,9 @@ test('une décision approuvée perdue après redémarrage ne sert qu’au rattac
   request.state.status = 'completed'; request.state.time = { start: Date.now(), end: Date.now() + 1 };
   request.state.output = JSON.stringify({ ...diagnostic, status: 'APPROVED', reviewer: 'CGPT',
     decision_applied_at: new Date().toISOString() });
-  await h.stop(); await h.start();
+  await h.stop();
+  unlinkSync(join(runtimeStateDirectory(h.directory), 'runs', a.runId, String(a.contextId), 'controller-communication.json'));
+  await h.start();
   const decision = await h.get('/runs/' + a.runId + '/decision/' + diagnostic.requestId);
   assert.equal(decision.body, null, JSON.stringify(decision));
   const payload = { version: a.version,
@@ -955,7 +1443,7 @@ async function orphanedPreflight(t, mutate = () => {}) {
     output: JSON.stringify({ ...approval, status: 'PENDING', notification_status: 'FAILED' }) };
   await h.stop();
   // Reproduire l'état durable produit par l'ancienne admission, uniquement dans la fixture arrêtée.
-  const registry = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  const registry = new ResourceRunRegistry(h.directory, join(runtimeStateDirectory(h.directory)));
   await registry.acquireAuthority();
   try {
     registry.prepareOperation(a.runId, approval, { candidateSession: recovery.sessionId });
@@ -998,7 +1486,7 @@ for(const timeout of [false,true])test(`demande orpheline en pause : admission a
   for(const decision of ['approved','needs_clarification'])assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision})).status,400);
   const after=(await h.get('/runs')).body;
   assert.equal(after.requestOwners[approval.requestId].reconciliation.outcome,'REJECTION_ONLY');
-  const restored=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode/state/cgpt-approval-bridge'));
+  const restored=new ResourceRunRegistry(h.directory,join(runtimeStateDirectory(h.directory)));
   assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly,true);
   assert.equal((await h.post('/runs/a/decision/'+approval.requestId,{decision:'rejected'})).status,201);
   assert.deepEqual(h.native.replies,[]);
@@ -1056,7 +1544,7 @@ test('prévol orphelin : rejet seul durable, notifications répétées, pair act
   const after = (await h.get('/runs')).body;
   assert.deepEqual(after.runs.find((r) => r.runId === 'b'), before.runs.find((r) => r.runId === 'b'));
   assert.deepEqual(after.coordination.accesses, before.coordination.accesses);
-  const restored = new ResourceRunRegistry(h.directory, join(h.directory, '.opencode/state/cgpt-approval-bridge'));
+  const restored = new ResourceRunRegistry(h.directory, join(runtimeStateDirectory(h.directory)));
   assert.deepEqual(restored.requestOwners[approval.requestId].reconciliation, receipt.body);
   assert.equal(restored.resourceState.operations[approval.operation_id].rejectionOnly, true);
   assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'rejected' })).status, 201);
@@ -1143,13 +1631,13 @@ test('réconciliation orpheline : propriétaire ou opération absent/divergent n
   });
 });
 
-test('réconciliation orpheline : un reçu après perte du contexte ne restaure aucune décision', async (t) => {
+test('réconciliation orpheline : reçu durable après restart, rejet seul sans décision inventée', async (t) => {
   const { h, payload, approval } = await orphanedPreflight(t);
   assert.equal((await h.get('/status')).body.notificationReconciliation, 'rejection-only-v1');
   const result = await h.post('/runs/a/validation/reconcile', payload); assert.equal(result.status, 201);
   await h.stop(); await h.start();
   await h.post('/broker/readiness', { status: 'BLOCKED', pending_count: 1 });
-  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).body.error, 'notification-reconciliation-context-lost');
+  assert.equal((await h.post('/runs/a/validation/reconcile', payload)).status, 200);
   assert.equal((await h.post('/runs/a/decision/' + approval.requestId, { decision: 'approved' })).status, 400);
   assert.equal((await h.get('/runs/a/decision/' + approval.requestId)).status, 404);
   assert.deepEqual((await h.get('/runs')).body.requestOwners[approval.requestId].reconciliation, result.body);
@@ -1221,8 +1709,8 @@ test('une identité déclarée ne remplace pas le tool part natif de la session 
   const claimed = { ...h.approval(a, 'forged-request'), run_id: b.runId, change_id: b.changeId,
     session_id: b.sessionId, reservation_version: b.version, resources: b.resources };
   const response = await h.post('/validation/request', { approval: claimed });
-  assert.equal(response.status, 409);
-  assert.equal(response.body.error, 'native-validation-not-correlated');
+  assert.equal(response.status, 503);
+  assert.equal(response.body.error, 'native-validation-evidence-unavailable');
   assert.equal(h.native.replies.length, 0);
 });
 
@@ -1332,7 +1820,7 @@ test('request_validation Code Mode lie le requestId natif et compare les cartes 
  const held=h.approval(run,'held-before-bound-request-id');held.files=['src/protected.md'];held.commands=[];
  held.resources=[{key:'file:src/protected.md',mode:'write'}];held.expected_revisions={'file:src/protected.md':0};
  await h.stop();
- const registry=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode','state','cgpt-approval-bridge'));
+ const registry=new ResourceRunRegistry(h.directory,join(runtimeStateDirectory(h.directory)));
  await registry.acquireAuthority();
  try{
   const prepared=registry.prepareOperation(run.runId,held);
@@ -1387,7 +1875,7 @@ test('request_validation Code Mode lie le requestId mais refuse une identité na
    output:'request_validation terminé',metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',
     status:'completed',input:nativeInput}]}}}];
  const response=await h.post('/validation/request',{approval});
- assert.equal(response.status,409);assert.equal(response.body.error,'native-validation-not-correlated');
+ assert.equal(response.status,503);assert.equal(response.body.error,'native-validation-evidence-unavailable');
  const admission=await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission');
  assert.equal(admission.status,404);assert.equal(h.native.permissions.length,0);assert.equal(h.native.replies.length,0);
 });
@@ -1402,7 +1890,7 @@ test('request_validation Code Mode brut terminé refuse les métadonnées non ex
    h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
    h.native.messages[run.sessionId].at(-1).parts[0].state.metadata.truncated=true;
   }else if(variant==='call-status'){
-   calls=[{...calls[0],status:'error'}];
+   calls=[{...calls[0],status:'unknown-phase'}];
    h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
   }else h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationCompleted(approval.requestId,calls)];
   const response=await h.post('/validation/request',{approval});
@@ -1418,7 +1906,7 @@ test('request_validation Code Mode en cours est admis sur ressource disjointe av
  const held=h.approval(run,'held-before-restart');held.files=['src/protected.md'];held.commands=[];
  held.resources=[{key:'file:src/protected.md',mode:'write'}];held.expected_revisions={'file:src/protected.md':0};
  await h.stop();
- const registry=new ResourceRunRegistry(h.directory,join(h.directory,'.opencode','state','cgpt-approval-bridge'));
+ const registry=new ResourceRunRegistry(h.directory,join(runtimeStateDirectory(h.directory)));
  await registry.acquireAuthority();
  try{
   const prepared=registry.prepareOperation(run.runId,held);
@@ -1466,7 +1954,7 @@ test('request_validation Code Mode en cours est admis sur ressource disjointe av
 });
 
 test('request_validation Code Mode en cours refuse les métadonnées actives divergentes',async t=>{
- for(const variant of ['divergent-input','extra-tool','truncated','executed','call-completed'])await t.test(variant,async t=>{
+ for(const variant of ['divergent-input','extra-tool','truncated','executed','call-status-unknown'])await t.test(variant,async t=>{
   const h=await setup(t);const run=await h.reserve('active-codemode-'+variant);
   const approval=h.approval(run,'active-codemode-'+variant);
   let input=structuredClone(approval),calls=[{tool:'cgpt-validation.request_validation',status:'running',input}];
@@ -1475,7 +1963,7 @@ test('request_validation Code Mode en cours refuse les métadonnées actives div
   if(variant==='extra-tool')calls=[{tool:'bash',status:'completed',input:{command:'true'}},...calls];
   if(variant==='truncated')overrides.truncated=true;
   if(variant==='executed')overrides.executed=true;
-  if(variant==='call-completed')calls[0].status='completed';
+  if(variant==='call-status-unknown')calls[0].status='unknown';
   h.native.messages[run.sessionId].at(-1).parts=[rawCodeModeValidationRunning(approval.requestId,input,calls,overrides)];
   const response=await h.post('/validation/request',{approval});
   assert.equal(response.status,409,JSON.stringify(response));assert.equal(response.body.error,'native-validation-not-correlated');
@@ -1505,7 +1993,7 @@ test('récupération de A avec B actif : réservation conservée et génération
   let stamp;
   const recovery = { jobId: 'job-a', expectedSessionId: 'ses_a', sessionId: 'ses_a_new', recoveryId: 'recovery-a', preflightRequestId: 'preflight-a' };
   assert.equal((await h.post('/runs/a/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
-  const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'a');
+  const runStateDirectory = join(runtimeStateDirectory(h.directory), 'runs', 'a');
   const runContext = readdirSync(runStateDirectory)[0];
   const jobStatePath = join(runStateDirectory, runContext, 'controller-job.json');
   const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
@@ -1552,7 +2040,7 @@ for (const invalidDiscovery of ['duplicate', 'truncated', 'untimed', 'divergent'
     const recovery = { jobId: 'job-legacy-invalid', expectedSessionId: 'ses_legacy-invalid',
       sessionId: 'ses_legacy-invalid_new', recoveryId: 'recovery-legacy-invalid', preflightRequestId: 'preflight-legacy-invalid' };
     assert.equal((await h.post('/runs/legacy-invalid/job/recover', { ...recovery, phase: 'prepare' })).status, 200);
-    const runStateDirectory = join(h.directory, '.opencode', 'state', 'cgpt-approval-bridge', 'runs', 'legacy-invalid');
+    const runStateDirectory = join(runtimeStateDirectory(h.directory), 'runs', 'legacy-invalid');
     const jobStatePath = join(runStateDirectory, readdirSync(runStateDirectory)[0], 'controller-job.json');
     const persistedJob = JSON.parse(readFileSync(jobStatePath, 'utf8'));
     delete persistedJob.recovery.preparationHistory.requestValidationSignatureHash;
@@ -1643,7 +2131,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.1.72');
+  assert.equal(initialized.result.serverInfo.version, '2.2.12');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -1894,7 +2382,7 @@ test('migration HTTP conserve les RUN et exige once exact avant leur reprise mé
   const legacy = (await h.get('/runs')).body; legacy.schemaVersion = 3;
   delete legacy.coordination; delete legacy.coordinationProtocol;
   await h.stop();
-  const state = join(h.directory,'.opencode','state','cgpt-approval-bridge');
+  const state = join(runtimeStateDirectory(h.directory));
   writeFileSync(join(state,'controller-runs.json'),JSON.stringify(legacy)+'\n');
   await h.start();
   // A nominal cohort proof requires the initial SSE connection to be established.
@@ -3096,6 +3584,38 @@ function appendNativeCancelledTranscript(h, approval, { status='CANCELLED', canc
  ]});
 }
 
+function wrapNativeRequestValidationInCodeMode(h,approval) {
+ const messages=h.native.messages[approval.session_id];let replaced=0;
+ for(const message of messages){
+  if(!Array.isArray(message.parts))continue;
+  message.parts=message.parts.map(part=>{
+   if(part?.tool!=='cgpt-validation_request_validation'||part.state?.input?.requestId!==approval.requestId)return part;
+   replaced++;
+   return {type:'tool',id:'execute-'+approval.requestId,callID:'call-execute-'+approval.requestId,
+    tool:'execute',executed:false,state:{status:'completed',input:{code:'const payload = runtimeInput; return await tools["cgpt-validation"].request_validation(payload);'},
+     output:JSON.stringify({...structuredClone(approval),status:'PENDING'}),
+     time:{start:Date.now()-3,end:Date.now()-2},metadata:{truncated:false,toolCalls:[
+      {tool:'cgpt-validation.request_validation',status:'completed',input:structuredClone(approval)},
+     ]}}};
+  });
+ }
+ assert.equal(replaced,1,'exact native request is represented by one Code Mode wrapper');
+}
+
+function appendNativeCodeModeCancelledTranscript(h,approval,{variant}={}) {
+ const command='const r = await search({query: "cancel_approval", namespace: "cgpt-validation", limit: 20}); if (r.items[0].path !== \'tools["cgpt-validation"].cancel_approval\') throw new Error("UNEXPECTED_PATH"); return await tools["cgpt-validation"].cancel_approval({approval_id: '+JSON.stringify(approval.approval_id)+'});';
+ const result={...structuredClone(approval),status:'CANCELLED',cancelled_by:'OC',...(variant==='wrong-result'?{requestId:'other-request'}:{})};
+ const toolCalls=[
+  {tool:'search',status:'completed',input:{query:'cancel_approval',namespace:'cgpt-validation',limit:20}},
+  {tool:'cgpt-validation.cancel_approval',status:'completed',input:{approval_id:approval.approval_id}},
+ ];
+ if(variant==='extra-tool')toolCalls.push({tool:'bash',status:'completed',input:{command:'/usr/bin/true'}});
+ h.native.messages[approval.session_id].push({parts:[{type:'tool',id:'execute-cancel-'+approval.requestId,
+  callID:'call-execute-cancel-'+approval.requestId,tool:'execute',executed:false,
+  state:{status:'completed',input:{code:variant==='code-divergent'?command+' ':command},output:JSON.stringify(result),
+   time:{start:Date.now()-1,end:Date.now()},metadata:{truncated:variant==='truncated',toolCalls}}}]});
+}
+
 test('annulation native OC : clôture préparée sans décision, accès, permission ou once',async t=>{
  const h=await setup(t);const run=await h.reserve('native-cancelled');const approval=h.approval(run,'native-cancelled-request');
  assert.equal((await h.post('/runs/native-cancelled/validation/request',{approval})).status,202);
@@ -3110,7 +3630,7 @@ test('annulation native OC : clôture préparée sans décision, accès, permiss
  const status=(await h.get('/runs/native-cancelled/status')).body;
  const decision=await h.get('/runs/native-cancelled/decision/'+approval.requestId);
  const operation=(await h.get('/runs/native-cancelled/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
- const state=JSON.parse(readFileSync(join(h.directory,'.opencode','state','cgpt-approval-bridge','controller-runs.json'),'utf8'));
+ const state=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory),'controller-runs.json'),'utf8'));
  const durable=state.coordination.operations[approval.operation_id];
  assert.equal(status.undecidedValidationCount,0);assert.equal(decision.status,404);
  assert.equal(operation.state,'CANCELLED');assert.equal(operation.decision,null);
@@ -3120,6 +3640,67 @@ test('annulation native OC : clôture préparée sans décision, accès, permiss
  assert.equal(h.native.permissions.length,0);assert.deepEqual(h.native.replies,[]);
  const next=h.approval(run,'native-cancelled-next');
  assert.equal((await h.post('/runs/native-cancelled/validation/request',{approval:next})).status,202);
+});
+
+test('annulation native OC sous Code Mode : request et cancel imbriqués réconciliés exactement',async t=>{
+ const h=await setup(t);const run=await h.reserve('native-cancelled-codemode');
+ const approval=h.approval(run,'native-cancelled-codemode-request');
+ assert.equal((await h.post('/runs/native-cancelled-codemode/validation/request',{approval})).status,202);
+ wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval);
+ await h.stop();await h.start();
+ assert.equal((await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'})).status,202);
+ await waitFor(async()=>{
+  const status=(await h.get('/runs/native-cancelled-codemode/status')).body;
+  const ops=(await h.get('/runs/native-cancelled-codemode/operations?operationId='+encodeURIComponent(approval.operation_id))).body;
+  return status.undecidedValidationCount===0&&ops.operations?.[0]?.state==='CANCELLED';
+ });
+ const op=(await h.get('/runs/native-cancelled-codemode/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
+ const decision=await h.get('/runs/native-cancelled-codemode/decision/'+approval.requestId);
+ assert.equal(op.state,'CANCELLED');assert.equal(op.decision,null);assert.equal(decision.status,404);
+ assert.equal(h.native.permissions.length,0);assert.deepEqual(h.native.replies,[]);
+});
+
+for (const restart of [false, true]) test(`annulation native OC approuvée non consommée : historique conservé, restart=${restart}`, async t => {
+ const h=await setup(t), run=await h.reserve('approved-cancel');
+ const approval=h.approval(run,'approved-cancel-request');
+ assert.equal((await h.post('/runs/approved-cancel/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/approved-cancel/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval);
+ if(restart){await h.stop();await h.start();}
+ await delay(60);
+ await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY',root_cause:'DECISION_WAIT_WITHOUT_PROGRESS'});
+ await delay(60);
+ h.native.emit({type:'session.idle',properties:{sessionID:approval.session_id}});
+ await waitFor(async()=>{
+  const ops=(await h.get('/runs/approved-cancel/operations?operationId='+encodeURIComponent(approval.operation_id))).body;
+  return ops.operations?.[0]?.state==='CANCELLED';
+ });
+ const state=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory), 'controller-runs.json'),'utf8'));
+ const op=state.coordination.operations[approval.operation_id];
+ assert.equal(op.decision.status,'approved');assert.equal(op.native,undefined);
+ assert.match(op.completionDigest,/^[a-f0-9]{64}$/);
+ assert.equal((await h.get('/runs/approved-cancel/decision/'+approval.requestId)).status,404);
+ assert.deepEqual(h.native.replies,[]);assert.deepEqual((await h.get('/runs/approved-cancel/locks')).body.accesses,[]);
+ await h.stop();await h.start();
+ assert.equal((await h.get('/runs/approved-cancel/decision/'+approval.requestId)).status,404);
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const next=await h.post('/runs/approved-cancel/validation/request',{approval:h.approval(run,'approved-cancel-next')});
+ assert.equal(next.status,202,JSON.stringify(next)+' '+h.getStderr());
+});
+
+test('annulation native OC sous Code Mode : wrappers divergents ou avec appels supplémentaires restent protégés',async t=>{
+ for(const variant of ['code-divergent','extra-tool','truncated','wrong-result'])await t.test(variant,async subtest=>{
+  const h=await setup(subtest);const run=await h.reserve('native-cancelled-codemode-'+variant);
+  const approval=h.approval(run,'native-cancelled-codemode-request-'+variant);
+  assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+  wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval,{variant});
+  await h.stop();await h.start();
+  await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});await delay(60);
+  const operation=(await h.get('/runs/'+run.runId+'/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0];
+  assert.equal(operation.state,'PREPARED',variant);assert.equal(operation.completionDigest,undefined,variant);
+  assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404,variant);
+  assert.deepEqual(h.native.replies,[],variant);assert.equal(h.native.permissions.length,0,variant);
+ });
 });
 
 test('annulation native OC : divergence ou activité conserve l’opération PREPARED',async t=>{
@@ -3208,4 +3789,550 @@ test('rejet natif : preuve divergente, outil additionnel, session active ou perm
   assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+encodeURIComponent(approval.operation_id))).body.operations[0].state,'PREPARED',variant);
   assert.equal(h.native.replies.length,0,variant);
  }
+});
+
+
+async function reviewedCancellationFixture(t) {
+ const h=await setup(t,{sourceFiles:{'src/reviewed-cancel.py':'# reviewed pure helper\n'}}),run=await h.reserve('reviewed-cancel'),approval=h.approval(run,'reviewed-cancel-request');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);
+ for(const id of ['review-call-a','review-call-b'])h.native.messages[run.sessionId].push({nativeV2:{
+  id:'msg_'+id,type:'assistant',time:{created:Date.now()},finish:'error',content:[{type:'tool',id,name:'shell',executed:false,
+   time:{created:Date.now()-3,ran:Date.now()-2,completed:Date.now()-1},state:{status:'error',input:{command:approval.commands[0]},
+   error:{type:'aborted',message:'synthetic programmatic rejection'},metadata:{},content:[]}}]}});
+ appendNativeCodeModeCancelledTranscript(h,approval);
+ const evidence=await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id);
+ assert.equal(evidence.status,200,JSON.stringify(evidence));assert.equal(evidence.body.calls.length,2);
+ assert.equal(evidence.body.journal.coverage,'MISSING_RELEVANT_CALLS');
+ const policy={policyId:'review-policy',ownerId:run.ownerId,version:run.version,actions:['cancel-reviewed-validation'],
+  resources:run.resources,authorization:'developer approved autonomous change; code and audit review by orchestrator'};
+ assert.equal((await h.post('/runs/'+run.runId+'/recovery/policy',policy)).status,201);
+ const plan=(await h.get('/runs/'+run.runId+'/recovery')).body;
+ const payload={actionId:'review-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,
+  action:'cancel-reviewed-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.body.nativeBoundaryDigest,
+  review:{ownerId:run.ownerId,effect:'READ_ONLY',commandSha256:evidence.body.commandSha256,sourceFiles:[{path:'src/reviewed-cancel.py',sha256:createHash('sha256').update('# reviewed pure helper\n').digest('hex')}],evidenceRefs:['audit/code-review'],
+  rejectedCalls:evidence.body.calls.map((call,i)=>({callId:call.callId,permissionId:'per_review_'+i,auditExecutionId:'exec-audit-'+i,ackStatus:204}))}}};
+ return {h,run,approval,payload};
+}
+test('revue orchestrateur : annule une validation sans once, conserve approved et issue native indéterminée',async t=>{
+ const {h,run,approval,payload}=await reviewedCancellationFixture(t);
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ assert.equal(result.body.executionOutcome,'UNDETERMINED_READ_ONLY');assert.equal(result.body.evidenceAuthority,'ORCHESTRATOR_AUDIT_REVIEW');
+ assert.deepEqual((await h.post('/runs/'+run.runId+'/recovery/action',payload)).body,result.body);
+ assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404);
+ let op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,'CANCELLED');assert.equal(op.decision.status,'approved');assert.equal(op.onceAcknowledged,null);
+ assert.equal(op.native,null);assert.equal(op.access,null);assert.equal(op.executionOutcome,'UNDETERMINED_READ_ONLY');
+ assert.deepEqual(h.native.replies,[]);assert.ok(!JSON.stringify(result.body).includes('NO_EFFECT'));
+ await h.stop();await h.start();
+ op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.executionOutcome,'UNDETERMINED_READ_ONLY');
+});
+for(const variant of ['write','digest','stale-native','source-outside','source-hash','uncovered-native','consumed'])test('revue HTTP refuse '+variant,async t=>{
+ const {h,run,approval,payload}=await reviewedCancellationFixture(t);
+ if(variant==='write')payload.input.review.effect='WRITE';
+ if(variant==='digest')payload.input.review.commandSha256='0'.repeat(64);
+ if(variant==='stale-native')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ if(variant==='source-hash')payload.input.review.sourceFiles[0].sha256='0'.repeat(64);
+ if(variant==='consumed'){
+  const acquired=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions});
+  assert.equal(acquired.status,200,JSON.stringify(acquired));await h.execute(approval);
+ }
+ if(variant==='source-outside')payload.input.review.sourceFiles=[{path:'outside.py',sha256:'0'.repeat(64)}];
+ if(variant==='uncovered-native')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',executed:true,callID:'unreviewed-effect',state:{status:'completed',input:{command:'/usr/bin/true'},output:''}}]});
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.ok([400,403,409].includes(result.status),JSON.stringify(result));
+ const op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,variant==='consumed'?'EXECUTING':'PREPARED');assert.equal(op.decision.status,'approved');
+ assert.equal(h.native.replies.length,variant==='consumed'?1:0);
+});
+test('extension HTTP additive : held conservé, génération stable, scope CAS et aucun effet natif',async t=>{
+ const h=await setup(t),run=await h.reserve('extend-compatible',{resources:[{key:'port:host-a/5173',mode:'write'}]}),approval=h.approval(run,'held-before-extension');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const acquired=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:approval.operation_id,
+  operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions});
+ assert.equal(acquired.status,200,JSON.stringify(acquired));
+ const plan=(await h.get('/runs/'+run.runId+'/recovery')).body;
+ assert.equal(plan.decisionOwner,'orchestrator');assert.equal(plan.humanDecisionRequired,false);
+ const input={extensionId:'http-compatible-extension',ownerId:run.ownerId,version:run.version,
+  expectedManifestDigest:plan.manifestDigest,resources:[{key:'port:host-a/5174',mode:'write'}],
+  authorization:'same approved change; independent test origin',evidence:['audit/new-port-review']};
+ const result=await h.post('/runs/'+run.runId+'/extend-compatible',input);assert.equal(result.status,201,JSON.stringify(result));
+ assert.equal(result.body.version,run.version);
+ assert.deepEqual((await h.post('/runs/'+run.runId+'/extend-compatible',input)).body,result.body);
+ const access=(await h.get('/runs/'+run.runId+'/locks')).body.accesses[0];
+ assert.equal(access.token,acquired.body.token);assert.equal(access.fencing,acquired.body.fencing);assert.equal(access.state,'HELD');
+ assert.deepEqual(h.native.replies,[]);
+});
+
+
+test('revue : transport NOT_ADMITTED audité ignoré sans masquer une admission ou un effet',async t=>{
+ const {h,run,approval,payload}=await reviewedCancellationFixture(t);
+ const input={...structuredClone(approval),requestId:'unadmitted-retry',approval_id:'approval-unadmitted',operation_id:'op-unadmitted'};
+ const wrapper={type:'tool',tool:'execute',callID:'retry-wrapper',executed:false,state:{status:'completed',input:{code:'const result = await tools["cgpt-validation"].request_validation(retry); return result;'},
+  output:JSON.stringify({...input,status:'NOT_ADMITTED'}),metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',status:'completed',input}]}}};
+ h.native.messages[run.sessionId].splice(-1,0,{parts:[wrapper]});
+ const evidence=await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id);
+ payload.input.nativeBoundaryDigest=evidence.body.nativeBoundaryDigest;
+ payload.input.review.wrapperReviews=[{callId:wrapper.callID,codeSha256:createHash('sha256').update(wrapper.state.input.code).digest('hex'),effect:'VALIDATION_TRANSPORT_ONLY',returnsNativeResult:true}];
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'CANCELLED');assert.equal(result.body.executionOutcome,'UNDETERMINED_READ_ONLY');
+});
+
+async function portReconciliationFixture(t) {
+ const packageContent=JSON.stringify({scripts:{dev:'vite'}}),port={key:'port:host-a/5173',mode:'write'},file={key:'file:frontend',mode:'write'};
+ const h=await setup(t,{sourceFiles:{'frontend/package.json':packageContent}}),run=await h.reserve('reconcile-port',{resources:[port,file]});
+ const approval=h.approval(run,'reconcile-port-original');approval.resources=[port];approval.expected_revisions={[port.key]:0};
+ approval.commands=['cd frontend && npm run dev -- --port 5173'];
+ const requestPart=h.native.messages[run.sessionId].at(-1).parts[0];requestPart.state.input=structuredClone(approval);
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const acquire=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:[port],expectedRevisions:approval.expected_revisions});
+ assert.equal(acquire.status,200,JSON.stringify(acquire));await h.execute(approval);
+ requestPart.state.status='completed';requestPart.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const stamp=Date.now()+1;
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'shell',callID:'call-'+approval.requestId,executed:false,state:{status:'completed',input:{command:approval.commands[0]},output:'Command timed out',time:{start:stamp,end:stamp+100},metadata:{timeout:true}}}]});
+ await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const preview=await h.get('/runs/'+run.runId+'/locks/timeout-quarantine-preview?operationId='+approval.operation_id);
+ assert.equal(preview.status,200,JSON.stringify(preview));
+ assert.equal((await h.post('/runs/'+run.runId+'/locks/quarantine-timeout',{version:run.version,operationId:approval.operation_id,fencing:preview.body.fencing,
+  quarantineId:'port-recovery-quarantine',boundaryDigest:preview.body.boundaryDigest,evidence:['native timeout observed']})).status,200);
+ const probes=[];const native=(await h.nativeClient.info()).pid,identity=await processIdentity(native);
+ const initialEvidence=(await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id)).body;
+ assert.ok(initialEvidence.nativeInstanceEvidence);const instance=initialEvidence.nativeInstanceEvidence;
+ for(const nonce of ['probe-port-a','probe-port-b']) {
+  const params={workspace:h.directory,nativePid:native,port:5173,runtimeDirectories:['.'],nonce:'op-'+nonce,resourceKey:port.key,excludedInfrastructure:[],instanceObservedAt:instance.observedAt,instanceStartTime:instance.startTime,instanceEvidenceKind:instance.kind};
+  const probe=h.approval(run,nonce);probe.commands=[portProbeCommand(params)];probe.resources=[{...port,mode:'read'}];probe.expected_revisions={[port.key]:0};
+  h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(probe);
+  assert.equal((await h.post('/validation/request',{approval:probe})).status,202);
+  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+probe.requestId,{decision:'approved'})).status,201);
+  const acquired=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:probe.operation_id,operationDigest:probe.operation_digest,resources:probe.resources,expectedRevisions:probe.expected_revisions});
+  assert.equal(acquired.status,200,JSON.stringify(acquired));await h.execute(probe);
+  const capture={protocol:'cab-port-boundary-v1',nonce:params.nonce,nativePid:native,port:5173,runtimeDirectories:['.'],workspace:h.directory,
+   observedAt:Date.now(),instanceObservedAt:instance.observedAt,instanceEvidenceKind:instance.kind,nativeStartedAtMs:instance.observedAt-1000,nativeStartedAtUpperBound:instance.observedAt,complete:true,quiescent:true,nativeUid:process.getuid(),nativeStartTime:identity.startTime,cgroupDigest:instance.cgroupDigest,netnsDigest:'d'.repeat(64),
+   listening:false,matchingProcessCount:0,matchingProcesses:[],matchingProcessesDigest:proofHash([])};
+  capture.captureDigest=proofHash(capture);
+  await h.completeTool(probe,0,{nativeShell:true,output:'CAB_PORT_BOUNDARY_V1:'+Buffer.from(JSON.stringify(capture)).toString('base64')+'\n'});
+  const released=await h.releaseOperation(run,probe,acquired.body,'NO_EFFECT');assert.equal(released.status,200,JSON.stringify(released));
+  assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+probe.operation_id)).body.operations[0].state,'COMPLETED');probes.push(probe.operation_id);
+ }
+ const evidence=await h.get('/runs/'+run.runId+'/recovery/native-evidence?operationId='+approval.operation_id);
+ assert.equal(evidence.status,200,JSON.stringify(evidence));
+ const policy={policyId:'port-recovery-policy',ownerId:run.ownerId,version:run.version,actions:['reconcile-quarantined-port'],resources:[port],authorization:'same change; orchestrator reviewed Vite boundary'};
+ assert.equal((await h.post('/runs/'+run.runId+'/recovery/policy',policy)).status,201);
+ const plan=(await h.get('/runs/'+run.runId+'/recovery')).body;
+ const payload={actionId:'port-recovery-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'reconcile-quarantined-port',targetId:approval.operation_id,
+  input:{nativeBoundaryDigest:evidence.body.nativeBoundaryDigest,probeOperationIds:probes,review:{ownerId:run.ownerId,serverKind:'VITE_LOCAL_DEV_SERVER',
+   commandSha256:evidence.body.commandSha256,runtimeDirectories:['.'],sourceFiles:[{path:'frontend/package.json',sha256:createHash('sha256').update(packageContent).digest('hex')}],
+   noDetachedWorkOutsideDirectories:true,noProcessIsolationOrCredentialChange:true,evidenceRefs:['audit/vite-scope-review']}}};
+ return {h,run,approval,payload};
+}
+test('port quarantiné : deux sondes natives clôturent RECONCILED sans exit historique ni once rejouée',async t=>{
+ const {h,run,approval,payload}=await portReconciliationFixture(t),before=h.native.replies.length;
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'RELEASED');assert.equal(result.body.executionOutcome,'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT');
+ const op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,'CANCELLED');assert.equal(op.onceAcknowledged,true);assert.equal(op.nativeResult,null);assert.equal(op.executionOutcome,result.body.executionOutcome);
+ assert.equal(h.native.replies.length,before);assert.deepEqual((await h.post('/runs/'+run.runId+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ const restored=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(restored.executionOutcome,result.body.executionOutcome);
+});
+for(const variant of ['same-probe','source','command','owner'])test('port quarantiné : refuse '+variant,async t=>{
+ const {h,run,approval,payload}=await portReconciliationFixture(t);
+ if(variant==='same-probe')payload.input.probeOperationIds[1]=payload.input.probeOperationIds[0];
+ if(variant==='source')payload.input.review.sourceFiles[0].sha256='0'.repeat(64);
+ if(variant==='command')payload.input.review.commandSha256='0'.repeat(64);
+ if(variant==='owner')payload.input.review.ownerId='foreign';
+ const result=await h.post('/runs/'+run.runId+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ const op=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'EXECUTING');assert.equal(op.onceAcknowledged,true);assert.equal(op.access.state,'HELD');
+});
+
+async function boundaryRecoveryFixture(t,{terminal=false}={}) {
+ const content='console.log("syntax fixture");\n',file='src/boundary.js';
+ const h=await setup(t,{nativeShellFixtures:true,sourceFiles:{[file]:content}});
+ const run=await h.reserve('boundary-'+(terminal?'terminal':'pending'),{resources:[{key:'file:src',mode:'write'}]});
+ const approval=h.approval(run,'boundary-request');approval.commands=['node --check '+file];
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ const base='/runs/'+run.runId;
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ if(terminal)assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);
+ const request=h.native.messages[run.sessionId].at(-1).parts[0];request.state.status='completed';
+ request.state.output=JSON.stringify({...approval,status:terminal?'APPROVED':'PENDING',...(terminal?{reviewer:'CGPT'}:{})});
+ if(terminal) {
+  const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'shell',callID:'boundary-terminal-call',executed:false,
+   state:{status:'completed',input:{command:approval.commands[0],workdir:h.directory,background:false},output:'(no output)',
+    metadata:{truncated:false,exit:0},time:{start:stamp-1,end:stamp}}}]});
+ } else {
+  await h.stop();
+  unlinkSync(join(runtimeStateDirectory(h.directory), 'runs',run.runId,String(run.contextId),'controller-communication.json'));
+  await h.start();
+  const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',callID:'boundary-pending-read',
+   state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'PENDING',expires_at:new Date(stamp+600000).toISOString()}),
+    metadata:{truncated:false},time:{start:stamp-1,end:stamp}}}]});
+ }
+ await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY',by_run:{[run.runId]:{status:'READY',root_cause:'NONE',pending_count:terminal?0:1}}});
+ const action=terminal?'reconcile-reviewed-terminal':'restore-pending-validation';
+ const policy={policyId:'boundary-policy',ownerId:run.ownerId,version:run.version,actions:[action],resources:run.resources,authorization:'approved change; autonomous orchestrator boundary review'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const evidence=await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id);assert.equal(evidence.status,200,JSON.stringify(evidence));
+ const plan=(await h.get(base+'/recovery')).body;
+ const payload={actionId:'boundary-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,
+  action,targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.body.nativeBoundaryDigest}};
+ if(terminal)payload.input.review={ownerId:run.ownerId,effect:'READ_ONLY',commandSha256:evidence.body.commandSha256,
+  sourceFiles:[{path:file,sha256:createHash('sha256').update(content).digest('hex')}],evidenceRefs:['audit/read-only-node-syntax'],
+  callId:evidence.body.calls[0].callId,partDigest:evidence.body.calls[0].partDigest};
+ return{h,run,approval,payload,base};
+}
+test('frontière PENDING : restaure même identité sans décision, permission ou nouvelle demande',async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t);
+ const before=(await h.get('/runs')).body.coordination.operations[approval.operation_id];
+ assert.equal((await h.get(base+'/decision/'+approval.requestId)).status,404);
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'PENDING');
+ assert.deepEqual((await h.get('/runs')).body.coordination.operations[approval.operation_id],before);
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,1);assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,1);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY'});
+ const decided=await h.post(base+'/decision/'+approval.requestId,{decision:'approved'});assert.equal(decided.status,201,JSON.stringify(decided));
+ assert.equal(h.native.replies.length,0);
+});
+for(const variant of ['expired','stale-read','identity','busy','permission','conflict','effect','owner','boundary'])test('frontière PENDING : refuse '+variant,async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t);
+ if(variant==='expired'){
+  const p=h.native.messages[run.sessionId].at(-1).parts[0];const v=JSON.parse(p.state.output);v.expires_at=new Date(Date.now()-1).toISOString();p.state.output=JSON.stringify(v);
+ }if(variant==='conflict'){
+  const p=h.native.messages[run.sessionId].at(-1).parts[0],v=JSON.parse(p.state.output);v.status='APPROVED';p.state.output=JSON.stringify(v);
+ }if(variant==='effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'shell',callID:'unexpected-effect',state:{status:'completed',input:{command:approval.commands[0],workdir:h.directory},metadata:{exit:0},time:{start:Date.now()-1,end:Date.now()}}}]});
+ if(variant==='stale-read')h.native.messages[run.sessionId].at(-1).parts[0].state.time.end=Date.now()-300001;
+ if(variant==='identity'){const p=h.native.messages[run.sessionId].at(-1).parts[0],v=JSON.parse(p.state.output);v.operation_digest='0'.repeat(64);p.state.output=JSON.stringify(v);}
+ if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ if(variant==='permission')h.native.permissions.push({id:'unexpected-pending',sessionID:run.sessionId,permission:'bash',metadata:{command:approval.commands[0]}});
+ if(variant==='owner')payload.ownerId='foreign-owner';
+ if(variant==='boundary')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ if(['expired','stale-read','identity','busy','permission','conflict','effect'].includes(variant))payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.ok([403,409].includes(result.status),JSON.stringify(result));
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,0);assert.equal(h.native.replies.length,0);
+});
+test('terminal revu : clôt coordination sans once/nativeResult et sans rejeu, survit au redémarrage',async t=>{
+ const{h,approval,payload,base}=await boundaryRecoveryFixture(t,{terminal:true});
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'COMPLETED');assert.equal(result.body.executionOutcome,'NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED');
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'COMPLETED');assert.equal(op.native,null);assert.equal(op.nativeResult,null);assert.notEqual(op.onceAcknowledged,true);
+ assert.equal((await h.get(base+'/status')).body.hasUnresolvedValidation,false);assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ const after=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(after.executionOutcome,result.body.executionOutcome);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);assert.equal(h.native.replies.length,0);
+});
+for(const variant of ['source','call','part','write','duplicate','extra-effect'])test('terminal revu : refuse '+variant,async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t,{terminal:true});
+ if(variant==='source')payload.input.review.sourceFiles[0].sha256='0'.repeat(64);
+ if(variant==='call')payload.input.review.callId='foreign-call';
+ if(variant==='part')payload.input.review.partDigest='0'.repeat(64);
+ if(variant==='write')payload.input.review.effect='WRITE';
+ if(variant==='duplicate')h.native.messages[run.sessionId].push(structuredClone(h.native.messages[run.sessionId].at(-1)));
+ if(variant==='extra-effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'edit',callID:'extra-edit',state:{status:'completed',input:{filePath:'other'},output:''}}]});
+ if(['duplicate','extra-effect'].includes(variant))payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'PREPARED');assert.equal(op.native,null);assert.equal(h.native.replies.length,0);
+});
+for(const terminal of [false,true])test('frontière validée : reprise causale après réponse perdue '+(terminal?'terminal':'PENDING'),async t=>{
+ const{h,approval,payload,base}=await boundaryRecoveryFixture(t,{terminal});
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ await h.stop();
+ const file=join(runtimeStateDirectory(h.directory), 'recovery-policies.json'),env=JSON.parse(readFileSync(file,'utf8'));
+ const row=env.value.receipts.find(r=>r.actionId===payload.actionId);row.state='PREPARED';delete row.result;delete row.httpStatus;
+ env.digest=createHash('sha256').update(JSON.stringify(env.value)).digest('hex');writeFileSync(file,JSON.stringify(env)+'\n');
+ await h.start();
+ const replay=await h.post(base+'/recovery/action',payload);assert.equal(replay.status,200,JSON.stringify(replay));assert.equal(replay.body.recoveredFrom,'qualified-receipt');
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,terminal?'COMPLETED':'PREPARED');assert.equal(op.native,null);assert.equal(op.nativeResult,null);assert.equal(h.native.replies.length,0);
+});
+test('frontière PENDING : intention avant écriture reprend la même identité après crash',async t=>{
+ const{h,run,approval,payload,base}=await boundaryRecoveryFixture(t);
+ assert.equal((await h.post(base+'/recovery/action',payload)).status,200);
+ await h.stop();
+ const root=join(runtimeStateDirectory(h.directory));
+ const file=join(root,'recovery-policies.json'),env=JSON.parse(readFileSync(file,'utf8')),row=env.value.receipts.find(r=>r.actionId===payload.actionId);
+ row.state='PREPARED';delete row.result;delete row.httpStatus;delete row.observation;
+ env.digest=createHash('sha256').update(JSON.stringify(env.value)).digest('hex');writeFileSync(file,JSON.stringify(env)+'\n');
+ unlinkSync(join(root,'runs',run.runId,String(run.contextId),'controller-communication.json'));
+ await h.start();await h.post('/broker/readiness',{status:'BLOCKED',pending_count:1,infrastructure_status:'READY'});
+ const replay=await h.post(base+'/recovery/action',payload);assert.equal(replay.status,200,JSON.stringify(replay));
+ assert.equal((await h.get(base+'/status')).body.undecidedValidationCount,1);assert.equal(h.native.replies.length,0);
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].native,null);
+});
+async function closedHistoryTerminalFixture(t) {
+ const {h,run,approval:old,payload:cancel}=await reviewedCancellationFixture(t),base='/runs/'+run.runId;
+ assert.equal((await h.post(base+'/recovery/action',cancel)).status,200);
+ const approval=h.approval(run,'after-closed-review');approval.commands=['/usr/bin/head src/reviewed-cancel.py'];
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);
+ const source=h.native.messages[run.sessionId].pop();source.parts[0].state.time={start:Date.now()-60000,end:Date.now()-59000};
+ h.native.messages[run.sessionId].unshift(source);
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'execute',callID:'closed-failed-coordination',executed:false,state:{status:'completed',input:{code:'const payload=runtimeInput; return await tools["cgpt-validation"].request_validation(payload);'},output:'MCP notification failed',metadata:{error:true,truncated:false,toolCalls:[{tool:'cgpt-validation.request_validation',status:'error',input:{...approval,requestId:'unowned-failed-coordination'}}]},time:{start:Date.now()-2,end:Date.now()-1}}}]});
+ for(const tool of ['broker_health','get_approval'])h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'execute',callID:'closed-diagnostic-'+tool,executed:false,
+  state:{status:'completed',input:{code:tool==='get_approval'?'const r=await tools["cgpt-validation"].get_approval(input); return {status:r.status};':'return await tools["cgpt-validation"].broker_health({});'},output:JSON.stringify({status:'APPROVED'}),metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.'+tool,status:'completed',input:tool==='get_approval'?{approval_id:approval.approval_id}:{}}]},time:{start:Date.now()-2,end:Date.now()-1}}}]});
+ const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',callID:'get-after-closed-review',state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'}),metadata:{truncated:false},time:{start:stamp-2,end:stamp-1}}}]});
+ h.native.messages[run.sessionId].push({nativeV2:{id:'msg_terminal_after_closed',type:'assistant',time:{created:stamp},finish:'stop',content:[{type:'tool',id:'call-terminal-after-closed',name:'shell',executed:false,time:{created:stamp,ran:stamp+1,completed:stamp+2},state:{status:'completed',input:{command:approval.commands[0],workdir:h.directory,background:false},metadata:{exit:0,truncated:false},content:[{type:'text',text:'reviewed pure helper'}]}}]}});
+ const policy={policyId:'after-closed-policy',ownerId:run.ownerId,version:run.version,actions:['reconcile-reviewed-terminal'],resources:run.resources,authorization:'same approved change; retain prior closed audit receipts'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body;
+ const call=evidence.calls.find(c=>c.callId==='call-terminal-after-closed');assert.equal(evidence.calls.length,3);
+ const plan=(await h.get(base+'/recovery')).body;
+ const payload={actionId:'after-closed-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'reconcile-reviewed-terminal',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,review:{ownerId:run.ownerId,effect:'READ_ONLY',commandSha256:evidence.commandSha256,callId:call.callId,partDigest:call.partDigest,sourceFiles:[{path:'src/reviewed-cancel.py',sha256:createHash('sha256').update('# reviewed pure helper\n').digest('hex')}],evidenceRefs:['audit/current-read-after-closed-history']}}};
+ return {h,run,old,approval,base,payload};
+}
+test('historique clos : deux aborted déjà réconciliés permettent un terminal unique sans transformer leur issue',async t=>{
+ const{h,old,approval,base,payload}=await closedHistoryTerminalFixture(t);
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ const ops=(await h.get(base+'/operations')).body.operations;
+ assert.equal(ops.find(x=>x.operationId===old.operation_id).state,'CANCELLED');assert.equal(ops.find(x=>x.operationId===old.operation_id).executionOutcome,'UNDETERMINED_READ_ONLY');
+ assert.equal(ops.find(x=>x.operationId===approval.operation_id).state,'COMPLETED');assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ const store=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory), 'recovery-policies.json'),'utf8'));
+ assert.equal(store.value.receipts.find(r=>r.actionId===payload.actionId).observation.excludedPriorReviews.length,4);
+ await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+});
+for(const variant of ['unknown-call','changed-command','no-aborted','duplicate','changed-wrapper'])test('historique clos : refuse '+variant,async t=>{
+ const{h,run,approval,base,payload}=await closedHistoryTerminalFixture(t);
+ const oldShell=h.native.messages[run.sessionId].find(m=>m.nativeV2?.content?.[0]?.id==='review-call-a').nativeV2.content[0];
+ if(variant==='unknown-call')oldShell.id='unknown-unreviewed-call';
+ if(variant==='changed-command')oldShell.state.input.command='/usr/bin/false';
+ if(variant==='no-aborted')oldShell.state.error={type:'unknown',message:'not a reviewed aborted boundary'};
+ if(variant==='duplicate')h.native.messages[run.sessionId].push({nativeV2:{id:'msg_duplicate_old',type:'assistant',time:{created:Date.now()},content:[structuredClone(oldShell)]}});
+ if(variant==='changed-wrapper'){
+  const wrapper=h.native.messages[run.sessionId].flatMap(m=>m.parts||[]).find(p=>p.tool==='execute'&&p.state.input.code.includes('cancel_approval'));
+  wrapper.state.input.code+=' return "changed";';
+ }
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'PREPARED');assert.equal(h.native.replies.length,0);
+});
+async function unissuedWithdrawalFixture(t) {
+ const h=await setup(t),run=await h.reserve('withdraw-unissued'),approval=h.approval(run,'withdraw-future-server'),base='/runs/'+run.runId;
+ approval.commands=['node future-server.js'];h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ const source=h.native.messages[run.sessionId].at(-1).parts[0];source.state.status='completed';source.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const policy={policyId:'withdraw-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation'],resources:run.resources,authorization:'same change; replace future server before issuing any native command'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body,plan=(await h.get(base+'/recovery')).body;
+ assert.deepEqual(evidence.calls,[]);
+ const payload={actionId:'withdraw-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/future-server-withdrawal']}};
+ return{h,run,approval,base,payload};
+}
+test('retrait non émis : aucun refus à fabriquer, approved conservé, aucune once/nativeResult/NO_EFFECT',async t=>{
+ const{h,approval,base,payload}=await unissuedWithdrawalFixture(t);
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(result.body.state,'CANCELLED');assert.equal(result.body.executionOutcome,'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE');
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,'CANCELLED');assert.equal(op.decision.status,'approved');assert.equal(op.native,null);assert.equal(op.nativeResult,null);assert.notEqual(op.onceAcknowledged,true);
+ assert.equal((await h.get(base+'/status')).body.hasUnresolvedValidation,false);assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].executionOutcome,result.body.executionOutcome);
+});
+for(const variant of ['effect','permission','busy','access','once','boundary','owner','missing-evidence'])test('retrait non émis : refuse '+variant,async t=>{
+ const{h,run,approval,base,payload}=await unissuedWithdrawalFixture(t);
+ if(variant==='effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',callID:'unissued-unexpected-effect',state:{status:'completed',input:{command:approval.commands[0]},metadata:{exit:0},output:'started'}}]});
+ if(variant==='permission')h.native.permissions.push({id:'unissued-pending-permission',sessionID:run.sessionId,permission:'bash',metadata:{command:'/usr/bin/false'}});
+ if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ if(['access','once'].includes(variant))assert.equal((await h.post(base+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions})).status,200);
+ if(variant==='once')await h.execute(approval);
+ if(variant==='boundary')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ if(variant==='owner')payload.ownerId='foreign-owner';
+ if(variant==='missing-evidence')delete payload.input.evidence;
+ if(['effect','permission','busy','access','once'].includes(variant)){
+  payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+  payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ }
+ const result=await h.post(base+'/recovery/action',payload);assert.ok([403,409].includes(result.status),JSON.stringify(result));
+ assert.notEqual((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'CANCELLED');
+});
+
+test('Code Mode brut : requête terminée avec erreur externe conserve sa corrélation sans décision',async t=>{
+ const h=await setup(t),run=await h.reserve('outer-error-completed'),approval=h.approval(run,'outer-error-completed');
+ approval.commands=[];approval.files=['src/outer-error-completed.py'];approval.tool_input_sha256='d'.repeat(64);
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,[{tool:'cgpt-validation.request_validation',status:'completed',input:approval}]);
+ part.state.output=JSON.stringify({...approval,status:'PENDING'});
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const response=await h.post('/validation/request',{approval});assert.equal(response.status,202,JSON.stringify(response));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,1);
+ assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404);
+ assert.equal(h.native.replies.length,0);
+});
+for(const variant of ['input','extra-tool','truncated','invalid-error-type'])test('Code Mode brut erreur externe : refuse '+variant,async t=>{
+ const h=await setup(t),run=await h.reserve('outer-error-'+variant),approval=h.approval(run,'outer-error-'+variant);
+ let calls=[{tool:'cgpt-validation.request_validation',status:'completed',input:structuredClone(approval)}];
+ if(variant==='input')calls[0].input.operation_digest='0'.repeat(64);
+ if(variant==='extra-tool')calls.unshift({tool:'bash',status:'completed',input:{command:'/usr/bin/true'}});
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,calls);
+ if(variant==='truncated')part.state.metadata.truncated=true;
+ if(variant==='invalid-error-type'){part.state.status='error';part.state.metadata.error='invalid';}
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const response=await h.post('/validation/request',{approval});assert.equal(response.status,409,JSON.stringify(response));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,0);assert.equal(h.native.replies.length,0);
+});
+
+test('Code Mode : résultat NOT_ADMITTED exact reste terminal malgré une corrélation d’input',async t=>{
+ const h=await setup(t),run=await h.reserve('outer-error-terminal'),approval=h.approval(run,'outer-error-terminal');
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,[{tool:'cgpt-validation.request_validation',status:'completed',input:approval}]);
+ part.state.output=JSON.stringify({...approval,status:'NOT_ADMITTED'});
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const response=await h.post('/validation/request',{approval});assert.equal(response.status,409);
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.undecidedValidationCount,0);assert.equal(h.native.replies.length,0);
+});
+test('Code Mode canonique : retour littéral direct reste projeté malgré l’erreur externe',async t=>{
+ const h=await setup(t),run=await h.reserve('canonical-outer-error'),approval=h.approval(run,'canonical-outer-error');
+ const part=rawCodeModeValidationFailure(approval.requestId,approval,[{tool:'cgpt-validation.request_validation',status:'completed',input:approval}]);
+ part.state.input.code='return await tools["cgpt-validation"].request_validation('+JSON.stringify(approval)+');';part.state.output=JSON.stringify({...approval,status:'PENDING'});
+ h.native.messages[run.sessionId].at(-1).parts=[part];
+ const observed=await h.nativeClient.messages(run.sessionId,h.directory);assert.equal(observed.at(-1).parts[0].tool,'cgpt-validation_request_validation');
+ assert.equal((await h.post('/validation/request',{approval})).status,202);assert.equal(h.native.replies.length,0);
+});
+
+test('Code Mode brut : matrice des phases observées ne crée aucune autorisation',async t=>{
+ for(const outer of ['running','completed','error'])for(const nested of ['running','completed','error'])for(const flag of [undefined,false,true]){
+  const h=await setup(t),id='matrix-'+outer+'-'+nested+'-'+String(flag),run=await h.reserve(id),approval=h.approval(run,id);
+  const p=rawCodeModeValidationFailure(id,approval,[{tool:'cgpt-validation.request_validation',status:nested,input:approval}]);
+  p.state.status=outer;if(flag===undefined)delete p.state.metadata.error;else p.state.metadata.error=flag;
+  p.state.output=JSON.stringify({...approval,status:'PENDING'});h.native.messages[run.sessionId].at(-1).parts=[p];
+  const result=await h.post('/validation/request',{approval});assert.equal(result.status,202,id+JSON.stringify(result));
+  assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId)).status,404);assert.equal(h.native.replies.length,0);await h.stop();
+ }
+});
+test('visibilité native : attente bornée sur même notification puis admission sans requête neuve',async t=>{
+ const h=await setup(t),run=await h.reserve('visibility'),approval=h.approval(run,'visibility-request'),saved=h.native.messages[run.sessionId];
+ h.native.messages[run.sessionId]=[];
+ const first=await h.post('/runs/'+run.runId+'/validation/request',{approval});assert.equal(first.status,503,JSON.stringify(first));assert.equal(first.body.error,'native-validation-evidence-unavailable');
+ const diagnostic=(await h.get('/runs/'+run.runId+'/validation/correlation?requestId='+approval.requestId)).body.evidence;
+ assert.equal(diagnostic.first.outcome,'EVIDENCE_UNAVAILABLE');assert.ok(diagnostic.first.snapshots.length<=4);assert.equal(diagnostic.first.snapshots[0].identifiedParts,0);
+ assert.equal((await h.get('/runs/'+run.runId+'/decision/'+approval.requestId+'/admission')).body.owner_registered,false);
+ h.native.messages[run.sessionId]=saved;
+ const retry=await h.post('/runs/'+run.runId+'/validation/request',{approval});assert.equal(retry.status,202,JSON.stringify(retry));
+ const after=(await h.get('/runs/'+run.runId+'/validation/correlation?requestId='+approval.requestId)).body.evidence;
+ assert.equal(after.first.outcome,'EVIDENCE_UNAVAILABLE');assert.equal(after.latest.outcome,'MATCHED');assert.equal(after.notificationCount,2);assert.equal(h.native.replies.length,0);
+ assert.equal(JSON.stringify(after).includes(approval.commands[0]),false);
+});
+test('visibilité native : preuve qui apparaît pendant le même POST ne provoque pas de refus terminal',async t=>{
+ const h=await setup(t),run=await h.reserve('visibility-delayed'),approval=h.approval(run,'visibility-delayed'),saved=h.native.messages[run.sessionId];h.native.messages[run.sessionId]=[];
+ const timer=setTimeout(()=>{h.native.messages[run.sessionId]=saved;},60);t.after(()=>clearTimeout(timer));
+ const response=await h.post('/runs/'+run.runId+'/validation/request',{approval});assert.equal(response.status,202,JSON.stringify(response));
+ const evidence=(await h.get('/runs/'+run.runId+'/validation/correlation?requestId='+approval.requestId)).body.evidence;
+ assert.equal(evidence.first.outcome,'MATCHED');assert.ok(evidence.first.snapshots.length>=2);assert.equal(h.native.replies.length,0);
+});
+test('persistance : mode privé dérivé expose la cause et permet la même décision après restauration sûre',async t=>{
+ const h=await setup(t),run=await h.reserve('communication-mode'),approval=h.approval(run,'communication-mode');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ const file=join(runtimeStateDirectory(h.directory), 'runs',run.runId,String(run.contextId),'controller-communication.json');
+ const {chmodSync}=await import('node:fs');chmodSync(file,0o644);
+ const failed=await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'});assert.equal(failed.status,400);
+ const status=(await h.get('/runs/'+run.runId+'/status')).body;assert.equal(status.communicationPersistence.available,false);assert.equal(status.communicationPersistence.error,'continuity-file-unsafe');
+ assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0].decision,null);
+ chmodSync(file,0o600);
+ const prepared=await h.post('/transport/prepare',{transactionId:'update-communication-repaired'});assert.equal(prepared.status,200,JSON.stringify(prepared));
+ assert.equal((await h.post('/transport/cancel',{transactionId:'update-communication-repaired'})).status,200);
+ const retry=await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'});assert.equal(retry.status,201,JSON.stringify(retry));
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.communicationPersistence.available,true);assert.equal(h.native.replies.length,0);
+});
+test('persistance : contenu ou séquence contradictoires ne sont pas écrasés par un réarmement',async t=>{
+ const h=await setup(t),run=await h.reserve('communication-drift'),approval=h.approval(run,'communication-drift');
+ assert.equal((await h.post('/runs/'+run.runId+'/validation/request',{approval})).status,202);
+ const file=join(runtimeStateDirectory(h.directory), 'runs',run.runId,String(run.contextId),'controller-communication.json'),env=JSON.parse(readFileSync(file,'utf8'));env.sequence++;const changed=JSON.stringify(env)+'\n';writeFileSync(file,changed);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,400);
+ assert.equal((await h.get('/runs/'+run.runId+'/status')).body.communicationPersistence.error,'continuity-state-changed');
+ assert.equal((await h.post('/transport/prepare',{transactionId:'update-communication-drift'})).status,409);assert.equal(readFileSync(file,'utf8'),changed);assert.equal(h.native.replies.length,0);
+});
+
+test('migration privée : PENDING absent du checkpoint restauré avant activation, projet0775 inchangé',async t=>{
+ const h=await setup(t),run=await h.reserve('private-migration',{resources:[{key:'file:src/private-read.md',mode:'read'}]});
+ const directory=runtimeStateDirectory(h.directory),file=join(directory,'runs',run.runId,String(run.contextId),'controller-communication.json');
+ await h.post('/transport/prepare',{transactionId:'empty-migration-checkpoint'});await h.post('/transport/cancel',{transactionId:'empty-migration-checkpoint'});
+ const previous=readFileSync(file),approval=h.approval(run,'private-pending');
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ const snapshot=(await h.get('/runs')).body,status=(await h.get('/status')).body;
+ const pending=migrationPendingValidations(snapshot,status,new Map([[run.sessionId,h.native.messages[run.sessionId]]]));
+ assert.equal(pending.length,1);await h.stop();writeFileSync(file,previous);
+ const legacy=legacyStateDirectory(h.directory);cpSync(directory,legacy,{recursive:true});
+ const files=[];const modes=path=>{chmodSync(path,0o775);for(const item of readdirSync(path,{withFileTypes:true})){const next=join(path,item.name);if(item.isDirectory())modes(next);else {chmodSync(next,0o775);files.push([next,readFileSync(next)]);}}};modes(legacy);
+ rmSync(directory,{recursive:true});initializeRuntimeState(h.directory,directory);
+ const transactionId='update-11111111-1111-4111-8111-111111111111';
+ writeRuntimeJson(join(directory,'runtime-migration.json'),{protocol:RUNTIME_MIGRATION_PROTOCOL,transactionId,workspace:h.directory,
+  phase:'PREPARED',registryDigest:migrationRegistryDigest(snapshot),nativeIdentity:{pid:process.pid,version:'2.2.0',directory:h.directory},pending});
+ await h.start();
+ const restored=(await h.get('/runs/'+run.runId+'/status')).body;
+ assert.equal(restored.undecidedValidationCount,1);assert.equal(restored.communicationPersistence.available,true);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
+ assert.equal(h.native.replies.length,0);
+ assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.12'});
+ assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
+ assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
+ assert.equal((await h.post('/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ await h.execute(approval);
+ assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].native.onceAcknowledged,true);
+ for(const [path,bytes] of files){assert.equal(statSync(path).mode&0o777,0o775);assert.deepEqual(readFileSync(path),bytes);}
+ assert.equal(statSync(file).mode&0o777,0o600);assert.equal(h.native.replies.length,1);
+ await h.stop();await h.start();assert.equal((await h.get('/runtime/migration')).body.migration.phase,'ACTIVE');
+});
+
+test('création privée : job0600 et verrou public de projet0775 sous umask parent002',async t=>{
+ const h=await setup(t),run=await h.reserve('private-create-mode');
+ const job=join(runtimeStateDirectory(h.directory),'runs',run.runId,String(run.contextId),'controller-job.json');
+ assert.equal(statSync(job).mode&0o777,0o600);
+ assert.equal(statSync(join(legacyStateDirectory(h.directory),'registry.instance.lock')).mode&0o777,0o775);
+ const approval=h.approval(run,'private-create-mode');assert.equal((await h.post('/validation/request',{approval})).status,202);
+ assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ assert.equal(statSync(job).mode&0o777,0o600);assert.equal(h.native.replies.length,0);
+});
+
+async function rejectedEditFixture(t){
+ const h=await setup(t),file='src/refused.md',run=await h.reserve('refused-edit',{resources:[{key:'file:'+file,mode:'write'}]}),base='/runs/'+run.runId;
+ const approval=h.approval(run,'refused-edit-request'),input={path:join(h.directory,file),oldString:'old',newString:'new'};
+ approval.commands=[];approval.files=[file];approval.tool_input_sha256=nativeToolInputDigest({...input,replaceAll:false});h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ wrapNativeRequestValidationInCodeMode(h,approval);const request=h.native.messages[run.sessionId].at(-1).parts[0];request.state.status='completed';request.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
+ const stamp=Date.now();h.native.messages[run.sessionId].push({nativeV2:{id:'msg_refused_edit',type:'assistant',time:{created:stamp},content:[{type:'tool',id:'call_refused_edit',name:'edit',executed:false,time:{created:stamp,ran:stamp},state:{status:'running',input,content:[],metadata:{}}}]}});
+ h.native.permissions.push({id:'per_refused_edit',sessionID:run.sessionId,permission:'edit',messageID:'msg_refused_edit',tool:{callID:'call_refused_edit'},metadata:{filepath:input.path}});
+ await h.nativeClient.replyPermission(run.sessionId,'per_refused_edit','reject',h.directory);
+ const part=h.native.messages[run.sessionId].at(-1).nativeV2.content[0];part.state.status='error';part.state.error={type:'aborted',message:'synthetic explicit permission rejection'};part.time.completed=Date.now()+1;
+ await h.post(base+'/recovery/policy',{policyId:'refused-edit-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation'],resources:run.resources,authorization:'approved change; retire rejected edit only'});
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body,plan=(await h.get(base+'/recovery')).body;
+ const payload={actionId:'withdraw-refused-edit',ownerId:run.ownerId,policyId:'refused-edit-policy',boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/rejected-edit']}};
+ return{h,run,base,approval,payload,evidence};
+}
+test('retrait edit refusé : CANCELLED coordonnée, APPROVED conservé, reprise idempotente après redémarrage',async t=>{
+ const{h,run,base,approval,payload,evidence}=await rejectedEditFixture(t);assert.equal(evidence.calls[0].tool,'edit');assert.equal(evidence.replyReceipts[0].state,'ACKNOWLEDGED');
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ const op=(await h.get('/runs')).body.coordination.operations[approval.operation_id];assert.equal(op.state,'CANCELLED');assert.equal(op.decision.status,'approved');assert.equal(op.native,undefined);assert.equal(op.nativeResult,undefined);assert.equal(h.native.replies.length,1);assert.equal(h.native.replies[0].body.response,'reject');
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const next=h.approval(run,'after-refused-edit');assert.equal((await h.post(base+'/validation/request',{approval:next})).status,202);
+});
+
+for(const kind of ['missing-ack','wrong-native-error','extra-request-effect'])test('retrait edit refusé : garde '+kind+' sans mutation',async t=>{
+ const{h,base,approval,payload}=await rejectedEditFixture(t);
+ if(kind==='missing-ack'){
+  const dir=join(runtimeStateDirectory(h.directory),'permission-replies');for(const file of readdirSync(dir))unlinkSync(join(dir,file));
+ }else if(kind==='wrong-native-error')h.native.messages[approval.session_id].at(-1).nativeV2.content[0].state.error.type='ToolError';
+ else h.native.messages[approval.session_id][0].parts[0].state.metadata.toolCalls.push({tool:'opencode.shell',status:'completed',input:{command:'unknown extra effect'}});
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
+ const op=(await h.get('/runs')).body.coordination.operations[approval.operation_id];assert.equal(op.state,'PREPARED');assert.equal(op.decision.status,'approved');assert.equal(op.native,undefined);assert.equal(h.native.replies.length,1);
+});
+
+test('retrait edit refusé : recherche de catalogue dans le wrapper reste une observation',async t=>{
+ const{h,base,approval,payload}=await rejectedEditFixture(t);const request=h.native.messages[approval.session_id][0].parts[0];request.state.metadata.toolCalls.unshift({tool:'search',status:'completed',input:{namespace:'cgpt-validation',query:'request_validation'}});
+ request.state.input.code='const schema=search({namespace:"cgpt-validation",query:"request_validation"}); '+request.state.input.code;
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');assert.equal(h.native.replies.length,1);
 });

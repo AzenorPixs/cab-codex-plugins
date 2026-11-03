@@ -1,3 +1,173 @@
+## 2.2.12 — Retirer une validation après refus natif edit vérifié
+
+- Le diagnostic expose les edits et leurs reçus ;le retrait non émis accepte
+  un unique edit avorté lié au reçu privé ACK204 et à deux frontières stables.
+- La décision APPROVED historique reste conservée. Aucun nativeResult, once
+  ou NO_EFFECT inventé ;aucune empreinte approuvée corrigée rétroactivement.
+
+## 2.2.11+codex.20261103164239 — Clarifier l’authentification du pilote
+
+- GET sans authentification401 et client CAB authentifié200 sont distingués.
+- Le credential est consommé localement sans valeur transmise au modèle ;le
+  SID existant est vérifié avant d’envisager une récupération.
+- Révision documentaire :aucun fichier runtime ou commande canonique modifié.
+
+## 2.2.11 — Transformer les faux positifs qualifiés en cadrage durable
+
+- Une référence canonique distingue catalogue Codex/OpenCode, preuve historique,
+  statut agrégé, versions chargées, échec métier et garde de sécurité légitime.
+- Le skill, l’index et la commande orientent vers cette référence au diagnostic.
+  Les enseignements généralisables complètent le contrat sous SCM ;aucune
+  hypothèse, garde contournée ou autorisation métier supplémentaire introduite.
+
+## 2.2.10 — Refuser une permission shell décomposée avec un reçu privé
+
+- Le rejet vérifie son identité native indépendamment de la garde d’exécution.
+  Une cible shell multipartie reste refusée pour once ;son rejet conserve
+  INTENT/ACK204, identité de processus et protection contre le rejeu incertain.
+- Le refus natif ne modifie pas rétroactivement la décision du mandat ;la
+  réconciliation et la libération restent des étapes propriétaires distinctes.
+
+## 2.2.9 — Préserver la reprise et les créations privées
+
+- Le contrôleur et le superviseur démarrent avec un umask privé0077, même si
+  le shell utilise0002. Les checkpoints recréés restent0600 ;le verrou public
+  explicitement0775 conserve la coordination avec les anciens contrôleurs.
+- Les répertoires privés0700 protégeaient déjà ces données. Ce correctif
+  n’ajoute aucune barrière métier ni changement de droits projet.
+
+- Une renotification identique ne remplace plus l’objet restauré et ses preuves.
+  Après décision du propriétaire, la validation restaurée peut acquérir son
+  accès normal et transmettre once à la permission exacte, sans rejeu du mandat.
+
+## 2.2.8 — Lire le registre réel pendant la migration
+
+- Le précontrôle de migration utilise le lecteur JSON runtime borné à64Mio,
+  plutôt que le lecteur d’artefacts4Mio. Les limites HTTP ne changent pas.
+- La première tentative2.2.7 a échoué avant coupure ; aucune migration ou
+  activation n’a été déclarée. Le correctif conserve les mêmes garanties,
+  les états pendants et les fichiers projet0775.
+
+## 2.2.7 — Admissions résilientes et stockage privé hors projet
+
+- Une enveloppe Code Mode brute completed/error=true avec request_validation completed conserve la corrélation de son input exact, sans décision, accès ou permission implicite.
+- Un résultat natif NOT_ADMITTED de la même identité reste terminal et ne peut être réadmis. Les inputs divergents, troncatures et appels exécutants supplémentaires restent refusés.
+- Le mandat natif recommande le retour direct du payload littéral ; les identités refusées ne sont jamais réutilisées. Le résultat final d’un wrapper ne suffit pas à attribuer la cause de sa première notification.
+
+- Une visibilité native retardée conserve le même PENDING avec503 transitoire et un diagnostic filtré ; les phases connues du wrapper et de l’appel MCP restent indépendantes.
+- Les états privés quittent les projets ; DIU et les fichiers projet restent en0775. CABU migre les checkpoints et validations attestées, vérifie RUN/opérations/once, puis active le nouveau stockage. Le premier reçu reste explicitement LEGACY ; une interruption après copie reprend en avant sans rejouer la commande ni restaurer un ancien registre.
+
+## 2.2.6 — Réutiliser les preuves closes dans un historique long
+
+- Une validation PREPARED/approved jamais émise peut être retirée par son propriétaire, avec double frontière stable et sans fabriquer de refus natif ou NO_EFFECT.
+
+- La clôture revue d’un terminal peut réutiliser les anciens reçus DONE du même RUN/contexte/propriétaire : les deux refus aborted déjà réconciliés ne bloquent plus automatiquement la nouvelle lecture.
+- Les anciennes parties sont revérifiées par identité, commande, code et antériorité, puis référencées dans le nouveau reçu ; une partie inconnue, modifiée ou non réconciliée reste refusée. Aucun once ou NO_EFFECT n’est fabriqué.
+- Le protocole précise que le contrôleur transmet et journalise once, et détaille la continuation sur un port compatible quand une ancienne sonde n’établit pas la quiescence. Priorité explicite à l’autonomie et au cache de prompts LLM mesuré.
+
+## 2.2.5 — Réconcilier les frontières de validation manquantes
+
+- Le propriétaire peut restaurer la même validation PENDING après une lecture native fraîche, sans décision, nouvelle demande ou permission créée.
+- Une lecture native terminée peut être clôturée en coordination après revue épinglée, avec issue explicite NATIVE_TERMINAL_OBSERVED_PERMISSION_UNVERIFIED : aucune once, nativeResult ou absence d’effet inventée.
+- Les intentions et reçus permettent les reprises après réponse perdue et redémarrage ; les identités, sources, révisions et effets contradictoires restent protégés.
+
+## 2.2.4 — Reprises autonomes dans le périmètre validé
+
+- L’orchestrateur décide, revoit et valide les reprises dans le change ; l’aperçu distingue politique à installer et décision réellement hors périmètre, sans sollicitation humaine automatique pour une preuve technique manquante.
+- Les refus natifs programmatiques conservent intention et ACK204 privés, sans commandes ni secrets ; une réponse incertaine n’est pas renvoyée.
+- Une validation non consommée peut être annulée sur revue bornée de lecture, refus audités et annulation native stable, en conservant approved et l’issue historique indéterminée. Les wrappers de transport relus ne masquent ni admission réelle ni outil exécutant.
+- Un port quarantiné peut être réconcilié sur deux sondes natives indépendantes, instance antérieure prouvée et scope relu, sans sortie historique ni NO_EFFECT fabriqué ; l’ancienne once reste acquittée.
+- Une extension additive disjointe du manifeste conserve les générations, jetons et protections existants. Les nouvelles opérations gardent leurs propres mandats et permissions.
+
+## 2.2.3 — Confirmation de l’arrêt réel du contrôleur
+
+- CABU reconnaît un contrôleur arrêté avec MainPID=0, que systemd le classe inactive ou failed. L’ancien code de sortie 78 ne fait plus expirer un transfert déjà scellé.
+- L’adoption du certificat reste obligatoire ; ni failed avec PID vivant, ni deactivating, ni un transfert absent ou divergent ne prouvent une transition réussie.
+
+## 2.2.2 — Arrêt CABU préservant l’autorité du registre
+
+- CABU termine d’abord le seul processus principal du contrôleur avant l’arrêt du groupe systemd, pour permettre le scellement du transfert avec son helper flock encore vivant. L’unité distribuée utilise KillMode=mixed.
+- Une page native réduite pour taille excessive ne réduit plus toutes les pages suivantes ; les bornes de réponse et de pagination restent inchangées, sans retour partiel.
+- Une passe de réconciliation réutilise un snapshot natif par session et génération au lieu de relire tout l’historique pour chaque opération. Une clôture continue d’exiger une seconde lecture stable indépendante.
+
+## 2.2.1 — Annulation native après approbation et bootstrap cohérent
+
+- Une validation approuvée encore PREPARED, sans entrée native ni accès, peut être clôturée sur preuve native exacte CANCELLED/OC stable. La décision historique reste conservée, sa réponse exécutable est retirée ; aucune permission once n’est rejouée.
+- Les événements de fin native déclenchent aussi cette réconciliation, sans redémarrage obligatoire.
+- Le bootstrap du moniteur déduit la version attendue du manifeste du paquet installé ; CABU compare également la révision complète des plugins.
+
+## 2.2.0 — Continuité, récupération et CABU court
+
+- La restitution d’un bail de test nettoyé dépend de ses propres opérations et accès ; une quarantaine sur une ressource disjointe du même RUN conserve ses protections sans retenir ce bail.
+- Les validations et décisions sont persistées ; les observations reprennent leur curseur et déclarent les lacunes. Une coupure SSE seule ne change plus l’issue de toutes les opérations.
+- Un transfert contrôlé et consommable une seule fois conserve les protections des baux et accès ; un crash ou reçu divergent garde la restauration protégée historique.
+- Les shells background explicitement approuvés sont suivis par leur shellID natif jusqu'à une fin exacte, sans fermeture déduite d'un idle ou d'un timeout historique.
+- La récupération expose portée, preuves et actions qualifiées par propriétaire, avec politique explicite et reçus idempotents ; un défaut privé d'un RUN n'arrête pas les pairs.
+- CABU prépare à chaud, préserve les composants conformes et bascule seulement les groupes nécessaires ; une readiness reprise exige le même broker prouvé et conserve son horodatage natif.
+- Le contrat et les commandes se chargent par branche, AGENTS.md provient du template et les mesures INPUT/OUTPUT/cache conservent leur couverture ; aucune économie de facturation n'est inventée.
+- Un incident récupérable ne crée plus automatiquement un chat de correctif ; les clôtures et autorisations de communication restent respectées.
+- Le programme est qualifié et archivé dans `2026-11-02-track-background-shell-lifecycle` ; les publications et versions opérationnelles restent vérifiées séparément de la qualification source.
+
+## 2.1.81 — Quarantiner un shell timeout sans libérer son port
+
+- Un timeout shell natif sans shellID/exit garde l’opération et son verrou write en quarantine après double preuve native stable.
+- Le même RUN peut acquérir un accès read sur ce port pour un contrôle autorisé ; les écritures et les RUN étrangers restent bloqués.
+- La quarantine ne termine pas l’opération, ne conclut pas NO_EFFECT et ne rejoue jamais once.
+- CAB/CABU, broker, contrôleur, superviseur, moniteur, plugins, commandes et cadrages partagent 2.1.81.
+
+## 2.1.80 — Récupérer un accès HELD restauré après redémarrage
+
+- Le prévol owner/RUN-scoped expose l’accès HELD sans token ni contenu natif.
+- La réconciliation vérifie les décisions durables, l’historique natif stable, l’inactivité de session, l’absence de permission, les révisions et les conflits avant de renouveler fencing/token sur le même accès.
+- Un reçu idempotent permet la reprise sans réacquisition ni rejeu de `once`; les accès incertains, conflits et effets possibles restent protégés.
+- CAB, CABU, broker, services, plugins, commandes et cadrages partagent 2.1.80.
+
+## 2.1.79 — Ignorer les événements après le watermark terminal NO_EFFECT
+
+- La preuve terminale NO_EFFECT est limitée aux trois messages du tour assistant d’origine.
+- Un événement V2 non corrélé au message est ignoré uniquement s’il porte une séquence durable strictement supérieure au watermark conservé ; les événements à la frontière ou sans séquence restent bloquants.
+- Les gardes d’identité, permissions, session idle, transcript/journal stable et révisions restent inchangées.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.79.
+
+## 2.1.78 — Borner NO_EFFECT au tour natif d’origine
+
+- Une activité read-only dans un tour ultérieur ne bloque plus la preuve terminale antérieure ; les parties et événements du tour d’origine restent strictement qualifiés.
+- Les gardes d’accès, permission, callID, `once`, session idle, transcript/log stables et révisions inchangées restent obligatoires.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.78.
+
+## 2.1.77 — Réconcilier un bail de test restauré sans ancien token
+
+- Le prévol read-only scelle le RUN, le bail HELD, ses opérations terminales et la frontière native sans révéler de token. Le propriétaire exact peut réconcilier un bail USED après redémarrage sans ancien token ; CAB renouvelle token/fencing et garde les mêmes ressources HELD.
+- La récupération terminale NO_EFFECT peut examiner une opération approuvée existante alors qu’un bail test disjoint est encore restauré, sans créer d’accès ni rejouer `once`.
+- Toute activité, permission, opération native incertaine ou divergence conserve les protections ; les baux ne sont jamais déclarés inutilisés par absence de preuve.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.77.
+
+## 2.1.76 — Récupérer un tour terminal sans effet sous readiness bloquée
+
+- Une décision approuvée reste irrécupérable tant que le transcript terminal, le journal synchronisé et l’absence d’effets ne sont pas prouvés deux fois.
+- La voie NO_EFFECT invalide l’accord local, puis clôt uniquement l’accès concerné sans avancer les révisions ; toute permission, activité, divergence ou opération sœur maintient UNKNOWN.
+- Le cas exact peut être réconcilié pendant qu’un autre RUN bloque la readiness globale ; aucun autre chemin de récupération n’est élargi.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.76.
+
+## 2.1.75 — Lier les commandes Code Mode à clé JSON
+
+- Le binder reconnaît la clé `"commands"` sérialisée par JSON.stringify en plus de la propriété JavaScript non quotée.
+- Les clés dupliquées, bindings divergents et expressions dynamiques restent bloqués.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.75.
+
+## 2.1.74 — Cibler l’historique natif dans la location de session
+
+- Chaque page de messages V2 reçoit explicitement la location de la session dans `x-opencode-directory`.
+- Les tests vérifient la pagination lorsque la location de session diffère de la location par défaut du client.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.74.
+
+## 2.1.73 — Réconcilier l’annulation native imbriquée Code Mode
+
+- Le contrôleur retrouve `request_validation` dans un wrapper Code Mode complet et non tronqué.
+- Une annulation imbriquée n’est clôturée qu’avec le code littéral exact, la découverte et l’appel unique `cancel_approval`, les identités terminales concordantes et un double transcript stable.
+- Les appels supplémentaires, contenus divergents et wrappers incomplets restent protégés sans décision ni `once`.
+- CAB/CABU, broker, services, plugins, commandes et cadrages partagent 2.1.73.
+
 ## 2.1.72 — Fiabiliser le suivi des permissions et validations
 
 - La cause `NONE` est normalisée comme absence de cause et ne bloque plus un RUN sain.

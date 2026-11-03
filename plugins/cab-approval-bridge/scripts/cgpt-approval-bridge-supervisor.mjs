@@ -1,12 +1,15 @@
+import {runtimeStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-const version = "2.1.72";
+const version = "2.2.12";
 if ([CONTEXT_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB supervisor component version mismatch');
 
+// Private checkpoints must not inherit a group-writable shell umask.
+process.umask(process.umask() | 0o077);
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspace = envValue('OC_Codex_WORKSPACE');
 if (!workspace || !isAbsolute(workspace)) throw new Error('OC_Codex_WORKSPACE doit désigner une racine de projet absolue.');
@@ -19,7 +22,7 @@ const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace, signal: t
 const pollInterval = Number(envValue('OC_Codex_SUPERVISOR_POLL_INTERVAL_MS') || 5000);
 const reconnectMs = Number(envValue('OC_Codex_RECONNECT_MS') || 1000);
 if (!Number.isFinite(pollInterval) || pollInterval < 250) throw new Error('Intervalle de supervision invalide.');
-const stateDirectory = join(workspace, '.opencode', 'state', 'cgpt-approval-bridge');
+const stateDirectory = runtimeStateDirectory(workspace);
 const legacy = createSupervisorContext({ workspace, controllerUrl,
   statePath: envValue('OC_Codex_SUPERVISOR_STATE_PATH') || join(stateDirectory, 'supervisor-state.json') });
 const contexts = new Map();

@@ -1,5 +1,139 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Correctif SCM courant2.2.12
+
+[withdraw-rejected-unissued-native-edit](openspec/changes/archive/2026-11-03-withdraw-rejected-unissued-native-edit/), code non attribué :ARCHIVÉ, source2.2.12 qualifiée.
+Retrait borné après refus natif edit ;aucun SID ou lease modifié.
+266Node,94Python,1natif :361cas ;OpenSpec20/20puis19/19. Activation séparée.
+
+## Clarification documentaire authentification
+
+[clarify-authenticated-opencode-access](openspec/changes/archive/2026-11-03-clarify-authenticated-opencode-access/), code non attribué :ARCHIVÉ.
+GET401 sans authentification versus client local ;base2.2.11 inchangée.
+37tests etOpenSpec20/20puis19/19 ;publication/CABU séparés.
+
+## Cadrage SCM courant2.2.11
+
+[clarify-incident-triage-and-feedback](openspec/changes/archive/2026-11-03-clarify-incident-triage-and-feedback/), code non attribué :ARCHIVÉ, source2.2.11 qualifiée.
+Qualification/capitalisation canonique des faux positifs ;aucune garde modifiée.
+236Node et94Python :330cas ;OpenSpec20/20puis19/19. Activation séparée.
+
+## Correctif SCM courant2.2.10
+
+[journal-rejection-of-multipart-shell-permissions](openspec/changes/archive/2026-11-03-journal-rejection-of-multipart-shell-permissions/), code non attribué :ARCHIVÉ, source2.2.10 qualifiée.
+Rejet shell journalisé, garde once inchangée.236Node,94Python,1natif :331cas ;
+OpenSpec20/20puis19/19. Publication et activation attestées séparément.
+
+## Correctif SCM courant2.2.9
+
+[enforce-private-runtime-creation-modes](openspec/changes/archive/2026-11-03-enforce-private-runtime-creation-modes/), code non attribué :ARCHIVÉ, source2.2.9 qualifiée.
+Objet restauré conservé après renotification ;créations privées0600 et verrou
+projet0775.154Node,94Python,1natif :249cas qualifiés ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier sont attestées séparément.
+
+## Correctif SCM courant2.2.8
+
+[read-large-legacy-registry-for-private-migration](openspec/changes/archive/2026-11-03-read-large-legacy-registry-for-private-migration/), code non attribué :ARCHIVÉ, source2.2.8 qualifiée.
+Registre réel lu à la borne runtime64Mio après refus sûr avant coupure.
+153Node,94Python,1natif :248réussites ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier restent séparées.
+
+
+## Correctif SCM courant2.2.7
+
+[correlate-completed-mcp-call-with-outer-error](openspec/changes/archive/2026-11-03-correlate-completed-mcp-call-with-outer-error/), code non attribué : ARCHIVÉ, source2.2.7 qualifiée.
+Admission transitoire et états privés hors projet compatibles0775.
+937cas Node uniques qualifiés,94Python,1natif ;31ignorés. Une dernière
+fixture en timeout passe isolément ; pas de passe globale entièrement verte.
+OpenSpec20/20avant puis19/19après. Publication et activation séparées.
+
+
+## Correctif SCM courant2.2.6
+
+[reuse-closed-validation-review-evidence](openspec/changes/archive/2026-11-03-reuse-closed-validation-review-evidence/), code non attribué : ARCHIVÉ, source2.2.6 qualifiée.
+Réemploi des revues closes et retrait avant émission, sans effet ni once
+inventés. Qualification :920Node,93Python,1natif,1014réussites ;31ignorés.
+Index final15/15 ; OpenSpec20/20avant puis19/19après archive. Activation séparée.
+
+
+## Correctif SCM courant 2.2.5
+
+[restore-proven-validation-boundaries](openspec/changes/archive/2026-11-03-restore-proven-validation-boundaries/), code non attribué : ARCHIVÉ, source 2.2.5 qualifiée.
+Deux frontières : PENDING perdu par le contexte et terminal de lecture sans
+preuve once. Actions propriétaires bornées ; aucun rejeu ou résultat natif
+inventé. Qualification finale : 904 Node, 93 Python et 1 native, 998 réussites ;
+31 ignorés ; OpenSpec strict 20/20 avant puis 19/19 après archive. Publication
+et activation distinctes.
+
+## Correctif autonome courant 2.2.4
+
+[fix-autonomous-scoped-recovery](openspec/changes/archive/2026-11-03-fix-autonomous-scoped-recovery/),
+code non attribué : ARCHIVÉ, source 2.2.4 qualifiée. Autorité de l’orchestrateur dans
+le change, reçus de refus natifs, diagnostic filtré, revue de validation non
+consommée, réconciliation bornée d’un port et extension additive disjointe.
+Qualification finale : Node 884/915, 31 ignorés, zéro échec ; Python 93/93 ;
+natif 1/1, soit 978 réussites exécutées. OpenSpec strict avant archive 20/20.
+Précontrôles réels sans mutation : revue PA01 structurellement admissible ;
+instance Vite antérieure retrouvée dans un reçu CABU de même contexte.
+Aucune activation 2.2.4 ni clôture métier des deux RUN revendiquée ici.
+
+
+## Correctif CABU courant 2.2.3
+
+[fix-cabu-stopped-controller-status](openspec/changes/archive/2026-11-02-fix-cabu-stopped-controller-status/),
+code non attribué : ARCHIVÉ, source 2.2.3 qualifiée. CABU ciblé 87/87 ; 830 cas
+Node uniques validés après reprise isolée d’un démarrage fixture, 31 ignorés ;
+Python 93/93 ; natif 1/1. MainPID=0 confirme inactive ou failed ; adoption
+certifiée toujours obligatoire. Publication et activation distinctes. Le cas
+PA01 demeure protégé sur deux erreurs natives aborted. Attribution ACL ultérieure.
+
+
+## Correctif CABU courant 2.2.2
+
+[fix-cabu-authority-shutdown](openspec/changes/archive/2026-11-02-fix-cabu-authority-shutdown/),
+code non attribué : ARCHIVÉ, source 2.2.2 qualifiée (Node 829/860, 31 ignorés ;
+Python 93/93 ; natif 1/1). Arrêt systemd préservant le helper flock et relecture
+adaptative. Deux CABU 2.2.1 ont été rétablis après transfert non scellé ;
+publication et activation 2.2.2 restent distinctes. PA01 reste protégé sur deux
+erreurs natives aborted, sans preuve terminale qualifiée. Attribution ACL ultérieure.
+
+
+## Correctif courant CAB 2.2.1
+
+`reconcile-approved-native-cancellation`, code non attribué : correctif SCM
+sur la validation PREPARED approuvée non consommée et le bootstrap versionné.
+Dépendance vérifiée : CAB 2.2.0 actif, opération PA01 observée PREPARED sans
+native ni accès au 2 novembre 2026. Qualification source réussie : Node 827/858, 31 ignorés, Python 93/93, natif 1/1.
+Publication et activation distinctes ; voir [tâches](openspec/changes/archive/2026-11-02-reconcile-approved-native-cancellation/tasks.md).
+
+
+## Suivi ciblé SCM — CAB 2.2.0, 2 novembre 2026
+
+Le change archivé [track-background-shell-lifecycle](openspec/changes/archive/2026-11-02-track-background-shell-lifecycle/proposal.md)
+est élargi au programme autorisé CAB 2.2.0 : protocole modulaire, continuité,
+shells durables, récupération, CABU court et efficacité. **Code non attribué**,
+attribution ACL ultérieure. Les [tâches](openspec/changes/archive/2026-11-02-track-background-shell-lifecycle/tasks.md)
+conservent leurs identifiants initiaux et décrivent les dépendances internes.
+La qualification locale est consignée dans [VALIDATION.md](openspec/changes/archive/2026-11-02-track-background-shell-lifecycle/VALIDATION.md) :
+819 tests Node réussis, 93 Python, campagne native à deux RUN et 17 validations
+strictes. La migration des 18 renvois prompts est réalisée sur accord explicite, et
+le protocole local est retiré. L’archive et la synchronisation des spécifications
+sont vérifiées ; statistiques et publication SCM terminent la livraison. Ces preuves ne déclarent aucune activation 2.2.0. Observation ciblée : 147 dossiers
+d’archives et aucun change actif. Les totaux historiques ci-dessous restent des
+relevés datés et ne constituent pas un inventaire global actualisé.
+
+```mermaid
+flowchart LR
+    CAB220["track-background-shell-lifecycle · CAB 2.2.0<br/>code non attribué · ARCHIVÉ, publication en cours"]
+    CONT["Continuité durable"] --> CONTRAT["Contrat 2.2.0"]
+    UPDATE["CABU court"] --> CONT
+    RECOVER["Récupération et ressources"] --> CONT
+    CAB220 --> UPDATE
+    CAB220 --> RECOVER
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class CAB220 provisional
+```
+
 Actualisation SCM du 28 octobre 2026 : **76 changes archivés, 0 change actif**, **618/618 tâches cochées**. Attribution ACL du 28 octobre 2026, plan CAB-ACL-R5 : SUP10 pour la fermeture technique CAB ; 76 correspondances vérifiées, dont les 75 codes antérieurs conservés. MAI11 conserve son attribution rétrospective CAB-ACL-R4. Le suivi de CT14, correctif 2.1.5 archivé avec six tâches validées, est consigné ci-dessous ; les relevés ACL antérieurs restent historiques.
 
 Actualisation SCM du 2 novembre 2026 : OpenSpec dénombre **134 archives et 0 change actif** ; la cartographie documente 76 entrées archivées codées et trente et une archives sans code : [retire-lowercase-cab-command](openspec/changes/archive/2026-10-31-retire-lowercase-cab-command/), [add-monitor-bootstrap-identity](openspec/changes/archive/2026-10-31-add-monitor-bootstrap-identity/), [discard-released-access-tokens](openspec/changes/archive/2026-10-31-discard-released-access-tokens/), [reconcile-native-completion-after-terminal-sse](openspec/changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/), [require-native-recovery-preflight](openspec/changes/archive/2026-11-01-require-native-recovery-preflight/), [enforce-recovery-preflight-discovery](openspec/changes/archive/2026-11-01-enforce-recovery-preflight-discovery/), [normalize-literal-request-validation-codemode](openspec/changes/archive/2026-11-01-normalize-literal-request-validation-codemode/), [redact-test-reservation-tokens-from-reads](openspec/changes/archive/2026-11-01-redact-test-reservation-tokens-from-reads/) et [formalize-idempotent-test-reservation-recovery](openspec/changes/archive/2026-11-01-formalize-idempotent-test-reservation-recovery/) et [reconcile-rejected-operations-for-unused-test-leases](openspec/changes/archive/2026-11-01-reconcile-rejected-operations-for-unused-test-leases/) et [prove-unused-test-lease-after-history-compaction](openspec/changes/archive/2026-11-01-prove-unused-test-lease-after-history-compaction/), [recover-authorized-failed-mcp-receipt](openspec/changes/archive/2026-11-01-recover-authorized-failed-mcp-receipt/), [close-deterministic-pre-admission-refusals](openspec/changes/archive/2026-11-01-close-deterministic-pre-admission-refusals/), [read-only-opencode-fs-fallback](openspec/changes/archive/2026-11-01-read-only-opencode-fs-fallback/), [allow-no-effect-release-after-native-edit-failure](openspec/changes/archive/2026-11-01-allow-no-effect-release-after-native-edit-failure/), [correlate-native-codemode-validation-failures](openspec/changes/archive/2026-11-01-correlate-native-codemode-validation-failures/), [correlate-completed-raw-codemode-validation](openspec/changes/archive/2026-11-02-correlate-completed-raw-codemode-validation/), [align-native-codemode-recovery-fixture](openspec/changes/archive/2026-11-02-align-native-codemode-recovery-fixture/), [route-cab-mcp-calls-through-codemode-execute](openspec/changes/archive/2026-11-02-route-cab-mcp-calls-through-codemode-execute/), [advertise-cab-codemode-routing-instructions](openspec/changes/archive/2026-11-02-advertise-cab-codemode-routing-instructions/), [reconcile-terminal-native-operations](openspec/changes/archive/2026-11-02-reconcile-terminal-native-operations/), [correlate-running-codemode-validation](openspec/changes/archive/2026-11-02-correlate-running-codemode-validation/), [reconcile-running-codemode-validation](openspec/changes/archive/2026-11-02-reconcile-running-codemode-validation/). Les changes 2.1.39 précédents sont publiés ; le change de reprise sûre 2.1.40 est lui aussi publié et activé par CABU. Le change 2.1.41 de récupération des opérations rejetées est publié et CABU a terminé ; contrôleur, superviseur, monitor et broker servent 2.1.41. Le change 2.1.42 de preuve ledger-only après compaction est archivé en 8/8 tâches, publié sur main et activé par CABU ; les versions des quatre composants et les trois services actifs sont vérifiés. Le change 2.1.44 de récupération autorisée d’un reçu MCP failed est archivé en 10/10 tâches, publié et activé par CABU. Le change 2.1.45 de clôture des refus déterministes avant admission est archivé en 9/9 tâches, publié et activé par CABU ; l’approval 03 est `NOT_ADMITTED` sans décision. Le change 2.1.52 de restitution NO_EFFECT après erreur native est archivé en 11/11 tâches, publié et activé par CABU ; C12 a confirmé RELEASED/NO_EFFECT sans replay. Validation complète 2.1.54 : Node 708/739 (0 échec, 31 ignorés), Python 87/87, OpenSpec strict 17/17 et archives 118/118. Le change 2.1.54 de corrélation CodeMode native est archivé ; sa limite sur les wrappers dynamiques bruts est suivie par le change `correlate-raw-codemode-mcp-failures`, archivé après qualification de la version source 2.1.56. Le change 2.1.50 de lecture native read-only OpenCode est archivé en 11/11 tâches, publié et activé par CABU ; les lectures natives `list` et `read` sont qualifiées. Node passe 698/729 (0 échec, 31 ignorés), Python 87/87, OpenSpec strict 16/16 et validation stricte des archives 117/117. Le graphe et le registre détaillé couvrent 89 des 119 dossiers observés ; 30 archives restent à réconcilier. Aucun total global de tâches n’est revendiqué. Les 76 codes attestés demeurent inchangés. Exécuter ultérieurement ACL pour réconcilier la cartographie et le registre ; aucune reconstruction globale n’est faite ici. Archive sans code de lot attribué : [fix-native-permission-reply-location-scope](openspec/changes/archive/2026-11-02-fix-native-permission-reply-location-scope/), « Corriger le scope de location des réponses de permission native », ARCHIVÉ, 5/5 tâches ; test client V2 isolé 56/56, Node.js 714/745 (0 échec, 31 ignorés) avant ajout du test négatif final, Python 87/87, OpenSpec strict 17/17 avant archive et 16/16 après, archives strictes 125/125, OpenCode 2.2 isolé 1/1 ; source 2.1.61 qualifiée, CABU et activation vérifiés. Archive sans code de lot attribué : [expose-safe-run-native-operation-state](openspec/changes/archive/2026-11-02-expose-safe-run-native-operation-state/), « Exposer l’état durable d’une opération native par RUN », ARCHIVÉ, 5/5 tâches ; registry 47/47, route HTTP 1/1, distribution 33/33, Node.js 716/747 (31 ignorés, 0 échec) à concurrence 2, Python 87/87, OpenSpec strict 17/17 avant archive, archives strictes 126/126 ; source 2.1.62 qualifiée, CABU/activation distincts.

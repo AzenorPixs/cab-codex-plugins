@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.72';
+export const VERSION = '2.2.12';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -168,7 +168,7 @@ export class ResourceRunRegistry extends RunRegistry {
       if (op.nativeRecovery !== undefined && (!onlyKeys(op.nativeRecovery, ['permissionId','callId','proofDigest','observedAt','boundary','logWatermark']) ||
           (op.nativeRecovery.permissionId !== null && typeof op.nativeRecovery.permissionId !== 'string') ||
           (op.nativeRecovery.callId !== null && typeof op.nativeRecovery.callId !== 'string') || !hash(op.nativeRecovery.proofDigest) ||
-          !['PERMISSION_PENDING_NO_REPLY','TOOL_TERMINAL_UNCLASSIFIED','TOOL_TERMINAL_SUCCESS'].includes(op.nativeRecovery.boundary) ||
+          !['PERMISSION_PENDING_NO_REPLY','TOOL_TERMINAL_UNCLASSIFIED','TOOL_TERMINAL_SUCCESS','TERMINAL_TURN_NO_EFFECT'].includes(op.nativeRecovery.boundary) ||
           (op.nativeRecovery.logWatermark !== null && (!Number.isSafeInteger(op.nativeRecovery.logWatermark) || op.nativeRecovery.logWatermark < 0)) ||
           !Number.isFinite(Date.parse(op.nativeRecovery.observedAt)))) fail();
       if (op.testReservationId && (!Number.isSafeInteger(op.native?.startSequence) || op.native.startSequence < 1 ||
@@ -180,7 +180,7 @@ export class ResourceRunRegistry extends RunRegistry {
         run.runId === access?.runId && run.contextId === access?.contextId);
       if (!id(key) || !onlyKeys(access, ['accessId','runId','contextId','version','operationDigest','inputDigest',
           'resources','operationIds','expectedRevisions','protection','state','order','requestedAt','token','fencing',
-          'grantedAt','finishedAt','outcome','releaseDigest','reconciliationReceipts']) || access.accessId !== key || !owner ||
+          'grantedAt','finishedAt','outcome','releaseDigest','reconciliationReceipts','timeoutQuarantine']) || access.accessId !== key || !owner ||
           !hash(access.inputDigest) || !hash(access.operationDigest) ||
           !['WAITING', 'HELD', 'EXECUTING', 'UNKNOWN', 'RELEASED', 'CANCELLED', 'STALE'].includes(access.state) ||
           !['SHARED', 'EXCLUSIVE'].includes(access.protection) || !Array.isArray(access.operationIds) ||
@@ -194,6 +194,17 @@ export class ResourceRunRegistry extends RunRegistry {
           Object.entries(access.reconciliationReceipts).some(([key, value]) => !id(key) ||
             !onlyKeys(value,['inputDigest','fencing']) || !hash(value.inputDigest) ||
             !Number.isSafeInteger(value.fencing) || value.fencing < 1 || value.fencing > state.sequence))) fail();
+      if (access.timeoutQuarantine !== undefined) {
+        const quarantine = access.timeoutQuarantine, operation = state.operations[quarantine.operationId];
+        if (!onlyKeys(quarantine,['operationId','quarantineId','inputDigest','proofDigest','fencing','observedAt']) ||
+            !id(quarantine.operationId) || !id(quarantine.quarantineId) || !hash(quarantine.inputDigest) ||
+            !hash(quarantine.proofDigest) || !Number.isSafeInteger(quarantine.fencing) ||
+            quarantine.fencing < 1 || quarantine.fencing > state.sequence || !Number.isFinite(Date.parse(quarantine.observedAt)) ||
+            !operation || operation.runId !== access.runId || operation.contextId !== access.contextId ||
+            !access.operationIds.includes(quarantine.operationId) || !['EXECUTING','UNKNOWN'].includes(operation.state) ||
+            operation.native?.onceAcknowledged !== true || !access.resources.some(resource =>
+              resource.mode === 'write' && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(resource.key))) fail();
+      }
     }
     for (const [requestId, requestOwner] of Object.entries(this.requestOwners)) {
       const receipt = requestOwner.reconciliation;
@@ -351,14 +362,64 @@ export class ResourceRunRegistry extends RunRegistry {
         blockers: r.state === 'WAITING' ? this.testBlockers(r) : [],
         ...(r.state === 'HELD' ? { unusedReleaseBoundary: this.unusedTestBoundary(r) } : {}) }));
   }
+  restoredTestReconciliationSnapshot(runId,transactionId){
+    const entry=this.resourceState.testReservations?.[transactionId],run=this.runs.get(runId);
+    if(!entry||!run||entry.runId!==runId||entry.contextId!==run.contextId||entry.version!==run.version||
+        entry.state!=='HELD'||!this.restoredTests.has(transactionId))throw new CoordinationError('test-reconciliation-boundary-required');
+    const operations=this.operationTests(entry).map(op=>({operationId:op.operationId,state:op.state,
+      operationDigest:op.operationDigest,identityDigest:op.identityDigest,
+      onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null,nativePresent:Boolean(op.native),
+      completionDigest:op.completionDigest??null,completionProved:hash(op.completionDigest),nativeResultStatus:op.nativeResult?.status??null,
+      nativeProofDigest:op.native?.proofDigest??null})).sort((a,b)=>a.operationId.localeCompare(b.operationId));
+    const boundary={runId,contextId:run.contextId,transactionId,version:run.version,fencing:entry.fencing,
+      state:entry.state,resources:entry.resources,inputDigest:entry.inputDigest,operations};
+    return {runId,contextId:run.contextId,transactionId,version:run.version,state:entry.state,
+      reconciliationRequired:true,fencing:entry.fencing,resources:copy(entry.resources),
+      operations:operations.map(({operationId,state,onceAcknowledged,nativePresent,completionProved,nativeResultStatus})=>
+        ({operationId,state,onceAcknowledged,nativePresent,completionProved,nativeResultStatus})),boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  reconcileRestoredTests(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','transactionId','fencing','reconciliationId','boundaryDigest','evidence'])||
+        !id(payload.transactionId)||!id(payload.reconciliationId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('test-reconciliation-invalid',400);
+    const entry=this.resourceState.testReservations?.[payload.transactionId];
+    const inputDigest=digest(payload),prior=entry?.reconciliationReceipts?.[payload.reconciliationId];
+    if(prior){
+      if(entry.runId!==runId||prior.inputDigest!==inputDigest)throw new CoordinationError('test-reconciliation-divergent');
+      return copy(entry);
+    }
+    const snapshot=this.restoredTestReconciliationSnapshot(runId,payload.transactionId),run=this.runs.get(runId);
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||
+        snapshot.boundaryDigest!==payload.boundaryDigest||this.unresolvedTestAccess(runId,snapshot.resources))
+      throw new CoordinationError('test-reconciliation-boundary-changed');
+    if(snapshot.operations.some(op=>!['PREPARED','CANCELLED','COMPLETED'].includes(op.state)||
+        op.state!=='COMPLETED'&&(op.onceAcknowledged===true||op.nativePresent)||
+        op.state==='COMPLETED'&&(!op.completionProved||
+          !['completed','error'].includes(op.nativeResultStatus))))
+      throw new CoordinationError('test-reconciliation-boundary-required');
+    const proofBody={runId,contextId:run.contextId,transactionId:entry.transactionId,version:entry.version,
+      fencing:entry.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationsDigest:digest(snapshot.operations),sessionIdle:true,pendingPermissions:0,
+      transcriptDigest:proof?.transcriptDigest,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.transactionId!==entry.transactionId||
+        proof.version!==entry.version||proof.fencing!==entry.fencing||proof.boundaryDigest!==snapshot.boundaryDigest||
+        proof.sessionId!==run.sessionId||proof.sessionIdle!==true||proof.pendingPermissions!==0||
+        !hash(proof.transcriptDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('test-reconciliation-proof-required');
+    entry.token=randomUUID();entry.fencing=++this.resourceState.sequence;
+    entry.reconciliationReceipts||={};entry.reconciliationReceipts[payload.reconciliationId]={inputDigest,fencing:entry.fencing};
+    this.restoredTests.delete(entry.transactionId);this.persist();return copy(entry);
+  }
   testBlockers(entry) {
     return Object.values(this.resourceState.testReservations || {}).filter((other) => other !== entry &&
       reservedTest(other) && (other.state === 'HELD' || other.order < entry.order) &&
       conflicts(entry.resources, other.resources)).map((r) => ({ runId: r.runId,
         transactionId: r.transactionId, reason: 'test-resource-conflict' }));
   }
-  unresolvedTestAccess(runId, resources) {
-    return Object.values(this.resourceState.accesses).some((access) => access.runId === runId &&
+  unresolvedTestAccess(runId, resources, excludeAccessId = null) {
+    return Object.values(this.resourceState.accesses).some((access) => access.runId === runId && access.accessId !== excludeAccessId &&
       (active(access) || access.state === 'WAITING') && conflicts(resources, access.resources));
   }
   grantTests() {
@@ -439,6 +500,13 @@ export class ResourceRunRegistry extends RunRegistry {
   operationTests(entry) {
     return Object.values(this.resourceState.operations).filter((op) => op.testReservationId === entry.transactionId);
   }
+  unresolvedReservationAccess(entry) {
+    return this.unresolvedTestAccess(entry.runId, entry.resources) ||
+      Object.values(this.resourceState.accesses).some((access) => access.runId === entry.runId &&
+        access.contextId === entry.contextId && (active(access) || access.state === 'WAITING') &&
+        access.operationIds.some((operationId) =>
+          this.resourceState.operations[operationId]?.testReservationId === entry.transactionId));
+  }
   unusedTestOperations(entry) {
     return Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId &&
       op.contextId === entry.contextId && (op.testReservationId === entry.transactionId ||
@@ -455,7 +523,9 @@ export class ResourceRunRegistry extends RunRegistry {
         access.operationIds.includes(op.operationId)));
   }
   unusedTestOperationClassification(op, decision = null) {
-    if (op.state === 'CANCELLED' && !op.native) return 'cancelled-without-execution';
+    if(this.withdrawnUnissuedOperations?.has(op.operationId))return null;
+    if (op.state === 'CANCELLED' && !op.native) return this.reviewedReadOnlyOperations?.has(op.operationId)
+      ? 'read-only-no-effect' : 'cancelled-without-execution';
     if (this.isRejectionOnlyOperation(op)) return 'rejected-validation-no-native-effect';
     if (op.state === 'PREPARED' && !op.native && decision === 'rejected') return 'rejected-validation-no-native-effect';
     if (op.state === 'PREPARED' && !op.native && decision === 'cancelled') return 'cancelled-validation-no-native-effect';
@@ -564,7 +634,7 @@ export class ResourceRunRegistry extends RunRegistry {
     if (prior?.state === 'RELEASED' && !prior.unusedReleaseReceipt && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
     const entry = this.testHeld(runId, payload);
     const ops = this.operationTests(entry);
-    if (this.unresolvedAccess(runId, false) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {
+    if (this.unresolvedReservationAccess(entry) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {
       throw new CoordinationError('test-effects-unresolved');
     }
     if (!Array.isArray(payload.cleanup) || payload.cleanup.length !== entry.resources.length ||
@@ -679,13 +749,29 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('resource-revision-stale');
     }
   }
-  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false, checkCurrentRevisions = true } = {}) {
+  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false, checkCurrentRevisions = true,
+    terminalTurnNoEffect = false } = {}) {
     const preflight = Array.isArray(approval.files) && approval.files.length === 0 &&
       approval.commands?.length === 1 && approval.commands[0] === '/usr/bin/true' &&
       Array.isArray(approval.resources) && approval.resources.every((r) => r.mode === 'read');
     if (rejectionOnly) {
       this.mutable();
       if (this.runs.get(runId)?.suspension?.action !== 'PAUSE') throw new CoordinationError('notification-reconciliation-pause-required');
+    } else if(terminalTurnNoEffect){
+      this.mutable();
+      const prior=this.resourceState.operations[approval?.operation_id],access=prior&&this.resourceState.accesses[prior.accessId];
+      const run=this.runs.get(runId);
+      if(!run||run.state!=='RESERVED'||run.phase!=='WORK'||run.suspension||prior?.runId!==runId||
+          prior.contextId!==run.contextId||prior.state!=='UNKNOWN'||prior.decision?.status!=='approved'||
+          prior.native||prior.nativeResult||prior.onceAcknowledged===true||prior.testReservationId||
+          prior.nativeRecovery?.boundary!=='TOOL_TERMINAL_UNCLASSIFIED'||
+          prior.nativeRecovery.permissionId!==null||prior.nativeRecovery.callId!==null||
+          !access||access.runId!==runId||access.contextId!==run.contextId||access.state!=='UNKNOWN'||
+          access.operationIds.length!==1||access.operationIds[0]!==prior.operationId||
+          !this.restoredAccesses.has(access.accessId)||prior.resources.some(resource=>resource.mode!=='write'||
+            !resource.key.startsWith('file:'))){
+        throw new CoordinationError('terminal-turn-no-effect-candidate-required');
+      }
     } else this.admission(runId, preflight);
     const { run, resources } = this.scope(runId, approval.reservation_version, approval.resources);
     if (approval.coordination_protocol !== COORDINATION_PROTOCOL || !id(approval.operation_id) ||
@@ -699,7 +785,8 @@ export class ResourceRunRegistry extends RunRegistry {
     const identityDigest = digest(Object.fromEntries(['run_id', 'reservation_version', 'requestId', 'approval_id',
       'change_id', 'session_id', 'directory', 'title', 'summary', 'files', 'commands', 'resources',
       'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol',
-      ...(Object.hasOwn(approval,'tool_input_sha256') ? ['tool_input_sha256'] : [])]
+      ...(Object.hasOwn(approval,'tool_input_sha256') ? ['tool_input_sha256'] : []),
+      ...(Object.hasOwn(approval,'shell_background') ? ['shell_background'] : [])]
       .map((key) => [key, approval[key] ?? null])));
     const prior = this.resourceState.operations[approval.operation_id];
     if (prior) {
@@ -799,18 +886,28 @@ export class ResourceRunRegistry extends RunRegistry {
     const linkedAccess = op && Object.values(this.resourceState.accesses).some((access) =>
       access.accessId === op.accessId || access.operationIds.includes(operationId));
     if (!hash(proofDigest) || !op || !run || op.runId !== runId || op.contextId !== run.contextId ||
-        op.native || op.decision || linkedAccess) {
-      if (op?.state === 'CANCELLED' && op.completionDigest === proofDigest && !op.native && !op.decision && !linkedAccess) {
-        return copy(op);
-      }
+        op.native || (op.decision && op.decision.status !== 'approved') || linkedAccess) {
       throw new CoordinationError('native-cancellation-boundary-invalid');
     }
-    if (op.state !== 'PREPARED') throw new CoordinationError('native-cancellation-boundary-invalid');
     const owner = this.requestOwners[op.requestId];
     if (!owner || owner.runId !== runId) throw new CoordinationError('native-cancellation-owner-missing');
+    if (op.state === 'CANCELLED' && op.completionDigest === proofDigest) return copy(op);
+    if (op.state !== 'PREPARED') throw new CoordinationError('native-cancellation-boundary-invalid');
     op.state = 'CANCELLED'; op.finishedAt = now(); op.completionDigest = proofDigest;
     this.persist();
     return copy(op);
+  }
+  completeReviewedReadOnly(runId, operationId, proofDigest) {
+    this.admission(runId);
+    const op=this.resourceState.operations[operationId];
+    if (!op || op.runId!==runId || !hash(proofDigest) || op.native || op.nativeResult || op.decision?.status!=='approved' ||
+        Object.values(this.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(operationId)))
+      throw new CoordinationError('terminal-review-boundary-invalid');
+    if(op.state==='COMPLETED'&&op.completionDigest===proofDigest)return copy(op);
+    if(op.state!=='PREPARED')throw new CoordinationError('terminal-review-boundary-invalid');
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='COMPLETED';op.finishedAt=now();op.completionDigest=proofDigest;
+    this.persist();return copy(op);
   }
   restorePendingNative(runId, operationId, proof) {
     this.mutable();
@@ -849,6 +946,38 @@ export class ResourceRunRegistry extends RunRegistry {
     if(access.state==='HELD'||access.state==='EXECUTING')access.state='UNKNOWN';
     op.nativeRecovery={permissionId:op.native?.permissionId??null,callId:proof.callId,
       proofDigest:proof.proofDigest,observedAt:now(),boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:proof.logWatermark};
+    this.persist();return copy(op);
+  }
+  reconcileTerminalTurnNoEffect(runId,operationId,proof){
+    this.mutable();
+    const op=this.resourceState.operations[operationId],run=this.runs.get(runId),access=op&&this.resourceState.accesses[op.accessId];
+    if(op?.state==='CANCELLED'&&op.runId===runId&&op.nativeRecovery?.boundary==='TERMINAL_TURN_NO_EFFECT'&&
+        op.completionDigest===proof?.proofDigest&&access?.state==='RELEASED'&&access.outcome==='NO_EFFECT')return copy(op);
+    if(!op||!run||op.runId!==runId||op.contextId!==run.contextId||op.state!=='UNKNOWN'||run.state!=='RESERVED'||run.phase!=='WORK'||
+        op.decision?.status!=='approved'||op.native||op.nativeResult||op.testReservationId||
+        op.nativeRecovery?.boundary!=='TOOL_TERMINAL_UNCLASSIFIED'||
+        op.nativeRecovery.permissionId!==null||op.nativeRecovery.callId!==null||
+        !access||access.runId!==runId||access.contextId!==run.contextId||access.state!=='UNKNOWN'||
+        access.operationIds.length!==1||access.operationIds[0]!==operationId||
+        op.resources.some(resource=>resource.mode!=='write'||!resource.key.startsWith('file:'))||
+        access.resources.some(resource=>resource.mode!=='write'||!resource.key.startsWith('file:'))||
+        !this.restoredAccesses.has(access.accessId)||run.suspension||
+        !proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.operationId!==operationId||
+        proof.requestId!==op.requestId||proof.sessionId!==op.sessionId||
+        proof.operationDigest!==op.operationDigest||proof.identityDigest!==op.identityDigest||
+        proof.finish!=='stop'||!id(proof.userMessageId)||!id(proof.requestMessageId)||!id(proof.finalMessageId)||
+        !hash(proof.transcriptDigest)||!hash(proof.eventLogDigest)||!hash(proof.proofDigest)||
+        !Number.isSafeInteger(proof.logWatermark)||proof.logWatermark<0||
+        (op.nativeRecovery.logWatermark!==null&&proof.logWatermark<op.nativeRecovery.logWatermark)){
+      throw new CoordinationError('terminal-turn-no-effect-proof-required');
+    }
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='CANCELLED';op.finishedAt=Number.isFinite(proof.finishedAt)?proof.finishedAt:Date.now();
+    op.completionDigest=proof.proofDigest;
+    op.nativeRecovery={permissionId:null,callId:null,proofDigest:proof.proofDigest,observedAt:now(),
+      boundary:'TERMINAL_TURN_NO_EFFECT',logWatermark:proof.logWatermark};
+    this.finishAccess(access,'NO_EFFECT');
+    access.releaseDigest=digest({operationId,outcome:'NO_EFFECT',proofDigest:proof.proofDigest});
     this.persist();return copy(op);
   }
   completeLoggedNative(runId, operationId, proof) {
@@ -915,10 +1044,28 @@ export class ResourceRunRegistry extends RunRegistry {
     for (const other of Object.values(this.resourceState.accesses)) {
       if (other.accessId === access.accessId) continue;
       if ((active(other) || (other.state === 'WAITING' && other.order < access.order)) &&
-          conflicts(access.resources, other.resources)) result.push({ runId: other.runId,
+          this.accessConflict(access, other)) result.push({ runId: other.runId,
         accessId: other.accessId, reason: other.protection === 'EXCLUSIVE' ? 'resource-promotion-pending' : 'resource-conflict' });
     }
     return result;
+  }
+  accessConflict(candidate, existing) {
+    for (const requested of candidate.resources) for (const held of existing.resources) {
+      if (!(requested.mode === 'write' || held.mode === 'write') || !overlaps(requested.key, held.key)) continue;
+      const timeoutQuarantineRead = candidate.runId === existing.runId &&
+        candidate.contextId === existing.contextId && requested.mode === 'read' && held.mode === 'write' &&
+        requested.key === held.key && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(requested.key) &&
+        this.validTimeoutQuarantine(existing);
+      if (!timeoutQuarantineRead) return true;
+    }
+    return false;
+  }
+  validTimeoutQuarantine(access) {
+    const quarantine=access?.timeoutQuarantine,operation=quarantine&&this.resourceState.operations[quarantine.operationId];
+    return Boolean(quarantine&&operation&&operation.runId===access.runId&&operation.contextId===access.contextId&&
+      access.operationIds.includes(operation.operationId)&&['EXECUTING','UNKNOWN'].includes(operation.state)&&
+      operation.native?.onceAcknowledged===true&&access.resources.some(resource=>resource.mode==='write'&&
+        /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(resource.key)));
   }
   grantWaiting() {
     if (this.migrationRequired || (this.resourceState.global && this.resourceState.global.state !== 'RELEASED')) return;
@@ -1038,11 +1185,12 @@ export class ResourceRunRegistry extends RunRegistry {
     op.state = 'COMPLETED'; op.finishedAt = proof.finishedAt; op.completionDigest = digest(proof);
     op.nativeResult = { status: proof.status, proofStatus: proof.status,
       exit: Number.isInteger(proof.exit) ? proof.exit : null };
+    const access = this.resourceState.accesses[op.accessId];
+    if (access?.timeoutQuarantine?.operationId === operationId) delete access.timeoutQuarantine;
     if (op.testReservationId) {
       op.finishedSequence = ++this.resourceState.sequence;
     }
     if (op.maintenancePreflight) op.preflightSucceeded = proof.status === 'completed' && proof.exit === 0;
-    const access = this.resourceState.accesses[op.accessId];
     if (access.operationIds.every((key) => !['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(this.resourceState.operations[key].state))) {
       access.state = 'HELD';
     }
@@ -1166,6 +1314,7 @@ export class ResourceRunRegistry extends RunRegistry {
     }
     access.state = 'RELEASED'; access.finishedAt = now(); access.outcome = outcome;
     delete access.token;
+    delete access.timeoutQuarantine;
     this.restoredAccesses.delete(access.accessId);
   }
   releaseAccess(runId, payload) {
@@ -1177,9 +1326,169 @@ export class ResourceRunRegistry extends RunRegistry {
     this.finishAccess(access, payload.outcome); access.releaseDigest = digest(payload);
     this.grantWaiting(); this.persist(); return copy(access);
   }
+  reconcileQuiescentPort(runId, operationId, proofDigest) {
+    this.admission(runId);
+    const run = this.runs.get(runId), op = this.resourceState.operations[operationId];
+    const access = op && this.resourceState.accesses[op.accessId];
+    if (!hash(proofDigest) || !run || !op || op.runId !== runId || op.contextId !== run.contextId ||
+        !['EXECUTING','UNKNOWN'].includes(op.state) || op.native?.onceAcknowledged !== true || op.nativeResult ||
+        op.testReservationId || op.resources.length !== 1 || op.resources[0].mode !== 'write' ||
+        !/^port:[A-Za-z0-9_.-]+\/[1-9][0-9]{0,4}$/.test(op.resources[0].key) ||
+        !access || access.runId !== runId || access.contextId !== run.contextId ||
+        !['HELD','UNKNOWN'].includes(access.state) || access.operationIds.length !== 1 || access.operationIds[0] !== operationId ||
+        access.timeoutQuarantine?.operationId !== operationId || access.resources.length !== 1 ||
+        access.resources[0].key !== op.resources[0].key || access.resources[0].mode !== 'write')
+      throw new CoordinationError('port-recovery-boundary-invalid');
+    op.state = 'CANCELLED'; op.finishedAt = now(); op.completionDigest = proofDigest;
+    this.resourceState.revisions[op.resources[0].key] = ++this.resourceState.sequence;
+    this.finishAccess(access, 'RECONCILED'); access.releaseDigest = proofDigest;
+    this.grantWaiting(); this.persist();
+    return { operation: copy(op), access: copy(access) };
+  }
   accesses(runId) {
     return Object.values(this.resourceState.accesses).filter((a) => !runId || a.runId === runId).map((a) =>
       ({ ...copy(a), blockers: a.state === 'WAITING' ? this.blockers(a) : [] }));
+  }
+  restoredAccessReconciliationSnapshot(runId,operationId){
+    const access=this.resourceState.accesses[operationId],run=this.runs.get(runId);
+    if(!access||!run||access.runId!==runId||access.contextId!==run.contextId||
+        access.version!==run.version||access.state!=='HELD'||!this.restoredAccesses.has(access.accessId))
+      throw new CoordinationError('access-reconciliation-boundary-required');
+    const operations=access.operationIds.map(id=>this.resourceState.operations[id]).map(op=>({
+      operationId:op.operationId,state:op.state,operationDigest:op.operationDigest,identityDigest:op.identityDigest,
+      decisionStatus:op.decision?.status??null,completionDigest:op.completionDigest??null,
+      nativeResultStatus:op.nativeResult?.status??null,onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null,
+      nativePresent:Boolean(op.native)})).sort((a,b)=>a.operationId.localeCompare(b.operationId));
+    const boundary={runId,contextId:run.contextId,accessId:access.accessId,version:run.version,fencing:access.fencing,
+      state:access.state,resources:access.resources,expectedRevisions:access.expectedRevisions,
+      inputDigest:access.inputDigest,operationIds:access.operationIds,operations};
+    return {runId,contextId:run.contextId,accessId:access.accessId,version:run.version,state:access.state,
+      fencing:access.fencing,resources:copy(access.resources),expectedRevisions:copy(access.expectedRevisions),
+      operations:operations.map(({operationId,state,decisionStatus,nativeResultStatus,onceAcknowledged})=>
+        ({operationId,state,decisionStatus,nativeResultStatus,onceAcknowledged})),
+      boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  reconcileRestoredAccess(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','operationId','fencing','reconciliationId','boundaryDigest','evidence'])||
+        !id(payload.operationId)||!id(payload.reconciliationId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('access-reconciliation-invalid',400);
+    const access=this.resourceState.accesses[payload.operationId],prior=access?.reconciliationReceipts?.[payload.reconciliationId];
+    const inputDigest=digest(payload);
+    if(prior){
+      if(access.runId!==runId||prior.inputDigest!==inputDigest)throw new CoordinationError('access-reconciliation-divergent');
+      return copy(access);
+    }
+    const snapshot=this.restoredAccessReconciliationSnapshot(runId,payload.operationId),run=this.runs.get(runId);
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||
+        snapshot.boundaryDigest!==payload.boundaryDigest)throw new CoordinationError('access-reconciliation-boundary-changed');
+    if(this.blockers(access).length)throw new CoordinationError('access-reconciliation-conflict');
+    if(this.unresolvedTestAccess(runId,access.resources,access.accessId))throw new CoordinationError('access-reconciliation-test-resource-active');
+    if(this.resourceState.global&&this.resourceState.global.state!=='RELEASED')throw new CoordinationError('global-coordination-suspended');
+    if(run.suspension)throw new CoordinationError('run-suspended');
+    if(run.phase!=='WORK')throw new CoordinationError('access-reconciliation-phase-invalid');
+    const operationDetails=access.operationIds.map(id=>this.resourceState.operations[id]).map(op=>({state:op.state,
+      completionDigest:op.completionDigest??null,nativeResultStatus:op.nativeResult?.status??null,
+      decisionStatus:op.decision?.status??null,nativePresent:Boolean(op.native),
+      onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null}));
+    if(operationDetails.some(op=>!['PREPARED','CANCELLED','COMPLETED'].includes(op.state)||
+        op.state!=='COMPLETED'&&(op.nativePresent||op.onceAcknowledged===true)))
+      throw new CoordinationError('access-reconciliation-boundary-required');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&!op.completionDigest))
+      throw new CoordinationError('access-reconciliation-completion-unproved');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&!['completed','error'].includes(op.nativeResultStatus)))
+      throw new CoordinationError('access-reconciliation-native-result-unproved');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&op.decisionStatus!=='approved'))
+      throw new CoordinationError('access-reconciliation-approval-unproved');
+    this.validateExpected(access.expectedRevisions,access.resources);
+    const proofBody={runId,contextId:run.contextId,accessId:access.accessId,version:run.version,
+      fencing:access.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationsDigest:digest(snapshot.operations),sessionIdle:true,pendingPermissions:0,
+      transcriptDigest:proof?.transcriptDigest,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.accessId!==access.accessId||
+        proof.version!==run.version||proof.fencing!==access.fencing||proof.boundaryDigest!==snapshot.boundaryDigest||
+        proof.sessionId!==run.sessionId||proof.sessionIdle!==true||proof.pendingPermissions!==0||
+        !hash(proof.transcriptDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('access-reconciliation-proof-required');
+    for(const id of access.operationIds){
+      const op=this.resourceState.operations[id];
+      if(op.state==='PREPARED')op.state='CANCELLED';
+    }
+    access.token=randomUUID();access.fencing=++this.resourceState.sequence;
+    access.reconciliationReceipts||={};access.reconciliationReceipts[payload.reconciliationId]={inputDigest,fencing:access.fencing};
+    this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
+  }
+  timeoutQuarantineSnapshot(runId,operationId){
+    const access=this.resourceState.accesses[operationId],run=this.runs.get(runId);
+    const alreadyQuarantined=Boolean(access?.timeoutQuarantine);
+    if(!access||!run||access.runId!==runId||access.contextId!==run.contextId||access.version!==run.version||
+        !(alreadyQuarantined?access.state==='HELD':['EXECUTING','UNKNOWN'].includes(access.state))||
+        !this.restoredAccesses.has(access.accessId)||
+        access.operationIds.length!==1||access.operationIds[0]!==operationId)
+      throw new CoordinationError('timeout-quarantine-boundary-required');
+    const operation=this.resourceState.operations[operationId];
+    if(!operation||operation.runId!==runId||operation.contextId!==run.contextId||
+        !['EXECUTING','UNKNOWN'].includes(operation.state)||operation.native?.onceAcknowledged!==true||
+        !operation.native?.callId||operation.nativeResult||operation.decision?.status!=='approved'||
+        access.resources.length!==1||access.resources[0].mode!=='write'||
+        !/^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(access.resources[0].key))
+      throw new CoordinationError('timeout-quarantine-boundary-required');
+    const boundary={runId,contextId:run.contextId,accessId:access.accessId,operationId,version:run.version,
+      fencing:access.fencing,state:access.state,resources:access.resources,expectedRevisions:access.expectedRevisions,
+      inputDigest:access.inputDigest,operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+      operationState:operation.state,decisionStatus:operation.decision.status,permissionId:operation.native.permissionId,
+      callId:operation.native.callId,onceAcknowledged:operation.native.onceAcknowledged,targetDigest:operation.native.targetDigest,
+      timeoutQuarantine:access.timeoutQuarantine??null};
+    return {runId,contextId:run.contextId,accessId:access.accessId,operationId,version:run.version,
+      fencing:access.fencing,state:access.state,resources:copy(access.resources),expectedRevisions:copy(access.expectedRevisions),
+      operation:{operationId,state:operation.state,decisionStatus:operation.decision.status,
+        onceAcknowledged:operation.native.onceAcknowledged,kind:operation.native.kind||'bash'},
+      timeoutQuarantineRequired:!alreadyQuarantined,
+      ...(alreadyQuarantined?{timeoutQuarantine:{quarantineId:access.timeoutQuarantine.quarantineId,
+        proofDigest:access.timeoutQuarantine.proofDigest}}:{}),
+      boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  quarantineTimedOutPortAccess(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','operationId','fencing','quarantineId','boundaryDigest','evidence'])||
+        !id(payload.operationId)||!id(payload.quarantineId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('timeout-quarantine-request-invalid',400);
+    const access=this.resourceState.accesses[payload.operationId],prior=access?.timeoutQuarantine;
+    const inputDigest=digest(payload);
+    if(prior){
+      if(access.runId!==runId||prior.quarantineId!==payload.quarantineId||prior.inputDigest!==inputDigest)
+        throw new CoordinationError('timeout-quarantine-divergent');
+      return copy(access);
+    }
+    const snapshot=this.timeoutQuarantineSnapshot(runId,payload.operationId),run=this.runs.get(runId);
+    const operation=this.resourceState.operations[payload.operationId];
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||snapshot.boundaryDigest!==payload.boundaryDigest)
+      throw new CoordinationError('timeout-quarantine-boundary-changed');
+    if(this.blockers(access).length)throw new CoordinationError('timeout-quarantine-conflict');
+    if(this.resourceState.global&&this.resourceState.global.state!=='RELEASED')
+      throw new CoordinationError('global-coordination-suspended');
+    if(run.suspension||run.phase!=='WORK')throw new CoordinationError('timeout-quarantine-run-not-quiescent');
+    this.validateExpected(access.expectedRevisions,access.resources);
+    const proofBody={runId,contextId:run.contextId,accessId:access.accessId,operationId:operation.operationId,
+      version:run.version,fencing:access.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+      permissionId:operation.native.permissionId,callId:operation.native.callId,
+      timeoutPartDigest:proof?.timeoutPartDigest,transcriptDigest:proof?.transcriptDigest,
+      shellInventoryDigest:proof?.shellInventoryDigest,sessionIdle:true,pendingPermissions:0,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.accessId!==access.accessId||
+        proof.operationId!==operation.operationId||proof.version!==run.version||proof.fencing!==access.fencing||
+        proof.boundaryDigest!==snapshot.boundaryDigest||proof.sessionId!==run.sessionId||
+        proof.operationDigest!==operation.operationDigest||proof.identityDigest!==operation.identityDigest||
+        proof.permissionId!==operation.native.permissionId||proof.callId!==operation.native.callId||
+        proof.sessionIdle!==true||proof.pendingPermissions!==0||!hash(proof.timeoutPartDigest)||
+        !hash(proof.transcriptDigest)||!hash(proof.shellInventoryDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('timeout-quarantine-proof-required');
+    access.timeoutQuarantine={quarantineId:payload.quarantineId,operationId:operation.operationId,
+      inputDigest,proofDigest:proof.proofDigest,fencing:++this.resourceState.sequence,observedAt:now()};
+    access.state='HELD';access.fencing=this.resourceState.sequence;access.token=randomUUID();access.grantedAt=now();
+    this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
   }
   unresolvedAccess(runId, includeTests = true) {
     return Object.values(this.resourceState.accesses).some((a) => a.runId === runId && (active(a) || a.state === 'WAITING')) ||
@@ -1189,6 +1498,48 @@ export class ResourceRunRegistry extends RunRegistry {
     this.admission(runId);
     if (this.unresolvedAccess(runId)) throw new CoordinationError('run-accesses-unresolved');
     this.resources(payload.resources); return super.extend(runId, payload);
+  }
+  manifestDigest(runId) {
+    const run = this.runs.get(runId);
+    if (!run) throw new CoordinationError('run-not-reserved');
+    return digest(run.resources);
+  }
+  compatibleExtension(runId, payload, apply = false) {
+    this.admission(runId);
+    const run = this.owned(runId, payload.version);
+    if (run.phase !== 'WORK' || payload.ownerId !== run.ownerId ||
+        typeof payload.authorization !== 'string' || !payload.authorization.trim() || payload.authorization.length > 500 ||
+        !hash(payload.expectedManifestDigest) || payload.expectedManifestDigest !== this.manifestDigest(runId))
+      throw new CoordinationError('compatible-extension-boundary-invalid');
+    if (this.integrationOwner && this.integrationOwner !== runId ||
+        !this.integrationOwner && this.integrationQueue.length && run.integrationReady)
+      throw new CoordinationError('integration-suspended');
+    evidence(payload.evidence);
+    const additions = this.resources(payload.resources);
+    const namespace = key => key.startsWith('file:') ? 'file:' + key.slice(5).split('/').slice(0,-1).join('/')
+      : key.includes('/') ? key.slice(0,key.lastIndexOf('/')) : key;
+    if (additions.some(resource => !run.resources.some(existing => namespace(existing.key) === namespace(resource.key) &&
+        (existing.mode === 'write' || resource.mode === 'read'))))
+      throw new CoordinationError('compatible-extension-outside-namespace');
+    if (additions.some(resource => run.resources.some(existing => covers(existing, resource) || overlaps(existing.key, resource.key))))
+      throw new CoordinationError('compatible-extension-not-additive');
+    const protectedResources = [
+      ...Object.values(this.resourceState.accesses).filter(access => active(access) || access.state === 'WAITING' || access.state === 'STALE'),
+      ...Object.values(this.resourceState.testReservations || {}).filter(reservedTest),
+      ...Object.values(this.resourceState.operations).filter(op => ['ISSUING','EXECUTING','UNKNOWN'].includes(op.state)),
+    ].flatMap(item => item.resources);
+    if (additions.some(resource => protectedResources.some(existing => overlaps(existing.key, resource.key))))
+      throw new CoordinationError('compatible-extension-overlap');
+    const resources = this.validate({ ...run, resources: [...run.resources, ...additions] }).resources;
+    this.checkConflicts({ ...run, resources });
+    const result = { beforeDigest: this.manifestDigest(runId), afterDigest: digest(resources), resources, additions };
+    if (apply) {
+      run.resources = resources; run.requiresPublication ||= additions.some(resource => resource.mode === 'write');
+      run.integrationReady = false;
+      // An additive manifest CAS does not invalidate already issued effects or lease tokens.
+      this.persist();
+    }
+    return copy(result);
   }
   reduce(runId, payload) {
     this.admission(runId);

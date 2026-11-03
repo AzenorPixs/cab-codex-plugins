@@ -1,11 +1,13 @@
+import {runtimeStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
+import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.1.72';
+export const VERSION = '2.2.12';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -214,9 +216,10 @@ export function nativeToolInputDigest(input) {
 export function nativeCodingMandate(instruction) {
   if (typeof instruction !== 'string' || !instruction.trim()) fail('opencode-coding-mandate-invalid');
   return 'CAB — outils natifs : write, edit et shell sont distincts du catalogue MCP search/execute. ' +
-    'Pour les méthodes MCP CAB broker_readiness, request_validation, poll_approval, get_approval et reject, ' +
+    'Pour les méthodes MCP CAB broker_readiness, request_validation, lookup_validation, poll_approval, get_approval et reject, ' +
     'utiliser uniquement Code Mode execute avec le nom exact découvert par search, sous la forme ' +
     'tools["cgpt-validation"].request_validation(...). Ne pas appeler directement une entrée MCP native. ' +
+    'Pour request_validation, retourner directement await avec le payload littéral complet ; ne pas utiliser runtimeInput ou transformer le retour. ' +
     'Si execute ou la méthode découverte est indisponible, signaler le blocage sans appel direct ou repli. ' +
     'Une recherche MCP vide ne prouve pas leur absence. Utiliser directement l’outil natif disponible prescrit, ' +
     'avec les arguments exacts approuvés, seulement après les étapes CAB requises. ' +
@@ -334,6 +337,17 @@ function replaceCommandBinding(source, binding) {
   let result = '', braceDepth = 0, matches = 0;
   for (let index = 0; index < source.length;) {
     const character = source[index];
+    const previous = source[index - 1];
+    if (braceDepth === 1 && (previous === '{' || previous === ',' || previous === undefined || /\s/.test(previous))) {
+      const property = /^(?:"commands"|commands)\s*:\s*\[\s*([A-Za-z_$][\w$]*)\s*\]/.exec(source.slice(index));
+      if (property) {
+        if (property[1] !== binding.name || matches !== 0) return null;
+        const identifier = property[0].lastIndexOf(property[1]);
+        result += property[0].slice(0, identifier) + JSON.stringify(binding.value) + property[0].slice(identifier + property[1].length);
+        index += property[0].length; matches++; continue;
+      }
+      if (/^(?:"commands"|commands)\s*:/.test(source.slice(index))) return null;
+    }
     if (character === '"') {
       let end = index + 1, escaped = false;
       for (; end < source.length; end++) {
@@ -352,17 +366,6 @@ function replaceCommandBinding(source, binding) {
     }
     if (character === '{') { braceDepth++; result += character; index++; continue; }
     if (character === '}') { braceDepth--; result += character; index++; continue; }
-    const previous = source[index - 1];
-    if (braceDepth === 1 && /[A-Za-z_$]/.test(character) &&
-        (previous === '{' || previous === ',' || previous === undefined || /\s/.test(previous))) {
-      const key = /^commands\b\s*:\s*\[\s*([A-Za-z_$][\w$]*)\s*\]/.exec(source.slice(index));
-      if (key) {
-        if (key[1] !== binding.name || matches !== 0) return null;
-        const identifier = key[0].lastIndexOf(key[1]);
-        result += key[0].slice(0, identifier) + JSON.stringify(binding.value) + key[0].slice(identifier + key[1].length);
-        index += key[0].length; matches++; continue;
-      }
-    }
     result += character; index++;
   }
   return matches === 1 ? result : null;
@@ -514,7 +517,7 @@ function codeModePart(content, part) {
   const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
   let call, requestIdBound = false;
   if (match) {
-    if (!['broker_readiness', 'request_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
+    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
     const literal = literalObject(code.slice(match[0].length), commandBinding,
       match[2] === 'request_validation' ? nativeRequestId : null);
     if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
@@ -637,6 +640,8 @@ function normalizeMessage(message, sessionId) {
       state: { status: state.status, input: state.input, output, error,
         metadata: directError ? { ...nativeMetadata, cabDirectMcpError: directError } : nativeMetadata, time: { start: content.time?.ran ?? content.time?.created,
           end: content.time?.completed } } };
+    if (record(state.error) && typeof state.error.type === 'string')
+      Object.defineProperty(part, 'nativeErrorType', { value: state.error.type, enumerable: false });
     normalized.parts.push(content.name === 'execute' ? codeModePart(content, part) || part : part);
   }
   return normalized;
@@ -657,7 +662,7 @@ export function normalizeOpenCodeEvent(envelope) {
   return { type: event.type, properties, ...(directories.length ? { directory: directories[0] } : {}) };
 }
 
-export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, fetchImpl = fetch, timeoutMs = 10000, signal }) {
+export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, permissionReceiptDirectory, fetchImpl = fetch, timeoutMs = 10000, signal }) {
   const origin = loopbackUrl(baseUrl);
   const user = username || 'opencode';
   const credentialPath = passwordFile || (process.env.CREDENTIALS_DIRECTORY
@@ -911,6 +916,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   }
 
   async function messages(sessionId, directoryValue = directory) {
+    if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     const result = [];
     let cursor;
     let pageSize = 200;
@@ -920,7 +926,8 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       for (;;) {
         try {
           response = await json(`/api/session/${encodeURIComponent(sessionId)}/message`,
-            { query: { order: cursor === undefined ? 'asc' : undefined, limit: String(pageSize), cursor } });
+            { query: { order: cursor === undefined ? 'asc' : undefined, limit: String(pageSize), cursor },
+              locationDirectory: directoryValue });
           break;
         } catch (cause) {
           if (cause.code !== 'opencode-response-too-large' || pageSize === 1) throw cause;
@@ -949,6 +956,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       if (typeof next !== 'string' || !next || seen.has(next)) fail('opencode-messages-pagination-invalid');
       seen.add(next);
       cursor = next;
+      pageSize = 200;
     }
     fail('opencode-messages-pagination-limit');
   }
@@ -981,11 +989,14 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       if (!record(input) || !['running', 'completed'].includes(part.state.status)) fail('opencode-permission-source-invalid');
       if (raw.action === 'shell') {
         if (part.nativeTool !== 'shell' || raw.resources.length !== 1 || raw.resources[0] !== input.command ||
-            input.background === true || (input.workdir !== undefined &&
+            (input.workdir !== undefined &&
               (typeof input.workdir !== 'string' || resolve(directoryValue, input.workdir) !== directoryValue))) {
           fail('opencode-permission-target-invalid');
         }
         permission.metadata.command = input.command;
+        permission.metadata.shellBackground = input.background === true;
+        permission.metadata.shellTimeout = input.timeout;
+        permission.metadata.nativeToolInputSha256 = nativeToolInputDigest(input);
       } else {
         const file = input.path ?? input.filePath ?? input.filepath;
         const target = typeof file === 'string' ? resolve(directoryValue, file) : '';
@@ -1208,13 +1219,83 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     }
   }
 
+  async function shellPermissionForRejection(sessionId, permissionId, directoryValue) {
+    const response = await json('/api/permission/request', { query: { directory: directoryValue } });
+    if (!record(response) || response.location?.directory !== directoryValue || !Array.isArray(response.data)) fail('opencode-permissions-invalid');
+    const matches = response.data.filter(raw => raw?.id === permissionId);
+    if (matches.length !== 1 || matches[0].sessionID !== sessionId) fail('opencode-permission-receipt-pending-required');
+    const raw = matches[0], permission = normalizePermission(raw);
+    if (raw.action !== 'shell') fail('opencode-permission-target-invalid');
+    if (raw.source?.type !== 'tool' || typeof raw.source.id !== 'string' || !raw.source.id ||
+        typeof raw.source.messageID !== 'string' || !raw.source.messageID) fail('opencode-permission-source-invalid');
+    const observedSession = await session(sessionId, directoryValue);
+    if (observedSession.directory !== directoryValue) fail('opencode-permission-source-invalid');
+    const envelope = await json(`/api/session/${encodeURIComponent(sessionId)}/message/${encodeURIComponent(raw.source.messageID)}`);
+    const message = normalizeMessage(unwrapData(envelope, 'opencode-message-invalid'), sessionId);
+    const parts = message.parts.filter(p => p.type === 'tool' && p.callID === raw.source.id);
+    if (message.info.id !== raw.source.messageID || parts.length !== 1 || parts[0].nativeTool !== 'shell' ||
+        !['running', 'completed'].includes(parts[0].state.status) || !record(parts[0].state.input) ||
+        typeof parts[0].state.input.command !== 'string' || !parts[0].state.input.command.trim()) fail('opencode-permission-source-invalid');
+    // This observation is private to reject; it must never authorize execution.
+    permission.metadata.command = parts[0].state.input.command;
+    return permission;
+  }
+
   async function replyPermission(sessionId, permissionId, decision, directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     if (decision !== 'once' && decision !== 'always' && decision !== 'reject') fail('opencode-permission-decision-invalid');
-    await info();
+    const native = await info(decision === 'reject');
+    let journal, intent;
+    if (decision === 'reject') {
+      journal = new PermissionReplyJournal(permissionReceiptDirectory ||
+        join(runtimeStateDirectory(directoryValue),'permission-replies'));
+      const identity = { sessionId, permissionId, directory: directoryValue, decision };
+      const existing = journal.read(journal.path(identity));
+      if (existing) {
+        if (existing.nativePid !== native.pid || existing.nativeVersion !== native.version) fail('opencode-permission-receipt-identity-divergent');
+        if (existing.state === 'ACKNOWLEDGED') return;
+        fail('opencode-permission-outcome-unverified');
+      }
+      let permission;
+      try {
+        const pending = (await permissions(directoryValue, { sessionIds: [sessionId] })).filter(item => item.id === permissionId);
+        if (pending.length !== 1) fail('opencode-permission-receipt-pending-required');
+        permission = pending[0];
+      } catch (cause) {
+        if (cause.code !== 'opencode-permission-target-invalid') throw cause;
+        permission = await shellPermissionForRejection(sessionId, permissionId, directoryValue);
+      }
+      const checked = await info(true);
+      if (checked.pid !== native.pid || checked.version !== native.version) fail('opencode-permission-receipt-identity-divergent');
+      const target = permission.permission === 'bash' ? permission.metadata.command : permission.metadata.filepath;
+      intent = journal.begin({ ...identity, nativePid: native.pid, nativeVersion: native.version,
+        callId: permission.tool?.callID || null, targetDigest: typeof target === 'string'
+          ? createHash('sha256').update(JSON.stringify([permission.permission, target])).digest('hex') : null });
+      if (intent.replay) return;
+    }
     const response = await request(`/api/session/${encodeURIComponent(sessionId)}/permission/${encodeURIComponent(permissionId)}/reply`,
       { method: 'POST', body: { decision }, locationDirectory: directoryValue });
     if (response.status !== 204) fail('opencode-permission-reply-invalid');
+    if (journal) {
+      let after;
+      try { after = await info(true); } catch (cause) {
+        throw Object.assign(new Error('opencode-permission-reply-confirmed-identity-unavailable'),
+          { code: 'opencode-permission-reply-confirmed-identity-unavailable', replyConfirmed: true, httpStatus: 204, cause });
+      }
+      if (after.pid !== native.pid || after.version !== native.version) throw Object.assign(new Error('opencode-permission-reply-identity-changed'),
+        { code: 'opencode-permission-reply-identity-changed', replyConfirmed: true, httpStatus: 204 });
+      try { journal.acknowledge(intent.value); }
+      catch (cause) {
+        throw Object.assign(new Error('opencode-permission-reply-confirmed-receipt-unavailable'), {
+          code: 'opencode-permission-reply-confirmed-receipt-unavailable', replyConfirmed: true, httpStatus: 204, cause });
+      }
+    }
+  }
+
+  function permissionReplies(sessionId, directoryValue = directory) {
+    if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
+    return new PermissionReplyJournal(permissionReceiptDirectory ||
+      join(runtimeStateDirectory(directoryValue),'permission-replies')).snapshot(sessionId, directoryValue);
   }
 
   async function mcpRecoverySnapshot() {
@@ -1337,11 +1418,26 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     return {sessionId,after,watermark,events:items};
   }
 
-  return Object.freeze({ info, location, mcp, listSessions, session, activeSessions, sessionStatus, messages, message, permissions, sessionEventLog,
+  async function shellInfo(shellId, directoryValue = directory) {
+    if (!/^sh_[A-Za-z0-9]{1,100}$/.test(shellId || '')) fail('opencode-shell-id-invalid');
+    const envelope = await json('/api/shell/' + encodeURIComponent(shellId), {query:{directory:directoryValue}});
+    const value = envelope?.data;
+    if (envelope?.location?.directory !== directoryValue || !record(value) || value.id !== shellId ||
+        !['running','exited','timeout','killed'].includes(value.status) || typeof value.command !== 'string' ||
+        value.cwd !== directoryValue || !Number.isFinite(value.time?.started) ||
+        value.status !== 'running' && (!Number.isFinite(value.time?.completed) || value.time.completed < value.time.started) ||
+        value.exit !== undefined && !Number.isInteger(value.exit) ||
+        value.metadata?.sessionID !== undefined && typeof value.metadata.sessionID !== 'string') fail('opencode-shell-info-invalid');
+    return {shellId:value.id,status:value.status,command:value.command,cwd:value.cwd,
+      sessionId:value.metadata?.sessionID ?? null,startedAt:value.time.started,
+      finishedAt:value.time.completed ?? null,exit:value.exit ?? null};
+  }
+
+  return Object.freeze({ info, location, mcp, shellInfo, listSessions, session, activeSessions, sessionStatus, messages, message, permissions, sessionEventLog,
     sourceRead, sourceList, sourceFind,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,
-    replyPermission, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy, events, request: json });
+    replyPermission, permissionReplies, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {

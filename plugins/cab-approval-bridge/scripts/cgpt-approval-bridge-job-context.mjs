@@ -9,10 +9,11 @@ import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
+import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge-continuity.mjs';
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.1.72";
+export const VERSION = "2.2.12";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -78,10 +79,22 @@ const DECISION_ERRORS = new Map(Object.entries({
 const decisionError = (code) => Object.assign(new Error(code), { code });
 
 // A context owns its decisions, gates and recovery; OpenCode and MCP stay shared.
+export function nativeSnapshotLookup(part) {
+  const state=part?.state,keys=['requestId','run_id','session_id','operation_id','operation_digest'];
+  if(part?.tool!=='cgpt-validation_lookup_validation' || part.executed!==false || state?.status!=='completed' ||
+      !/^[a-f0-9]{64}$/.test(state.metadata?.cabCodeMode?.envelopeHash || '') ||
+      !state.input || Object.keys(state.input).length!==keys.length ||
+      keys.some(key=>typeof state.input[key]!=='string' || !state.input[key])) return false;
+  let value;try{value=JSON.parse(state.output);}catch{return false;}
+  return value?.snapshot_only===true && typeof value.found==='boolean' &&
+    (!value.found || keys.every(key=>value[key]===state.input[key]));
+}
+
 export function createJobContext({ workspace, stateDirectory, run = null,
   currentRun = () => run,
   admitOperation = () => true, inspectOperationAdmission = null, ownsSession = () => true, observe = () => {},
   nativeLifecycle = {}, persistOperationDecision = () => {}, persistNativeRejectedDecision = () => {}, ensureOperationAccess = () => {},
+  restoreCommunication = null,
   openCodeClient = null, modelPolicy = {}, reviewOperation = () => null,
   maxCommandLength = commandLengthLimit(),
   verifyRestoredPreflight = () => true }) {
@@ -151,6 +164,8 @@ const validations = new Map();
 const reconcilingPermissions = new Set();
 const unmatchedNativePermissions = new Map();
 const reminderNotifications = new Map();
+const decisionWaiters = new Map();
+let decisionWaiterCount = 0;
 let job = null;
 let jobPersistence = Promise.resolve();
 let recoveryTransitionInFlight = false;
@@ -158,6 +173,9 @@ let lifecycleTransitionInFlight = false;
 let permissionTimer;
 let closed = false;
 let closePromise;
+let communicationFailed = false;
+let communicationError = null;
+let transportPaused = false;
 
 try {
   const persisted = JSON.parse(readFileSync(reminderStatePath, "utf8"));
@@ -180,7 +198,7 @@ try {
   if (cause.code !== "ENOENT") {
     const reason = cause instanceof SyntaxError ? "JSON invalide"
       : cause.code === "INVALID_JOB_CONTRACT" ? "contrat invalide" : "lecture impossible";
-    throw new Error(`Restauration du contrat de job impossible : ${reason}.`);
+    throw Object.assign(new Error(`Restauration du contrat de job impossible : ${reason}.`), { code: 'job-state-invalid' });
   }
 }
 
@@ -202,6 +220,96 @@ const terminalGate = {
   declaredState: job?.terminalGate?.declaredState || null,
   validatedAt: job?.terminalGate?.validatedAt || null,
 };
+
+const communicationScope = { runId: run?.runId ?? null, contextId: run?.contextId ?? null };
+const communication = new ContinuityStore(join(stateDirectory, 'controller-communication.json'),
+  'communication', value => validCommunicationState(value, communicationScope));
+const previousCommunication = communication.snapshot();
+if (previousCommunication) {
+  const decisions = new Map(previousCommunication.decisions);
+  for (const [requestId, stored] of previousCommunication.validations) {
+    const expected = approvedOperation(stored.sourceApproval);
+    if (!expected || stored.approvalId !== stored.sourceApproval.approval_id ||
+        stored.changeId !== stored.sourceApproval.change_id || stored.sourceApproval.requestId !== requestId ||
+        Object.keys(expected).some(key => JSON.stringify(expected[key]) !== JSON.stringify(stored.operation?.[key]))) {
+      throw new Error('communication-identity-divergent');
+    }
+    const decision = decisions.get(requestId);
+    const restored = restoreCommunication ? restoreCommunication(stored, decision) :
+      { validation: { ...stored, operationInvalidated: stored.operationConsumed ? stored.operationInvalidated : true }, decision };
+    if (!restored) continue;
+    validations.set(requestId, restored.validation);
+    if (restored.decision) { httpDecisions.set(requestId, restored.decision); answered.add(requestId); }
+  }
+}
+refreshPendingValidationStatus();
+
+function refreshPendingValidationStatus() {
+  status.activeValidations = [...validations.values()].filter(validation => !httpDecisions.has(validation.requestId))
+    .map(({ requestId, receivedAt }) => ({ requestId, receivedAt }));
+}
+
+function persistCommunication(additionalValidation, additionalDecision) {
+  refreshPendingValidationStatus();
+  const stagedValidations = new Map(validations), stagedDecisions = new Map(httpDecisions);
+  if (additionalValidation) stagedValidations.set(additionalValidation.requestId, additionalValidation);
+  if (additionalDecision) stagedDecisions.set(additionalDecision.requestId, additionalDecision);
+  const retained = [...stagedValidations].filter(([, validation]) => validation.sourceApproval);
+  const retainedIds = new Set(retained.map(([requestId]) => requestId));
+  try {
+    communication.write({ ...communicationScope, validations: retained,
+      decisions: [...stagedDecisions].filter(([requestId]) => retainedIds.has(requestId)) });
+    communicationFailed=false;communicationError=null;
+  } catch (cause) {
+    communicationError=/^continuity-[a-z-]{1,80}$/.test(cause.code||'')||['EACCES','EPERM','EIO','ENOSPC','EROFS'].includes(cause.code)
+      ?cause.code:'communication-write-unavailable';
+    communicationFailed = true;
+    throw cause;
+  }
+}
+
+function communicationStorageReady() {
+  if(!communicationFailed)return true;
+  if(communication.sequence===0)return false;
+  try {
+    const observed=new ContinuityStore(communication.path,'communication',value=>validCommunicationState(value,communicationScope));
+    if(observed.sequence!==communication.sequence||observed.instanceId!==communication.instanceId||
+      JSON.stringify(observed.snapshot())!==JSON.stringify(communication.snapshot()))return false;
+    communicationFailed=false;communicationError=null;return true;
+  } catch {return false;}
+}
+
+function recordDecisionDurably(validation, decision, record = persistOperationDecision) {
+  // A staged decision is executable only after the authoritative ledger commit.
+  persistCommunication(validation, decision);
+  record(validation, decision);
+  validations.set(validation.requestId, validation);
+  httpDecisions.set(validation.requestId, decision);
+  refreshPendingValidationStatus();
+  wakeDecisionWaiters(validation.requestId);
+}
+
+function wakeDecisionWaiters(requestId) {
+  const groups = requestId === undefined ? [...decisionWaiters.values()] : [decisionWaiters.get(requestId) || []];
+  for (const waiters of groups) for (const finish of [...waiters]) finish();
+}
+async function waitForDecision(requestId, waitMs, response) {
+  if (!waitMs || httpDecisions.has(requestId) || !validations.has(requestId) || closed || transportPaused) return;
+  if (decisionWaiterCount >= 64) throw Object.assign(new Error('decision-wait-capacity'), { code: 'decision-wait-capacity', status: 429 });
+  await new Promise(resolveWait => {
+    let timer, done = false;
+    const finish = () => {
+      if (done) return;
+      done = true; clearTimeout(timer); response.off('close', finish);
+      const group = decisionWaiters.get(requestId); group.delete(finish);
+      if (!group.size) decisionWaiters.delete(requestId);
+      decisionWaiterCount--; resolveWait();
+    };
+    if (!decisionWaiters.has(requestId)) decisionWaiters.set(requestId, new Set());
+    decisionWaiters.get(requestId).add(finish); decisionWaiterCount++;
+    response.once('close', finish); timer = setTimeout(finish, waitMs);
+  });
+}
 
 const modelTransitions = createModelTransition({
   getJob: () => job, setJob: candidate => { job = candidate; }, persist: candidate => persistJob(candidate), client: openCode,
@@ -320,7 +428,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.1.72",
+    version: "2.2.12",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -328,6 +436,9 @@ function publicStatus() {
     brokerReadiness: status.brokerReadiness,
     brokerReadinessReceivedAt: status.brokerReadinessReceivedAt,
     activeValidationCount: status.activeValidations.length,
+    decisionWaiterCount,
+    communicationPersistence: { protocol: 'cab-continuity-v1', available: !communicationFailed,
+      sequence: communication.sequence, error:communicationError },
     undecidedValidationCount: [...validations.values()].filter((v) => !httpDecisions.has(v.requestId)).length,
     pendingReminderCount: reminderNotifications.size,
     activeValidations: status.activeValidations.map(
@@ -486,8 +597,15 @@ function approvedOperation(approval) {
   if (!files.every(validFile) || !commands.every(validCommand)) {
     throw new Error("Mandat de validation invalide.");
   }
-  if (approval.tool_input_sha256 !== undefined && !(files.length === 1 && commands.length === 0)) {
+  if (approval.tool_input_sha256 !== undefined && (!(files.length + commands.length === 1) ||
+      !/^[a-f0-9]{64}$/.test(approval.tool_input_sha256))) {
     throw new Error('native-tool-input-digest-invalid');
+  }
+
+  if (Object.hasOwn(approval, 'shell_background') && (approval.shell_background !== true || files.length ||
+      commands.length !== 1 || !approval.tool_input_sha256 || !approval.run_id ||
+      !approval.resources?.some(r => r.mode === 'write' && r.key.startsWith('port:')))) {
+    throw new Error('native-shell-background-invalid');
   }
 
   if (files.length === 1 && commands.length === 0) {
@@ -505,6 +623,7 @@ function approvedOperation(approval) {
 
   if (files.length === 0 && commands.length === 1) {
     return { sessionId, directory, kind: "bash", target: commands[0], runId: approval.run_id,
+      toolInputSha256: approval.tool_input_sha256, shellBackground: approval.shell_background,
       reservationVersion: approval.reservation_version, resources: approval.resources,
       operationId: approval.operation_id, operationDigest: approval.operation_digest,
       expectedRevisions: approval.expected_revisions, accessId: approval.access_id,
@@ -517,7 +636,7 @@ function approvedOperation(approval) {
 }
 
 function operationAllowed(operation, requestId, stage = 'prepare') {
-  return operationContextAllowed(operation, requestId) && admitOperation(operation, requestId, stage);
+  return !communicationFailed && !transportPaused && operationContextAllowed(operation, requestId) && admitOperation(operation, requestId, stage);
 }
 
 function operationContextFailure(operation, requestId) {
@@ -708,6 +827,7 @@ async function inspectRejectedReconciliation(recovery, payload) {
   const current = currentRecoveryTools(recovery, parts, messages);
   let submitted = false, rejected = false, approvalId;
   for (const part of current) {
+    if(nativeSnapshotLookup(part))continue;
     const state = part.state;
     if (part.tool === 'cab_codemode_discovery' && state?.status === 'completed' && state.metadata?.cabCodeMode) continue;
     if (part.tool === 'cgpt-validation_broker_readiness' && state?.status === 'completed') continue;
@@ -790,6 +910,7 @@ async function checkRecoveryRetry(recovery, nextRequestId) {
   const submitted = new Map();
   let refused = false;
   for (const part of current) {
+    if(nativeSnapshotLookup(part))continue;
     const state = part.state;
     if (part.tool === 'cab_codemode_discovery' && state?.status === 'completed' && state.metadata?.cabCodeMode) continue;
     if (part.tool === "cgpt-validation_broker_readiness" && state?.status === "completed") continue;
@@ -919,6 +1040,7 @@ async function inspectNotificationReconciliation(payload, matchesApproval) {
   const current = currentRecoveryTools(recovery, parts, messages);
   let submitted = false;
   for (const part of current) {
+    if(nativeSnapshotLookup(part))continue;
     const state = part.state;
     if (part.tool === 'cgpt-validation_broker_readiness' && state?.status === 'completed') continue;
     if (part.tool === 'cgpt-validation_request_validation') {
@@ -958,7 +1080,7 @@ async function inspectNotificationReconciliation(payload, matchesApproval) {
   if (!operationContextAllowed(operation, approval.requestId) || validations.has(approval.requestId) ||
       httpDecisions.has(approval.requestId)) recoveryFailure('notification-reconciliation-context-divergent');
   return { validation: { requestId: approval.requestId, approvalId: approval.approval_id,
-    changeId: approval.change_id, summary: typeof approval.summary === 'string' ? approval.summary : 'Prévol réconcilié',
+    changeId: approval.change_id, sourceApproval: structuredClone(approval), summary: typeof approval.summary === 'string' ? approval.summary : 'Prévol réconcilié',
     operation, rejectionOnly: true }, nativeToolCount: parts.length, nativeToolHash: recoveryToolsHash(parts) };
 }
 
@@ -998,7 +1120,7 @@ async function inspectPausedOrphan(payload, matchesApproval) {
       (busy[job.sessionId] && busy[job.sessionId].type !== 'idle') || !hasNativeAsk(session,operation.kind,['ask','deny'])) fail('native-not-quiescent');
   if (recoveryToolsHash(recoveryTools(await openCode.messages(job.sessionId, job.directory))) !== recoveryToolsHash(parts)) fail('proof-divergent');
   return { validation: { requestId:approval.requestId,approvalId:approval.approval_id,changeId:approval.change_id,
-    summary:typeof approval.summary === 'string' ? approval.summary : 'Demande en pause réconciliée',operation,rejectionOnly:true,pausedOrphan:true },
+    sourceApproval:structuredClone(approval),summary:typeof approval.summary === 'string' ? approval.summary : 'Demande en pause réconciliée',operation,rejectionOnly:true,pausedOrphan:true },
     nativeToolCount:parts.length,nativeToolHash:recoveryToolsHash(parts) };
 }
 
@@ -1017,6 +1139,7 @@ function installReconciledValidation(inspection) {
   checkReconciledValidation(inspection);
   const validation = inspection.validation;
   validations.set(validation.requestId, validation);
+  persistCommunication();
   updateStatus('notification-reconciled-rejection-only', { requestId: validation.requestId });
 }
 
@@ -1047,6 +1170,7 @@ async function checkExecutedPreflight(recovery, payload) {
   let commandCount = 0;
   let ready = false;
   for (const part of current) {
+    if(nativeSnapshotLookup(part))continue;
     const state = part.state;
     if (part.tool === "cgpt-validation_request_validation") {
       const input = state?.input;
@@ -1206,6 +1330,7 @@ async function checkRecoveryPreflight(recovery, restored = null) {
   let commandCount = 0;
   let legacyDiscoverySeen = false;
   for (const part of parts) {
+    if(nativeSnapshotLookup(part))continue;
     const state = part.state;
     if (part.tool === 'cab_codemode_discovery') {
       const nativeTimeValid = Number.isFinite(state?.time?.start) && Number.isFinite(state?.time?.end) &&
@@ -1508,17 +1633,19 @@ async function restoreApprovedOperation(approval, approvalResult, requiredNative
   const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
   if (previous || priorDecision || answered.has(requestId)) {
     if (previous?.approvalId !== approval.approval_id || previous?.changeId !== approval.change_id ||
-        previous?.operationConsumed || previous?.operationInvalidated || priorDecision?.decision !== 'approved') {
+        previous?.operationConsumed || previous?.operationInvalidated || priorDecision && priorDecision.decision !== 'approved') {
       throw decisionError('operation-restore-already-present');
     }
-    previous.operation.requiredNativeCallId = requiredNativeCallId;
-    previous.restoredOperation = true;
-    await transmitApprovedOperation(previous);
-    return { requestId, operationId: operation.operationId, restored: false };
+    if (priorDecision) {
+      previous.operation.requiredNativeCallId = requiredNativeCallId;
+      previous.restoredOperation = true;
+      await transmitApprovedOperation(previous);
+      return { requestId, operationId: operation.operationId, restored: false };
+    }
   }
   assertDecisionOperation(operation, requestId);
   const validation = { requestId, approvalId: approval.approval_id, changeId: approval.change_id,
-    summary: typeof approval.summary === 'string' ? approval.summary : 'Validation restaurée', operation,
+    sourceApproval: structuredClone(approval), summary: typeof approval.summary === 'string' ? approval.summary : 'Validation restaurée', operation,
     receivedAt: new Date().toISOString(), operationConsumed: false, operationInvalidated: false,
     restoredOperation: true };
   const decision = { decision: 'approved', requestId, approval_id: approval.approval_id,
@@ -1526,11 +1653,13 @@ async function restoreApprovedOperation(approval, approvalResult, requiredNative
     operation_id: operation.operationId, operation_digest: operation.operationDigest,
     expected_revisions: operation.expectedRevisions, coordination_protocol: operation.coordinationProtocol,
     resources: operation.resources, access_id: operation.accessId,
-    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}) };
-  persistOperationDecision(validation, decision);
+    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}),
+    ...(operation.shellBackground === true ? { shell_background: true } : {}) };
+  recordDecisionDurably(validation, decision);
   validations.set(requestId, validation);
   httpDecisions.set(requestId, decision);
   answered.add(requestId);
+  persistCommunication();
   updateStatus('operation-approval-restored', { requestId, operationId: operation.operationId });
   const replied = await transmitApprovedOperation(validation);
   if (!replied) updateStatus('operation-restore-waiting-boundary', { requestId, operationId: operation.operationId });
@@ -1548,7 +1677,11 @@ async function restoreApprovedTerminalOperation(approval, approvalResult) {
       job?.revokedSessions?.includes(operation.sessionId)) throw decisionError('operation-restore-identity-divergent');
   const requestId = approval.requestId;
   const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
-  if (previous || priorDecision || answered.has(requestId)) {
+  const pendingContinuation = previous && !priorDecision && !answered.has(requestId) &&
+    previous.approvalId === approval.approval_id && previous.changeId === approval.change_id &&
+    !previous.operationConsumed && !previous.operationInvalidated &&
+    previous.operation?.operationId === operation.operationId && previous.operation?.operationDigest === operation.operationDigest;
+  if ((previous || priorDecision || answered.has(requestId)) && !pendingContinuation) {
     if (previous?.approvalId !== approval.approval_id || previous?.changeId !== approval.change_id ||
         !previous?.operationConsumed || !previous?.operationInvalidated || priorDecision?.decision !== 'approved') {
       throw decisionError('operation-restore-already-present');
@@ -1557,7 +1690,7 @@ async function restoreApprovedTerminalOperation(approval, approvalResult) {
   }
   assertDecisionOperation(operation, requestId);
   const validation = { requestId, approvalId: approval.approval_id, changeId: approval.change_id,
-    summary: typeof approval.summary === 'string' ? approval.summary : 'Validation terminale réconciliée',
+    sourceApproval: structuredClone(approval), summary: typeof approval.summary === 'string' ? approval.summary : 'Validation terminale réconciliée',
     operation, receivedAt: new Date().toISOString(), operationConsumed: true,
     operationInvalidated: true, restoredOperation: true, terminalRecovery: true };
   const decision = { decision: 'approved', requestId, approval_id: approval.approval_id,
@@ -1565,13 +1698,98 @@ async function restoreApprovedTerminalOperation(approval, approvalResult) {
     operation_id: operation.operationId, operation_digest: operation.operationDigest,
     expected_revisions: operation.expectedRevisions, coordination_protocol: operation.coordinationProtocol,
     resources: operation.resources, access_id: operation.accessId,
-    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}) };
-  persistOperationDecision(validation, decision);
+    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}),
+    ...(operation.shellBackground === true ? { shell_background: true } : {}) };
+  recordDecisionDurably(validation, decision);
   validations.set(requestId, validation);
   httpDecisions.set(requestId, decision);
   answered.add(requestId);
+  persistCommunication();
   updateStatus('operation-terminal-approval-reconciled', { requestId, operationId: operation.operationId });
   return { requestId, operationId: operation.operationId, restored: true };
+}
+
+function restorePendingValidation(approval, proofDigest) {
+  if (!/^[a-f0-9]{64}$/.test(proofDigest || '') || !run || approval.run_id !== run.runId ||
+      approval.change_id !== job?.changeId || approval.directory !== workspace || !ownsSession(approval.session_id))
+    throw decisionError('pending-restore-identity-divergent');
+  const operation = approvedOperation(approval), requestId = approval.requestId;
+  if (!operation || operationContextFailure(operation,requestId) || communicationFailed || transportPaused ||
+      httpDecisions.has(requestId) || answered.has(requestId) || job.currentCabMandate && job.currentCabMandate !== requestId) throw decisionError('pending-restore-context-divergent');
+  const previous = validations.get(requestId);
+  if (previous) {
+    if (previous.pendingRestorationProof !== proofDigest || terminalApprovalIdentity(previous.sourceApproval) !== terminalApprovalIdentity(approval))
+      throw decisionError('pending-restore-already-present');
+    return {requestId,restored:false};
+  }
+  if ([...validations.values()].some(v => !httpDecisions.has(v.requestId) ||
+      httpDecisions.get(v.requestId)?.decision === 'approved' && !v.operationConsumed && !v.operationInvalidated))
+    throw decisionError('pending-restore-another-validation');
+  const validation = {requestId,approvalId:approval.approval_id,changeId:approval.change_id,
+    sourceApproval:structuredClone(approval),summary:approval.summary || 'Validation PENDING restaurée',operation,
+    receivedAt:new Date().toISOString(),operationConsumed:false,operationInvalidated:false,restoredOperation:true,pendingRestorationProof:proofDigest};
+  persistCommunication(validation);
+  validations.set(requestId,validation);refreshPendingValidationStatus();
+  updateStatus('pending-validation-restored',{requestId,operationId:operation.operationId});
+  return {requestId,restored:true};
+}
+function pendingRestorationProof(requestId) { return validations.get(requestId)?.pendingRestorationProof; }
+function completeReviewedTerminal(approval,proofDigest) {
+  const prior=validations.get(approval.requestId);
+  if(prior?.terminalReviewProof===proofDigest && prior.operationInvalidated &&
+    terminalApprovalIdentity(prior.sourceApproval)===terminalApprovalIdentity(approval)) return {requestId:approval.requestId};
+  verifyNativeCancelledValidation(approval,proofDigest);
+  const validation=validations.get(approval.requestId),decision=httpDecisions.get(approval.requestId);
+  if (!validation) return {requestId:approval.requestId};
+  if (decision?.decision !== 'approved') throw decisionError('terminal-review-context-unavailable');
+  validation.operationInvalidated=true;
+  validation.terminalReviewProof=proofDigest;
+  // Local invalidation prevents another permission; it never claims native once.
+  persistCommunication();wakeDecisionWaiters(approval.requestId);
+  updateStatus('read-only-terminal-coordination-completed',{requestId:approval.requestId,operationId:approval.operation_id});
+  return {requestId:approval.requestId};
+}
+
+function terminalApprovalIdentity(value){
+  return JSON.stringify(Object.fromEntries(['run_id','reservation_version','requestId','approval_id','change_id','session_id',
+    'directory','title','summary','files','commands','resources','coordination_protocol','operation_id','operation_digest',
+    'expected_revisions','access_id'].map(key=>[key,value?.[key]??(['resources','commands'].includes(key)?[]:key==='summary'?'':null)])));
+}
+async function invalidateApprovedTerminalOperation(approval,approvalResult){
+  if(!run||!approval||approvalResult?.status!=='APPROVED'||approvalResult.reviewer!=='CGPT'||
+      approvalResult.requestId!==approval.requestId||approvalResult.approval_id!==approval.approval_id||
+      terminalApprovalIdentity(approvalResult)!==terminalApprovalIdentity(approval))throw decisionError('operation-restore-proof-invalid');
+  const operation=approvedOperation(approval);
+  if(!operation||operation.runId!==run.runId||operation.directory!==workspace||
+      operation.operationId!==approval.operation_id||operation.operationDigest!==approval.operation_digest||
+      operation.sessionId!==approval.session_id||approval.change_id!==job?.changeId||
+      job?.revokedSessions?.includes(operation.sessionId))throw decisionError('operation-restore-identity-divergent');
+  const contextFailure=operationContextFailure(operation,approval.requestId);
+  if(contextFailure)throw decisionError(contextFailure);
+  let previous=validations.get(approval.requestId),decision=httpDecisions.get(approval.requestId);
+  if(previous&&(previous.approvalId!==approval.approval_id||previous.changeId!==approval.change_id||
+      previous.operation?.operationId!==operation.operationId||previous.operation?.operationDigest!==operation.operationDigest||
+      previous.operation?.sessionId!==operation.sessionId))throw decisionError('operation-terminal-invalidation-context-divergent');
+  if(decision&&(decision.decision!=='approved'||decision.approval_id!==approval.approval_id||
+      decision.operation_id!==operation.operationId||decision.operation_digest!==operation.operationDigest))
+    throw decisionError('operation-terminal-invalidation-decision-divergent');
+  previous||={requestId:approval.requestId,approvalId:approval.approval_id,changeId:approval.change_id,
+    summary:typeof approval.summary==='string'?approval.summary:'Validation terminale réconciliée',operation,
+    receivedAt:new Date().toISOString(),operationConsumed:false,operationInvalidated:false};
+  previous.sourceApproval ||= structuredClone(approval);
+  decision||={decision:'approved',requestId:approval.requestId,approval_id:approval.approval_id,
+    change_id:approval.change_id,run_id:run.runId,reservation_version:operation.reservationVersion,
+    operation_id:operation.operationId,operation_digest:operation.operationDigest,
+    expected_revisions:operation.expectedRevisions,coordination_protocol:operation.coordinationProtocol,
+    resources:operation.resources,access_id:operation.accessId,
+    ...(operation.toolInputSha256?{tool_input_sha256:operation.toolInputSha256}:{}),
+    ...(operation.shellBackground === true ? { shell_background: true } : {})};
+  previous.operationConsumed=true;previous.operationInvalidated=true;
+  recordDecisionDurably(previous,decision);validations.set(approval.requestId,previous);
+  httpDecisions.set(approval.requestId,decision);answered.add(approval.requestId);
+  persistCommunication();
+  updateStatus('operation-terminal-approval-invalidated',{requestId:approval.requestId,operationId:operation.operationId});
+  return {requestId:approval.requestId,operationId:operation.operationId,restored:true,invalidated:true};
 }
 
 function restoreNativeRejectedOperation(approval, proofDigest) {
@@ -1585,7 +1803,11 @@ function restoreNativeRejectedOperation(approval, proofDigest) {
       operation.sessionId !== approval.session_id) throw decisionError('native-rejection-operation-divergent');
   const requestId = approval.requestId;
   const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
-  if (previous || priorDecision || answered.has(requestId)) {
+  const pendingContinuation = previous && !priorDecision && !answered.has(requestId) &&
+    previous.approvalId === approval.approval_id && previous.changeId === approval.change_id &&
+    !previous.operationConsumed && !previous.operationInvalidated &&
+    previous.operation?.operationId === operation.operationId && previous.operation?.operationDigest === operation.operationDigest;
+  if ((previous || priorDecision || answered.has(requestId)) && !pendingContinuation) {
     if (previous?.approvalId !== approval.approval_id || previous?.changeId !== approval.change_id ||
         priorDecision?.decision !== 'rejected' || priorDecision?.native_proof_digest !== proofDigest) {
       throw decisionError('native-rejection-decision-conflict');
@@ -1593,7 +1815,7 @@ function restoreNativeRejectedOperation(approval, proofDigest) {
     return { requestId, operationId: operation.operationId, restored: false };
   }
   const validation = { requestId, approvalId: approval.approval_id, changeId: approval.change_id,
-    summary: typeof approval.summary === 'string' ? approval.summary : 'Rejet natif réconcilié',
+    sourceApproval: structuredClone(approval), summary: typeof approval.summary === 'string' ? approval.summary : 'Rejet natif réconcilié',
     operation, receivedAt: new Date().toISOString(), operationConsumed: false,
     operationInvalidated: true, nativeRejected: true };
   const decision = { decision: 'rejected', requestId, approval_id: approval.approval_id,
@@ -1601,16 +1823,18 @@ function restoreNativeRejectedOperation(approval, proofDigest) {
     operation_id: operation.operationId, operation_digest: operation.operationDigest,
     expected_revisions: operation.expectedRevisions, coordination_protocol: operation.coordinationProtocol,
     resources: operation.resources, access_id: operation.accessId, native_proof_digest: proofDigest,
-    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}) };
-  persistNativeRejectedDecision(validation, decision, proofDigest);
+    ...(operation.toolInputSha256 ? { tool_input_sha256: operation.toolInputSha256 } : {}),
+    ...(operation.shellBackground === true ? { shell_background: true } : {}) };
+  recordDecisionDurably(validation, decision, (entry, result) => persistNativeRejectedDecision(entry, result, proofDigest));
   validations.set(requestId, validation);
   httpDecisions.set(requestId, decision);
   answered.add(requestId);
+  persistCommunication();
   updateStatus('native-rejected-validation-reconciled', { requestId, operationId: operation.operationId });
   return { requestId, operationId: operation.operationId, restored: true };
 }
 
-function restoreNativeCancelledValidation(approval, proofDigest) {
+function verifyNativeCancelledValidation(approval, proofDigest) {
   if (!run || !approval || !/^[a-f0-9]{64}$/.test(proofDigest || '') ||
       approval.run_id !== run.runId || approval.change_id !== job?.changeId ||
       approval.directory !== workspace || !ownsSession(approval.session_id) ||
@@ -1621,15 +1845,29 @@ function restoreNativeCancelledValidation(approval, proofDigest) {
       operation.sessionId !== approval.session_id) throw decisionError('native-cancellation-operation-divergent');
   const requestId = approval.requestId;
   const previous = validations.get(requestId), priorDecision = httpDecisions.get(requestId);
-  if (priorDecision || (previous && (previous.approvalId !== approval.approval_id ||
+  if (priorDecision && priorDecision.decision !== 'approved' || (previous && (previous.approvalId !== approval.approval_id ||
       previous.changeId !== approval.change_id || previous.operation?.operationId !== operation.operationId ||
-      previous.operationConsumed || previous.operationInvalidated))) {
+      previous.operationConsumed))) {
     throw decisionError('native-cancellation-validation-conflict');
   }
+  return { requestId, operationId: operation.operationId };
+}
+function withdrawUnissuedValidation(approval,proofDigest) {
+  const {requestId,operationId}=verifyNativeCancelledValidation(approval,proofDigest);
+  validations.delete(requestId);httpDecisions.delete(requestId);answered.add(requestId);
+  persistCommunication();wakeDecisionWaiters(requestId);
+  updateStatus('unissued-validation-withdrawn',{requestId,operationId});
+  return {requestId,operationId};
+}
+function restoreNativeCancelledValidation(approval, proofDigest) {
+  const { requestId, operationId } = verifyNativeCancelledValidation(approval, proofDigest);
   validations.delete(requestId);
+  httpDecisions.delete(requestId);
   answered.add(requestId);
-  updateStatus('native-cancelled-validation-reconciled', { requestId, operationId: operation.operationId });
-  return { requestId, operationId: operation.operationId, cancelled: true };
+  persistCommunication();
+  wakeDecisionWaiters(requestId);
+  updateStatus('native-cancelled-validation-reconciled', { requestId, operationId });
+  return { requestId, operationId, cancelled: true };
 }
 
 function nativePermissionSummary(permission) {
@@ -1761,6 +1999,13 @@ async function transmitApprovedOperation(validation) {
         cause.code = 'NATIVE_TOOL_INPUT_GUARD';
         throw cause;
       }
+      if ((permission.metadata?.shellBackground === true) !== (validation.operation.shellBackground === true) ||
+          validation.operation.shellBackground === true && (!Number.isSafeInteger(permission.metadata?.shellTimeout) ||
+            permission.metadata.shellTimeout <= 0)) {
+        validation.operationInvalidated = true;
+        validation.nativeInputGuardFailure = 'native-shell-background-mismatch';
+        throw Object.assign(new Error('native-shell-background-mismatch'), {code:'NATIVE_TOOL_INPUT_GUARD'});
+      }
       await checkNativeAsk(validation.operation, permission.nativeAction || validation.operation.kind);
       if (validation.restoredOperation) ensureOperationAccess(validation.operation);
       if (!operationAllowed(validation.operation, validation.requestId, 'permission') ||
@@ -1770,6 +2015,7 @@ async function transmitApprovedOperation(validation) {
 
       validation.operationConsumed = true;
       nativeLifecycle.issued?.(validation.operation, validation.requestId);
+      persistCommunication();
 
       updateStatus("opencode-permission-approved", {
         requestId: validation.requestId,
@@ -2063,7 +2309,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.1.72",
+      version: "2.2.12",
     },
   });
 
@@ -2329,14 +2575,16 @@ async function handleValidation(request) {
       approval_id: request.approvalId,
       change_id: request.changeId,
       ...(request.operation?.toolInputSha256 ? {tool_input_sha256:request.operation.toolInputSha256} : {}),
+      ...(request.operation?.shellBackground === true ? {shell_background:true} : {}),
       ...(run ? { run_id: run.runId, reservation_version: request.operation?.reservationVersion,
         operation_id: request.operation?.operationId, operation_digest: request.operation?.operationDigest,
         expected_revisions: request.operation?.expectedRevisions,
         coordination_protocol: request.operation?.coordinationProtocol, resources: request.operation?.resources,
         access_id: request.operation?.accessId } : {}),
     };
-    persistOperationDecision(request, decisionEntry);
+    recordDecisionDurably(request, decisionEntry);
     httpDecisions.set(request.requestId, decisionEntry);
+    persistCommunication();
 
     answered.add(
       request.requestId
@@ -2831,10 +3079,11 @@ const handle = async (request, response, url) => {
                 ? approval.title
                 : "Validation OpenCode";
 
-          const validation = {
+          const validation = previous || {
             requestId,
             approvalId,
             changeId,
+            sourceApproval: structuredClone(approval),
             summary,
             operation,
             receivedAt: request.cabReceivedAt,
@@ -2846,6 +3095,7 @@ const handle = async (request, response, url) => {
             requestId,
             validation
           );
+          persistCommunication();
 
           void handleValidation(validation);
         } else if (!previous) {
@@ -2940,6 +3190,8 @@ const handle = async (request, response, url) => {
 
         request.cabCommitAdmission?.();
         validations.set(requestId, validation);
+        validation.sourceApproval ||= structuredClone(approval);
+        persistCommunication();
 
         if (validation.rejectionOnly) {
           response.writeHead(202, { 'content-type': 'application/json' });
@@ -3001,6 +3253,13 @@ const handle = async (request, response, url) => {
       if (
         request.method === "GET"
       ) {
+        const wait = url.searchParams.get('wait_ms');
+        if (wait !== null && (url.searchParams.getAll('wait_ms').length !== 1 || !/^\d{1,4}$/.test(wait) || Number(wait) > 1000)) {
+          response.writeHead(400, { 'content-type': 'application/json' });
+          response.end(JSON.stringify({ error: 'decision-wait-invalid' })); return;
+        }
+        await waitForDecision(requestId, wait === null ? 0 : Number(wait), response);
+        if (response.destroyed) return;
         const decision =
           httpDecisions.get(
             requestId
@@ -3089,14 +3348,16 @@ const handle = async (request, response, url) => {
             change_id:
               validation.changeId,
             ...(validation.operation?.toolInputSha256 ? {tool_input_sha256:validation.operation.toolInputSha256} : {}),
+            ...(validation.operation?.shellBackground === true ? {shell_background:true} : {}),
             ...(run ? { run_id: run.runId, reservation_version: validation.operation?.reservationVersion,
               operation_id: validation.operation?.operationId, operation_digest: validation.operation?.operationDigest,
               expected_revisions: validation.operation?.expectedRevisions,
               coordination_protocol: validation.operation?.coordinationProtocol, resources: validation.operation?.resources,
               access_id: validation.operation?.accessId } : {}),
           };
-          persistOperationDecision(validation, decisionEntry);
+          recordDecisionDurably(validation, decisionEntry);
           httpDecisions.set(requestId, decisionEntry);
+          persistCommunication();
 
           const entry =
             active.get(requestId);
@@ -3180,10 +3441,17 @@ const handle = async (request, response, url) => {
 
 return {
   handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
-  verifyRejectedRecoveryRelease, restoreNativeRejectedOperation, restoreNativeCancelledValidation,
+  freezeTransport: () => { transportPaused = true; wakeDecisionWaiters(); },
+  resumeTransport: () => { if (!closed) transportPaused = false; },
+  transportHandoffReady: () => communicationStorageReady() && reconcilingPermissions.size === 0 &&
+    !recoveryTransitionInFlight && !lifecycleTransitionInFlight && !modelTransitions.inFlight,
+  flushCommunication: async () => { await jobPersistence; persistCommunication(); },
+  restorePendingValidation, pendingRestorationProof, completeReviewedTerminal, withdrawUnissuedValidation,
+  verifyRejectedRecoveryRelease, restoreNativeRejectedOperation, restoreNativeCancelledValidation, verifyNativeCancelledValidation,
   close: () => {
     if (closePromise) return closePromise;
     closed = true; transportAbort.abort(); clearInterval(permissionTimer);
+    wakeDecisionWaiters();
     closePromise = new Promise((resolveClosed) => {
       if (!codex?.pid || codex.exitCode !== null || codex.signalCode !== null) { resolveClosed(); return; }
       codex.once('close', resolveClosed);
@@ -3193,6 +3461,13 @@ return {
   },
   hasUnresolvedValidation: () => [...validations.values()].some((v) => !httpDecisions.has(v.requestId) ||
     (httpDecisions.get(v.requestId)?.decision === "approved" && !v.operationConsumed && !v.operationInvalidated)),
+  pendingEffectsFor: resources => Boolean(job?.currentCabMandate || reconcilingPermissions.size ||
+    unmatchedNativePermissions.size || [...validations.values()].some(v =>
+      (!httpDecisions.has(v.requestId) || httpDecisions.get(v.requestId)?.decision === 'approved' &&
+        !v.operationConsumed && !v.operationInvalidated) && (!v.operation?.resources ||
+          v.operation.resources.some(a => resources.some(b => a.key === 'project:*' || b.key === 'project:*' ||
+            a.key === b.key || a.key.startsWith('file:') && b.key.startsWith('file:') &&
+            (a.key.startsWith(b.key+'/') || b.key.startsWith(a.key+'/'))))))),
   pendingEffects: () => Boolean(job?.currentCabMandate || reconcilingPermissions.size ||
     unmatchedNativePermissions.size || [...validations.values()].some((v) =>
       !httpDecisions.has(v.requestId) || (httpDecisions.get(v.requestId)?.decision === "approved" &&
@@ -3207,11 +3482,15 @@ return {
     validation.operation?.operationId === operationId && reconcilingPermissions.has(validation.requestId)),
   restoreApprovedOperation,
   restoreApprovedTerminalOperation,
+  invalidateApprovedTerminalOperation,
   assertNativeShellAsk: () => checkNativeAsk({sessionId:job?.sessionId,directory:workspace,kind:'bash'},'shell'),
   decision: (requestId) => httpDecisions.get(requestId),
   invalidateOperation: (requestId) => {
     const validation = validations.get(requestId);
-    if (validation && !validation.operationConsumed) validation.operationInvalidated = true;
+    if (validation && !validation.operationConsumed) {
+      validation.operationInvalidated = true;
+      persistCommunication();
+    }
   },
   hasRequest: (requestId) => validations.has(requestId),
   isRejectionOnly: (requestId) => validations.get(requestId)?.rejectionOnly === true,

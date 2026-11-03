@@ -705,12 +705,20 @@ Le ledger MUST conserver pour chaque opération terminale l'issue native `comple
 
 ### Requirement: NO_EFFECT après erreur native sans mutation
 
-`NO_EFFECT` MUST être admis uniquement lorsque les opérations d'écriture terminales sont prouvées en erreur, aucune écriture réussie ou effet incertain n'existe et toutes les révisions restent égales aux révisions attendues. Cette libération MUST NOT avancer une révision ni créer un `pendingWrite`.
+`NO_EFFECT` MUST respecter les révisions attendues et MUST NOT créer un
+`pendingWrite` ni avancer une révision. Une écriture réussie ou incertaine reste
+refusée, sauf contrat distinct prouvant un tour assistant terminal sans effet ;
+un timeout, une permission absente ou un journal vide ne suffisent jamais.
 
 #### Scenario: Édition native en erreur et révision inchangée
 
 - **WHEN** un edit natif est terminé en erreur, sa preuve correspond à l'opération et la révision de la ressource n'a pas changé
 - **THEN** Codex peut décider `NO_EFFECT`, CAB libère l'accès et la révision reste inchangée
+
+#### Scenario: Tour assistant terminal sans appel d’effet
+
+- **WHEN** le contrat de preuve distinct `NO_EFFECT` d’approval-persistence est satisfait
+- **THEN** CAB invalide l’accord local et libère l’accès sans avancer les révisions ni créer un `pendingWrite`
 
 #### Scenario: Écriture réussie présentée comme sans effet
 
@@ -719,7 +727,7 @@ Le ledger MUST conserver pour chaque opération terminale l'issue native `comple
 
 #### Scenario: Révision modifiée ou effet inconnu
 
-- **WHEN** une révision diverge ou qu'une opération reste ISSUING, EXECUTING ou UNKNOWN
+- **WHEN** une révision diverge ou qu'une opération reste ISSUING, EXECUTING ou UNKNOWN sans la preuve spécifique d’un tour terminal sans effet
 - **THEN** `NO_EFFECT` est refusé et l'accès demeure HELD
 
 #### Scenario: Rejeu exact de la libération
@@ -801,3 +809,212 @@ Le registre MUST conserver les accès actifs présents au redémarrage, même lo
 - **GIVEN** un accès dont l’identité, les ressources ou le jeton sont invalides
 - **WHEN** le registre est restauré
 - **THEN** la restauration échoue sans supprimer ni réparer l’accès
+
+### Requirement: Réconcilier un bail de test restauré sans l’ancien token
+
+Après redémarrage, CAB MAY renouveler le token et le fencing d’un bail de test
+`HELD` restauré sans recevoir son ancien token, uniquement depuis un prévol
+scellé et une frontière native stable. Le bail et ses ressources MUST rester
+`HELD` ; aucune commande ni permission `once` MUST être émise.
+
+#### Scenario: Propriétaire réconcilie le même bail utilisé
+
+- **WHEN** le RUN propriétaire présente le digest du prévol exact, le transactionId, la version, le fencing et un reconciliationId neuf ; toutes les opérations liées sont terminales et prouvées, la session est idle et aucune permission n’est pendante
+- **THEN** CAB renouvelle token/fencing, conserve la même réservation `HELD`, inscrit un reçu idempotent et ne divulgue pas de token dans le prévol, les logs ou le checkpoint
+
+#### Scenario: Réservation inutilisée mais restauration non prouvée
+
+- **WHEN** le bail reste restauré mais son token initial est absent
+- **THEN** CAB ne le libère pas comme inutilisé et exige les gardes de réconciliation du bail utilisé
+
+#### Scenario: Effet, permission ou activité incertaine
+
+- **WHEN** une opération liée reste `ISSUING`, `EXECUTING` ou `UNKNOWN`, la session est active, une permission existe, ou le digest/version/fencing divergent
+- **THEN** CAB refuse la mutation, conserve le bail `HELD` et ne renvoie aucun token
+
+#### Scenario: Rejeu du même reçu
+
+- **WHEN** le même reconciliationId et le même digest sont rejoués pour le même RUN et le même bail
+- **THEN** CAB rend le même reçu sans nouveau fencing ni nouvelle mutation
+
+#### Scenario: Réconciliation d’un bail différent
+
+- **WHEN** un autre RUN, contexte, transaction ou ensemble de ressources est présenté
+- **THEN** CAB refuse le reçu et conserve le bail d’origine
+
+### Requirement: Réacquérir le token d’un bail restauré utilisé
+
+Le propriétaire MAY renouveler un token de test `HELD` restauré sans fournir
+son ancien token si un prévol non secret exact et une preuve native stable
+confirment le même RUN, session et lease. Le bail MUST rester `HELD`.
+
+#### Scenario: Réconciliation owner-scoped du bail utilisé
+
+- **WHEN** un `boundaryDigest` read-only correspond au bail `HELD` restauré, le `transactionId`, version, fencing et `reconciliationId` sont exacts, toutes les opérations liées sont terminales, la session est idle et aucune permission n’est pendante
+- **THEN** CAB renouvelle le token/fencing du même bail, retourne le bail uniquement au propriétaire et retire `reconciliationRequired` sans lancer ni libérer de ressource
+
+#### Scenario: Effet natif ou frontière instable
+
+- **WHEN** une opération liée est `ISSUING`, `EXECUTING` ou `UNKNOWN`, une permission ou activité apparaît, ou le boundaryDigest change
+- **THEN** CAB ne renouvelle pas le token et garde le bail `HELD` avec `reconciliationRequired=true`
+
+#### Scenario: Token absent du prévol
+
+- **WHEN** un prévol est demandé ou relu en GET
+- **THEN** CAB retourne les identités, ressources, états et boundaryDigest sans token, contenu de commande ou sortie native
+
+#### Scenario: Rejeu du reçu exact
+
+- **WHEN** le même reconciliationId et le même payload de propriétaire sont rejoués après succès
+- **THEN** CAB retourne le bail renouvelé au même RUN sans incrémenter une seconde fois le fencing
+
+### Requirement: Recovery locale terminale indépendante de l’admission métier
+
+La revalidation d’un candidat `NO_EFFECT` déjà approuvé MAY poursuivre
+l’admission uniquement pour relire l’identité existante. Elle MUST NOT créer
+une opération ni un accès et reste soumise au contrat de preuve terminale.
+
+#### Scenario: Bail de test disjoint encore restauré
+
+- **WHEN** une opération `UNKNOWN` existante est approuvée, son accès unique concerne un fichier, la preuve terminale `NO_EFFECT` est complète et un bail de test disjoint attend sa réconciliation
+- **THEN** CAB peut clôturer uniquement l’accès fichier sans permission, sans `once` et sans modifier le bail de test
+
+#### Scenario: Candidate différent ou effet natif présent
+
+- **WHEN** la récupération ne vise pas l’opération UNKNOWN approuvée exacte, ou que permission, callID, résultat natif, once ou ressource non fichier est présent
+- **THEN** CAB conserve les gardes d’admission et refuse la voie locale
+
+#### Scenario: Événement d’un tour ultérieur read-only
+
+- **WHEN** une lecture read-only possède son propre message après le tour assistant terminal prouvé
+- **THEN** CAB garde la preuve `NO_EFFECT` limitée au tour d’origine et n’assimile pas l’événement ultérieur à un effet dans ce tour
+
+#### Scenario: Événement ultérieur sans messageId
+
+- **WHEN** le journal contient après le watermark terminal un événement sans messageId, mais à séquence durable strictement supérieure au watermark conservé
+- **THEN** CAB ne l’attribue pas au tour prouvé ; tout événement à la frontière ou sans séquence durable reste ambigu et bloque la clôture
+
+### Requirement: Réconcilier un accès HELD restauré sans replay d’acquisition
+
+Après redémarrage, le propriétaire MAY rebind un accès `HELD` uniquement par
+une frontière scellée, les décisions durables exactes, des fins natives
+terminales et une session quiescente. CAB MUST garder le même accès et les
+mêmes ressources HELD, sans nouvel accès, effet, permission ou `once`.
+
+#### Scenario: Accès terminal restauré avec décision persistée
+
+- **WHEN** le prévol owner/RUN-scoped correspond au digest actuel, toutes les opérations liées sont terminales, les décisions approved sont dans le ledger, les révisions sont inchangées, la session est idle et aucune permission n’existe
+- **THEN** CAB renouvelle token/fencing du même accès HELD et enregistre un reçu idempotent
+
+#### Scenario: Contexte de décision local absent après redémarrage
+
+- **WHEN** la décision locale n’est plus en mémoire mais le même requestId/opération portent la décision approved durable exacte
+- **THEN** CAB peut réconcilier cet accès existant sans créer une décision, une permission ou un nouvel accès
+
+#### Scenario: Opération incertaine, permission ou frontière divergente
+
+- **WHEN** une opération est `ISSUING`, `EXECUTING` ou `UNKNOWN`, une permission existe, les révisions changent ou le digest d’accès diverge
+- **THEN** CAB conserve l’accès HELD/UNKNOWN et refuse la réconciliation
+
+#### Scenario: Accès recouvrant ou effet C12 `-03`
+
+- **WHEN** une ressource recouvre un autre accès actif ou un shell reste `EXECUTING` avec une fin native absente
+- **THEN** CAB garde toutes les protections et n’attribue aucune fin ni nouveau `once`
+
+#### Scenario: Rejeu exact du reçu
+
+- **WHEN** le même reconciliationId et le même digest sont rejoués pour le même owner, RUN et accès
+- **THEN** CAB rend le reçu sans changement supplémentaire de fencing
+
+### Requirement: Quarantine d’un shell port timeouté sans fin native
+
+Un shell foreground timeouté sans `shellID` ni exit MUST rester incertain avec
+son port write détenu. CAB MAY quarantiner ce même accès après preuve native
+exacte, transcript doublement stable, session inactive et permission absente.
+La quarantine garde `once` et l'opération inchangés ; elle ne prouve pas la fin
+du shell et n'autorise ni gate ni libération.
+
+#### Scenario: Quarantine d’un timeout exact
+
+- **WHEN** le tool part native exact du seul accès port write est completed avec timeout, sans exit ni shellID, et que deux lectures confirment session inactive, aucune permission et transcript stable
+- **THEN** CAB renouvelle le fencing du même accès, conserve son verrou et l’opération `EXECUTING`, et enregistre le reçu `timeoutQuarantine`
+
+#### Scenario: Timeout, permission ou transcript divergent
+
+- **WHEN** une permission est encore présente, la session est active, l’input/callID diverge, le transcript change ou la preuve de timeout est absente
+- **THEN** CAB ne crée pas de reçu, ne répond pas à `once`, ne change pas l’accès et conserve l’état incertain
+
+### Requirement: Lecture du port timeouté par son propriétaire
+
+Sous `timeoutQuarantine`, seul le même RUN MAY acquérir, avec une décision CAB
+neuve, un accès `read` au même `port:*`. L’accès write initial MUST rester
+détenu. Les autres ressources suivent les conflits et leases habituels.
+
+#### Scenario: Browser-check read du même RUN
+
+- **WHEN** le propriétaire demande une lecture du port avec ses autres ressources et leases valides
+- **THEN** CAB accorde la lecture sans modifier l’accès write quarantiné ni son opération d’origine
+
+#### Scenario: Écriture concurrente ou autre RUN
+
+- **WHEN** une demande d’accès `write` recouvre le port quarantiné ou un autre RUN demande un accès recouvrant
+- **THEN** CAB maintient la demande en attente ou la refuse selon la FIFO, sans accorder de ressource
+
+### Requirement: Ressource détenue pendant un processus background
+
+Un accès qui porte un processus shell background MUST rester actif pendant
+que le shell corrélé est RUNNING. Les opérations disjointes MAY progresser.
+Une opération de fin explicite MUST être attachée au même accès et conserver
+les décisions et permissions natives unitaires. La publication ou le gate
+MUST attendre la preuve terminale du processus.
+
+#### Scenario: Accès concurrent disjoint
+
+- **WHEN** un serveur tient un port et une autre opération utilise des ressources disjointes
+- **THEN** la nouvelle opération progresse sans libérer ni remplacer le verrou du port
+
+#### Scenario: Gate avant fin du serveur
+
+- **WHEN** un accès contient un shell background encore RUNNING ou une fin inconnue
+- **THEN** la publication et le gate restent bloqués
+
+### Requirement: Restitution d’un bail limitée à ses effets
+
+La restitution d’une réservation de test MUST contrôler les opérations liées
+à ce bail et les accès qui recouvrent ses ressources. Un accès distinct du
+même RUN MUST NOT empêcher à lui seul cette restitution lorsque les propres
+preuves cleanup et vérification du bail sont terminales et concordantes.
+Un effet associé au bail ou un accès recouvrant incertain MUST garder le bail
+protégé. La restitution MUST NOT modifier les accès distincts ni leurs once.
+
+#### Scenario: Bail Chromium nettoyé et port Vite quarantiné
+- **WHEN** les opérations navigateur, cleanup et vérification sont terminales et les seuls accès encore actifs concernent un port distinct du bail Chromium
+- **THEN** le bail navigateur peut être restitué avec ses preuves, tandis que le port, son opération et son once restent intégralement protégés
+
+#### Scenario: Opération incertaine utilisant le bail
+- **WHEN** une opération liée au bail ou un accès recouvrant sa ressource reste EXECUTING ou UNKNOWN
+- **THEN** la restitution est refusée même si un autre nettoyage a réussi
+
+### Requirement: Réconciliation d'un bail disjoint sans effet associé
+
+La réconciliation d'un bail restauré MUST vérifier ses effets et ressources,
+la frontière native stable, l'inactivité et l'absence de permission. Une
+validation déjà décidée d'un accès disjoint MUST NOT suffire à interdire
+cette réconciliation. Les contrôles propriétaire, phase, version, fencing et
+conflits MUST rester requis ; l'accès disjoint MUST rester inchangé.
+
+#### Scenario: Validation décidée sur un fichier indépendant
+- **WHEN** le bail est sans effet associé et les seules validations déjà décidées portent sur un fichier disjoint
+- **THEN** le propriétaire peut réconcilier le bail avec ses preuves sans autoriser ou libérer ce fichier
+
+### Requirement: Extension additive de ressources compatibles
+
+Le propriétaire MAY ajouter des ressources disjointes dans les namespace et droits réservés malgré des effets protégés. CAB MUST vérifier owner, génération, digest du manifeste et recouvrement avec accès, attentes et effets inconnus. L’extension MUST être additive et idempotente, conserver générations, jetons, fencing et opérations. Les nouvelles opérations MUST garder leurs propres mandats et once.
+
+#### Scenario: Port quarantiné et port de remplacement
+- **WHEN** l’orchestrateur ajoute un port disjoint pour le même objectif de test
+- **THEN** le manifeste grandit, l’ancien port reste protégé et les générations/jetons détenus ne changent pas
+
+#### Scenario: Frontière périmée ou périmètre recouvrant
+- **WHEN** le digest a changé, le propriétaire diverge ou l’ajout recouvre une ressource protégée
+- **THEN** l’extension est refusée sans mutation du manifeste ni des protections

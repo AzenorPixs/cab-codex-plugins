@@ -1,12 +1,57 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+## États privés CAB2.2.12 et fichiers projet0775
+
+Les fichiers de projet conservent leurs droits0775, y compris après DIU.
+Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
+`<home exécution>/.local/state/cab-approval-bridge/<SHA256 du workspace résolu>/cgpt-approval-bridge/`.
+Les répertoires privés sont0700 et les fichiers0600. La racine optionnelle
+`OC_Codex_RUNTIME_STATE_ROOT` (alias historique `OC_CGPT_RUNTIME_STATE_ROOT`
+seulement si le nom principal est absent) remplace `.local/state` ; elle doit
+être absolue, hors projet et protégée. Le broker conserve son magasin de profil
+hors projet. `/status` expose `runtimeStateDirectory` ; ne pas deviner ce chemin.
+Seul le verrou public de coordination reste dans le projet en0775, pour
+exclure une ancienne instance ; il ne contient aucune décision ou secret.
+
+Le premier CABU depuis2.2.6 vérifie le registre source et le transcript des
+validations actives, puis copie les seuls états CAB connus sans changer les
+anciens fichiers. Le reçu `cab-private-state-migration-v1` garde explicitement
+la continuité LEGACY, sans certificat source inventé. Le contrôleur démarre
+avec les mutations et permissions suspendues ; CABU vérifie versions, identité
+native, RUN, opérations et once, puis active le reçu exact de façon idempotente.
+Une interruption après copie reprend en avant avec le même reçu et le même
+stockage privé ; revenir aux anciens fichiers de projet est interdit. Les
+anciennes protections incertaines restent en place, sans once ni commande rejouée.
+Les mises à jour suivantes utilisent de nouveau le transfert certifié ordinaire.
+
+
+## Récupération autonome 2.2.12
+
+Les frontières PENDING sans contexte et terminal de lecture sans reçu once
+possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
+la clôture du terminal garde explicitement l’autorisation native non prouvée.
+Aucune commande ni once historique n’est rejouée. Les mêmes identités et reçus
+survivent à la perte de réponse et au redémarrage.
+
+Dans le périmètre validé du change, l’orchestrateur décide, revoit et valide ;
+l’agent de codage réalise le travail. La décision humaine est réservée à une
+extension hors périmètre. Les diagnostics, revues bornées et récupérations
+qualifiées sont décrits dans
+[autonomous-recovery](plugins/cab-approval-bridge/skills/approval-bridge/references/autonomous-recovery.md).
+Ils conservent les historiques, permissions once et protections incertaines.
+Les ports anciens peuvent être réconciliés sur deux sondes natives sans
+inventer leur exit ; un ajout de ressource disjointe garde les anciens jetons
+et générations. Le helper utilise Node, Linux /proc et getconf de libc-bin,
+déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajouté.
+
+
 ## 1. Objet
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.1.72
+### Distribution courante 2.2.12
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.1.72. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Seules `/CAB` et `/CABU` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui valide le paquet, arrête systématiquement les trois unités systemd CAB, remplace les fichiers des quatre briques puis redémarre les unités. L'absence d'OpenCode n'empêche pas le remplacement des fichiers broker ; leur version runtime est rapportée `INDISPONIBLE` si elle ne peut être vérifiée.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.2.12. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Seules `/CAB` et `/CABU` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui prépare à chaud et ne bascule que les briques nécessaires, avec vérification des versions et de la continuité. Un jeu conforme ne redémarre pas. Aucune activation au login ; OpenCode demeure ouvert.
 
 Le contrôleur persiste chaque décision terminale avant une réponse native. Au
 redémarrage, la restauration d’une approbation exige la demande et la décision
@@ -59,11 +104,16 @@ CAB/
 ├── plugins/cab-approval-bridge/      # plugin Codex distribuable
 │   ├── .codex-plugin/plugin.json
 │   ├── skills/approval-bridge/SKILL.md
+│   ├── skills/approval-bridge/references/ # noyau et procédures conditionnelles
 │   ├── skills/coding-session-statistics/SKILL.md
 │   ├── systemd/cgpt-approval-bridge-controller.service
 │   └── scripts/
 │       ├── cgpt-approval-bridge-controller.mjs
 │       ├── cgpt-approval-bridge-job-context.mjs
+│       ├── cgpt-approval-bridge-continuity.mjs
+│       ├── cgpt-approval-bridge-recovery.mjs
+│       ├── cgpt-approval-bridge-shell-lifecycle.mjs
+│       ├── cgpt-approval-bridge-efficiency.mjs
 │       ├── cgpt-approval-bridge-model-policy.mjs
 │       ├── cgpt-approval-bridge-runs.mjs
 │       ├── cgpt-approval-bridge-import-observations.mjs
@@ -270,7 +320,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.1.72` pour le broker,
+artefacts distribués. La version de base actuelle est `2.2.12` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -458,14 +508,16 @@ d'un autre commit ou réécrire la configuration OpenCode.
 Le script est exécuté depuis le plugin installé, hors des destinations qu'il
 remplace. Il valide et sauvegarde le jeu complet avant tout effet. Il ne modifie
 ni cache de plugin, secret, environnement, drop-in ni projet piloté. L'invocation
-`/CAB update` arrête systématiquement les trois unités systemd CAB, remplace
-atomiquement les fichiers des quatre briques, exécute `daemon-reload`, puis
-démarre systématiquement les trois unités, sans consulter les états RUN ou de
-coordination en précondition. Aucune unité n'est activée au login. OpenCode
-reste ouvert ; si son API répond après remplacement, les routes natives
-rechargent le broker. En son absence, les fichiers broker sont quand même
-installés et sa version runtime est rapportée `INDISPONIBLE`. Le journal et les
-sauvegardes permettent le retour arrière sans restaurer de données métier.
+CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
+puis ne bascule que les composants nécessaires. Un jeu conforme ne subit
+aucune coupure. Le transfert compatible préserve demandes, décisions, accès et
+baux ; une réponse réseau perdue reprend le même reçu sans rejeu de once.
+OpenCode reste ouvert. Le broker n'est reconnecté que si nécessaire ; sa
+readiness et les versions réelles sont vérifiées. L'absence prouvée d'OpenCode
+permet `INDISPONIBLE` pour sa version chargée, sans en déduire un succès natif.
+Le repli restaure les artefacts, jamais un ancien état métier. Les mesures
+séparent préparation, bascule et indisponibilité observée ; aucune unité
+n'est activée au login.
 
 ### Correctif source de notification orpheline
 
@@ -572,7 +624,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.72 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.2.12 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -619,7 +671,7 @@ Le banc de processus exige une terminaison sous cinq secondes, libération des v
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.1.72.
+La distribution courante des quatre briques, plugins et commandes est 2.2.12.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -893,3 +945,15 @@ CAB2.1.32 partage le prédicat de permissions natives entre client et contrôleu
 
 
 CAB2.1.32 ferme les imports relatifs statiquement déclarés selon leurs destinations réelles, et inclut permission-policy dans le groupe du moniteur. Une dépendance seulement présente dans un autre groupe est refusée avant coupure ; les contrôles de permissions restent ceux du correctif29.
+
+Les reprises2.2.12 réutilisent les revues closes dans un historique long et
+permettent le retrait propriétaire avant toute émission native. Elles ne
+fabriquent ni permission, reçu once ou NO_EFFECT ; voir autonomous-recovery.
+La responsabilité du contrôleur pour la chaîne accès/intention/once/ACK est
+explicite. Les ports historiques non prouvés restent protégés pendant une
+continuation disjointe ; aucune dépendance n’est ajoutée.
+
+La corrélation2.2.12 distingue l’input d’un appel MCP terminé et la réussite
+métier de son wrapper. Elle conserve NOT_ADMITTED terminal et les gardes
+indépendantes de décision/accès/once. La procédure canonique à payload
+littéral est détaillée dans technical-native ; aucune dépendance nouvelle.

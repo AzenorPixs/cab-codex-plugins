@@ -32,12 +32,16 @@ Toute preuve d'effet MUST corréler une permission native once, session, appel, 
 
 ### Requirement: Version majeure CAB 2.0.0 uniforme
 
-Le paquet CAB, le broker, tous les scripts, commandes, plugins, skills, unités et moniteur distribués MUST annoncer la version de base courante commune fixée par codex-integration-distribution. Les deux manifestes de plugin MAY ajouter un cachebuster après cette version. Aucune brique active ne MUST annoncer une version de base 1.x.
+Le paquet CAB, le broker, tous les scripts, commandes, plugins, skills, unités
+et moniteur distribués MUST annoncer la version de base courante commune fixée
+par codex-integration-distribution. Les deux manifestes de plugin MAY ajouter
+un cachebuster après cette version. Aucune brique active ne MUST annoncer une
+version de base 1.x.
 
 #### Scenario: Vérification des versions distribuées
 
 - **WHEN** les artefacts source et les deux manifestes de plugin sont inspectés
-- **THEN** toutes les briques annoncent la base courante commune `2.1.72` et les manifestes conservent leur cachebuster propre
+- **THEN** toutes les briques annoncent la base courante commune `2.1.81` et les manifestes conservent leur cachebuster propre
 
 #### Scenario: Faux succès HTML
 
@@ -551,19 +555,145 @@ rester en vigueur.
 
 ### Requirement: Réconciliation d’une validation annulée par OpenCode
 
-Le contrôleur MAY clore une validation `PREPARED` sans décision seulement sur
-preuve terminale native `CANCELLED` par OpenCode. Il MUST vérifier l’identité
-exacte, deux lectures stables, la session inactive et l’absence de permission,
-d’opération native commencée et d’accès lié. Il MUST persister `CANCELLED` sans
-décision, permission, accès ni `once`, puis retirer la validation indécise.
-Toute divergence ou activité MUST conserver l’état protégé.
+Le contrôleur MAY clore une validation PREPARED sans décision ou approuvée non consommée sur preuve native CANCELLED/OC. Il MUST vérifier identité exacte, double lecture stable, session inactive et absence de permission, entrée native et accès lié. Il MUST conserver la décision historique, persister CANCELLED et sa preuve, retirer toute réponse exécutable et ne créer aucun once. Une divergence MUST préserver les protections ; une fin native MUST déclencher la vérification.
 
 #### Scenario: Annulation OpenCode stable sans effet
 
 - **WHEN** la demande exacte est terminale CANCELLED par OpenCode et deux lectures natives identiques prouvent l’identité exacte, session idle et absence d’effet
-- **THEN** l’opération devient CANCELLED sans décision, accès ni permission et le RUN peut préparer une autre demande distincte
+- **THEN** l’opération devient CANCELLED sans créer de décision, accès ou permission et le RUN peut préparer une autre demande distincte
+
+#### Scenario: Approbation locale non consommée annulée
+
+- **GIVEN** une décision approved historique, une opération PREPARED sans entrée native ni accès
+- **WHEN** une preuve CANCELLED/OC exacte et stable est qualifiée sur fin native ou après reconnexion
+- **THEN** CAB conserve approved dans le ledger, clôt CANCELLED et retire la réponse exécutable, y compris après un autre redémarrage
 
 #### Scenario: Annulation divergente ou frontière native active
 
 - **WHEN** l’identité, le transcript, la session, la permission ou l’état de l’opération diverge ou reste actif
-- **THEN** CAB conserve l’opération préparée ou indécise sans libérer de ressource ni créer de décision
+- **THEN** CAB conserve l’état protégé sans libérer de ressource ni créer de décision
+
+#### Scenario: Attente métier d’un autre RUN
+
+- **GIVEN** une infrastructure native joignable et une readiness BLOCKED due à une décision en attente
+- **WHEN** l’annulation exacte d’une opération PREPARED sans effet est qualifiée
+- **THEN** CAB peut clôturer cette annulation sans décision de substitution ni permission, en conservant les autres protections
+
+### Requirement: Annulation exacte d’une validation imbriquée sous Code Mode
+
+Le contrôleur MUST pouvoir corréler une demande native `request_validation`
+unique imbriquée dans `execute` avec une annulation terminale `CANCELLED` par
+OpenCode. Pour un wrapper d’annulation, les métadonnées MUST montrer une
+découverte littérale `cancel_approval` puis l’appel unique à l’approvalId exact,
+et la sortie MUST confirmer toutes les identités. Le double transcript, la
+session idle et l’absence de permission ou d’accès restent requis. Aucune
+décision ni `once` n’est créé.
+
+#### Scenario: Wrapper Code Mode d’annulation terminale
+
+- **WHEN** un wrapper complet et non tronqué lie une demande exacte à la découverte et l’appel unique `cancel_approval` puis retourne CANCELLED/OC concordant
+- **THEN** CAB clôt la même opération sans décision, permission ou accès
+
+#### Scenario: Wrapper ambigu ou effet possible
+
+- **WHEN** le wrapper est tronqué, ses métadonnées ajoutent un appel ou son identité, transcript, session, permission ou opération diverge
+- **THEN** CAB conserve l’opération protégée et n’émet aucune décision
+
+### Requirement: Location explicite de l’historique des messages
+
+Le client MUST transmettre `x-opencode-directory` avec la location explicite
+reçue par `messages(sessionId, directory)` pour chaque page de l’historique.
+Il MUST NOT utiliser la location par défaut du client quand un répertoire de
+session est fourni. Le contrôle s’applique aussi aux pages suivantes après
+chaque curseur.
+
+#### Scenario: Historique paginé d’une session dans une autre location
+
+- **WHEN** le client lit plusieurs pages d’une session dont le répertoire diffère de sa location par défaut
+- **THEN** chaque requête de message cible le répertoire explicite de cette session
+
+### Requirement: Binding strict d’une commande JSON dans Code Mode
+
+Le client MUST pouvoir lier une commande littérale déclarée à une propriété
+`commands` unique dans un objet `request_validation` Code Mode, que la clé soit
+écrite en syntaxe JavaScript non quotée ou JSON quotée. L’élément lié MUST être
+l’identifiant exact de la déclaration et MUST être remplacé par sa valeur
+littérale échappée avant la comparaison avec l’appel MCP natif. Une clé
+dupliquée, une valeur différente ou une expression dynamique MUST conserver le
+wrapper `execute` bloquant.
+
+#### Scenario: Clé JSON quotée et commande littérale
+
+- **WHEN** un wrapper complet et non exécuté déclare une commande littérale puis l’utilise comme unique entrée de `"commands"` et correspond à l’appel MCP natif
+- **THEN** CAB normalise l’appel en conservant son entrée exacte et sa preuve native
+
+#### Scenario: Propriété dupliquée ou binding divergent
+
+- **WHEN** plusieurs propriétés `commands` existent, la variable diffère de la déclaration ou l’entrée est dynamique
+- **THEN** CAB conserve le wrapper `execute` non normalisé et n’admet aucune validation
+
+### Requirement: Corrélation d’un shell natif background
+
+CAB MAY accepter background=true uniquement pour un shell déclaré par
+shell_background=true, avec once, tool_input_sha256 concordant, timeout positif
+et port write réservé. Le shellID MUST venir du call natif lié à la session.
+Le GET shell MUST vérifier id, location, commande, cwd et dates. Shell.Info
+ne fournissant pas de session obligatoire, la liaison MUST venir de la chaîne
+native, jamais d’un champ inventé.
+
+#### Scenario: Start background natif corrélé
+
+- **WHEN** la partie native approuvée fournit shellID et que GET shell retourne cet id, la commande, la location, le cwd et les dates concordants
+- **THEN** CAB conserve la corrélation du processus sans traiter le lancement comme sa fin
+
+### Requirement: Fin native d’un serveur background
+
+Le verrou de ressource MUST rester détenu jusqu’à ce que `GET /api/shell/:id` ou
+`shell.exited` fournisse un statut terminal corrélé au shellID et au start.
+Un timeout sans shellID, un port fermé, l’absence d’une ligne dans `GET /api/shell`
+ou une session idle MUST NOT prouver la fin d’une opération existante.
+
+#### Scenario: Processus encore en cours
+
+- **WHEN** le shell corrélé répond `status=running`
+- **THEN** CAB garde l’accès du port et laisse progresser seulement les accès disjoints
+
+#### Scenario: Timeout foreground historique sans shellID
+
+- **WHEN** un appel foreground a `metadata.timeout=true` mais aucun shellID/exit corrélable
+- **THEN** CAB conserve l’opération et l’accès `EXECUTING` sans `NO_EFFECT`, rejeu ou réattribution
+
+#### Scenario: GET shell indisponible ou divergent
+
+- **WHEN** la lecture du shell échoue, retourne 404, ou change session, commande, cwd, id ou révision
+- **THEN** CAB garde les protections et ne clôt aucun accès
+
+### Requirement: Pagination adaptative locale à une page native
+
+Une réduction de page pour dépassement de taille MUST rester au même curseur et MUST NOT réduire toutes les pages suivantes. Le client MUST rétablir sa taille nominale au curseur suivant, préserver les plafonds de réponse et de pages et refuser les cycles, réponses invalides ou dépassements sans retourner un transcript partiel.
+
+#### Scenario: Grande page puis historique ordinaire
+
+- **WHEN** la première page nécessite une taille de 1 et que les suivantes sont petites
+- **THEN** le client reprend la taille nominale et retourne l’ensemble complet sans fausse limite de pagination
+
+### Requirement: Snapshot natif partagé dans une passe de réconciliation
+
+Le contrôleur MAY réutiliser une lecture native pour une même session et génération pendant une seule passe. Il MUST invalider cette réutilisation après un événement natif et MUST conserver une seconde lecture indépendante et stable avant une clôture terminale. Un échec partagé MUST NOT devenir une preuve ni bloquer les RUN disjoints.
+
+#### Scenario: Plusieurs validations de la même session
+
+- **WHEN** une passe inspecte plusieurs opérations sans événement natif intermédiaire
+- **THEN** l’historique initial est lu une fois et chaque clôture conserve sa vérification indépendante
+
+### Requirement: Reçu durable d’un refus natif programmatique
+
+Le client CAB MUST conserver pour reject une intention privée avant POST et un ACK après HTTP204, avec identités natives et digests sans commandes ni secrets. Une intention sans ACK MUST rester indéterminée et MUST NOT rejouer le POST. Une réponse déjà confirmée MAY être relue sans effet. Un échec de journalisation après ACK MUST distinguer la réponse confirmée de sa persistance manquante.
+
+#### Scenario: Réponse perdue après un refus
+- **WHEN** un ACK durable existe pour la même permission et le même scope
+- **THEN** sa relecture ne renvoie aucune nouvelle réponse native
+
+#### Scenario: Intention seule après crash
+- **WHEN** le journal contient l’intention sans confirmation
+- **THEN** le client expose l’issue indéterminée sans second POST
