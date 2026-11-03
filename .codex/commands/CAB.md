@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.10
+version: 2.2.11
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -40,3 +40,5 @@ demandée. Status, source, stats, pause, stop, test et update n'activent pas ce
 bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
 par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
+
+Pour un diagnostic ou une demande de correctif, lire `references/incident-triage.md` ;un signalement n’autorise pas implicitement un prévol ou un effet supplémentaire.

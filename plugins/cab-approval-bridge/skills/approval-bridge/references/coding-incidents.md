@@ -1,4 +1,6 @@
-# Incidents pendant le codage CAB — 2.2.10
+# Incidents pendant le codage CAB — 2.2.11
+
+Commencer par le [triage des observations](incident-triage.md) avant de conclure à une panne.
 
 ## Diagnostic et récupération dans le mandat
 

@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.2.10. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.2.11. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -22,6 +22,7 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 |---|---|
 | Entrée/reprise de pilotage | [monitor-service](references/monitor-service.md) d'abord, puis [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md) ; [PLLM](references/protocol-model.md) au seul démarrage initial |
 | Mandat et compte rendu | [session](references/protocol-session.md), [mandats](references/technical-mandates.md), [concurrence](references/concurrent-runs.md), [cycle](references/run-lifecycle.md) |
+| Diagnostic ou faux positif présumé | [triage](references/incident-triage.md), puis la seule référence du cas |
 | Ressource ou incident natif | [récupération](references/protocol-recovery.md), [précisions](references/technical-recovery.md), [politique](references/recovery-policy.md), [reprise autonome](references/autonomous-recovery.md), [incidents](references/coding-incidents.md) selon le diagnostic |
 | Outils natifs, lecture ou arguments | [adaptations natives](references/technical-native.md) et la référence spécialisée indiquée |
 | Transport coupé ou réponse perdue | [continuité](references/transport-continuity.md) et [politique de récupération](references/recovery-policy.md) |

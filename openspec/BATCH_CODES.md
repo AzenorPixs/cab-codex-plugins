@@ -1,5 +1,11 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Cadrage SCM courant2.2.11
+
+[clarify-incident-triage-and-feedback](changes/archive/2026-11-03-clarify-incident-triage-and-feedback/), code non attribué :ARCHIVÉ, source2.2.11 qualifiée.
+Qualification/capitalisation canonique des faux positifs ;aucune garde modifiée.
+236Node et94Python :330cas ;OpenSpec20/20puis19/19. Activation séparée.
+
 ## Correctif SCM courant2.2.10
 
 [journal-rejection-of-multipart-shell-permissions](changes/archive/2026-11-03-journal-rejection-of-multipart-shell-permissions/), code non attribué :ARCHIVÉ, source2.2.10 qualifiée.

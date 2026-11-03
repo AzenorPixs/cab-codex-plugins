@@ -3,7 +3,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, mkdirSync, open
   readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-export const VERSION = '2.2.10';
+export const VERSION = '2.2.11';
 export const CONTINUITY_PROTOCOL = 'cab-continuity-v1';
 export const continuityDigest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const canonicalContinuityDigest = value => createHash('sha256').update(JSON.stringify(value, (_, item) =>
