@@ -1,3 +1,11 @@
+## 2.2.17 — Projection native du préambule await search
+
+- Le binding const d’une discovery readonly accepte await optionnel avant
+  le retour direct du call MCP littéral, dès son état running.
+- La notification peut être corrélée sans attendre la fin de l’appel bloquant ;
+  entrée, metadata, code et troncature restent contrôlés strictement.
+- Aucun effet métier, nouveau endpoint ou relâchement des permissions.
+
 ## 2.2.16 — Shell APPROVED sans accès lié
 
 - Le contrat distribué décrit la composition ordinaire acquisition/clôture

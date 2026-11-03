@@ -392,10 +392,14 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       operation_id: 'operation-partial-native', operation_digest: createHash('sha256').update('synthetic changed content').digest('hex'),
       expected_revisions: { 'file:fixture.txt': (await http('/runs')).coordination.revisions['file:fixture.txt'] }, tool_input_sha256:nativeToolInputDigest({path:target,oldString:'file',newString:'changed'}), title: 'édition native partielle exacte' };
     const partialEnd = dispatched + 2;
-    queue.push(mcp('request_validation', partial), { tool: 'edit', input: { path: target,
+    queue.push({tool:'execute',input:{code:'const schema = await search({query:"request_validation",namespace:"cgpt-validation",limit:20}); '+mcp('request_validation',partial).input.code}}, { tool: 'edit', input: { path: target,
       oldString: 'file', newString: 'changed' } });
     await client.prompt(candidate.id, 'Exécuter uniquement le remplacement synthétique exact.');
     await until(async () => (await http('/runs/native-code/status')).undecidedValidationCount === 1, 'partial admission', async () => ({ status: await http('/runs/native-code/status'), parts: (await client.messages(candidate.id)).slice(-3), controlLog: controlLog.slice(-1500) }));
+    const projectedAwaited=(await client.messages(candidate.id)).flatMap(m=>m.parts).find(p=>p.tool==='cgpt-validation_request_validation'&&p.state?.input?.requestId===partial.requestId);
+    assert.ok(projectedAwaited?.state.metadata?.cabCodeMode,'awaited search is projected before the blocking request returns');
+    assert.equal(projectedAwaited.state.status,'running');
+    console.log(JSON.stringify({awaitedSearchEarlyAdmission:true,noTimeoutOrManualPoll:true,exactRequestPreserved:true}));
     await http('/runs/native-code/decision/' + partial.requestId, { decision: 'approved', rationale: 'remplacement exact examiné' });
     const partialAccess = await http('/runs/native-code/locks/acquire', { version: current.version, operationId: partial.operation_id,
       operationDigest: partial.operation_digest, resources: partial.resources, expectedRevisions: partial.expected_revisions });
