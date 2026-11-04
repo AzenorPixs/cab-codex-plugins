@@ -70,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.2.30"
+SERVER_VERSION = "2.2.31"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
@@ -7590,7 +7590,7 @@ def remediation_catalog_snapshot():
     }
 
 
-def recommended_action_for_root_cause(root_cause):
+def recommended_action_for_root_cause(root_cause, pending_watchdog=None):
     """Retourne une recommandation structuree sans executer de remediaton."""
     actions = {
         "NONE": {
@@ -7710,6 +7710,25 @@ def recommended_action_for_root_cause(root_cause):
             "reason": "cause racine inconnue du catalogue d'actions",
         },
     ))
+    if root_cause == "NOTIFICATION_LEASE_STUCK" and pending_watchdog is not None:
+        approvals = pending_watchdog.get("approvals", {}) if isinstance(pending_watchdog, dict) else {}
+        stalled = [value for value in approvals.values() if isinstance(value, dict)
+                   and value.get("state") == "STALLED_NOTIFICATION"] if isinstance(approvals, dict) else []
+        lease_only = bool(stalled) and all(
+            value.get("reason") == "notification_lease_expired"
+            and value.get("notification_status") == "SENDING" for value in stalled
+        )
+        retry_only = bool(stalled) and all(
+            value.get("reason") == "retry_overdue" and value.get("notification_status") == "FAILED"
+            or value.get("reason") == "notification_never_delivered"
+            and value.get("notification_status", "") in ("", "PENDING") for value in stalled
+        )
+        if retry_only:
+            action = dict(actions["CONTROLLER_DECISION_PATH_STALLED"])
+            action["reason"] = "notification sans lease active : evaluer la reconciliation ciblee avant renotification"
+        elif not lease_only:
+            action = dict(actions["PENDING_WATCHDOG_ERROR"])
+            action["reason"] = "sous-etats de notification mixtes ou incomplets : identifier la cible avant remediation"
     class_meta = remediation_class_metadata(action.get("mode", "DIAGNOSTIC"))
     action["class"] = action.get("mode", "DIAGNOSTIC")
     action["mutates_state"] = class_meta["mutates_state"]
@@ -7861,7 +7880,7 @@ def classify_root_cause(
     return {
         "status": status,
         "root_cause": root_cause,
-        "recommended_action": recommended_action_for_root_cause(root_cause),
+        "recommended_action": recommended_action_for_root_cause(root_cause, pending_watchdog),
         "contributing_factors": factors,
         "diagnosed_at": utc_now(),
     }

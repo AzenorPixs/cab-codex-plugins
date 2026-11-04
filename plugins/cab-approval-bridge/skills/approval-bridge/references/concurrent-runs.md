@@ -3,7 +3,7 @@
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
 
-## Restitution ciblée d’un bail — évolution 2.2.30
+## Restitution ciblée d’un bail — évolution 2.2.31
 
 La restitution ordinaire examine les opérations liées au bail et les accès
 qui recouvrent ses ressources. Après cleanup et vérification natifs distincts
@@ -217,3 +217,19 @@ l’accès n’est pas marqué restauré, utiliser la libération normale locks/
 avec le token/fencing actuels et outcomeCOMPLETED lorsque toutes les fins sont
 qualifiées. Le token reste dans le processus local, sans copie au chat ou
 checkpoint. Ne pas traiter cet état comme une fuite ou forcer une réconciliation.
+
+### Bail HELD non restauré et payload d’acquisition perdu
+
+Les previews reconcile-preview/release-unused-preview restent limités à leurs
+frontières restaurées ; leurs409 ne prouvent pas que le bail ordinaire est
+inutilisable. Une opération native autorisée du même RUN couvrant sa ressource
+utilise le bail HELD existant sans rejouer acquire ; son association est faite
+par le contrôleur avant once. Ne pas reconstruire le payload d’origine.
+
+GET recovery peut proposer release-test pour ce bail. Sous policy propriétaire
+courante, recovery/action lie transactionId/token/fencing en interne ; l’input
+fournit evidence et cleanup ordinaires prouvés, jamais un jeton reconstitué.
+Nettoyage et vérification réels restent obligatoires, distincts, réussis et
+postérieurs aux autres tests du bail. Aucune commande LXC n’est autorisée par
+la seule perte d’un token ; si ces travaux ne sont pas dans le mandat courant,
+conserver HELD et continuer le disjoint, sans fabriquer restored/NO_EFFECT.
