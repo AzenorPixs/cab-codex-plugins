@@ -1,4 +1,4 @@
-# Récupération de session — CAB 2.2.23
+# Récupération de session — CAB 2.2.24
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -116,3 +116,6 @@ désarmer uniquement le job concerné et libérer sa réservation avec preuves,
 sans purge ni suppression des historiques. Une nouvelle session ou un nouveau
 job exige une autorisation explicite de reprise ; ne fermer ni redémarrer
 OpenCode, le broker ou les services communs des autres RUN.
+
+Appairage navigateur ou accès restauré : suivre [la reprise propriétaire autonome](owner-reconciliation.md),
+sans sollicitation humaine pour une procédure déjà mandatée.
