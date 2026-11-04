@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.29 — 2026-11-04
+
+- Accord permanent de restauration ASK bornée dans le protocole, skills, plugin et commandes ; aucune nouvelle sollicitation humaine par session.
+- Autorité explicite liée au plan, gardes SDK et protections maintenues ; aucun changement moteur hors version.
+
 ## 2.2.28 — 2026-11-04
 
 - ASK effectif : audit des grants sauvegardés, garde avant émission et maintenance API ciblée avec reçu privé.
