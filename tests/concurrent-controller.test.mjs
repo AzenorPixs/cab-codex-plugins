@@ -2132,7 +2132,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.24');
+  assert.equal(initialized.result.serverInfo.version, '2.2.25');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4273,7 +4273,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.24'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.25'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4295,11 +4295,24 @@ test('création privée : job0600 et verrou public de projet0775 sous umask pare
  assert.equal(statSync(job).mode&0o777,0o600);assert.equal(h.native.replies.length,0);
 });
 
-async function rejectedEditFixture(t){
+async function rejectedEditFixture(t,{attached=false}={}){
  const h=await setup(t),file='src/refused.md',run=await h.reserve('refused-edit',{resources:[{key:'file:'+file,mode:'write'}]}),base='/runs/'+run.runId;
+ let parent=null,access=null;
+ if(attached){
+  const first=await h.approvedEditAccess(run,'cancelled-edit-parent',file);parent=first.approval;
+  await h.stop();await h.start();
+  const reconciled=await h.post(base+'/locks/reconcile',{version:run.version,operationId:first.access.accessId,
+   token:first.access.token,fencing:first.access.fencing,transactionId:'cancel-unissued-parent',evidence:['old unit was never issued']});
+  assert.equal(reconciled.status,200,JSON.stringify(reconciled));access=reconciled.body;
+  assert.equal((await h.post(base+'/job/progress',{jobId:'job-'+run.runId,currentCabMandate:''})).status,202);
+  await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ }
  const approval=h.approval(run,'refused-edit-request'),input={path:join(h.directory,file),oldString:'old',newString:'new'};
- approval.commands=[];approval.files=[file];approval.tool_input_sha256=nativeToolInputDigest({...input,replaceAll:false});h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
- assert.equal((await h.post(base+'/validation/request',{approval})).status,202);assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ if(attached)approval.access_id=access.accessId;
+ approval.commands=[];approval.files=[file];approval.tool_input_sha256=nativeToolInputDigest(attached?{filePath:input.path,oldString:input.oldString,newString:input.newString}:{...input,replaceAll:false});h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ const admission=await h.post(base+'/validation/request',{approval});assert.equal(admission.status,202,JSON.stringify(admission));assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+ if(attached){const result=await h.post(base+'/locks/attach',{version:run.version,operationId:access.accessId,
+  token:access.token,fencing:access.fencing,operationIds:[approval.operation_id],evidence:['new reviewed edit in same held set']});assert.equal(result.status,200,JSON.stringify(result));}
  wrapNativeRequestValidationInCodeMode(h,approval);const request=h.native.messages[run.sessionId].at(-1).parts[0];request.state.status='completed';request.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
  const stamp=Date.now();h.native.messages[run.sessionId].push({nativeV2:{id:'msg_refused_edit',type:'assistant',time:{created:stamp},content:[{type:'tool',id:'call_refused_edit',name:'edit',executed:false,time:{created:stamp,ran:stamp},state:{status:'running',input,content:[],metadata:{}}}]}});
  h.native.permissions.push({id:'per_refused_edit',sessionID:run.sessionId,permission:'edit',messageID:'msg_refused_edit',tool:{callID:'call_refused_edit'},metadata:{filepath:input.path}});
@@ -4308,7 +4321,7 @@ async function rejectedEditFixture(t){
  await h.post(base+'/recovery/policy',{policyId:'refused-edit-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation'],resources:run.resources,authorization:'approved change; retire rejected edit only'});
  const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body,plan=(await h.get(base+'/recovery')).body;
  const payload={actionId:'withdraw-refused-edit',ownerId:run.ownerId,policyId:'refused-edit-policy',boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/rejected-edit']}};
- return{h,run,base,approval,payload,evidence};
+ return{h,run,base,approval,payload,evidence,parent,access};
 }
 test('retrait edit refusé : CANCELLED coordonnée, APPROVED conservé, reprise idempotente après redémarrage',async t=>{
  const{h,run,base,approval,payload,evidence}=await rejectedEditFixture(t);assert.equal(evidence.calls[0].tool,'edit');assert.equal(evidence.replyReceipts[0].state,'ACKNOWLEDGED');
@@ -4454,4 +4467,33 @@ test('readiness absente : notification répétée conserve la préparation déj�
  await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
  const resumed=await h.post('/validation/resource-request',{approval});assert.ok([200,202].includes(resumed.status),JSON.stringify(resumed));assert.equal(h.native.replies.length,0);
  assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].decision,undefined);
+});
+
+test('edit attaché refusé : parent annulé, retrait isolé et reçu durable',async t=>{
+ const{h,run,base,approval,payload,parent,access}=await rejectedEditFixture(t,{attached:true});
+ const plan=(await h.get(base+'/recovery')).body;assert.ok(plan.actions.some(o=>o.action==='withdraw-unissued-validation'&&o.targetId===approval.operation_id),JSON.stringify(plan.actions));
+ const before=(await h.get('/runs')).body.coordination;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ const after=(await h.get('/runs')).body.coordination,child=after.operations[approval.operation_id];
+ assert.deepEqual(after.accesses,before.accesses);assert.deepEqual(after.operations[parent.operation_id],before.operations[parent.operation_id]);
+ assert.deepEqual(after.revisions,before.revisions);assert.deepEqual(after.testReservations,before.testReservations);
+ assert.equal(child.state,'CANCELLED');assert.deepEqual(child.decision,before.operations[approval.operation_id].decision);
+ assert.equal(child.native,undefined);assert.equal(child.nativeResult,undefined);assert.equal(h.native.replies.length,1);assert.equal(h.native.replies[0].body.response,'reject');
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ assert.deepEqual((await h.get('/runs')).body.coordination.accesses,before.accesses);
+ h.native.permissions.push({id:'late-rejected-edit',sessionID:run.sessionId,permission:'edit',tool:{callID:'late-edit'},metadata:{filepath:join(h.directory,'src/refused.md')}});
+ await delay(100);assert.equal(h.native.replies.filter(r=>r.body.response==='once').length,0);h.native.permissions=[];
+});
+
+for(const kind of ['missing-ack','busy','pending-permission'])test('edit attaché refusé : preuve '+kind+' refusée sans mutation',async t=>{
+ const{h,run,base,approval,payload}=await rejectedEditFixture(t,{attached:true});
+ if(kind==='missing-ack'){const dir=join(runtimeStateDirectory(h.directory),'permission-replies');for(const f of readdirSync(dir))unlinkSync(join(dir,f));}
+ if(kind==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ if(kind==='pending-permission')h.native.permissions.push({id:'other-permission',sessionID:run.sessionId,permission:'edit',metadata:{filepath:join(h.directory,'other.md')}});
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const before=(await h.get('/runs')).body.coordination;
+ assert.equal((await h.post(base+'/recovery/action',payload)).status,409);
+ assert.deepEqual((await h.get('/runs')).body.coordination,before);assert.equal(h.native.replies.filter(r=>r.body.response==='once').length,0);
 });

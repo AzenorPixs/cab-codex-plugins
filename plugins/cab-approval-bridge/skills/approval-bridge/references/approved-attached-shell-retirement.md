@@ -1,4 +1,4 @@
-# Shell APPROVED refusé attaché à un parent HELD — CAB 2.2.24
+# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.25
 
 Le propriétaire traite ce cas dans le périmètre validé sans solliciter le
 correcteur. Le parent peut protéger un effet antérieur incertain : ne jamais
@@ -9,16 +9,23 @@ Le retrait concerne la coordination seule, pas la qualification métier.
 
 Relire admission, opération complète, parent et job. Exiger l’enfant
 PREPARED/APPROVED sans native/nativeResult/once ; un seul parent HELD, même
-RUN/contexte/version et toutes ses opérations du même SID courant, contenant
+RUN/contexte/version et enfant du SID courant, contenant
 l’enfant et au moins une autre opération. Le manifeste de l’enfant doit
 rester couvert par le parent ; aucun jeton ou fencing ne doit être recopié
-au modèle. Une opération historique peut rester protégée et incertaine.
+au modèle. Une opération historique du même SID peut rester protégée et incertaine.
+L’unique exception pour un autre SID est un historique CANCELLED sans native,
+nativeResult ni onceAcknowledged=true, toujours dans le même RUN/contexte/version.
+Un ancien SID actif ou porteur d’un effet reste inadmissible.
 
 GET `/runs/<run>/recovery/native-evidence?operationId=<enfant>` doit montrer
-un unique shell correspondant exactement à commands[0], error/aborted,
+un unique shell correspondant exactement à commands[0], ou un edit V2 visant
+le fichier unique approuvé, error/aborted,
 executed=false, son reçu privé reject ACKNOWLEDGED HTTP204 lié au même
 processus/version, SID, directory, call, permission et empreinte de commande.
-SID idle, permissions0, absence de troncature et d’effet supplémentaire sont
+Pour l’edit, la preuve doit satisfaire rejectedEditWithdrawalProof : input
+path/oldString/newString/replaceAll exact observé, digest de part et reçu
+privé lié à la cible, au call et à l’input natif. Le rejet permet seulement le
+retrait ; il ne rend pas exécutable l’input divergent. SID idle, permissions0, absence de troncature et d’effet supplémentaire sont
 obligatoires. L’approbation du mandat reste distincte du refus natif.
 
 ## Retrait propriétaire avec la route existante
@@ -74,3 +81,13 @@ Ne pas relancer l’ancien shell composite ; le porte-mandat scellé évite une
 nouvelle permission fragmentée. Si la frontière n’est pas qualifiée, conserver
 les protections et signaler la preuve manquante. Une extension métier reste
 soumise au développeur.
+
+## Après un historique de SID différent
+
+Le retrait ne modifie pas la garde session-handoff-historical-access-protected
+à l’émission native. Ne pas en déduire qu’une nouvelle édition peut exécuter
+sur ce même accès historique. Après retrait, le propriétaire examine séparément
+la clôture ordinaire de cet accès si toutes ses opérations sont annulées sans
+effet, puis prépare un mandat et un accès neufs sur les révisions courantes.
+Cette clôture possède ses preuves propres ; elle n’est pas effectuée par le
+retrait et ne libère aucun autre parent, bail ou effet incertain.

@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.24
+# Index du protocole CAB 2.2.25
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -36,9 +36,12 @@ Avant une demande de correctif, appliquer le [triage des incidents](incident-tri
 
 Changement de session de pilotage avec historique protégé : [session-handoff](session-handoff.md).
 
-Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.
+Shell ou edit refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.
 
 NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admitted-retirement.md). Une absence temporaire de readiness donne503, pas une incompatibilité de contrat.
 
 Appairage navigateur ou accès restauré : suivre [la reprise propriétaire autonome](owner-reconciliation.md),
 sans sollicitation humaine pour une procédure déjà mandatée.
+
+Edit attaché refusé et historique CANCELLED d’ancien SID sans effet :
+[retrait isolé](approved-attached-shell-retirement.md), sans libération du parent.

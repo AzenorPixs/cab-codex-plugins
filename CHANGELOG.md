@@ -1,3 +1,10 @@
+## 2.2.25 — 2026-11-04
+
+Retrait isolé d’un edit refusé attaché : preuve edit existante admise et
+historique d’ancien SID toléré seulement CANCELLED sans native/résultat/once.
+Enfant courant annulé sans modifier parent, APPROVED, tokens/fencing, autres
+opérations ou baux. Émission cross-SID et gardes natives inchangées.
+
 ## 2.2.24 — 2026-11-04
 
 Réconciliation propriétaire autonome : client API avant demande d’appairage,
