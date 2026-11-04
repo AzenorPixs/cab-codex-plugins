@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.24
+# Grille de décision du pilotage — CAB 2.2.25
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -63,7 +63,7 @@ priment sur une interprétation d’un compteur agrégé.
 | HELD restauré après interruption | Réconciliation propriétaire du seul accès nécessaire ; ne pas réacquérir ou modifier token/fencing à la main | [reprise autonome](owner-reconciliation.md) |
 | APPROVED/HELD jamais commencé devenu obsolète | Clôture de coordination qualifiée ; vérifier toutes les opérations liées avant de libérer | [retrait HELD](approved-held-retirement.md) |
 | Shell refusé sans accès | Diagnostic/retrait qualifié ; acquisition pour clôture seulement si ses conditions strictes restent satisfaites | [shell sans accès](approved-shell-retirement.md) |
-| Sous-opération shell refusée sur parent HELD protégé | Retirer seulement l’enfant ; parent et ses autres effets restent protégés | [retrait attaché](approved-attached-shell-retirement.md) |
+| Sous-opération shell/edit refusée sur parent HELD protégé | Retirer seulement l’enfant ; parent et ses autres effets restent protégés | [retrait attaché](approved-attached-shell-retirement.md) |
 
 ## Effet, clôture et ressources partagées
 
