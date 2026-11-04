@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.18
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.19
 
 ## Avant de solliciter une correction
 
@@ -49,3 +49,5 @@ spécification et sa régression propres.
 Appliquer le mandat SCM, l’incrément, la publication et CABU autorisés ;rapporter
 séparément documentation source, paquet installé et activation observée. Le
 nouveau cadrage ne prouve aucun ancien diagnostic ni aucune reprise métier.
+
+Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.

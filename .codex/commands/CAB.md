@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.18
+version: 2.2.19
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -51,4 +51,6 @@ Pour retirer une unité APPROVED avant once, le propriétaire suit
 `references/approved-held-retirement.md` si l’accès est HELD ; pour un shell
 refusé sans accès, `references/approved-shell-retirement.md`. Il examine la
 frontière et agit dans son mandat, sans solliciter le correcteur pour ces
-voies qualifiées. Aucun nouvel argument ni aucune garde contournée.
+voies qualifiées. Pour un shell refusé attaché à un parent HELD protégé, lire
+`references/approved-attached-shell-retirement.md` : retrait ciblé seulement.
+Aucun nouvel argument ni aucune garde contournée.

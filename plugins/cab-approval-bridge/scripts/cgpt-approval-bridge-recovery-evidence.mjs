@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.18';
+export const VERSION = '2.2.19';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -311,4 +311,34 @@ export function rejectedEditWithdrawalProof(view, candidates, approval) {
     evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',rejectedEdit:{callId,permissionId:receipt.permissionId,
       nativeInputSha256:inputSha256,approvedInputSha256:approval.tool_input_sha256||null,
       partDigest:digest(part),receiptDigest:digest(receipt)}};
+}
+
+// A rejected shell can close coordination, never its shared resource protection.
+export function rejectedShellWithdrawalProof(view, candidates, approval) {
+  if(!view || view.sessionIdle!==true || view.pendingPermissionCount!==0 || view.callsTruncated ||
+      view.replyReceiptsTruncated || view.replyError || !Array.isArray(candidates) || candidates.length!==1 ||
+      approval?.files?.length!==0 || approval.commands?.length!==1)
+    fail('withdraw-rejected-shell-boundary-invalid');
+  const part=candidates[0],input=part.state?.input,callId=part.callID||part.callId;
+  if(part.tool!=='bash' || part.nativeTool!=='shell' || part.nativeFormat!=='opencode-v2' ||
+      part.executed!==false || part.state?.status!=='error' || part.nativeErrorType!=='aborted' ||
+      !id(callId) || typeof input?.command!=='string' || input.command!==approval.commands[0])
+    fail('withdraw-rejected-shell-native-invalid');
+  const observed=(view.calls||[]).filter(call=>call.callId===callId),inputSha256=digest(input);
+  if(observed.length!==1 || observed[0].tool!=='bash' || observed[0].inputSha256!==inputSha256 ||
+      observed[0].partDigest!==digest(part)) fail('withdraw-rejected-shell-input-divergent');
+  const receipts=(view.replyReceipts||[]).filter(receipt=>receipt.callId===callId);
+  if(receipts.length!==1)fail('withdraw-rejected-shell-receipt-required');
+  const receipt=receipts[0],start=part.state.time?.start,end=part.state.time?.end,
+    created=Date.parse(receipt.createdAt),ack=Date.parse(receipt.acknowledgedAt);
+  if(receipt.state!=='ACKNOWLEDGED' || receipt.httpStatus!==204 || receipt.replyOrigin!=='CAB_CLIENT_PROGRAMMATIC' ||
+      receipt.decision!=='reject' || receipt.sessionId!==approval.session_id || receipt.directory!==approval.directory ||
+      receipt.nativePid!==view.nativePid || receipt.nativeVersion!==view.nativeVersion || !id(receipt.permissionId) ||
+      receipt.targetDigest!==commandDigest(JSON.stringify(['bash',input.command])) ||
+      !Number.isFinite(start) || !Number.isFinite(end) || end<start || !Number.isFinite(created) ||
+      created<start || created>end || !Number.isFinite(ack) || ack<created)
+    fail('withdraw-rejected-shell-receipt-divergent');
+  return {kind:'REJECTED_UNISSUED_SHELL',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
+    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',rejectedShell:{callId,permissionId:receipt.permissionId,
+      nativeInputSha256:inputSha256,partDigest:digest(part),receiptDigest:digest(receipt)}};
 }
