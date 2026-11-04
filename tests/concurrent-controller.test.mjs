@@ -2132,7 +2132,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.26');
+  assert.equal(initialized.result.serverInfo.version, '2.2.27');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3613,7 +3613,7 @@ function appendNativeCodeModeCancelledTranscript(h,approval,{variant}={}) {
  if(variant==='extra-tool')toolCalls.push({tool:'bash',status:'completed',input:{command:'/usr/bin/true'}});
  h.native.messages[approval.session_id].push({parts:[{type:'tool',id:'execute-cancel-'+approval.requestId,
   callID:'call-execute-cancel-'+approval.requestId,tool:'execute',executed:false,
-  state:{status:'completed',input:{code:variant==='code-divergent'?command+' ':command},output:JSON.stringify(result),
+  state:{status:'completed',input:{code:variant==='code-divergent'?command+' return 1;':command},output:JSON.stringify(result),
    time:{start:Date.now()-1,end:Date.now()},metadata:{truncated:variant==='truncated',toolCalls}}}]});
 }
 
@@ -4273,7 +4273,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.26'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.27'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4522,4 +4522,50 @@ for(const variant of ['native-read','native-read-window','unlinked-read','execut
  if(accepted){assert.equal(after.operations[approval.operation_id].state,'CANCELLED');assert.deepEqual(after.operations[approval.operation_id].decision,before.operations[approval.operation_id].decision);}
  else assert.deepEqual(after,before);
  assert.equal(h.native.replies.filter(r=>r.body.response==='once').length,0);
+});
+
+for(const variant of ['reported','trailing-space','tabs','compact','diagnostics','get-only-proof','poll-only-proof','reordered-metadata','extra-argument','executed','second-cancel','diagnostic-effect','diagnostic-truncated','diagnostic-running','diagnostic-empty','string-space','merged-word','comment','extra-code','operator','different-id','return-newline','throw-newline','oversize'])test('annulation native formatée : '+variant,async t=>{
+ const h=await setup(t),run=await h.reserve('cancel-format-'+variant),base='/runs/'+run.runId,approval=h.approval(run,'cancel-format-'+variant);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval);
+ const messages=h.native.messages[run.sessionId],cancel=messages.at(-1).parts[0];
+ if(['get-only-proof','poll-only-proof'].includes(variant)){
+  const tool=variant==='get-only-proof'?'get_approval':'poll_approval';
+  cancel.state.metadata.toolCalls=[{tool:'cgpt-validation.'+tool,status:'completed',input:{approval_id:approval.approval_id},output:cancel.state.output}];
+  cancel.state.input.code='return await tools["cgpt-validation"].'+tool+'({approval_id:'+JSON.stringify(approval.approval_id)+'});';
+ }
+ if(variant==='reordered-metadata')cancel.state.metadata.toolCalls[0].input={limit:20,namespace:'cgpt-validation',query:'cancel_approval'};
+ if(variant==='extra-argument')cancel.state.metadata.toolCalls[1].input.extra=true;
+ if(variant==='executed')cancel.executed=true;
+ if(variant==='second-cancel')cancel.state.metadata.toolCalls.push(structuredClone(cancel.state.metadata.toolCalls[1]));
+ if(variant==='reported')cancel.state.input.code='const r = await search({ query: "cancel_approval", namespace: "cgpt-validation", limit: 20 });\nif (r.items[0].path !== \'tools["cgpt-validation"].cancel_approval\') throw new Error("UNEXPECTED_PATH");\nreturn await tools["cgpt-validation"].cancel_approval({approval_id:'+JSON.stringify(approval.approval_id)+'});';
+ if(variant==='trailing-space')cancel.state.input.code+=' \n\t';
+ if(variant==='tabs')cancel.state.input.code=cancel.state.input.code.replaceAll(' ','\t');
+ if(variant==='compact')cancel.state.input.code=cancel.state.input.code.replace(/\s*([{}():;,])\s*/g,'$1');
+ if(variant.startsWith('diagnostic')){
+  const calls=[{tool:'search',status:'completed',input:{query:'broker_health',namespace:'cgpt-validation'}},
+   {tool:'cgpt-validation.get_approval',status:'completed',input:{approval_id:approval.approval_id}},
+   {tool:'cgpt-validation.lookup_validation',status:'completed',input:{requestId:approval.requestId}},
+   {tool:'cgpt-validation.broker_health',status:'completed',input:{}}];
+  if(variant==='diagnostic-effect')calls.push({tool:'opencode.shell',status:'completed',input:{command:'/usr/bin/true'}});
+  if(variant==='diagnostic-running')calls[1].status='running';
+  const part={type:'tool',tool:'execute',callID:'diagnostics-before-cancel',executed:false,state:{status:'completed',input:{code:'return await readonlyDiagnostics();'},output:'{}',metadata:{truncated:variant==='diagnostic-truncated',toolCalls:variant==='diagnostic-empty'?[]:calls}}};
+  messages.splice(messages.length-1,0,{parts:[part]});
+ }
+ if(variant==='string-space')cancel.state.input.code=cancel.state.input.code.replace('UNEXPECTED_PATH','UNEXPECTED PATH');
+ if(variant==='merged-word')cancel.state.input.code=cancel.state.input.code.replace('const r','constr');
+ if(variant==='comment')cancel.state.input.code='/* observation */ '+cancel.state.input.code;
+ if(variant==='extra-code')cancel.state.input.code+=' return 1;';
+ if(variant==='operator')cancel.state.input.code=cancel.state.input.code.replace('!==','===');
+ if(variant==='different-id')cancel.state.input.code=cancel.state.input.code.replace(approval.approval_id,'other-approval');
+ if(variant==='return-newline')cancel.state.input.code=cancel.state.input.code.replace('return await','return\nawait');
+ if(variant==='throw-newline')cancel.state.input.code=cancel.state.input.code.replace('throw new','throw\nnew');
+ if(variant==='oversize')cancel.state.input.code=' '.repeat(16384)+cancel.state.input.code;
+ await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const accepted=['reported','trailing-space','tabs','compact','diagnostics','get-only-proof','poll-only-proof','reordered-metadata'].includes(variant);
+ if(accepted)await waitFor(async()=>(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state==='CANCELLED');
+ else await delay(80);
+ const state=(await h.get('/runs')).body.coordination,op=state.operations[approval.operation_id];
+ assert.equal(op.state,accepted?'CANCELLED':'PREPARED',variant);assert.equal(op.decision,undefined);assert.equal(op.native,undefined);assert.equal(op.nativeResult,undefined);
+ assert.deepEqual(state.accesses,{});assert.deepEqual(h.native.replies,[]);assert.equal(h.native.permissions.length,0);
+ if(accepted){assert.equal((await h.get(base+'/status')).body.hasUnresolvedValidation,false);await h.stop();await h.start();assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'CANCELLED');}
 });

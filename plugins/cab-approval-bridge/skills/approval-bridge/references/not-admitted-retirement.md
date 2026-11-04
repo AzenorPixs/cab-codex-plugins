@@ -1,4 +1,4 @@
-# NOT_ADMITTED natif et préparation locale — CAB 2.2.26
+# NOT_ADMITTED natif et préparation locale — CAB 2.2.27
 
 Un NOT_ADMITTED broker est terminal. Une admission locale STABLE/owner et
 validation enregistrés ne le transforme pas en PENDING ou APPROVED. Dans son
@@ -65,3 +65,7 @@ Le mandat suivant exige de nouveaux requestId/approvalId/operationId/digest,
 révisions courantes, revue, décision et accès ordinaires. Réutiliser le RUN,
 le SID et les critères du change. Si un autre accès/effet demeure, diagnostiquer
 sa frontière propre ; ne pas le libérer pour débloquer cette préparation.
+
+Si le broker est CANCELLED/OC après une annulation PENDING, ce n’est pas une
+preuve NOT_ADMITTED : suivre [la convergence native](autonomous-recovery.md),
+sans rejouer cancel_approval ou un retrait déjà terminé en409.

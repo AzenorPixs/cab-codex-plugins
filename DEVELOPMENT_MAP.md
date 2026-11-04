@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Annulation Code Mode SCM 2.2.27
+
+[qualify-formatted-native-cancellation](openspec/changes/archive/2026-11-04-qualify-formatted-native-cancellation/), code non attribué : ARCHIVÉ, source2.2.27 qualifiée.
+Matcher lexical fermé et diagnostics sans effet ;769tests uniques finaux réussis.
+Identités, quiescence et autres protections conservées. Publication/activation
+et convergence native distinctes ; QUALIFICATION.md du change. ACL ultérieure.
+
+```mermaid
+flowchart LR
+    cancelFormatting["qualify-formatted-native-cancellation<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class cancelFormatting provisional
+```
+
 ## Lectures et retrait SCM 2.2.26
 
 [recognize-native-reads-during-rejected-withdrawal](openspec/changes/archive/2026-11-04-recognize-native-reads-during-rejected-withdrawal/), code non attribué : ARCHIVÉ, source2.2.26 qualifiée.
