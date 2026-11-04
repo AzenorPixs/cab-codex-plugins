@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.31
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.32
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -77,3 +77,5 @@ NOTIFICATION_LEASE_STUCK peut aussi couvrir FAILED/retry_overdue sans lease.
 Identifier l’approval et le sous-état via broker_health/list_pending, puis
 [qualifier la recommandation et ses gardes](technical-recovery.md#notification-bloquée--qualifier-le-sous-état).
 La présence de services READY ne remplace pas la readiness du seul RUN.
+
+Accès HELD non restauré, membres terminaux et token perdu : [libération owner](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage), sans restitution implicite des baux ou effets inconnus.

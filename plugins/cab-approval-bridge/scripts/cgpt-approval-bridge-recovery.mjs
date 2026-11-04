@@ -2,7 +2,7 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.2.31';
+export const VERSION = '2.2.32';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -18,6 +18,7 @@ const actions = {
   'reconcile-access': '/locks/reconcile-restored',
   'quarantine-port': '/locks/quarantine-timeout',
   'release-test': '/test-resources/release',
+  'release-access': '/locks/release',
   'cancel-waiting-test': '/test-resources/cancel',
   'cancel-waiting-access': '/locks/cancel',
 };
@@ -153,6 +154,9 @@ export class RecoveryCoordinator {
         offer('reconcile-access', access.accessId, access.resources,
           '/locks/reconcile-preview?operationId=' + encodeURIComponent(access.accessId));
       }
+      if (access.state === 'HELD' && !this.registry.restoredAccesses.has(access.accessId) &&
+          !access.timeoutQuarantine && ops.length && ops.every(op => op && ['COMPLETED','CANCELLED'].includes(op.state)))
+        offer('release-access', access.accessId, access.resources);
       for (const op of ops.filter(op => op && ['EXECUTING', 'UNKNOWN'].includes(op.state))) {
         if (!access.timeoutQuarantine && access.resources.every(resource => resource.mode === 'write' && resource.key.startsWith('port:'))) {
           offer('quarantine-port', op.operationId, access.resources,
@@ -248,8 +252,9 @@ export class RecoveryCoordinator {
     if (portAction && (!Array.isArray(body.probeOperationIds) || body.probeOperationIds.length !== 2 ||
         body.probeOperationIds[0] === body.probeOperationIds[1] || body.probeOperationIds.some(value => !id(value)))) fail('recovery-input-divergent');
     if (Object.keys(body).some(key => !['version', 'fencing', 'transactionId', 'operationId', 'evidence',
-      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest', ...(reviewAction || portAction || boundaryAction ? ['review','nativeBoundaryDigest'] : []), ...(portAction ? ['probeOperationIds'] : [])].includes(key))) fail('recovery-input-divergent');
+      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest', ...(input.action === 'release-access' ? ['outcome'] : []), ...(reviewAction || portAction || boundaryAction ? ['review','nativeBoundaryDigest'] : []), ...(portAction ? ['probeOperationIds'] : [])].includes(key))) fail('recovery-input-divergent');
     if (Object.hasOwn(body, 'token') || body.version !== undefined && body.version !== run.version) fail('recovery-input-divergent');
+    if (input.action === 'release-access' && !['COMPLETED','RECONCILED'].includes(body.outcome)) fail('recovery-input-divergent');
     body.version = run.version;
     const leaseAction = ['reconcile-test', 'release-test', 'cancel-waiting-test'].includes(input.action);
     const entity = reviewAction || portAction || boundaryAction ? this.registry.resourceState.operations[input.targetId] : leaseAction ? this.registry.resourceState.testReservations[input.targetId] :
@@ -261,7 +266,8 @@ export class RecoveryCoordinator {
         body.fencing !== undefined && body.fencing !== entity.fencing) fail('recovery-input-divergent');
     body[identityKey] = input.targetId;
     if (entity.fencing !== undefined) body.fencing = entity.fencing;
-    if (['release-test', 'cancel-waiting-test', 'cancel-waiting-access'].includes(input.action) && entity.token) body.token = entity.token;
+    if (input.action === 'release-access') body.accessReleaseBoundary = canonicalContinuityDigest(entity);
+    if (['release-access', 'release-test', 'cancel-waiting-test', 'cancel-waiting-access'].includes(input.action) && entity.token) body.token = entity.token;
     const receipt = { actionId: input.actionId, runId, contextId: run.contextId, ownerId: run.ownerId,
       policyId: policy.policyId, action: input.action, targetId: input.targetId,
       entityId: reviewAction || portAction || boundaryAction ? entity.operationId : leaseAction ? entity.transactionId : entity.accessId,
@@ -303,7 +309,7 @@ export class RecoveryCoordinator {
         this.registry.resourceState.accesses[entity.accessId].outcome === 'RECONCILED' && !!receipt.observation;
       else if (receipt.action === 'cancel-reviewed-validation') proof = entity.state === 'CANCELLED' &&
         entity.completionDigest === receipt.effectDigest && !entity.native && entity.decision?.status === 'approved';
-      else if (receipt.action === 'release-test') proof = entity.state === 'RELEASED' && entity.releaseDigest === receipt.effectDigest;
+      else if (['release-access','release-test'].includes(receipt.action)) proof = entity.state === 'RELEASED' && entity.releaseDigest === receipt.effectDigest;
       else if (receipt.action.startsWith('reconcile-')) proof = entity.reconciliationReceipts?.[receipt.receiptId]?.inputDigest === receipt.effectDigest;
       else if (receipt.action === 'quarantine-port') proof = entity.timeoutQuarantine?.quarantineId === receipt.receiptId &&
         entity.timeoutQuarantine.inputDigest === receipt.effectDigest;

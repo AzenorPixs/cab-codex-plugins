@@ -27,7 +27,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.31";
+const version = "2.2.32";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -2892,6 +2892,16 @@ async function handleRequest(request, response) {
         const receipt = url.pathname === '/publish' ? registry.resourceState.publications[payload.transactionId] : null;
         if (receipt) { json(response, 200, registry.publish(runId, payload)); return; }
         const access = registry.held(runId, payload);
+        const checkDelegatedRelease = () => {
+          if (payload.accessReleaseBoundary === undefined) return;
+          if (url.pathname !== '/locks/release' || !/^[a-f0-9]{64}$/.test(payload.accessReleaseBoundary) ||
+              proofHash(access) !== payload.accessReleaseBoundary || access.state !== 'HELD' ||
+              access.timeoutQuarantine || registry.restoredAccesses.has(access.accessId) ||
+              !access.operationIds.length || access.operationIds.some(id =>
+                !['COMPLETED','CANCELLED'].includes(registry.resourceState.operations[id]?.state)))
+            throw new CoordinationError('recovery-access-boundary-changed');
+        };
+        checkDelegatedRelease();
         if (context.publicJob()?.currentCabMandate || (url.pathname === '/publish' &&
             (context.publicJob()?.recovery || context.publicStatus().undecidedValidationCount))) {
           throw new CoordinationError('run-not-quiescent');
@@ -2900,6 +2910,7 @@ async function handleRequest(request, response) {
         await reconcileTerminalNativeOutcomes(runId, access);
         await checkNative(registry.resourceState.operations[access.operationIds[0]]?.sessionId ||
           context.publicJob()?.sessionId || run.sessionId, true);
+        checkDelegatedRelease();
         const result = url.pathname === '/publish' ? registry.publish(runId, payload) : registry.releaseAccess(runId, payload);
         for (const id of access.operationIds) context.invalidateOperation(registry.resourceState.operations[id].requestId);
         json(response, 200, result); return;
