@@ -7,7 +7,7 @@ import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.2.25';
+export const VERSION = '2.2.26';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -662,7 +662,7 @@ function normalizeMessage(message, sessionId) {
     const directError = directMcpError(content);
     if (content.executed !== undefined && typeof content.executed !== 'boolean') fail('opencode-message-invalid');
     const part = { type: 'tool', id: content.id, tool: content.name === 'shell' ? 'bash' : content.name, callID: content.id, executed: content.executed,
-      ...((content.name === 'shell' || ['write', 'edit'].includes(content.name) && content.executed === false)
+      ...((content.name === 'shell' || ['write', 'edit', 'read'].includes(content.name) && content.executed === false)
         ? { nativeFormat: 'opencode-v2', nativeTool: content.name } : {}),
       state: { status: state.status, input: state.input, output, error,
         metadata: directError ? { ...nativeMetadata, cabDirectMcpError: directError } : nativeMetadata, time: { start: content.time?.ran ?? content.time?.created,

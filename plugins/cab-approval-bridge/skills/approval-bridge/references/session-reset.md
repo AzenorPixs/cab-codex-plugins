@@ -34,7 +34,7 @@ crée ni permission ni remédiation des composants observés.
 4. Résoudre les espaces d'état réellement utilisés. Le broker utilise par
    défaut `<home OpenCode>/.opencode/state/cgpt-approval-bridge/` ; contrôleur et
    superviseur utilisent le `runtimeStateDirectory` privé exposé par `/status`,
-   hors projet depuis2.2.25. Le répertoire historique de projet ne fait plus
+   hors projet depuis2.2.26. Le répertoire historique de projet ne fait plus
    autorité après migration et ne doit pas servir de repli.
    Tenir compte des chemins personnalisés déclarés sans lire de secret ni
    d'environnement complet. Ne pas déduire le home du broker du home Codex.

@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { ContinuityStore, canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 import { processIdentity } from './cgpt-approval-bridge-process-lifecycle.mjs';
 
-export const VERSION = '2.2.25';
+export const VERSION = '2.2.26';
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 function metadata(path) {

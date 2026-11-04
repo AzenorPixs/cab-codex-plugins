@@ -27,7 +27,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.25";
+const version = "2.2.26";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -975,6 +975,17 @@ const noEnvironmentMcpTools = new Set(['search', 'cgpt-validation.request_valida
 function nativeNoEnvironmentObservation(part) {
   const status = part?.state?.status;
   if (part?.type !== 'tool' || !['completed', 'error'].includes(status)) return false;
+  if (part.tool === 'read') {
+    const input=part.state.input;
+    return status==='completed' && part.executed===false && part.nativeFormat==='opencode-v2' &&
+      part.nativeTool==='read' && typeof part.callID==='string' && part.callID.length>0 &&
+      input && typeof input==='object' && !Array.isArray(input) &&
+      Object.keys(input).every(key=>['path','offset','limit'].includes(key)) &&
+      typeof input.path==='string' && input.path.length>0 && !input.path.includes('\0') &&
+      (input.offset===undefined || Number.isSafeInteger(input.offset) && input.offset>=0) &&
+      (input.limit===undefined || Number.isSafeInteger(input.limit) && input.limit>0) &&
+      part.state.metadata?.truncated!==true;
+  }
   if (['cgpt-validation_request_validation', 'cgpt-validation_poll_approval', 'cgpt-validation_get_approval',
     'cgpt-validation_lookup_validation', 'cgpt-validation_reject', 'cgpt-validation_list_pending', 'cgpt-validation_cancel_approval',
     'cgpt-validation_broker_readiness', 'cgpt-validation_broker_health'].includes(part.tool)) return true;
