@@ -84,7 +84,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
         OPENCODE_DISABLE_PROJECT_CONFIG: '1', OPENCODE_DISABLE_DEFAULT_PLUGINS: '1', OPENCODE_DISABLE_CLAUDE_CODE: '1',
         OPENCODE_DISABLE_MODELS_FETCH: '1', OPENCODE_DISABLE_AUTOUPDATE: '1', OPENCODE_DISABLE_LSP_DOWNLOAD: '1' } });
     native.stderr.on('data', chunk => nativeLog += chunk);
-    const client = createOpenCodeV2Client({ baseUrl: base, directory: workspace, passwordFile, permissionReceiptDirectory:join(root,'private-replies') });
+    const client = createOpenCodeV2Client({ baseUrl: base, directory: workspace, passwordFile, permissionReceiptDirectory:join(root,'private-replies'),permissionRepairDirectory:join(root,'private-grant-repairs') });
     await until(async () => { if (native.exitCode !== null) throw Error('native startup: ' + nativeLog.replaceAll(password, '[synthetic]'));
       try { return (await client.info()).version.startsWith('2.2.'); } catch { return false; } }, 'native startup');
     eventReader = (await client.events()).body.getReader();
@@ -189,6 +189,7 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       if (!catalogReady) await delay(100);
     }
     assert.equal(catalogReady, true, 'MCP catalog must advertise broker_readiness before preflight');
+
     const systemInstructions = providerRequests.map(raw => JSON.parse(raw)).flatMap(body => body.messages || [])
       .filter(message => message.role === 'system').map(message => typeof message.content === 'string' ? message.content : JSON.stringify(message.content)).join('\n');
     assert.match(systemInstructions, /Les autres clients MCP suivent leur propre contrat/);
@@ -678,5 +679,38 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.equal(dispatched,pilotEnd,'restart and replay issue no provider or native effect');
     console.log(JSON.stringify({sameRunPilotHandoff:true,historicalApprovalsAndAccessesPreserved:true,idempotentReceipt:true,noHandoffNativePermission:true,certifiedRestartWithHandoffReceipt:true}));
 
+
+    // Run cache qualification after normal multi-RUN setup: an unowned legacy shell must not bypass its startup gate.
+    const effectiveAskProbe=await makeSession('saved grant versus effective ASK');
+    const effectiveAskCommand="node -e \"console.log('CAB_PRIVATE_SAVED_GRANT')\"";
+    queue.push({tool:'shell',input:{command:effectiveAskCommand,timeout:2000}});
+    await client.prompt(effectiveAskProbe.id,'Synthetic isolated native cache qualification.');
+    await until(async()=>(await client.permissions()).some(p=>p.sessionID===effectiveAskProbe.id),'private grant initial ASK');
+    const effectiveAskRequest=(await client.permissions()).find(p=>p.sessionID===effectiveAskProbe.id);
+    // The raw native API simulates a legacy external grant; the CAB client forbids always.
+    await client.request('/api/session/'+effectiveAskProbe.id+'/permission/'+effectiveAskRequest.id+'/reply',{method:'POST',body:{decision:'always'}});
+    await until(async()=>!(await client.activeSessions())[effectiveAskProbe.id],'private legacy grant done');
+    const effectiveAskFirstPart=(await client.messages(effectiveAskProbe.id)).flatMap(m=>m.parts||[]).findLast(p=>p.nativeTool==='shell');
+    assert.equal(effectiveAskFirstPart.state.metadata.exit,0);assert.match(effectiveAskFirstPart.state.output,/CAB_PRIVATE_SAVED_GRANT/);
+    const effectiveAskPolicy=await client.nativePermissionPolicy(effectiveAskProbe.id,{requiredNativeAsk:['shell','edit']});
+    assert.equal(effectiveAskPolicy.nominalReady,true);assert.equal(effectiveAskPolicy.ready,false);assert.ok(effectiveAskPolicy.savedGrantAudit.protectedCount>0);
+    const effectiveAskProviderCount=providerRequests.length;
+    await assert.rejects(client.prompt(effectiveAskProbe.id,nativeCodingMandate('No new native effect is allowed before maintenance.')),{code:'opencode-native-permission-ask-required'});
+    assert.equal(providerRequests.length,effectiveAskProviderCount);
+    await until(async()=>Object.keys(await client.activeSessions()).length===0,'private permission maintenance boundary');
+    const effectiveAskBoundary=await client.mcpRecoverySnapshot(),effectiveAskBrokerPid=Number(readFileSync(brokerPidFile,'utf8'));
+    const effectiveAskPlan=await client.nativePermissionRepairPlan(effectiveAskProbe.id,{planId:'native-effective-ask-qualification'});
+    const effectiveAskRepair=await client.revokeSavedNativePermissions(effectiveAskPlan,{kind:'shared-project-maintenance',projectID:effectiveAskPlan.projectID,directory:workspace,planDigest:effectiveAskPlan.planDigest,reference:'fixture:explicit-private-native-maintenance'});
+    assert.equal(effectiveAskRepair.state,'COMPLETED');assert.equal((await client.nativePermissionPolicy(effectiveAskProbe.id,{requiredNativeAsk:['shell','edit']})).ready,true);
+    assert.deepEqual(await client.mcpRecoverySnapshot(),effectiveAskBoundary);assert.equal(Number(readFileSync(brokerPidFile,'utf8')),effectiveAskBrokerPid);
+    queue.push({tool:'shell',input:{command:effectiveAskCommand,timeout:2000}});
+    await client.prompt(effectiveAskProbe.id,'Controlled readonly command must wait for ASK.',{requiredNativeAsk:['shell','edit']});
+    await until(async()=>(await client.permissions()).some(p=>p.sessionID===effectiveAskProbe.id),'ASK physically restored after revocation');
+    const effectiveAskPending=(await client.permissions()).find(p=>p.sessionID===effectiveAskProbe.id);
+    const effectiveAskPart=(await client.messages(effectiveAskProbe.id)).flatMap(m=>m.parts||[]).findLast(p=>p.nativeTool==='shell');
+    assert.equal(effectiveAskPart.state.status,'running');assert.notEqual(effectiveAskPart.state.metadata?.exit,0);
+    await client.replyPermission(effectiveAskProbe.id,effectiveAskPending.id,'reject');
+    await until(async()=>!(await client.activeSessions())[effectiveAskProbe.id],'restored ASK rejected without executing');
+    console.log('Saved native grant detected behind nominal ASK; scoped API revocation restores an actual pending permission before the second command.');
 
   });

@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.2.27";
+export const VERSION = "2.2.28";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -429,7 +429,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.2.27",
+    version: "2.2.28",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -774,6 +774,12 @@ async function checkNativeAsk(operation, nativeKind = operation?.kind) {
     nativePermissionFailure("native-permission-context-divergent");
   }
   if (!hasNativeAsk(session, nativeKind)) nativePermissionFailure("native-permission-ask-required");
+  let policy;
+  try {policy=await openCode.nativePermissionPolicy(operation.sessionId,{directory:operation.directory,
+    requiredNativeAsk:[nativeKind==='bash'?'shell':nativeKind]});}
+  catch {nativePermissionFailure('native-permission-control-unavailable');}
+  if(!policy?.savedGrantAudit?.available)nativePermissionFailure('native-permission-control-unavailable');
+  if(!policy.ready)nativePermissionFailure('native-permission-ask-required');
 }
 
 async function nativeAskGuard(operation, response, request) {
@@ -2393,7 +2399,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.2.27",
+      version: "2.2.28",
     },
   });
 

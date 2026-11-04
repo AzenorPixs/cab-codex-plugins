@@ -1,4 +1,4 @@
-# Arrêt — CAB 2.2.27
+# Arrêt — CAB 2.2.28
 
 ## `/CAB stop`
 

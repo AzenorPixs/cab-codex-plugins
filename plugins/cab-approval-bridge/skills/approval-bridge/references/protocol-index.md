@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.27
+# Index du protocole CAB 2.2.28
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -48,3 +48,6 @@ Edit attaché refusé et historique CANCELLED d’ancien SID sans effet :
 
 PENDING annulé nativement mais PREPARED local : [convergence qualifiée](autonomous-recovery.md),
 sans rejeu du cancel ; mise en forme et diagnostics purs distingués.
+
+ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
+sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).

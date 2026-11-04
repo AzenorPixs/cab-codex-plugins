@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.27
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.28
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -59,3 +59,6 @@ NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admi
 
 Appairage navigateur ou accès restauré : suivre [la reprise propriétaire autonome](owner-reconciliation.md),
 sans sollicitation humaine pour une procédure déjà mandatée.
+
+ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
+sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).
