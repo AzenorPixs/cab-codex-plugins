@@ -1,4 +1,4 @@
-# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.25
+# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.26
 
 Le propriétaire traite ce cas dans le périmètre validé sans solliciter le
 correcteur. Le parent peut protéger un effet antérieur incertain : ne jamais
@@ -91,3 +91,20 @@ la clôture ordinaire de cet accès si toutes ses opérations sont annulées san
 effet, puis prépare un mandat et un accès neufs sur les révisions courantes.
 Cette clôture possède ses preuves propres ; elle n’est pas effectuée par le
 retrait et ne libère aucun autre parent, bail ou effet incertain.
+
+## Lectures natives sans mutation après le rejet
+
+Un read V2 terminé, executed=false, non tronqué, avec provenance dérivée du
+nom d’outil natif, path non vide et éventuelle fenêtre offset/limit valide,
+est une observation ; il ne devient pas un deuxième effet candidat.
+La fenêtre est bornée à offset entier sûr positif ou nul et limit entier sûr
+strictement positif. Les seules clés admises sont path, offset, limit.
+Cette qualification ne permet aucune lecture hors mandat et ne transforme
+pas un autre outil ou un wrapper JavaScript opaque en lecture sûre.
+
+Read actif/échoué/executed=true, troncature, provenance absente, clé inconnue,
+outil imitant read, shell/write/edit supplémentaire restent à qualifier.
+Le contrôleur doit toujours prouver l’unique edit/shell refusé, ACK204, zéro
+permission et deux frontières stables ; parent et autres protections restent
+inchangés. Après un reçu terminal409 de retrait, conserver ce reçu et préparer
+une action neuve sur les preuves fraîches corrigées ; ne pas réémettre l’effet.

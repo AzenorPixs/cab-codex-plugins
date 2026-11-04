@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Lectures et retrait SCM 2.2.26
+
+[recognize-native-reads-during-rejected-withdrawal](openspec/changes/archive/2026-11-04-recognize-native-reads-during-rejected-withdrawal/), code non attribué : ARCHIVÉ, source2.2.26 qualifiée.
+Read V2 sans mutation distingué des effets ;745tests uniques finaux réussis.
+Rejet/ACK/frontières et parent conservés. Publication/activation distinctes ;
+voir QUALIFICATION.md du change. Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    readObservation["recognize-native-reads-during-rejected-withdrawal<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class readObservation provisional
+```
+
 ## Retrait edit attaché SCM 2.2.25
 
 [retire-rejected-attached-edit-with-cancelled-history](openspec/changes/archive/2026-11-04-retire-rejected-attached-edit-with-cancelled-history/), code non attribué : ARCHIVÉ, source2.2.25 qualifiée.

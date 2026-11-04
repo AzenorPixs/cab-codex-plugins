@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.25
+# Reprise autonome dans le change — CAB 2.2.26
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -256,7 +256,7 @@ disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
 supposition. La clôture historique reste non prouvée ; aucune procédure ne
 peut effacer cette incertitude sans preuve supplémentaire.
 
-## Permission shell décomposée — CAB2.2.25
+## Permission shell décomposée — CAB2.2.26
 
 Une permission shell peut porter plusieurs ressources ;elle autoriserait
 l’appel entier, pas une once par fragment. CAB ne déduit aucune équivalence
@@ -279,7 +279,7 @@ anciennes identités et permissions ne sont pas réutilisées. Aucun reçu absen
 ne se fabrique rétroactivement. Des mandats unitaires ou le transport shell
 scellé existant permettent d’éviter une décomposition non qualifiée.
 
-## Retirer un edit refusé avant once — CAB2.2.25
+## Retirer un edit refusé avant once — CAB2.2.26
 
 Utiliser la policy propriétaire withdraw-unissued-validation et la même route
 recovery/action, targetId de l’opération, input={nativeBoundaryDigest,evidence}.
@@ -309,3 +309,7 @@ ses propres identités, révisions et empreinte, après revue du fichier actuel.
 Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.
 
 NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admitted-retirement.md). Une absence temporaire de readiness donne503, pas une incompatibilité de contrat.
+
+Les lectures natives read V2 qualifiées après un rejet restent des observations ;
+voir [le retrait ciblé](approved-attached-shell-retirement.md). Les autres appels
+supplémentaires ne sont jamais ignorés par analogie.

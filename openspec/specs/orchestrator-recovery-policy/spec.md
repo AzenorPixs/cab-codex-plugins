@@ -250,7 +250,7 @@ inventée pour satisfaire une branche de récupération inapplicable.
 - **THEN** le contrat interdit de forcer la clôture HELD ou de modifier les ressources pour contourner le refus
 
 ### Requirement: Retrait isolé d’un shell refusé attaché
-Le contrôleur SHALL retirer seulement l’enfant PREPARED/APPROVED sans native/nativeResult/once, sur preuve qualifiée de rejet shell ou edit avorté executed=false et reçu privé reject ACK204 exact. Deux frontières stables SHALL vérifier SID courant idle, zéro permission et parent HELD inchangé. Un historique d’autre SID SHALL être admissible seulement CANCELLED sans native/nativeResult/once, dans le même RUN/contexte/version. APPROVED et protections SHALL rester conservés.
+Le contrôleur SHALL retirer uniquement l’enfant PREPARED/APPROVED sans native/nativeResult/once sur preuve qualifiée de rejet shell/edit et ACK204 exact. Deux frontières stables SHALL vérifier SID idle, zéro permission et parent HELD inchangé. Les lectures natives prouvées sans mutation SHALL rester distinctes des effets. Un historique d’autre SID SHALL être admis seulement CANCELLED sans native/nativeResult/once, mêmes RUN/contexte/version. APPROVED et protections SHALL rester conservés.
 
 #### Scenario: Sous-opération sur parent protégé
 - **GIVEN** un parent unique HELD du même RUN/contexte/version couvrant l’enfant courant et une autre opération historique
@@ -273,6 +273,17 @@ Le contrôleur SHALL retirer seulement l’enfant PREPARED/APPROVED sans native/
 - **GIVEN** un reçu absent, input/cible divergent du rejet qualifié, effet supplémentaire, once, résultat, parent absent/multiple/étranger/non HELD ou frontière modifiée
 - **WHEN** le retrait est demandé
 - **THEN** il est refusé sans libérer ni réconcilier le parent
+
+#### Scenario: Lectures natives après le rejet
+- **GIVEN** l’edit ciblé refusé et des read V2 terminés executed=false avec provenance native, path et fenêtre de lecture valides, sans troncature
+- **WHEN** CAB qualifie les candidats d’effet avant le retrait
+- **THEN** ces lectures sont reconnues comme observations et l’edit reste l’unique effet candidat
+- **AND** la normalisation dérive la provenance du nom natif read, jamais d’une métadonnée libre
+
+#### Scenario: Lecture non qualifiée ou effet supplémentaire
+- **GIVEN** une lecture active, échouée, tronquée, executed=true, input inconnu ou outil imitant read, ou un shell/write supplémentaire
+- **WHEN** CAB examine la frontière de retrait
+- **THEN** l’appel reste à qualifier et la frontière insuffisante est refusée sans mutation ni once
 
 #### Scenario: Réponse perdue et permission tardive
 - **GIVEN** un retrait qualifié durable et une réponse perdue ou un redémarrage

@@ -7,7 +7,7 @@ description: Préparer et produire des statistiques détaillées et auditables d
 
 Produire un rapport factuel à partir de l'historique persistant de la session concernée. Ne pas inventer les données absentes.
 
-## Collecte native CAB 2.2.25
+## Collecte native CAB 2.2.26
 
 La collecte statistique native continue et GET /runs/<run_id>/efficiency sont
 prioritaires sur un tour LLM périodique pour recueillir des mesures déjà
