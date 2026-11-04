@@ -1,5 +1,12 @@
 ## 2.2.18 — Assertion readonly du chemin de discovery
 
+## 2.2.20 — 2026-11-04
+
+Readiness broker absente explicitement transitoire503, sans faux NOT_ADMITTED.
+Retrait propriétaire d’une préparation sans décision sur preuve NOT_ADMITTED
+native exacte et fraîche, sans accès ni effet. Terminal conservé, reçu durable,
+nouveau mandat avec identifiants neufs. Contrat distribué et tests complétés.
+
 ## 2.2.19 — 2026-11-04
 
 Retrait propriétaire ciblé du shell refusé avant once attaché à un parent HELD.

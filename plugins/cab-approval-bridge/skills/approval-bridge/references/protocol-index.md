@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.19
+# Index du protocole CAB 2.2.20
 
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées
@@ -33,3 +33,5 @@ Avant une demande de correctif, appliquer le [triage des incidents](incident-tri
 Changement de session de pilotage avec historique protégé : [session-handoff](session-handoff.md).
 
 Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.
+
+NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admitted-retirement.md). Une absence temporaire de readiness donne503, pas une incompatibilité de contrat.

@@ -70,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.2.19"
+SERVER_VERSION = "2.2.20"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
@@ -2211,7 +2211,7 @@ def journal_controller_event(
 
 
 CONTROLLER_NOTIFICATION_ERROR_CODES = {
-    503: frozenset(("native-validation-evidence-unavailable",)),
+    503: frozenset(("native-validation-evidence-unavailable", "broker-coordination-not-ready")),
     400: frozenset(("expected-revisions-invalid", "command-too-long")),
     409: frozenset((
         "resource-revision-stale", "reservation-version-stale",

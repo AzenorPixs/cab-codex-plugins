@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.19
+# Récupération par RUN — CAB 2.2.20
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -67,3 +67,5 @@ les routes ordinaires acquire/release ; aucune nouvelle action policy
 n’est créée et les gardes d’accès restent opposables.
 
 Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.
+
+NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admitted-retirement.md). Une absence temporaire de readiness donne503, pas une incompatibilité de contrat.

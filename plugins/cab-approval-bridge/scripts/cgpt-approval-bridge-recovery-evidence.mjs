@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.19';
+export const VERSION = '2.2.20';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -149,6 +149,27 @@ export function pendingValidationProof(parts, approval, sameIdentity, now = Date
   const latest = reads.reduce((a,b) => a.part.state.time.end > b.part.state.time.end ? a : b);
   return {kind:'PENDING_VALIDATION',callId:latest.part.callID || latest.part.callId,
     partDigest:digest(latest.part),observedAt:latest.part.state.time.end,expiresAt:Date.parse(latest.value.expires_at)};
+}
+
+export function notAdmittedWithdrawalProof(view, parts, approval, sameIdentity, now=Date.now()) {
+  if(!view || view.sessionIdle!==true || view.pendingPermissionCount!==0 || view.callsTruncated ||
+      view.calls.length!==0)fail('not-admitted-withdrawal-boundary-invalid');
+  const outputs=parts.filter(part=>part.type==='tool' && part.state?.status==='completed' &&
+    ['cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_poll_approval'].includes(part.tool))
+    .flatMap(part=>{try{return[{part,value:JSON.parse(part.state.output)}];}catch{return[];}})
+    .filter(({value})=>value?.requestId===approval.requestId || value?.approval_id===approval.approval_id);
+  if(outputs.some(({value})=>!sameIdentity(value) || !['PENDING','NOT_ADMITTED'].includes(value.status)))
+    fail('not-admitted-withdrawal-result-conflict');
+  const reads=outputs.filter(({part,value})=>part.tool==='cgpt-validation_get_approval' &&
+    part.state.input?.approval_id===approval.approval_id && part.state.metadata?.truncated!==true &&
+    id(part.callID||part.callId) && value.status==='NOT_ADMITTED' && Number.isFinite(part.state.time?.end) && part.state.time.end<=now &&
+    now-part.state.time.end<=300000 && Number.isFinite(Date.parse(value.not_admitted_at)) &&
+    Date.parse(value.not_admitted_at)<=part.state.time.end);
+  if(!reads.length)fail('not-admitted-withdrawal-fresh-read-required');
+  const latest=reads.reduce((a,b)=>a.part.state.time.end>b.part.state.time.end?a:b);
+  return {kind:'NOT_ADMITTED_UNISSUED',callId:latest.part.callID||latest.part.callId,
+    partDigest:digest(latest.part),executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
+    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
 }
 
 export function validateTerminalReview(review, ownerId) {

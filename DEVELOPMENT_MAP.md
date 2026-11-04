@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Convergence NOT_ADMITTED SCM 2.2.20
+
+[reconcile-not-admitted-after-broker-transition](openspec/changes/archive/2026-11-04-reconcile-not-admitted-after-broker-transition/), code non attribué : ARCHIVÉ, source2.2.20 qualifiée.
+Readiness absente503 et retrait terminal sans décision ;762 tests uniques réussis.
+Publication/activation distinctes, voir QUALIFICATION.md du change.
+
 ## Retrait attaché SCM 2.2.19
 
 [withdraw-rejected-attached-shell](openspec/changes/archive/2026-11-04-withdraw-rejected-attached-shell/), code non attribué : ARCHIVÉ, source2.2.19 qualifiée.
