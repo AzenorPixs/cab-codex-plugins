@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.2.27";
+export const VERSION = "2.2.28";
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
@@ -14,7 +14,7 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "2.2.27";
+const version = "2.2.28";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -272,6 +272,7 @@ async function reconcile() {
     }
     await openCode.prompt(job.sessionId, resumeMessage(job), {
       directory: job?.directory || workspace,
+      requiredNativeAsk:['shell','edit'],
       ...(job.codingModel ? { model: { ...job.codingModel, reasoning: job.codingModel.reasoning } } : {}),
     });
 

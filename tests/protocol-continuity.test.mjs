@@ -104,7 +104,7 @@ async function handoffFixture(t) {
   const access = registry.acquireAccess(run.runId, { version: run.version, operationId: approval.operation_id,
     operationDigest: approval.operation_digest, resources, expectedRevisions: approval.expected_revisions });
   let clock = Date.now();
-  const path = join(state, 'handoff.json'), nativeIdentity = { pid: 12345, version: '2.2.27', directory: h.root };
+  const path = join(state, 'handoff.json'), nativeIdentity = { pid: 12345, version: '2.2.28', directory: h.root };
   const journal = () => new TransportHandoff(path, h.root, { now: () => clock });
   const restart = async () => {
     await registry.close(); registry = new ResourceRunRegistry(h.root, state); await registry.acquireAuthority();
@@ -149,7 +149,7 @@ test('transfert certifié : une préparation seule ou expirée ne vaut jamais un
 test('transfert : readiness privée liée au processus, sans exposition ni horodatage renouvelé',async t=>{
   const h=await handoffFixture(t),journal=h.journal();
   const state={identity:{pid:123,startTime:'456'},readiness:{status:'READY',ready:true,instance_id:'inst-fixture',
-    server_version:'2.2.27',coordination_protocol:'resource-scoped-v1',pending_count:0,
+    server_version:'2.2.28',coordination_protocol:'resource-scoped-v1',pending_count:0,
     broker_process:{pid:123,started_at:'2026-11-02T12:00:00Z'},checked_at:'2026-11-02T12:00:01Z'}};
   assert.equal(validHandoffBrokerState(state),true);
   assert.equal(validHandoffBrokerState({...state,identity:{pid:124,startTime:'456'}}),false);

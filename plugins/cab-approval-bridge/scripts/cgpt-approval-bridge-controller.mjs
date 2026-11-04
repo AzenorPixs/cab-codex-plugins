@@ -27,7 +27,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.27";
+const version = "2.2.28";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -1341,10 +1341,11 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   const op=registry.resourceState.operations[payload.operationId];
   if(!op || op.runId!==run.runId || op.contextId!==run.contextId || op.state!=='PREPARED' || op.native || op.nativeResult ||
       (withdraw ? op.decision && op.decision.status!=='approved' : terminal ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
-      (!withdraw && Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId))))
+      (!withdraw && !terminal && Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId))))
     throw new CoordinationError('validation-boundary-recovery-invalid');
   const linked=Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId));
-  const parent=linked ? registry.attachedWithdrawalAccess(run.runId,op.operationId) : null;
+  const parent=terminal ? registry.terminalReviewAccessBoundary(run.runId,op.operationId) :
+    linked ? registry.attachedWithdrawalAccess(run.runId,op.operationId) : null;
   const parentDigest=parent ? proofHash(parent) : null;
   if(context.publicStatus().recoveryRequired || !context.publicJob()?.armed ||
       context.publicJob().sessionId!==op.sessionId || context.publicJob().currentCabMandate &&
@@ -1447,14 +1448,15 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   }
   if(generationChanged(op.sessionId,first.generation)||proofHash(op)!==original)throw new CoordinationError('recovery-native-boundary-changed');
   registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw});
-  if(parent && proofHash(registry.attachedWithdrawalAccess(run.runId,op.operationId))!==parentDigest)
+  if(parent && proofHash(terminal?registry.terminalReviewAccessBoundary(run.runId,op.operationId):
+      registry.attachedWithdrawalAccess(run.runId,op.operationId))!==parentDigest)
     throw new CoordinationError('attached-withdrawal-parent-changed');
   const proofDigest=proofHash(payload);
   recovery.observeAction(actionId,{...observation,approval:structuredClone(first.approval)});
   if(terminal) {
     // Invalidate the local executable answer before closing coordination.
     context.completeReviewedTerminal(first.approval,proofDigest);
-    registry.completeReviewedReadOnly(run.runId,op.operationId,proofDigest);
+    registry.completeReviewedReadOnly(run.runId,op.operationId,proofDigest,parentDigest);
   } else if(withdraw) {
     context.withdrawUnissuedValidation(first.approval,proofDigest);
     if(parent)registry.withdrawRejectedAttachedShell(run.runId,op.operationId,proofDigest,parentDigest);

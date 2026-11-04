@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.27
+# Grille de décision du pilotage — CAB 2.2.28
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -112,3 +112,6 @@ métier seule exige l’arbitrage du développeur. Ni incertitude technique ni
 policy absente ne crée une nouvelle autorité. Toute nouvelle voie documentaire
 ou fonctionnelle suit SCM, version, commit/publication puis CABU ; son écriture
 ne prouve ni activation ni résolution du cas métier.
+
+ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
+sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).

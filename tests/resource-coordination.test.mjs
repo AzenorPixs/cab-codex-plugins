@@ -1221,3 +1221,31 @@ for(const variant of ['clean','old-prepared','old-native','old-result','old-once
  assert.throws(()=>h.r.nativeStart(run.runId,{...child,kind:'edit'},stored.requestId,{id:'late-edit',tool:{callID:'late-edit'}}),/session-handoff-historical-access-protected/);
  await h.restart();assert.deepEqual(h.r.resourceState.accesses,before.accesses);assert.deepEqual(h.r.resourceState.operations[parent.operationId],before.operations[parent.operationId]);
 });
+
+for(const variant of ['clean','attached','foreign-parent','parent-context','parent-version','parent-state','scope','old-child','native','result','changed-parent'])test('terminal parent référencé sans liaison : '+variant,async t=>{
+ const h=await fixture(t),run=h.reserve('unbound-review',[file('scope')]),parent=h.prepare(run,'protected-parent'),access=h.acquire(run,parent);
+ h.start(run,parent);h.complete(run,parent);
+ const child=h.prepare(run,'readonly-unbound',run.resources,access.accessId),stored=h.r.resourceState.operations[child.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('readonly-owner'),false);
+ h.r.recordDecision(run.runId,child.operationId,{status:'approved',requestId:stored.requestId,approvalId:'readonly-approval',changeId:run.changeId,operationId:child.operationId,operationDigest:child.operationDigest,identityDigest:stored.identityDigest,runId:run.runId,version:run.version,sessionId:run.sessionId});
+ const held=h.r.resourceState.accesses[access.accessId],parentDigest=proofHash(held),proof=fingerprint('qualified readonly terminal');
+ if(variant==='attached')held.operationIds.push(child.operationId);
+ if(variant==='foreign-parent')held.runId='foreign';
+ if(variant==='parent-context')held.contextId++;
+ if(variant==='parent-version')held.version++;
+ if(variant==='parent-state')held.state='UNKNOWN';
+ if(variant==='scope')stored.resources=[file('outside')];
+ if(variant==='old-child')stored.sessionId='ses_retired';
+ if(variant==='native')stored.native={onceAcknowledged:false};
+ if(variant==='result')stored.nativeResult={exit:0};
+ if(variant==='changed-parent')held.fencing++;
+ const before=structuredClone(h.r.resourceState);
+ if(variant!=='clean'){
+  assert.throws(()=>h.r.completeReviewedReadOnly(run.runId,child.operationId,proof,parentDigest),/terminal-review/);
+  assert.deepEqual(h.r.resourceState,before);return;
+ }
+ const completed=h.r.completeReviewedReadOnly(run.runId,child.operationId,proof,parentDigest);assert.equal(completed.state,'COMPLETED');assert.equal(completed.native,undefined);assert.equal(completed.nativeResult,undefined);
+ assert.deepEqual(h.r.resourceState.accesses,before.accesses);assert.deepEqual(h.r.resourceState.operations[parent.operationId],before.operations[parent.operationId]);assert.deepEqual(h.r.resourceState.revisions,before.revisions);assert.deepEqual(h.r.resourceState.testReservations,before.testReservations);
+ assert.deepEqual(h.r.completeReviewedReadOnly(run.runId,child.operationId,proof,parentDigest),completed);
+ await h.restart();assert.deepEqual(h.r.resourceState.accesses,before.accesses);assert.deepEqual(h.r.resourceState.operations[child.operationId],completed);
+});

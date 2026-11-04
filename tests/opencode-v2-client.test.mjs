@@ -14,7 +14,7 @@ function fixture() {
   return { root, passwordFile, close: () => rmSync(root, { recursive: true, force: true }) };
 }
 
-const info = { version: '2.2.27', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
+const info = { version: '2.2.28', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } };
 const location = { directory: '/workspace', project: { id: 'fixture', directory: '/workspace', canonical: '/workspace' } };
 const json = (data, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'content-type': 'application/json' } });
 
@@ -1002,7 +1002,8 @@ async function permissionPromptFixture(t) {
  const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/default',passwordFile:f.passwordFile,fetchImpl:async(u,o)=>{
   const path=new URL(u).pathname;calls.push({path,method:o.method,scope:o.headers['x-opencode-directory']});
   if(path==='/api/info')return json(info);
-  if(path==='/api/session/ses_policy')return json({data:{id:returnedId,directory:'/target',permissions:rules}});
+  if(path==='/api/permission/saved')return json({data:[]});
+  if(path==='/api/session/ses_policy')return json({data:{id:returnedId,directory:'/target',projectID:'project-fixture',permissions:rules}});
   if(path==='/api/session/ses_policy/model'){if(modelChangesDeny)rules[0].effect='deny';return json({data:{}})}
   if(path==='/api/session/ses_policy/prompt')return json({data:{id:'msg_prompt'}});
   throw Error('unexpected '+path);

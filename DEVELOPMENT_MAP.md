@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## ASK effectif et revue ciblée SCM 2.2.28
+
+[enforce-effective-native-ask](openspec/changes/archive/2026-11-04-enforce-effective-native-ask/), code non attribué : ARCHIVÉ, source2.2.28 qualifiée.
+Audit des grants sauvegardés, maintenance API bornée et revue de lecture sans
+liaison rétroactive ;854tests finaux uniques réussis. Parent et protections
+conservés. Publication, CABU et reprise propriétaire distincts ; voir
+QUALIFICATION.md. Normalisation définitive par ACL ultérieure.
+
+```mermaid
+flowchart LR
+    effectiveAsk["enforce-effective-native-ask<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class effectiveAsk provisional
+```
+
 ## Annulation Code Mode SCM 2.2.27
 
 [qualify-formatted-native-cancellation](openspec/changes/archive/2026-11-04-qualify-formatted-native-cancellation/), code non attribué : ARCHIVÉ, source2.2.27 qualifiée.

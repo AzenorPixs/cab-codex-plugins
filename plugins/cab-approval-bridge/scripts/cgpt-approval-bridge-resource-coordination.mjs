@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.27';
+export const VERSION = '2.2.28';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -953,14 +953,28 @@ export class ResourceRunRegistry extends RunRegistry {
     op.state='CANCELLED';op.finishedAt=now();op.completionDigest=proofDigest;
     this.persist();return copy(op);
   }
-  completeReviewedReadOnly(runId, operationId, proofDigest) {
+  terminalReviewAccessBoundary(runId,operationId) {
+    const run=this.runs.get(runId),op=this.resourceState.operations[operationId];
+    if(!run||!op||op.runId!==runId||op.contextId!==run.contextId||op.version!==run.version||
+        op.sessionId!==run.sessionId||op.state!=='PREPARED'||op.decision?.status!=='approved'||op.native||
+        op.nativeResult||op.onceAcknowledged===true||Object.values(this.resourceState.accesses)
+          .some(access=>access.operationIds.includes(operationId)))throw new CoordinationError('terminal-review-boundary-invalid');
+    const parent=this.resourceState.accesses[op.accessId];
+    if(op.accessId===operationId){if(parent)throw new CoordinationError('terminal-review-boundary-invalid');return null;}
+    if(!parent||parent.runId!==runId||parent.contextId!==run.contextId||parent.version!==run.version||
+        parent.state!=='HELD'||op.resources.some(r=>!parent.resources.some(held=>covers(held,r))))
+      throw new CoordinationError('terminal-review-parent-invalid');
+    return copy(parent);
+  }
+  completeReviewedReadOnly(runId, operationId, proofDigest, parentDigest=null) {
     this.admission(runId);
     const op=this.resourceState.operations[operationId];
-    if (!op || op.runId!==runId || !hash(proofDigest) || op.native || op.nativeResult || op.decision?.status!=='approved' ||
-        Object.values(this.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(operationId)))
+    if (!op || op.runId!==runId || !hash(proofDigest) || op.native || op.nativeResult || op.decision?.status!=='approved')
       throw new CoordinationError('terminal-review-boundary-invalid');
     if(op.state==='COMPLETED'&&op.completionDigest===proofDigest)return copy(op);
     if(op.state!=='PREPARED')throw new CoordinationError('terminal-review-boundary-invalid');
+    const parent=this.terminalReviewAccessBoundary(runId,operationId);
+    if(parent?digest(parent)!==parentDigest:parentDigest!==null)throw new CoordinationError('terminal-review-parent-changed');
     this.validateExpected(op.expectedRevisions,op.resources);
     op.state='COMPLETED';op.finishedAt=now();op.completionDigest=proofDigest;
     this.persist();return copy(op);

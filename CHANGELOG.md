@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.28 — 2026-11-04
+
+- ASK effectif : audit des grants sauvegardés, garde avant émission et maintenance API ciblée avec reçu privé.
+- Revue READ_ONLY : enfant non attaché avec parent référencé conservé ; aucune permission rétroactive fabriquée.
+
 Reconnaissance lexicale bornée du wrapper d’annulation native : blancs légaux
 hors chaînes acceptés, programme/données inchangés. Diagnostics MCP purs
 séparés de la preuve, sans nouveau cancel ni décision ; wrappers opaques,

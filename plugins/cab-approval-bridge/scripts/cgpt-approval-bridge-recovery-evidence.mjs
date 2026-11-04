@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.27';
+export const VERSION = '2.2.28';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -13,6 +13,7 @@ export function nativeEvidenceView({ run, operation, approval, parts, native, ac
     tool:part.tool, inputSha256:part.state?.input&&typeof part.state.input==='object'&&!Array.isArray(part.state.input)?digest(part.state.input):null,
     callId: part.callID || part.callId || null, status: part.state?.status || null,
     executed: typeof part.executed === 'boolean' ? part.executed : null,
+    observedExit:Number.isInteger(part.state?.metadata?.exit)?part.state.metadata.exit:null,
     nativeFormat: part.nativeFormat || null, nativeErrorType: part.nativeErrorType || null,
     commandSha256: typeof part.state?.input?.command === 'string' ? commandDigest(part.state.input.command) : null,
     partDigest: digest(part),
@@ -39,6 +40,7 @@ export function nativeEvidenceView({ run, operation, approval, parts, native, ac
       coverage: missingCalls.length ? 'MISSING_RELEVANT_CALLS' : relevantCalls.length ? 'COVERED' : 'NO_RELEVANT_CALLS',
       missingCalls: missingCalls.slice(0, 100) },
     decisionOwner: 'orchestrator', nativeExecutionOutcome: 'UNVERIFIED', snapshot_only: true,
+    untrackedNativeTerminalObserved:!operation.native && relevantCalls.some(call=>call.status==='completed'&&call.nativeFormat==='opencode-v2'),
   };
   return value;
 }
@@ -173,9 +175,11 @@ export function notAdmittedWithdrawalProof(view, parts, approval, sameIdentity, 
 }
 
 export function validateTerminalReview(review, ownerId) {
-  if (!review || Object.keys(review).some(key => !['ownerId','effect','commandSha256','sourceFiles','evidenceRefs','callId','partDigest'].includes(key)) ||
+  if (!review || Object.keys(review).some(key => !['ownerId','effect','commandSha256','sourceFiles','evidenceRefs','callId','partDigest','inlineCommand'].includes(key)) ||
       review.ownerId !== ownerId || review.effect !== 'READ_ONLY' || !hash(review.commandSha256) ||
-      !id(review.callId) || !hash(review.partDigest) || !Array.isArray(review.sourceFiles) || !review.sourceFiles.length || review.sourceFiles.length > 20 ||
+      !id(review.callId) || !hash(review.partDigest) || !Array.isArray(review.sourceFiles) ||
+      (!review.sourceFiles.length&&review.inlineCommand!==true) || review.sourceFiles.length > 20 ||
+      (review.inlineCommand!==undefined&&typeof review.inlineCommand!=='boolean') ||
       !Array.isArray(review.evidenceRefs) || !review.evidenceRefs.length || review.evidenceRefs.length > 20 ||
       review.evidenceRefs.some(ref => typeof ref !== 'string' || !/^[A-Za-z0-9_.:/@-]{1,240}$/.test(ref))) fail('terminal-review-invalid');
   const paths = new Set();

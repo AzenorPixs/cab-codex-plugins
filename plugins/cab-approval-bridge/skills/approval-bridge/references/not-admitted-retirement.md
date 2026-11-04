@@ -1,4 +1,4 @@
-# NOT_ADMITTED natif et préparation locale — CAB 2.2.27
+# NOT_ADMITTED natif et préparation locale — CAB 2.2.28
 
 Un NOT_ADMITTED broker est terminal. Une admission locale STABLE/owner et
 validation enregistrés ne le transforme pas en PENDING ou APPROVED. Dans son

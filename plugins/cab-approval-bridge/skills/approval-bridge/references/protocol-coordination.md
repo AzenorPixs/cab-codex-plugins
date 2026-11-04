@@ -1,4 +1,4 @@
-# Identité et coordination — CAB 2.2.27
+# Identité et coordination — CAB 2.2.28
 
 ## Identité, coordination et autorisations des RUN
 

@@ -36,7 +36,7 @@ function v2Permission(permission) {
 }
 
 function v2Session(session, directory) {
-  return { ...session, ...(session.model ? { model: { providerID: session.model.providerID, id: session.model.modelID,
+  return { ...session, projectID:session.projectID||'project-fixture', ...(session.model ? { model: { providerID: session.model.providerID, id: session.model.modelID,
       ...(session.model.variant ? { variant: session.model.variant } : {}) } } : {}), directory: session.directory || directory,
     permissions: Array.isArray(session.permission) ? session.permission.map((rule) => rule && typeof rule === 'object'
       ? ({ action: rule.permission, resource: rule.pattern, effect: rule.action }) : rule) : session.permission };
@@ -122,7 +122,8 @@ function transform(path, method, payload, directory) {
 }
 
 export function openCodeV2TestHandler(handler, { directory, locationDirectory = () => directory, onModelSwitch,
-  allowNonApi = false, allowLegacyTestCalls = false, sourceFiles = {}, sourceEntries = [], onFsRequest } = {}) {
+  allowNonApi = false, allowLegacyTestCalls = false, sourceFiles = {}, sourceEntries = [], onFsRequest,
+  savedPermissions = [], onSavedPermissionDelete, sessionPermissions } = {}) {
   return async (request, response) => {
     const incoming = new URL(request.url, 'http://localhost');
     const path = incoming.pathname;
@@ -145,6 +146,22 @@ export function openCodeV2TestHandler(handler, { directory, locationDirectory = 
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(transform(path, request.method, null, targetDirectory)));
       return;
+    }
+    if(request.method==='GET'&&/^\/api\/session\/ses_[^/]+$/.test(path)&&sessionPermissions!==undefined){
+      const rules=typeof sessionPermissions==='function'?await sessionPermissions():sessionPermissions;
+      if(rules!==undefined){response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({data:v2Session({id:decodeURIComponent(path.split('/').at(-1)),permission:rules},directory)}));return;}
+    }
+    if(path==='/api/permission/saved'&&request.method==='GET'){
+      response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({data:savedPermissions}));return;
+    }
+    if(path.startsWith('/api/permission/saved/')&&request.method==='DELETE'){
+      const id=decodeURIComponent(path.split('/').at(-1)),mode=await onSavedPermissionDelete?.(id);
+      if(mode==='fail-before'){response.writeHead(503).end();return;}
+      const index=savedPermissions.findIndex(row=>row.id===id);
+      if(index<0){response.writeHead(404).end();return;}
+      savedPermissions.splice(index,1);
+      if(mode==='drop-response'){response.destroy();return;}
+      response.writeHead(204).end();return;
     }
     if (path.startsWith('/api/fs/read/')) {
       onFsRequest?.(path, incoming);
