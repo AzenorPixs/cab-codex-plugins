@@ -251,6 +251,17 @@ class ConcurrentBrokerTest(unittest.TestCase):
             self.assertEqual(bridge.load_store(bridge.store_path())["approvals"], {})
         self.assertEqual(bridge.do_propose(self.args())["status"], "PENDING")
 
+    def test_broker_readiness_transition_is_retryable_without_new_request(self):
+        args = self.args()
+        item = bridge.do_propose(args)
+        lease = bridge.acquire_notification_lease(item["approval_id"])
+        diagnostic = {"http_status": 503, "error_code": "broker-coordination-not-ready"}
+        bridge.complete_notification_lease(item["approval_id"], lease["lease_id"], False, diagnostic)
+        restored = bridge.do_get({"approval_id": item["approval_id"]})
+        self.assertEqual(restored["status"], "PENDING")
+        self.assertEqual(restored["requestId"], args["requestId"])
+        self.assertEqual(restored["notification_diagnostic"], diagnostic)
+
     def test_transient_native_visibility_and_busy_keep_same_pending(self):
         for status, code in ((503, "native-validation-evidence-unavailable"), (409, "run-transition-in-flight")):
             args = self.args()

@@ -2,7 +2,7 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.2.19';
+export const VERSION = '2.2.20';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -177,8 +177,12 @@ export class RecoveryCoordinator {
         '/recovery/native-evidence?operationId=' + encodeURIComponent(op.operationId));
     for (const op of boundary.operations) if (op.state === 'PREPARED' && !op.native &&
       !boundary.accesses.some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId))) {
-      if (!op.decision) offer('restore-pending-validation',op.operationId,op.resources,
-        '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
+      if (!op.decision) {
+        offer('restore-pending-validation',op.operationId,op.resources,
+          '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
+        offer('withdraw-unissued-validation',op.operationId,op.resources,
+          '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
+      }
       if (op.decision?.status==='approved') {
         offer('reconcile-reviewed-terminal',op.operationId,op.resources,'/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
         offer('withdraw-unissued-validation',op.operationId,op.resources,'/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));

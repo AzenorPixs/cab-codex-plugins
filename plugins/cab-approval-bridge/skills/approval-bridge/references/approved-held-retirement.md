@@ -1,4 +1,4 @@
-# Retirer une unité APPROVED avec accès HELD — CAB 2.2.19
+# Retirer une unité APPROVED avec accès HELD — CAB 2.2.20
 
 ## Décideur et choix de la voie
 

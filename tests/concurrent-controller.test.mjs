@@ -2097,7 +2097,8 @@ test('périmètre, génération, identité native et redémarrage refusent les p
   assert.equal((await h.post('/validation/request', { approval })).status, 202);
   await h.stop(); await h.start();
   assert.equal((await h.get('/runs')).body.runs[0].version, current.version);
-  assert.equal((await h.post('/validation/request', { approval })).status, 409);
+  const notReady=await h.post('/validation/request', { approval });
+  assert.equal(notReady.status,503);assert.equal(notReady.body.error,'broker-coordination-not-ready');
   assert.equal(h.native.replies.length, 0);
 });
 
@@ -2131,7 +2132,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.19');
+  assert.equal(initialized.result.serverInfo.version, '2.2.20');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4272,7 +4273,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.19'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.20'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4396,4 +4397,61 @@ for(const variant of ['missing-ack','different-command','busy','pending-permissi
  const before=(await h.get('/runs')).body.coordination;
  const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
  assert.deepEqual((await h.get('/runs')).body.coordination,before);
+});
+
+async function notAdmittedFixture(t){
+ const h=await setup(t),run=await h.reserve('not-admitted'),approval=h.approval(run,'not-admitted-request'),base='/runs/'+run.runId;
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ wrapNativeRequestValidationInCodeMode(h,approval);
+ const request=h.native.messages[run.sessionId].at(-1).parts[0];request.state.input.code='return await tools["cgpt-validation"].request_validation('+JSON.stringify(approval)+');';request.state.status='completed';request.state.metadata.error=true;request.state.metadata.toolCalls.at(-1).status='error';request.state.output='MCP error APPROVAL_NOT_ADMITTED';
+ const stamp=Date.now();h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'cgpt-validation_get_approval',callID:'not-admitted-get',state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'NOT_ADMITTED',not_admitted_at:new Date(stamp-1000).toISOString(),notification_status:'FAILED',notification_diagnostic:{http_status:409,error_code:'coordination-upgrade-required'}}),metadata:{truncated:false},time:{start:stamp-1,end:stamp}}}]});
+ await h.post(base+'/recovery/policy',{policyId:'not-admitted-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation'],resources:run.resources,authorization:'same change; retire terminal broker preparation without decision'});
+ const evidence=await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id);assert.equal(evidence.status,200,JSON.stringify(evidence));
+ const plan=(await h.get(base+'/recovery')).body,payload={actionId:'withdraw-not-admitted',ownerId:run.ownerId,policyId:'not-admitted-policy',boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.body.nativeBoundaryDigest,evidence:['audit/terminal-not-admitted']}};
+ return{h,run,approval,base,payload};
+}
+test('NOT_ADMITTED : préparation sans décision retirée, reçu durable et nouveau mandat distinct',async t=>{
+ const{h,run,approval,base,payload}=await notAdmittedFixture(t),before=(await h.get('/runs')).body.coordination;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ const after=(await h.get('/runs')).body.coordination,op=after.operations[approval.operation_id];assert.equal(op.state,'CANCELLED');assert.equal(op.decision,undefined);assert.equal(op.native,undefined);assert.equal(op.nativeResult,undefined);assert.deepEqual(after.accesses,before.accesses);assert.deepEqual(after.revisions,before.revisions);assert.deepEqual(after.testReservations,before.testReservations);assert.equal((await h.get(base+'/status')).body.hasUnresolvedValidation,false);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ h.native.permissions.push({id:'late-not-admitted-permission',sessionID:run.sessionId,permission:'bash',tool:{callID:'late-not-admitted-call'},metadata:{command:approval.commands[0]}});await delay(80);assert.equal(h.native.replies.length,0);h.native.permissions=[];
+ const next=h.approval(run,'new-after-not-admitted');const admitted=await h.post(base+'/validation/request',{approval:next});assert.equal(admitted.status,202,JSON.stringify(admitted));assert.equal((await h.post(base+'/decision/'+next.requestId,{decision:'approved'})).status,201);
+});
+for(const variant of ['pending','foreign','stale','effect','access','decision','boundary'])test('NOT_ADMITTED : retrait refusé '+variant,async t=>{
+ const{h,run,approval,base,payload}=await notAdmittedFixture(t),part=h.native.messages[run.sessionId].at(-1).parts[0];
+ if(variant==='pending'){const v=JSON.parse(part.state.output);v.status='PENDING';part.state.output=JSON.stringify(v);}
+ if(variant==='foreign'){const v=JSON.parse(part.state.output);v.operation_digest='0'.repeat(64);part.state.output=JSON.stringify(v);}
+ if(variant==='stale')part.state.time.end=Date.now()-400000;
+ if(variant==='effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',state:{status:'completed',input:{command:'/usr/bin/true'},metadata:{exit:0}}}]});
+ if(['access','decision'].includes(variant)){
+  assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
+  if(variant==='decision'){const request=h.native.messages[run.sessionId].find(m=>m.parts?.some(p=>p.tool==='execute'&&p.state?.input?.code?.includes(approval.requestId))).parts[0];request.state.metadata.error=false;request.state.metadata.toolCalls.at(-1).status='completed';request.state.output=JSON.stringify({...approval,status:'PENDING'});}
+  if(variant==='access')assert.equal((await h.post(base+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions})).status,200);
+ }
+ const evidence=await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id);
+ if(evidence.status===200)payload.input.nativeBoundaryDigest=evidence.body.nativeBoundaryDigest;
+ if(variant==='boundary')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const before=(await h.get('/runs')).body.coordination,result=await h.post(base+'/recovery/action',payload);assert.ok([403,409].includes(result.status),JSON.stringify(result));assert.deepEqual((await h.get('/runs')).body.coordination,before);assert.equal(h.native.replies.length,0);
+});
+test('readiness broker absente après redémarrage :503 réessayable, même demande admise après readiness',async t=>{
+ const h=await setup(t),run=await h.reserve('broker-transition');await h.stop();await h.start();const approval=h.approval(run,'during-broker-transition');
+ const first=await h.post('/validation/resource-request',{approval});assert.equal(first.status,503,JSON.stringify(first));assert.equal(first.body.error,'broker-coordination-not-ready');
+ const legacy=await h.post('/validation/resource-request',{approval:{...approval,coordination_protocol:'legacy'}});assert.equal(legacy.status,409);assert.equal(legacy.body.error,'coordination-upgrade-required');
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const second=await h.post('/validation/resource-request',{approval});assert.equal(second.status,202,JSON.stringify(second));assert.equal(h.native.replies.length,0);
+});
+test('readiness absente : notification répétée conserve la préparation déjà admise',async t=>{
+ const h=await setup(t),run=await h.reserve('broker-existing'),approval=h.approval(run,'existing-broker-request'),base='/runs/'+run.runId;
+ assert.equal((await h.post('/validation/resource-request',{approval})).status,202);
+ const before=(await h.get('/runs')).body.coordination.operations[approval.operation_id];
+ await h.stop();await h.start();
+ const retry=await h.post('/validation/resource-request',{approval});assert.equal(retry.status,503,JSON.stringify(retry));assert.equal(retry.body.error,'broker-coordination-not-ready');
+ assert.deepEqual((await h.get('/runs')).body.coordination.operations[approval.operation_id],before);
+ const admission=(await h.get(base+'/decision/'+approval.requestId+'/admission')).body;assert.equal(admission.owner_registered,true);assert.equal(admission.validation_registered,true);assert.equal(admission.decision_recorded,false);
+ await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ const resumed=await h.post('/validation/resource-request',{approval});assert.ok([200,202].includes(resumed.status),JSON.stringify(resumed));assert.equal(h.native.replies.length,0);
+ assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].decision,undefined);
 });

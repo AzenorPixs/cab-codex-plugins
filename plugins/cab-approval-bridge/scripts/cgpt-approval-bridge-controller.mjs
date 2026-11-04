@@ -24,10 +24,10 @@ import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from '.
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
 import { NativeInstances } from './cgpt-approval-bridge-native-instances.mjs';
 import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.mjs';
-import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
+import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.19";
+const version = "2.2.20";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -202,7 +202,9 @@ function contextFor(run) {
     if (transitions.has(run.runId)) throw new CoordinationError('run-transition-in-flight');
     if (!operation || operation.runId !== run.runId || operation.directory !== workspace ||
         !context.sessions().includes(operation.sessionId)) throw new CoordinationError('operation-identity-divergent');
-    if (broker?.coordination_protocol !== COORDINATION_PROTOCOL) throw new CoordinationError('coordination-upgrade-required');
+    if (broker?.coordination_protocol !== undefined && broker.coordination_protocol !== COORDINATION_PROTOCOL)
+      throw new CoordinationError('coordination-upgrade-required');
+    if (!broker || broker.coordination_protocol === undefined) throw new CoordinationError('broker-coordination-not-ready',503);
     if (['STORE_UNHEALTHY', 'JOURNAL_UNHEALTHY', 'JOURNAL_INTEGRITY_FAILURE', 'STORE_JOURNAL_DIVERGENCE']
       .includes(broker?.root_cause)) throw new CoordinationError('broker-integrity-unavailable');
     return registry.operationAdmission(run.runId, operation, requestId, stage);
@@ -1261,7 +1263,8 @@ async function collectRecoveryEvidence(run, operation) {
       generation !== (nativeSessionGenerations.get(operation.sessionId) || 0))
     throw new CoordinationError('recovery-native-boundary-changed');
   const allParts = messages.flatMap(message => Array.isArray(message.parts) ? message.parts : []);
-  const entries = nativeRequestValidationEntries(allParts, operation.requestId).filter(entry => entry.status === 'completed');
+  const entries = nativeRequestValidationEntries(allParts, operation.requestId).filter(entry => entry.status === 'completed' ||
+    !operation.decision && entry.status==='error' && entry.part.state?.metadata?.cabCodeMode?.nativeMcpError===true);
   if (entries.length !== 1) throw new CoordinationError('recovery-native-request-unverified');
   const approval = entries[0].input;
   const owner = registry.requestOwners[operation.requestId];
@@ -1290,7 +1293,7 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   registry.admission(run.runId);
   const op=registry.resourceState.operations[payload.operationId];
   if(!op || op.runId!==run.runId || op.contextId!==run.contextId || op.state!=='PREPARED' || op.native || op.nativeResult ||
-      (terminal||withdraw ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
+      (withdraw ? op.decision && op.decision.status!=='approved' : terminal ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
       (!withdraw && Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId))))
     throw new CoordinationError('validation-boundary-recovery-invalid');
   const linked=Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId));
@@ -1353,8 +1356,16 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     }
   } else if(withdraw) {
     proofReferences(payload);
+    if(op.decision && first.parts.some(part=>{
+      if(!['cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_poll_approval'].includes(part.tool) ||
+          part.state?.status!=='completed')return false;
+      let value;try{value=JSON.parse(part.state.output);}catch{return false;}
+      return value?.status==='NOT_ADMITTED' && (value.requestId===op.requestId || value.approval_id===first.approval.approval_id);
+    }))throw new CoordinationError('not-admitted-withdrawal-decision-conflict');
     const effects=first.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
-    observation=effects.length?(effects[0].tool==='bash' ? rejectedShellWithdrawalProof(first.view,effects,first.approval) :
+    if(!op.decision && (parent || effects.length))throw new CoordinationError('not-admitted-withdrawal-effect-or-access');
+    observation=!op.decision ? notAdmittedWithdrawalProof(first.view,first.parts,first.approval,same) :
+      effects.length?(effects[0].tool==='bash' ? rejectedShellWithdrawalProof(first.view,effects,first.approval) :
       rejectedEditWithdrawalProof(first.view,effects,first.approval)):
       {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
     if(parent && observation.kind!=='REJECTED_UNISSUED_SHELL')throw new CoordinationError('attached-withdrawal-shell-proof-required');
@@ -1378,7 +1389,10 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     if(effects.length){const repeated=effects[0].tool==='bash' ? rejectedShellWithdrawalProof(second.view,effects,second.approval) :
         rejectedEditWithdrawalProof(second.view,effects,second.approval);
       if(proofHash(repeated)!==proofHash(observation))throw new CoordinationError('recovery-native-boundary-changed');}
-    else if(observation.kind!=='UNISSUED_COORDINATION')throw new CoordinationError('recovery-native-boundary-changed');
+    else if(!op.decision) {
+      const repeated=notAdmittedWithdrawalProof(second.view,second.parts,second.approval,same);
+      if(proofHash(repeated)!==proofHash(observation))throw new CoordinationError('recovery-native-boundary-changed');
+    } else if(observation.kind!=='UNISSUED_COORDINATION')throw new CoordinationError('recovery-native-boundary-changed');
   } else pendingValidationProof(second.parts,second.approval,same);
   if(terminal) for(const source of payload.review.sourceFiles) {
     const file=await openCode.sourceRead(op.sessionId,source.path,{directory:run.directory});
@@ -2960,7 +2974,9 @@ async function handleRequest(request, response) {
         json(response, 200, await cancelReviewedValidation(run, context, payload)); return;
       }
       if (request.method === 'POST' && ['/validation/request', '/validation/reminder'].includes(url.pathname)) {
-        if (broker?.coordination_protocol !== COORDINATION_PROTOCOL) throw new CoordinationError('coordination-upgrade-required');
+        if (broker?.coordination_protocol !== undefined && broker.coordination_protocol !== COORDINATION_PROTOCOL)
+          throw new CoordinationError('coordination-upgrade-required');
+        if (!broker || broker.coordination_protocol === undefined) throw new CoordinationError('broker-coordination-not-ready',503);
         if (context.publicJob() && !context.publicJob().armed) throw new CoordinationError('job-disarmed');
         const approval = payload.approval;
         if (context.hasUnresolvedValidation() && !context.hasRequest(approval?.requestId)) {
