@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.19
+version: 2.2.20
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -47,10 +47,10 @@ Pour un changement explicite de SID dans le même RUN avec historique protégé,
 lire `references/session-handoff.md`. Les commandes run/resume ne réalisent
 pas cette transition implicitement.
 
-Pour retirer une unité APPROVED avant once, le propriétaire suit
-`references/approved-held-retirement.md` si l’accès est HELD ; pour un shell
-refusé sans accès, `references/approved-shell-retirement.md`. Il examine la
-frontière et agit dans son mandat, sans solliciter le correcteur pour ces
-voies qualifiées. Pour un shell refusé attaché à un parent HELD protégé, lire
-`references/approved-attached-shell-retirement.md` : retrait ciblé seulement.
-Aucun nouvel argument ni aucune garde contournée.
+Retraits dans le mandat propriétaire, après revue de la frontière :
+`references/approved-held-retirement.md` pour HELD ;
+`references/approved-shell-retirement.md` pour shell sans accès ;
+`references/approved-attached-shell-retirement.md` pour shell attaché refusé ;
+`references/not-admitted-retirement.md` pour NOT_ADMITTED sans décision.
+Conserver le parent protégé et le terminal natif. Aucun nouvel argument,
+rejeu, garde contournée ou recours au correcteur pour ces voies qualifiées.
