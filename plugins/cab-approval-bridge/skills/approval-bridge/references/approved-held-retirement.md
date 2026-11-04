@@ -1,4 +1,4 @@
-# Retirer une unité APPROVED avec accès HELD — CAB 2.2.18
+# Retirer une unité APPROVED avec accès HELD — CAB 2.2.19
 
 ## Décideur et choix de la voie
 
@@ -121,3 +121,5 @@ ni once, ni nativeResult, ni changement de révision. Cette preuve ne remplace
 pas la revue du RUN réel. Un registre de décision et son recordedAt ne
 permettent pas, seuls, d’attribuer l’approbation à un utilisateur ou un chat.
 Ne pas confondre émetteur identifié, décision historique et autorité métier.
+
+Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.

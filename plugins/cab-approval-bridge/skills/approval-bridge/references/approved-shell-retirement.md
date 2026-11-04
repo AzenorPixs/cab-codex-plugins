@@ -1,4 +1,4 @@
-# Shell APPROVED refusé avant once, sans accès lié — CAB 2.2.18
+# Shell APPROVED refusé avant once, sans accès lié — CAB 2.2.19
 
 Dans son change déjà autorisé, l’orchestrateur propriétaire traite lui-même
 ce cas. Il conserve RUN, SID, décision et identifiants ; il ne sollicite pas
@@ -15,8 +15,12 @@ de la décision de mandat APPROVED ; ni l’un ni l’autre n’est NO_EFFECT.
 Le reçu doit correspondre au SID, call, permission, cible et processus natifs.
 Une donnée absente ou ambiguë ne suffit pas à exclure un effet.
 
-Le retrait direct `withdraw-unissued-validation` ne couvre pas ce shell
-refusé dans cette version : sa branche de refus natif qualifie edit.
+Depuis2.2.19, `withdraw-unissued-validation` couvre aussi le shell exact
+refusé avec ACK204 et deux frontières stables. Privilégier cette route qualifiée
+après diagnostic et revue propriétaire, plutôt que créer un accès pour retirer.
+Si le shell est attaché à un parent HELD protégeant d’autres opérations, suivre
+[le retrait ciblé](approved-attached-shell-retirement.md), sans libérer le parent.
+La composition ordinaire ci-dessous conserve ses conditions strictes.
 `cancel-reviewed-validation` exige sa preuve native/broker d’annulation ;
 un broker APPROVED non annulable ne devient pas CANCELLED par déclaration.
 Ne pas répéter cancel_approval refusé, inventer un rejet de mandat ni corriger
