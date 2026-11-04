@@ -1,4 +1,4 @@
-# Précisions recovery — CAB 2.2.30
+# Précisions recovery — CAB 2.2.31
 
 Pour changer le SID courant tout en conservant des effets et accès historiques
 protégés, utiliser la voie distincte [session-handoff](session-handoff.md).
@@ -255,3 +255,39 @@ Appliquer [la procédure de diagnostic et reprise](native-coding-recovery.md) : 
 ## MCP pending et récupération CABU — 2.1.32
 
 Appliquer [la procédure MCP pending](mcp-pending-recovery.md). Attendre la transition dans le budget existant sans réémettre connect/disconnect. MCP_RECOVERY_REQUIRED reste nonterminal dans le même reçu ; aucune nouvelle installation ou boucle de repli implicite. Le flag updater --recover-mcp <transactionId> signifie rechargement GLOBAL des locations et exige un accord humain explicite pour ce reçu, jamais l’accord d’un ancien incident. Il peut récupérer un statut `failed` uniquement après ce consentement et une snapshot idle sans permission ; `needs_auth`, profil gelé/reuse-readonly et reçu divergent restent refusés. Intention durable avant POST, jamais rejouée ; PID/location/sessions et frontière native vérifiés. Si le source CAB a ensuite avancé, la reprise peut clore `SUPERSEDED` seulement selon les empreintes strictes documentées ; le CABU suivant installe le jeu complet dans un nouvel identifiant. Après récupération : versions et readiness prouvées, puis information des sessions ; aucune once ou demande métier rejouée.
+
+## Notification bloquée : qualifier le sous-état
+
+La disponibilité du broker/contrôleur n’est pas la readiness de chaque RUN.
+Un NOTIFICATION_LEASE_STUCK agrégé reste compatible avec infrastructure READY ;
+lire by_run/by_session avant de geler des unités indépendantes. Ce code historique
+couvre plusieurs notifications stalled, pas uniquement une lease expirée.
+
+Lire broker_health.pending_watchdog et list_pending filtré PENDING pour identifier
+l’approval exacte, son RUN/SID, notification_status, reason, dates et dernier
+code HTTP. Les dernières opérations du contrôleur ne sont pas toute la file
+broker : une demande ancienne non admise peut ne jamais avoir eu d’opération.
+Ne pas exposer token, commande ou corps libre dans le diagnostic partagé.
+
+- SENDING + notification_lease_expired : évaluer RECOVER_NOTIFICATION_LEASE.
+- FAILED + retry_overdue, ou PENDING/vide + notification_never_delivered : évaluer
+  RECONCILE_PENDING_APPROVALS, jamais une récupération de lease inexistante.
+- Sous-états mixtes ou incomplets : INSPECT_PENDING_WATCHDOG, puis ciblage par
+  approval ; aucune mutation ne découle du libellé global.
+
+broker_evaluate_remediation est sans mutation. Examiner ses préconditions,
+cohérence magasin/journal, budget, cooldown et identité exacte. Une suggestion
+n’est pas une évaluation ELIGIBLE. Le propriétaire décide dans son mandat avant
+broker_execute_controlled_remediation sur cette seule approval. Un opérateur
+diagnostic ne transforme pas son analyse en feu vert opérant. Ne pas activer
+une politique globale automatique pour résoudre un cas local.
+
+RECOVER_NOTIFICATION_LEASE exige PENDING/SENDING et lease réellement expirée ;
+il ne renotifie pas. RECONCILE_PENDING_APPROVALS réobserve une décision existante
+corrélée ou retente la notification du même payload sous les gardes existantes.
+Cela ne vaut ni décision, nouvelle permission, rejeu du shell ou validation du
+catalogue. Un terminal NOT_ADMITTED/CANCELLED/REJECTED reste terminal. Ne pas
+modifier ses révisions/IDs ni libérer les accès/baux pour réparer la communication.
+Après action réellement mandatée : relire reçu, état broker, admission locale
+et readiness du seul RUN ; conserver les décisions et once historiques.
+Une récupération technique n’autorise aucun effet métier supplémentaire.

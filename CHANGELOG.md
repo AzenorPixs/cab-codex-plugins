@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.31 — 2026-11-04
+
+- Recommandation de notification qualifiée par sous-état : lease expirée, retry FAILED ou diagnostic mixte ; aucune récupération exécutée par le diagnostic.
+- Procédure owner et bail HELD non restauré clarifiés, sans suppression de protection ni nouveau droit métier.
+
 ## 2.2.30 — 2026-11-04
 
 - Retrait propriétaire d’un shell/edit refusé avant once avec parent seulement référencé ; parent et protections conservés sans attachement rétroactif.

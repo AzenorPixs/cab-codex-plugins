@@ -1,4 +1,4 @@
-# Incidents — CAB 2.2.30
+# Incidents — CAB 2.2.31
 
 Commencer par le [triage des observations](incident-triage.md) avant de conclure à une panne.
 
@@ -16,3 +16,5 @@ Restauration ASK par révocation de grants protégés : l’accord permanent du
 développeur couvre la maintenance partagée bornée selon
 [native-permission-grants](native-permission-grants.md). Ne pas redemander
 cet accord à chaque session ; une frontière active se coordonne sans forçage.
+
+Notification stalled/FAILED sans lease : [qualifier le sous-état](technical-recovery.md#notification-bloquée--qualifier-le-sous-état) avant toute action ciblée.
