@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Retrait avec parent référencé SCM 2.2.30
+
+[withdraw-rejected-edit-with-referenced-parent](openspec/changes/archive/2026-11-04-withdraw-rejected-edit-with-referenced-parent/), code non attribué : ARCHIVÉ, source2.2.30 qualifiée.
+Retrait propriétaire shell/edit refusé avant once, parent HELD référencé sans
+membership conservé.873tests finaux uniques réussis ; gardes d’émission et
+identités exactes inchangées. Publication, activation et retrait propriétaire
+distincts ; voir QUALIFICATION.md. Attribution/normalisation ACL ultérieure.
+
+```mermaid
+flowchart LR
+    referencedWithdrawal["withdraw-rejected-edit-with-referenced-parent<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class referencedWithdrawal provisional
+```
+
 ## Accord permanent de restauration ASK SCM 2.2.29
 
 [authorize-bounded-native-ask-maintenance](openspec/changes/archive/2026-11-04-authorize-bounded-native-ask-maintenance/), code non attribué : ARCHIVÉ, source2.2.29 qualifiée.

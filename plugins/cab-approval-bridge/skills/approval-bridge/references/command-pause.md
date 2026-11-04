@@ -1,4 +1,4 @@
-# Pause et reprise — CAB 2.2.29
+# Pause et reprise — CAB 2.2.30
 
 ## Suspension ciblée ou globale
 

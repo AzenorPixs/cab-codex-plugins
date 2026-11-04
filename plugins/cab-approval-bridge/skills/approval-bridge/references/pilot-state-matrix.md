@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.29
+# Grille de décision du pilotage — CAB 2.2.30
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -120,3 +120,6 @@ Restauration ASK par révocation de grants protégés : l’accord permanent du
 développeur couvre la maintenance partagée bornée selon
 [native-permission-grants](native-permission-grants.md). Ne pas redemander
 cet accord à chaque session ; une frontière active se coordonne sans forçage.
+
+Edit ou shell refusé avant once avec parent HELD seulement référencé :
+[retrait propriétaire isolé](approved-attached-shell-retirement.md), sans faux rattachement.

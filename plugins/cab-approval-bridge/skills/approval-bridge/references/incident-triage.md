@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.29
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.30
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -67,3 +67,6 @@ Restauration ASK par révocation de grants protégés : l’accord permanent du
 développeur couvre la maintenance partagée bornée selon
 [native-permission-grants](native-permission-grants.md). Ne pas redemander
 cet accord à chaque session ; une frontière active se coordonne sans forçage.
+
+Edit ou shell refusé avant once avec parent HELD seulement référencé :
+[retrait propriétaire isolé](approved-attached-shell-retirement.md), sans faux rattachement.

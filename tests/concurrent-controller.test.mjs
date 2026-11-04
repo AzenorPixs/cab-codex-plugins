@@ -2132,7 +2132,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.29');
+  assert.equal(initialized.result.serverInfo.version, '2.2.30');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4273,7 +4273,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.29'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.30'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4295,7 +4295,7 @@ test('création privée : job0600 et verrou public de projet0775 sous umask pare
  assert.equal(statSync(job).mode&0o777,0o600);assert.equal(h.native.replies.length,0);
 });
 
-async function rejectedEditFixture(t,{attached=false}={}){
+async function rejectedEditFixture(t,{attached=false,referenceOnly=false,lineEndingMismatch=false}={}){
  const h=await setup(t),file='src/refused.md',run=await h.reserve('refused-edit',{resources:[{key:'file:'+file,mode:'write'}]}),base='/runs/'+run.runId;
  let parent=null,access=null;
  if(attached){
@@ -4310,8 +4310,10 @@ async function rejectedEditFixture(t,{attached=false}={}){
  const approval=h.approval(run,'refused-edit-request'),input={path:join(h.directory,file),oldString:'old',newString:'new'};
  if(attached)approval.access_id=access.accessId;
  approval.commands=[];approval.files=[file];approval.tool_input_sha256=nativeToolInputDigest(attached?{filePath:input.path,oldString:input.oldString,newString:input.newString}:{...input,replaceAll:false});h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
+ if(lineEndingMismatch)approval.tool_input_sha256=nativeToolInputDigest({...input,newString:input.newString+'\n'});
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
  const admission=await h.post(base+'/validation/request',{approval});assert.equal(admission.status,202,JSON.stringify(admission));assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision:'approved'})).status,201);
- if(attached){const result=await h.post(base+'/locks/attach',{version:run.version,operationId:access.accessId,
+ if(attached&&!referenceOnly){const result=await h.post(base+'/locks/attach',{version:run.version,operationId:access.accessId,
   token:access.token,fencing:access.fencing,operationIds:[approval.operation_id],evidence:['new reviewed edit in same held set']});assert.equal(result.status,200,JSON.stringify(result));}
  wrapNativeRequestValidationInCodeMode(h,approval);const request=h.native.messages[run.sessionId].at(-1).parts[0];request.state.status='completed';request.state.output=JSON.stringify({...approval,status:'APPROVED',reviewer:'CGPT'});
  const stamp=Date.now();h.native.messages[run.sessionId].push({nativeV2:{id:'msg_refused_edit',type:'assistant',time:{created:stamp},content:[{type:'tool',id:'call_refused_edit',name:'edit',executed:false,time:{created:stamp,ran:stamp},state:{status:'running',input,content:[],metadata:{}}}]}});
@@ -4636,4 +4638,28 @@ test('ASK effectif : parent HELD ne vaut pas attach, pending sans once puis atta
  await delay(100);assert.equal(h.native.replies.length,before+1);
  await h.completeTool(approval,0);const delivered=h.native.messages[run.sessionId].at(-1).parts[0];delivered.executed=true;h.native.emit({type:'message.part.updated',properties:{part:delivered}});await waitFor(async()=>(await h.get('/runs')).body.coordination.operations[approval.operation_id].state==='COMPLETED');
  assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].nativeResult.exit,0);
+});
+
+for(const variant of ['clean','missing-ack','busy','pending','extra-effect','boundary','target'])test('edit parent seulement référencé : '+variant,async t=>{
+ const{h,run,base,approval,access,payload,evidence}=await rejectedEditFixture(t,{attached:true,referenceOnly:true,lineEndingMismatch:true});
+ let state=(await h.get('/runs')).body.coordination;
+ assert.equal(state.accesses[access.accessId].operationIds.includes(approval.operation_id),false);
+ assert.ok((await h.get(base+'/recovery')).body.actions.some(a=>a.action==='withdraw-unissued-validation'&&a.targetId===approval.operation_id));
+ if(variant==='missing-ack'){const d=join(runtimeStateDirectory(h.directory),'permission-replies');for(const f of readdirSync(d))unlinkSync(join(d,f));}
+ if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ if(variant==='pending')h.native.permissions.push({id:'unrelated-pending',sessionID:run.sessionId,permission:'bash',metadata:{command:'/usr/bin/false'}});
+ if(variant==='extra-effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',state:{status:'completed',input:{command:'/usr/bin/true'},metadata:{exit:0}}}]});
+ if(variant==='target')h.native.messages[run.sessionId].at(-1).nativeV2.content[0].state.input.path=join(h.directory,'other');
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ if(variant==='boundary')payload.input.nativeBoundaryDigest='0'.repeat(64);
+ payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const before=(await h.get('/runs')).body.coordination,replies=h.native.replies.length;
+ const result=await h.post(base+'/recovery/action',payload);
+ if(variant!=='clean'){assert.equal(result.status,409,JSON.stringify(result));assert.deepEqual((await h.get('/runs')).body.coordination,before);return;}
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ const after=(await h.get('/runs')).body.coordination,child=after.operations[approval.operation_id];
+ assert.deepEqual(after.accesses,before.accesses);assert.deepEqual(after.revisions,before.revisions);assert.deepEqual(after.testReservations,before.testReservations);
+ assert.equal(child.native,undefined);assert.equal(child.nativeResult,undefined);assert.notEqual(child.onceAcknowledged,true);assert.deepEqual(child.decision,before.operations[approval.operation_id].decision);assert.equal(h.native.replies.length,replies);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+ assert.deepEqual((await h.get('/runs')).body.coordination.accesses,before.accesses);
 });
