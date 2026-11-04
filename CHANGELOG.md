@@ -1,3 +1,10 @@
+## 2.2.24 — 2026-11-04
+
+Réconciliation propriétaire autonome : client API avant demande d’appairage,
+portée du résumé access-reconciliation-required et choix ciblé des voies
+existantes. Skill, plugin, commande et références cohérents ; aucune nouvelle
+sollicitation humaine pour une procédure déjà autorisée. Gardes inchangées.
+
 ## 2.2.23 — 2026-11-04
 
 Accord permanent explicite de récupération MCP CABU bornée, distribué dans les

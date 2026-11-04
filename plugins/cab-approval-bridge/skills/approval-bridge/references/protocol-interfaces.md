@@ -1,4 +1,4 @@
-# Interfaces et persistance — CAB 2.2.23
+# Interfaces et persistance — CAB 2.2.24
 
 ## Architecture et interfaces techniques CAB
 
@@ -43,6 +43,10 @@ dans le contexte autorisé, sans lire de secret.
 Le SSE et les états HTTP ne remplacent pas un appel MCP réel de
 `broker_readiness` dans la session de codage ciblée. L'état `connected` de
 `GET /api/mcp` ne constitue ni une readiness métier ni une décision.
+
+Une page demandant un appairage relève de la surface navigateur. Avant de
+solliciter l’hôte, vérifier le client authentifié ci-dessous ; une API accessible
+permet le pilotage autorisé du même SID. Voir [la reprise autonome](owner-reconciliation.md).
 
 ## HTTP401 et client authentifié du pilote
 

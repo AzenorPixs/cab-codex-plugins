@@ -1,4 +1,4 @@
-# Précisions startup — CAB 2.2.23
+# Précisions startup — CAB 2.2.24
 
 ## Bootstrap prioritaire du monitoring
 
@@ -122,7 +122,7 @@ Interprétation :
 
 - `READY` : pilotage nominal.
 - `DEGRADED` : pilotage potentiellement poursuivable si l’action reste sûre ; afficher la cause et l’action recommandée.
-- `BLOCKED` : arrêter le test ou le pilotage actif concerné.
+- `BLOCKED` : arrêter l’action réellement concernée ; un résumé de coordination du RUN ne prouve pas un gel de toute unité disjointe. Suivre [la reprise propriétaire](owner-reconciliation.md), sans supprimer ses protections.
 - `HUMAN_REQUIRED` : suspendre la partie concernée et demander l’intervention humaine requise.
 
 Ne reconstruis pas toi-même une seconde logique de diagnostic si `broker_readiness` fournit déjà :

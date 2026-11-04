@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Réconciliation autonome SCM 2.2.24
+
+[document-autonomous-owner-reconciliation](openspec/changes/archive/2026-11-04-document-autonomous-owner-reconciliation/), code non attribué : ARCHIVÉ, source2.2.24 qualifiée.
+Reprise propriétaire, API versus appairage et portée du résumé BLOCKED ;
+615tests uniques réussis, moteurs inchangés hors version. Prévol C12 READY
+sous2.2.23 et préparation reprise ; publication/activation24 distinctes.
+Voir QUALIFICATION.md du change. Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    ownerRecovery["document-autonomous-owner-reconciliation<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class ownerRecovery provisional
+```
+
 ## Accord permanent MCP SCM 2.2.23
 
 [document-standing-bounded-mcp-recovery](openspec/changes/archive/2026-11-04-document-standing-bounded-mcp-recovery/), code non attribué : ARCHIVÉ, source2.2.23 qualifiée.
