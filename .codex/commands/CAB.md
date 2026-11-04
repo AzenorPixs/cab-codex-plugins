@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.22
+version: 2.2.23
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -52,5 +52,5 @@ puis la seule voie utile ; `references/validation-submission.md` distingue
 soumission, décision, acquisition et once. L’orchestrateur demande l’accès au
 contrôleur ; APPROVED ne signifie pas HELD. Aucun retrait, nouvel argument,
 rejeu ou élargissement de mandat n’est implicite.
-`run-transition-in-flight` : suivre `references/admission-state.md` sur les
-mêmes identités ; STABLE ne garantit pas la mutation suivante.
+BUSY : `references/admission-state.md`. Récupération MCP : accord permanent
+borné dans `references/mcp-pending-recovery.md`, sans nouvelle question admissible.

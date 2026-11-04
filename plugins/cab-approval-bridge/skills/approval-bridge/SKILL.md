@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.2.22. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.2.23. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -29,7 +29,7 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 | Outils natifs, lecture ou arguments | [adaptations natives](references/technical-native.md) et la référence spécialisée indiquée |
 | Transport coupé ou réponse perdue | [continuité](references/transport-continuity.md) et [politique de récupération](references/recovery-policy.md) |
 | Attente, contexte ou statistiques | [cadences](references/protocol-cadences.md), [compaction](references/protocol-compaction.md) seulement si nécessaire, [statistiques](references/protocol-lifecycle.md) à l'archivage/clôture |
-| Mise à jour demandée | [component-update](references/component-update.md), [command-update](references/command-update.md) ; script `scripts/cgpt-approval-bridge-update.mjs` du plugin |
+| Mise à jour demandée | [component-update](references/component-update.md), [MCP](references/mcp-pending-recovery.md) ; script `scripts/cgpt-approval-bridge-update.mjs` du plugin |
 | Clôture | [closure](references/protocol-closure.md), [nettoyage](references/protocol-lifecycle.md), [précisions](references/technical-lifecycle.md) |
 
 Les consultations `/CAB status`, `source` et `stats` suivent directement leur

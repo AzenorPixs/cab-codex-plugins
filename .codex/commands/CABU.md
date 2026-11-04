@@ -1,6 +1,6 @@
 ---
 description: Mettre à jour CAB ; équivalent exact de /CAB update
-version: 2.2.22
+version: 2.2.23
 ---
 
 Réponds en français.
@@ -13,7 +13,7 @@ et termine immédiatement, avant toute lecture réseau ou effet de maintenance.
 
 Charge intégralement le fichier frère `CAB.md` depuis le même répertoire de
 commandes que ce fichier. Utilise uniquement ce fichier local, sans recherche
-globale ni téléchargement. Vérifie son frontmatter : `version: 2.2.22`.
+globale ni téléchargement. Vérifie son frontmatter : `version: 2.2.23`.
 S'il est absent, illisible ou d'une version différente, affiche
 `CAB_COMMANDE_ALIAS_INDISPONIBLE` avec la cause et termine avant toute
 opération réseau, installation ou maintenance.
@@ -25,3 +25,6 @@ et doit mener son exécution jusqu'au résultat terminal avec le rapport complet
 La préparation, la bascule sélective, la continuité et le
 repli sont définis uniquement par CAB ; n'ajoute aucune logique de maintenance
 ici. Ne déclenche ni start, ni run, ni test, ni bootstrap du monitoring.
+
+CAB applique l’accord permanent de récupération MCP bornée décrit dans son
+skill, référence `mcp-pending-recovery.md` ; ne pas inventer de procédure ici.
