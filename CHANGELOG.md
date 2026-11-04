@@ -1,3 +1,10 @@
+## 2.2.26 — 2026-11-04
+
+Qualification des read natifs V2 terminés et sans mutation comme observations
+pendant le retrait d’un edit/shell refusé. Provenance dérivée, input borné,
+statut/executed et troncature contrôlés. Outils inconnus, lectures non prouvées
+et effets supplémentaires conservés comme gardes ; parent et once inchangés.
+
 ## 2.2.25 — 2026-11-04
 
 Retrait isolé d’un edit refusé attaché : preuve edit existante admise et

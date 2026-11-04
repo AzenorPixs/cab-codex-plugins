@@ -2132,7 +2132,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.25');
+  assert.equal(initialized.result.serverInfo.version, '2.2.26');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4273,7 +4273,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.25'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.26'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4496,4 +4496,30 @@ for(const kind of ['missing-ack','busy','pending-permission'])test('edit attach�
  const before=(await h.get('/runs')).body.coordination;
  assert.equal((await h.post(base+'/recovery/action',payload)).status,409);
  assert.deepEqual((await h.get('/runs')).body.coordination,before);assert.equal(h.native.replies.filter(r=>r.body.response==='once').length,0);
+});
+
+for(const variant of ['native-read','native-read-window','unlinked-read','executed','running','error','extra-input','invalid-window','truncated','spoofed-tool','write','extra-shell'])test('retrait edit et lecture native : '+variant,async t=>{
+ const{h,run,base,approval,payload}=await rejectedEditFixture(t,{attached:variant!=='unlinked-read'});
+ const stamp=Date.now(),read={type:'tool',id:'read_after_rejected_edit',name:'read',executed:false,time:{created:stamp,ran:stamp,completed:stamp+1},state:{status:'completed',input:{path:join(h.directory,'notes.md')},content:[{type:'text',text:'synthetic observation'}],metadata:{}}};
+ if(variant==='native-read-window')Object.assign(read.state.input,{offset:0,limit:20});
+ if(variant==='executed')read.executed=true;
+ if(variant==='running')read.state.status='running';
+ if(variant==='error')read.state.status='error';
+ if(variant==='extra-input')read.state.input.command='/usr/bin/true';
+ if(variant==='invalid-window')read.state.input.limit=-1;
+ if(variant==='truncated')read.state.metadata.truncated=true;
+ if(variant==='write'){read.name='write';read.state.metadata.nativeTool='read';read.state.input.content='mutating tool remains an effect';}
+ if(variant==='spoofed-tool'){read.name='plugin_read';Object.assign(read.state.metadata,{nativeFormat:'opencode-v2',nativeTool:'read'});}
+ h.native.messages[run.sessionId].push({nativeV2:{id:'msg_read_after_edit',type:'assistant',time:{created:stamp},content:[read]}});
+ if(variant==='extra-shell')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',callID:'extra-effect',state:{status:'completed',input:{command:'/usr/bin/true'},metadata:{exit:0}}}]});
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const before=(await h.get('/runs')).body.coordination,result=await h.post(base+'/recovery/action',payload);
+ const accepted=['native-read','native-read-window','unlinked-read'].includes(variant);
+ assert.equal(result.status,accepted?200:409,JSON.stringify(result));
+ const after=(await h.get('/runs')).body.coordination;
+ assert.deepEqual(after.accesses,before.accesses);assert.deepEqual(after.revisions,before.revisions);assert.deepEqual(after.testReservations,before.testReservations);
+ if(accepted){assert.equal(after.operations[approval.operation_id].state,'CANCELLED');assert.deepEqual(after.operations[approval.operation_id].decision,before.operations[approval.operation_id].decision);}
+ else assert.deepEqual(after,before);
+ assert.equal(h.native.replies.filter(r=>r.body.response==='once').length,0);
 });
