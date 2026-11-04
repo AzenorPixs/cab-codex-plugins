@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,existsSync} from 'node:fs';import {join} from 'node:path';import {tmpdir} from 'node:os';
 import {NativeInstances} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-native-instances.mjs';
-function fixture(t){const root=mkdtempSync(join(tmpdir(),'cab-instances-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const updateRoot=join(root,'updates');mkdirSync(updateRoot);return {root,updateRoot,native:{pid:process.pid,version:'2.2.31'}};}
+function fixture(t){const root=mkdtempSync(join(tmpdir(),'cab-instances-'));t.after(()=>rmSync(root,{recursive:true,force:true}));const updateRoot=join(root,'updates');mkdirSync(updateRoot);return {root,updateRoot,native:{pid:process.pid,version:'2.2.32'}};}
 test('instance native : observation durable avant invocation et preuve en lecture seule',async t=>{
  const h=fixture(t),file=join(h.root,'instances.json'),journal=new NativeInstances(h.root,file,h.updateRoot);
  const observed=await journal.observe(h.native),before=readFileSync(file,'utf8');

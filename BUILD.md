@@ -1,13 +1,21 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
-## Notification stalled et sous-état — CAB 2.2.31
+## Libération propriétaire sans token dans le contexte — CAB 2.2.32
+
+La récupération release-access lie le token/fencing en interne pour la libération
+ordinaire d’un accès HELD non restauré/non quarantiné et aux membres terminaux.
+Le propriétaire reste responsable des preuves et de l’issue ; les contrôles
+natifs, l’empreinte de l’accès et les protections sont conservés. Aucun effet
+ou bail n’est libéré par un GET. Voir [le contrat](plugins/cab-approval-bridge/skills/approval-bridge/references/recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage).
+
+## Notification stalled et sous-état — CAB 2.2.32
 
 La recommandation de diagnostic distingue lease SENDING expirée, retry FAILED
 en retard et notification jamais livrée. Une situation mixte/incomplète reste
 diagnostique. La readiness et les gardes d’exécution ne sont pas levées ; aucune
 récupération automatique n’est ajoutée. Voir [la procédure ciblée](plugins/cab-approval-bridge/skills/approval-bridge/references/technical-recovery.md#notification-bloquée--qualifier-le-sous-état).
 
-## Retrait sur parent seulement référencé — CAB 2.2.31
+## Retrait sur parent seulement référencé — CAB 2.2.32
 
 La récupération propriétaire peut retirer un shell/edit refusé avant once dont
 accessId référence un parent HELD unique sans membership effectif. Elle vérifie
@@ -15,7 +23,7 @@ le rejet natif ACK204 et deux frontières stables, sans rattacher l’enfant ni
 modifier parent, historiques, révisions ou baux. Les inputs et fins de ligne
 restent exacts ; aucune permission rétroactive. Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-attached-shell-retirement.md).
 
-## Accord permanent de restauration ASK — CAB 2.2.31
+## Accord permanent de restauration ASK — CAB 2.2.32
 
 Le développeur autorise durablement la révocation API bornée des grants natifs
 protégés pour rétablir ASK déjà déclaré, sans nouvelle demande à chaque session.
@@ -24,7 +32,7 @@ frontière inactive, journal et préservation des autres droits/identités reste
 obligatoires. Aucune suppression n’est implicite dans un audit ou CABU. Voir
 [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/native-permission-grants.md).
 
-## ASK effectif et revue ciblée — CAB 2.2.31
+## ASK effectif et revue ciblée — CAB 2.2.32
 
 CAB audite les grants natifs sauvegardés en plus des règles de session avant
 émission. Une maintenance partagée mandatée peut révoquer les seules entrées
@@ -33,7 +41,7 @@ La revue propriétaire d’un terminal de lecture peut clore un enfant non attac
 référençant un parent HELD compatible, sans inventer une once historique ni
 modifier le parent. Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/native-permission-grants.md).
 
-## Annulation native et mise en forme — CAB 2.2.31
+## Annulation native et mise en forme — CAB 2.2.32
 
 La preuve d’annulation native qualifiée tolère les blancs légaux hors chaînes
 d’un gabarit fermé, sans changer les données, appels ou retour. Les diagnostics
@@ -42,7 +50,7 @@ La coordination peut converger vers CANCELLED sans rejouer l’annulation,
 avec deux lectures stables et les protections existantes. Voir
 [la voie propriétaire](plugins/cab-approval-bridge/skills/approval-bridge/references/autonomous-recovery.md).
 
-## Lectures natives et retrait qualifié — CAB 2.2.31
+## Lectures natives et retrait qualifié — CAB 2.2.32
 
 Le contrôleur distingue les read V2 prouvés sans mutation des effets candidats
 lors d’un retrait. Provenance dérivée par le client, lecture terminée,
@@ -51,7 +59,7 @@ appels inconnus ou mutateurs restent bloquants ; aucune garde de once ou de
 parent n’est levée. Voir le
 [contrat](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-attached-shell-retirement.md).
 
-## Retrait edit attaché avec historique annulé — CAB 2.2.31
+## Retrait edit attaché avec historique annulé — CAB 2.2.32
 
 Le retrait propriétaire admet aussi l’edit natif refusé sur preuve privée ACK204,
 deux frontières stables et absence de once. Un historique d’autre SID n’est
@@ -60,7 +68,7 @@ Seul l’enfant est annulé ; le parent et ses protections restent identiques.
 Voir [le contrat](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-attached-shell-retirement.md).
 Les gardes d’émission sur accès historique restent inchangées.
 
-## Réconciliation propriétaire autonome — CAB 2.2.31
+## Réconciliation propriétaire autonome — CAB 2.2.32
 
 Dans le change autorisé, l’orchestrateur traite les réconciliations qualifiées
 sans demander un accord humain supplémentaire. Il distingue page navigateur,
@@ -69,7 +77,7 @@ Voir [la procédure distribuée](plugins/cab-approval-bridge/skills/approval-bri
 Les anciens effets incertains restent protégés ; les unités indépendantes
 peuvent continuer sous leurs gardes. Aucun changement moteur hors version.
 
-## Récupération MCP sous accord permanent — CAB 2.2.31
+## Récupération MCP sous accord permanent — CAB 2.2.32
 
 Le développeur autorise durablement, dans un cycle CABU mandaté, la récupération
 MCP globale bornée au reçu admissible exact : snapshot fraîche inactive et sans
@@ -79,7 +87,7 @@ classe ; les cas hors cadre restent distincts. Voir la
 [référence distribuée](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-pending-recovery.md).
 Moteurs inchangés hors version ; le flag exact reste fourni par l’orchestrateur.
 
-## Transitions brèves du RUN — CAB 2.2.31
+## Transitions brèves du RUN — CAB 2.2.32
 
 Le pilotage reprend une décision ou une acquisition refusée par
 `run-transition-in-flight` sur les mêmes identités après relecture autoritaire
@@ -88,7 +96,7 @@ et recontrôles. STABLE reste un instantané. La référence distribuée
 précise la limite entre refus explicite et réponse perdue ; aucune once ni
 exécution métier n’est rejouée. Moteurs et protections inchangés hors version.
 
-## Décisions de pilotage 2.2.31
+## Décisions de pilotage 2.2.32
 
 La [grille distribuée](plugins/cab-approval-bridge/skills/approval-bridge/references/pilot-state-matrix.md)
 relie les états connus aux preuves et voies propriétaires, avec repli explicite
@@ -97,7 +105,7 @@ distingue valeurs préparées, soumission littérale, décision, acquisition,
 once et fin. Les moteurs et gardes restent inchangés ; l’orchestrateur demande
 l’accès partagé au contrôleur au lieu de déduire HELD d’APPROVED.
 
-## Transition broker et retrait NOT_ADMITTED 2.2.31
+## Transition broker et retrait NOT_ADMITTED 2.2.32
 
 Une readiness broker temporairement indisponible renvoie503 et conserve le
 PENDING ; une vraie incompatibilité de requête reste409. Un ancien terminal
@@ -106,7 +114,7 @@ propriétaire qualifié, sans accès ni effet, sur deux frontières stables et u
 lecture exacte fraîche. Aucun terminal ou effet n’est rejoué, aucune décision
 n’est inventée. Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/not-admitted-retirement.md).
 
-## Retrait ciblé 2.2.31
+## Retrait ciblé 2.2.32
 
 Un shell approuvé mais refusé avant once peut être retiré par son orchestrateur
 avec ACK204 natif exact et double frontière stable. Seule la coordination de
@@ -116,7 +124,7 @@ Voir [la procédure distribuée](plugins/cab-approval-bridge/skills/approval-bri
 Aucun changement du RUN métier par le correcteur ; qualification, publication
 et activation restent distinctes.
 
-## États privés CAB2.2.31 et fichiers projet0775
+## États privés CAB2.2.32 et fichiers projet0775
 
 Les fichiers de projet conservent leurs droits0775, y compris après DIU.
 Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
@@ -141,7 +149,7 @@ anciennes protections incertaines restent en place, sans once ni commande rejou�
 Les mises à jour suivantes utilisent de nouveau le transfert certifié ordinaire.
 
 
-## Récupération autonome 2.2.31
+## Récupération autonome 2.2.32
 
 Les frontières PENDING sans contexte et terminal de lecture sans reçu once
 possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
@@ -165,9 +173,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.2.31
+### Distribution courante 2.2.32
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.2.31. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Seules `/CAB` et `/CABU` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui prépare à chaud et ne bascule que les briques nécessaires, avec vérification des versions et de la continuité. Un jeu conforme ne redémarre pas. Aucune activation au login ; OpenCode demeure ouvert.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.2.32. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Seules `/CAB` et `/CABU` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui prépare à chaud et ne bascule que les briques nécessaires, avec vérification des versions et de la continuité. Un jeu conforme ne redémarre pas. Aucune activation au login ; OpenCode demeure ouvert.
 
 Le contrôleur persiste chaque décision terminale avant une réponse native. Au
 redémarrage, la restauration d’une approbation exige la demande et la décision
@@ -436,7 +444,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.2.31` pour le broker,
+artefacts distribués. La version de base actuelle est `2.2.32` pour le broker,
 le contrôleur, le superviseur et le plugin ; le plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -740,7 +748,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.2.31 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.2.32 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -787,7 +795,7 @@ Le banc de processus exige une terminaison sous cinq secondes, libération des v
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des quatre briques, plugins et commandes est 2.2.31.
+La distribution courante des quatre briques, plugins et commandes est 2.2.32.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -1062,20 +1070,20 @@ CAB2.1.32 partage le prédicat de permissions natives entre client et contrôleu
 
 CAB2.1.32 ferme les imports relatifs statiquement déclarés selon leurs destinations réelles, et inclut permission-policy dans le groupe du moniteur. Une dépendance seulement présente dans un autre groupe est refusée avant coupure ; les contrôles de permissions restent ceux du correctif29.
 
-Les reprises2.2.31 réutilisent les revues closes dans un historique long et
+Les reprises2.2.32 réutilisent les revues closes dans un historique long et
 permettent le retrait propriétaire avant toute émission native. Elles ne
 fabriquent ni permission, reçu once ou NO_EFFECT ; voir autonomous-recovery.
 La responsabilité du contrôleur pour la chaîne accès/intention/once/ACK est
 explicite. Les ports historiques non prouvés restent protégés pendant une
 continuation disjointe ; aucune dépendance n’est ajoutée.
 
-La corrélation2.2.31 distingue l’input d’un appel MCP terminé et la réussite
+La corrélation2.2.32 distingue l’input d’un appel MCP terminé et la réussite
 métier de son wrapper. Elle conserve NOT_ADMITTED terminal et les gardes
 indépendantes de décision/accès/once. La procédure canonique à payload
 littéral est détaillée dans technical-native ; aucune dépendance nouvelle.
 
 
-## Changement de session de pilotage — CAB 2.2.31
+## Changement de session de pilotage — CAB 2.2.32
 
 Une API distincte `/runs/<run>/session-handoff` change le SID courant sans
 transférer les anciennes autorisations ni libérer les protections historiques.
@@ -1086,7 +1094,7 @@ reste strict. Procédure, préconditions et absence de downgrade après usage :
 Publication/CABU et utilisation métier restent des preuves séparées.
 
 
-## Retrait autonome d’une unité approuvée — CAB 2.2.31
+## Retrait autonome d’une unité approuvée — CAB 2.2.32
 
 Le skill, l’index et la commande dirigent le propriétaire vers la procédure
 [APPROVED avec accès HELD](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-held-retirement.md).
@@ -1099,7 +1107,7 @@ restent dans le traitement local privé ; publication/CABU et action métier
 sont vérifiées séparément.
 
 
-## Shell approuvé sans accès — CAB2.2.31
+## Shell approuvé sans accès — CAB2.2.32
 
 Le [parcours autonome sans accès lié](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-shell-retirement.md)
 complète les entrées du skill, de la commande et du triage. Un manifeste
@@ -1110,7 +1118,7 @@ Une protection incompatible, une base périmée ou un effet incertain reste
 opposable. Distribution/CABU et résultat métier sont vérifiés séparément.
 
 
-## Corrélation du préambule await search — CAB2.2.31
+## Corrélation du préambule await search — CAB2.2.32
 
 Le client reconnaît await optionnel dans la discovery readonly liée par const
 avant un retour MCP littéral. Cette projection pendant running évite le cycle
@@ -1119,7 +1127,7 @@ de timeout/poll pour cette forme, sous les mêmes comparaisons et gardes.
 La clôture des anciennes coordinations REJECTED est un périmètre distinct.
 
 
-## Assertion native bornée — CAB 2.2.31
+## Assertion native bornée — CAB 2.2.32
 
 Une vérification readonly du chemin découvert peut précéder le retour MCP
 littéral : même binding, items[0].path, chemin de catalogue exact et Error

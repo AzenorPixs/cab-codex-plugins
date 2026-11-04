@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.32 — 2026-11-04
+
+- Libération owner release-access après perte du token par compactage : route ordinaire, token lié en interne, empreinte vérifiée, aucun secret public.
+- Quarantaine, restauration, effets inconnus et gardes natives restent bloquants ; aucun bail de test libéré implicitement.
+
 ## 2.2.31 — 2026-11-04
 
 - Recommandation de notification qualifiée par sous-état : lease expirée, retry FAILED ou diagnostic mixte ; aucune récupération exécutée par le diagnostic.

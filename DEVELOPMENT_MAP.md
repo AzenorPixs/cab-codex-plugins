@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Libération déléguée après compactage SCM 2.2.32
+
+[delegate-held-access-release-without-token](openspec/changes/archive/2026-11-04-delegate-held-access-release-without-token/), code non attribué : ARCHIVÉ, source2.2.32 qualifiée.
+Action owner release-access, token/fencing liés en interne et empreinte stable,
+route/gardes ordinaires conservées ;897tests finaux uniques réussis. Publication,
+activation et libération opérante distinctes ; voir QUALIFICATION.md. ACL ultérieure.
+
+```mermaid
+flowchart LR
+    ownerRelease["delegate-held-access-release-without-token<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class ownerRelease provisional
+```
+
 ## Recommandation de notification SCM 2.2.31
 
 [qualify-stalled-notification-recommendation](openspec/changes/archive/2026-11-04-qualify-stalled-notification-recommendation/), code non attribué : ARCHIVÉ, source2.2.31 qualifiée.

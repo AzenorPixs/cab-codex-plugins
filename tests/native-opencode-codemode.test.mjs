@@ -545,7 +545,16 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       assert.ok(shell.state.output.includes(corrupt?'CAB_SHELL_PAYLOAD_REFUSED':'CAB_LONG_EXACT_OK'));if(corrupt){assert.equal(shell.state.output.includes('CAB_LONG_EXACT_OK'),false);assert.equal(shell.state.output.includes('CAB_LONG_WRONG_OK'),false);}
       assert.equal(readFileSync(target,'utf8'),'duplicate duplicate');
       assert.equal(providerRequests.some(raw=>raw.includes(padding)),false);
-      await http('/runs/native-code/locks/release',{version:current.version,operationId:carrierApproval.operation_id,token:access.token,fencing:access.fencing,outcome:'COMPLETED',evidence:['native carrier result reviewed']});
+      if(!corrupt){
+        await until(async()=>(await http('/runs')).coordination.operations[carrierApproval.operation_id].state==='COMPLETED','native delegated release boundary');
+        await http('/runs/native-code/recovery/policy',{policyId:'native-owner-release-policy',ownerId:run.ownerId,version:current.version,
+          actions:['release-access'],resources:carrierApproval.resources,authorization:'same native fixture mandate; owner reviewed terminal effect'});
+        const plan=await http('/runs/native-code/recovery');
+        const result=await http('/runs/native-code/recovery/action',{actionId:'native-owner-release-action',ownerId:run.ownerId,
+          policyId:'native-owner-release-policy',boundaryDigest:plan.boundaryDigest,action:'release-access',targetId:access.accessId,
+          input:{outcome:'COMPLETED',evidence:['native carrier result reviewed without owner token transport']}});
+        assert.equal(result.state,'RELEASED');assert.equal(result.token,undefined);assert.equal(JSON.stringify(result).includes(access.token),false);
+      }else await http('/runs/native-code/locks/release',{version:current.version,operationId:carrierApproval.operation_id,token:access.token,fencing:access.fencing,outcome:'COMPLETED',evidence:['native carrier result reviewed']});
       assert.equal((await http('/runs')).coordination.operations[carrierApproval.operation_id].native.onceAcknowledged,true);
       assert.equal((await fetch(control+'/runs/native-code/shell-stage/'+stageInput.stageId+'/payload')).status,409);
     }

@@ -1,4 +1,4 @@
-# PLLM et raccord natif — CAB 2.2.31
+# PLLM et raccord natif — CAB 2.2.32
 
 ## PLLM Automatique — sélection, fraîcheur initiale et continuité
 

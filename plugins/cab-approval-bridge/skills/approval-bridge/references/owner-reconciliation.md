@@ -1,4 +1,4 @@
-# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.31
+# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.32
 
 Dans le change et les moyens déjà autorisés, l’orchestrateur propriétaire
 examine les preuves, décide la réconciliation qualifiée et poursuit le mandat.
@@ -63,3 +63,6 @@ code, cible, date et preuve manquante. Continuer les travaux indépendants permi
 Solliciter le développeur uniquement pour une décision ou capacité effectivement
 hors périmètre, après vérification des chemins autorisés ; ne pas lui demander
 une confirmation générique pour une réconciliation déjà déléguée.
+
+Token perdu par compactage, parent HELD non restauré et tous membres terminaux :
+[release-access propriétaire](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage), sous les gardes ordinaires et sans exposition du token.

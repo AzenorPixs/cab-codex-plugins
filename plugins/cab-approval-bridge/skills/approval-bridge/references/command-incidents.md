@@ -1,4 +1,4 @@
-# Incidents — CAB 2.2.31
+# Incidents — CAB 2.2.32
 
 Commencer par le [triage des observations](incident-triage.md) avant de conclure à une panne.
 
@@ -18,3 +18,5 @@ développeur couvre la maintenance partagée bornée selon
 cet accord à chaque session ; une frontière active se coordonne sans forçage.
 
 Notification stalled/FAILED sans lease : [qualifier le sous-état](technical-recovery.md#notification-bloquée--qualifier-le-sous-état) avant toute action ciblée.
+
+Accès HELD non restauré, membres terminaux et token perdu : [libération owner](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage), sans restitution implicite des baux ou effets inconnus.

@@ -2132,7 +2132,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.2.31');
+  assert.equal(initialized.result.serverInfo.version, '2.2.32');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4273,7 +4273,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.31'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.2.32'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4662,4 +4662,42 @@ for(const variant of ['clean','missing-ack','busy','pending','extra-effect','bou
  assert.equal(child.native,undefined);assert.equal(child.nativeResult,undefined);assert.notEqual(child.onceAcknowledged,true);assert.deepEqual(child.decision,before.operations[approval.operation_id].decision);assert.equal(h.native.replies.length,replies);
  assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
  assert.deepEqual((await h.get('/runs')).body.coordination.accesses,before.accesses);
+});
+
+async function delegatedAccessReleaseFixture(t){
+ const h=await setup(t),run=await h.reserve('delegated-release'),base='/runs/'+run.runId;
+ const {approval,access}=await h.approvedAccess(run,'delegated-held');
+ await h.execute(approval);
+ const stamp=Date.now()+1;
+ h.native.messages[run.sessionId].push({nativeV2:{id:'msg_delegated_release',type:'assistant',time:{created:stamp},content:[{type:'tool',id:'call-'+approval.requestId,name:'shell',executed:false,time:{created:stamp,ran:stamp,completed:stamp+1},state:{status:'completed',input:{command:approval.commands[0]},content:[{type:'text',text:'completed'}],metadata:{truncated:false,exit:0,status:'completed'}}}]}});
+ h.native.emit({type:'session.idle',properties:{sessionID:run.sessionId}});
+ await waitFor(async()=>(await h.get('/runs')).body.coordination.operations[approval.operation_id].state==='COMPLETED');
+ await h.post(base+'/job/progress',{jobId:'job-'+run.runId,currentCabMandate:''});
+ await h.post(base+'/recovery/policy',{policyId:'release-access-policy',ownerId:run.ownerId,version:run.version,actions:['release-access'],resources:run.resources,authorization:'same approved change; owner reviewed all native completions before release'});
+ const plan=(await h.get(base+'/recovery')).body;
+ const payload={actionId:'delegated-release-action',ownerId:run.ownerId,policyId:'release-access-policy',boundaryDigest:plan.boundaryDigest,action:'release-access',targetId:access.accessId,input:{outcome:'COMPLETED',evidence:['audit/known-terminal-effects']}};
+ return {h,run,base,approval,access,payload};
+}
+for(const variant of ['clean','reconciled','owner','boundary','token','fencing','outcome','busy','permission','current-mandate'])test('libération owner sans token : '+variant,async t=>{
+ const {h,run,base,approval,access,payload}=await delegatedAccessReleaseFixture(t);
+ assert.ok((await h.get(base+'/recovery')).body.actions.some(a=>a.action==='release-access'&&a.targetId===access.accessId));
+ if(variant==='reconciled')payload.input.outcome='RECONCILED';
+ if(variant==='owner')payload.ownerId='foreign';if(variant==='boundary')payload.boundaryDigest='0'.repeat(64);if(variant==='token')payload.input.token='FAKE';if(variant==='fencing')payload.input.fencing=access.fencing+1;if(variant==='outcome')payload.input.outcome='NO_EFFECT';
+ if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ if(variant==='permission')h.native.permissions.push({id:'pending-owner-release',sessionID:run.sessionId,permission:'bash',metadata:{command:'/usr/bin/false'}});
+ if(variant==='current-mandate')await h.post(base+'/job/progress',{jobId:'job-'+run.runId,currentCabMandate:'new-unfinished-mandate'});
+ if(!['owner','boundary','token','fencing','outcome'].includes(variant))payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ const before=(await h.get('/runs')).body.coordination,replies=h.native.replies.length;
+ const result=await h.post(base+'/recovery/action',payload);
+ if(!['clean','reconciled'].includes(variant)){assert.ok([403,409].includes(result.status),JSON.stringify(result));assert.deepEqual((await h.get('/runs')).body.coordination,before);return;}
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'RELEASED');assert.equal(result.body.token,undefined);assert.equal(JSON.stringify(result.body).includes(access.token),false);
+ const after=(await h.get('/runs')).body.coordination;assert.equal(after.accesses[access.accessId].token,undefined);assert.deepEqual(after.operations[approval.operation_id].native,before.operations[approval.operation_id].native);assert.deepEqual(after.operations[approval.operation_id].nativeResult,before.operations[approval.operation_id].nativeResult);assert.equal(h.native.replies.length,replies);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+});
+
+test('libération déléguée : empreinte interne périmée refuse avant effet',async t=>{
+ const {h,run,base,access}=await delegatedAccessReleaseFixture(t),before=(await h.get('/runs')).body.coordination;
+ const result=await h.post(base+'/locks/release',{version:run.version,operationId:access.accessId,token:access.token,fencing:access.fencing,
+  outcome:'COMPLETED',evidence:['fixture stale internal boundary'],accessReleaseBoundary:'0'.repeat(64)});
+ assert.equal(result.status,409);assert.equal(result.body.error,'recovery-access-boundary-changed');assert.deepEqual((await h.get('/runs')).body.coordination,before);
 });

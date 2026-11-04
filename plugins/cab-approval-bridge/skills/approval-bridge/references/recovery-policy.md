@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.31
+# Récupération par RUN — CAB 2.2.32
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -31,6 +31,7 @@ de cette policy ; ne pas la remplacer par withdraw-unissued ou cancel-waiting.
 | reconcile-test | /test-resources/reconcile-restored |
 | reconcile-access | /locks/reconcile-restored ; la cible est accessId |
 | quarantine-port | /locks/quarantine-timeout ; aucun effet déclaré terminé |
+| release-access | /locks/release ; accès HELD non restauré/non quarantiné, membres terminaux et gardes ordinaires conservés |
 | release-test | /test-resources/release ; seulement les effets du bail |
 | cancel-waiting-test | /test-resources/cancel |
 | cancel-waiting-access | /locks/cancel ; WAITING ou STALE selon ses gardes |
@@ -69,3 +70,30 @@ n’est créée et les gardes d’accès restent opposables.
 Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.
 
 NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admitted-retirement.md). Une absence temporaire de readiness donne503, pas une incompatibilité de contrat.
+
+## Libérer un accès après perte de token par compactage
+
+La policy propriétaire peut autoriser release-access pour le seul accès exact
+du même RUN/contexte/version. GET recovery propose cette action pour un parent
+HELD non restauré, non quarantiné et dont tous les membres sont terminaux.
+Une offre ne prouve pas que les effets/nettoyages sont qualifiés : la libération
+ordinaire conserve ses contrôles et la décision appartient au propriétaire.
+
+POST recovery/action utilise ownerId, policyId, actionId neuf, boundaryDigest
+frais, action="release-access", targetId=<accessId> et
+input={outcome:"COMPLETED" ou "RECONCILED",evidence:[preuves réelles]}.
+Le contrôleur lie version, opération, token et fencing en interne, sans GET
+secret, restauration fictive, reconstruction du payload initial ni rotation.
+Ne pas fournir de token ou d’empreinte interne. NO_EFFECT n’est pas offert par
+cette voie. COMPLETED ne devient pas une publication ; RECONCILED ne transforme
+pas un ancien échec, timeout ou nettoyage inconnu en succès.
+
+L’empreinte complète de l’accès est liée à l’action et recontrôlée avant/après
+les lectures natives. Une nouvelle opération, modification de membership,
+quarantaine/restauration, SID actif, permission, mandat courant, résultat natif
+divergent ou effet inconnu refuse la clôture. Les once et résultats historiques
+restent exacts. Le reçu public ne contient aucun token ; après réponse perdue,
+relire le même actionId, sans lancer une seconde libération. Une intention
+sans preuve d’effet reste outcome-unverified. Un releaseDigest exact permet
+la reprise du reçu après crash, sans rejouer l’effet ni réexposer le secret.
+Les baux de test et autres accès ne sont pas libérés par cette action.
