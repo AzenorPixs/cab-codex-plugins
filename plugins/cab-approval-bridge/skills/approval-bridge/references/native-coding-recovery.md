@@ -1,4 +1,4 @@
-# Reprise des incidents de codage natif — CAB 2.2.21
+# Reprise des incidents de codage natif — CAB 2.2.22
 
 ## Tour assistant terminal sans effet
 

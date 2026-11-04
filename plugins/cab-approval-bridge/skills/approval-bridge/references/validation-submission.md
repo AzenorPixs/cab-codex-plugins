@@ -1,4 +1,4 @@
-# Soumettre, décider et acquérir — CAB 2.2.21
+# Soumettre, décider et acquérir — CAB 2.2.22
 
 Parcours propriétaire d’une unité déjà autorisée. Il complète
 [les mandats](technical-mandates.md) et [les accès](concurrent-runs.md).
@@ -78,7 +78,20 @@ wrapper concerne la prochaine unité neuve, pas la réécriture de l’ancienne.
 
 ## 3. Décision puis acquisition : deux opérations distinctes
 
+Avant de conclure à une divergence broker/contrôleur, relier les preuves de
+l’unité courante : requestId, approval_id, operation_id/operationDigest,
+SID/RUN/version et empreinte native exacte. Lire le requestId enregistré pour
+cette opération, puis la décision et l’admission de ce requestId. Un
+poll_approval APPROVED pour l’édition précédente ne valide pas le shell suivant,
+même dans le même RUN/SID. Si les IDs diffèrent, observer la vraie demande
+courante sans reconstruire une décision depuis l’ancien reçu ni réémettre
+le shell. Si toute la chaîne concorde et que la divergence persiste, appliquer
+la voie de reprise qualifiée de la grille, sans extrapoler cette explication.
+
 APPROVED enregistre la décision ; cela ne crée pas systématiquement HELD.
+Un refus `run-transition-in-flight` pendant décision ou acquisition suit
+[la reprise sur les mêmes identités](admission-state.md), sans sollicitation
+humaine dans le mandat courant ; STABLE est un instantané, pas une réservation.
 Un fichier est partagé par défaut. exclusiveResources vide, une réservation
 ou l’absence d’autre accès observé ne prouvent pas une admission exclusive.
 

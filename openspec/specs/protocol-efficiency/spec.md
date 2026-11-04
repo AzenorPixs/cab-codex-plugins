@@ -73,6 +73,19 @@ Le contrat distribué SHALL relier état observé, preuve requise, action propri
 - **WHEN** cette lecture expire avant soumission de l’action
 - **THEN** seule l’observation du même objet peut être renouvelée après préparation du cadrage, sans réémission métier ni changement d’un reçu existant
 
+#### Scenario: Transition après observation STABLE
+- **GIVEN** un refus explicite run-transition-in-flight pendant décision ou acquisition
+- **WHEN** l’orchestrateur observe la fin de transition et recontrôle les préconditions
+- **THEN** il poursuit la même demande indécise ou la même acquisition encore nécessaire sur les mêmes identités, sans sollicitation humaine dans son mandat
+- **AND** une décision déjà enregistrée ou un accès HELD ne sont pas réémis
+- **AND** une réponse perdue exige une relecture autoritaire et n’autorise aucun rejeu de once ou d’effet métier
+
+#### Scenario: Reçu approuvé pour une autre unité
+- **GIVEN** un reçu APPROVED et une opération courante encore indécise dans le même RUN et SID
+- **WHEN** les requestId ou approval_id ou operation_id ne correspondent pas
+- **THEN** l’orchestrateur lit les preuves de la vraie demande courante sans lui attribuer l’approbation précédente
+- **AND** aucune décision, commande ou once n’est reconstruite ou rejouée depuis cet ancien reçu
+
 #### Scenario: État non répertorié
 - **GIVEN** une combinaison non documentée ou des preuves contradictoires
 - **WHEN** l’orchestrateur diagnostique le cas

@@ -1,3 +1,10 @@
+## 2.2.22 — 2026-11-04
+
+Reprise autonome des refus transitoires run-transition-in-flight pendant
+décision ou acquisition, même après un instantané STABLE. Grille, skill,
+commande et référence d’admission reliés ; mêmes identités, recontrôles et
+limites de reprise explicites. Aucun changement moteur hors versions.
+
 ## 2.2.18 — Assertion readonly du chemin de discovery
 
 ## 2.2.21 — 2026-11-04

@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.21
+# Index du protocole CAB 2.2.22
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -15,6 +15,7 @@ pour un incident ou une migration restent des faits historiques.
 | Modèle et raccord | [protocol-model](protocol-model.md), [model-policy](model-policy.md) |
 | Mandat, preuves, clôture différée | [protocol-session](protocol-session.md), [technical-mandates](technical-mandates.md), [run-lifecycle](run-lifecycle.md) |
 | API et persistance | [protocol-interfaces](protocol-interfaces.md), [transport-continuity](transport-continuity.md) |
+| Transition BUSY malgré STABLE, décision ou acquisition | [admission et reprise sur les mêmes identités](admission-state.md) |
 | Shell durable | [shell-background](shell-background.md) |
 | Shell approuvé refusé sans accès avant once | [shell approuvé sans accès](approved-shell-retirement.md) ; composition ordinaire conditionnelle par le propriétaire |
 | Unité approuvée avec accès HELD avant once | [retrait APPROVED/HELD](approved-held-retirement.md) ; clôture par le propriétaire dans son mandat |
