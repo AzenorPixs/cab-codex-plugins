@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Reprise des transitions SCM 2.2.22
+
+[clarify-transient-run-transition-retries](openspec/changes/archive/2026-11-04-clarify-transient-run-transition-retries/), code non attribué : ARCHIVÉ, source2.2.22 qualifiée.
+Routage de la course BUSY/STABLE et contrôle des identités entre unités ;
+622tests uniques finaux réussis, moteurs inchangés hors version.
+Publication/activation distinctes ; voir QUALIFICATION.md du change. Attribution par ACL ultérieure.
+
+```mermaid
+flowchart LR
+    transientRun["clarify-transient-run-transition-retries<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class transientRun provisional
+```
+
 ## Documentation de pilotage SCM 2.2.21
 
 [clarify-pilot-state-decisions-and-submission](openspec/changes/archive/2026-11-04-clarify-pilot-state-decisions-and-submission/), code non attribué : ARCHIVÉ, source2.2.21 qualifiée.
