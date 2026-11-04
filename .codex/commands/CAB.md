@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.28
+version: 2.2.29
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -41,7 +41,7 @@ bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
 par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
 
-Pour un diagnostic ou une demande de correctif, lire `references/incident-triage.md` ;un signalement n’autorise pas implicitement un prévol ou un effet supplémentaire.
+Pour un incident, lire `references/incident-triage.md` ;un signalement n’autorise pas implicitement un prévol ou un effet supplémentaire.
 
 Pour un changement explicite de SID dans le même RUN avec historique protégé,
 lire `references/session-handoff.md`. Les commandes run/resume ne réalisent
@@ -52,6 +52,6 @@ puis la seule voie utile ; `references/validation-submission.md` distingue
 soumission, décision, acquisition et once. L’orchestrateur demande l’accès au
 contrôleur ; APPROVED ne signifie pas HELD. Aucun retrait, nouvel argument,
 rejeu ou élargissement de mandat n’est implicite.
-Voies conditionnelles : `references/native-permission-grants.md` (ASK),
+Voies ciblées : `references/native-permission-grants.md` (accord ASK permanent),
 `references/approved-attached-shell-retirement.md` (retrait),
 `references/mcp-pending-recovery.md` (accord MCP permanent).

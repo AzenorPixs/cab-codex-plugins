@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Accord permanent de restauration ASK SCM 2.2.29
+
+[authorize-bounded-native-ask-maintenance](openspec/changes/archive/2026-11-04-authorize-bounded-native-ask-maintenance/), code non attribué : ARCHIVÉ, source2.2.29 qualifiée.
+Mandat partagé permanent du développeur dans skills/plugin/commandes, sans
+nouvelle sollicitation par session ; gardes et moteurs inchangés hors version.
+347tests finaux uniques réussis. Publication, activation et reprise métier
+distinctes ; voir QUALIFICATION.md. Attribution/normalisation par ACL ultérieure.
+
+```mermaid
+flowchart LR
+    askAuthority["authorize-bounded-native-ask-maintenance<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class askAuthority provisional
+```
+
 ## ASK effectif et revue ciblée SCM 2.2.28
 
 [enforce-effective-native-ask](openspec/changes/archive/2026-11-04-enforce-effective-native-ask/), code non attribué : ARCHIVÉ, source2.2.28 qualifiée.

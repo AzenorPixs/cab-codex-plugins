@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.28
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.29
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -62,3 +62,8 @@ sans sollicitation humaine pour une procédure déjà mandatée.
 
 ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
 sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).
+
+Restauration ASK par révocation de grants protégés : l’accord permanent du
+développeur couvre la maintenance partagée bornée selon
+[native-permission-grants](native-permission-grants.md). Ne pas redemander
+cet accord à chaque session ; une frontière active se coordonne sans forçage.

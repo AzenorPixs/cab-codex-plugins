@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.28
+# Index du protocole CAB 2.2.29
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -51,3 +51,8 @@ sans rejeu du cancel ; mise en forme et diagnostics purs distingués.
 
 ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
 sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).
+
+Restauration ASK par révocation de grants protégés : l’accord permanent du
+développeur couvre la maintenance partagée bornée selon
+[native-permission-grants](native-permission-grants.md). Ne pas redemander
+cet accord à chaque session ; une frontière active se coordonne sans forçage.

@@ -14,7 +14,7 @@ from pathlib import Path
 STATE_DIRECTORY = "cgpt-approval-bridge"
 INSTANCE_LOCK = "broker.instance.lock"
 REGISTRY_LOCK = "registry.instance.lock"
-VERSION = "2.2.28"
+VERSION = "2.2.29"
 
 
 def validate_directory(value):

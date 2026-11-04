@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.28
+# Grille de décision du pilotage — CAB 2.2.29
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -115,3 +115,8 @@ ne prouve ni activation ni résolution du cas métier.
 
 ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
 sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).
+
+Restauration ASK par révocation de grants protégés : l’accord permanent du
+développeur couvre la maintenance partagée bornée selon
+[native-permission-grants](native-permission-grants.md). Ne pas redemander
+cet accord à chaque session ; une frontière active se coordonne sans forçage.
