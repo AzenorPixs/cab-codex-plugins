@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Documentation de pilotage SCM 2.2.21
+
+[clarify-pilot-state-decisions-and-submission](openspec/changes/archive/2026-11-04-clarify-pilot-state-decisions-and-submission/), code non attribué : ARCHIVÉ, source2.2.21 qualifiée.
+54 situations et parcours court ; moteurs inchangés hors version,405 tests uniques réussis.
+Publication et activation distinctes ; COVERAGE.md/QUALIFICATION.md du change.
+
 ## Convergence NOT_ADMITTED SCM 2.2.20
 
 [reconcile-not-admitted-after-broker-transition](openspec/changes/archive/2026-11-04-reconcile-not-admitted-after-broker-transition/), code non attribué : ARCHIVÉ, source2.2.20 qualifiée.

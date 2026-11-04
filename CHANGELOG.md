@@ -1,5 +1,13 @@
 ## 2.2.18 — Assertion readonly du chemin de discovery
 
+## 2.2.21 — 2026-11-04
+
+Grille de décision du pilotage, parcours court de soumission littérale et
+clarification décision/acquisition/once. Preuves et autorité explicites pour
+les états connus et cas inconnus ; projections, fraîcheur, reprises et hash
+d’outil distingués. Skill, commande, plugin et cadrages cohérents. Aucun moteur
+ni garde fonctionnelle modifiés ; versions distribuées alignées.
+
 ## 2.2.20 — 2026-11-04
 
 Readiness broker absente explicitement transitoire503, sans faux NOT_ADMITTED.
