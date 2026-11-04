@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.29
+version: 2.2.30
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -53,5 +53,5 @@ soumission, décision, acquisition et once. L’orchestrateur demande l’accès
 contrôleur ; APPROVED ne signifie pas HELD. Aucun retrait, nouvel argument,
 rejeu ou élargissement de mandat n’est implicite.
 Voies ciblées : `references/native-permission-grants.md` (accord ASK permanent),
-`references/approved-attached-shell-retirement.md` (retrait),
+`references/approved-attached-shell-retirement.md` (retrait référencé/attaché),
 `references/mcp-pending-recovery.md` (accord MCP permanent).

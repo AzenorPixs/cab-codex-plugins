@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.30 — 2026-11-04
+
+- Retrait propriétaire d’un shell/edit refusé avant once avec parent seulement référencé ; parent et protections conservés sans attachement rétroactif.
+- Entrées exactes et preuve ACK204 maintenues ; clarification du nom MCP projeté depuis Code Mode.
+
 ## 2.2.29 — 2026-11-04
 
 - Accord permanent de restauration ASK bornée dans le protocole, skills, plugin et commandes ; aucune nouvelle sollicitation humaine par session.

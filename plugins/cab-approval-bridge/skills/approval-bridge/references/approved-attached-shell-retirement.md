@@ -1,4 +1,4 @@
-# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.29
+# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.30
 
 Le propriétaire traite ce cas dans le périmètre validé sans solliciter le
 correcteur. Le parent peut protéger un effet antérieur incertain : ne jamais
@@ -9,8 +9,10 @@ Le retrait concerne la coordination seule, pas la qualification métier.
 
 Relire admission, opération complète, parent et job. Exiger l’enfant
 PREPARED/APPROVED sans native/nativeResult/once ; un seul parent HELD, même
-RUN/contexte/version et enfant du SID courant, contenant
-l’enfant et au moins une autre opération. Le manifeste de l’enfant doit
+RUN/contexte/version et enfant du SID courant, dont operationIds contient soit l’enfant et au moins une autre opération,
+soit uniquement l’historique du parent si l’enfant ne fait que le référencer.
+Dans ce second cas, aucun autre accès ne doit contenir l’enfant ; la référence
+reste inchangée, sans rattachement rétroactif. Le manifeste de l’enfant doit
 rester couvert par le parent ; aucun jeton ou fencing ne doit être recopié
 au modèle. Une opération historique du même SID peut rester protégée et incertaine.
 L’unique exception pour un autre SID est un historique CANCELLED sans native,
@@ -108,3 +110,20 @@ Le contrôleur doit toujours prouver l’unique edit/shell refusé, ACK204, zér
 permission et deux frontières stables ; parent et autres protections restent
 inchangés. Après un reçu terminal409 de retrait, conserver ce reçu et préparer
 une action neuve sur les preuves fraîches corrigées ; ne pas réémettre l’effet.
+
+## Parent référencé sans liaison effective
+
+La même voie withdraw-unissued-validation traite le shell ou edit refusé
+avant once dont accessId référence ce parent HELD sans appartenance à ses
+operationIds. L’orchestrateur n’attache pas l’enfant pour permettre son retrait.
+Le contrôleur conserve tous les membres historiques, le parent et ses preuves.
+Un terminal de lecture reconcile-reviewed-terminal ne s’applique pas à un edit
+refusé : la présence d’une offre générique ne qualifie jamais cette preuve.
+Le rejet ACK204 est observé dans le journal, jamais inventé par l’orchestrateur.
+Après retrait, exiger CANCELLED, APPROVED historique, native/nativeResult/once
+absents, operationIds/parent/révisions/baux identiques. Si une réponse est perdue,
+relire le même actionId ; la reprise est durable sans second reject ou once.
+
+Une différence de fin de ligne entre l’input approuvé et celui réellement
+présenté reste une divergence : aucun digest n’est normalisé. Corriger seulement
+la prochaine unité neuve après revue de son input exact et des révisions fraîches.

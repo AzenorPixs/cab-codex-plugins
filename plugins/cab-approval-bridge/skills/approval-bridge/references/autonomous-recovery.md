@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.29
+# Reprise autonome dans le change — CAB 2.2.30
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -256,7 +256,7 @@ disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
 supposition. La clôture historique reste non prouvée ; aucune procédure ne
 peut effacer cette incertitude sans preuve supplémentaire.
 
-## Permission shell décomposée — CAB2.2.29
+## Permission shell décomposée — CAB2.2.30
 
 Une permission shell peut porter plusieurs ressources ;elle autoriserait
 l’appel entier, pas une once par fragment. CAB ne déduit aucune équivalence
@@ -279,7 +279,7 @@ anciennes identités et permissions ne sont pas réutilisées. Aucun reçu absen
 ne se fabrique rétroactivement. Des mandats unitaires ou le transport shell
 scellé existant permettent d’éviter une décomposition non qualifiée.
 
-## Retirer un edit refusé avant once — CAB2.2.29
+## Retirer un edit refusé avant once — CAB2.2.30
 
 Utiliser la policy propriétaire withdraw-unissued-validation et la même route
 recovery/action, targetId de l’opération, input={nativeBoundaryDigest,evidence}.
@@ -356,3 +356,6 @@ Restauration ASK par révocation de grants protégés : l’accord permanent du
 développeur couvre la maintenance partagée bornée selon
 [native-permission-grants](native-permission-grants.md). Ne pas redemander
 cet accord à chaque session ; une frontière active se coordonne sans forçage.
+
+Edit ou shell refusé avant once avec parent HELD seulement référencé :
+[retrait propriétaire isolé](approved-attached-shell-retirement.md), sans faux rattachement.
