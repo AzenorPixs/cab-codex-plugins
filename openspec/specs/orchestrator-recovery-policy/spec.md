@@ -250,17 +250,27 @@ inventée pour satisfaire une branche de récupération inapplicable.
 - **THEN** le contrat interdit de forcer la clôture HELD ou de modifier les ressources pour contourner le refus
 
 ### Requirement: Retrait isolé d’un shell refusé attaché
-Le contrôleur SHALL permettre au propriétaire de retirer une coordination shell PREPARED/APPROVED sans native/nativeResult/once, après rejet natif avorté executed=false avec reçu privé reject ACKNOWLEDGED HTTP204 exactement lié au SID, processus, version, call, permission et commande approuvée. Deux frontières identiques SHALL vérifier SID idle, zéro permission, opération et accès inchangés. Le retrait SHALL conserver APPROVED et les liens historiques, sans créer un résultat natif ou NO_EFFECT.
+Le contrôleur SHALL retirer seulement l’enfant PREPARED/APPROVED sans native/nativeResult/once, sur preuve qualifiée de rejet shell ou edit avorté executed=false et reçu privé reject ACK204 exact. Deux frontières stables SHALL vérifier SID courant idle, zéro permission et parent HELD inchangé. Un historique d’autre SID SHALL être admissible seulement CANCELLED sans native/nativeResult/once, dans le même RUN/contexte/version. APPROVED et protections SHALL rester conservés.
 
 #### Scenario: Sous-opération sur parent protégé
-- **GIVEN** un unique accès parent HELD du même RUN, contexte, version et SID, contenant la sous-opération et une autre opération historique
-- **WHEN** le propriétaire retire le shell refusé à la frontière qualifiée
+- **GIVEN** un parent unique HELD du même RUN/contexte/version couvrant l’enfant courant et une autre opération historique
+- **WHEN** le propriétaire retire le shell ou edit refusé à la frontière qualifiée
 - **THEN** seule la coordination ciblée devient CANCELLED et sa réponse exécutable locale est invalidée
 - **AND** le parent, ses token/fencing, autres opérations, révisions et baux restent strictement identiques
-- **AND** un nouveau mandat peut suivre le cycle ordinaire sans réutiliser les anciens identifiants ou once
+
+#### Scenario: Historique annulé après changement de session
+- **GIVEN** une ancienne opération d’autre SID annulée avant émission, sans native, nativeResult ni once, dans le même accès et la même génération
+- **WHEN** l’enfant courant dispose d’une preuve de rejet qualifiée
+- **THEN** l’ancien SID historique ne bloque pas le retrait ciblé, sans changement de cette ancienne opération ni de l’accès
+- **AND** les gardes d’émission sur accès historique restent inchangées, aucune nouvelle once ne vient du retrait
+
+#### Scenario: Ancien SID non admissible
+- **GIVEN** un enfant d’ancien SID, un historique étranger ou un historique d’autre SID non CANCELLED ou présentant native, résultat ou once
+- **WHEN** le retrait est demandé
+- **THEN** CAB refuse sans mutation de l’enfant ni du parent
 
 #### Scenario: Preuve ou parent non admissible
-- **GIVEN** un reçu absent, une commande divergente, un effet supplémentaire, une once, un résultat, un parent absent/multiple/étranger/non HELD ou une frontière modifiée
+- **GIVEN** un reçu absent, input/cible divergent du rejet qualifié, effet supplémentaire, once, résultat, parent absent/multiple/étranger/non HELD ou frontière modifiée
 - **WHEN** le retrait est demandé
 - **THEN** il est refusé sans libérer ni réconcilier le parent
 

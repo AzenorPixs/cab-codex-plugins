@@ -1192,3 +1192,32 @@ for(const variant of ['clean','wrong-parent-state','parent-owner','parent-contex
  assert.throws(()=>h.r.nativeStart(run.runId,{...child,kind:'bash'},stored.requestId,{id:'late-permission',tool:{callID:'late-call'}}),/operation-access-not-held/);
  await h.restart();assert.equal(h.r.resourceState.operations[child.operationId].state,'CANCELLED');assert.deepEqual(h.r.resourceState.accesses,before.accesses);
 });
+
+for(const variant of ['clean','old-prepared','old-native','old-result','old-once','foreign-run','foreign-context','foreign-version','old-child'])test('retrait attaché : historique annulé autre SID '+variant,async t=>{
+ const h=await fixture(t),run=h.reserve('mixed-history',[file('notes')]),parent=h.prepare(run,'old-parent'),access=h.acquire(run,parent);
+ await h.restart();
+ const renewed=h.r.reconcileAccess(run.runId,{version:run.version,operationId:access.accessId,token:access.token,fencing:access.fencing,transactionId:'cancel-before-handoff',evidence:['unissued parent']});
+ const handoff=handoffPayload(run);h.r.prepareSessionHandoff(run.runId,handoff);h.r.commitSessionHandoff(run.runId,handoff.handoffId);h.r.completeSessionHandoff(run.runId,handoff.handoffId);
+ const current=h.r.runs.get(run.runId),child=h.prepare(current,'new-child',current.resources,renewed.accessId),stored=h.r.resourceState.operations[child.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('new-child-owner'),false);
+ h.r.recordDecision(run.runId,child.operationId,{status:'approved',requestId:stored.requestId,approvalId:'new-child-approval',changeId:run.changeId,operationId:child.operationId,operationDigest:child.operationDigest,identityDigest:stored.identityDigest,runId:run.runId,version:run.version,sessionId:current.sessionId});
+ h.r.attachOperations(run.runId,{version:run.version,operationId:renewed.accessId,token:renewed.token,fencing:renewed.fencing,operationIds:[child.operationId],evidence:['same held scope']});
+ const old=h.r.resourceState.operations[parent.operationId];
+ if(variant==='old-prepared')old.state='PREPARED';
+ if(variant==='old-native')old.native={onceAcknowledged:false};
+ if(variant==='old-result')old.nativeResult={exit:0};
+ if(variant==='old-once')old.onceAcknowledged=true;
+ if(variant==='foreign-run')old.runId='foreign';
+ if(variant==='foreign-context')old.contextId++;
+ if(variant==='foreign-version')old.version++;
+ if(variant==='old-child')stored.sessionId=run.sessionId;
+ const before=structuredClone(h.r.resourceState),proof=fingerprint('reviewed native rejection'),parentDigest=proofHash(h.r.resourceState.accesses[renewed.accessId]);
+ if(variant!=='clean'){
+  assert.throws(()=>h.r.withdrawRejectedAttachedShell(run.runId,child.operationId,proof,parentDigest),/attached-withdrawal/);assert.deepEqual(h.r.resourceState,before);return;
+ }
+ assert.equal(h.r.withdrawRejectedAttachedShell(run.runId,child.operationId,proof,parentDigest).state,'CANCELLED');
+ assert.deepEqual(h.r.resourceState.accesses,before.accesses);assert.deepEqual(h.r.resourceState.operations[parent.operationId],before.operations[parent.operationId]);
+ assert.deepEqual(stored.decision,before.operations[child.operationId].decision);assert.deepEqual(h.r.resourceState.revisions,before.revisions);assert.deepEqual(h.r.resourceState.testReservations,before.testReservations);
+ assert.throws(()=>h.r.nativeStart(run.runId,{...child,kind:'edit'},stored.requestId,{id:'late-edit',tool:{callID:'late-edit'}}),/session-handoff-historical-access-protected/);
+ await h.restart();assert.deepEqual(h.r.resourceState.accesses,before.accesses);assert.deepEqual(h.r.resourceState.operations[parent.operationId],before.operations[parent.operationId]);
+});

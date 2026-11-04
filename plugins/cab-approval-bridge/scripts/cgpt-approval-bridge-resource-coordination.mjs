@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.24';
+export const VERSION = '2.2.25';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -936,7 +936,8 @@ export class ResourceRunRegistry extends RunRegistry {
         !access.operationIds.includes(operationId) || access.operationIds.length<2 ||
         access.operationIds.some(id=>{const other=this.resourceState.operations[id];return !other ||
           other.runId!==runId || other.contextId!==run.contextId || other.version!==run.version ||
-          other.sessionId!==op.sessionId;}) ||
+          other.sessionId!==op.sessionId && !(other.state==='CANCELLED' &&
+            !other.native && !other.nativeResult && other.onceAcknowledged!==true);}) ||
         op.resources.some(r=>!access.resources.some(held=>covers(held,r))))
       throw new CoordinationError('attached-withdrawal-parent-invalid');
     return copy(access);

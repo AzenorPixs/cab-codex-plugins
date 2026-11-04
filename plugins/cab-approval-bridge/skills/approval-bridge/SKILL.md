@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.2.24. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.2.25. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -23,7 +23,7 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 | Entrée/reprise | [monitor-service](references/monitor-service.md) d'abord, puis [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md) ; [PLLM](references/protocol-model.md) au seul démarrage initial |
 | Mandat et compte rendu | [session](references/protocol-session.md), [soumission](references/validation-submission.md), [concurrence](references/concurrent-runs.md), [cycle](references/run-lifecycle.md) |
 | Incident/reprise | [autonomie](references/owner-reconciliation.md), [grille](references/pilot-state-matrix.md) puis voie du cas |
-| Retrait | [HELD](references/approved-held-retirement.md), [sans accès](references/approved-shell-retirement.md), [attaché](references/approved-attached-shell-retirement.md), [NOT_ADMITTED](references/not-admitted-retirement.md) |
+| Retrait | [HELD](references/approved-held-retirement.md), [sans accès](references/approved-shell-retirement.md), [shell/edit attaché](references/approved-attached-shell-retirement.md), [NOT_ADMITTED](references/not-admitted-retirement.md) |
 | Changer le SID dans le même RUN | [session-handoff](references/session-handoff.md), après triage ; conserver les effets historiques |
 | Ressource ou incident natif | [récupération](references/protocol-recovery.md), [précisions](references/technical-recovery.md), [politique](references/recovery-policy.md), [reprise autonome](references/autonomous-recovery.md), [incidents](references/coding-incidents.md) selon le diagnostic |
 | Outils natifs, lecture ou arguments | [adaptations natives](references/technical-native.md) et la référence spécialisée indiquée |

@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Retrait edit attaché SCM 2.2.25
+
+[retire-rejected-attached-edit-with-cancelled-history](openspec/changes/archive/2026-11-04-retire-rejected-attached-edit-with-cancelled-history/), code non attribué : ARCHIVÉ, source2.2.25 qualifiée.
+Deux gardes ciblées, historique CANCELLED sans émission et retrait edit qualifié ;
+655tests uniques finaux réussis, parent et émission crossSID protégés.
+Publication/activation distinctes ; voir QUALIFICATION.md du change. ACL ultérieure.
+
+```mermaid
+flowchart LR
+    attachedEdit["retire-rejected-attached-edit-with-cancelled-history<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class attachedEdit provisional
+```
+
 ## Réconciliation autonome SCM 2.2.24
 
 [document-autonomous-owner-reconciliation](openspec/changes/archive/2026-11-04-document-autonomous-owner-reconciliation/), code non attribué : ARCHIVÉ, source2.2.24 qualifiée.

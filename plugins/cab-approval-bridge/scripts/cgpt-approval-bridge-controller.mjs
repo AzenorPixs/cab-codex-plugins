@@ -27,7 +27,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.24";
+const version = "2.2.25";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -1368,7 +1368,7 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
       effects.length?(effects[0].tool==='bash' ? rejectedShellWithdrawalProof(first.view,effects,first.approval) :
       rejectedEditWithdrawalProof(first.view,effects,first.approval)):
       {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
-    if(parent && observation.kind!=='REJECTED_UNISSUED_SHELL')throw new CoordinationError('attached-withdrawal-shell-proof-required');
+    if(parent && !['REJECTED_UNISSUED_SHELL','REJECTED_UNISSUED_EDIT'].includes(observation.kind))throw new CoordinationError('attached-withdrawal-shell-proof-required');
     context.verifyNativeCancelledValidation(first.approval,proofHash(payload));
   } else {
     if(context.hasRequest(op.requestId) && !context.pendingRestorationProof(op.requestId))throw new CoordinationError('pending-restore-already-present');
