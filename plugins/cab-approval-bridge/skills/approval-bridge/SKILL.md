@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.2.27. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.2.28. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -25,7 +25,7 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 | Incident/reprise | [autonomie](references/owner-reconciliation.md), [grille](references/pilot-state-matrix.md) puis voie du cas |
 | Retrait | [HELD](references/approved-held-retirement.md), [sans accès](references/approved-shell-retirement.md), [shell/edit attaché](references/approved-attached-shell-retirement.md), [NOT_ADMITTED](references/not-admitted-retirement.md) |
 | Changer le SID dans le même RUN | [session-handoff](references/session-handoff.md), après triage ; conserver les effets historiques |
-| Ressource ou incident natif | [récupération](references/protocol-recovery.md), [précisions](references/technical-recovery.md), [politique](references/recovery-policy.md), [reprise autonome](references/autonomous-recovery.md), [incidents](references/coding-incidents.md) selon le diagnostic |
+| Ressource ou incident natif | [récupération](references/protocol-recovery.md), [politique](references/recovery-policy.md), [grants natifs](references/native-permission-grants.md), [incidents](references/coding-incidents.md) selon le diagnostic |
 | Outils natifs, lecture ou arguments | [adaptations natives](references/technical-native.md) et la référence spécialisée indiquée |
 | Transport coupé ou réponse perdue | [continuité](references/transport-continuity.md) et [politique de récupération](references/recovery-policy.md) |
 | Attente, contexte ou statistiques | [cadences](references/protocol-cadences.md), [compaction](references/protocol-compaction.md) seulement si nécessaire, [statistiques](references/protocol-lifecycle.md) à l'archivage/clôture |

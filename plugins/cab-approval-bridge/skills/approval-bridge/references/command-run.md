@@ -1,4 +1,4 @@
-# Pilotage — CAB 2.2.27
+# Pilotage — CAB 2.2.28
 
 ## `/CAB run`
 

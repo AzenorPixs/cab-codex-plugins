@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.27
+# Reprise autonome dans le change — CAB 2.2.28
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -256,7 +256,7 @@ disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
 supposition. La clôture historique reste non prouvée ; aucune procédure ne
 peut effacer cette incertitude sans preuve supplémentaire.
 
-## Permission shell décomposée — CAB2.2.27
+## Permission shell décomposée — CAB2.2.28
 
 Une permission shell peut porter plusieurs ressources ;elle autoriserait
 l’appel entier, pas une once par fragment. CAB ne déduit aucune équivalence
@@ -279,7 +279,7 @@ anciennes identités et permissions ne sont pas réutilisées. Aucun reçu absen
 ne se fabrique rétroactivement. Des mandats unitaires ou le transport shell
 scellé existant permettent d’éviter une décomposition non qualifiée.
 
-## Retirer un edit refusé avant once — CAB2.2.27
+## Retirer un edit refusé avant once — CAB2.2.28
 
 Utiliser la policy propriétaire withdraw-unissued-validation et la même route
 recovery/action, targetId de l’opération, input={nativeBoundaryDigest,evidence}.
@@ -348,3 +348,6 @@ réellement émis ; ne pas corriger un ancien payload pour le rendre exécutable
 Les get_approval/poll_approval seuls portant déjà un terminal CANCELLED exact
 conservent leur voie de preuve historique ; le filtrage des diagnostics ne
 les élimine pas. Aucun nouveau cancel n’est requis pour les relire.
+
+ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
+sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).

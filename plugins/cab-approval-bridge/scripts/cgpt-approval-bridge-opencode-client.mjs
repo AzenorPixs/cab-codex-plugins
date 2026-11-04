@@ -6,8 +6,9 @@ import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
 import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
+import { ContinuityStore } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.27';
+export const VERSION = '2.2.28';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -216,13 +217,14 @@ export function nativeToolInputDigest(input) {
 export function nativeCodingMandate(instruction) {
   if (typeof instruction !== 'string' || !instruction.trim()) fail('opencode-coding-mandate-invalid');
   return 'CAB — outils natifs : write, edit et shell sont distincts du catalogue MCP search/execute. ' +
-    'Pour les méthodes MCP CAB broker_readiness, request_validation, lookup_validation, poll_approval, get_approval et reject, ' +
+    'Pour les méthodes MCP CAB broker_readiness, request_validation, lookup_validation, poll_approval, get_approval, cancel_approval et reject, ' +
     'utiliser uniquement Code Mode execute avec le nom exact découvert par search, sous la forme ' +
     'tools["cgpt-validation"].request_validation(...). Ne pas appeler directement une entrée MCP native. ' +
     'Pour request_validation, retourner directement await avec le payload littéral complet ; ne pas utiliser runtimeInput ou transformer le retour. ' +
     'Si execute ou la méthode découverte est indisponible, signaler le blocage sans appel direct ou repli. ' +
     'Une recherche MCP vide ne prouve pas leur absence. Utiliser directement l’outil natif disponible prescrit, ' +
     'avec les arguments exacts approuvés, seulement après les étapes CAB requises. ' +
+    'APPROVED et access_id référencé ne prouvent pas le rattachement effectif : exiger HELD et la liaison de cette opération avant l’appel ; le contrôleur seul émet once. ' +
     'Si cet outil est réellement absent, signaler le blocage sans substitution ni opération supplémentaire. ' +
     'Après erreur fournisseur ou arguments incomplets, ne pas compléter un fragment ni relancer un outil : ' +
     'attendre la réconciliation et un nouveau mandat. Une proposition doit être complète ; READY ne prouve aucun test.\n\n' + instruction;
@@ -689,7 +691,7 @@ export function normalizeOpenCodeEvent(envelope) {
   return { type: event.type, properties, ...(directories.length ? { directory: directories[0] } : {}) };
 }
 
-export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, permissionReceiptDirectory, fetchImpl = fetch, timeoutMs = 10000, signal }) {
+export function createOpenCodeV2Client({ baseUrl, directory, username, passwordFile, permissionReceiptDirectory, permissionRepairDirectory, fetchImpl = fetch, timeoutMs = 10000, signal }) {
   const origin = loopbackUrl(baseUrl);
   const user = username || 'opencode';
   const credentialPath = passwordFile || (process.env.CREDENTIALS_DIRECTORY
@@ -1111,19 +1113,139 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       permissions: [{ permission: '*', pattern: '*', action: 'deny' }] });
   }
 
+  const protectedSavedAction=(action,kinds)=>kinds.some(kind=>
+    (kind==='shell'?['shell','bash','*']:['edit','write','*']).includes(action));
+  const permissionDigest=value=>createHash('sha256').update(canonical(value)).digest('hex');
+  async function savedPermissionRows(sessionId,directoryValue) {
+    const observed=await session(sessionId,directoryValue);
+    if(observed.id!==sessionId||observed.directory!==directoryValue||typeof observed.projectID!=='string'||!observed.projectID)
+      fail('opencode-permission-project-divergent');
+    const envelope=await json('/api/permission/saved',{query:{directory:directoryValue}});
+    if(!record(envelope)||!Array.isArray(envelope.data)||envelope.data.length>2000||
+        envelope.location?.directory!==undefined&&envelope.location.directory!==directoryValue)
+      fail('opencode-saved-permission-response-invalid');
+    const ids=new Set();
+    for(const row of envelope.data){
+      if(!record(row)||Object.keys(row).some(key=>!['id','projectID','action','resource','time'].includes(key))||
+          !/^psv_[A-Za-z0-9_.-]{1,190}$/.test(row.id||'')||ids.has(row.id)||
+          typeof row.projectID!=='string'||!row.projectID||typeof row.action!=='string'||!row.action||
+          typeof row.resource!=='string'||!row.resource)fail('opencode-saved-permission-response-invalid');
+      ids.add(row.id);
+    }
+    return {observed,rows:envelope.data.filter(row=>row.projectID===observed.projectID)};
+  }
   async function nativePermissionPolicy(sessionId, { directory: directoryValue = directory, requiredNativeAsk = ['shell'] } = {}) {
     if (!Array.isArray(requiredNativeAsk) || !requiredNativeAsk.length || new Set(requiredNativeAsk).size !== requiredNativeAsk.length ||
         requiredNativeAsk.some(kind => !['shell','edit'].includes(kind))) fail('opencode-native-ask-requirement-invalid');
     const observed = await session(sessionId,directoryValue);
+    if(observed.id!==sessionId||observed.directory!==directoryValue)fail('opencode-permission-project-divergent');
     const effective = Object.fromEntries(requiredNativeAsk.map(kind=>[kind,nativeAskState(observed,kind)]));
     const missing = requiredNativeAsk.filter(kind=>!hasNativeAsk(observed,kind));
-    return {sessionId,directory:directoryValue,snapshot_only:true,requiredNativeAsk:[...requiredNativeAsk],
+    const base={sessionId,directory:directoryValue,snapshot_only:true,requiredNativeAsk:[...requiredNativeAsk],
       policySha256:Object.values(effective).every(state=>state.valid)?createHash('sha256').update(canonical(observed.permission)).digest('hex'):null,
-      effective,missing,ready:missing.length===0};
+      effective,missing,nominalReady:missing.length===0};
+    if(missing.length)return {...base,ready:false,savedGrantAudit:{available:false,reason:'nominal-policy-not-ask'}};
+    try {
+      const {observed:checked,rows}=await savedPermissionRows(sessionId,directoryValue);
+      if(checked.projectID!==observed.projectID||permissionDigest(checked.permission)!==base.policySha256)fail('opencode-permission-policy-changed');
+      const protectedRows=rows.filter(row=>protectedSavedAction(row.action,requiredNativeAsk));
+      return {...base,missing:requiredNativeAsk.filter(kind=>rows.some(row=>protectedSavedAction(row.action,[kind]))),
+        ready:protectedRows.length===0,savedGrantAudit:{available:true,projectID:checked.projectID,
+          count:rows.length,protectedCount:protectedRows.length,truncated:protectedRows.length>20,
+          grants:protectedRows.slice(0,20).map(row=>({id:row.id,action:row.action,resourceSha256:permissionDigest(row.resource)}))}};
+    } catch(cause) {
+      return {...base,missing:[...requiredNativeAsk],ready:false,savedGrantAudit:{available:false,
+        reason:/^opencode-[a-z0-9-]+$/.test(cause.code||'')?cause.code:'saved-permission-control-unavailable'}};
+    }
+  }
+
+  async function permissionRepairBoundary(directoryValue) {
+    const before=await info(true);
+    const [active,pending]=await Promise.all([
+      json('/api/session/active',{scoped:false}),json('/api/permission/request',{query:{directory:directoryValue}})]);
+    const running=unwrapData(active,'opencode-permission-repair-boundary-invalid');
+    if(!record(running)||!record(pending)||pending.location?.directory!==directoryValue||!Array.isArray(pending.data))
+      fail('opencode-permission-repair-boundary-invalid');
+    if(Object.keys(running).length||pending.data.length)fail('opencode-permission-repair-not-quiescent');
+    const after=await info(true);
+    if(before.pid!==after.pid||before.version!==after.version)fail('opencode-permission-repair-native-changed');
+    return {nativePid:after.pid,nativeVersion:after.version};
+  }
+  async function nativePermissionRepairPlan(sessionId,{planId,directory:directoryValue=directory,requiredNativeAsk=['shell','edit']}={}) {
+    if(typeof planId!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(planId))fail('opencode-permission-repair-plan-invalid');
+    const policy=await nativePermissionPolicy(sessionId,{directory:directoryValue,requiredNativeAsk});
+    if(!policy.nominalReady||!policy.savedGrantAudit.available)fail('opencode-permission-repair-policy-unavailable');
+    const boundary=await permissionRepairBoundary(directoryValue),{observed,rows}=await savedPermissionRows(sessionId,directoryValue);
+    if(permissionDigest(observed.permission)!==policy.policySha256)fail('opencode-permission-policy-changed');
+    const protectedRows=rows.filter(row=>protectedSavedAction(row.action,requiredNativeAsk));
+    const targets=protectedRows.map(row=>({id:row.id,action:row.action,recordSha256:permissionDigest(row),resourceSha256:permissionDigest(row.resource)})).sort((a,b)=>a.id.localeCompare(b.id));
+    const retained=rows.filter(row=>!protectedSavedAction(row.action,requiredNativeAsk)).map(row=>({id:row.id,recordSha256:permissionDigest(row)})).sort((a,b)=>a.id.localeCompare(b.id));
+    const plan={protocol:'cab-native-permission-repair-v1',planId,sessionId,directory:directoryValue,projectID:observed.projectID,
+      ...boundary,requiredNativeAsk:[...requiredNativeAsk],policySha256:policy.policySha256,targets,retained};
+    return {...plan,planDigest:permissionDigest(plan)};
+  }
+  async function revokeSavedNativePermissions(plan,authorization) {
+    if(!record(plan)||plan.protocol!=='cab-native-permission-repair-v1'||typeof plan.planDigest!=='string')fail('opencode-permission-repair-plan-invalid');
+    const unsigned={...plan};delete unsigned.planDigest;
+    if(permissionDigest(unsigned)!==plan.planDigest||!Array.isArray(plan.targets)||!Array.isArray(plan.retained)||
+        !Array.isArray(plan.requiredNativeAsk)||!plan.requiredNativeAsk.length||new Set(plan.requiredNativeAsk).size!==plan.requiredNativeAsk.length||
+        plan.requiredNativeAsk.some(kind=>!['shell','edit'].includes(kind))||
+        [...plan.targets,...plan.retained].some(row=>!record(row)||!/^psv_[A-Za-z0-9_.-]{1,190}$/.test(row.id||'')||!/^[a-f0-9]{64}$/.test(row.recordSha256||'')))fail('opencode-permission-repair-plan-invalid');
+    if(!record(authorization)||authorization.kind!=='shared-project-maintenance'||authorization.projectID!==plan.projectID||
+        authorization.directory!==plan.directory||authorization.planDigest!==plan.planDigest||
+        typeof authorization.reference!=='string'||!/^[A-Za-z0-9_.:/@-]{1,240}$/.test(authorization.reference))
+      fail('opencode-permission-repair-authorization-required');
+    if(plan.targets.some(row=>!protectedSavedAction(row.action,plan.requiredNativeAsk)))fail('opencode-permission-repair-target-invalid');
+    const expected=new Map([...plan.targets,...plan.retained].map(row=>[row.id,row.recordSha256]));
+    if(expected.size!==plan.targets.length+plan.retained.length)fail('opencode-permission-repair-plan-invalid');
+    const check=async()=>{
+      const boundary=await permissionRepairBoundary(plan.directory);
+      if(boundary.nativePid!==plan.nativePid||boundary.nativeVersion!==plan.nativeVersion)fail('opencode-permission-repair-native-changed');
+      const {observed,rows}=await savedPermissionRows(plan.sessionId,plan.directory);
+      if(observed.projectID!==plan.projectID||permissionDigest(observed.permission)!==plan.policySha256)fail('opencode-permission-repair-policy-changed');
+      if(rows.some(row=>!expected.has(row.id)||permissionDigest(row)!==expected.get(row.id))||
+          plan.retained.some(row=>!rows.some(current=>current.id===row.id)))fail('opencode-permission-repair-boundary-changed');
+      return rows;
+    };
+    await check();
+    const root=permissionRepairDirectory||join(runtimeStateDirectory(plan.directory),'permission-grant-repairs');
+    if(!isAbsolute(root))fail('opencode-permission-repair-directory-invalid');
+    const journal=new ContinuityStore(join(root,permissionDigest(plan.planId)+'.json'),'native-permission-repair',value=>
+      record(value)&&value.planDigest===plan.planDigest&&record(value.steps)&&['PREPARED','APPLYING','COMPLETED'].includes(value.state));
+    let receipt=journal.snapshot()||{planDigest:plan.planDigest,authorizationSha256:permissionDigest(authorization),state:'PREPARED',steps:{}};
+    if(receipt.authorizationSha256!==permissionDigest(authorization))fail('opencode-permission-repair-authorization-divergent');
+    if(receipt.state==='COMPLETED')return {...receipt.result,replay:true};
+    journal.write(receipt);
+    for(const target of plan.targets){
+      const rows=await check();
+      if(!rows.some(row=>row.id===target.id)){
+        if(!receipt.steps[target.id]){receipt.steps[target.id]={state:'OBSERVED_ABSENT',attempts:0};journal.write(receipt);}
+        continue;
+      }
+      const attempts=(receipt.steps[target.id]?.attempts||0)+1;
+      if(attempts>2)fail('opencode-permission-repair-retry-budget-exhausted');
+      receipt.state='APPLYING';receipt.steps[target.id]={state:'INTENT',attempts};journal.write(receipt);
+      let httpStatus=null;
+      try {httpStatus=(await request('/api/permission/saved/'+encodeURIComponent(target.id),{method:'DELETE',query:{directory:plan.directory}})).status;}
+      catch { /* Only an observed absence below can close a lost DELETE response. */ }
+      const after=await check();
+      if(after.some(row=>row.id===target.id))fail('opencode-permission-repair-outcome-unverified');
+      receipt.steps[target.id]={state:httpStatus===200||httpStatus===204?'REMOVED':'OBSERVED_REMOVED',attempts,httpStatus};journal.write(receipt);
+    }
+    await check();
+    const policy=await nativePermissionPolicy(plan.sessionId,{directory:plan.directory,requiredNativeAsk:plan.requiredNativeAsk});
+    if(!policy.ready)fail('opencode-permission-repair-not-ready');
+    receipt.state='COMPLETED';receipt.result={state:'COMPLETED',planId:plan.planId,planDigest:plan.planDigest,
+      projectID:plan.projectID,nativePid:plan.nativePid,targetCount:plan.targets.length,
+      revokedCount:Object.values(receipt.steps).filter(step=>step.state==='REMOVED').length,
+      observedRemovedCount:Object.values(receipt.steps).filter(step=>step.state==='OBSERVED_REMOVED').length,
+      alreadyAbsentCount:Object.values(receipt.steps).filter(step=>step.state==='OBSERVED_ABSENT').length,retainedCount:plan.retained.length,
+      policyReady:true,receiptPath:journal.path};journal.write(receipt);return receipt.result;
   }
 
   async function prompt(sessionId, text, { directory: directoryValue = directory, model, resume = true, requiredNativeAsk } = {}) {
     if (typeof text !== 'string' || !text || typeof resume !== 'boolean') fail('opencode-prompt-invalid');
+    if(requiredNativeAsk===undefined&&text.startsWith('CAB — outils natifs :'))requiredNativeAsk=['shell','edit'];
     if (model !== undefined) modelReference(model);
     const inspectRequired = async () => {
       const policy = await nativePermissionPolicy(sessionId,{directory:directoryValue,requiredNativeAsk});
@@ -1271,6 +1393,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
   async function replyPermission(sessionId, permissionId, decision, directoryValue = directory) {
     if (typeof directoryValue !== 'string' || !isAbsolute(directoryValue)) fail('opencode-location-invalid');
     if (decision !== 'once' && decision !== 'always' && decision !== 'reject') fail('opencode-permission-decision-invalid');
+    if(decision==='always')fail('opencode-permission-always-forbidden');
     const native = await info(decision === 'reject');
     let journal, intent;
     if (decision === 'reject') {
@@ -1464,7 +1587,8 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     sourceRead, sourceList, sourceFind,
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,
-    replyPermission, permissionReplies, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy, events, request: json });
+    replyPermission, permissionReplies, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy,
+    nativePermissionRepairPlan, revokeSavedNativePermissions, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {

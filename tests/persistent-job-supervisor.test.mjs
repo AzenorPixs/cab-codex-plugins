@@ -9,6 +9,8 @@ import { join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
+const fixtureAskRules=['shell','edit'].map(permission=>({permission,pattern:'*',action:'ask'}));
+
 const supervisorPath = fileURLToPath(
   new URL(
     "../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
@@ -53,7 +55,7 @@ async function statusFixture(context, initialState) {
     criteria: ["preuve"], lastProvenMilestone: "tests-proved",
     terminalGate: { status: "OPEN" }, recovery: { sessionId: "ses_next" } };
   if (initialState) writeFileSync(statePath, JSON.stringify(initialState(job)));
-  const control = { job, unavailable: false, sessionUnavailable: false, failMessage: false };
+  const control = { job, unavailable: false, sessionUnavailable: false, failMessage: false, savedPermissions: [] };
   const messages = [];
   const controller = createServer((request, response) => {
     if (control.unavailable) { response.writeHead(503).end(); return; }
@@ -78,7 +80,7 @@ async function statusFixture(context, initialState) {
     }
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ id: control.job?.sessionId }));
-  }, { directory }));
+  }, { directory,sessionPermissions:()=>control.sessionUnavailable?undefined:fixtureAskRules,savedPermissions:control.savedPermissions }));
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
   let supervisor;
   async function stop() {
@@ -231,7 +233,7 @@ test("CGP07 distingue l'activité ciblée du trafic SSE étranger et du transpor
     }
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ id: job.sessionId, directory }));
-  }, { directory }));
+  }, { directory,sessionPermissions:fixtureAskRules }));
   await new Promise((resolve) => opencode.listen(0, "127.0.0.1", resolve));
   const supervisor = spawn(process.execPath, [supervisorPath], {
     env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory,
@@ -348,7 +350,7 @@ test("relance une seule fois une session armée dont le gate reste ouvert", asyn
     }
 
     response.writeHead(404).end();
-  }, { directory }));
+  }, { directory,sessionPermissions:fixtureAskRules }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
@@ -405,7 +407,7 @@ test("ne relance pas un job dont le gate est validé", async (context) => {
     if (request.method === "POST") messageCount += 1;
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({}));
-  }, { directory }));
+  }, { directory,sessionPermissions:fixtureAskRules }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
@@ -466,7 +468,7 @@ test("restaure l'état persistant de supervision après redémarrage", async (co
   const opencode = createServer(openCodeV2TestHandler((request, response) => {
     response.writeHead(200, { "content-type": "text/event-stream" });
     response.end();
-  }, { directory }));
+  }, { directory,sessionPermissions:fixtureAskRules }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
 
   const supervisor = spawn(process.execPath, [supervisorPath], {
@@ -534,7 +536,7 @@ test("gèle les relances pendant la récupération et suit ensuite la session tr
     }
     response.writeHead(200, { "content-type": "application/json" });
     response.end(JSON.stringify({ id: "ses_new", directory }));
-  }, { directory }));
+  }, { directory,sessionPermissions:fixtureAskRules }));
   await new Promise((resolve) => opencode.listen(opencodePort, "127.0.0.1", resolve));
   const supervisor = spawn(process.execPath, [supervisorPath], {
     env: { ...fixtureEnvironment, OC_Codex_WORKSPACE: directory,
@@ -560,4 +562,11 @@ test("gèle les relances pendant la récupération et suit ensuite la session tr
   await waitFor(() => messages.length === 1, "La session transférée n'a pas été suivie.");
   assert.equal(new URL(messages[0].url, 'http://localhost').pathname, "/session/ses_new/message");
   assert.match(messages[0].body.parts[0].text, /REPRISE_CAB_SUPERVISEUR/);
+});
+
+test('reprise autonome : un grant natif sauvegardé bloque avant toute émission modèle',async context=>{
+ const h=await statusFixture(context);h.control.savedPermissions.push({id:'psv_hidden',projectID:'project-fixture',action:'shell',resource:'node *'});
+ h.control.job.recovery=null;
+ await waitFor(async()=>(await h.status()).lastResumeAttempt?.result==='failed','le guard de permission effective doit refuser la reprise');
+ assert.equal(h.messages.length,0);assert.equal((await h.status()).lastResumeAttempt.result,'failed');
 });

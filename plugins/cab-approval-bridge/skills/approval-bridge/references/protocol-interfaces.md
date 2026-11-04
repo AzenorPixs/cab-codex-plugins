@@ -1,4 +1,4 @@
-# Interfaces et persistance — CAB 2.2.27
+# Interfaces et persistance — CAB 2.2.28
 
 ## Architecture et interfaces techniques CAB
 
@@ -252,3 +252,6 @@ identifiants et preuves avant toute mise à jour du seul état autorisé.
 Ne pas supprimer ni réinitialiser un état, migrer le runtime ou remplacer
 une permission consommée pour adapter ce nom de champ. Une préparation
 documentaire n'exécute aucune migration d'une session active.
+
+ASK nominal sans permission réelle, grant sauvegardé ou terminal de lecture
+sans once avec parent seulement référencé : suivre [le contrat ciblé](native-permission-grants.md).

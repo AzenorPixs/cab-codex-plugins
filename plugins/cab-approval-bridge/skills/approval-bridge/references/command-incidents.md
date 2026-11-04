@@ -1,4 +1,4 @@
-# Incidents — CAB 2.2.27
+# Incidents — CAB 2.2.28
 
 Commencer par le [triage des observations](incident-triage.md) avant de conclure à une panne.
 
