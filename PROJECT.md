@@ -1,6 +1,14 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Accord permanent de restauration ASK — CAB 2.2.29
+## Retrait sur parent seulement référencé — CAB 2.2.30
+
+La récupération propriétaire peut retirer un shell/edit refusé avant once dont
+accessId référence un parent HELD unique sans membership effectif. Elle vérifie
+le rejet natif ACK204 et deux frontières stables, sans rattacher l’enfant ni
+modifier parent, historiques, révisions ou baux. Les inputs et fins de ligne
+restent exacts ; aucune permission rétroactive. Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-attached-shell-retirement.md).
+
+## Accord permanent de restauration ASK — CAB 2.2.30
 
 Le développeur autorise durablement la révocation API bornée des grants natifs
 protégés pour rétablir ASK déjà déclaré, sans nouvelle demande à chaque session.
@@ -9,7 +17,7 @@ frontière inactive, journal et préservation des autres droits/identités reste
 obligatoires. Aucune suppression n’est implicite dans un audit ou CABU. Voir
 [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/native-permission-grants.md).
 
-## ASK effectif et revue ciblée — CAB 2.2.29
+## ASK effectif et revue ciblée — CAB 2.2.30
 
 CAB audite les grants natifs sauvegardés en plus des règles de session avant
 émission. Une maintenance partagée mandatée peut révoquer les seules entrées
@@ -18,7 +26,7 @@ La revue propriétaire d’un terminal de lecture peut clore un enfant non attac
 référençant un parent HELD compatible, sans inventer une once historique ni
 modifier le parent. Voir [le contrat distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/native-permission-grants.md).
 
-## Annulation native et mise en forme — CAB 2.2.29
+## Annulation native et mise en forme — CAB 2.2.30
 
 La preuve d’annulation native qualifiée tolère les blancs légaux hors chaînes
 d’un gabarit fermé, sans changer les données, appels ou retour. Les diagnostics
@@ -27,7 +35,7 @@ La coordination peut converger vers CANCELLED sans rejouer l’annulation,
 avec deux lectures stables et les protections existantes. Voir
 [la voie propriétaire](plugins/cab-approval-bridge/skills/approval-bridge/references/autonomous-recovery.md).
 
-## Lectures natives et retrait qualifié — CAB 2.2.29
+## Lectures natives et retrait qualifié — CAB 2.2.30
 
 Le contrôleur distingue les read V2 prouvés sans mutation des effets candidats
 lors d’un retrait. Provenance dérivée par le client, lecture terminée,
@@ -36,7 +44,7 @@ appels inconnus ou mutateurs restent bloquants ; aucune garde de once ou de
 parent n’est levée. Voir le
 [contrat](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-attached-shell-retirement.md).
 
-## Retrait edit attaché avec historique annulé — CAB 2.2.29
+## Retrait edit attaché avec historique annulé — CAB 2.2.30
 
 Le retrait propriétaire admet aussi l’edit natif refusé sur preuve privée ACK204,
 deux frontières stables et absence de once. Un historique d’autre SID n’est
@@ -45,7 +53,7 @@ Seul l’enfant est annulé ; le parent et ses protections restent identiques.
 Voir [le contrat](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-attached-shell-retirement.md).
 Les gardes d’émission sur accès historique restent inchangées.
 
-## Réconciliation propriétaire autonome — CAB 2.2.29
+## Réconciliation propriétaire autonome — CAB 2.2.30
 
 Dans le change autorisé, l’orchestrateur traite les réconciliations qualifiées
 sans demander un accord humain supplémentaire. Il distingue page navigateur,
@@ -54,7 +62,7 @@ Voir [la procédure distribuée](plugins/cab-approval-bridge/skills/approval-bri
 Les anciens effets incertains restent protégés ; les unités indépendantes
 peuvent continuer sous leurs gardes. Aucun changement moteur hors version.
 
-## Récupération MCP sous accord permanent — CAB 2.2.29
+## Récupération MCP sous accord permanent — CAB 2.2.30
 
 Le développeur autorise durablement, dans un cycle CABU mandaté, la récupération
 MCP globale bornée au reçu admissible exact : snapshot fraîche inactive et sans
@@ -64,7 +72,7 @@ classe ; les cas hors cadre restent distincts. Voir la
 [référence distribuée](plugins/cab-approval-bridge/skills/approval-bridge/references/mcp-pending-recovery.md).
 Moteurs inchangés hors version ; le flag exact reste fourni par l’orchestrateur.
 
-## Transitions brèves du RUN — CAB 2.2.29
+## Transitions brèves du RUN — CAB 2.2.30
 
 Le pilotage reprend une décision ou une acquisition refusée par
 `run-transition-in-flight` sur les mêmes identités après relecture autoritaire
@@ -73,7 +81,7 @@ et recontrôles. STABLE reste un instantané. La référence distribuée
 précise la limite entre refus explicite et réponse perdue ; aucune once ni
 exécution métier n’est rejouée. Moteurs et protections inchangés hors version.
 
-## Décisions de pilotage 2.2.29
+## Décisions de pilotage 2.2.30
 
 La [grille distribuée](plugins/cab-approval-bridge/skills/approval-bridge/references/pilot-state-matrix.md)
 relie les états connus aux preuves et voies propriétaires, avec repli explicite
@@ -82,7 +90,7 @@ distingue valeurs préparées, soumission littérale, décision, acquisition,
 once et fin. Les moteurs et gardes restent inchangés ; l’orchestrateur demande
 l’accès partagé au contrôleur au lieu de déduire HELD d’APPROVED.
 
-## Transition broker et retrait NOT_ADMITTED 2.2.29
+## Transition broker et retrait NOT_ADMITTED 2.2.30
 
 Une readiness broker temporairement indisponible renvoie503 et conserve le
 PENDING ; une vraie incompatibilité de requête reste409. Un ancien terminal
@@ -91,7 +99,7 @@ propriétaire qualifié, sans accès ni effet, sur deux frontières stables et u
 lecture exacte fraîche. Aucun terminal ou effet n’est rejoué, aucune décision
 n’est inventée. Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/not-admitted-retirement.md).
 
-## Retrait ciblé 2.2.29
+## Retrait ciblé 2.2.30
 
 Un shell approuvé mais refusé avant once peut être retiré par son orchestrateur
 avec ACK204 natif exact et double frontière stable. Seule la coordination de
@@ -105,12 +113,12 @@ Les signalements CAB suivent le [triage canonique](plugins/cab-approval-bridge/s
 Les ambiguïtés établies complètent la documentation sous SCM ;la qualification
 ne crée aucune autorisation métier et conserve les protections légitimes.
 
-Les états privés CAB2.2.29 résident dans le profil d’exécution hors projet.
+Les états privés CAB2.2.30 résident dans le profil d’exécution hors projet.
 Les fichiers projet restent en0775 ; CABU vérifie et migre les identités,
 décisions et once, sans remettre les fichiers projet en0600. Le premier reçu
 de migration est distingué du transfert certifié ordinaire.
 
-## Récupération autonome 2.2.29
+## Récupération autonome 2.2.30
 
 Les frontières PENDING sans contexte et terminal de lecture sans reçu once
 possèdent des actions propriétaires distinctes. La restauration ne décide pas ;
@@ -132,9 +140,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.29`.
+Version de référence des briques CAB : `2.2.30`.
 
-CAB 2.2.29 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.2.30 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -937,13 +945,13 @@ n’est déduit de la seule stabilité du prompt. Cette livraison réutilise des
 preuves et fixe cette priorité, sans modifier une politique de cache fournisseur
 ni revendiquer un benchmark LLM facturé.
 
-La corrélation2.2.29 distingue l’input d’un appel MCP terminé et la réussite
+La corrélation2.2.30 distingue l’input d’un appel MCP terminé et la réussite
 métier de son wrapper. Elle conserve NOT_ADMITTED terminal et les gardes
 indépendantes de décision/accès/once. La procédure canonique à payload
 littéral est détaillée dans technical-native ; aucune dépendance nouvelle.
 
 
-## Changement de session de pilotage — CAB 2.2.29
+## Changement de session de pilotage — CAB 2.2.30
 
 Une API distincte `/runs/<run>/session-handoff` change le SID courant sans
 transférer les anciennes autorisations ni libérer les protections historiques.
@@ -954,7 +962,7 @@ reste strict. Procédure, préconditions et absence de downgrade après usage :
 Publication/CABU et utilisation métier restent des preuves séparées.
 
 
-## Retrait autonome d’une unité approuvée — CAB 2.2.29
+## Retrait autonome d’une unité approuvée — CAB 2.2.30
 
 Le skill, l’index et la commande dirigent le propriétaire vers la procédure
 [APPROVED avec accès HELD](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-held-retirement.md).
@@ -967,7 +975,7 @@ restent dans le traitement local privé ; publication/CABU et action métier
 sont vérifiées séparément.
 
 
-## Shell approuvé sans accès — CAB2.2.29
+## Shell approuvé sans accès — CAB2.2.30
 
 Le [parcours autonome sans accès lié](plugins/cab-approval-bridge/skills/approval-bridge/references/approved-shell-retirement.md)
 complète les entrées du skill, de la commande et du triage. Un manifeste
@@ -978,7 +986,7 @@ Une protection incompatible, une base périmée ou un effet incertain reste
 opposable. Distribution/CABU et résultat métier sont vérifiés séparément.
 
 
-## Corrélation du préambule await search — CAB2.2.29
+## Corrélation du préambule await search — CAB2.2.30
 
 Le client reconnaît await optionnel dans la discovery readonly liée par const
 avant un retour MCP littéral. Cette projection pendant running évite le cycle
@@ -987,7 +995,7 @@ de timeout/poll pour cette forme, sous les mêmes comparaisons et gardes.
 La clôture des anciennes coordinations REJECTED est un périmètre distinct.
 
 
-## Assertion native bornée — CAB 2.2.29
+## Assertion native bornée — CAB 2.2.30
 
 Une vérification readonly du chemin découvert peut précéder le retour MCP
 littéral : même binding, items[0].path, chemin de catalogue exact et Error
