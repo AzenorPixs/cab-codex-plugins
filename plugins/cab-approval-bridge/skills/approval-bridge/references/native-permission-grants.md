@@ -1,4 +1,4 @@
-# ASK effectif et permissions sauvegardées — CAB 2.2.28
+# ASK effectif et permissions sauvegardées — CAB 2.2.29
 
 Une règle de session `shell ask` ou `edit ask` ne suffit pas à prouver qu’une
 permission sera demandée : OpenCode2.2 conserve aussi des grants par projet.
@@ -19,18 +19,39 @@ Une consultation n’efface rien et ne change pas la politique de session.
 
 ## Restaurer ASK dans une maintenance partagée mandatée
 
-La portée des grants est le projet natif, potentiellement commun à plusieurs
-RUN. Un mandat d’un seul enfant ne vaut pas maintenance de ce projet partagé.
-Utiliser l’autorité de maintenance applicable et coordonner les sessions ;
-attendre leur inactivité naturelle sans permission pendante. Ne pas arrêter
-un pair ni redémarrer OpenCode pour obtenir cette frontière.
+Le développeur autorise durablement cette récupération CAB bornée depuis le
+4 novembre 2026, jusqu’à révocation. L’orchestrateur de maintenance applique
+cet accord permanent aux consommateurs du même projet natif, sans solliciter
+le développeur ou chaque session de codage à nouveau. Il coordonne les
+propriétaires et documente son autorité dans le plan exact. Ce mandat partagé
+vient de l’instruction du développeur ; il n’est pas inféré d’APPROVED ni du
+seul mandat métier d’un enfant. Les sessions signalent l’audit au correcteur
+CAB désigné, sans nettoyage concurrent ni formulaire d’approbation répété.
+
+La classe autorisée est la restauration de shell/edit ASK déjà déclaré :
+uniquement les grants sauvegardés des actions protégées du projet exact, via
+l’API officielle et sous toutes les gardes du SDK. read, external_directory,
+autres projets, règles de session, PID/version, sessions, RUN, accès et baux
+restent conservés. Aucun nouveau droit, changement métier, kill/restart/reload,
+purge de fichiers ou rétablissement always n’est autorisé par cette classe.
+
+Attendre l’inactivité native globale naturelle et zéro permission pendante.
+Une frontière active ne demande aucun accord supplémentaire : coordonner et
+attendre sa fin naturelle sans nouvelle émission. Une identité, une entrée ou
+une empreinte divergente arrête le plan avant suppression suivante ; conserver
+les reçus, diagnostiquer et préparer un plan actualisé si les mêmes critères
+restent satisfaits. Une opération sortant réellement de cette classe nécessite
+son autorité distincte, sans transformer un échec de garde en consentement.
 
 1. Préparer `nativePermissionRepairPlan(sessionId,{planId,requiredNativeAsk})`.
    Relire directory, projectID, PID/version, politique, planDigest, targets et
    retained : IDs et empreintes uniquement. La préparation est sans mutation.
 2. Appliquer `revokeSavedNativePermissions(plan,authorization)` avec
    `authorization={kind:"shared-project-maintenance",projectID,directory,
-   planDigest,reference}` ; reference désigne l’autorisation réellement acquise.
+   planDigest,reference}` ; reference désigne l’accord permanent du développeur appliqué à ce plan,
+   par exemple `cab-native-ask-maintenance-v1/2026-11-04/<planId>`.
+   Le SDK exige toujours cette autorité explicite et liée au plan ; aucune
+   option de consentement implicite ou nettoyage automatique dans un GET.
    Seuls les grants protégés du plan passent par DELETE officiel
    `/api/permission/saved/:id`. read, external_directory et autres projets
    restent conservés. Une nouvelle entrée, un changement de politique,

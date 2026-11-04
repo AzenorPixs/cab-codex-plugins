@@ -1,4 +1,4 @@
-# Précisions lifecycle — CAB 2.2.28
+# Précisions lifecycle — CAB 2.2.29
 
 ## Problèmes de codage et coordination du correctif CAB
 

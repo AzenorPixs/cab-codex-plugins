@@ -26,3 +26,8 @@ Pour MCP_RECOVERY_REQUIRED, lire `references/mcp-pending-recovery.md` dans le
 skill CAB : l’accord permanent du développeur couvre la récupération bornée
 au reçu exact, avec contrôles frais et intention unique. Ne pas redemander cet
 accord pour chaque reçu admissible ; les cas hors de cette classe restent distincts.
+
+L’accord permanent de restauration ASK bornée relève de
+`references/native-permission-grants.md` du skill CAB : aucune sollicitation
+répétée des sessions. Cette maintenance distincte ne se lance pas implicitement
+avec CABU ; elle conserve son plan, ses gardes et son reçu exacts.
