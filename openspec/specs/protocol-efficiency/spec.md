@@ -86,6 +86,18 @@ Le contrat distribué SHALL relier état observé, preuve requise, action propri
 - **THEN** l’orchestrateur lit les preuves de la vraie demande courante sans lui attribuer l’approbation précédente
 - **AND** aucune décision, commande ou once n’est reconstruite ou rejouée depuis cet ancien reçu
 
+#### Scenario: Appairage navigateur sans diagnostic API
+- **GIVEN** une page demandant un appairage et un client CAB authentifié disponible
+- **WHEN** l’orchestrateur peut lire le serveur et son SID existant par cette API
+- **THEN** il poursuit le pilotage autorisé par cette interface sans demander un réglage hôte pour ce seul obstacle navigateur
+- **AND** il conserve les prévols MCP réels et les contrôles de permission du mandat
+
+#### Scenario: Réconciliation agrégée et unité indépendante
+- **GIVEN** une infrastructure disponible et un résumé RUN access-reconciliation-required
+- **WHEN** l’orchestrateur identifie la garde de l’accès réellement nécessaire
+- **THEN** il applique seul la réconciliation qualifiée ou poursuit l’unité indépendante admissible sans accord humain supplémentaire
+- **AND** il conserve les accès historiques incertains et ne déduit aucune autorisation du seul résumé
+
 #### Scenario: État non répertorié
 - **GIVEN** une combinaison non documentée ou des preuves contradictoires
 - **WHEN** l’orchestrateur diagnostique le cas

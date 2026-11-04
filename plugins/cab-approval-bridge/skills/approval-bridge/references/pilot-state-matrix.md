@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.23
+# Grille de décision du pilotage — CAB 2.2.24
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -25,6 +25,7 @@ priment sur une interprétation d’un compteur agrégé.
 | Observation | Preuve / décision propriétaire | Référence ciblée |
 |---|---|---|
 | Mauvais workspace/RUN/SID/version | Vérifier les identités chargées et la génération ; aucune mutation par déduction du titre | [triage](incident-triage.md) |
+| Page demandant un appairage, API non testée | Vérifier le client authentifié et le même SID avant toute demande hôte | [reprise propriétaire](owner-reconciliation.md) |
 | GET401 | Client CAB authentifié ; ne pas conclure à une session perdue | [interfaces](protocol-interfaces.md) |
 | Outil absent du catalogue Codex | Vérifier le catalogue OpenCode du SID concerné ; ne pas lancer un shell pour découvrir un MCP | [native](technical-native.md) |
 | Valeurs préparées, wrapper littéral qualifié running | Corrélation anticipée possible ; attendre l’admission et la décision effectives | [soumission](validation-submission.md) |
@@ -59,7 +60,7 @@ priment sur une interprétation d’un compteur agrégé.
 | Permission appartenant à un autre SID/RUN | Ne pas la traiter ni l’attribuer au RUN courant ; un gel commun exige sa propre justification | [concurrence](concurrent-runs.md) |
 | Accès WAITING | Attente de l’ensemble complet ; aucune acquisition partielle ni effet | [concurrence](concurrent-runs.md) |
 | Accès STALE / révision changée | Relecture et nouvelle unité selon la procédure ; pas de substitution de révision dans une ancienne décision | [concurrence](concurrent-runs.md) |
-| HELD restauré après interruption | Réconcilier avec les preuves requises ; ne pas réacquérir ou modifier token/fencing à la main | [reprise](technical-recovery.md) |
+| HELD restauré après interruption | Réconciliation propriétaire du seul accès nécessaire ; ne pas réacquérir ou modifier token/fencing à la main | [reprise autonome](owner-reconciliation.md) |
 | APPROVED/HELD jamais commencé devenu obsolète | Clôture de coordination qualifiée ; vérifier toutes les opérations liées avant de libérer | [retrait HELD](approved-held-retirement.md) |
 | Shell refusé sans accès | Diagnostic/retrait qualifié ; acquisition pour clôture seulement si ses conditions strictes restent satisfaites | [shell sans accès](approved-shell-retirement.md) |
 | Sous-opération shell refusée sur parent HELD protégé | Retirer seulement l’enfant ; parent et ses autres effets restent protégés | [retrait attaché](approved-attached-shell-retirement.md) |

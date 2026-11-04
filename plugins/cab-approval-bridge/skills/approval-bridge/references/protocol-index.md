@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.23
+# Index du protocole CAB 2.2.24
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -39,3 +39,6 @@ Changement de session de pilotage avec historique protégé : [session-handoff](
 Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.
 
 NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admitted-retirement.md). Une absence temporaire de readiness donne503, pas une incompatibilité de contrat.
+
+Appairage navigateur ou accès restauré : suivre [la reprise propriétaire autonome](owner-reconciliation.md),
+sans sollicitation humaine pour une procédure déjà mandatée.
