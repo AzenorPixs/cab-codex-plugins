@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.21
+# Grille de décision du pilotage — CAB 2.2.22
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -36,6 +36,7 @@ priment sur une interprétation d’un compteur agrégé.
 | Contrat entrant ou broker explicitement incompatible,409 | Diagnostiquer version/schéma ; ne pas convertir une incompatibilité en autorisation | [triage](incident-triage.md) |
 | Broker NOT_ADMITTED, préparation locale sans décision | Terminal natif conservé ; retrait local qualifié seulement, puis identifiants neufs | [retrait](not-admitted-retirement.md) |
 | Broker APPROVED, décision locale absente après interruption | Restaurer uniquement sur demande/réponse natives exactes et preuves de la voie qualifiée ; pas d’accord reconstruit depuis READY | [reprise](technical-recovery.md) |
+| APPROVED cité pour une autre unité du même RUN/SID | Relier requestId, approval_id et opération courante avant de conclure à une divergence ; ancien reçu sans autorité sur le nouveau shell | [soumission](validation-submission.md) |
 | Broker REJECTED, opération locale PREPARED | Ne pas approuver ni acquérir pour clôturer ; qualifier le rejet natif par la voie existante. Si elle ne couvre pas ce cas, garder l’historique et signaler la lacune | [reprise autonome](autonomous-recovery.md) |
 | Broker EXPIRED | L’expiration ne prouve pas l’absence d’effet ; croiser opération, accès et natif avant toute unité de remplacement | [reprise](technical-recovery.md) |
 | Broker CANCELLED, préparation encore présente | Clôture locale seulement par preuve d’annulation native corrélée et voie qualifiée ; pas de réouverture ou décision fictive | [reprise autonome](autonomous-recovery.md) |
@@ -47,6 +48,8 @@ priment sur une interprétation d’un compteur agrégé.
 | Observation | Preuve / décision propriétaire | Référence ciblée |
 |---|---|---|
 | PENDING, aucune décision durable | Revue du mandat exact ; ne pas envoyer un effet avant décision | [session](protocol-session.md) |
+| Décision refusée run-transition-in-flight malgré STABLE | Relire décision/admission ; même demande encore indécise et preuves valides après stabilisation, puis même décision | [admission](admission-state.md) |
+| Acquisition refusée run-transition-in-flight | Lire l’accès exact ; HELD existant se poursuit, sinon même acquisition seulement après stabilisation et recontrôles | [admission](admission-state.md) |
 | APPROVED, pas d’accès, exclusiveResources vide/non prouvée | Demander locks/acquire au contrôleur sur l’opération existante ; exiger HELD, puis le contrôleur seul émet once | [soumission](validation-submission.md) |
 | APPROVED, admission exclusive prouvée | L’admission interne peut acquérir ; réservation seule ou absence de conflit observé ne prouve pas l’exclusivité | [concurrence](concurrent-runs.md) |
 | Permission exacte pending, accès HELD | Recontrôles du contrôleur ; conserver la même permission, pas de réponse once directe ni nouvel appel edit/shell | [soumission](validation-submission.md) |
