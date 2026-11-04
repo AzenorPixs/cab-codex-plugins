@@ -1161,3 +1161,34 @@ test('handoff intent uncertainty, changed inventory and foreign owner fail close
   assert.equal(aborted.state,'ABORTED'); assert.equal(h.r.runs.get(run.runId).sessionId,run.sessionId);
   await h.restart(); assert.equal(h.r.sessionHandoffs(run.runId)[0].state,'ABORTED');
 });
+
+for(const variant of ['clean','wrong-parent-state','parent-owner','parent-context','parent-version','old-sid','multiple-links','missing-attachment','native','result','once','changed-parent'])test('retrait enfant shell : frontière parent '+variant,async t=>{
+ const h=await fixture(t),run=h.reserve('withdraw-child',[file('child')]),parent=h.prepare(run,'withdraw-parent'),access=h.acquire(run,parent);
+ h.start(run,parent);h.complete(run,parent, 'completed',124);
+ const child=h.prepare(run,'withdraw-child-op',run.resources,access.accessId),stored=h.r.resourceState.operations[child.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('child-owner'),false);
+ h.r.recordDecision(run.runId,child.operationId,{status:'approved',requestId:stored.requestId,approvalId:'child-approval',changeId:run.changeId,operationId:child.operationId,operationDigest:child.operationDigest,identityDigest:stored.identityDigest,runId:run.runId,version:run.version,sessionId:run.sessionId});
+ h.r.attachOperations(run.runId,{version:run.version,operationId:access.accessId,token:access.token,fencing:access.fencing,operationIds:[child.operationId],evidence:['reviewed same set']});
+ const parentState=h.r.resourceState.accesses[access.accessId],decision=structuredClone(stored.decision),proof=fingerprint('retirement'),parentDigest=proofHash(parentState);
+ if(variant==='wrong-parent-state')parentState.state='UNKNOWN';
+ if(variant==='parent-owner')parentState.runId='foreign';
+ if(variant==='parent-context')parentState.contextId++;
+ if(variant==='parent-version')parentState.version++;
+ if(variant==='old-sid')stored.sessionId='ses_retired';
+ if(variant==='multiple-links')h.r.resourceState.accesses.other={...structuredClone(parentState),accessId:'other'};
+ if(variant==='missing-attachment')parentState.operationIds=parentState.operationIds.filter(id=>id!==child.operationId);
+ if(variant==='native')stored.native={onceAcknowledged:false};
+ if(variant==='result')stored.nativeResult={exit:0};
+ if(variant==='once')stored.onceAcknowledged=true;
+ if(variant==='changed-parent')parentState.fencing++;
+ const before=structuredClone(h.r.resourceState);
+ if(variant!=='clean'){
+  assert.throws(()=>h.r.withdrawRejectedAttachedShell(run.runId,child.operationId,proof,parentDigest),/attached-withdrawal/);
+  assert.deepEqual(h.r.resourceState,before);return;
+ }
+ assert.equal(h.r.withdrawRejectedAttachedShell(run.runId,child.operationId,proof,parentDigest).state,'CANCELLED');
+ assert.deepEqual(h.r.resourceState.accesses,before.accesses);assert.deepEqual(stored.decision,decision);
+ assert.deepEqual(h.r.resourceState.operations[parent.operationId],before.operations[parent.operationId]);assert.deepEqual(h.r.resourceState.revisions,before.revisions);
+ assert.throws(()=>h.r.nativeStart(run.runId,{...child,kind:'bash'},stored.requestId,{id:'late-permission',tool:{callID:'late-call'}}),/operation-access-not-held/);
+ await h.restart();assert.equal(h.r.resourceState.operations[child.operationId].state,'CANCELLED');assert.deepEqual(h.r.resourceState.accesses,before.accesses);
+});

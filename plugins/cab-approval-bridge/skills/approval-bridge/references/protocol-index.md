@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.18
+# Index du protocole CAB 2.2.19
 
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées
@@ -31,3 +31,5 @@ Reprises dans le périmètre du change : [autonomous-recovery](autonomous-recove
 Avant une demande de correctif, appliquer le [triage des incidents](incident-triage.md). Un faux positif établi complète la référence canonique si nécessaire, sans nouvelle autorisation métier.
 
 Changement de session de pilotage avec historique protégé : [session-handoff](session-handoff.md).
+
+Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.

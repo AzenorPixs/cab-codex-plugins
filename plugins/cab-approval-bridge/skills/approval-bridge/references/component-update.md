@@ -1,6 +1,6 @@
-# Mise à jour autonome des briques CAB — CAB 2.2.18
+# Mise à jour autonome des briques CAB — CAB 2.2.19
 
-## États privés CAB2.2.18 et fichiers projet0775
+## États privés CAB2.2.19 et fichiers projet0775
 
 Les fichiers de projet conservent leurs droits0775, y compris après DIU.
 Le contrôleur, le superviseur et les reçus de rejet utilisent désormais

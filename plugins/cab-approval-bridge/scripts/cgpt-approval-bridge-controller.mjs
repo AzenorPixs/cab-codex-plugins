@@ -24,10 +24,10 @@ import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from '.
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
 import { NativeInstances } from './cgpt-approval-bridge-native-instances.mjs';
 import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.mjs';
-import { nativeEvidenceView, rejectedEditWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
+import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.18";
+const version = "2.2.19";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -1291,8 +1291,11 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   const op=registry.resourceState.operations[payload.operationId];
   if(!op || op.runId!==run.runId || op.contextId!==run.contextId || op.state!=='PREPARED' || op.native || op.nativeResult ||
       (terminal||withdraw ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
-      Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId)))
+      (!withdraw && Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId))))
     throw new CoordinationError('validation-boundary-recovery-invalid');
+  const linked=Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId));
+  const parent=linked ? registry.attachedWithdrawalAccess(run.runId,op.operationId) : null;
+  const parentDigest=parent ? proofHash(parent) : null;
   if(context.publicStatus().recoveryRequired || !context.publicJob()?.armed ||
       context.publicJob().sessionId!==op.sessionId || context.publicJob().currentCabMandate &&
       context.publicJob().currentCabMandate!==op.requestId) throw new CoordinationError('validation-boundary-context-divergent');
@@ -1351,8 +1354,10 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   } else if(withdraw) {
     proofReferences(payload);
     const effects=first.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
-    observation=effects.length?rejectedEditWithdrawalProof(first.view,effects,first.approval):
+    observation=effects.length?(effects[0].tool==='bash' ? rejectedShellWithdrawalProof(first.view,effects,first.approval) :
+      rejectedEditWithdrawalProof(first.view,effects,first.approval)):
       {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
+    if(parent && observation.kind!=='REJECTED_UNISSUED_SHELL')throw new CoordinationError('attached-withdrawal-shell-proof-required');
     context.verifyNativeCancelledValidation(first.approval,proofHash(payload));
   } else {
     if(context.hasRequest(op.requestId) && !context.pendingRestorationProof(op.requestId))throw new CoordinationError('pending-restore-already-present');
@@ -1370,7 +1375,8 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   }
   else if(withdraw) {
     const effects=second.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
-    if(effects.length){const repeated=rejectedEditWithdrawalProof(second.view,effects,second.approval);
+    if(effects.length){const repeated=effects[0].tool==='bash' ? rejectedShellWithdrawalProof(second.view,effects,second.approval) :
+        rejectedEditWithdrawalProof(second.view,effects,second.approval);
       if(proofHash(repeated)!==proofHash(observation))throw new CoordinationError('recovery-native-boundary-changed');}
     else if(observation.kind!=='UNISSUED_COORDINATION')throw new CoordinationError('recovery-native-boundary-changed');
   } else pendingValidationProof(second.parts,second.approval,same);
@@ -1380,6 +1386,8 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   }
   if(generationChanged(op.sessionId,first.generation)||proofHash(op)!==original)throw new CoordinationError('recovery-native-boundary-changed');
   registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw});
+  if(parent && proofHash(registry.attachedWithdrawalAccess(run.runId,op.operationId))!==parentDigest)
+    throw new CoordinationError('attached-withdrawal-parent-changed');
   const proofDigest=proofHash(payload);
   recovery.observeAction(actionId,{...observation,approval:structuredClone(first.approval)});
   if(terminal) {
@@ -1388,7 +1396,8 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     registry.completeReviewedReadOnly(run.runId,op.operationId,proofDigest);
   } else if(withdraw) {
     context.withdrawUnissuedValidation(first.approval,proofDigest);
-    registry.recordNativeCancelledValidation(run.runId,op.operationId,proofDigest);
+    if(parent)registry.withdrawRejectedAttachedShell(run.runId,op.operationId,proofDigest,parentDigest);
+    else registry.recordNativeCancelledValidation(run.runId,op.operationId,proofDigest);
     registry.withdrawnUnissuedOperations ||= new Set();registry.withdrawnUnissuedOperations.add(op.operationId);
   } else context.restorePendingValidation(first.approval,proofDigest);
   return {state:terminal?'COMPLETED':withdraw?'CANCELLED':'PENDING',operationState:terminal?'COMPLETED':withdraw?'CANCELLED':'PREPARED',

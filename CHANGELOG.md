@@ -1,5 +1,12 @@
 ## 2.2.18 — Assertion readonly du chemin de discovery
 
+## 2.2.19 — 2026-11-04
+
+Retrait propriétaire ciblé du shell refusé avant once attaché à un parent HELD.
+Preuve native ACK204 exacte, double frontière, historique APPROVED et protections
+du parent conservés. Staging suivant possible sans effacer la protection ni rejouer
+la commande. Skill, plugin, commande et cadrages complétés.
+
 - Une assertion unique sur variable.items[0].path peut précéder le retour MCP
   littéral, si son chemin de catalogue fixe correspond exactement à ce call.
 - Le client qualifie aussi les messages simples entre quotes simples, sans

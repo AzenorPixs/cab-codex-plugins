@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.18
+# Récupération par RUN — CAB 2.2.19
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -65,3 +65,5 @@ un simple redémarrage n'autorise pas le rejeu d'une opération.
 Le [shell approuvé sans accès](approved-shell-retirement.md) emploie, lorsque ses préconditions sont prouvées,
 les routes ordinaires acquire/release ; aucune nouvelle action policy
 n’est créée et les gardes d’accès restent opposables.
+
+Shell refusé avant once attaché à un parent HELD : [retrait ciblé](approved-attached-shell-retirement.md). Conserver le parent et ses autres effets.

@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Retrait attaché SCM 2.2.19
+
+[withdraw-rejected-attached-shell](openspec/changes/archive/2026-11-04-withdraw-rejected-attached-shell/), code non attribué : ARCHIVÉ, source2.2.19 qualifiée.
+Retrait isolé du shell refusé, parent HELD conservé ;738 tests finaux uniques réussis.
+Publication et activation distinctes ; voir QUALIFICATION.md du change.
+
 ## Assertion native SCM 2.2.18
 
 [recognize-literal-discovery-path-assertion](openspec/changes/archive/2026-11-04-recognize-literal-discovery-path-assertion/), code non attribué : ARCHIVÉ, source 2.2.18 qualifiée.

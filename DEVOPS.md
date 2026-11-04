@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-03T22:06:51Z
+Début du relevé (UTC) : 2026-11-04T04:55:18Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -60,7 +60,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Conteneur Docker, pour tests nécessitant des droits root
 
-  * 29.9.2
+  * 29.9.3
   * /usr/bin/docker
   * /var/run/docker.sock
   * debian:stable-slim
