@@ -1,4 +1,4 @@
-# NOT_ADMITTED natif et préparation locale — CAB 2.2.20
+# NOT_ADMITTED natif et préparation locale — CAB 2.2.21
 
 Un NOT_ADMITTED broker est terminal. Une admission locale STABLE/owner et
 validation enregistrés ne le transforme pas en PENDING ou APPROVED. Dans son
@@ -23,12 +23,15 @@ idle sans permission, sans effet postérieur à la demande. Un appel MCP natif
 échoué reste identifiable uniquement par son input exact et son enveloppe
 Code Mode scellée ; une erreur opaque ou une identité divergente est refusée.
 
-L’agent de codage lit une seule fois get_approval sur le même approval_id,
+Préparer la revue et la policy bornée avant la lecture fraîche.
+L’agent de codage lit get_approval une fois par qualification sur le même approval_id,
 dans le même SID, sans nouvel effet. La lecture complète de moins de cinq
 minutes doit donner NOT_ADMITTED avec toutes les identités exactes et
 not_admitted_at cohérent. Si l’enveloppe est tronquée, le résultat périmé,
 PENDING/APPROVED ou non corrélé, ne pas appliquer ce retrait. La consultation
 d’un ancien transcript ou une simple capture de checkpoint ne suffit pas.
+Si la lecture expire avant soumission, renouveler cette seule observation,
+pas request_validation ; ne pas changer le payload d’un actionId déjà envoyé.
 
 Clore le mandat courant après son rapport si nécessaire. Lire GET
 /runs/<run>/recovery/native-evidence?operationId=<operation>, puis le plan

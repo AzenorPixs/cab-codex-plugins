@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.2.20. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.2.21. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -20,9 +20,9 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 
 | Action | Références à lire |
 |---|---|
-| Entrée/reprise de pilotage | [monitor-service](references/monitor-service.md) d'abord, puis [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md) ; [PLLM](references/protocol-model.md) au seul démarrage initial |
-| Mandat et compte rendu | [session](references/protocol-session.md), [mandats](references/technical-mandates.md), [concurrence](references/concurrent-runs.md), [cycle](references/run-lifecycle.md) |
-| Diagnostic ou faux positif présumé | [triage](references/incident-triage.md), puis la seule référence du cas |
+| Entrée/reprise | [monitor-service](references/monitor-service.md) d'abord, puis [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md) ; [PLLM](references/protocol-model.md) au seul démarrage initial |
+| Mandat et compte rendu | [session](references/protocol-session.md), [soumission](references/validation-submission.md), [concurrence](references/concurrent-runs.md), [cycle](references/run-lifecycle.md) |
+| Incident | [grille](references/pilot-state-matrix.md), puis la seule voie du cas |
 | Retrait | [HELD](references/approved-held-retirement.md), [sans accès](references/approved-shell-retirement.md), [attaché](references/approved-attached-shell-retirement.md), [NOT_ADMITTED](references/not-admitted-retirement.md) |
 | Changer le SID dans le même RUN | [session-handoff](references/session-handoff.md), après triage ; conserver les effets historiques |
 | Ressource ou incident natif | [récupération](references/protocol-recovery.md), [précisions](references/technical-recovery.md), [politique](references/recovery-policy.md), [reprise autonome](references/autonomous-recovery.md), [incidents](references/coding-incidents.md) selon le diagnostic |
@@ -39,7 +39,7 @@ Une indisponibilité de télémétrie ne prouve pas un effet métier. Une protec
 pour effet incertain demeure jusqu'à preuve exacte ; les travaux disjoints
 autorisés peuvent continuer.
 
-Pour un mandat de codage, le contrôleur est seul à acquérir/lier l’accès,
-transmettre once et persister intention/ACK. L’orchestrateur décide via CAB ;
-il ne répond jamais once directement avec le client HTTP. Un ACK externe ne
-devient pas un reçu CAB par déclaration ou copie après l’exécution.
+L’orchestrateur demande l’accès au contrôleur (locks/acquire), sauf admission
+exclusive prouvée. Le contrôleur seul lie l’accès, émet once et persiste INTENT/ACK.
+APPROVED ne vaut pas HELD. Jamais de once directe par le client HTTP, ni d’ACK
+externe transformé rétroactivement en reçu CAB.

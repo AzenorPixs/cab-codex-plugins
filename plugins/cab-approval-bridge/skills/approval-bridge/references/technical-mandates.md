@@ -1,4 +1,7 @@
-# Précisions mandates — CAB 2.2.20
+# Précisions mandates — CAB 2.2.21
+
+Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
+pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
 
 ## RUN concurrents CAB 2.1.75
 
@@ -215,7 +218,7 @@ un nouveau mandat. Une demande non corrélée, `rejected`,
 `needs_clarification`, `BLOCKED`, `HUMAN_REQUIRED` ou divergente suspend le
 job et reste signalée dans la session persistante.
 
-## Permission shell décomposée — CAB2.2.20
+## Permission shell décomposée — CAB2.2.21
 
 La garde d’exécution reste stricte. La procédure canonique de rejet journalisé
 est dans [la reprise autonome](autonomous-recovery.md), section «Permission

@@ -1,4 +1,4 @@
-# Shell APPROVED refusé attaché à un parent HELD — CAB 2.2.20
+# Shell APPROVED refusé attaché à un parent HELD — CAB 2.2.21
 
 Le propriétaire traite ce cas dans le périmètre validé sans solliciter le
 correcteur. Le parent peut protéger un effet antérieur incertain : ne jamais
