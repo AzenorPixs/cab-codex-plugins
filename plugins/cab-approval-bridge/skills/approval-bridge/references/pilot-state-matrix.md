@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.30
+# Grille de décision du pilotage — CAB 2.2.31
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -123,3 +123,5 @@ cet accord à chaque session ; une frontière active se coordonne sans forçage.
 
 Edit ou shell refusé avant once avec parent HELD seulement référencé :
 [retrait propriétaire isolé](approved-attached-shell-retirement.md), sans faux rattachement.
+
+Notification stalled/FAILED sans lease : [qualifier le sous-état](technical-recovery.md#notification-bloquée--qualifier-le-sous-état) avant toute action ciblée.

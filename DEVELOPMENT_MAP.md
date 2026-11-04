@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Recommandation de notification SCM 2.2.31
+
+[qualify-stalled-notification-recommendation](openspec/changes/archive/2026-11-04-qualify-stalled-notification-recommendation/), code non attribué : ARCHIVÉ, source2.2.31 qualifiée.
+Choix de recommandation par sous-état stalled, sans action automatique ni levée
+de readiness/garde ;355tests finaux uniques réussis. Publication, activation et
+récupération opérante distinctes ; voir QUALIFICATION.md. Attribution ACL ultérieure.
+
+```mermaid
+flowchart LR
+    notificationAdvice["qualify-stalled-notification-recommendation<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class notificationAdvice provisional
+```
+
 ## Retrait avec parent référencé SCM 2.2.30
 
 [withdraw-rejected-edit-with-referenced-parent](openspec/changes/archive/2026-11-04-withdraw-rejected-edit-with-referenced-parent/), code non attribué : ARCHIVÉ, source2.2.30 qualifiée.

@@ -1,6 +1,6 @@
 # Statistiques globales
 
-**NCA — Nombre de changes analysés : 166**
+**NCA — Nombre de changes analysés : 167**
 
 ## Périmètre et durée
 
@@ -8,8 +8,8 @@
 |---|---|---|
 | DGCT — Temps total de développement du projet via l’IA | 12 | 0,235279 |
 | DGCTSPA — Temps total de développement du projet via l’IA hors pauses et attentes | 0 | N/A |
-| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 166 | 28,288171 |
-| NCMA — Changes achevés par jour (NCA / NJT) | 166 | 5,868177 |
+| NJT — Ecart entre le premier change archivé à l’archivage du dernier | 167 | 28,288171 |
+| NCMA — Changes achevés par jour (NCA / NJT) | 167 | 5,903528 |
 
 | Indicateur | Nombre de changes | Valeur en heures décimales |
 |---|---|---|
@@ -24,14 +24,14 @@ Les agents de codage et orchestrateurs ont utilisé les dernières versions disp
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 164 | N/A | N/A | 98,80 % |
+| 165 | N/A | N/A | 98,80 % |
 | 2 | gpt-6.1-sol | N/A | 1,20 % |
 
 ### LLM des agents orchestrateurs
 
 | Changes réalisés ou partiellement réalisés | Modèle de LLM | Niveau de raisonnement | Pourcentage de NCA |
 |---|---|---|---|
-| 5 | N/A | N/A | 3,01 % |
+| 5 | N/A | N/A | 2,99 % |
 
 ## Performances des LLM de codage OpenCode
 
@@ -107,7 +107,7 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 | Périmètre | Lignes de code | Lignes de commentaires |
 |---|---|---|
 | Global | N/A | N/A |
-| Broker | 10427 | 336 |
+| Broker | 10446 | 336 |
 | Commun | N/A | N/A |
 | Contrôleur | N/A | N/A |
 | Moniteur | 1622 | 8 |
@@ -150,13 +150,13 @@ Les messages « utilisateur » peuvent provenir de l’orchestrateur et ne sont 
 
 | Mesure | Total | Moyenne par change |
 |---|---|---|
-| Tests exécutés dans les bilans finaux | 85621 | 548,853 |
+| Tests exécutés dans les bilans finaux | 85976 | 547,618 |
 | Fichiers ayant passé un contrôle syntaxique | 2710 | 61,591 |
 | Tâches OpenSpec prouvées et terminées | 156 | 6,000 |
 
 | Résultat des tests finaux | Nombre | Pourcentage |
 |---|---|---|
-| Tests finaux réussis | 85612 | 99,99 % |
+| Tests finaux réussis | 85967 | 99,99 % |
 | Tests finaux échoués | 9 | 0,01 % |
 
 | Catégorie de tests | Nombre |

@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.30
+# Index du protocole CAB 2.2.31
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -59,3 +59,5 @@ cet accord à chaque session ; une frontière active se coordonne sans forçage.
 
 Edit ou shell refusé avant once avec parent HELD seulement référencé :
 [retrait propriétaire isolé](approved-attached-shell-retirement.md), sans faux rattachement.
+
+Notification stalled/FAILED sans lease : [qualifier le sous-état](technical-recovery.md#notification-bloquée--qualifier-le-sous-état) avant toute action ciblée.
