@@ -3,7 +3,7 @@
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
 
-## Restitution ciblée d’un bail — évolution 2.2.31
+## Restitution ciblée d’un bail — évolution 2.2.32
 
 La restitution ordinaire examine les opérations liées au bail et les accès
 qui recouvrent ses ressources. Après cleanup et vérification natifs distincts
@@ -215,7 +215,9 @@ la libération est une action explicite, après examen de toutes ses opérations
 Si reconcile-preview répond access-reconciliation-boundary-required et que
 l’accès n’est pas marqué restauré, utiliser la libération normale locks/release
 avec le token/fencing actuels et outcomeCOMPLETED lorsque toutes les fins sont
-qualifiées. Le token reste dans le processus local, sans copie au chat ou
+qualifiées. Si le token a été perdu par compactage, choisir la voie propriétaire
+[release-access](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage),
+sans forcer restored ni reconstruire un token. Le token reste dans le processus local, sans copie au chat ou
 checkpoint. Ne pas traiter cet état comme une fuite ou forcer une réconciliation.
 
 ### Bail HELD non restauré et payload d’acquisition perdu

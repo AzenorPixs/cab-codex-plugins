@@ -1,4 +1,4 @@
-# Continuité du protocole — CAB 2.2.31
+# Continuité du protocole — CAB 2.2.32
 
 Les validations admises et décisions sont conservées dans un checkpoint privé
 distinct du registre métier. Leur restauration vérifie les identités et les

@@ -1,4 +1,4 @@
-# Interfaces et persistance — CAB 2.2.31
+# Interfaces et persistance — CAB 2.2.32
 
 ## Architecture et interfaces techniques CAB
 
