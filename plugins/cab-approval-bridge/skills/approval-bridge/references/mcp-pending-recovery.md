@@ -10,19 +10,36 @@ Une reprise ordinaire peut observer un retour autonome : si l’installation est
 
 ## Autorisation du rechargement global
 
-La demande générale CABU et une ancienne autorisation consommée ne donnent aucun droit de rechargement global. L’opérateur doit obtenir une autorisation explicite pour le reçu exact, coordonner les locations concernées et expliquer que POST /api/location/reload reconstruit TOUTES les locations et annule permissions/formulaires en attente. Les processus et sessions persistantes restent à préserver ; aucun kill, restart OpenCode, dispose ou effacement de journal n’est admis.
+Dans un cycle CABU autorisé, le développeur accorde durablement la récupération
+MCP globale de cette classe, sans nouvelle sollicitation pour chaque reçu.
+Cet accord permanent explicite du4novembre2026 reste applicable jusqu’à sa
+révocation ; il n’est pas déduit de la seule présence d’un plugin ou d’un ancien
+accord unitaire consommé. L’orchestrateur applique cette politique dans son
+mandat de maintenance et la lie au reçu courant exact, jamais à une permission
+métier. Il informe les sessions concernées de la frontière technique.
 
-Après cet accord seulement, reprendre les mêmes chemins/URLs/paquet et ajouter à l’updater installé :
+La récupération est limitée au reçu non terminal admissible et au raccord
+`pending` persistant ou `failed`, après reprise ordinaire/diagnostic. Elle exige
+une snapshot fraîche avec zéro session active globale et zéro permission
+partagée, coordination des locations et absence de formulaire connu en attente.
+Si une location ou un formulaire connu exige une décision non couverte, ne pas
+supposer qu’il peut être annulé : conserver le reçu et expliciter ce besoin.
+POST /api/location/reload reconstruit TOUTES les locations et peut annuler leurs
+permissions/formulaires en attente. Conserver les processus, sessions, RUN,
+accès, baux, décisions et once ; aucun kill, restart OpenCode, dispose ou
+effacement de journal. La politique n’autorise aucun autre profil de réparation.
+
+Sous cet accord permanent et après ces contrôles, reprendre les mêmes chemins/URLs/paquet et ajouter à l’updater installé :
 
 ```text
 --recover-mcp update-<identifiant-exact-du-reçu-nonterminal>
 ```
 
-Le flag lie le consentement au reçu MCP_RECOVERY_REQUIRED ou ancienROLLBACK_FAILED exact. `failed` peut utiliser ce chemin uniquement après que l’utilisateur a autorisé le reçu exact ; `needs_auth` reste refusé. Reçu absent, étranger, terminal ou profil frozen-recovery-controller/reuse-readonly : refus sans rechargement. Aucune option globale n’est implicite dans /CAB update ordinaire. --recover-mcp n’autorise aucune décision, permission ou reprise métier.
+Le flag lie le consentement au reçu MCP_RECOVERY_REQUIRED ou ancienROLLBACK_FAILED exact. `failed` peut utiliser ce chemin sous cet accord permanent appliqué au reçu exact ; `needs_auth` reste refusé. Reçu absent, étranger, terminal ou profil frozen-recovery-controller/reuse-readonly : refus sans rechargement. Le flag reste explicite : l’orchestrateur le fournit pour le seul reçu qualifié, sans option automatique générale du moteur. --recover-mcp n’autorise aucune décision, permission ou reprise métier.
 
 ## Contrôles et intention unique
 
-Le client mcpRecoverySnapshot observe le PID/version et la location MCP canonique, une empreinte des IDs globaux des sessions (pagination bornée), le nombre de sessions actives globales et de permissions du raccord partagé. Il ne retourne ni corps, secret, modèle ou message libre. Les autres locations ne sont pas sondées ni initialisées ; leur coordination et leurs formulaires restent dans le périmètre de l’autorisation explicite. La frontière doit être inactive et sans permission partagée. En failed, ces contrôles précèdent l’intention durable ; l’état failed seul ne dispense jamais du consentement ni de la snapshot.
+Le client mcpRecoverySnapshot observe le PID/version et la location MCP canonique, une empreinte des IDs globaux des sessions (pagination bornée), le nombre de sessions actives globales et de permissions du raccord partagé. Il ne retourne ni corps, secret, modèle ou message libre. Les autres locations ne sont pas sondées ni initialisées ; leur coordination et leurs formulaires restent dans le périmètre borné de cet accord permanent. La frontière doit être inactive et sans permission partagée. En failed, ces contrôles précèdent l’intention durable ; l’état failed seul ne dispense jamais du consentement ni de la snapshot.
 
 Le reçu écrit l’intention de rechargement AVANT l’unique POSTglobal. Un crash après intention peut avoir précédé l’envoi : son résultat reste inconnu et le POST n’est quand même pas rejoué. Après réponse perdue ou délai expiré, seules des observations peuvent réconcilier le résultat. Une intention déjà présente ne permet jamais un second rechargement, même avec le même flag. Si le raccord ne revient pas, conserver le même reçu ouvert et diagnostiquer ; ne pas purger le verrou ni bricoler le journal.
 

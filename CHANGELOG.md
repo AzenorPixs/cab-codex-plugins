@@ -1,3 +1,10 @@
+## 2.2.23 — 2026-11-04
+
+Accord permanent explicite de récupération MCP CABU bornée, distribué dans les
+skills CAB/CABU, références du plugin et commandes. Aucune nouvelle demande
+par reçu admissible ; frontières, intention unique et preuves conservées.
+Aucun changement moteur hors versions, aucun élargissement métier.
+
 ## 2.2.22 — 2026-11-04
 
 Reprise autonome des refus transitoires run-transition-in-flight pendant

@@ -1,6 +1,6 @@
-# Mise à jour autonome des briques CAB — CAB 2.2.22
+# Mise à jour autonome des briques CAB — CAB 2.2.23
 
-## États privés CAB2.2.22 et fichiers projet0775
+## États privés CAB2.2.23 et fichiers projet0775
 
 Les fichiers de projet conservent leurs droits0775, y compris après DIU.
 Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
@@ -532,3 +532,7 @@ La [procédure dédiée](mcp-pending-recovery.md) distingue attente bornée, MCP
 ## Fermeture de distribution — 2.1.32
 
 Le groupe monitorScripts inclut permission-policy, dépendance du client. Avant coupure, chaque import relatif statique doit trouver le même artefact source à la destination relative attendue ; une présence dans le seul groupe primaire ne suffit pas. update-package-import-missing refuse le paquet incomplet avant arrêt. Les contrôles ask, permissions et mandats restent inchangés.
+
+La récupération MCP globale suit [l’accord permanent borné](mcp-pending-recovery.md) :
+contrôles frais, reçu exact et intention unique, sans nouvelle question si toutes
+les conditions sont satisfaites. Ne pas étendre cet accord à un autre profil.

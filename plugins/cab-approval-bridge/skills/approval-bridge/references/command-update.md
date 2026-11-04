@@ -1,4 +1,4 @@
-# Mise à jour — CAB 2.2.22
+# Mise à jour — CAB 2.2.23
 
 ## `/CAB update`
 
@@ -258,3 +258,7 @@ nommés, leurs unités utilisateur, la commande de profil et le journal privé
 avec ses sauvegardes, selon references/component-update.md. La migration
 réversible de marketplace reste la seule exception de configuration. Aucun
 nettoyage ou migration des états métier n'est effectué par update.
+
+La récupération MCP globale suit [l’accord permanent borné](mcp-pending-recovery.md) :
+contrôles frais, reçu exact et intention unique, sans nouvelle question si toutes
+les conditions sont satisfaites. Ne pas étendre cet accord à un autre profil.

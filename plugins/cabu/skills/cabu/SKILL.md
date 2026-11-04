@@ -21,3 +21,8 @@ N'exécute ni `/CAB start`, ni `/CAB run`, ni `/CAB test`, ni bootstrap du
 monitoring. Restitue le résultat de `/CAB update`, avec versions des fichiers,
 processus réellement observés, mesures de bascule et état du même reçu en cas
 d'attente. Une préparation ou une copie de fichiers ne prouve pas l'activation.
+
+Pour MCP_RECOVERY_REQUIRED, lire `references/mcp-pending-recovery.md` dans le
+skill CAB : l’accord permanent du développeur couvre la récupération bornée
+au reçu exact, avec contrôles frais et intention unique. Ne pas redemander cet
+accord pour chaque reçu admissible ; les cas hors de cette classe restent distincts.

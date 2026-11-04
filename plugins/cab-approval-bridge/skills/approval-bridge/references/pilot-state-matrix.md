@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.22
+# Grille de décision du pilotage — CAB 2.2.23
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -90,7 +90,7 @@ priment sur une interprétation d’un compteur agrégé.
 | Plugin installé / service actif | Vérifier les quatre versions, readiness, workspace et adoption ; source/paquet/processus sont distincts | [CABU](component-update.md) |
 | Jeu CAB conforme | CABU idempotent, aucune bascule requise ; ne pas redémarrer pour produire une preuve | [CABU](component-update.md) |
 | Coupure CABU ou réponse perdue | Relire le même reçu ; ne pas créer de transaction pour contourner une issue incertaine | [continuité](transport-continuity.md) |
-| MCP_RECOVERY_REQUIRED | Diagnostic et même reçu ; rechargement global seulement avec accord explicite lié à ce reçu, jamais rejoué après intention | [MCP](mcp-pending-recovery.md) |
+| MCP_RECOVERY_REQUIRED | Diagnostic et même reçu ; récupération bornée sous accord permanent lié au reçu exact, jamais rejoué après intention | [MCP](mcp-pending-recovery.md) |
 | Nouvelle identité PID/version inattendue | Requalifier la continuité ; ne pas fabriquer ADOPTED ou restaurer un ancien état métier | [continuité](transport-continuity.md) |
 | Nouveau SID nécessaire dans le même RUN | Handoff explicite, candidate qualifiée et historique protégé ; pas un simple changement de champ | [handoff](session-handoff.md) |
 | Transition modèle / recovery job | Respecter sa garde et son reçu propres ; ne pas remplacer fournisseur/modèle ou SID pour contourner une validation | [modèles](protocol-model.md) |

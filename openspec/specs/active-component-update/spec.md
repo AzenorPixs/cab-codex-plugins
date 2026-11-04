@@ -436,11 +436,7 @@ Un échec après coupure ou durant la récupération MUST conserver le journal e
 - **THEN** le rollback du même journal peut être confirmé sans modifier les RUN ni rejouer once
 
 ### Requirement: Récupération globale explicite d’un reçu MCP avec broker failed
-Pour un reçu non terminal exact en `MCP_RECOVERY_REQUIRED`, CAB MAY traiter
-`failed` par `--recover-mcp` uniquement après accord explicite lié à ce reçu.
-CAB MUST vérifier une snapshot globale inactive, sans permission partagée,
-écrire l’intention avant l’unique POST global et contrôler identité, versions
-et readiness fraîche. Sans flag exact ou si une garde échoue, aucun POST.
+Dans un cycle CABU autorisé, CAB MAY récupérer pending persistant ou failed sous l’accord permanent explicite et révocable du développeur, sans nouvelle question par reçu. Le flag MUST cibler le reçu non terminal exact. CAB MUST vérifier snapshot inactive sans permission partagée, intention unique, identités, versions et readiness. Sans flag ou si une garde échoue, aucun POST. Aucun autre profil ni effet métier n’est autorisé.
 
 #### Scenario: Broker failed avec reçu exact et locations inactives
 - **WHEN** le reçu est autorisé, OpenCode conserve sa même identité et la
@@ -448,6 +444,20 @@ et readiness fraîche. Sans flag exact ou si une garde échoue, aucun POST.
 - **THEN** l’updater persiste l’intention, envoie un POST global unique,
   vérifie PID/version/location/sessions et clôt le même reçu seulement après
   confirmation du broker cible et de sa readiness
+
+#### Scenario: Accord permanent et reçu admissible
+- **GIVEN** un cycle CABU autorisé et l’accord permanent explicite non révoqué
+- **WHEN** le reçu est admissible et les contrôles frais de la frontière sont satisfaits
+- **THEN** l’orchestrateur fournit le flag du reçu exact sans redemander un accord unitaire
+- **AND** les snapshots, l’intention unique, les contrôles de continuité et les limites métier restent obligatoires
+
+#### Scenario: Coordination des locations et formulaires
+- **WHEN** une autre location ou un formulaire connu exige une décision non couverte
+- **THEN** le pilote conserve le reçu et ne suppose pas que la reconstruction globale peut l’annuler
+
+#### Scenario: Accord révoqué ou cas hors cadre
+- **WHEN** l’accord permanent est révoqué ou le cas exige un autre profil ou une décision hors de son cadre
+- **THEN** l’orchestrateur conserve le reçu et les protections et demande seulement l’autorisation manquante
 
 #### Scenario: Broker failed sans autorisation exacte
 - **WHEN** `--recover-mcp` manque, vise un autre reçu ou le reçu est terminal
