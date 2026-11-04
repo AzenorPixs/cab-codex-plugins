@@ -1,4 +1,4 @@
-# Statut — CAB 2.2.22
+# Statut — CAB 2.2.23
 
 ## `/CAB status`
 

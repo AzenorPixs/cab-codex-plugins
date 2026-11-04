@@ -1,5 +1,19 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Accord permanent MCP SCM 2.2.23
+
+[document-standing-bounded-mcp-recovery](openspec/changes/archive/2026-11-04-document-standing-bounded-mcp-recovery/), code non attribué : ARCHIVÉ, source2.2.23 qualifiée.
+Politique bornée distribuée dans skills, plugin et commandes ;248tests uniques
+réussis, moteurs inchangés hors version. Publication/activation distinctes ;
+voir QUALIFICATION.md du change. Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    standingMcp["document-standing-bounded-mcp-recovery<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class standingMcp provisional
+```
+
 ## Reprise des transitions SCM 2.2.22
 
 [clarify-transient-run-transition-retries](openspec/changes/archive/2026-11-04-clarify-transient-run-transition-retries/), code non attribué : ARCHIVÉ, source2.2.22 qualifiée.
