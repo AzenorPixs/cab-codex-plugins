@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.20
+version: 2.2.21
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -47,10 +47,8 @@ Pour un changement explicite de SID dans le même RUN avec historique protégé,
 lire `references/session-handoff.md`. Les commandes run/resume ne réalisent
 pas cette transition implicitement.
 
-Retraits dans le mandat propriétaire, après revue de la frontière :
-`references/approved-held-retirement.md` pour HELD ;
-`references/approved-shell-retirement.md` pour shell sans accès ;
-`references/approved-attached-shell-retirement.md` pour shell attaché refusé ;
-`references/not-admitted-retirement.md` pour NOT_ADMITTED sans décision.
-Conserver le parent protégé et le terminal natif. Aucun nouvel argument,
-rejeu, garde contournée ou recours au correcteur pour ces voies qualifiées.
+Pour piloter ou reprendre une unité, lire `references/pilot-state-matrix.md`,
+puis la seule voie utile ; `references/validation-submission.md` distingue
+soumission, décision, acquisition et once. L’orchestrateur demande l’accès au
+contrôleur ; APPROVED ne signifie pas HELD. Aucun retrait, nouvel argument,
+rejeu ou élargissement de mandat n’est implicite.

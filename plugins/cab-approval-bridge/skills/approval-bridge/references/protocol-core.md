@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.2.20
+# Noyau du contrat — CAB 2.2.21
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -51,6 +51,16 @@ solutions de transport ou d'approbation. Ils conservent les décisions réservé
 au développeur et leurs limites métier. Un autre profil technique exige un
 contrat d'intégration explicitement validé et ses preuves de compatibilité ;
 la seule présence d'un outil ne rend pas ce profil disponible.
+
+## Choisir la voie et conserver les rôles
+
+La [grille de décision](pilot-state-matrix.md) relie états, preuves et voies
+existantes ; le [parcours de soumission](validation-submission.md) traite
+l’unité ordinaire. L’orchestrateur demande l’acquisition partagée au contrôleur
+après APPROVED ; seul le contrôleur applique les gardes, persiste l’accès et
+émet once. L’automatisme est limité à l’admission exclusive prouvée.
+Le compteur de permissions non appariées n’est pas le total des permissions
+natives, et une projection omettant un champ ne prouve pas son absence durable.
 
 ## Contrat commun de session
 

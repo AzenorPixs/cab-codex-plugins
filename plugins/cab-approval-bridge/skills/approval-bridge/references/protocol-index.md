@@ -1,4 +1,7 @@
-# Index du protocole CAB 2.2.20
+# Index du protocole CAB 2.2.21
+
+Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
+pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
 
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées
