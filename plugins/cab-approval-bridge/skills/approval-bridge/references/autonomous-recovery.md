@@ -1,4 +1,4 @@
-# Reprise autonome dans le change — CAB 2.2.26
+# Reprise autonome dans le change — CAB 2.2.27
 
 Le développeur intervient pour une décision hors du périmètre validé du change.
 Dans ce périmètre, l’orchestrateur décide des mandats, revoit le code et les
@@ -256,7 +256,7 @@ disjoints, sans arrêter les pairs ni attribuer les candidats à Vite par
 supposition. La clôture historique reste non prouvée ; aucune procédure ne
 peut effacer cette incertitude sans preuve supplémentaire.
 
-## Permission shell décomposée — CAB2.2.26
+## Permission shell décomposée — CAB2.2.27
 
 Une permission shell peut porter plusieurs ressources ;elle autoriserait
 l’appel entier, pas une once par fragment. CAB ne déduit aucune équivalence
@@ -279,7 +279,7 @@ anciennes identités et permissions ne sont pas réutilisées. Aucun reçu absen
 ne se fabrique rétroactivement. Des mandats unitaires ou le transport shell
 scellé existant permettent d’éviter une décomposition non qualifiée.
 
-## Retirer un edit refusé avant once — CAB2.2.26
+## Retirer un edit refusé avant once — CAB2.2.27
 
 Utiliser la policy propriétaire withdraw-unissued-validation et la même route
 recovery/action, targetId de l’opération, input={nativeBoundaryDigest,evidence}.
@@ -313,3 +313,38 @@ NOT_ADMITTED natif et préparation sans décision : [retrait qualifié](not-admi
 Les lectures natives read V2 qualifiées après un rejet restent des observations ;
 voir [le retrait ciblé](approved-attached-shell-retirement.md). Les autres appels
 supplémentaires ne sont jamais ignorés par analogie.
+
+## PENDING annulé nativement, coordination locale encore PREPARED
+
+Après cancel_approval réussi CANCELLED/cancelled_by=OC sur les identités exactes,
+ne pas répéter l’annulation ni employer withdraw-unissued-validation comme si
+le broker était NOT_ADMITTED. Conserver les reçus échoués antérieurs. Le
+contrôleur réconcilie l’annulation corrélée sur deux transcripts stables,
+SID idle, zéro permission, aucun accès/native/once, sans décision de substitution.
+Lire l’opération exacte et son admission ; une absence de convergence exige
+son diagnostic de preuve, pas une nouvelle demande ou un arbitrage humain.
+
+Le gabarit qualifié reste search littéral cancel_approval, assertion du chemin
+exact, puis return await du cancel unique à l’approval_id exact. Les blancs
+légaux hors chaînes sont tolérés ; chaînes, tokens et données restent exacts.
+Le matcher n’évalue aucun JavaScript et reste borné à16384caractères.
+Commentaires, instructions ajoutées, mots fusionnés ou saut de ligne après
+return/throw ne sont pas des variantes qualifiées.
+
+Un wrapper diagnostic distinct, terminé/executed=false/non tronqué, avec
+calls complets non vides limités à search/get_approval/poll_approval/
+lookup_validation/broker_health/broker_readiness, peut rester une observation.
+Il ne prouve aucune annulation ni décision ; la preuve du cancel exact reste
+requise. Les outils mutateurs, calls inconnus, request/cancel/reject ou
+wrappers opaques ne sont pas ignorés. Les reads V2 qualifiés suivent leurs
+gardes existantes. Toute donnée, permission, effet ou frontière divergente
+conserve la protection.
+
+Après convergence, exiger coordination CANCELLED, décision absente ou historique
+conservée selon le cas, aucun nouvel accès/effet/once et autres protections
+inchangées. Poursuivre seulement un mandat neuf après revue des champs
+réellement émis ; ne pas corriger un ancien payload pour le rendre exécutable.
+
+Les get_approval/poll_approval seuls portant déjà un terminal CANCELLED exact
+conservent leur voie de preuve historique ; le filtrage des diagnostics ne
+les élimine pas. Aucun nouveau cancel n’est requis pour les relire.

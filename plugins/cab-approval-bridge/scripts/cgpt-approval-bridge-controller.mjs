@@ -27,7 +27,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.26";
+const version = "2.2.27";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -1090,29 +1090,65 @@ function nativeRequestValidationEntries(parts, requestId) {
   }
   return entries;
 }
+function cancellationWrapperTokens(code) {
+  if(typeof code!=='string'||code.length>16384)return null;
+  const tokens=[];let at=0;
+  while(at<code.length){
+    if(/\s/.test(code[at])){
+      if(['return','throw'].includes(tokens.at(-1)) && /[\n\r\u2028\u2029]/.test(code[at]))return null;
+      at++;continue;
+    }
+    if(code[at]==='"'||code[at]==="'"){
+      const start=at,quote=code[at++];let closed=false;
+      while(at<code.length){
+        const value=code[at++];
+        if(value==='\\'){at++;continue;}
+        if(value==='\n'||value==='\r')return null;
+        if(value===quote){closed=true;break;}
+      }
+      if(!closed)return null;tokens.push(code.slice(start,at));continue;
+    }
+    const token=/^(?:[A-Za-z_$][A-Za-z0-9_$]*|[0-9]+|!==|[=;(){},:.\[\]])/.exec(code.slice(at));
+    if(!token)return null;tokens.push(token[0]);at+=token[0].length;
+  }
+  return tokens;
+}
 function exactCancelApprovalWrapper(wrapper, approval) {
   if(!wrapper||wrapper.tool!=='execute'||wrapper.executed!==false||wrapper.status!=='completed'||
       wrapper.truncated!==false||!Array.isArray(wrapper.toolCalls)||wrapper.toolCalls.length!==2)return false;
   const [search,cancel]=wrapper.toolCalls;
+  const searchInput=search?.input,cancelInput=cancel?.input;
   if(search?.tool!=='search'||search.status!=='completed'||
-      JSON.stringify(search.input)!==JSON.stringify({query:'cancel_approval',namespace:'cgpt-validation',limit:20})||
+      !searchInput||typeof searchInput!=='object'||Array.isArray(searchInput)||Object.keys(searchInput).length!==3||
+      !Object.keys(searchInput).every(key=>['query','namespace','limit'].includes(key))||
+      searchInput.query!=='cancel_approval'||searchInput.namespace!=='cgpt-validation'||searchInput.limit!==20||
       cancel?.tool!=='cgpt-validation.cancel_approval'||cancel.status!=='completed'||
-      JSON.stringify(cancel.input)!==JSON.stringify({approval_id:approval.approval_id}))return false;
+      !cancelInput||typeof cancelInput!=='object'||Array.isArray(cancelInput)||Object.keys(cancelInput).length!==1||
+      !Object.hasOwn(cancelInput,'approval_id')||cancelInput.approval_id!==approval.approval_id)return false;
   const code=typeof wrapper.code==='string'?wrapper.code:'';
   const expected=`const r = await search({query: "cancel_approval", namespace: "cgpt-validation", limit: 20}); if (r.items[0].path !== 'tools["cgpt-validation"].cancel_approval') throw new Error("UNEXPECTED_PATH"); return await tools["cgpt-validation"].cancel_approval({approval_id: ${JSON.stringify(approval.approval_id)}});`;
-  return code===expected;
+  const tokens=cancellationWrapperTokens(code);
+  return tokens!==null && JSON.stringify(tokens)===JSON.stringify(cancellationWrapperTokens(expected));
 }
 function nativeCancelledValidationProof(parts, approval, { allowApprovedHistory = false } = {}) {
   const allowed = new Set(['cgpt-validation.request_validation','cgpt-validation.cancel_approval',
     'cgpt-validation.get_approval','cgpt-validation.poll_approval','search']);
   const entries = [];
+  const diagnosticTools=new Set(['search','cgpt-validation.get_approval','cgpt-validation.poll_approval',
+    'cgpt-validation.lookup_validation','cgpt-validation.broker_health','cgpt-validation.broker_readiness']);
   for (const part of parts) {
     if (part?.type !== 'tool') continue;
+    if(part.tool==='read' && nativeNoEnvironmentObservation(part))continue;
+    if(['cgpt-validation_lookup_validation','cgpt-validation_broker_health','cgpt-validation_broker_readiness'].includes(part.tool) &&
+        part.state?.status==='completed')continue;
     if (part.tool === 'execute') {
       if (part.executed !== false || part.state?.metadata?.truncated !== false ||
-          !Array.isArray(part.state?.metadata?.toolCalls) || part.state?.status !== 'completed') {
+          !Array.isArray(part.state?.metadata?.toolCalls) || !part.state.metadata.toolCalls.length || part.state?.status !== 'completed') {
         entries.push({ tool:'untrusted-wrapper', status:part.state?.status }); continue;
       }
+      if(part.state.metadata.toolCalls.length>0 && part.state.metadata.toolCalls.every(call=>
+          call && diagnosticTools.has(call.tool) && call.status==='completed') &&
+          part.state.metadata.toolCalls.some(call=>!['cgpt-validation.get_approval','cgpt-validation.poll_approval'].includes(call.tool)))continue;
       const wrapper={tool:'execute',callID:part.callID,code:part.state?.input?.code,output:part.state?.output,
         status:part.state.status,executed:part.executed,truncated:part.state.metadata.truncated,
         toolCalls:part.state.metadata.toolCalls};

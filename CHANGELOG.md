@@ -1,3 +1,10 @@
+## 2.2.27 — 2026-11-04
+
+Reconnaissance lexicale bornée du wrapper d’annulation native : blancs légaux
+hors chaînes acceptés, programme/données inchangés. Diagnostics MCP purs
+séparés de la preuve, sans nouveau cancel ni décision ; wrappers opaques,
+effets supplémentaires et divergences restent bloquants. Contrat distribué aligné.
+
 ## 2.2.26 — 2026-11-04
 
 Qualification des read natifs V2 terminés et sans mutation comme observations
