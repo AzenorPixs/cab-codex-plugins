@@ -1,5 +1,17 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Rapports SGS isolés et compatibles — CAB 2.3.2
+
+CHANGE produit son rapport sans récupération globale, avec preuves sur stdin,
+verrou du répertoire et candidat adjacent exact. L’échec du delta séparé ne
+retire pas le rapport réussi. Le suivi est initialisé avant les tâches, pour
+codeurs et orchestrateurs distincts, puis alimenté depuis les sources disponibles.
+Les rapports anciens restent à leur emplacement (--report) et gardent leur
+structure, avec annexe si nécessaire. REPORT réserve le rapport et son candidat ;
+l’orchestrateur appelle DELTA sous l’autorisation distincte du prompt. Les
+identités d’agents restent libres et les périmètres de mesure restent ceux de SGS.
+
+
 ## Clôture des statistiques réutilisables — CAB 2.3.1
 
 La capacité SGS livrée en 2.3.0 est archivée et qualifiée. La version 2.3.1
@@ -254,9 +266,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.3.1`.
+Version de référence des briques CAB : `2.3.2`.
 
-CAB 2.3.1 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.3.2 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
@@ -1116,3 +1128,10 @@ littéral : même binding, items[0].path, chemin de catalogue exact et Error
 littéral. [Contrat natif](plugins/cab-approval-bridge/skills/approval-bridge/references/technical-native.md).
 Le code arbitraire, les gardes et les permissions restent hors de cette
 projection ; l’acquisition partagée et les REJECTED historiques sont inchangés.
+
+
+Le nettoyage statistique rejoint l’effacement terminal CAB après le rapport
+vérifié, la clôture sûre et le nettoyage des sessions natives. Les données du
+change sont supprimées, celles des pairs et les preuves métier sont conservées ;
+la session métier de reprise prévue reste protégée en cas de dépendance.
+Sans état CAB utilisé, le nettoyage est déclaré non applicable.

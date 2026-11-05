@@ -1,3 +1,13 @@
+## 2.3.2 — 2026-11-06
+
+- Nettoyage statistique intégré à l’effacement terminal CAB après le rapport et les sessions natives, avec préservation des pairs et vérification après restauration.
+
+- CHANGE indépendant de la récupération globale ; succès individuel conservé en cas d’échec du delta optionnel.
+- Preuves sur stdin, candidat propre au rapport et ressources REPORT bornées, avec lecture des anciennes réservations.
+- Rapports anciens et variantes identifiées amendés sans doublon ni restructuration ; identités d’agents libres.
+- Suivi initialisé avant les tâches pour codeurs et orchestrateurs, avec sources disponibles et inconnues explicites.
+- Toutes les versions distribuées alignées sur2.3.2 ; aucune activation de service ajoutée.
+
 ## 2.3.1 — 2026-11-05
 
 - Clôture documentaire du change de statistiques réutilisables : archivage, qualification et publication 2.3.0 distingués des disponibilités des forges.

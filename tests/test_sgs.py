@@ -443,11 +443,10 @@ Aucun appel à un outil web observé.
         directory=self.root/self.archive;directory.mkdir(parents=True)
         evidence=self.root/'.STATISTICS.session.json'
         evidence.write_text(json.dumps({'schema_version':1,'session_id':'retry-1','scope':'cumulative','contribution':sgs.blank()}))
-        with sgs.locked(self.root):
-            sgs.change_report(self.root,self.archive,evidence,'archived')
-            with patch.object(sgs,'delta',return_value={'status':'updated'}) as maintenance:
-                result=sgs.change_report(self.root,self.archive,evidence,'archived',maintain=True,contract=self.contract)
-                maintenance.assert_called_once()
+        sgs.change_report(self.root,self.archive,evidence,'archived')
+        with patch.object(sgs,'delta',return_value={'status':'updated'}) as maintenance:
+            result=sgs.change_report(self.root,self.archive,evidence,'archived',maintain=True,contract=self.contract)
+            maintenance.assert_called_once()
         self.assertEqual(result['global']['status'],'updated')
 
     def test_cli_absent_global_leaves_no_files(self):
@@ -518,6 +517,83 @@ Aucun appel à un outil web observé.
         self.source('Tests finaux : 12 réussis, 0 échec.\n');self.build()
         with sgs.locked(self.root):
             with self.assertRaises(sgs.SGSError):sgs.query(self.root,self.contract)
+
+    def stdin_change(self,archive=None,*extra):
+        import subprocess,sys
+        target=self.root/(archive or self.archive);target.mkdir(parents=True,exist_ok=True)
+        evidence=json.dumps({'schema_version':1,'session_id':'stdin-1','scope':'cumulative','contribution':sgs.blank()})
+        r=subprocess.run([sys.executable,'-B',str(ROOT/'plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-sgs.py'),
+            'CHANGE','--project-root',str(self.root),'--change',archive or self.archive,
+            '--state','archived','--evidence','-',*extra],input=evidence,capture_output=True,text=True)
+        return r,target
+
+    def test_stdin_change_ignores_unrecoverable_global_and_creates_no_root_files(self):
+        journal=self.root/sgs.JOURNAL;journal.write_text('broken global journal')
+        (self.root/self.archive).mkdir(parents=True)
+        before=set(self.root.iterdir())
+        r,target=self.stdin_change()
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertTrue((target/sgs.REPORT).is_file())
+        self.assertEqual(journal.read_text(),'broken global journal')
+        self.assertEqual(set(self.root.iterdir()),before)
+        self.assertFalse((target/(sgs.REPORT+'.sgs-candidate')).exists())
+
+    def test_maintain_failure_keeps_individual_success_and_global_journal(self):
+        journal=self.root/sgs.JOURNAL;journal.write_text('broken')
+        r,target=self.stdin_change(None,'--maintain-global','--contract',str(self.contract))
+        self.assertEqual(r.returncode,0,r.stderr)
+        data=json.loads(r.stdout);self.assertEqual(data['status'],'created')
+        self.assertEqual(data['global']['status'],'error')
+        self.assertTrue((target/sgs.REPORT).exists());self.assertEqual(journal.read_text(),'broken')
+
+    def test_change_runs_while_global_lock_is_busy(self):
+        with sgs.locked(self.root):r,target=self.stdin_change()
+        self.assertEqual(r.returncode,0,r.stderr)
+
+    def test_same_report_is_serialized_but_another_change_can_progress(self):
+        a=self.root/self.archive;a.mkdir(parents=True)
+        with sgs.report_locked(a):
+            blocked,_=self.stdin_change()
+            independent,_=self.stdin_change('openspec/changes/archive/2026-11-05-other')
+        self.assertEqual(blocked.returncode,1)
+        self.assertEqual(independent.returncode,0,independent.stderr)
+        self.assertFalse((a/sgs.REPORT).exists())
+
+    def test_legacy_structure_is_preserved_byte_for_byte_and_not_duplicated(self):
+        target=self.source('# Ancien rapport\n\n## Bilan unique\nTexte historique.\n')
+        before=target.read_bytes()
+        r,_=self.stdin_change();self.assertEqual(r.returncode,0,r.stderr)
+        data=target.read_bytes();self.assertTrue(data.startswith(before))
+        self.assertEqual(data.decode().count('\n## '),1)
+        self.assertIn('#### 6. Synthèse globale',data.decode())
+        retry,_=self.stdin_change();self.assertEqual(retry.returncode,0,retry.stderr)
+        self.assertEqual(target.read_bytes(),data)
+
+    def test_explicit_variant_keeps_name_and_is_not_implicitly_created_twice(self):
+        target=self.source('# Statistiques historiques\n',self.archive).with_name('STATISTIQUES.md')
+        (target.parent/sgs.REPORT).rename(target)
+        r,_=self.stdin_change();self.assertEqual(r.returncode,1)
+        before=target.read_bytes()
+        r,_=self.stdin_change(None,'--report',str(target.relative_to(self.root)),
+                             '--maintain-global','--contract',str(self.contract))
+        self.assertEqual(r.returncode,0,r.stderr)
+        self.assertTrue(target.read_bytes().startswith(before))
+        self.assertFalse((target.parent/sgs.REPORT).exists())
+        self.assertEqual(json.loads(r.stdout)['global']['status'],'not-admissible')
+
+    def test_report_override_cannot_escape_change(self):
+        other=self.source('# Statistiques\n','openspec/changes/archive/2026-11-05-other')
+        r,_=self.stdin_change(None,'--report',str(other.relative_to(self.root)))
+        self.assertEqual(r.returncode,1)
+        self.assertEqual(other.read_text(),'# Statistiques\n')
+
+    def test_failed_report_publication_cleans_only_its_candidate(self):
+        target=self.source('# Historique\n')
+        evidence=json.dumps({'schema_version':1,'session_id':'cleanup-1','scope':'cumulative','contribution':sgs.blank()}).encode()
+        with patch.object(sgs.os,'replace',side_effect=OSError('synthetic publication failure')):
+            with self.assertRaises(OSError):sgs.change_report(self.root,self.archive,evidence,'archived')
+        self.assertEqual(target.read_text(),'# Historique\n')
+        self.assertFalse(target.with_name(target.name+'.sgs-candidate').exists())
 
 
 if __name__ == '__main__':

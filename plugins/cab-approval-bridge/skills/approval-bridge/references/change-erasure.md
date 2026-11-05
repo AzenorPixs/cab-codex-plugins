@@ -1,4 +1,4 @@
-# Effacement terminal ciblé — CAB 2.2.40
+# Effacement terminal ciblé — CAB 2.3.2
 
 ## Autorité et conditions
 
@@ -143,3 +143,29 @@ public d’observations adopte une nouvelle époque : un ancien curseur reçoit
 réindexés. Les identités métier des événements du broker restent conservées.
 Les permissions internes 0775 sont acceptées sous un ancêtre privé effectif ;
 le pilote ne modifie pas les droits des dossiers pour les normaliser.
+
+
+## Données statistiques du change
+
+L’effacement terminal couvre controller-statistics.json et
+controller-observations.json, leurs contextes, admissions, catalogues,
+événements, intervalles et jeux importés rattachés au change, ainsi que les
+copies runtime couvertes par l’inventaire. Il suit le rapport individuel
+vérifié, la clôture sûre et le nettoyage des sessions natives, pour TERMINÉ
+comme pour BLOQUÉ sur dépendance insatisfaite. La session métier conservée
+pour reprise reste soumise à l’exception native prévue, pas à une suppression
+implicite de son historique OpenCode.
+
+Les segments et imports partagés sont projetés sur les seuls pairs restants.
+Les références historiques integrationOwner de la cible deviennent null et
+les listes d’identités conservent les pairs. L’empreinte d’un import modifié
+est recalculée après validation du format et de son empreinte initiale, afin
+que le magasin reste valide à la restauration. Aucune donnée étrangère n’est
+effacée pour satisfaire le contrôle. Une référence non attribuable ou un format
+non qualifié garde le refus existant et ses preuves.
+
+Après rechargement des briques, vérifier que le change n’apparaît plus dans
+leurs statistiques. Conserver le rapport, le registre global et les fichiers
+métier du projet. Ne pas utiliser la purge générale de rétention comme substitut.
+En session directe sans état CAB utilisé pour ce change, indiquer non applicable ;
+le moteur de rapport ne crée pas de runtime ou de stockage privé à nettoyer.

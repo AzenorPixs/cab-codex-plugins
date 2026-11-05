@@ -1,5 +1,24 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Contrats SGS et suivi de session — SCM 2.3.2
+
+[fix-sgs-report-isolation-and-compatibility](changes/archive/2026-11-06-fix-sgs-report-isolation-and-compatibility/), code non attribué : ARCHIVÉ — CLOS.
+Isolation CHANGE/global, preuves stdin, ressources REPORT bornées, rapports
+historiques, agents libres, suivi à l’amorçage et nettoyage statistique ciblé.
+Qualification et archivage normaux réussis ; rapport individuel vérifié.
+Delta global refusé pour contrat incompatible, couple préservé, sans blocage
+de clôture. Livraison viaDIU prévue par SCM ; résultat distant vérifié à son
+issue, sans activation. Voir QUALIFICATION.md du change.
+Attribution définitive et convergence des sous-lots par ACL ultérieure.
+
+```mermaid
+flowchart LR
+  sgsFixes["fix-sgs-report-isolation-and-compatibility<br/>code non attribué — ARCHIVÉ / CLOS"]
+  classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+  class sgsFixes provisional
+```
+
+
 ## Statistiques réutilisables SCM — 5 novembre 2026
 
 [add-reusable-project-statistics](changes/archive/2026-11-05-add-reusable-project-statistics/), code non attribué : ARCHIVÉ — CLOS.

@@ -3,10 +3,11 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, open
   readFileSync, readdirSync, realpathSync, unlinkSync, renameSync, rmdirSync, writeFileSync,fchmodSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import {homedir} from 'node:os';
+import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge-observation-statistics.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.3.1';
+export const VERSION = '2.3.2';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
@@ -110,7 +111,7 @@ export function projectErasure(value, scope) {
   const related=node=>own(node)||typeof node==='string'&&unambiguousId(node)&&ids.has(node);
   const visit = (node,parentKey='') => {
     if (Array.isArray(node)) {
-      if (node.length === 2 && unambiguousId(node[0]) && ids.has(node[0])) return undefined;
+      if (!identityLists.has(parentKey) && node.length === 2 && unambiguousId(node[0]) && ids.has(node[0])) return undefined;
       return node.filter(item=>!(identityLists.has(parentKey)&&typeof item==='string'&&ids.has(item))&&
         !(record(item)&&contains(item,own)&&!contains(item,foreign))).map(item=>visit(item,parentKey)).filter(item => item !== undefined);
     }
@@ -118,8 +119,16 @@ export function projectErasure(value, scope) {
     if(foreign(node)&&contains(node,related))fail('erasure-foreign-reference');
     const ownedPath=typeof node.name==='string'&&node.name.startsWith('runs/')&&scope.runIds.includes(node.name.split('/')[1]);
     if (own(node)||ownedPath) { if (foreign(node)||typeof node.directory==='string'&&node.directory!==scope.workspace) fail('erasure-foreign-reference'); return undefined; }
-    const result = Object.fromEntries(Object.entries(node).filter(([key]) => !(ids.has(key)&&unambiguousId(key))).map(([key,item]) => [key,visit(item,key)])
+    const result = Object.fromEntries(Object.entries(node).filter(([key]) => !(ids.has(key)&&unambiguousId(key))).map(([key,item]) => [key,key==='integrationOwner'&&ids.has(item)?null:visit(item,key)])
       .filter(([,item]) => item !== undefined));
+    if (record(node.bundle) && node.bundle.schemaVersion===1 && typeof node.bundle.sourceId==='string' &&
+        typeof node.bundle.datasetId==='string' && typeof node.hash==='string') {
+      try {
+        validateBundle(node.bundle,scope.workspace);validateBundle(result.bundle,scope.workspace);
+        if (observationDigest(node.bundle)!==node.hash) fail('erasure-statistics-import-invalid');
+        result.hash=observationDigest(result.bundle);
+      } catch { fail('erasure-statistics-import-invalid'); }
+    }
     if((Object.hasOwn(node,'signature')||Object.hasOwn(node,'sealDigest'))&&
       canonicalContinuityDigest(node)!==canonicalContinuityDigest(result))fail('erasure-signed-format-uncovered');
     if (result.protocol === 'cab-continuity-v1' && Object.hasOwn(result,'value')) {

@@ -1279,3 +1279,51 @@ for(const variant of ['clean','parent-state','foreign','context','version','old-
  if(variant!=='clean'){assert.throws(()=>h.r.withdrawRejectedAttachedShell(run.runId,child.operationId,proof,pd,{allowReference:true,allowSingleton:true}),/attached-withdrawal/);assert.deepEqual(h.r.resourceState,before);return;}
  assert.equal(h.r.withdrawRejectedAttachedShell(run.runId,child.operationId,proof,pd,{allowReference:true,allowSingleton:true}).state,'CANCELLED');assert.deepEqual(h.r.resourceState.accesses,before.accesses);assert.deepEqual(h.r.resourceState.revisions,before.revisions);assert.deepEqual(op.decision,before.operations[child.operationId].decision);await h.restart();assert.equal(h.r.resourceState.operations[child.operationId].state,'CANCELLED');assert.deepEqual(h.r.resourceState.accesses,before.accesses);
 });
+
+
+test('SGS REPORT reserves its canonical report and candidate, never global files',async(t)=>{
+  const h=await fixture(t);const run=h.reserve('a',[file('source')]);
+  const op=h.prepare(run,'sgs-publish');const access=h.acquire(run,op);h.start(run,op);h.complete(run,op);
+  const reportFile='openspec/changes/archive/2026-11-05-change-a/STATISTICS.md';
+  h.r.publish('a',{version:run.version,transactionId:'sgs-publish',operationId:access.accessId,
+    token:access.token,fencing:access.fencing,outcome:'COMPLETED',proofRevisions:op.expectedRevisions,
+    evidence:['archive and product validated'],reportFile});
+  const current=h.r.runs.get('a');
+  assert.deepEqual(current.resources,[{key:'file:'+reportFile,mode:'write'},
+    {key:'file:'+reportFile+'.sgs-candidate',mode:'write'}]);
+  assert.doesNotThrow(()=>h.r.scope('a',current.version,[{key:'file:'+reportFile+'.sgs-candidate',mode:'write'}]));
+  for(const name of ['STATISTICS.md','STATISTICS_CONTRIBUTIONS.json','.STATISTICS.lock','tasks.md'])
+    assert.throws(()=>h.r.scope('a',current.version,[{key:'file:'+name,mode:'write'}]),/outside-reservation/);
+  await h.restart();assert.deepEqual(h.r.runs.get('a').resources,current.resources);
+});
+
+
+test('legacy REPORT remains readable and a closing upgrade adds only its candidate',async(t)=>{
+  const h=await fixture(t);const run=h.reserve('a',[file('source')]);
+  const op=h.prepare(run,'legacy-sgs');const access=h.acquire(run,op);h.start(run,op);h.complete(run,op);
+  const reportFile='openspec/changes/archive/2026-11-05-change-a/STATISTICS.md';
+  h.r.publish('a',{version:run.version,transactionId:'legacy-sgs',operationId:access.accessId,
+    token:access.token,fencing:access.fencing,outcome:'COMPLETED',proofRevisions:op.expectedRevisions,
+    evidence:['validated'],reportFile});
+  const current=h.r.runs.get('a');current.resources=current.resources.slice(0,1);
+  current.exclusiveResources=current.exclusiveResources.slice(0,1);h.r.persist();
+  await h.restart();const restored=h.r.runs.get('a');assert.equal(restored.resources.length,1);
+  const upgraded=h.r.closing('a',{version:restored.version,reportFile,evidence:['explicit REPORT candidate upgrade']});
+  assert.deepEqual(upgraded.resources,[{key:'file:'+reportFile,mode:'write'},
+    {key:'file:'+reportFile+'.sgs-candidate',mode:'write'}]);
+  await h.restart();assert.equal(h.r.runs.get('a').resources.length,2);
+});
+
+test('report target accepts an identified existing variant and refuses business artifacts',async(t)=>{
+  const h=await fixture(t);const run=h.reserve('a',[file('source')]);
+  const directory=join(h.directory,'openspec/changes/archive/2026-11-05-change-a');mkdirSync(directory,{recursive:true});
+  const name='openspec/changes/archive/2026-11-05-change-a/stats-history.md';
+  assert.throws(()=>h.r.reportTarget(run,name),/report-target-invalid/);
+  writeFileSync(join(h.directory,name),'# Statistiques historiques\n');
+  assert.equal(h.r.reportTarget(run,name),name);
+  for(const file of ['tasks.md','proposal.md','spec.md']){
+    const target='openspec/changes/archive/2026-11-05-change-a/'+file;
+    writeFileSync(join(h.directory,target),'historical business artifact');
+    assert.throws(()=>h.r.reportTarget(run,target),/report-target-invalid/);
+  }
+});

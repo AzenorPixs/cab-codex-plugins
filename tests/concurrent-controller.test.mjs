@@ -727,7 +727,12 @@ test('réconcilie un accès HELD restauré depuis la décision durable sans rejo
  h.native.busy[run.sessionId]={type:'busy'};
  assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.busy={};
  h.native.permissions.push({id:'pending-restored-access',sessionID:run.sessionId,permission:'bash',tool:{callID:'call-pending'}});
- assert.equal((await h.post(route,payload)).body.error,'native-session-not-quiescent');h.native.permissions=[];
+ // SSE may already have exposed the permission as a local pending effect.
+ // Both quiescence guards deny reconciliation without issuing another once.
+ const pendingPermission=await h.post(route,payload);
+ assert.equal(pendingPermission.status,409);
+ assert.ok(['run-not-quiescent','native-session-not-quiescent'].includes(pendingPermission.body.error));
+ h.native.permissions=[];
  await waitFor(async()=>{const status=(await h.get('/runs/'+run.runId+'/status')).body,job=status.job||{};
   return !job.currentCabMandate&&!job.recovery&&!job.modelTransition&&status.undecidedValidationCount===0&&
    status.unmatchedNativePermissionCount===0;});
@@ -2133,7 +2138,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.3.1');
+  assert.equal(initialized.result.serverInfo.version, '2.3.2');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -4293,7 +4298,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.3.1'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.3.2'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);

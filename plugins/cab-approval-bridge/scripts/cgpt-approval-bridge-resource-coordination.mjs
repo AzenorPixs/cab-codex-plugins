@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.3.1';
+export const VERSION = '2.3.2';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -1681,6 +1681,8 @@ export class ResourceRunRegistry extends RunRegistry {
     }
     this.validateExpected(payload.proofRevisions, access.resources);
     const reportFile = payload.reportFile === undefined ? undefined : this.reportTarget(run, payload.reportFile);
+    const reportResources=reportFile ? this.reportResources(run,reportFile) : undefined;
+    if (reportResources) this.checkConflicts({...run,resources:reportResources});
     this.finishAccess(access, payload.outcome);
     this.referenceVersion++;
     run.referenceVersion = this.referenceVersion; run.publishedReferenceVersion = this.referenceVersion;
@@ -1688,7 +1690,7 @@ export class ResourceRunRegistry extends RunRegistry {
     run.pendingWrites = {};
     if (reportFile) {
       run.phase = 'REPORT'; run.reportFile = reportFile;
-      run.resources = [{ key: `file:${reportFile}`, mode: 'write' }]; run.exclusiveResources = [run.resources[0].key];
+      run.resources = reportResources; run.exclusiveResources = reportResources.map(r=>r.key);
     }
     run.version = ++this.sequence;
     const receipt = { transactionId: payload.transactionId, runId, contextId: run.contextId, inputDigest,
