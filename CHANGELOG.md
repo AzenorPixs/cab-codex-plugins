@@ -1,3 +1,9 @@
+## 2.3.1 — 2026-11-05
+
+- Clôture documentaire du change de statistiques réutilisables : archivage, qualification et publication 2.3.0 distingués des disponibilités des forges.
+- Maintien du rapport statistique individuel et de l’historique ; un delta global impossible reste signalé sans bloquer la clôture, conformément à SCM.
+- Versions de distribution alignées sur 2.3.1 ; aucun nouveau service ni activation CABU.
+
 ## 2.3.0 — 2026-11-05
 
 - Moteur Python SGS réutilisable, skill embarqué CAB et commande `/SGS`.

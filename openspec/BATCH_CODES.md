@@ -2,18 +2,24 @@
 
 ## Statistiques réutilisables SCM — 5 novembre 2026
 
-[add-reusable-project-statistics](changes/archive/2026-11-05-add-reusable-project-statistics/), code non attribué : ARCHIVÉ.
+[add-reusable-project-statistics](changes/archive/2026-11-05-add-reusable-project-statistics/), code non attribué : ARCHIVÉ — CLOS.
 Moteur Python, skill CAB, commande SGS et carte Statistiques du moniteur.
 Interface CLI/JSON agnostique des agents et orchestrateurs, avec QUERY sans
 mutation.185tests Python et1284tests Node réussis, Chromium/Firefox qualifiés ;
-177archives dans le global vérifié sous SGS1.19, contribution ajoutée une fois.
-Archivage et nettoyage du bilan réussis ; livraison SCM en cours.
-Aucune activation attestée. Voir QUALIFICATION.md du change.
+Archivage et nettoyage du bilan réussis. Publication GitHub2.3.0 vérifiée,
+commit af940d26 et branche réconciliée d2dd0b33 ; Forgejo indisponible, GitLab
+non configuré. Le global177archives a été vérifié sous le contrat du recalcul ;
+son empreinte diverge du SGS courant, sans bloquer la clôture. La clôture
+2.3.1 est qualifiée : rapport individuel amendé, DELTA global tenté et refusé
+pour contrat divergent, couple préservé. Cette limite ne bloque pas SCM.
+Toutes les versions courantes sont alignées sur 2.3.1 ; livraison via DIU et
+nouveau tag v2.3.1, sans activation.
+Voir QUALIFICATION.md du change pour la portée et les résultats datés.
 Attribution et normalisation définitive par ACL ultérieure.
 
 ```mermaid
 flowchart LR
-    reusableStatistics["add-reusable-project-statistics<br/>code non attribué — ARCHIVÉ"]
+    reusableStatistics["add-reusable-project-statistics<br/>code non attribué — ARCHIVÉ / CLOS"]
     classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
     class reusableStatistics provisional
 ```
