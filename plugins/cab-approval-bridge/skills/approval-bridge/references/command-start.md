@@ -1,4 +1,4 @@
-# Démarrage — CAB 2.2.38
+# Démarrage — CAB 2.2.39
 
 ## `/CAB start`
 

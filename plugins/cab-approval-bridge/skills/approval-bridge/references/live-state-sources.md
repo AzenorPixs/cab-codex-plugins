@@ -1,4 +1,4 @@
-# Sources d’état courantes — CAB 2.2.38
+# Sources d’état courantes — CAB 2.2.39
 
 ## Tableau des autorités
 

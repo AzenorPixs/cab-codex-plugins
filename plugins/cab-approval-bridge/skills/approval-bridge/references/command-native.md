@@ -1,4 +1,4 @@
-# Compléments natifs — CAB 2.2.38
+# Compléments natifs — CAB 2.2.39
 
 ## Récupération contrôlée de session dans le même RUN
 

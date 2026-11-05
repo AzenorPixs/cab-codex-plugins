@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
 import { ContinuityStore, canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.38';
+export const VERSION = '2.2.39';
 const fail = code => { throw Object.assign(new Error(code), {code}); };
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const valid = value => Array.isArray(value?.shells) && value.shells.length <= 5000 &&

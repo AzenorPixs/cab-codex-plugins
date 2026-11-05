@@ -1,5 +1,11 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.39 — 2026-11-05
+
+- Prévalidation par langage des payloads rendus et constantes sensibles aux échappements.
+- Rapports de build sérialisés avec JSON strict, distinction artefact construit/rapport échoué et reprise sans rebuild implicite.
+- Documentation distribuée uniquement, runtime inchangé hors versions.
+
 ## 2.2.38 — 2026-11-05
 
 - Skill/plugin/commande : diagnostic autonome par cas, sans relecture globale.
