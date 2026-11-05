@@ -1,4 +1,25 @@
-# Soumettre, décider et acquérir — CAB 2.2.36
+# Soumettre, décider et acquérir — CAB 2.2.37
+
+## Révisions effectives et scripts composés
+
+Avant request_validation, lire les révisions courantes de /runs/<run>/locks.
+Pour chaque clé du manifeste, appliquer revision(key) : maximum de toutes les
+révisions des clés qui la recouvrent ou qu’elle recouvre, avec zéro par défaut
+lorsqu’aucune révision correspondante n’existe. Un enfant absent du tableau ou du disque peut donc
+hériter d’une révision du parent. Exemple : file:output/qualification=11369 implique
+son enfant file:output/qualification/cache=11369 s’il n’a pas de révision supérieure. Ne jamais
+utiliser revisions[child] ?? 0 sans examen des recouvrements. Recalculer après
+retrait/libération, puis conserver les révisions approuvées pour cette unité.
+
+Un script multiligne ou composé peut produire plusieurs cibles de permission
+natives, même s’il est court. La garde exige une cible exacte ; ne pas assouplir
+cette comparaison ni approuver séparément les fragments. Préparer dès l’origine
+le [transport scellé](exact-shell-carrier.md), puis utiliser seulement sa command
+dans la validation et l’appel shell. Si une ancienne tentative est déjà pendante,
+la rejeter et la retirer par la voie qualifiée avant une nouvelle unité.
+Une erreur de révision terminale NOT_ADMITTED sans admission ni effet n’exige
+pas d’inventer un retrait local ; conserver son reçu et préparer les nouvelles
+identités aux révisions effectives fraîches. PENDING ne permet pas de resoumettre.
 
 Parcours propriétaire d’une unité déjà autorisée. Il complète
 [les mandats](technical-mandates.md) et [les accès](concurrent-runs.md).
