@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.32';
+export const VERSION = '2.2.33';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -923,18 +923,21 @@ export class ResourceRunRegistry extends RunRegistry {
     this.persist();
     return copy(op);
   }
-  attachedWithdrawalAccess(runId, operationId, {allowReference=false}={}) {
+  attachedWithdrawalAccess(runId, operationId, {allowReference=false,allowSingleton=false}={}) {
     const run=this.runs.get(runId),op=this.resourceState.operations[operationId];
     const linked=op && Object.values(this.resourceState.accesses).filter(a=>
       a.accessId===op.accessId || a.operationIds.includes(operationId));
     const access=linked?.[0];
+    const singleton=allowSingleton===true && Boolean(access) && access.accessId===operationId &&
+      access.operationIds.length===1 && access.operationIds[0]===operationId &&
+      !access.timeoutQuarantine && !this.restoredAccesses.has(access.accessId);
     if(!run || !op || op.runId!==runId || op.contextId!==run.contextId || op.version!==run.version ||
         op.sessionId!==run.sessionId || op.state!=='PREPARED' || op.decision?.status!=='approved' ||
         op.native || op.nativeResult || op.onceAcknowledged===true || linked.length!==1 ||
-        access.accessId===operationId || access.accessId!==op.accessId || access.runId!==runId ||
+        (access.accessId===operationId && !singleton) || access.accessId!==op.accessId || access.runId!==runId ||
         access.contextId!==run.contextId || access.version!==run.version || access.state!=='HELD' ||
         (!access.operationIds.includes(operationId) && !allowReference) ||
-        access.operationIds.length<(access.operationIds.includes(operationId)?2:1) ||
+        access.operationIds.length<(singleton?1:access.operationIds.includes(operationId)?2:1) ||
         access.operationIds.some(id=>{const other=this.resourceState.operations[id];return !other ||
           other.runId!==runId || other.contextId!==run.contextId || other.version!==run.version ||
           other.sessionId!==op.sessionId && !(other.state==='CANCELLED' &&

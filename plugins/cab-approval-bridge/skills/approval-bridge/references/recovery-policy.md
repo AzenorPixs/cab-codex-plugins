@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.32
+# Récupération par RUN — CAB 2.2.33
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -97,3 +97,6 @@ relire le même actionId, sans lancer une seconde libération. Une intention
 sans preuve d’effet reste outcome-unverified. Un releaseDigest exact permet
 la reprise du reçu après crash, sans rejouer l’effet ni réexposer le secret.
 Les baux de test et autres accès ne sont pas libérés par cette action.
+
+Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
+[retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.

@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Retrait d’un membre dédié SCM 2.2.33
+
+[withdraw-rejected-dedicated-access-member](openspec/changes/archive/2026-11-05-withdraw-rejected-dedicated-access-member/), code non attribué : ARCHIVÉ, source2.2.33 qualifiée.
+Garde recovery monomembre dédiée sous ACK204, retrait puis libération sous
+reçus distincts ;918tests finaux uniques réussis. Parent conservé au retrait,
+aucun token/once inventé. Publication, activation et récupération opérante
+distinctes ; voir QUALIFICATION.md. Attribution/normalisation ACL ultérieure.
+
+```mermaid
+flowchart LR
+    dedicatedWithdrawal["withdraw-rejected-dedicated-access-member<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class dedicatedWithdrawal provisional
+```
+
 ## Libération déléguée après compactage SCM 2.2.32
 
 [delegate-held-access-release-without-token](openspec/changes/archive/2026-11-04-delegate-held-access-release-without-token/), code non attribué : ARCHIVÉ, source2.2.32 qualifiée.

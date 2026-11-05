@@ -1,6 +1,6 @@
-# Syntaxe et transport — CAB 2.2.32
+# Syntaxe et transport — CAB 2.2.33
 
-## RUN concurrents CAB 2.2.32
+## RUN concurrents CAB 2.2.33
 
 Lire [le contrat concurrent](concurrent-runs.md) et le noyau protocol-core.md avant pilotage. Un OpenCode et un broker stdio restent partagés ; change/intention, session, job, décisions, preuves et gates sont propres au RUN. Réserver par POST /runs/reserve avant préparation et armer POST /runs/<run_id>/job/arm ; garder le checkpoint output/<prompt>/<run_id>/state.json.
 
@@ -8,7 +8,7 @@ Le manifeste déclare la portée ; les accès actifs sont temporaires. Les lectu
 
 Chaque request_validation inclut coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Préparer le contenu exact, obtenir la décision, acquérir juste avant effet et conserver ask/once. Une base périmée exige une nouvelle demande. Terminer les effets natifs corrélés avant /locks/release ; aucun timeout ni idle ne libère un effet inconnu.
 
-### Réservation d’un environnement de test avec accès disjoints — CAB 2.2.32
+### Réservation d’un environnement de test avec accès disjoints — CAB 2.2.33
 
 `/test-resources/acquire` ne doit pas être bloqué par les seuls accès actifs
 HELD, EXECUTING, UNKNOWN ou WAITING du même RUN lorsque leurs ressources sont

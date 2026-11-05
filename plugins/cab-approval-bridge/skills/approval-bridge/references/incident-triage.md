@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.32
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.33
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -79,3 +79,6 @@ Identifier l’approval et le sous-état via broker_health/list_pending, puis
 La présence de services READY ne remplace pas la readiness du seul RUN.
 
 Accès HELD non restauré, membres terminaux et token perdu : [libération owner](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage), sans restitution implicite des baux ou effets inconnus.
+
+Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
+[retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.

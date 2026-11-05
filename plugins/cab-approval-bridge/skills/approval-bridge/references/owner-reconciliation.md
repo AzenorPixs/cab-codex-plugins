@@ -1,4 +1,4 @@
-# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.32
+# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.33
 
 Dans le change et les moyens déjà autorisés, l’orchestrateur propriétaire
 examine les preuves, décide la réconciliation qualifiée et poursuit le mandat.
@@ -66,3 +66,6 @@ une confirmation générique pour une réconciliation déjà déléguée.
 
 Token perdu par compactage, parent HELD non restauré et tous membres terminaux :
 [release-access propriétaire](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage), sous les gardes ordinaires et sans exposition du token.
+
+Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
+[retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.

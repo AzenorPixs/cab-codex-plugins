@@ -1,4 +1,4 @@
-# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.32
+# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.33
 
 Le propriétaire traite ce cas dans le périmètre validé sans solliciter le
 correcteur. Le parent peut protéger un effet antérieur incertain : ne jamais
@@ -127,3 +127,33 @@ relire le même actionId ; la reprise est durable sans second reject ou once.
 Une différence de fin de ligne entre l’input approuvé et celui réellement
 présenté reste une divergence : aucun digest n’est normalisé. Corriger seulement
 la prochaine unité neuve après revue de son input exact et des révisions fraîches.
+
+## Accès dédié à un seul membre refusé avant once
+
+Le même retrait propriétaire couvre l’accès HELD non restauré/non quarantiné
+dont accessId égale l’operationId et operationIds contient exactement ce seul
+membre PREPARED/APPROVED. Le token peut être absent du contexte après compactage.
+La preuve reste un unique shell/edit refusé, aborted/executed=false, rejet
+privé CAB ACKNOWLEDGED HTTP204 exact, même SID idle et zéro permission, sans
+native/nativeResult/once. La divergence d’input n’est jamais rendue exécutable.
+
+1. Relire job/admission/opération/accès puis preuve native de refus. L’accès
+   doit appartenir au même RUN/contexte/version et couvrir les ressources.
+2. Établir au besoin une policy owner courante avec withdraw-unissued-validation
+   et release-access dans le mandat existant, sans nouvelle question humaine.
+3. Avec plan et nativeBoundaryDigest frais, appliquer withdraw-unissued-validation
+   sur l’operationId et conserver son reçu. Le contrôleur relit deux frontières
+   et l’empreinte du parent ; seul le membre devient CANCELLED, APPROVED reste
+   historique. L’accès, token/fencing, membership, révisions et baux sont inchangés.
+4. Relire l’état et GET recovery. release-access n’est proposé qu’après ce
+   retrait et sous ses propres gardes ; le propriétaire peut alors demander
+   outcome RECONCILED avec ses preuves, sans token reconstruit ou exposé.
+5. Exiger deux reçus distincts : CANCELLED puis RELEASED/token absent, aucune
+   once/nativeResult nouvelle et protections indépendantes conservées. Après
+   réponse perdue, relire le même actionId ; ne rejouer ni reject, ni edit.
+
+Restauré/quarantiné, membre ou accès étranger, SID/version/contexte divergent,
+effet natif, once, ACK manquant, cible différente, outil supplémentaire ou
+frontière changée restent refusés. Si un redémarrage non certifié intervient
+entre les deux étapes, la garde restored reste applicable : ne pas forcer une
+libération ordinaire. Ni le retrait ni RECONCILED ne valent succès de l’édition.
