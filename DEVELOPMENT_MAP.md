@@ -1,5 +1,21 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Payloads générés SCM 2.2.39
+
+[document-generated-build-payload-preflight](openspec/changes/archive/2026-11-05-document-generated-build-payload-preflight/), code non attribué : ARCHIVÉ, documentation qualifiée.
+Prévalidation des octets rendus par langage,constants d’échappement etJSON
+produit correctement ; reprise sur artefact observé sans rebuild implicite.
+255tests finaux ciblés sur70empreintes, runtime inchangé hors versions.
+Publication,CABU et reprise métier séparées ; voir QUALIFICATION.md.
+Convergence ACL ultérieure, aucune attribution de code implicite.
+
+```mermaid
+flowchart LR
+    generatedPayload["document-generated-build-payload-preflight<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class generatedPayload provisional
+```
+
 ## Diagnostics autonomes SCM 2.2.38
 
 [document-autonomous-owner-diagnostics](openspec/changes/archive/2026-11-05-document-autonomous-owner-diagnostics/), code non attribué : ARCHIVÉ, contrat documentaire qualifié.

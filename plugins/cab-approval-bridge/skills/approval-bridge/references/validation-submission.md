@@ -1,4 +1,4 @@
-# Soumettre, décider et acquérir — CAB 2.2.38
+# Soumettre, décider et acquérir — CAB 2.2.39
 
 ## Révisions effectives et scripts composés
 
