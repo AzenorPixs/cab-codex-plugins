@@ -735,6 +735,41 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.equal(singletonFinal.state,'CANCELLED');assert.equal(singletonFinal.native,undefined);assert.equal(singletonFinal.nativeResult,undefined);assert.equal(singletonFinal.decision.status,'approved');
     console.log(JSON.stringify({dedicatedEditWithdrawal:true,nativeRejectionAck:true,parentPreservedBeforeRelease:true,noOnce:true,noEdit:true,ownerReleaseWithoutToken:true}));
 
+    { // Write shares the edit permission category but keeps its own exact schema.
+    const writeApproval={...singletonApproval,requestId:'native-singleton-write-request',approval_id:'native-singleton-write-approval',
+      operation_id:'native-singleton-write-operation',operation_digest:createHash('sha256').update('native-singleton-write-operation').digest('hex'),
+      tool_input_sha256:nativeToolInputDigest({path:singletonPath,content:'approved write'})};
+    const writeEnd=dispatched+2;
+    queue.push(mcp('request_validation',writeApproval),{tool:'write',input:{path:singletonPath,content:'unapproved write'}});
+    await client.prompt(singletonSession.id,nativeCodingMandate('Only queued write request and input, no other effect.'));
+    await until(async()=>(await http('/runs/native-singleton/status')).undecidedValidationCount===1,'write withdrawal admission');
+    await http('/runs/native-singleton/decision/'+writeApproval.requestId,{decision:'approved'});
+    const writeAccess=await http('/runs/native-singleton/locks/acquire',{version:singletonRun.version,operationId:writeApproval.operation_id,
+      operationDigest:writeApproval.operation_digest,resources:writeApproval.resources,expectedRevisions:writeApproval.expected_revisions});
+    await until(async()=>(await http('/runs/native-singleton/status')).blockedNativeInputs.some(x=>x.requestId===writeApproval.requestId),'write divergent input guard');
+    const writePermission=(await singletonClient.permissions(workspace,{sessionIds:[singletonSession.id],verifyInputs:true})).find(p=>p.sessionID===singletonSession.id);
+    assert.ok(writePermission);assert.equal(writePermission.permission,'edit');
+    await singletonClient.replyPermission(singletonSession.id,writePermission.id,'reject');
+    await until(async()=>!(await client.activeSessions())[singletonSession.id]&&dispatched===writeEnd,'write refusal terminal');
+    const writeEvidence=await http('/runs/native-singleton/recovery/native-evidence?operationId='+writeApproval.operation_id),writePlan=await http('/runs/native-singleton/recovery');
+    assert.equal(writeEvidence.calls.length,1);assert.equal(writeEvidence.calls[0].tool,'write');assert.equal(writeEvidence.calls[0].nativeTool,'write');
+    assert.equal(writeEvidence.replyReceipts.length,1);assert.equal(writeEvidence.replyReceipts[0].httpStatus,204);
+    const writeBefore=(await http('/runs')).coordination.accesses[writeAccess.accessId];
+    const writeWithdraw=await http('/runs/native-singleton/recovery/action',{actionId:'native-write-withdraw',ownerId:singletonRun.ownerId,
+      policyId:'native-singleton-policy',boundaryDigest:writePlan.boundaryDigest,action:'withdraw-unissued-validation',targetId:writeApproval.operation_id,
+      input:{nativeBoundaryDigest:writeEvidence.nativeBoundaryDigest,evidence:['write native rejection ACK and exact target reviewed']}});
+    assert.equal(writeWithdraw.state,'CANCELLED');assert.deepEqual((await http('/runs')).coordination.accesses[writeAccess.accessId],writeBefore);
+    const writeReleasePlan=await http('/runs/native-singleton/recovery');
+    const writeReleased=await http('/runs/native-singleton/recovery/action',{actionId:'native-write-release',ownerId:singletonRun.ownerId,
+      policyId:'native-singleton-policy',boundaryDigest:writeReleasePlan.boundaryDigest,action:'release-access',targetId:writeAccess.accessId,
+      input:{outcome:'RECONCILED',evidence:['write rejected and withdrawn before once']}});
+    assert.equal(writeReleased.state,'RELEASED');assert.equal(writeReleased.token,undefined);assert.equal(readFileSync(singletonPath,'utf8'),'old');
+    const writeFinal=(await http('/runs')).coordination.operations[writeApproval.operation_id];
+    assert.equal(writeFinal.state,'CANCELLED');assert.equal(writeFinal.decision.status,'approved');assert.equal(writeFinal.native,undefined);assert.equal(writeFinal.nativeResult,undefined);
+    console.log(JSON.stringify({nativeWriteWithdrawal:true,permissionCategory:'edit',schema:'path/content',exactAck:true,parentUnchangedBeforeRelease:true,noWriteEffect:true,noOnce:true}));
+    }
+
+
     // Run cache qualification after normal multi-RUN setup: an unowned legacy shell must not bypass its startup gate.
     const effectiveAskProbe=await makeSession('saved grant versus effective ASK');
     const effectiveAskCommand="node -e \"console.log('CAB_PRIVATE_SAVED_GRANT')\"";

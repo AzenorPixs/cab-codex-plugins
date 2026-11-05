@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.33
+# Index du protocole CAB 2.2.34
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -66,3 +66,6 @@ Accès HELD non restauré, membres terminaux et token perdu : [libération owner
 
 Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 [retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.
+
+Write V2 refusé (permission edit), call/ACK masqués dans un ancien diagnostic :
+[preuve et retrait qualifiés](approved-attached-shell-retirement.md#write-v2-refusé-sous-permission-edit), sans conversion ni exécution de l’input divergent.

@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Retrait Write V2 refusé SCM 2.2.34
+
+[withdraw-rejected-native-write](openspec/changes/archive/2026-11-05-withdraw-rejected-native-write/), code non attribué : ARCHIVÉ, source2.2.34 qualifiée.
+Projection Write/call/ACK et preuve path/content sous permissionedit, sans
+conversion ni exécution d’input divergent ;975tests finaux uniques réussis sur
+72empreintes de code inchangées. Parent conservé au retrait, libération séparée.
+Publication,activation et choix owner distincts ; voir QUALIFICATION.md. ACL ultérieure.
+
+```mermaid
+flowchart LR
+    rejectedWrite["withdraw-rejected-native-write<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class rejectedWrite provisional
+```
+
 ## Retrait d’un membre dédié SCM 2.2.33
 
 [withdraw-rejected-dedicated-access-member](openspec/changes/archive/2026-11-05-withdraw-rejected-dedicated-access-member/), code non attribué : ARCHIVÉ, source2.2.33 qualifiée.

@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.2.33
+# Noyau du contrat — CAB 2.2.34
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -59,6 +59,9 @@ existantes ; le [parcours de soumission](validation-submission.md) traite
 l’unité ordinaire. L’orchestrateur demande l’acquisition partagée au contrôleur
 après APPROVED ; seul le contrôleur applique les gardes, persiste l’accès et
 émet once. L’automatisme est limité à l’admission exclusive prouvée.
+Les outils natifs edit et write partagent la catégorie de permission edit,
+mais conservent leurs schémas et empreintes distincts. Un retrait après rejet
+ne rend jamais un input divergent exécutable ; suivre la référence du cas.
 Le compteur de permissions non appariées n’est pas le total des permissions
 natives, et une projection omettant un champ ne prouve pas son absence durable.
 
