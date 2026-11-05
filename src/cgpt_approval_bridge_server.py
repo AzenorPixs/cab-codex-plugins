@@ -70,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.2.35"
+SERVER_VERSION = "2.2.36"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
@@ -106,6 +106,8 @@ DEFAULT_POLL_INTERVAL_SECONDS = 5
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 
 CONTROLLER_HTTP_TIMEOUT_SECONDS = 2
+# Notification admission includes native evidence checks; keep below its lease.
+CONTROLLER_NOTIFICATION_TIMEOUT_SECONDS = 10
 CONTROLLER_TCP_TIMEOUT_SECONDS = 1
 
 NOTIFICATION_RETRY_INITIAL_SECONDS = 5
@@ -2340,7 +2342,7 @@ def notify_controller(
         with request.urlopen(
             http_request,
             timeout=(
-                CONTROLLER_HTTP_TIMEOUT_SECONDS
+                CONTROLLER_NOTIFICATION_TIMEOUT_SECONDS
             ),
         ) as response:
             status = response.status
