@@ -2,7 +2,7 @@
 
 ## Portée
 
-Pour un nouveau mandat Bash long, le codeur propose le corps ; l’orchestrateur le relit et valide ses octets/syntaxe/ressources. Il peut ensuite le transmettre directement au contrôleur comme payload scellé. Le modèle ne recopie plus ce long corps dans request_validation et shell : il émet uniquement l’invocation courte retournée. Cette invocation reste exacte et peut être refusée si le modèle l’altère ; aucune correction silencieuse n’est faite.
+Pour un nouveau mandat Bash long, multiligne ou composé, le codeur propose le corps ; l’orchestrateur le relit et valide ses octets/syntaxe/ressources. Il peut ensuite le transmettre directement au contrôleur comme payload scellé. Le modèle ne recopie plus ce long corps dans request_validation et shell : il émet uniquement l’invocation courte retournée. Cette invocation reste exacte et peut être refusée si le modèle l’altère ; aucune correction silencieuse n’est faite.
 
 Cette voie n’utilise pas POST session.shell et n’installe aucun plugin natif. Elle conserve request_validation, décision explicite, révisions, accès exclusif et permission native once. Elle concerne un payload explicitement revu comme Bash exécuté par /bin/bash -c ; aucune équivalence implicite avec un autre shell ou un ancien mandat n’est supposée. Les commandes ordinaires restent inchangées.
 
@@ -49,3 +49,15 @@ Qualification exacte2.2.0 : payload9860octets absent des requêtes du fournisseu
 ### Examen du contenu
 
 L’orchestrateur examine le corps et l’invocation avant approbation. Pour une décision automatique, CAB transmet au validateur `operation.shellPayload` : transport, stageId, SHA256, taille et corps, issus du stage privé exactement corrélé. Le modèle de codage ne fournit pas cette preuve par texte libre et ne recopie pas le corps dans ses arguments shell. Ne jamais approuver la seule apparence générique du lanceur sans examiner ses effets réels.
+
+## Plusieurs cibles natives malgré un script court
+
+Le choix du transport ne dépend pas uniquement du nombre d’octets. OpenCode
+peut découper un script composé en plusieurs ressources de permission ; ces
+fragments ne remplacent pas la commande complète examinée. L’erreur
+opencode-permission-target-invalid dans ce cas est une garde légitime.
+Avant once, le propriétaire utilise le rejet natif avec reçu privé, vérifie
+la fin et l’absence d’effet, puis le retrait APPROVED/HELD et la libération
+séparée selon [la procédure](approved-attached-shell-retirement.md). Il relit
+ensuite les révisions effectives et prépare un nouveau stage et de nouvelles
+identités. Aucune réinterprétation de l’ancienne approbation ni once rejouée.

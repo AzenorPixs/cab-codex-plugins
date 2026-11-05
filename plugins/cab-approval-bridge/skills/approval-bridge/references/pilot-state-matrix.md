@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.36
+# Grille de décision du pilotage — CAB 2.2.37
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
