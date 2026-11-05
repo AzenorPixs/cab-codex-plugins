@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { createOpenCodeV2Client, nativeToolInputDigest, nativeCodingMandate, diagnoseCodingTurn } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
+import {runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
 const binary = process.env.CAB_TEST_OPENCODE;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -569,6 +570,12 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     await http('/runs/native-peer/test-resources/acquire',{version:peerRun.version,transactionId:'peer-lease',
       resources:[{key:'browser:fixture/peer',mode:'write'}],evidence:['isolated fixture reservation; no browser effect']});
     const peerBefore=(await http('/runs/native-peer/test-resources')).reservations;
+    const singletonSession=await makeSession('dedicated edit withdrawal'),singletonPath=join(workspace,'singleton-withdraw.txt');
+    writeFileSync(singletonPath,'old');
+    const singletonRun=await http('/runs/reserve',{runId:'native-singleton',ownerId:'native-singleton-owner',sessionId:singletonSession.id,
+      directory:workspace,changeId:'synthetic-singleton',selectionKey:'synthetic-singleton',dependsOn:[],resources:[{key:'file:singleton-withdraw.txt',mode:'write'}]});
+    await http('/runs/native-singleton/job/arm',{jobId:'job-singleton',sessionId:singletonSession.id,directory:workspace,
+      changeId:'synthetic-singleton',strictCommands:true,criteria:['reject divergent edit then withdraw only dedicated member']});
 
     // Background sous CAB : le start retourne, le port reste EXECUTING jusqu'à Shell.Info terminal.
     current=(await http('/runs')).runs.find(r=>r.runId===run.runId);
@@ -688,6 +695,45 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.equal(dispatched,pilotEnd,'restart and replay issue no provider or native effect');
     console.log(JSON.stringify({sameRunPilotHandoff:true,historicalApprovalsAndAccessesPreserved:true,idempotentReceipt:true,noHandoffNativePermission:true,certifiedRestartWithHandoffReceipt:true}));
 
+
+
+    // Real dedicated edit rejected before once: two owner actions, no transported token.
+    const singletonInput={path:singletonPath,oldString:'old',newString:'approved'};
+    const singletonApproval={...approval,run_id:singletonRun.runId,reservation_version:singletonRun.version,
+      session_id:singletonSession.id,change_id:'synthetic-singleton',requestId:'native-singleton-request',approval_id:'native-singleton-approval',
+      operation_id:'native-singleton-operation',operation_digest:createHash('sha256').update('native-singleton-operation').digest('hex'),
+      resources:singletonRun.resources,expected_revisions:{'file:singleton-withdraw.txt':0},files:['singleton-withdraw.txt'],commands:[],
+      tool_input_sha256:nativeToolInputDigest(singletonInput)};
+    const singletonEnd=dispatched+2;
+    queue.push(mcp('request_validation',singletonApproval),{tool:'edit',input:{...singletonInput,newString:'unapproved'}});
+    await client.prompt(singletonSession.id,nativeCodingMandate('Run only queued divergent edit; no other action.'));
+    await until(async()=>(await http('/runs/native-singleton/status')).undecidedValidationCount===1,'singleton admission');
+    await http('/runs/native-singleton/decision/'+singletonApproval.requestId,{decision:'approved'});
+    const singletonAccess=await http('/runs/native-singleton/locks/acquire',{version:singletonRun.version,operationId:singletonApproval.operation_id,
+      operationDigest:singletonApproval.operation_digest,resources:singletonApproval.resources,expectedRevisions:singletonApproval.expected_revisions});
+    await until(async()=>(await http('/runs/native-singleton/status')).blockedNativeInputs.some(x=>x.requestId===singletonApproval.requestId),'singleton input guard');
+    const singletonPermission=(await client.permissions(workspace,{sessionIds:[singletonSession.id]})).find(p=>p.sessionID===singletonSession.id);
+    assert.ok(singletonPermission);
+    const singletonClient=createOpenCodeV2Client({baseUrl:base,directory:workspace,passwordFile,
+      permissionReceiptDirectory:join(runtimeStateDirectory(workspace,{stateHome:join(root,'private-state')}),'permission-replies')});
+    await singletonClient.replyPermission(singletonSession.id,singletonPermission.id,'reject');
+    await until(async()=>!(await client.activeSessions())[singletonSession.id]&&dispatched===singletonEnd,'singleton rejection terminal');
+    await http('/runs/native-singleton/recovery/policy',{policyId:'native-singleton-policy',ownerId:singletonRun.ownerId,version:singletonRun.version,
+      actions:['withdraw-unissued-validation','release-access'],resources:singletonRun.resources,authorization:'private fixture owner reviewed rejected edit before once'});
+    const singletonBefore=(await http('/runs')).coordination.accesses[singletonAccess.accessId];
+    const singletonEvidence=await http('/runs/native-singleton/recovery/native-evidence?operationId='+singletonApproval.operation_id),singletonPlan=await http('/runs/native-singleton/recovery');
+    const singletonWithdraw=await http('/runs/native-singleton/recovery/action',{actionId:'native-singleton-withdraw',ownerId:singletonRun.ownerId,
+      policyId:'native-singleton-policy',boundaryDigest:singletonPlan.boundaryDigest,action:'withdraw-unissued-validation',targetId:singletonApproval.operation_id,
+      input:{nativeBoundaryDigest:singletonEvidence.nativeBoundaryDigest,evidence:['exact native edit rejection ACK reviewed']}});
+    assert.equal(singletonWithdraw.state,'CANCELLED');assert.deepEqual((await http('/runs')).coordination.accesses[singletonAccess.accessId],singletonBefore);
+    const singletonReleasePlan=await http('/runs/native-singleton/recovery');
+    const singletonReleased=await http('/runs/native-singleton/recovery/action',{actionId:'native-singleton-release',ownerId:singletonRun.ownerId,
+      policyId:'native-singleton-policy',boundaryDigest:singletonReleasePlan.boundaryDigest,action:'release-access',targetId:singletonAccess.accessId,
+      input:{outcome:'RECONCILED',evidence:['dedicated member withdrawn before once']}});
+    assert.equal(singletonReleased.state,'RELEASED');assert.equal(singletonReleased.token,undefined);assert.equal(readFileSync(singletonPath,'utf8'),'old');
+    const singletonFinal=(await http('/runs')).coordination.operations[singletonApproval.operation_id];
+    assert.equal(singletonFinal.state,'CANCELLED');assert.equal(singletonFinal.native,undefined);assert.equal(singletonFinal.nativeResult,undefined);assert.equal(singletonFinal.decision.status,'approved');
+    console.log(JSON.stringify({dedicatedEditWithdrawal:true,nativeRejectionAck:true,parentPreservedBeforeRelease:true,noOnce:true,noEdit:true,ownerReleaseWithoutToken:true}));
 
     // Run cache qualification after normal multi-RUN setup: an unowned legacy shell must not bypass its startup gate.
     const effectiveAskProbe=await makeSession('saved grant versus effective ASK');

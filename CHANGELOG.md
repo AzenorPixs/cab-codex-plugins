@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.33 — 2026-11-05
+
+- Retrait propriétaire de l’unique membre d’un accès dédié HELD après rejet natif avant once ; parent conservé, puis libération ordinaire déléguée sous reçu distinct.
+- Gardes natives/ACK/identité/empreinte conservées, aucune exposition de token ni normalisation d’input.
+
 ## 2.2.32 — 2026-11-04
 
 - Libération owner release-access après perte du token par compactage : route ordinaire, token lié en interne, empreinte vérifiée, aucun secret public.
