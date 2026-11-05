@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Résultat vérifié de réconciliation SCM 2.2.35
+
+[verify-reconciliation-delivery-outcome](openspec/changes/archive/2026-11-05-verify-reconciliation-delivery-outcome/), code non attribué : ARCHIVÉ, source2.2.35 qualifiée.
+Résultat et clôture liés aux postconditions, sans faux rétablissement d’une
+notification non livrée ;992tests finaux uniques réussis sur71empreintes figées.
+Budgets/gardes/historique conservés. Publication,activation et choix opérants
+distincts ; voir QUALIFICATION.md. Attribution/normalisation ACL ultérieure.
+
+```mermaid
+flowchart LR
+    deliveryOutcome["verify-reconciliation-delivery-outcome<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class deliveryOutcome provisional
+```
+
 ## Retrait Write V2 refusé SCM 2.2.34
 
 [withdraw-rejected-native-write](openspec/changes/archive/2026-11-05-withdraw-rejected-native-write/), code non attribué : ARCHIVÉ, source2.2.34 qualifiée.
