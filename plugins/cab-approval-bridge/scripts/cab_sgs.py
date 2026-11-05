@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-VERSION = "2.3.1"
+VERSION = "2.3.2"
 FORMAT = "cab-sgs-1"
 # Bounded inputs below make this precision sufficient for all exact additive states.
 getcontext().prec = 100
@@ -1455,10 +1455,55 @@ CHANGE_TITLES = ['Statistiques générales et décisions','Types de messages et 
                  'Fichiers modifiés','Commandes','Accès web','Synthèse globale']
 
 
-def change_report(root, relative, evidence_path, state, maintain=False, contract=None, code_roots=None, cab_export=None, file_mode=None):
+
+def report_target(root, relative, report=None):
+    directory=safe_path(root,relative)
+    if not directory.is_dir() or not re.fullmatch(r'openspec/changes/(?:archive/)?[^/]+',relative):
+        raise SGSError('Dossier de change attendu')
+    if report is not None:
+        path=safe_path(root,report)
+        if (not path.is_relative_to(directory) or not path.is_file() or
+                path.name.lower() in {'proposal.md','design.md','tasks.md','checkpoint.md','blockers.md','blocker.md','revalidation.md','spec.md','readme.md'} or path.name.startswith('.')):
+            raise SGSError('--report exige un fichier existant dans le change ciblé')
+        return path
+    variants=[p for p in directory.rglob('*.md')
+              if p.name!=REPORT and re.match(r'(?:statist|stats)',p.name,re.I)]
+    if variants:
+        raise SGSError('Rapport alternatif ou ambigu : identifier le fichier existant avec --report')
+    return safe_path(root,relative+'/'+REPORT)
+
+
+@contextmanager
+def report_locked(directory):
+    # A directory inode survives atomic replacement of its report; no lock file
+    # or shared project-level input is needed by a REPORT-only mandate.
+    fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        try:fcntl.flock(fd,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError as exc:raise SGSError('Rapport SGS occupé ; aucune mutation effectuée') from exc
+        yield
+    finally:os.close(fd)
+
+
+def change_report(root, relative, evidence_path, state, maintain=False, contract=None, code_roots=None, cab_export=None, file_mode=None, report=None):
+    path=report_target(root,relative,report)
+    with report_locked(path.parent):
+        result=_change_report(root,relative,evidence_path,state,cab_export,file_mode,path)
+    if maintain:
+        if path!=safe_path(root,relative+'/'+REPORT):
+            result['global']={'status':'not-admissible','mutated':False}
+        else:
+            try:
+                if contract is None:raise SGSError('--contract requis pour le delta global')
+                with locked(root):
+                    result['global']=delta(root,relative,contract_file(str(contract)),code_roots,{},None,file_mode)
+            except (SGSError,OSError,UnicodeError,json.JSONDecodeError) as exc:
+                result['global']={'status':'error','cause':str(exc)}
+    return result
+
+
+def _change_report(root, relative, evidence_path, state, cab_export, file_mode, path):
     def finish(result):
-        if maintain:
-            result['global']=delta(root,relative,contract,code_roots,{},None,file_mode)
         return result
     directory = safe_path(root,relative)
     if not directory.is_dir() or not re.fullmatch(r'openspec/changes/(?:archive/)?[^/]+',relative):
@@ -1467,13 +1512,13 @@ def change_report(root, relative, evidence_path, state, maintain=False, contract
         raise SGSError('Un rapport final exige un dossier déjà archivé')
     if state == 'blocked' and (relative.startswith('openspec/changes/archive/') or not safe_path(root,relative+'/BLOCKERS.md').is_file()):
         raise SGSError('Change ouvert et BLOCKERS.md existant requis')
-    evidence_data = read_file(evidence_path)
+    evidence_data = evidence_path if isinstance(evidence_path,bytes) else read_file(evidence_path)
+    if len(evidence_data)>MAX_BYTES:raise SGSError('Preuves trop volumineuses')
     evidence = load_json(evidence_data)
     if set(evidence) - {'schema_version','session_id','scope','contribution','details','tables','notes','agent_details'} or not {'schema_version','session_id','scope','contribution'} <= set(evidence) or evidence['schema_version'] != 1:
         raise SGSError('Schéma de preuves de session invalide')
     if not re.fullmatch(r'[\w.:-]{1,180}',evidence['session_id']):
         raise SGSError('Identifiant de session invalide')
-    path = safe_path(root,relative+'/'+REPORT)
     data = read_file(path) if path.exists() else None
     input_hash=sha(evidence_data+(read_file(cab_export) if cab_export else b''))
     if data:
@@ -1544,13 +1589,15 @@ def change_report(root, relative, evidence_path, state, maintain=False, contract
     if found:
         text = text[:found[0].start()] + text[found[0].end():]
     sections = list(re.finditer(r'^## (?:[1-6]\. )?([^\n]+)\n',text,re.M))
-    if len(sections) != 6:
-        raise SGSError('Rapport historique sans six sections : adaptation explicite requise avant amendement')
+    standard=len(sections)==6
+    prefix=text[:sections[0].start()] if standard else text+'\n\n### Relevé '+record['id']+'\n\n'
     blocks = []
-    for index,heading in enumerate(sections):
-        start = heading.start(); end = sections[index+1].start() if index < 5 else len(text)
-        block = text[start:end].rstrip()+'\n\n'
-        block += '### Relevé '+record['id']+'\n\n'
+    for index in range(6):
+        if standard:
+            start=sections[index].start();end=sections[index+1].start() if index<5 else len(text)
+            block=text[start:end].rstrip()+'\n\n### Relevé '+record['id']+'\n\n'
+        else:
+            block=f'#### {index+1}. {CHANGE_TITLES[index]}\n\n'
         if index == 0:
             block += ('Change ouvert — dépendances manquantes — archivage en attente. Voir [BLOCKERS.md](BLOCKERS.md).'
                       if state == 'blocked' else 'Change archivé ; mesures limitées aux preuves de ce relevé.')+'\n\n'
@@ -1573,7 +1620,7 @@ def change_report(root, relative, evidence_path, state, maintain=False, contract
             block += '\n'.join(table(['Élément documenté','Valeur','Preuve'],[
                 [r['label'],r['value'],r['proof']] for r in record['details'][str(index+1)]]))+'\n'
         for detail in record.get('tables',{}).get(str(index+1),[]):
-            block += '#### '+detail['title']+'\n\n'+'\n'.join(table(detail['columns'],detail['rows']))+'\n'
+            block += ('#### ' if standard else '##### ')+detail['title']+'\n\n'+'\n'.join(table(detail['columns'],detail['rows']))+'\n'
         for note in record.get('notes',{}).get(str(index+1),[]):
             # Notes are data; headings cannot manufacture additional H2 sections.
             block += '\n'.join(('> '+line) if line.startswith('#') else line for line in note.splitlines())+'\n\n'
@@ -1589,18 +1636,24 @@ def change_report(root, relative, evidence_path, state, maintain=False, contract
                 if a['role']!=role:continue
                 perf=next((p for p in c['performance'] if p['model']==a['model'] and p['reasoning']==a['reasoning']),{})
                 data_rows.append([a['model'],'N/A','N/A',a['reasoning'],perf.get('ttmt') or 'N/A',perf.get('throughput') or 'N/A','N/A'])
-        agents+='### '+title+' — relevé '+record['id']+'\n\n'+'\n'.join(table(
+        agents+=('### ' if standard else '#### ')+title+' — relevé '+record['id']+'\n\n'+'\n'.join(table(
             ['Modèle de LLM','Version','Fournisseur','Niveau de raisonnement','TTMT moyen','Tokens/seconde moyens','Temps de service (% total)'],
             data_rows or [['N/A']*7]))+'\n'
-    result = text[:sections[0].start()] + agents + ''.join(blocks) + '\n<!-- CAB_SGS_SESSIONS_V1\n'+dumps(ledger).decode().rstrip()+'\n-->\n'
+    result = prefix + agents + ''.join(blocks) + '\n<!-- CAB_SGS_SESSIONS_V1\n'+dumps(ledger).decode().rstrip()+'\n-->\n'
     if '-->' in dumps(ledger).decode():
         raise SGSError('Délimiteur interdit dans les preuves')
-    temporary = safe_path(root,'.STATISTICS.change.candidate')
+    temporary = path.with_name(path.name+'.sgs-candidate')
     mode=file_mode or (stat.S_IMODE(path.stat().st_mode) if data is not None else 0o644)
     durable_write(temporary,result.encode('utf-8'),mode)
     if fingerprint(path) != (sha(data) if data is not None else None):
         temporary.unlink(); raise SGSError('Rapport de change modifié concurremment')
-    os.replace(temporary,path); sync_directory(directory)
+    if fingerprint(temporary)!=sha(result.encode('utf-8')):
+        raise SGSError('Candidat du rapport modifié concurremment ; conservé pour diagnostic')
+    try:
+        os.replace(temporary,path); sync_directory(path.parent)
+    except OSError:
+        if temporary.exists():temporary.unlink()
+        raise
     outcome = {'status':'updated' if data else 'created','report':str(path),'state':state}
     return finish(outcome)
 
@@ -1873,7 +1926,8 @@ def main(argv=None):
     parser.add_argument('--change')
     parser.add_argument('--metric',choices=list(METRICS),help='QUERY : une mesure du global ou du change')
     parser.add_argument('--state',choices=['blocked','archived'])
-    parser.add_argument('--evidence')
+    parser.add_argument('--evidence',help='Preuves JSON : chemin réservé ou - pour stdin')
+    parser.add_argument('--report',help='CHANGE : rapport existant identifié dans le change')
     parser.add_argument('--maintain-global',action='store_true')
     parser.add_argument('--review',help='JSON technique de corrections liées aux empreintes')
     parser.add_argument('--cab-export',help='Export public CAB explicitement fourni et rattaché')
@@ -1901,7 +1955,7 @@ def main(argv=None):
             raise SGSError('--contract requis')
         if args.mode=='DELTA' and not safe_path(root,REPORT).exists() and not safe_path(root,JOURNAL).exists():
             print(dumps({'status':'absent','mutated':False}).decode(),end='');return 0
-        contract = contract_file(args.contract) if args.contract else None
+        contract = (Path(args.contract) if args.mode=='CHANGE' else contract_file(args.contract)) if args.contract else None
         if args.mode=='QUERY':
             print(dumps(query(root,contract,args.change,args.metric)).decode(),end='');return 0
         code_roots = ['NONE'] if args.no_code else args.code_root
@@ -1921,6 +1975,12 @@ def main(argv=None):
                     'agents':c['agents'],'performance':c['performance'],'costs':c['costs'],
                     'breakdowns':c['breakdowns'],'bounds':c['bounds']})
             print(dumps({'total':len(paths),'offset':args.offset,'entries':output}).decode(),end=''); return 0
+        if args.mode=='CHANGE':
+            if not args.change or not args.evidence or not args.state:
+                raise SGSError('CHANGE exige --change, --evidence et --state')
+            source=sys.stdin.buffer.read(MAX_BYTES+1) if args.evidence=='-' else safe_path(root,args.evidence)
+            result=change_report(root,args.change,source,args.state,args.maintain_global,contract,code_roots,cab_export,args.file_mode,args.report)
+            print(dumps(result).decode(),end='');return 0
         with locked(root):
             if args.mode == 'REBUILD':
                 result = rebuild(root,contract,code_roots,reviews,cab_export,args.file_mode)
@@ -1931,13 +1991,6 @@ def main(argv=None):
                 result = verify(root,contract,sources=args.sources)
             elif args.mode == 'RECOVER':
                 result = {'status':'recovered' if recover(root) else 'no-transaction'}
-            else:
-                if not args.change or not args.evidence or not args.state:
-                    raise SGSError('CHANGE exige --change, --evidence et --state')
-                if args.maintain_global and contract is None:
-                    raise SGSError('--maintain-global exige --contract')
-                recover(root)
-                result = change_report(root,args.change,safe_path(root,args.evidence),args.state,args.maintain_global,contract,code_roots,cab_export,args.file_mode)
         print(dumps(result).decode(),end=''); return 0
     except (SGSError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         print(json.dumps({'status':'error','cause':str(exc)},ensure_ascii=False),file=sys.stderr); return 1

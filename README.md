@@ -1,5 +1,17 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+## Rapports SGS isolés et compatibles — CAB 2.3.2
+
+CHANGE produit son rapport sans récupération globale, avec preuves sur stdin,
+verrou du répertoire et candidat adjacent exact. L’échec du delta séparé ne
+retire pas le rapport réussi. Le suivi est initialisé avant les tâches, pour
+codeurs et orchestrateurs distincts, puis alimenté depuis les sources disponibles.
+Les rapports anciens restent à leur emplacement (--report) et gardent leur
+structure, avec annexe si nécessaire. REPORT réserve le rapport et son candidat ;
+l’orchestrateur appelle DELTA sous l’autorisation distincte du prompt. Les
+identités d’agents restent libres et les périmètres de mesure restent ceux de SGS.
+
+
 ## Clôture des statistiques réutilisables — CAB 2.3.1
 
 La capacité SGS livrée en 2.3.0 est archivée et qualifiée. La version 2.3.1
@@ -259,7 +271,7 @@ Le bridge transporte les demandes de validation d'OpenCode vers Codex, conserve 
 
 Il ne décide jamais à la place de Codex et ne modifie pas le projet piloté.
 
-La version source courante est CAB 2.3.1. CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
+La version source courante est CAB 2.3.2. CABU prépare et vérifie le jeu à chaud, compare les empreintes et les processus,
 puis ne bascule que les composants nécessaires. Un jeu conforme ne subit
 aucune coupure. Le transfert compatible préserve demandes, décisions, accès et
 baux ; une réponse réseau perdue reprend le même reçu sans rejeu de once.
@@ -949,7 +961,7 @@ racine, puis importez et synchronisez-le depuis l'administration de votre
 espace de travail Codex. Le compte GitHub connecté doit pouvoir lire le dépôt.
 
 La version de base actuelle des briques CAB, des plugins CAB/CABU et des commandes
-est `2.3.1`. Chaque plugin ajoute un cachebuster Codex pour les installations
+est `2.3.2`. Chaque plugin ajoute un cachebuster Codex pour les installations
 locales.
 
 ## Documentation
@@ -1069,7 +1081,7 @@ Ce correctif source n’installe ni n’active 2.1.6 dans un profil existant. Le
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des briques, plugins et commandes est 2.3.1.
+La distribution courante des briques, plugins et commandes est 2.3.2.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -1408,3 +1420,10 @@ littéral : même binding, items[0].path, chemin de catalogue exact et Error
 littéral. [Contrat natif](plugins/cab-approval-bridge/skills/approval-bridge/references/technical-native.md).
 Le code arbitraire, les gardes et les permissions restent hors de cette
 projection ; l’acquisition partagée et les REJECTED historiques sont inchangés.
+
+
+Le nettoyage statistique rejoint l’effacement terminal CAB après le rapport
+vérifié, la clôture sûre et le nettoyage des sessions natives. Les données du
+change sont supprimées, celles des pairs et les preuves métier sont conservées ;
+la session métier de reprise prévue reste protégée en cas de dépendance.
+Sans état CAB utilisé, le nettoyage est déclaré non applicable.

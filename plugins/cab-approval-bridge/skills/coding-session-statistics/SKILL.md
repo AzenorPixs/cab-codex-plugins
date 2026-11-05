@@ -7,7 +7,7 @@ description: Préparer et produire des statistiques détaillées et auditables d
 
 Produire un rapport factuel à partir de l'historique persistant de la session concernée. Ne pas inventer les données absentes.
 
-## Collecte native CAB 2.3.1
+## Collecte native CAB 2.3.2
 
 La collecte statistique native continue et GET /runs/<run_id>/efficiency sont
 prioritaires sur un tour LLM périodique pour recueillir des mesures déjà
@@ -25,7 +25,9 @@ attendre un créneau.
 
 La collecte et les preuves restent celles de cette compétence. Le rendu et
 l’amendement du rapport de change utilisent le mode CHANGE du moteur Python
-du [skill SGS](../sgs/SKILL.md), depuis des preuves structurées. Conserver au
+du [skill SGS](../sgs/SKILL.md), depuis des preuves structurées transmises sur stdin (--evidence -), sans fichier
+partagé entre RUN. Le mandat couvre le rapport et son candidat exact
+.sgs-candidate ; CHANGE reste indépendant de toute transaction globale. Conserver au
 minimum la richesse des rapports Pixs : agents complets, rôles/parties/outils,
 décisions, chemins, commandes, web, durées, sondes et quotas autorisés. Utiliser
 les tableaux et notes du schéma, sans éliminer une donnée disponible pour
@@ -36,7 +38,8 @@ ventilations exposées ; les données privées ou absentes ne sont pas devinées
 Le rapport d’un arrêt pour dépendance conserve ses six sections et ses sessions ;
 le même fichier est amendé lors de la reprise et de l’archivage. Le mandat
 d’édition du rapport et sa vérification restent obligatoires. L’actualisation
-du global relève de DELTA sous mandat distinct : absent, ne rien créer ;
+du global relève de DELTA appelé par l’orchestrateur sous autorisation distincte
+du prompt, hors du mandat REPORT du codeur : absent, ne rien créer ;
 incompatible, recommander SGS manuel sans reconstruction automatique.
 
 ## Sources et méthode
@@ -177,7 +180,8 @@ OpenSpec réussi, même sans demande supplémentaire de rapport.
    de statistiques ne constitue jamais une autorisation d'archiver.
 2. Effectuer les contrôles finaux de collecte et le relevé de quota après
    archivage, puis fixer la fin de l'intervalle avant rédaction de la synthèse.
-3. Faire autoriser un mandat d'édition distinct pour le seul fichier
+3. Faire autoriser un mandat d'édition distinct pour le rapport et son candidat exact .sgs-candidate ;
+   le rapport est
    `openspec/changes/archive/<archive>/STATISTICS.md` du projet piloté.
 4. Produire les six sections ci-dessous, puis vérifier l'existence, l'encodage
    UTF-8/LF, les six titres de niveau 2 et la cohérence des totaux.
@@ -269,3 +273,17 @@ Un workspace technique distinct peut initialiser un contexte MCP concurrent :
 ne pas l’utiliser pour cette sonde. En cas d’échec, rapporter INCOMPLETE sans
 reconnexion automatique ni reconstruction des créneaux manqués. Voir
 [la procédure CAB](../approval-bridge/references/mcp-location-isolation.md).
+
+
+## Fin du suivi et nettoyage des données CAB
+
+Après rapport individuel vérifié et tentative de delta, suivre la clôture sûre,
+le nettoyage des sessions natives, puis l’effacement terminal CAB, statistiques
+du change comprises. Cela couvre la fin normale et l’arrêt pour dépendance,
+avec les exceptions de reprise et la préservation des pairs du protocole.
+Vérifier disque et mémoire rechargée ; conserver le rapport et le registre global.
+Ne pas lire manuellement les états privés ni substituer une purge globale.
+Sans état CAB utilisé, tracer non applicable sans démarrer un runtime.
+Le moteur CHANGE ne purge pas ces états ; les preuves stdin ne persistent pas
+et son candidat est nettoyé à la fin de la publication. Ne pas régénérer les
+statistiques pour mesurer leur propre nettoyage.

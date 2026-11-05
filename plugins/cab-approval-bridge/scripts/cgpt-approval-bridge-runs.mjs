@@ -5,7 +5,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "2.3.1";
+export const VERSION = "2.3.2";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -195,8 +195,7 @@ export class RunRegistry {
       for (const run of this.runs.values()) if (run.phase === 'REPORT') {
         if (!run.integrationCompleted || !Number.isSafeInteger(run.publishedReferenceVersion) ||
             run.publishedReferenceVersion < 1 || run.publishedReferenceVersion > this.referenceVersion ||
-            run.resources.length !== 1 || run.resources[0].mode !== 'write' ||
-            run.resources[0].key !== `file:${this.reportTarget(run, run.reportFile)}`) {
+            !this.validReportResources(run)) {
           throw new CoordinationError('registry-restoration-invalid');
         }
       }
@@ -387,12 +386,30 @@ export class RunRegistry {
     this.schemaVersion = Math.max(this.schemaVersion, 2); this.persist(); return this.snapshot();
   }
   reportTarget(run, file) {
-    if (typeof file !== 'string' || !/^openspec\/changes\/archive\/[A-Za-z0-9][A-Za-z0-9_.-]*\/STATISTIQUES\.md$/.test(file) ||
-        !/^\d{4}-\d{2}-\d{2}-/.test(file.split('/')[3]) || file.split('/')[3].slice(11) !== run.changeId ||
-        canonicalResource({ key: `file:${file}`, mode: 'write' }, this.directory).key !== `file:${file}`) {
+    const match=typeof file==='string' && /^openspec\/changes\/archive\/([A-Za-z0-9][A-Za-z0-9_.-]*)\/(.+\.md)$/.exec(file);
+    if (!match || !/^\d{4}-\d{2}-\d{2}-/.test(match[1]) || match[1].slice(11)!==run.changeId ||
+        canonicalResource({key:`file:${file}`,mode:'write'},this.directory).key!==`file:${file}`)
       throw new CoordinationError('report-target-invalid');
+    if (!['STATISTICS.md','STATISTIQUES.md'].includes(match[2])) {
+      const name=match[2].split('/').at(-1);
+      if (/^(?:proposal|design|tasks|checkpoint|blockers?|revalidation|spec|readme)\.md$/i.test(name) || name.startsWith('.'))
+        throw new CoordinationError('report-target-invalid');
+      try {
+        const info=lstatSync(resolve(this.directory,file));
+        if (!info.isFile() || info.isSymbolicLink() || info.nlink!==1) throw new Error('report-target-invalid');
+      } catch { throw new CoordinationError('report-target-invalid'); }
     }
     return file;
+  }
+  reportResources(run, file) {
+    const target=this.reportTarget(run,file);
+    return [{key:`file:${target}`,mode:'write'},
+      {key:`file:${target}.sgs-candidate`,mode:'write'}];
+  }
+  validReportResources(run) {
+    const expected=this.reportResources(run,run.reportFile);
+    return [1,2].includes(run.resources.length) && run.resources.every((r,i)=>
+      r.key===expected[i].key && r.mode==='write');
   }
   closing(runId, payload) {
     const run = this.owned(runId, payload.version);
@@ -401,11 +418,11 @@ export class RunRegistry {
     const file = this.reportTarget(run, payload.reportFile);
     if (run.phase === 'REPORT') {
       if (run.reportFile !== file) throw new CoordinationError('report-target-invalid');
-      return structuredClone(run);
+      if (run.resources.length===2) return structuredClone(run);
     }
-    const resources = [{ key: `file:${file}`, mode: 'write' }];
+    const resources = this.reportResources(run,file);
     this.checkConflicts({ ...run, resources });
-    run.resources = resources; run.phase = 'REPORT'; run.reportFile = file;
+    run.resources = resources; run.exclusiveResources=resources.map(r=>r.key); run.phase = 'REPORT'; run.reportFile = file;
     run.requiresPublication = true;
     run.publishedReferenceVersion ??= run.referenceVersion;
     run.integrationReady = true; run.version = ++this.sequence;
@@ -446,7 +463,7 @@ export class RunRegistry {
       throw new CoordinationError('reference-version-stale');
     }
     const reportFile = this.reportTarget(run, input.reportFile);
-    const resources = [{ key: `file:${reportFile}`, mode: 'write' }];
+    const resources = this.reportResources(run,reportFile);
     this.checkConflicts({ ...run, resources });
     const receipt = { transactionId: input.transactionId, runId, contextId: run.contextId,
       requestVersion: payload.version, previousReferenceVersion: this.referenceVersion,
@@ -455,7 +472,7 @@ export class RunRegistry {
     this.referenceVersion = receipt.referenceVersion;
     run.referenceVersion = this.referenceVersion; run.publishedReferenceVersion = this.referenceVersion;
     run.integrationCompleted = true; run.integrationReady = true; run.requiresPublication = true;
-    run.resources = resources; run.reportFile = reportFile; run.phase = 'REPORT';
+    run.resources = resources; run.exclusiveResources=resources.map(r=>r.key); run.reportFile = reportFile; run.phase = 'REPORT';
     run.version = ++this.sequence;
     this.integrationQueue = this.integrationQueue.filter((e) => e.runId !== runId);
     this.integrationOwner = null;

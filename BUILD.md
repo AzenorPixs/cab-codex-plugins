@@ -1,5 +1,17 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+## Rapports SGS isolés et compatibles — CAB 2.3.2
+
+CHANGE produit son rapport sans récupération globale, avec preuves sur stdin,
+verrou du répertoire et candidat adjacent exact. L’échec du delta séparé ne
+retire pas le rapport réussi. Le suivi est initialisé avant les tâches, pour
+codeurs et orchestrateurs distincts, puis alimenté depuis les sources disponibles.
+Les rapports anciens restent à leur emplacement (--report) et gardent leur
+structure, avec annexe si nécessaire. REPORT réserve le rapport et son candidat ;
+l’orchestrateur appelle DELTA sous l’autorisation distincte du prompt. Les
+identités d’agents restent libres et les périmètres de mesure restent ceux de SGS.
+
+
 ## Clôture des statistiques réutilisables — CAB 2.3.1
 
 La capacité SGS livrée en 2.3.0 est archivée et qualifiée. La version 2.3.1
@@ -272,9 +284,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 Ce document définit le cadrage de construction, d'installation, de packaging et de distribution de CAB. Il complète `PROJECT.md` et `TECHNICAL.md` sans reprendre leur contenu.
 
-### Distribution courante 2.3.1
+### Distribution courante 2.3.2
 
-Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.3.1. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Les commandes `/CAB`, `/CABU` et `/SGS` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui prépare à chaud et ne bascule que les briques nécessaires, avec vérification des versions et de la continuité. Un jeu conforme ne redémarre pas. Aucune activation au login ; OpenCode demeure ouvert.
+Le paquet, les trois modules broker, tous les modules Node/Python, unités systemd et commandes partagent la version 2.3.2. Le bootstrap `/CAB start` utilise `GET /api/identity` pour vérifier version et workspace sans charger les RUN du snapshot complet. Les commandes `/CAB`, `/CABU` et `/SGS` sont distribuées ; le fichier `cab.md` et l’invocation `/cab` sont retirés. `/CABU` délègue à `/CAB update`, qui prépare à chaud et ne bascule que les briques nécessaires, avec vérification des versions et de la continuité. Un jeu conforme ne redémarre pas. Aucune activation au login ; OpenCode demeure ouvert.
 
 Le contrôleur persiste chaque décision terminale avant une réponse native. Au
 redémarrage, la restauration d’une approbation exige la demande et la décision
@@ -543,7 +555,7 @@ profil et la mise en service des composants sont des opérations distinctes.
 ## 7. Versionnement
 
 CAB doit utiliser une version de projet explicite et cohérente entre les
-artefacts distribués. La version de base actuelle est `2.3.1` pour le broker,
+artefacts distribués. La version de base actuelle est `2.3.2` pour le broker,
 le contrôleur, le superviseur, le moniteur, le moteur SGS et les plugins CAB/CABU ; chaque plugin ajoute uniquement un
 cachebuster Codex à cette version.
 
@@ -636,7 +648,7 @@ et runs, ainsi que resource-coordination, statistics, observation-statistics
 et statistics-maintenance ;
 l'importeur import-observations est également distribué. Le registre lance
 registry-lock.py avec Python 3. Ces fichiers sont
-indissociables et doivent partager la version source courante 2.3.1. Aucune dépendance tierce
+indissociables et doivent partager la version source courante 2.3.2. Aucune dépendance tierce
 n'est ajoutée. Les unités utilisateur existantes restent les points d'entrée.
 
 Le retour historique à 0.87.2 exigeait libération ou gel réconcilié de tous les
@@ -847,7 +859,7 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.3.1 en fin de transaction. OpenCode actif
+Les trois services doivent servir 2.3.2 en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
@@ -894,7 +906,7 @@ Le banc de processus exige une terminaison sous cinq secondes, libération des v
 
 ## Réconciliation des prévols rejetés — 2.1.7
 
-La distribution courante des briques, plugins et commandes est 2.3.1.
+La distribution courante des briques, plugins et commandes est 2.3.2.
 Les preuves historiques conservent leur version. Après redémarrage,
 `reconcile-rejected` permet une réconciliation humaine du rejet natif sans
 effet et sans reconstruire de décision locale. Le retry ordinaire conserve
@@ -1233,3 +1245,10 @@ littéral : même binding, items[0].path, chemin de catalogue exact et Error
 littéral. [Contrat natif](plugins/cab-approval-bridge/skills/approval-bridge/references/technical-native.md).
 Le code arbitraire, les gardes et les permissions restent hors de cette
 projection ; l’acquisition partagée et les REJECTED historiques sont inchangés.
+
+
+Le nettoyage statistique rejoint l’effacement terminal CAB après le rapport
+vérifié, la clôture sûre et le nettoyage des sessions natives. Les données du
+change sont supprimées, celles des pairs et les preuves métier sont conservées ;
+la session métier de reprise prévue reste protégée en cas de dépendance.
+Sans état CAB utilisé, le nettoyage est déclaré non applicable.

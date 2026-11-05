@@ -63,30 +63,60 @@ Cette consultation explicite ne constitue pas une invocation manuelle `/SGS`.
    calcul reste réalisable. Nettoyer les seuls fichiers de preuves/revue créés
    pour cette invocation, après publication vérifiée.
 
+## Initialisation et continuité du suivi
+
+Identifier dès le départ les codeurs et les orchestrateurs séparément, avec
+leur rôle, agent, modèle, fournisseur et mesures disponibles. Une session
+directe sans orchestration conserve cette absence ; aucun orchestrateur
+fictif n’est ajouté. Les activités des deux rôles restent distinctes dans
+les preuves et le rapport ; le périmètre du global reste défini par SGS.
+
+Dès l’amorçage, après résolution des sources requises et avant l’exploration
+métier, vérifier VERSION. Initialiser project_root, session_id stable et borne
+native de début ; rattacher change_id dès sa sélection autorisée, avant la
+première tâche. Une cible encore inconnue reste null sans créer de change, puis
+la contribution avec blank() du module Python distribué. Consigner les agents
+connus et les sources natives disponibles. Les mesures non collectées restent
+indisponibles. Les preuves sont conservées au fil du travail dans l’historique
+ou le checkpoint déjà autorisé, puis transmises sur stdin. Une reprise conserve
+les identifiants et indique les lacunes ; aucune collecte rétroactive ni sonde
+de pilotage en mode direct n’est déduite de cette initialisation.
+
 ## Rapports individuels dans une session de codage
 
-Le codeur prépare uniquement les preuves structurées disponibles dans
-`.STATISTICS.session.json` à la racine du projet, selon le schéma, avec les tableaux, notes et métadonnées d’agents disponibles
-au moins aussi détaillés que les références Pixs. Aucune mesure
-native manquante n’est inventée. Utiliser un identifiant de relevé stable ; un
-nouveau relevé corrigé reçoit un identifiant distinct et conserve le précédent.
+L’appelant prépare les preuves en mémoire selon le schéma et les transmet à
+`CHANGE --evidence -` sur stdin. Un fichier JSON explicitement réservé reste
+compatible ; ne pas utiliser un fichier commun entre sessions concurrentes.
+Le codeur fournit les mesures disponibles, les notes et tableaux détaillés,
+avec un identifiant stable de relevé et sans mesure native inventée.
 
-Appeler `CHANGE --project-root /racine --change openspec/changes/<change>`
-`--state blocked --evidence .STATISTICS.session.json` après création vérifiée
-de BLOCKERS.md. À l’archivage réussi, le chemin devient
-`openspec/changes/archive/<archive>` et l’état `archived`. Le même rapport est
-amendé dans ses six sections, avec historique et portée cumulative/incrémentale.
-Un rapport historique incompatible exige une adaptation ciblée des preuves,
-sans effacement de son contenu. Vérifier les six sections et l’état réel.
+Appeler CHANGE avec --project-root, --change et --state blocked après création
+vérifiée de BLOCKERS.md, ou --state archived sur l’archive existante. Le moteur
+verrouille le seul répertoire du rapport et n’accède pas à la transaction globale.
+Le mandat d’écriture comprend le rapport et <rapport>.sgs-candidate uniquement.
+Les anciens mandats REPORT à un fichier restent lisibles ; refaire /closing
+sans accès en cours avant d’utiliser le candidat dans un tel contexte.
+
+Pour un rapport ancien identifié, passer --report <chemin relatif existant>.
+Le chemin doit rester dans le change. Une variante connue sans sélection
+explicite empêche la création d’un doublon. Les six sections d’un rapport
+canonique sont conservées ; une structure ancienne différente est conservée
+avec une annexe de niveau3 ou inférieur. Les sessions et le contenu historique
+restent présents. Une variante n’est pas admise au global par cet amendement.
 
 Appeler ensuite `DELTA --project-root /racine --contract /prompts/SGS.md`
 `--change <chemin du change>`. Le global absent produit `absent` sans création.
 Le change ouvert reste exclu des agrégats historiques. Un couple incompatible
 est préservé avec diagnostic et recommandation de SGS manuel, jamais reconstruit
 par cette session. Un delta inchangé n’est pas appliqué deux fois.
-`CHANGE --maintain-global --contract ...` enchaîne les deux modes sous le même
-verrou en mode direct lorsque les mêmes autorisations sont acquises. Avec le protocole CAB,
-conserver CHANGE et DELTA sous leurs mandats distincts et leurs réservations.
+`CHANGE --maintain-global --contract ...` enchaîne les deux modes avec leurs
+protections séparées en mode direct lorsque les autorisations sont acquises.
+Le succès du rapport et l’erreur éventuelle global.status=error restent distincts ;
+un code0 de CHANGE ne prouve pas le succès du global. Avec le protocole CAB,
+le codeur conserve le mandat REPORT du rapport et de son candidat exact ;
+l’orchestrateur appelle DELTA directement sous l’autorisation statistique
+distincte du prompt, hors de ce mandat et sous verrou SGS. Ne pas élargir REPORT
+aux ressources globales ni créer un RUN de substitution.
 Pour un autre pilotage, respecter les autorisations de son protocole sans
 introduire de prérequis CAB.
 
@@ -109,3 +139,17 @@ NCA, génération, empreinte et absence de transaction ; cela ne valide pas les
 tests historiques ni une livraison. Restituer le résultat réel du moteur,
 les limites d’extraction et l’état des fichiers. Aucun commit ou effet Git
 n’est autorisé par cette seule compétence.
+
+
+## Fin du suivi et nettoyage des données CAB
+
+Après rapport individuel vérifié et tentative de delta, suivre la clôture sûre,
+le nettoyage des sessions natives, puis l’effacement terminal CAB, statistiques
+du change comprises. Cela couvre la fin normale et l’arrêt pour dépendance,
+avec les exceptions de reprise et la préservation des pairs du protocole.
+Vérifier disque et mémoire rechargée ; conserver le rapport et le registre global.
+Ne pas lire manuellement les états privés ni substituer une purge globale.
+Sans état CAB utilisé, tracer non applicable sans démarrer un runtime.
+Le moteur CHANGE ne purge pas ces états ; les preuves stdin ne persistent pas
+et son candidat est nettoyé à la fin de la publication. Ne pas régénérer les
+statistiques pour mesurer leur propre nettoyage.
