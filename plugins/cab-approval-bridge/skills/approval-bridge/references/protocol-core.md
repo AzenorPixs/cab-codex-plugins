@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.2.34
+# Noyau du contrat — CAB 2.2.35
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -144,3 +144,6 @@ technique doit représenter la finalité demandée ; une incompatibilité démon
 est rapportée sans création de change fictif, modification interdite ou faux gate.
 Les restrictions d'un audit ciblé priment sur les clauses génériques de tests,
 d'intégration, d'archivage ou de fin globale du projet.
+
+Un appel technique terminé ne prouve pas sa récupération réussie : lire le
+résultat structuré et l’état autoritaire ; un échec de livraison reste un échec.

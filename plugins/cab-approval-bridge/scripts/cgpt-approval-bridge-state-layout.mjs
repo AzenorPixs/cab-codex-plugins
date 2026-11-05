@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {dirname,isAbsolute,join,relative,resolve} from 'node:path';
 import {constants,closeSync,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync,chmodSync} from 'node:fs';
-export const VERSION='2.2.34';
+export const VERSION='2.2.35';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const hash=b=>createHash('sha256').update(b).digest('hex');
 export function legacyStateDirectory(workspace){return join(workspace,'.opencode/state/cgpt-approval-bridge');}

@@ -1,4 +1,4 @@
-# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.34
+# Qualifier un incident et capitaliser le diagnostic — CAB 2.2.35
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -85,3 +85,5 @@ Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 
 Write V2 refusé (permission edit), call/ACK masqués dans un ancien diagnostic :
 [preuve et retrait qualifiés](approved-attached-shell-retirement.md#write-v2-refusé-sous-permission-edit), sans conversion ni exécution de l’input divergent.
+
+Remédiation COMPLETED avec livraisonfalse : [distinguer exécution et résultat vérifié](technical-recovery.md#résultat-vérifié-dune-réconciliation-de-notification), sans consommer un nouveau budget à l’aveugle.
