@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.39
+version: 2.2.40
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -32,6 +32,7 @@ mutation. Jamais de sous-commande implicite.
 | `pause`, `resume`, `stop` avec `--run <run_id>` ou `--all` | `references/command-pause.md` ; respecter la portée exacte |
 | `stop` sans portée | `references/command-stop.md` ; ne jamais déduire `--all` |
 | `update ...` | `references/command-update.md` et `references/component-update.md` |
+| `cleanup ...` | `references/change-erasure.md` ; nettoyage terminal ciblé |
 
 Pour start, run ou resume, résoudre le workspace canonique puis appliquer
 `references/monitor-service.md` avant PLLM et les prévols, sans purge, reset ou
@@ -41,7 +42,7 @@ bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
 par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
 
-Pour un incident, lire `references/owner-diagnostics.md`, puis `references/incident-triage.md` ;un signalement n’autorise pas implicitement un prévol ou un effet supplémentaire.
+Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md`, sans effet implicite.
 
 Pour un changement explicite de SID dans le même RUN avec historique protégé,
 lire `references/session-handoff.md`. Les commandes run/resume ne réalisent

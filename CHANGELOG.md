@@ -1,3 +1,10 @@
+## 2.2.40 — 2026-11-05
+
+- Effacement terminal ciblé après nettoyage OC, transaction authentifiée et reprise sans restauration des données effacées.
+- Réancrage HMAC du journal partagé, préservation des pairs et certificat externe avant retrait des derniers reçus CAB.
+- Retrait qualifié de PREPARED/REJECTED sans émission et de APPROVED dont le parent seulement référencé est RELEASED.
+- Catalogue du moniteur limité aux changes référencés après le premier cleanup, afin de ne pas réimporter un change BLOQUÉ.
+
 ## 2.2.27 — 2026-11-04
 
 ## 2.2.39 — 2026-11-05

@@ -1,4 +1,4 @@
-# Incidents pendant le codage CAB — 2.2.39
+# Incidents pendant le codage CAB — 2.2.40
 
 Commencer par le [triage des observations](incident-triage.md) avant de conclure à une panne.
 

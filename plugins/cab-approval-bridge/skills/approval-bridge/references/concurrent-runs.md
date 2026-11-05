@@ -3,7 +3,7 @@
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
 
-## Restitution ciblée d’un bail — évolution 2.2.39
+## Restitution ciblée d’un bail — évolution 2.2.40
 
 La restitution ordinaire examine les opérations liées au bail et les accès
 qui recouvrent ses ressources. Après cleanup et vérification natifs distincts

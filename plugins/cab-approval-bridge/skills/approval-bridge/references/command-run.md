@@ -1,4 +1,4 @@
-# Pilotage — CAB 2.2.39
+# Pilotage — CAB 2.2.40
 
 Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 

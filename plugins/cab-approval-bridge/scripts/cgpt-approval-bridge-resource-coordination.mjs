@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.2.39';
+export const VERSION = '2.2.40';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -905,14 +905,30 @@ export class ResourceRunRegistry extends RunRegistry {
     this.persist();
     return copy(value);
   }
-  recordNativeCancelledValidation(runId, operationId, proofDigest) {
+  releasedReferenceWithdrawal(runId,operationId) {
+    const run=this.runs.get(runId),op=this.resourceState.operations[operationId];
+    const linked=op&&Object.values(this.resourceState.accesses).filter(a=>a.accessId===op.accessId||a.operationIds.includes(operationId));
+    const parent=linked?.[0];
+    if(!run||!op||op.runId!==runId||op.contextId!==run.contextId||op.version!==run.version||op.sessionId!==run.sessionId||
+      op.state!=='PREPARED'||op.decision?.status!=='approved'||op.native||op.nativeResult||op.onceAcknowledged===true||
+      linked.length!==1||!parent||parent.accessId!==op.accessId||parent.operationIds.includes(operationId)||
+      parent.runId!==runId||parent.contextId!==run.contextId||parent.version!==run.version||parent.state!=='RELEASED'||
+      !['COMPLETED','NO_EFFECT','RECONCILED'].includes(parent.outcome)||!hash(parent.releaseDigest)||!Number.isFinite(Date.parse(parent.finishedAt))||
+      parent.operationIds.some(id=>{const member=this.resourceState.operations[id];return !member||member.runId!==runId||
+        member.contextId!==run.contextId||!['COMPLETED','CANCELLED'].includes(member.state)}))
+      throw new CoordinationError('released-reference-withdrawal-invalid');
+    return copy(parent);
+  }
+  recordNativeCancelledValidation(runId, operationId, proofDigest, {allowRejected=false,allowReleasedReference=false}={}) {
     this.mutable();
     const op = this.resourceState.operations[operationId];
     const run = this.runs.get(runId);
-    const linkedAccess = op && Object.values(this.resourceState.accesses).some((access) =>
+    let linkedAccess = op && Object.values(this.resourceState.accesses).some((access) =>
       access.accessId === op.accessId || access.operationIds.includes(operationId));
+    if(linkedAccess&&allowReleasedReference){this.releasedReferenceWithdrawal(runId,operationId);linkedAccess=false;}
     if (!hash(proofDigest) || !op || !run || op.runId !== runId || op.contextId !== run.contextId ||
-        op.native || (op.decision && op.decision.status !== 'approved') || linkedAccess) {
+        op.native || op.nativeResult || (op.decision && op.decision.status !== 'approved'&&
+          !(allowRejected&&op.decision.status==='rejected')) || linkedAccess) {
       throw new CoordinationError('native-cancellation-boundary-invalid');
     }
     const owner = this.requestOwners[op.requestId];

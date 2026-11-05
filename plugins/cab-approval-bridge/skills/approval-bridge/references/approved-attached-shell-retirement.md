@@ -1,4 +1,4 @@
-# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.39
+# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.40
 
 Le propriétaire traite ce cas dans le périmètre validé sans solliciter le
 correcteur. Le parent peut protéger un effet antérieur incertain : ne jamais
@@ -190,3 +190,30 @@ ayant déjà rendu409 : conserver ce reçu et choisir une action neuve après re
 Après réponse perdue d’une même action, relire son reçu exact sans nouveau
 reject, write ou once. ACK absent/non204, call supplémentaire, cible/empreinte
 ou identité divergente restent refusés ; les autres gardes de parent s’appliquent.
+
+## Parent seulement référencé puis RELEASED
+
+Un rattachement refusé avant once peut laisser un enfant PREPARED/APPROVED
+référençant un parent ensuite RELEASED, sans avoir figuré dans ses
+`operationIds`. Après vérification, le plan propose alors
+`withdraw-unissued-validation`. Le propriétaire peut créer sa policy couvrante
+et décider ce retrait dans le change sans sollicitation du développeur.
+
+Contrôler le même RUN, contexte, version et SID ; la libération du parent doit
+posséder son reçu, une issue COMPLETED/NO_EFFECT/RECONCILED et des membres
+terminaux. L’enfant n’a ni native, ni nativeResult, ni once, ni membership dans
+un autre accès. Le contrôleur vérifie deux frontières natives stables, la
+session inactive et l’absence de permissions et d’effets après la validation.
+Le parent est recontrôlé par empreinte avant le retrait. Cette voie ne demande
+pas que les ressources de l’enfant soient couvertes par l’ancien parent :
+elle retire la coordination sans exécuter l’input ni étendre un accès.
+
+Lire `/recovery/native-evidence?operationId=<id>`, puis le plan `/recovery`.
+Utiliser l’action offerte, son `boundaryDigest`, l’empreinte native et les
+références de revue dans la même policy `withdraw-unissued-validation`.
+Vérifier l’opération CANCELLED, la décision APPROVED inchangée, aucune nouvelle
+once ni réponse native, le parent et les baux inchangés. Un reçu perdu se relit
+ou se réconcilie sous les mêmes identités ; il ne se rejoue pas comme un effet.
+Une nouvelle unité corrigée utilise de nouveaux request/approval/op/stage et
+son manifeste minimal réellement nécessaire. Ne pas modifier la validation
+historique pour corriger ses ressources.

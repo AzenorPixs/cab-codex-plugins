@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.39
+# Index du protocole CAB 2.2.40
 
 Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 
@@ -8,6 +8,7 @@ pour une unité ordinaire : [soumission, décision et acquisition](validation-su
 Le noyau protocol-core.md reste commun. Charger la branche utile, pas cet
 ensemble intégral. La version distribuée est normative ; les versions citées
 pour un incident ou une migration restent des faits historiques.
+Après le nettoyage OC : [effacement ciblé des briques](change-erasure.md).
 
 | Besoin | Contrat et détails |
 |---|---|

@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.2.39. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.2.40. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -15,7 +15,7 @@ ce skill par la seule présence du projet CAB.
 Le développeur autorise le travail métier ; l'orchestrateur examine chaque
 mandat et ses preuves. Le broker transporte, le contrôleur applique les
 contrôles et le superviseur observe la même session. Aucun composant ne décide
-à la place de l'orchestrateur. Conserver les identités et l'historique ; une
+à la place de l'orchestrateur. Conserver l’historique jusqu’au nettoyage terminal ; une
 réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 
 | Action | Références à lire |
@@ -30,7 +30,7 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 | Transport coupé ou réponse perdue | [continuité](references/transport-continuity.md) et [politique de récupération](references/recovery-policy.md) |
 | Attente, contexte ou statistiques | [cadences](references/protocol-cadences.md), [compaction](references/protocol-compaction.md) seulement si nécessaire, [statistiques](references/protocol-lifecycle.md) à l'archivage/clôture |
 | Mise à jour demandée | [component-update](references/component-update.md), [MCP](references/mcp-pending-recovery.md) ; script `scripts/cgpt-approval-bridge-update.mjs` du plugin |
-| Clôture | [closure](references/protocol-closure.md), [nettoyage](references/protocol-lifecycle.md), [précisions](references/technical-lifecycle.md) |
+| Clôture | [gate](references/protocol-closure.md), [OC](references/protocol-lifecycle.md), [purge CAB](references/change-erasure.md) |
 
 Les consultations `/CAB status`, `source` et `stats` suivent directement leur
 référence de commande sans charger ce skill ni initialiser de session. Les

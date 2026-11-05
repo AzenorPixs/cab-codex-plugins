@@ -1,5 +1,12 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Effacement terminal SCM 2.2.40
+
+[purge-change-state-after-opencode-cleanup](changes/archive/2026-11-05-purge-change-state-after-opencode-cleanup/), code non attribué : source qualifiée, archivage SCM.
+1068 tests produit réussis ; purge ciblée après nettoyage OC, réancrage authentifié,
+pairs et protections conservés. Publication, CABU et reprise métier distincts ;
+voir QUALIFICATION.md et DELIVERY.md. Convergence ACL ultérieure.
+
 ## Annulation Code Mode SCM 2.2.27
 
 [qualify-formatted-native-cancellation](changes/archive/2026-11-04-qualify-formatted-native-cancellation/), code non attribué : ARCHIVÉ, source2.2.27 qualifiée.

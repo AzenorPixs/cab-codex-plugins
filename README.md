@@ -1,5 +1,14 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+## Nettoyage terminal des briques — CAB 2.2.40
+
+Après clôture sûre et nettoyage OpenCode, l’orchestrateur peut effacer les
+états du seul change dans controller, broker, supervisor et monitor. Le pilote
+préserve les pairs, réancre le journal par HMAC et vérifie disque et mémoire
+après une courte bascule de continuité, sans arrêter OpenCode. Le certificat
+est conservé hors CAB avant finalisation ; les effets incertains restent
+protégés. Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/change-erasure.md).
+
 ## Payloads générés et rapports structurés — CAB 2.2.39
 
 Le contrat distingue syntaxe Bash et helpers embarqués, octets rendus et

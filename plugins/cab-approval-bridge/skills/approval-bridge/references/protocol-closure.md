@@ -1,4 +1,4 @@
-# Clôture — CAB 2.2.39
+# Clôture — CAB 2.2.40
 
 ## Clôture et bilan documentaire
 
@@ -13,7 +13,9 @@ ressources du seul RUN sont libérées après désarmement et réconciliation.
 Les rapports attendus, dans le change ouvert ou l'archive selon le cas,
 sont vérifiés selon « Statistiques des sessions pilotées » avant le gate.
 Après désarmement et libération réconciliés, appliquer « Nettoyage final des
-sessions de l'agent de codage » avant restitution ou session suivante.
+sessions de l'agent de codage », puis l’[effacement terminal CAB](change-erasure.md)
+avant restitution ou session suivante. Une préparation du certificat ne vaut
+pas son acquittement et la suppression finale des reçus CAB.
 
 Pour un diagnostic ou une préparation sans écriture métier nécessaire, le
 job et son gate portent sur les preuves d'analyse et de restitution. Ne pas

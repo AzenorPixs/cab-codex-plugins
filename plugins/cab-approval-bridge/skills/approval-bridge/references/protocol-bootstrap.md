@@ -1,4 +1,4 @@
-# Entrée et cycle de pilotage — CAB 2.2.39
+# Entrée et cycle de pilotage — CAB 2.2.40
 
 ## Bootstrap prioritaire du monitoring
 

@@ -51,6 +51,7 @@ Dependances externes Python : aucune.
 
 import fcntl
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -70,7 +71,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.2.39"
+SERVER_VERSION = "2.2.40"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
@@ -500,6 +501,9 @@ SESSION_WATCHDOG_LOCK = threading.Lock()
 SESSION_WATCHDOG_STOP = threading.Event()
 READINESS_PUBLISH_STOP = threading.Event()
 READINESS_PUBLISH_INTERVAL_SECONDS = 30
+ERASURE_PREPARED = None
+ERASURE_PREPARATION_ERROR = None
+ERASURE_LOCK = threading.Lock()
 SESSION_WATCHDOG_STATE = {}
 SESSION_WATCHDOG_LAST_RUN_AT = ""
 SESSION_WATCHDOG_LAST_ERROR = ""
@@ -3983,6 +3987,21 @@ def do_propose(args):
                     "approval_id '%s' deja utilise"
                     % approval_id
                 )
+
+            if (os.path.exists(journal.journal_path() + ".erasure-epoch.json")
+                    or (os.path.exists(journal.journal_path() + ".hmac.key")
+                        and os.path.exists(journal.checkpoint_path()))):
+                admission = request.Request(controller_url() + "/cleanup/admission",
+                    data=json.dumps({"runId":run_identity.get("run_id"),
+                        "version":run_identity.get("reservation_version"),
+                        "changeId":change_id,"sessionId":session_id}).encode("utf-8"),
+                    headers={"Content-Type":"application/json","x-cab-continuity":"cab-continuity-v1"},method="POST")
+                try:
+                    with request.urlopen(admission, timeout=2) as response:
+                        if json.loads(response.read(4096)).get("accepted") is not True:
+                            raise ValidationError("erasure-admission-refused")
+                except (error.URLError, OSError, ValueError) as exc:
+                    raise ValidationError("erasure-admission-unavailable-or-retired") from exc
 
             now = utc_now()
 
@@ -8367,7 +8386,13 @@ def do_readiness(args=None):
 
 def publish_readiness_to_controller():
     """Publie le snapshot readiness au controleur local."""
+    global ERASURE_PREPARATION_ERROR
     snapshot = do_readiness()
+    with ERASURE_LOCK:
+        if ERASURE_PREPARED:
+            snapshot["erasure_prepared"] = ERASURE_PREPARED["transactionId"]
+        if ERASURE_PREPARATION_ERROR:
+            snapshot["erasure_prepare_error"] = dict(ERASURE_PREPARATION_ERROR)
     endpoint = controller_url() + "/broker/readiness"
     payload = json.dumps(snapshot, ensure_ascii=False).encode("utf-8")
     http_request = request.Request(
@@ -8376,8 +8401,20 @@ def publish_readiness_to_controller():
     )
     try:
         with request.urlopen(http_request, timeout=2) as response:
+            body = response.read(1024 * 1024)
+            value = json.loads(body) if body else {}
+            if not isinstance(value, dict):
+                return False
+            if value.get("erasure_prepare") is not None:
+                try:
+                    prepare_terminal_erasure(value["erasure_prepare"])
+                    ERASURE_PREPARATION_ERROR = None
+                except (ValidationError, StoreError, OSError, journal.JournalError) as exc:
+                    code = str(exc)
+                    ERASURE_PREPARATION_ERROR = {"transactionId":value["erasure_prepare"].get("transactionId"),
+                        "code":code if re.fullmatch(r"erasure-[a-z0-9-]+",code) else "erasure-broker-preparation-failed"}
             return 200 <= response.status < 300
-    except (error.URLError, error.HTTPError, OSError):
+    except (error.URLError, error.HTTPError, OSError, ValueError):
         return False
 
 
@@ -8406,6 +8443,260 @@ def start_readiness_publisher():
 
 def stop_readiness_publisher():
     READINESS_PUBLISH_STOP.set()
+
+
+def erasure_control_signature(value, key):
+    material = json.dumps(value, sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=False).encode("utf-8")
+    digest = hashlib.sha256(material).hexdigest().encode("ascii")
+    return hmac.new(key, digest, hashlib.sha256).hexdigest()
+
+
+def erasure_journal_snapshot_unlocked(path):
+    """Verifie l'ancre avant acquittement puis avant preparation hors ligne."""
+    events = journal.read_events_unlocked(path)
+    journal.validate_sequences(events)
+    journal.calculate_chain_tip(events)
+    checkpoint = journal.verify_checkpoint(events, path)
+    if not checkpoint.get("ok"):
+        raise ValidationError("erasure-journal-integrity-invalid")
+    if not checkpoint.get("enabled") and os.path.exists(journal.checkpoint_path()):
+        raise ValidationError("erasure-journal-authentication-unavailable")
+    if checkpoint.get("enabled") and journal.checkpoint_key(allow_unanchored=True) is None:
+        raise ValidationError("erasure-primary-signing-key-unavailable")
+    return events, checkpoint
+
+
+def prepare_terminal_erasure(signed):
+    """Accepte seulement l'intention locale scellee, sans encore effacer."""
+    global ERASURE_PREPARED
+    from pathlib import Path
+    import stat
+    if not isinstance(signed, dict):
+        raise ValidationError("erasure-control-invalid")
+    value = dict(signed)
+    signature = value.pop("signature", "")
+    root = value.get("controlRoot", "")
+    if (value.get("protocol") != "cab-change-erasure-v1"
+            or not os.path.isabs(root) or os.path.realpath(root) != root
+            or not re.fullmatch(r"erasure-[a-f0-9-]{36}", value.get("transactionId", ""))):
+        raise ValidationError("erasure-control-invalid")
+    path = str(Path(root) / "change-erasure.key")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size != 32):
+            raise ValidationError("erasure-control-key-unsafe")
+        key = os.read(fd, 32)
+    finally:
+        os.close(fd)
+    if not hmac.compare_digest(signature, erasure_control_signature(value, key)):
+        raise ValidationError("erasure-control-signature-invalid")
+    scope = value.get("scope", {})
+    if (not isinstance(scope.get("ids"), list) or not scope["ids"]
+            or not isinstance(scope.get("runIds"), list)):
+        raise ValidationError("erasure-control-scope-invalid")
+    with locked_store(store_path()):
+        items = list(load_store(store_path())["approvals"].values())
+        if any(item.get("directory") != scope.get("workspace") for item in items
+               if item.get("change_id") == scope.get("changeId") or item.get("run_id") in scope["runIds"]):
+            raise ValidationError("erasure-broker-ownership-ambiguous")
+        if any(item.get("status") not in TERMINAL_STATES for item in items
+               if item.get("change_id") == scope.get("changeId")
+               or item.get("run_id") in scope["runIds"]):
+            raise ValidationError("erasure-broker-pending")
+    with ERASURE_LOCK:
+        if ERASURE_PREPARED and ERASURE_PREPARED != signed:
+            raise ValidationError("erasure-broker-already-prepared")
+    with journal.locked_journal(journal.journal_path()):
+        erasure_journal_snapshot_unlocked(journal.journal_path())
+    with ERASURE_LOCK:
+        ERASURE_PREPARED = signed
+
+
+def prepare_terminal_erasure_bundle():
+    """Apres arret des producteurs, prepare le journal rescellable hors ligne.
+
+    Le pilote applique les candidats uniquement apres disparition de ce PID.
+    Aucun ancien contenu cible n'est sauvegarde par ce prepareur.
+    """
+    import stat
+    def private_parent(directory):
+        if os.path.realpath(directory) != os.path.abspath(directory):
+            return False
+        while True:
+            metadata = os.stat(directory, follow_symlinks=False)
+            if stat.S_ISDIR(metadata.st_mode) and metadata.st_uid == os.getuid() and not metadata.st_mode & 0o077:
+                return True
+            parent = os.path.dirname(directory)
+            if parent == directory:
+                return False
+            directory = parent
+    with ERASURE_LOCK:
+        signed = ERASURE_PREPARED
+    if signed is None:
+        return
+    prepare_terminal_erasure(signed)
+    value = dict(signed)
+    value.pop("signature")
+    # Un simple redemarrage CABU ne doit pas preparer un ancien effacement.
+    control_path = os.path.join(value["controlRoot"], "change-erasure.json")
+    fd = os.open(control_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size > 128 * 1024 * 1024:
+            raise ValidationError("erasure-control-intent-unsafe")
+        with os.fdopen(os.dup(fd), "r", encoding="utf-8") as handle:
+            intent = json.load(handle)
+    finally:
+        os.close(fd)
+    intent_signature = intent.pop("signature", "")
+    fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if info.st_size != 32 or info.st_mode & 0o077 or info.st_uid != os.getuid():
+            raise ValidationError("erasure-control-key-unsafe")
+        control_key = os.read(fd, 32)
+    finally:
+        os.close(fd)
+    if not hmac.compare_digest(intent_signature, erasure_control_signature(intent, control_key)):
+        raise ValidationError("erasure-control-signature-invalid")
+    if intent.get("phase") != "STOPPING":
+        return
+    if intent.get("transactionId") != value["transactionId"] or intent.get("scope") != value["scope"]:
+        raise ValidationError("erasure-control-intent-divergent")
+    scope = dict(value["scope"])
+    ids = set(scope["ids"])
+    identity_keys = {"runId", "run_id", "changeId", "change_id", "sessionId", "session_id",
+                     "requestId", "approval_id", "operation_id", "access_id"}
+    with locked_store(store_path()):
+        data = load_store(store_path())
+        for item in data["approvals"].values():
+            if item.get("change_id") == scope["changeId"] or item.get("run_id") in scope["runIds"]:
+                ids.update(v for k, v in item.items() if k in identity_keys and isinstance(v, str) and v)
+                ids.update(item_request_ids(item))
+    scope["ids"] = sorted(ids)
+    path = journal.journal_path()
+    with journal.locked_journal(path):
+        events, checkpoint = erasure_journal_snapshot_unlocked(path)
+        selected = []
+        def owns_event(node, field=""):
+            if isinstance(node, dict):
+                return any((key in identity_keys and isinstance(item, str) and item in ids)
+                           or (key == "event_key" and isinstance(item, str)
+                               and any(token in ids and token != scope["changeId"] for token in item.split(":")))
+                           or owns_event(item, key) for key, item in node.items())
+            if isinstance(node, list):
+                return any((field in {"approval_ids", "requestIds", "runIds", "sessionIds"}
+                            and isinstance(item, str) and item in ids) or owns_event(item, field)
+                           for item in node)
+            return False
+
+        def foreign_reference(node):
+            if isinstance(node, dict):
+                return any((key in {"run_id", "runId"} and isinstance(item, str) and item not in scope["runIds"])
+                           or (key == "directory" and isinstance(item, str) and item != scope["workspace"])
+                           or foreign_reference(item) for key, item in node.items())
+            if isinstance(node, list):
+                return any(foreign_reference(item) for item in node)
+            return False
+
+        for event in events:
+            if owns_event(event):
+                if event.get("change_id") and event["change_id"] != scope["changeId"]:
+                    raise ValidationError("erasure-journal-foreign-reference")
+                if foreign_reference(event):
+                    raise ValidationError("erasure-journal-foreign-reference")
+                selected.append(event["event_id"])
+        next_events = journal.prepare_erasure_reanchor(events, selected)
+        signing_key = journal.checkpoint_key(allow_unanchored=True)
+        if signing_key is None:
+            if checkpoint.get("enabled"):
+                raise ValidationError("erasure-primary-signing-key-unavailable")
+            key_path = path + ".hmac.key"
+            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            try:
+                signing_key = os.urandom(32)
+                if os.write(fd, signing_key) != len(signing_key):
+                    raise OSError("erasure-key-write-incomplete")
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            directory_fd = os.open(os.path.dirname(path), os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        next_checkpoint = journal.build_checkpoint(len(next_events), journal.calculate_chain_tip(next_events), path, key=signing_key)
+        entries = []
+        for target, replacement in [(path, "".join(json.dumps(event, ensure_ascii=False, separators=(",", ":"))+"\n" for event in next_events)),
+                                    (journal.checkpoint_path(), json.dumps(next_checkpoint, ensure_ascii=False, separators=(",", ":"))+"\n")]:
+            before = None
+            if os.path.exists(target):
+                fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                try:
+                    info = os.fstat(fd)
+                    parent = os.stat(os.path.dirname(target), follow_symlinks=False)
+                    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid()
+                            or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or not private_parent(os.path.dirname(target))):
+                        raise ValidationError("erasure-broker-file-unsafe")
+                    with os.fdopen(os.dup(fd), "rb") as handle:
+                        before = hashlib.sha256(handle.read()).hexdigest()
+                finally:
+                    os.close(fd)
+            entries.append({"path":target,"before":before,"text":replacement,"remove":False})
+    epoch_path = journal.journal_path() + ".erasure-epoch.json"
+    epoch_before = None
+    previous_epoch = 0
+    previous_generation = 0
+    if os.path.exists(epoch_path):
+        fd = os.open(epoch_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid():
+                raise ValidationError("erasure-epoch-file-unsafe")
+            with os.fdopen(os.dup(fd), "rb") as handle:
+                raw_epoch = handle.read()
+                epoch_before = hashlib.sha256(raw_epoch).hexdigest()
+                old_epoch = json.loads(raw_epoch)
+                previous_epoch = int(old_epoch["epoch"])
+                previous_generation = int(old_epoch["generation"])
+                if previous_epoch < 0 or previous_generation < 0:
+                    raise ValidationError("erasure-epoch-invalid")
+        finally:
+            os.close(fd)
+    epoch = {"epoch":str(max(time.time_ns(), previous_epoch + 1)),
+             "generation":max(scope["registrySequence"], previous_generation)}
+    entries.append({"path":epoch_path,"before":epoch_before,"text":json.dumps(epoch,separators=(",", ":"))+"\n","remove":False})
+    roots = {store_path(), path, journal.checkpoint_path(), AUTO_REMEDIATION_CIRCUIT_STATE_PATH}
+    for state_file in (store_path(), path, journal.checkpoint_path()):
+        parent = os.path.dirname(state_file)
+        if any(part.startswith(("cab-approval-bridge", "cgpt-approval-bridge")) or part == "broker"
+               for part in parent.split(os.sep)):
+            roots.add(parent)
+    bundle = {"protocol":value["protocol"],"transactionId":value["transactionId"],"scope":scope,
+              "roots":sorted(roots),
+              "journalPaths":[path,journal.checkpoint_path()],"entries":entries,"brokerPid":os.getpid()}
+    bundle["locks"] = {"instance":instance_lock_path(),"store":store_path()+".lock","journal":journal.journal_lock_path(path)}
+    fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size != 32:
+            raise ValidationError("erasure-control-key-unsafe")
+        key = os.read(fd, 32)
+    finally:
+        os.close(fd)
+    bundle["schema_version"] = STORE_SCHEMA_VERSION
+    bundle["signature"] = erasure_control_signature(bundle, key)
+    bundle_path = os.path.join(value["controlRoot"], "broker-erasure.json")
+    save_store(bundle_path, bundle)
+    fd = os.open(bundle_path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        os.fchmod(fd, 0o600)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def reconcile_pending_approvals():
@@ -10230,6 +10521,18 @@ def main():
                 flush=True,
             )
 
+        if ERASURE_PREPARED:
+            try:
+                deadline = time.monotonic() + 15
+                for worker in threading.enumerate():
+                    if worker is not threading.current_thread() and worker.name.startswith("cgpt-mcp-"):
+                        worker.join(max(0, deadline - time.monotonic()))
+                        if worker.is_alive():
+                            raise ValidationError("erasure-background-writer-active")
+                prepare_terminal_erasure_bundle()
+            except (OSError, ValueError, ValidationError, StoreError, journal.JournalError,
+                    journal.JournalValidationError):
+                print("cgpt-approval-bridge: erasure-bundle-unavailable", file=sys.stderr, flush=True)
         release_instance_lock()
 
     return 0

@@ -1,4 +1,6 @@
 import {migrationRegistryDigest,validateRuntimeMigration,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
+import { ChangeErasureManager,erasureMonitorEndpoint } from './cgpt-approval-bridge-erasure-manager.mjs';
+import {ErasureTransaction} from './cgpt-approval-bridge-change-erasure.mjs';
 import {runtimeStateDirectory,legacyStateDirectory,projectAuthorityPath,initializeRuntimeState,readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
 import { EfficiencyLedger } from './cgpt-approval-bridge-efficiency.mjs';
 import { ShellLifecycle } from './cgpt-approval-bridge-shell-lifecycle.mjs';
@@ -27,7 +29,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.2.39";
+const version = "2.2.40";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -88,6 +90,9 @@ const registry = new ResourceRunRegistry(workspace, stateDirectory, {
 });
 await registry.acquireAuthority({additionalLockPath:projectAuthorityPath(workspace),
  beforeRestore:()=>{
+  if(existsSync(join(stateDirectory,'change-erasure.json'))&&
+    new ErasureTransaction(stateDirectory,{createKey:false}).load()?.phase==='APPLYING')
+    throw new CoordinationError('erasure-forward-recovery-required');
   const legacyRegistry=join(legacyStateDirectory(workspace),'controller-runs.json');
   if(existsSync(legacyRegistry)&&!existsSync(join(stateDirectory,'runtime-layout.json'))&&!existsSync(migrationPath))
     throw new Error('runtime-migration-required');
@@ -150,6 +155,14 @@ const nativeInstances = new NativeInstances(workspace, join(stateDirectory, 'nat
 statistics.registry(registry.snapshot());
 const statisticsMaintenance = new StatisticsMaintenance(statistics, { referenced: () => registry.snapshot().runs });
 const contexts = new Map();
+const erasure = new ChangeErasureManager({workspace,stateDirectory,registry,openCode,broker:()=>broker,terminalProofs:()=>recovery.receipts,
+  monitorIdentity:async()=>{
+    const response=await fetch(erasureMonitorEndpoint(envValue('OC_Codex_MONITOR_HOST'),envValue('OC_Codex_MONITOR_PORT')),
+      {signal:AbortSignal.timeout(3000),redirect:'error',headers:{'x-cab-continuity':'cab-continuity-v1'}});
+    if(!response.ok)throw new CoordinationError('erasure-monitor-unavailable');
+    return response.json();
+  }});
+if(erasure.pending()?.phase==='APPLYING')throw new CoordinationError('erasure-forward-recovery-required');
 recovery.validationBoundaryReplay = (receipt,op) => {
   const run=registry.runs.get(receipt.runId), context=contexts.get(receipt.runId);
   if(!run || !context || run.ownerId!==receipt.ownerId || !receipt.observation ||
@@ -158,7 +171,9 @@ recovery.validationBoundaryReplay = (receipt,op) => {
     return context.pendingRestorationProof?.(op.requestId)===receipt.effectDigest;
   if(receipt.action==='withdraw-unissued-validation') {
     if(op.state!=='CANCELLED'||op.completionDigest!==receipt.effectDigest||op.native||op.nativeResult)return false;
-    context.withdrawUnissuedValidation(receipt.observation.approval,receipt.effectDigest);return true;
+    if(receipt.observation.releasedReferenceDigest&&proofHash(registry.resourceState.accesses[op.accessId])!==receipt.observation.releasedReferenceDigest)return false;
+    context.withdrawUnissuedValidation(receipt.observation.approval,receipt.effectDigest,
+      {allowRejected:op.decision?.status==='rejected'});return true;
   }
   if(op.state!=='COMPLETED' || op.completionDigest!==receipt.effectDigest || op.native || op.nativeResult) return false;
   context.completeReviewedTerminal(receipt.observation.approval,receipt.effectDigest);
@@ -225,7 +240,8 @@ function contextFor(run) {
           op.decision && (op.decision.approvalId !== validation.approvalId || op.decision.requestId !== validation.requestId)) {
         throw new CoordinationError('communication-identity-divergent');
       }
-      if (op.state === 'CANCELLED' && (!op.decision || op.decision.status === 'approved' && !op.native && op.completionDigest)) return null;
+      if (op.state === 'CANCELLED' && (!op.decision || op.decision.status === 'approved' && !op.native && op.completionDigest||
+        registry.withdrawnUnissuedOperations?.has(op.operationId))) return null;
       const ledgerDecision = op.decision ? {
         decision: op.decision.status, requestId: validation.requestId, approval_id: validation.approvalId,
         change_id: validation.changeId, run_id: run.runId, reservation_version: operation.reservationVersion,
@@ -1340,12 +1356,17 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   registry.admission(run.runId);
   const op=registry.resourceState.operations[payload.operationId];
   if(!op || op.runId!==run.runId || op.contextId!==run.contextId || op.state!=='PREPARED' || op.native || op.nativeResult ||
-      (withdraw ? op.decision && op.decision.status!=='approved' : terminal ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
+      (withdraw ? op.decision && !['approved','rejected'].includes(op.decision.status) : terminal ? op.decision?.status!=='approved' : Boolean(op.decision)) ||
       (!withdraw && !terminal && Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId))))
     throw new CoordinationError('validation-boundary-recovery-invalid');
   const linked=Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId));
+  const rejectedWithdrawal=withdraw&&op.decision?.status==='rejected';
+  if(rejectedWithdrawal&&linked)throw new CoordinationError('rejected-withdrawal-access-linked');
+  let releasedReference=null;
+  if(withdraw&&linked){try{releasedReference=registry.releasedReferenceWithdrawal(run.runId,op.operationId)}catch{/* La voie HELD conserve ses propres gardes. */}}
+  const releasedReferenceDigest=releasedReference?proofHash(releasedReference):null;
   const parent=terminal ? registry.terminalReviewAccessBoundary(run.runId,op.operationId) :
-    linked ? registry.attachedWithdrawalAccess(run.runId,op.operationId,{allowReference:true,allowSingleton:true}) : null;
+    linked&&!releasedReference ? registry.attachedWithdrawalAccess(run.runId,op.operationId,{allowReference:true,allowSingleton:true}) : null;
   const parentDigest=parent ? proofHash(parent) : null;
   if(context.publicStatus().recoveryRequired || !context.publicJob()?.armed ||
       context.publicJob().sessionId!==op.sessionId || context.publicJob().currentCabMandate &&
@@ -1411,13 +1432,15 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
       return value?.status==='NOT_ADMITTED' && (value.requestId===op.requestId || value.approval_id===first.approval.approval_id);
     }))throw new CoordinationError('not-admitted-withdrawal-decision-conflict');
     const effects=first.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
+    if(releasedReference&&effects.length)throw new CoordinationError('released-reference-native-effect-observed');
     if(!op.decision && (parent || effects.length))throw new CoordinationError('not-admitted-withdrawal-effect-or-access');
     observation=!op.decision ? notAdmittedWithdrawalProof(first.view,first.parts,first.approval,same) :
       effects.length?(effects[0].tool==='bash' ? rejectedShellWithdrawalProof(first.view,effects,first.approval) :
       rejectedEditWithdrawalProof(first.view,effects,first.approval)):
       {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
+    if(releasedReference)observation.releasedReferenceDigest=releasedReferenceDigest;
     if(parent && !['REJECTED_UNISSUED_SHELL','REJECTED_UNISSUED_EDIT'].includes(observation.kind))throw new CoordinationError('attached-withdrawal-shell-proof-required');
-    context.verifyNativeCancelledValidation(first.approval,proofHash(payload));
+    context.verifyNativeCancelledValidation(first.approval,proofHash(payload),{allowRejected:rejectedWithdrawal});
   } else {
     if(context.hasRequest(op.requestId) && !context.pendingRestorationProof(op.requestId))throw new CoordinationError('pending-restore-already-present');
     observation=pendingValidationProof(first.parts,first.approval,same);
@@ -1451,6 +1474,8 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   if(parent && proofHash(terminal?registry.terminalReviewAccessBoundary(run.runId,op.operationId):
       registry.attachedWithdrawalAccess(run.runId,op.operationId,{allowReference:true,allowSingleton:true}))!==parentDigest)
     throw new CoordinationError('attached-withdrawal-parent-changed');
+  if(releasedReference&&proofHash(registry.releasedReferenceWithdrawal(run.runId,op.operationId))!==releasedReferenceDigest)
+    throw new CoordinationError('released-reference-parent-changed');
   const proofDigest=proofHash(payload);
   recovery.observeAction(actionId,{...observation,approval:structuredClone(first.approval)});
   if(terminal) {
@@ -1458,9 +1483,10 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     context.completeReviewedTerminal(first.approval,proofDigest);
     registry.completeReviewedReadOnly(run.runId,op.operationId,proofDigest,parentDigest);
   } else if(withdraw) {
-    context.withdrawUnissuedValidation(first.approval,proofDigest);
+    context.withdrawUnissuedValidation(first.approval,proofDigest,{allowRejected:rejectedWithdrawal});
     if(parent)registry.withdrawRejectedAttachedShell(run.runId,op.operationId,proofDigest,parentDigest,{allowReference:true,allowSingleton:true});
-    else registry.recordNativeCancelledValidation(run.runId,op.operationId,proofDigest);
+    else registry.recordNativeCancelledValidation(run.runId,op.operationId,proofDigest,
+      {allowRejected:rejectedWithdrawal,allowReleasedReference:Boolean(releasedReference)});
     registry.withdrawnUnissuedOperations ||= new Set();registry.withdrawnUnissuedOperations.add(op.operationId);
   } else context.restorePendingValidation(first.approval,proofDigest);
   return {state:terminal?'COMPLETED':withdraw?'CANCELLED':'PENDING',operationState:terminal?'COMPLETED':withdraw?'CANCELLED':'PREPARED',
@@ -2082,6 +2108,23 @@ async function handleRequest(request, response) {
         throw cause;
       }
     }
+    if (url.pathname.startsWith('/cleanup/')) {
+      guardContinuityRequest(request,url,server.address().port);
+      if(request.method!=='POST')throw new CoordinationError('erasure-method-invalid',405);
+      const input=await readJson(request,8192);
+      if(url.pathname==='/cleanup/admission') {
+        const candidate=registry.runs.get(input.runId);
+        if(handoffIntent||!candidate||candidate.state!=='RESERVED'||candidate.version!==input.version||
+          candidate.changeId!==input.changeId||candidate.sessionId!==input.sessionId||
+          input.changeId===erasure.pending()?.scope.changeId)throw new CoordinationError('erasure-admission-refused');
+        json(response,200,{accepted:true});return;
+      }
+      const value=url.pathname==='/cleanup/prepare'?await erasure.prepare(input):
+        url.pathname==='/cleanup/seal'?await erasure.seal(input):
+        url.pathname==='/cleanup/status'&&Object.keys(input).length===0?erasure.status():null;
+      if(!value)throw new CoordinationError('erasure-route-or-transaction-not-found',404);
+      json(response,200,value);return;
+    }
     if (handoffIntent && request.method === 'POST') {
       response.setHeader('retry-after', '1');
       json(response, 503, { error: 'transport-update-in-progress', retry_after_ms: 100 }); return;
@@ -2145,6 +2188,11 @@ async function handleRequest(request, response) {
       url.pathname = url.pathname === '/validation/resource-request' ? '/validation/request' : '/validation/reminder';
     }
     request.cabPayload = payload;
+    if(request.method==='POST'&&url.pathname==='/runs/reserve'){
+      const pending=erasure.pending();
+      if(pending&&(payload?.changeId===pending.scope.changeId||pending.scope.runIds.includes(payload?.runId)))
+        throw new CoordinationError('erasure-change-frozen');
+    }
     if (request.method === 'POST' && /^(?:\/runs\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99})?\/validation\/(request|reminder)$/.test(url.pathname)) {
       checkCommandLength(payload?.approval, maxCommandLength);
     }
@@ -2282,7 +2330,8 @@ async function handleRequest(request, response) {
         await publishTo(context, scopedReadiness(runId, payload));
         void restoreApprovedOperations(registry.runs.get(runId), context);
       }
-      json(response, 202, { accepted: true, status: payload.status }); return;
+      json(response, 202, { accepted: true, status: payload.status,
+        ...(erasure.brokerCommand()?{erasure_prepare:erasure.brokerCommand()}:{}) }); return;
     }
     const match = url.pathname.match(/^\/runs\/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})(\/.*)?$/);
     let runId = match?.[1] || payload?.approval?.run_id || url.searchParams.get('runId');

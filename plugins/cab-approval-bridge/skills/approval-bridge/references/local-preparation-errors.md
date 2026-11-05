@@ -1,4 +1,4 @@
-# Préparer sans faux blocage local — CAB 2.2.39
+# Préparer sans faux blocage local — CAB 2.2.40
 
 Pour un payload généré ou un rapport de build, suivre [la prévalidation par couche](generated-payload-validation.md) avant staging.
 

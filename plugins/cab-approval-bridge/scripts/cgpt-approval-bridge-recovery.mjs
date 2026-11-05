@@ -2,7 +2,7 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.2.39';
+export const VERSION = '2.2.40';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -191,6 +191,8 @@ export class RecoveryCoordinator {
         offer('reconcile-reviewed-terminal',op.operationId,op.resources,'/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
         offer('withdraw-unissued-validation',op.operationId,op.resources,'/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
       }
+      if(op.decision?.status==='rejected')offer('withdraw-unissued-validation',op.operationId,op.resources,
+        '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
     }
     for(const op of boundary.operations){
       try {if(!this.registry.terminalReviewAccessBoundary(runId,op.operationId))continue;}
@@ -199,6 +201,9 @@ export class RecoveryCoordinator {
         '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
     }
     for(const op of boundary.operations) {
+      try {this.registry.releasedReferenceWithdrawal(runId,op.operationId);
+        offer('withdraw-unissued-validation',op.operationId,op.resources,
+          '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));}catch{/* Aucun droit de retrait sur une reference non qualifiee. */}
       try { this.registry.attachedWithdrawalAccess(runId,op.operationId,{allowReference:true,allowSingleton:true}); }
       catch { continue; }
       offer('withdraw-unissued-validation',op.operationId,op.resources,

@@ -1,4 +1,4 @@
-# Statistiques et nettoyage final — CAB 2.2.39
+# Statistiques et nettoyage final — CAB 2.2.40
 
 ## Statistiques des sessions pilotées
 
@@ -154,8 +154,10 @@ Une interface absente, une propriété incertaine ou un effet inconnu suspend
 la suppression concernée et est signalé sans inventer de réussite.
 
 Conserver le chat et le checkpoint de l'orchestrateur, les rapports,
-`BLOCKERS.md` encore utile, les travaux, les preuves et les historiques
-d'audit CAB. Préserver les sessions d'autres travaux et les services partagés.
+`BLOCKERS.md` encore utile, les travaux et les preuves métier. Les historiques
+CAB restent nécessaires jusqu’à la clôture sûre ; leur
+[effacement terminal ciblé](change-erasure.md) suit ensuite ce nettoyage natif.
+Préserver les sessions d'autres travaux et la continuité des services partagés.
 Lors d'un arrêt pour dépendances insatisfaites, préserver aussi la dernière
 session métier désignée ci-dessus et son historique natif ; aucun arrêt de
 service ou de conteneur ne doit entraîner leur perte.
