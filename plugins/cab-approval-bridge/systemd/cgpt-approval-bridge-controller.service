@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 2.2.35 — Contrôleur local Codex Approval Bridge
+Description=CAB 2.2.36 — Contrôleur local Codex Approval Bridge
 
 [Service]
 KillMode=mixed

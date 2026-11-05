@@ -1,4 +1,4 @@
-# ASK effectif et permissions sauvegardées — CAB 2.2.35
+# ASK effectif et permissions sauvegardées — CAB 2.2.36
 
 Une règle de session `shell ask` ou `edit ask` ne suffit pas à prouver qu’une
 permission sera demandée : OpenCode2.2 conserve aussi des grants par projet.

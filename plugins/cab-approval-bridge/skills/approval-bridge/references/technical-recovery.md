@@ -1,4 +1,4 @@
-# Précisions recovery — CAB 2.2.35
+# Précisions recovery — CAB 2.2.36
 
 Pour changer le SID courant tout en conservant des effets et accès historiques
 protégés, utiliser la voie distincte [session-handoff](session-handoff.md).
@@ -334,3 +334,17 @@ La correction du reçu ne corrige pas automatiquement la cause de non-admission.
 L’opérateur garde la même identité et ses protections, observe le refus exact
 et décide la suite autorisée. Aucun statut COMPLETED technique ne vaut
 APPROVED/once, réussite d’un test ou livraison métier.
+
+## Notification et contrôle natif lent
+
+La réponse HTTP de notification dispose de10s, sous la lease15s ; les lectures
+de décision gardent2s. Une corrélation MATCHED prouve l’identité native observée,
+pas l’admission, l’ACK HTTP ou DELIVERED. Un ancien délai2s peut expirer avant
+la fin du contrôle natif. Distinguer ce cas d’un503 broker-coordination-not-ready
+au démarrage : vérifier le protocole réellement reçu et les dates de readiness.
+Après échec, observer le même reçu, sa prochaine échéance et l’admission exacte ;
+évaluer puis effectuer une seule reprise autorisée sur la même approval. Ne pas
+resoumettre, changer les IDs ou consommer une nouvelle remédiation à l’aveugle.
+Le délai augmenté ne prouve aucune reprise métier ; vérifier réponse, admission,
+décision, once et résultat séparément. Un refus déterministe reste soumis à sa
+classification existante ; un délai n’en change pas le sens.

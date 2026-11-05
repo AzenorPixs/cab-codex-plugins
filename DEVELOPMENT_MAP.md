@@ -1,5 +1,20 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Délai de notification SCM 2.2.36
+
+[bound-notification-admission-response](openspec/changes/archive/2026-11-05-bound-notification-admission-response/), code non attribué : ARCHIVÉ, correctif source qualifié.
+Notification10s sous lease15s, lectures2s conservées ;997cas uniques réussis
+sur71empreintes figées. Trois incidents antérieurs de démarrage du banc sont explicités ; dernière
+campagne complète réussie sans modification du code. Publication, activation
+et reprise PA01 distinctes ; voir QUALIFICATION.md. Convergence ACL ultérieure.
+
+```mermaid
+flowchart LR
+    notificationDeadline["bound-notification-admission-response<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class notificationDeadline provisional
+```
+
 ## Résultat vérifié de réconciliation SCM 2.2.35
 
 [verify-reconciliation-delivery-outcome](openspec/changes/archive/2026-11-05-verify-reconciliation-delivery-outcome/), code non attribué : ARCHIVÉ, source2.2.35 qualifiée.
