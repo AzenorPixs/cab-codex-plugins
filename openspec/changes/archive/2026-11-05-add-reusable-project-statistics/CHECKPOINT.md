@@ -1,3 +1,34 @@
+# Change finalisé — clôture SCM CAB 2.3.1
+
+Le change est archivé, ses 13 tâches sont validées et ses 11 exigences sont
+synchronisées. Aucun réarchivage ni nouvelle tâche. La capacité a été publiée
+sur GitHub en 2.3.0, commit af940d26 et branche réconciliée d2dd0b33.
+Le périmètre intégral CAB est conservé. Forgejo était indisponible ; GitLab
+non configuré. Aucune activation CABU ou de runtime n’est réalisée ici.
+
+La finalisation 2.3.1 aligne tous les composants, paquets et commandes ; le
+workflow DIU créera le nouveau tag v2.3.1. Qualification finale : 185 tests
+Python, 1 284 tests Node réussis, 31 ignorés, Chromium/Firefox réussis,
+24 fichiers Python syntaxiquement valides et deux commandes OpenSpec strictes
+réussies sur 21 éléments chacune. Voir QUALIFICATION.md.
+
+Le même rapport individuel conserve les trois relevés, ses six sections et
+les preuves de clôture. Le bilan de blocage résolu est absent et aucun lien
+courant ne pointe vers lui. Le DELTA global a échoué sur le contrat SGS
+divergent ; le couple est strictement préservé, sans transaction en attente.
+Cette limite ne bloque pas la clôture SCM. Une régénération manuelle SGS reste
+à mandater séparément. La livraison autorisée utilise exclusivement
+`sudo -n /usr/local/bin/diu projects cicd cab 2.3.1` ; son résultat est relevé
+dans la restitution finale et le journal local output/sgs-finalization-2.3.1.
+Aucun effet Git parallèle, amendement de tag existant ou suppression d’archive.
+
+## Historique conservé
+
+Les états de reprise ci-dessous sont des relevés antérieurs et ne décrivent
+pas des tâches encore à effectuer.
+
+---
+
 # Clôture locale vérifiée — CAB2.3.0
 
 Archivage normal réussi, six sections du même rapport vérifiées et contribution
