@@ -66,8 +66,9 @@ Durabilite :
   flush
   fsync
 
-Le journal est append-only.
-Aucun evenement existant n'est modifie.
+Le journal est append-only pendant l'activite et la reprise.
+L'exception explicite d'effacement terminal qualifie prepare un reancrage
+authentifie sans modifier le contenu metier des evenements conserves.
 Les evenements v3 sont lies par previous_hash/event_hash (SHA-256).
 Un checkpoint HMAC-SHA256 separe peut authentifier la tete du journal.
 """
@@ -77,10 +78,11 @@ import hashlib
 import hmac
 import json
 import os
+import stat
 import threading
 import uuid
 
-VERSION = "2.2.39"
+VERSION = "2.2.40"
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -272,7 +274,7 @@ def checkpoint_path():
     )
 
 
-def checkpoint_key():
+def checkpoint_key(allow_unanchored=False):
     """Retourne la cle HMAC primaire sans jamais l'exposer."""
     value = os.environ.get(
         CHECKPOINT_KEY_ENV,
@@ -280,7 +282,22 @@ def checkpoint_key():
     )
 
     if not value:
-        return None
+        path = journal_path() + ".hmac.key"
+        if not allow_unanchored and not os.path.exists(checkpoint_path()):
+            return None
+        try:
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except FileNotFoundError:
+            return None
+        try:
+            info = os.fstat(fd)
+            if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                    or info.st_uid != os.getuid() or info.st_mode & 0o077
+                    or info.st_size != 32):
+                raise JournalError("cle locale du journal non sure")
+            return os.read(fd, 32)
+        finally:
+            os.close(fd)
 
     return value.encode(
         "utf-8"
@@ -482,9 +499,9 @@ def fsync_parent_directory(path):
         )
 
 
-def build_checkpoint(sequence, chain_tip, path):
+def build_checkpoint(sequence, chain_tip, path, key=None):
     """Construit et signe le checkpoint avec la cle primaire."""
-    key = checkpoint_key()
+    key = checkpoint_key() if key is None else key
 
     if key is None:
         return None
@@ -804,6 +821,9 @@ def verify_checkpoint(events, journal_file_path):
     previous = previous_checkpoint_keys()
 
     if primary is None and not previous:
+        if os.path.exists(journal_file_path + ".erasure-epoch.json"):
+            return {"ok": False, "enabled": True, "status": "ERASURE_KEY_MISSING",
+                    "error": "cle HMAC absente apres reancrage"}
         return {
             "ok": True,
             "enabled": False,
@@ -1160,6 +1180,38 @@ def calculate_chain_tip(events):
         tip = event_hash
 
     return tip
+
+
+def prepare_erasure_reanchor(events, event_ids):
+    """Prepare un nouveau chainage sans ecrire ni modifier les evenements pairs.
+
+    L'appelant qualifie la cloture et detient le verrou du journal. Seules les
+    metadonnees de chainage, sequence et version peuvent changer. La selection
+    d'un evenement ambigu ou partage reste a la charge de l'inventaire type.
+    """
+    validate_sequences(events)
+    calculate_chain_tip(events)
+    if not isinstance(event_ids, (list, tuple, set)) or any(
+            not isinstance(item, str) or not item for item in event_ids):
+        raise JournalValidationError("selection de reancrage invalide")
+    selected = set(event_ids)
+    identities = [event.get("event_id") for event in events]
+    keys = [event.get("event_key") for event in events if event.get("event_key")]
+    if len(set(identities)) != len(identities) or len(set(keys)) != len(keys):
+        raise JournalError("identites du journal dupliquees")
+    if not selected.issubset(set(identities)):
+        raise JournalValidationError("evenement a retirer absent")
+    retained = json.loads(json.dumps(events, ensure_ascii=False))
+    retained = [event for event in retained if event["event_id"] not in selected]
+    tip = ZERO_HASH
+    for sequence, event in enumerate(retained, start=1):
+        event.update(journal_version=JOURNAL_VERSION, sequence=sequence,
+                     previous_hash=tip)
+        event["event_hash"] = calculate_event_hash(event)
+        tip = event["event_hash"]
+    validate_sequences(retained)
+    calculate_chain_tip(retained)
+    return retained
 
 
 def optional_string(

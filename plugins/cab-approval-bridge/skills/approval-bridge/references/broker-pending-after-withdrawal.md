@@ -1,4 +1,4 @@
-# Broker PENDING après retrait local — CAB 2.2.39
+# Broker PENDING après retrait local — CAB 2.2.40
 
 ## Identifier la dette de communication
 

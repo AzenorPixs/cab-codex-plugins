@@ -1,4 +1,4 @@
-# Prévalider les payloads générés — CAB 2.2.39
+# Prévalider les payloads générés — CAB 2.2.40
 
 ## Séparer les couches avant tout stage
 

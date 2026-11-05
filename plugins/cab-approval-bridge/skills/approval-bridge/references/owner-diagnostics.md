@@ -1,4 +1,4 @@
-# Diagnostic propriétaire autonome — CAB 2.2.39
+# Diagnostic propriétaire autonome — CAB 2.2.40
 
 Dans le change autorisé, l’orchestrateur qualifie et décide les récupérations
 existantes. Solliciter le développeur pour une décision hors de ce périmètre,
@@ -17,6 +17,7 @@ Une preuve absente reste à établir ; elle n’autorise jamais un effet incerta
 | Révision enfant absente ou shell multiligne/composé | [Soumission](validation-submission.md#révisions-effectives-et-scripts-composés) et [carrier](exact-shell-carrier.md) |
 | Accès HELD aux membres terminaux, jeton perdu | [Libération propriétaire](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage) |
 | APPROVED/HELD sans once, permission refusée | [Retrait qualifié](approved-attached-shell-retirement.md) |
+| APPROVED sans émission, parent seulement référencé puis RELEASED | [Référence libérée](approved-attached-shell-retirement.md#parent-seulement-référencé-puis-released) |
 | Autre combinaison d’états | [Grille](pilot-state-matrix.md), [autonomie](owner-reconciliation.md), puis [récupération](recovery-policy.md) |
 
 ## Séquence courte

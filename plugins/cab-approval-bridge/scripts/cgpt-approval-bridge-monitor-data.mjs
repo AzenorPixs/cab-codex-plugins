@@ -1,4 +1,5 @@
-import { constants } from 'node:fs';
+import { constants,existsSync } from 'node:fs';
+import { readRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -7,7 +8,7 @@ import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-mo
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.2.39';
+export const VERSION = '2.2.40';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -127,7 +128,7 @@ async function document(directory, name) {
   } finally { await file.close(); }
 }
 
-export async function readChanges(workspace, referenced = []) {
+export async function readChanges(workspace, referenced = [], {referencedOnly=false} = {}) {
   const unavailable = (changeId, reason) => ({ changeId, title: changeId, lotCode: null, location: 'unknown',
     progress: { available: false, reason, completed: null, total: null, tasks: [] } });
   try {
@@ -137,7 +138,8 @@ export async function readChanges(workspace, referenced = []) {
     await regularDirectory(specs);
     await regularDirectory(changes);
     const entries = (await readdir(changes, { withFileTypes: true })).slice(0, 1000);
-    const selected = entries.filter((entry) => entry.name !== 'archive' && id(entry.name) && entry.isDirectory())
+    const selected = entries.filter((entry) => entry.name !== 'archive' && id(entry.name) && entry.isDirectory()&&
+      (!referencedOnly||referenced.includes(entry.name)))
       .slice(0, 200).map((entry) => ({ changeId: entry.name, directory: join(changes, entry.name), location: 'active' }));
     const missing = [...new Set(referenced.filter(id))].filter((value) => !selected.some((entry) => entry.changeId === value));
     if (missing.length) {
@@ -228,6 +230,10 @@ export class MonitorState {
     this.configuration = configuration; this.now = now; this.fetcher = fetcher;
     this.openCode = createOpenCodeV2ClientFromEnv({ directory: configuration.workspace,
       baseUrl: configuration.opencodeUrl, fetchImpl: fetcher });
+    const policyPath=join(configuration.stateDirectory,'catalog-policy.json');
+    const policy=existsSync(policyPath)?readRuntimeJson(policyPath).value:null;
+    if(policy&&policy.referencedOnly!==true)throw new Error('monitor-catalog-policy-invalid');
+    this.referencedOnly=policy?.referencedOnly===true;
     this.startedAt = new Date(now()).toISOString(); this.sources = {}; this.events = [];
     this.changes = { available: false, changes: [] }; this.running = false; this.listeners = new Set();
     this.coverage = { instanceId: null, truncated: false, restarted: false, stream: 'connecting' };
@@ -288,7 +294,7 @@ export class MonitorState {
         this.source('observations', c.controllerUrl + '/monitor/events')]);
       this.ingest(this.sources.observations?.value);
       const runs = this.runs();
-      this.changes = await readChanges(c.workspace, runs.map((run) => run.changeId));
+      this.changes = await readChanges(c.workspace, runs.map((run) => run.changeId),{referencedOnly:this.referencedOnly});
       this.publish();
     } finally { this.running = false; }
   }

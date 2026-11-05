@@ -16,7 +16,7 @@ import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credentia
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.39';
+export const VERSION = '2.2.40';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -106,7 +106,7 @@ async function syntax(path, work) {
       { timeout: 15000, maxBuffer: 4096, env: { ...process.env, PYTHONPYCACHEPREFIX: join(work, 'pycache') } });
   } catch { throw error('update-syntax-invalid'); }
 }
-async function authority(path) {
+export async function authority(path) {
   const child = spawn('python3', [fileURLToPath(new URL('./cgpt-approval-bridge-registry-lock.py', import.meta.url)), path],
     { stdio: ['pipe', 'pipe', 'ignore'] });
   child.stdin.on('error', () => {});
@@ -913,6 +913,9 @@ export async function updateComponents(input, options = {}) {
   }
   try {
     const existing = await optional(currentFile);
+    const cleanup=await optional(join(runtimeStateDirectory(c.serviceWorkspace||c.workspace,{home:c.home}),'change-erasure.json'));
+    if(cleanup&&['FREEZING','STOPPING','APPLYING','RESTORING_PRESERVED','RESTARTING','VERIFYING'].includes(JSON.parse(cleanup.data.toString('utf8'))?.phase))
+      throw error('update-erasure-forward-recovery-required');
     if (existing) {
       try { receipt = JSON.parse(existing.data.toString('utf8')); } catch { throw error('update-journal-invalid'); }
       if (input.recoverMcp !== undefined && (receipt.id !== input.recoverMcp || complete.has(receipt.phase) ||

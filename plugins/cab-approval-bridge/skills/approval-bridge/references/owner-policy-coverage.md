@@ -1,4 +1,4 @@
-# Vérifier la couverture de policy — CAB 2.2.39
+# Vérifier la couverture de policy — CAB 2.2.40
 
 Une policy existante n’est pas nécessairement utilisable pour une opération
 nouvelle. policySetupRequired=false prouve sa présence, pas son périmètre.

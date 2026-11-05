@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Effacement terminal SCM 2.2.40
+
+[purge-change-state-after-opencode-cleanup](openspec/changes/archive/2026-11-05-purge-change-state-after-opencode-cleanup/), code non attribué : source qualifiée, archivage SCM.
+1068 tests produit réussis ; purge ciblée après nettoyage OC, réancrage authentifié,
+pairs et protections conservés. Publication, CABU et reprise métier distincts ;
+voir QUALIFICATION.md et DELIVERY.md. Convergence ACL ultérieure.
+
 ## Payloads générés SCM 2.2.39
 
 [document-generated-build-payload-preflight](openspec/changes/archive/2026-11-05-document-generated-build-payload-preflight/), code non attribué : ARCHIVÉ, documentation qualifiée.
