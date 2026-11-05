@@ -1,0 +1,44 @@
+{
+  "qualification": "two-real-uids",
+  "results": [
+    {
+      "scenario": "historical-key-forward-recovery",
+      "recoveryProof": {
+        "sameTransaction": true,
+        "sameGeneration": true,
+        "registryUnchanged": true,
+        "originalReceiptPreserved": true,
+        "interruptionRecovered": true,
+        "authorityDriftRefused": true,
+        "codeDriftRefused": true,
+        "pointerDriftRefused": true,
+        "heldDriftRefused": true,
+        "originalStagesPreserved": true,
+        "oldReleasesPreserved": true
+      },
+      "originalVersion": "1.9.0",
+      "largeRegistry": true,
+      "publicRegistryBytes": 5218610,
+      "privateRegistryBytes": 5657063,
+      "actualVersions": {
+        "controller": "1.10.1",
+        "supervisor": "1.10.1",
+        "web": "1.10.1",
+        "broker": "1.10.1"
+      },
+      "serviceUids": {
+        "controller": 1000,
+        "supervisor": 1000,
+        "monitor": 1000
+      },
+      "opencodeUid": 1002,
+      "brokerUid": 1002,
+      "sourceUnchanged": true,
+      "kernelWriteDenied": true,
+      "intentChecks": 1,
+      "openCodePreserved": true,
+      "pausesPreserved": true,
+      "artifactDigest": "f0179b37e83f93e85464499db70bcaf21b778c8f3a63e525be91ae4f9f4ea3c0"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: {"type":"result","uid":1000,"writeDenied":true,"error":"update-unit-invalid"} 
+    at scenario (file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:244:40)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async file:///inputs/tests/helpers/readonly-broker-two-uid.mjs:284:119 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.22.1

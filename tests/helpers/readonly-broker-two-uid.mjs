@@ -1,3 +1,4 @@
+import {runtimeStateDirectory} from '../../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
@@ -86,7 +87,7 @@ async function updater(c){
   assert.equal(process.getuid(),1000);
   let denied=false;
   try{const fd=await open(c.input.brokerProof.entry,'r+');await fd.close();}catch(error){if(error.code==='EACCES')denied=true;else throw error;}
-  assert.equal(denied,true,'la séparation UID interdit réellement l’écriture dans le broker');
+  assert.equal(denied,!c.actorArtifacts,'le banc vérifie les droits réels du propriétaire déclaré');
   try{
     const options={serviceCommand:(args)=>maintenanceHttp(c.controlUrl,'/service',{args}),onPhase:(phase,receipt)=>{
       process.send({type:'phase',phase,intent:receipt.externalBroker?.disconnectIntentAt,brokerInFiles:receipt.files.some((file)=>file.group==='broker')});
@@ -104,8 +105,9 @@ async function scenario(dropReply){
   const home=join(root,'profile'),workspace=join(root,'workspace'),brokerDirectory=join(root,'broker'),brokerState=join(root,'broker-state');
   const pluginRoot='/inputs/plugins/cab-approval-bridge',original='/inputs/original';
   const historicalRecovery=process.env.CAB_TEST_HISTORICAL_RECOVERY==='1';
+  const actorArtifacts=process.env.CAB_TEST_ACTOR_ARTIFACTS==='1';
   const originalVersion=JSON.parse(await readFile(join(original,'.codex-plugin/plugin.json'),'utf8')).version.split('+')[0];
-  assert.ok(['1.7.1','1.9.0','1.10.1','1.10.2','1.10.3','1.10.4'].includes(originalVersion));
+  assert.ok(['1.7.1','1.9.0','1.10.1','1.10.2','1.10.3','1.10.4','1.10.5','1.10.6'].includes(originalVersion));
   const scripts=join(home,'.local/share/cab-approval-bridge'),seed=join(scripts,'releases/seed/scripts');
   const monitorRoot=join(home,'.local/share/cab-approval-bridge-monitor'),monitorScripts=join(monitorRoot,'scripts');
   const processes={},children=[],events=[];let stderr='';
@@ -158,15 +160,16 @@ async function scenario(dropReply){
     }
     if(historicalRecovery){
       await stop(processes.controller);
-      const path=join(workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json');
+      const path=join(runtimeStateDirectory(workspace), 'controller-runs.json');
       const stored=JSON.parse(await readFile(path));stored.coordination.revisions['browser:c14-headless-test-profiles']=0;
       await writeFile(path,JSON.stringify(stored,null,2)+'\n');await start('controller');
     }
     const publicRegistryBytes=Buffer.byteLength(JSON.stringify(await fixtureRegistry(controllerUrl)));
-    const privateRegistryBytes=(await lstat(join(workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json'))).size;
+    const privateRegistryBytes=(await lstat(join(runtimeStateDirectory(workspace), 'controller-runs.json'))).size;
     if(largeRegistry){assert.ok(publicRegistryBytes>2*1024*1024);assert.ok(privateRegistryBytes>4*1024*1024);}
     await start('supervisor');await start('monitor');
     await maintenanceHttp(opencodeUrl,'/fixture/replace',{});
+    if(actorArtifacts)for(const name of BROKER_ARTIFACT_FILES){await chown(join(brokerDirectory,name),1000,1002);await chmod(join(brokerDirectory,name),0o644);}
     const ready=await maintenanceHttp(opencodeUrl,'/fixture/readiness'),initial=await maintenanceHttp(opencodeUrl,'/fixture/identity');
     assert.equal(ready.server_version,originalVersion);assert.equal(initial.opencode.uid,1002);assert.equal(initial.broker.uid,1002);
     if(process.env.CAB_TEST_WORKER_BROKER==='1'){
@@ -176,8 +179,17 @@ async function scenario(dropReply){
     const manifest={};for(const name of BROKER_ARTIFACT_FILES)manifest[name]=createHash('sha256').update(await readFile(join(brokerDirectory,name))).digest('hex');
     const input={home,workspace,pluginRoot:historicalRecovery?'/inputs/failing':pluginRoot,brokerDirectory,controllerUrl,supervisorUrl,monitorUrl,opencodeUrl,layout:'managed-release',brokerPolicy:'reuse-readonly',waitMs:5000,
       brokerProof:{authorization:'isolated two uid maintenance',entry:join(brokerDirectory,BROKER_ARTIFACT_FILES[0]),expectedUid:1002,expectedGid:1002,manifest,
-        loadedVersion:ready.server_version,instanceId:ready.instance_id,opencodeProcess:initial.opencode,brokerProcess:initial.broker}};
-    const before=await inspectBrokerArtifacts(brokerDirectory,input.brokerProof);
+        loadedVersion:ready.server_version,instanceId:ready.instance_id,opencodeProcess:initial.opencode,brokerProcess:initial.broker,
+        ...(actorArtifacts?{artifactOwnerUid:1000,directoryOwnerUid:1002}:{})}};
+    async function inspectArtifacts(){
+      const child=spawn(process.execPath,[import.meta.filename,'inspect',JSON.stringify({brokerDirectory,proof:input.brokerProof})],
+        {uid:1000,gid:1000,env:{PATH:process.env.PATH},stdio:['ignore','ignore','pipe','ipc']});children.push(child);let value;
+      child.on('message',message=>{value=message;});child.stderr.on('data',data=>{stderr+=data;});
+      const code=await new Promise(done=>child.once('exit',done));assert.equal(code,0,stderr);assert.ok(value,stderr);return value;
+    }
+    const before=await inspectArtifacts();
+    for(const artifact of Object.values(before.files))assert.equal(artifact.uid,actorArtifacts?1000:1002);
+    assert.equal(before.root.uid,1002);
     control=createServer(async(req,res)=>{try{
       assert.equal(req.url,'/service');assert.equal(req.method,'POST');let text='';for await(const part of req)text+=part;
       const {args}=JSON.parse(text);assert.ok(Array.isArray(args));events.push(args);
@@ -191,22 +203,22 @@ async function scenario(dropReply){
     }catch(error){stderr+=error.stack;res.writeHead(503,{'content-type':'application/json'}).end(JSON.stringify({error:'isolated-service-error'}));}});
     await new Promise((done)=>control.listen(0,'127.0.0.1',done));
     async function update(kind='update',overrides={},extra={}){
-      const child=spawn(process.execPath,[import.meta.filename,kind,JSON.stringify({input:{...input,...overrides},...extra,controlUrl:'http://127.0.0.1:'+control.address().port})],
+      const child=spawn(process.execPath,[import.meta.filename,kind,JSON.stringify({input:{...input,...overrides},...extra,actorArtifacts,controlUrl:'http://127.0.0.1:'+control.address().port})],
         {uid:1000,gid:1000,env:{PATH:process.env.PATH},stdio:['ignore','ignore','pipe','ipc']});children.push(child);let result;
       child.stderr.on('data',(value)=>{stderr+=value;});child.on('message',(message)=>{if(message.type==='result')result=message;else if(message.type==='phase')assert.equal(message.brokerInFiles,false);});
-      const exit=await new Promise((done)=>child.once('exit',done));assert.equal(exit,0,stderr);assert.ok(result,stderr);assert.equal(result.uid,1000);assert.equal(result.writeDenied,true);return result;
+      const exit=await new Promise((done)=>child.once('exit',done));assert.equal(exit,0,stderr);assert.ok(result,stderr);assert.equal(result.uid,1000);assert.equal(result.writeDenied,!actorArtifacts);return result;
     }
     if(dropReply){const failed=await update();assert.equal(failed.error,'update-broker-forward-recovery-required',stderr);
       const receipt=JSON.parse(await readFile(journalFile));assert.equal(receipt.phase,'READONLY_RECOVERY_REQUIRED');assert.ok(receipt.externalBroker.disconnectIntentAt);
       assert.equal((await maintenanceHttp(controllerUrl,'/coordination/global')).global.state,'HELD');
-      assert.deepEqual(await inspectBrokerArtifacts(brokerDirectory,input.brokerProof),before);
+      assert.deepEqual(await inspectArtifacts(),before);
     }
     let recoveryProof;
     if(historicalRecovery){
       const failed=await update();assert.ok(failed.error,JSON.stringify(failed));
       const originalRaw=await readFile(journalFile),receipt=JSON.parse(originalRaw);assert.equal(receipt.phase,'READONLY_RECOVERY_REQUIRED');
       await stop(processes.controller);await stop(processes.supervisor);
-      const registryPath=join(workspace,'.opencode/state/cgpt-approval-bridge/controller-runs.json');
+      const registryPath=join(runtimeStateDirectory(workspace), 'controller-runs.json');
       const originalRegistry=await readFile(registryPath),tx=join(dirname(journalFile),receipt.id);
       const repairInput={pluginRoot,transactionId:receipt.id,authorization:'isolated historical reader forward recovery'};
       const unauthorized=await update('repair',{...repairInput,transactionId:'update-00000000-0000-0000-0000-000000000000'});assert.equal(unauthorized.error,'forward-phase-refused');
@@ -243,7 +255,7 @@ async function scenario(dropReply){
     }
     const result=await update();assert.ok(!result.error,JSON.stringify(result)+' '+stderr);assert.equal(result.result.status,'completed');
     assert.equal(result.result.brokerLoadedBefore,originalVersion);assert.equal(result.result.brokerLoadedAfter,VERSION);
-    assert.deepEqual(await inspectBrokerArtifacts(brokerDirectory,input.brokerProof),before);
+    assert.deepEqual(await inspectArtifacts(),before);
     const after=await maintenanceHttp(opencodeUrl,'/fixture/identity');assert.deepEqual(after.opencode,initial.opencode);
     assert.notEqual(after.broker.pid,initial.broker.pid);assert.equal(after.broker.uid,1002);
     const actual={controller:(await maintenanceHttp(controllerUrl,'/status')).version,supervisor:(await maintenanceHttp(supervisorUrl,'/status')).version,
@@ -254,7 +266,8 @@ async function scenario(dropReply){
     const serviceUids={};for(const name of ['controller','supervisor','monitor']){serviceUids[name]=(await processIdentity(processes[name].pid)).uid;assert.equal(serviceUids[name],1000);}
     const stops=events.filter((event)=>event[0]==='stop').length;assert.equal((await update()).result.status,'up-to-date');assert.equal(events.filter((event)=>event[0]==='stop').length,stops);
     return {scenario:historicalRecovery?'historical-key-forward-recovery':dropReply?'disconnect-reply-lost':'success',recoveryProof,originalVersion,largeRegistry,publicRegistryBytes,privateRegistryBytes,actualVersions:actual,serviceUids,opencodeUid:after.opencode.uid,brokerUid:after.broker.uid,
-      sourceUnchanged:true,kernelWriteDenied:true,intentChecks,openCodePreserved:true,pausesPreserved:true,workerBroker:process.env.CAB_TEST_WORKER_BROKER==='1',artifactDigest:proofHash(before)};
+      sourceUnchanged:true,kernelWriteDenied:!actorArtifacts,artifactOwnerUid:actorArtifacts?1000:1002,directoryOwnerUid:1002,
+      intentChecks,openCodePreserved:true,pausesPreserved:true,workerBroker:process.env.CAB_TEST_WORKER_BROKER==='1',artifactDigest:proofHash(before)};
   }finally{
     for(const child of children.reverse())await stop(child);
     if(control){control.closeAllConnections();await new Promise((done)=>control.close(done));}
@@ -270,6 +283,7 @@ if(mode==='opencode'){
     await new Promise((done,reject)=>{worker.once('exit',done);worker.once('error',reject);});process.disconnect();
   }else await nativeServer(argument);
 }
+else if(mode==='inspect'){process.send(await inspectBrokerArtifacts(argument.brokerDirectory,argument.proof));process.disconnect();}
 else if(['update','repair'].includes(mode))await updater(argument);
 else {
   assert.equal(process.getuid(),0);assert.ok(existsSync('/.dockerenv'));assert.equal(process.env.CAB_TEST_ISOLATED_TWO_UID,'1');

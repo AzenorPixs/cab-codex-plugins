@@ -1,0 +1,4 @@
+interface:
+  display_name: "Statistiques de session de codage"
+  short_description: "Analyse détaillée des sessions de codage"
+  default_prompt: "Utilise $coding-session-statistics pour produire les statistiques complètes de cette session de codage."

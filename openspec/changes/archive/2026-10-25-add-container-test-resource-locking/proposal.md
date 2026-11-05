@@ -1,4 +1,4 @@
-# CAB 1.10.0 — ressources de test et rafraîchissement du moniteur
+# CO05 — CAB 1.10.0 — ressources de test et rafraîchissement du moniteur
 
 ## Why
 Les accès temporaires coordonnent les commandes mais ne prouvent pas la restitution d'un environnement Docker/LXC entre deux commandes. Le moniteur impose une vue continue et sa carte Web dépend immédiatement du transport SSE.

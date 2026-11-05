@@ -1,0 +1,4 @@
+interface:
+  display_name: "SGS"
+  short_description: "Statistiques globales et rapports de change"
+  default_prompt: "Utilise $sgs pour régénérer les statistiques globales du projet courant selon son prompt SGS."

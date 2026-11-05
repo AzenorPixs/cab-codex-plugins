@@ -1,0 +1,15 @@
+{
+  "scope": "documentation only",
+  "version": "2.2.11+codex.20261103164239",
+  "node": {
+    "pass": 37,
+    "fail": 0
+  },
+  "runtimeCodeChanged": false,
+  "commandsChanged": false,
+  "realProof": "GET unauthenticated401; authenticated info/mcp/session200; C12 independently confirmed same SID",
+  "logs": {
+    "/tmp/cab-auth-doc-tests.txt": "5c341197e7d6877929b0ce5d16a2183e96862e1ca318ceaef11d36d5a1c605f4",
+    "/tmp/cab-auth-spec-before.txt": "f7cdd6ff5a0b165a19ac8bf5b4210ddb0b7ba4ba5d5b3ef4e2eb0bcfe0fa1545"
+  }
+}

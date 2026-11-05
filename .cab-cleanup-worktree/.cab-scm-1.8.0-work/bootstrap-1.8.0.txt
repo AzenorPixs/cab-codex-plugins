@@ -1,0 +1,12 @@
+✔ processus original 1.7.1 → chargement L2 réel → rejectionOnly/refus/poll/retry, broker conservé (4114.334462ms)
+✔ maintenance gelée : pair actif et ancienne session DENY, aucune relance avant frontière (3852.906294ms)
+✔ maintenance gelée : reprise de la même transaction après arrêt simulé au reçu (4229.612658ms)
+✔ maintenance gelée : échec du chargement et retour conservatoire au contrôleur original (4102.548173ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16354.692247

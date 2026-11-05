@@ -1,0 +1,22 @@
+{
+  "files": {
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs": "bbb65ccf92857873f572bb26eba0a6df092962ee56b11f04ae994fd61b24f845",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-forward-repair.mjs": "0c31b2280321e7311769fd4bce28c52e2eff96fe31f677532c97d8a77d4436a7",
+    "tests/resource-coordination.test.mjs": "482433c4e1f778f18711bafb3e760c632280decff4330cd4ed3e5ab3c93e3bb5",
+    "tests/helpers/readonly-broker-two-uid.mjs": "c59c7ca62fd9ba923fe3a580c1fb7b6df303f584946df6194bda5f970dbd6d02",
+    "tests/helpers/run-readonly-broker-two-uid.py": "62906c63e3fb17507a7d534231d2dd443980290792091d24655c09e0c30b6be4",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md": "e48cb3743cd2c0b73523a5a6209c9033b35fa71dd3b8bf7f88a61efc79401989",
+    "plugins/cab-approval-bridge/.codex-plugin/plugin.json": "3e593f0015bdc38b23a6b4424bf73d50629c429a24b9bc2153a7b826f96a79be",
+    "PROJECT.md": "9899a2eebc9523f27a6484e2917fcb9cb498284e5cb7f8313180f2aad018ee3a",
+    "TECHNICAL.md": "650fee92e6ef352c25f27f3470602cdea9aacf7eae9c86ef210df8816b18b7a2",
+    "BUILD.md": "879ad5a4e77e5632b1a64fcac724c06f154f7173c55eb3bfea5cffedf87a17df",
+    "README.md": "3ab3463be5bd7d5306dc75f5a3e12d1847e464d226ad49fad48f99915059ba1b",
+    "CHANGELOG.md": "eea3a4df06c88cab773b7dc373ea8231d5096ffa5dafc10d1b09192be1dd4fcf"
+  },
+  "baselineUnchanged": [
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs",
+    ".codex/commands/cab.md"
+  ],
+  "gitInspected": false
+}

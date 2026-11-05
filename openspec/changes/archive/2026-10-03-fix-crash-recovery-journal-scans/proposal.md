@@ -1,3 +1,5 @@
+# BR01 — Indexer le journal pendant la récupération après crash
+
 ## Why
 
 Après un arrêt non propre, le broker répare le journal avant de traiter stdin

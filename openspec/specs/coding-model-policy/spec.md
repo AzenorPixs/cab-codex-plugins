@@ -1,41 +1,35 @@
 # coding-model-policy Specification
 
 ## Purpose
-Définir le choix du modèle de codage CAB depuis le prompt ou la PLLM automatique, contrôler high/xhigh et les replis prouvés, puis conserver le choix validé pendant les reprises sans sélection implicite du broker ou du moniteur.
+Définir le choix du modèle de codage CAB depuis le prompt ou la PLLM automatique, demander medium par défaut, contrôler les replis prouvés vers une candidate PLLM suivante, puis conserver le choix validé pendant les reprises sans sélection implicite du broker ou du moniteur.
 
 ## Requirements
 
 ### Requirement: Choix explicite et PLLM automatique
-Le protocole CAB MUST conserver le modèle explicitement fixé par le prompt. Sans modèle explicite, il MUST utiliser les politiques PLLM dans leur priorité publiée. Le catalogue MUST être courant, lisible et non ambigu ; une entrée invalide ou non évaluée dans cette invocation MUST NOT être sélectionnée. Une sélection absente MUST bloquer sans modèle inventé.
+Le protocole CAB MUST appliquer le dernier choix explicite autorisé de fournisseur, modèle et raisonnement, y compris à chaud dans le même job. Une ancienne politique, priorité ou provenance MUST NOT restreindre ce nouveau choix. Sans modèle explicite, il MUST utiliser la PLLM actuelle dans sa priorité publiée, sans entrée invalide, ambiguë ou non évaluée dans cette invocation. Aucun modèle MUST être inventé.
 
 #### Scenario: Prompt sans modèle
 - **WHEN** un nouveau job négocie pllm-auto-v1 sans modèle dans le prompt
 - **THEN** CAB résout les candidates actuelles de PLLM dans leur ordre de priorité
 
 #### Scenario: Politique seulement historique
-- **WHEN** une politique inférieure n'a pas été évaluée dans la publication active
+- **WHEN** une politique inférieure n’a pas été évaluée dans la publication active
 - **THEN** CAB demande son évaluation actuelle sans utiliser sa réussite historique
 
-### Requirement: Raisonnement high puis xhigh puis politique inférieure
-Un raisonnement explicitement donné par le prompt MUST prévaloir. Sinon CAB MUST choisir high si disponible, puis xhigh si high est indisponible, puis la politique de priorité inférieure si les deux sont indisponibles. CAB MUST vérifier les variantes du modèle réel sans déduction depuis son nom. Un échec d'authentification, quota ou réseau MUST NOT être assimilé à une incompatibilité de raisonnement.
-
-#### Scenario: Repli de raisonnement
-- **WHEN** une candidate ne déclare que xhigh parmi ces deux variantes
-- **THEN** CAB retient xhigh sans imposer low
-
-#### Scenario: Repli de politique
-- **WHEN** une candidate automatique ne prend en charge ni high ni xhigh
-- **THEN** CAB examine la politique de priorité suivante sans utiliser une entrée historique
-
-#### Scenario: Modèle imposé incompatible
-- **WHEN** un modèle explicite ne prend en charge ni high ni xhigh
-- **THEN** CAB refuse la sélection sans remplacer silencieusement ce modèle
+#### Scenario: Nouveau choix explicite à chaud
+- **WHEN** l’orchestrateur soumet un choix explicite autorisé différent de l’ancien fournisseur ou de sa politique
+- **THEN** CAB le résout sans catalogue imposé ni contrainte de l’ancien choix, accepte un niveau natif exposé hors medium/high si ces préférences manquent et conserve ce changement comme une nouvelle provenance
 
 ### Requirement: Prévol exact et reprise du choix conservé
-L'armement négocié MUST vérifier un prévol natif réussi sans outils pour le fournisseur, modèle et raisonnement exacts. Il MUST persister la sélection et sa preuve. Le superviseur MUST réutiliser explicitement ces valeurs lors des reprises. Un armement répété MUST NOT modifier le choix d'un job existant. Le broker et le moniteur MUST rester sans sélection LLM ; le validateur Codex MUST conserver son rôle distinct.
+L'armement négocié MUST vérifier un prévol natif réussi sans outils pour le
+fournisseur, modèle et raisonnement exacts. Il MUST persister la sélection et
+sa preuve. Le superviseur MUST réutiliser explicitement ces valeurs lors des
+reprises. Un armement répété MUST NOT modifier le choix d'un job existant. Le
+broker et le moniteur MUST rester sans sélection LLM ; le validateur Codex
+MUST conserver son rôle distinct.
 
 #### Scenario: Réponse sur une autre variante
-- **WHEN** le prévol correspond au même modèle mais porte low au lieu de high
+- **WHEN** le prévol correspond au même modèle mais porte un niveau différent de celui retenu
 - **THEN** l'armement refuse cette preuve sans adopter le modèle
 
 #### Scenario: Reprise après redémarrage
@@ -52,9 +46,9 @@ CAB MUST accepter OC_Codex_PLLM_CATALOG absolu, avec l'alias OC_CGPT_PLLM_CATALO
 ### Requirement: Repli après incompatibilité native prouvée
 CAB MAY écarter une variante exposée mais rejetée uniquement après preuve native corrélée d'une erreur de paramètre de raisonnement reconnu. La preuve MUST correspondre au modèle, à la variante et à l'évaluation courante. Les erreurs 401, 403, 429, réseau ou paramètres étrangers MUST NOT autoriser ce repli. CAB MUST conserver seulement les références filtrées, sans corps d'erreur brut.
 
-#### Scenario: high puis xhigh refusés par le fournisseur
-- **WHEN** deux prévols natifs prouvent successivement le rejet de high et xhigh pour la candidate automatique
-- **THEN** CAB examine la politique de priorité inférieure et exige son prévol réussi
+#### Scenario: medium refusé par le fournisseur
+- **WHEN** un prévol natif prouve le rejet de medium pour la candidate automatique
+- **THEN** CAB examine high sur le même modèle si aucun niveau explicite contraire n’est imposé, puis la politique inférieure seulement si medium et high sont indisponibles ; chaque nouveau choix exige son prévol réussi
 
 #### Scenario: Quota épuisé pendant un prévol
 - **WHEN** le fournisseur renvoie 429 plutôt qu'une incompatibilité de raisonnement
@@ -108,7 +102,7 @@ CAB MUST privilégier le fournisseur exact et MAY rapprocher opencodego vers ope
 - **THEN** CAB refuse sans normalisation arbitraire, compte de substitution ou sélection manuelle implicite
 
 ### Requirement: Variante native ou historique corrélée
-Le prévol et l'indisponibilité MUST lire parent.info.model.variant ou parent.info.variant, avec au moins un champ parent valide. Tous les champs parent présents et assistant.info.variant présent MUST être identiques. Une absence, valeur invalide ou contradiction MUST refuser. Les gardes session, répertoire, parent, fournisseur, modèle, date, achèvement et absence d'outil MUST être conservés.
+Le prévol MUST corréler session, utilisateur, réponse, modèle, variante et dates. Les variantes parent présentes MUST être cohérentes avec l’assistant. CAB MAY admettre un parent V2 sans modèle ni variante uniquement par une preuve native d’échange unique complet. Une déclaration partielle ou contradictoire MUST être refusée. Les gardes de fournisseur, modèle, date, fin stop et absence d’outil MUST être conservées.
 
 #### Scenario: Prévol natif imbriqué et preuve historique
 - **WHEN** la variante parent imbriquée ou historique correspond au choix et aux champs assistant disponibles
@@ -118,6 +112,98 @@ Le prévol et l'indisponibilité MUST lire parent.info.model.variant ou parent.i
 - **WHEN** les variantes divergent, manquent ou la réponse est tronquée, en erreur ou contient un outil
 - **THEN** CAB refuse la preuve sans permission implicite ni repli spéculatif
 
-#### Scenario: Rejet natif de high puis xhigh
-- **WHEN** des erreurs de paramètre reconnues et corrélées prouvent l'indisponibilité des deux variantes
-- **THEN** le repli conserve la correspondance fournisseur vérifiée et les gardes de dates, sans considérer auth, quota ou réseau comme preuve
+#### Scenario: Rejet natif de medium
+- **WHEN** une erreur de paramètre reconnue et corrélée prouve l'indisponibilité de medium pour la candidate automatique
+- **THEN** CAB examine high sur le même modèle avant la politique suivante et exige le prévol du nouveau choix, sans considérer auth, quota ou réseau comme preuve
+
+#### Scenario: Utilisateur natif sans modèle dans un échange unique
+- **WHEN** le transcript complet contient un utilisateur précédant un seul assistant dont le modèle et la variante exacts sont observés, sans outil et aux dates admissibles
+- **THEN** CAB peut valider le prévol sans ajouter de modèle ou de variante au parent utilisateur
+
+#### Scenario: Fausse provenance ou échange ambigu
+- **WHEN** une métadonnée prétend établir la provenance, le transcript est partiel, contient plusieurs échanges ou un parent contradictoire
+- **THEN** CAB refuse cette preuve et ne produit aucune autorisation
+
+#### Scenario: Modèle ou variante de session divergent
+- **WHEN** la session expose un modèle ou une variante différents du choix vérifié
+- **THEN** CAB refuse le prévol malgré une réponse assistant antérieure conforme
+
+### Requirement: Raisonnement medium par défaut et niveau explicite prioritaire
+
+Le raisonnement explicite du prompt MUST prévaloir. Sinon CAB MUST choisir medium, puis high si medium est indisponible ou rejeté par preuve native, puis la candidate PLLM suivante si les deux sont indisponibles. CAB MUST vérifier les variantes réellement publiées. Authentification, quota et réseau MUST NOT prouver une incompatibilité de raisonnement.
+
+#### Scenario: Défaut medium
+- **WHEN** une candidate automatique expose medium et aucun niveau n'est fixé par le prompt
+- **THEN** CAB choisit medium, même lorsque d'autres variantes sont exposées
+
+#### Scenario: Niveau explicite conservé
+- **WHEN** le prompt fixe explicitement un niveau pris en charge
+- **THEN** CAB prévole exactement ce niveau sans le remplacer par medium
+
+#### Scenario: Medium indisponible
+- **WHEN** une candidate automatique ne prend pas en charge medium
+- **THEN** CAB choisit high si disponible sur cette candidate, sinon examine la candidate suivante selon la priorité PLLM
+
+#### Scenario: Modèle imposé incompatible
+- **WHEN** un modèle explicite ne prend pas en charge le niveau de raisonnement requis
+- **THEN** CAB refuse la sélection sans remplacer silencieusement le modèle
+
+### Requirement: Négociation du protocole 1.10.6
+Tout nouveau job piloté par CAB 1.10.6 MUST négocier pllm-auto-v1 avant
+l'armement. La préparation source MUST NOT modifier les agents, fournisseurs
+ou services actifs. Les jobs déjà armés MUST conserver leur sélection
+persistée.
+
+#### Scenario: Défaut appliqué à un nouveau job
+- **WHEN** un nouveau job 1.10.6 est résolu sans niveau explicite
+- **THEN** il reçoit medium et exige un prévol exact avant armement
+
+### Requirement: Formats publics PLLM explicitement compatibles
+CAB MUST accepter le catalogue schéma 2 avec exactement six politiques et le schéma 3 avec exactement sept politiques. Il MUST refuser les autres couples. Les priorités MUST couvrir une seule fois 1..N et correspondre à modeN. Les gardes de dates, sélection unique Valide évaluée dans la publication, fournisseur, raisonnement et prévol natif MUST être conservées. Le catalogue MUST NOT être réécrit pour adapter son format.
+
+#### Scenario: Catalogue historique 2/6
+- **WHEN** un catalogue valide de schéma 2 comporte six politiques
+- **THEN** la préparation et la sélection conservent leur comportement compatible
+
+#### Scenario: Catalogue courant 3/7
+- **WHEN** un catalogue valide de schéma 3 comporte sept politiques
+- **THEN** la préparation réussit et la sélection peut examiner mode7 dans l’ordre publié
+
+#### Scenario: Couple ou structure incohérente
+- **WHEN** le schéma est inconnu, le compte ne correspond pas ou les priorités et modes divergent
+- **THEN** CAB refuse avec pllm-catalog-invalid avant armement sans transformer le catalogue
+
+#### Scenario: Sélection ou dates non admissibles
+- **WHEN** une sélection est historique, ambiguë, invalide ou ses dates sont incohérentes
+- **THEN** les refus actuels restent applicables aux deux formats sans modèle inventé
+
+### Requirement: Convergence du raisonnement aux entrées et reprises
+
+Le protocole CAB distribué MUST viser medium en priorité pour une nouvelle session ou une reprise autorisée, puis high seulement si medium n’est pas disponible sur le modèle retenu. Il MUST vérifier les variantes réellement publiées et respecter un niveau explicitement imposé par le développeur.
+
+#### Scenario: Reprise historique en high et medium disponible
+- **WHEN** une reprise autorisée réexamine un ancien choix high et que medium est disponible sans niveau contraire imposé
+- **THEN** l’orchestrateur prépare la convergence vers medium avec prévol et réconciliation, sans changement aveugle ni rejeu de permission
+
+#### Scenario: Repli high
+- **WHEN** medium est indisponible et high est publié sur le modèle retenu
+- **THEN** high est choisi puis prévolé sans sélectionner un autre modèle pour cette seule raison
+
+### Requirement: Transition de raisonnement conservant les preuves
+
+Une transition de raisonnement en reprise MUST préserver RUN, job, preuves et mandats et exiger un prévol natif du nouveau choix ainsi qu’une réconciliation du contrat conservé. Elle MUST NOT modifier une session active sans frontière autorisée ni déclencher un benchmark du seul fait d’une reprise. Une transition non représentable ou non prouvée MUST être signalée sans faux succès.
+
+#### Scenario: Transition non prouvée
+- **WHEN** le prévol ou la réconciliation du contrat conservé ne permet pas une transition sûre
+- **THEN** l’orchestrateur signale la limite et conserve le contexte sans prétendre medium appliqué
+
+### Requirement: Prévol et réconciliation du nouveau choix
+Une transition MUST résoudre à nouveau la cible, vérifier un prévol natif exact sans outil postérieur à sa préparation et observer le choix appliqué à la même session avant adoption durable. Les erreurs de quota/authentification MUST NOT devenir des incompatibilités de raisonnement. Le changement explicite MUST rester indépendant du catalogue ; une sélection omise MUST utiliser la PLLM actuelle.
+
+#### Scenario: Nouvelle politique automatique
+- **WHEN** la transition ne fournit pas de choix explicite
+- **THEN** le contrôleur recalcule la PLLM et exige le prévol exact de sa sélection actuelle
+
+#### Scenario: Preuve divergente ou cible modifiée
+- **WHEN** le prévol ne correspond pas au choix préparé ou que la résolution diverge
+- **THEN** la transition est refusée sans adoption ni permission implicite

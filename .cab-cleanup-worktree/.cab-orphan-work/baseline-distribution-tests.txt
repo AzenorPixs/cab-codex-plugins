@@ -1,0 +1,267 @@
+✖ le catalogue des étapes et son producteur sont distribués en 1.7.1 (2.281514ms)
+✖ la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué (2.776441ms)
+✖ le bootstrap précède les prévols dans chaque point d’entrée distribué (3.46156ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 60.626999
+
+✖ failing tests:
+
+test at .cab-orphan-work/baseline-distribution/tests/controller-service-distribution.test.mjs:58:1
+✖ le catalogue des étapes et son producteur sont distribués en 1.7.1 (2.281514ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /run-lifecycle\.md/. Input:
+  
+  '# ORCHESTRATED_CODING.md — Sessions de codage pilotées\n' +
+    '\n' +
+    'Version : 0.1\n' +
+    '\n' +
+    'Projet : `cab`\n' +
+    '\n' +
+    "## Champ d'application et autorité\n" +
+    '\n' +
+    "Ce fichier est facultatif à l'échelle du projet. Il est uniquement présent\n" +
+    'pour un projet qui nécessite des sessions pilotées par un agent orchestrateur\n' +
+    'vers un agent de codage. Son absence est normale dans un projet sans besoin\n' +
+    "de pilotage et n'empêche pas une session de codage directe.\n" +
+    '\n' +
+    'Ce document est la référence locale des sessions de codage conduites par un\n' +
+    'agent orchestrateur vers un agent de codage. Les deux agents doivent le lire\n' +
+    "avant l'initialisation du pilotage, en complément d'AGENTS.md. Il ne modifie\n" +
+    'ni les autorisations du développeur, ni la priorité des spécifications\n' +
+    'OpenSpec validées, ni les permissions de la plateforme.\n' +
+    '\n' +
+    "L'orchestrateur définit le périmètre et les critères, arbitre les demandes et\n" +
+    "vérifie les preuves. L'agent de codage analyse et exécute seulement les\n" +
+    'opérations autorisées. Le développeur conserve le contrôle des décisions qui\n' +
+    'lui sont réservées. Aucun de ces rôles ne peut inventer une autorisation.\n' +
+    '\n' +
+    'Le profil technique actuellement décrit est OpenCode comme agent de codage,\n' +
+    'Codex/CGPT comme orchestrateur et CAB comme transport neutre. Les rôles ne\n' +
+    "dépendent pas d'un modèle LLM particulier. Un autre agent ou transport exige\n" +
+    "un contrat d'intégration explicitement validé ; les exemples CAB ne prouvent\n" +
+    'pas sa compatibilité et ne déclenchent aucune adaptation implicite.\n' +
+    '\n' +
+    'Une session directe SCM reste régie par son prompt et AGENTS.md. La présence\n' +
+    'de ce fichier ne lance ni agent OpenCode, ni service CAB, ni compétence,\n' +
+    "sonde ou télémétrie de session pilotée. Le rapport d'archivage éventuellement\n" +
+    'requis par le projet reste une obligation distincte.\n' +
+    '\n' +
+    '## Identité, coordination et autorisations des RUN\n' +
+    '\n' +
+    '### Identité et nommage des sessions\n' +
+    '\n' +
+    "Chaque nouveau RUN dispose d'une identité propre et crée sa propre session\n" +
+    'OpenCode visible, sans créer une seconde instance du processus OpenCode.\n' +
+    "L'orchestrateur conserve la correspondance entre projet, racine réelle,\n" +
+    '`run_id`, numéro du RUN, identifiant du chat orchestrateur, sessions OpenCode\n' +
+    "et réservations CAB. Le numéro vient de la demande ou, s'il manque, d'un\n" +
+    'numéro disponible vérifié dans le registre et les chats accessibles. Ne pas\n' +
+    "inventer d'identifiant natif ; une valeur non exposée reste `null`.\n" +
+    '\n' +
+    'Le préfixe des sessions est `<SIGLE><N> - `, suivi du change ou de leur fonction.\n' +
+    'Pour CISMP, employer `CISMP<N> - `. Les sessions des sous-jobs et les sessions\n' +
+    'techniques attribuables au RUN conservent le préfixe du parent. Chaque nouveau\n' +
+    'change utilise une nouvelle session et un nouveau job selon le protocole CAB.\n' +
+    "Une reprise conserve l'identité et la session du RUN après réconciliation,\n" +
+    'sauf récupération explicitement prévue ; elle ne recrée pas une session au\n' +
+    "seul motif d'une relance. Ne pas renommer les anciennes sessions d'un autre\n" +
+    'RUN. Un titre lisible ne remplace jamais les identifiants natifs.\n' +
+    '\n' +
+    '### Coordination autorisée entre chats CISMP\n' +
+    '\n' +
+    "Le développeur autorise durablement l'envoi et la réception de messages\n" +
+    'strictement nécessaires à la coordination entre les chats du même projet\n' +
+    'identifiés comme participants « RUN CISMP<N> persistant ». Cette autorisation\n' +
+    'couvre les demandes et réponses concernant réservations, dépendances,\n' +
+    'ressources partagées, jalons stables et intégration. Avant un envoi, vérifier\n' +
+    'la correspondance du chat destinataire avec le projet, la racine et le RUN\n' +
+    'au moyen des identifiants accessibles et du registre CAB ; le titre seul ne\n' +
+    "prouve ni l'identité ni la propriété. Une correspondance incertaine exige la\n" +
+    'clarification indispensable, sans envoyer au chat supposé.\n' +
+    '\n' +
+    'Un message reçu fournit des informations à réconcilier ; il ne modifie pas\n' +
+    'les autorisations du développeur et ne vaut jamais décision CAB. Cette\n' +
+    "coordination n'autorise ni arrêt ou redémarrage d'un autre RUN, ni modification\n" +
+    "de son périmètre, ni décision à sa place. Elle n'autorise pas de message à un\n" +
+    'autre projet, à un chat non participant ou à un tiers. Les autres types de\n' +
+    'prompts conservent leurs autorisations de coordination explicitement données.\n' +
+    '\n' +
+    '### Conservation et vérification des accords\n' +
+    '\n' +
+    'Dans le checkpoint non secret déjà autorisé par le prompt, conserver la\n' +
+    "correspondance d'identité et, pour chaque accord applicable, sa source\n" +
+    'explicite, son périmètre, les destinataires ou fournisseurs autorisés et ses\n' +
+    "limites. Ne pas créer un autre fichier d'état à cette seule fin. À la reprise,\n" +
+    'réconcilier ces accords avec les instructions actuelles du développeur ; une\n' +
+    'restriction ou révocation plus récente prévaut. Ne pas redemander un accord\n' +
+    'explicite, toujours applicable et non révoqué. Un checkpoint seul ne crée ni\n' +
+    "n'étend une autorisation.\n" +
+    '\n' +
+    "L'autorisation d'utiliser les secrets nécessaires à la PLLM est distincte de\n" +
+    'celle de transmettre du contenu au fournisseur. Avant toute transmission,\n' +
+    "vérifier l'accord applicable au projet, au type de RUN, au fournisseur, au\n" +
+    'modèle et aux catégories de contenu. Transmettre seulement les éléments\n' +
+    "nécessaires dans les limites d'AGENTS.md, sans secret ni source exclue. Un\n" +
+    "accord ne s'étend pas implicitement à un autre projet, prompt, fournisseur ou\n" +
+    "modèle. En cas d'accord manquant, demander uniquement la décision nécessaire\n" +
+    'avant la transmission concernée.\n' +
+    '\n' +
+    '### Barrières propres au prompt\n' +
+    '\n' +
+    'Le feu vert de démarrage et la validation du périmètre restent distincts.\n' +
+    "Lorsqu'un prompt définit son invocation comme feu vert conditionnel,\n" +
+    "l'orchestrateur vérifie les conditions puis démarre sans redemander cet\n" +
+    'accord. Sinon, sa barrière de démarrage demeure applicable. Un sous-job\n' +
+    'hérite seulement du feu vert que son parent lui délègue effectivement.\n' +
+    '\n' +
+    'Ces règles ne déclenchent ni écriture ni implémentation dans un diagnostic.\n' +
+    'DOPP conserve son fonctionnement en lecture seule, sans `/cab run` ni PLLM\n' +
+    'obligatoire. Les validations spécifiques de périmètre, de reprise RSMP,\n' +
+    "d'OpenSpec, de Git, d'infrastructure et les mandats CAB restent applicables.\n" +
+    'La persistance suit les conditions terminales du prompt ; elle ne crée aucun\n' +
+    "réveil automatique après interruption de l'orchestrateur.\n" +
+    '\n' +
+    '## Accord durable conditionnel de transmission — Pixs uniquement\n' +
+    '\n' +
+    'Cette clause accompagne la propagation du modèle de projet. Elle ne\n' +
+    "s'applique qu'au projet Pixs, d'identifiant projet `pixs`, effectivement\n" +
+    'identifié par sa racine réelle et ses cadrages. Son inclusion dans un projet\n' +
+    "ne remplace pas la vérification de cette identité ; elle n'autorise aucune\n" +
+    "transmission pour un autre projet. Ne pas déduire l'identité Pixs du seul titre\n" +
+    "d'un chat ou d'une session OpenCode.\n" +
+    '\n' +
+    'Sur validation explicite du développeur du 14 octobre 2026, les RUN CISMP de\n' +
+    'Pixs sont durablement autorisés à transmettre à OpenCode Go, modèle\n' +
+    '`muse-spark-1.3-contributor`, les cadrages, spécifications, extraits de code et\n' +
+    "tests strictement nécessaires au travail demandé, dans les limites d'AGENTS.md\n" +
+    "et sans aucun secret ni source exclue. Cet accord n'est pas étendu aux RUN\n" +
+    "indépendants d'un autre type de prompt, aux autres fournisseurs ou aux autres\n" +
+    'modèles. Les sous-jobs pilotés du RUN CISMP en héritent dans le même périmètre.\n' +
+    '\n' +
+    "L'orchestrateur conserve la référence et les limites de cet accord dans le\n" +
+    'checkpoint non secret du RUN, le vérifie avant transmission et ne le redemande\n' +
+    "pas à chaque RUN ou reprise tant qu'il reste applicable et non révoqué. Cet\n" +
+    "accord n'impose aucun niveau de raisonnement et ne remplace ni la vérification\n" +
+    'de la PLLM, ni les mandats CAB, ni les validations distinctes du développeur.\n' +
+    '\n' +
+    '## Protocole de communication OpenCode ↔ CGPT via CAB\n' +
+    '\n' +
+    "Ce protocole s'applique à tout agent de codage OpenCode piloté par CGPT pendant\n" +
+    'une session de codage. Il complète les règles OpenSpec et ne les remplace pas.\n' +
+    '\n' +
+    '### Rôles\n' +
+    '\n' +
+    'CGPT fixe le périmètre, valide les choix fonctionnels et techniques, décide\n' +
+    'des mandats CAB et reçoit les comptes rendus. Le broker CAB ne décide jamais :\n' +
+    'il transporte et corrèle les demandes. Une décision est limitée à un\n' +
+    '`requestId` unique et à une seule opération.\n' +
+    '\n' +
+    "L'agent de codage NE DOIT PAS étendre le périmètre, inventer une réponse CGPT\n" +
+    'ou CAB, exécuter une opération refusée, ni déclarer exécuté un outil, une\n' +
+    'commande ou un test sans preuve observée dans la session. Il NE DOIT PAS lire,\n' +
+    'afficher ou transmettre de secret.\n' +
+    '\n' +
+    '### Initialisation de session\n' +
+    '\n' +
+    "Avant tout accès au projet, l'agent DOIT :\n" +
+    '\n' +
+    '1. confirmer le répertoire, le change OpenSpec et le périmètre reçus ;\n' +
+    "2. appeler réellement l'outil MCP `broker_readiness` exposé dans la session ;\n" +
+    "3. exiger le statut `READY` et l'absence d'approbation parasite ;\n" +
+    "4. rapporter à CGPT l'identifiant de session, le répertoire, le change et\n" +
+    "   l'état CAB.\n" +
+    '\n' +
+    "Une réponse textuelle sans appel d'outil observé ne constitue jamais une\n" +
+    "preuve. Si l'outil MCP n'est pas exposé, échoue, répond `BLOCKED` ou\n" +
+    "`HUMAN_REQUIRED`, l'agent DOIT envoyer `CAB_BLOCKED` à CGPT et s'arrêter.\n" +
+    '\n' +
+    '### États de session\n' +
+    '\n' +
+    "L'agent suit exclusivement la séquence suivante :\n" +
+    '\n' +
+    '```text\n' +
+    'INIT → ANALYSE → WAIT_CGPT → WAIT_CAB → EXECUTION → REPORT\n' +
+    '                                      ↑                 │\n' +
+    '                                      └─────────────────┘\n' +
+    '```\n' +
+    '\n' +
+    '* `ANALYSE` : lecture et compréhension dans le seul périmètre validé ;\n' +
+    '* `WAIT_CGPT` : une décision fonctionnelle, technique ou de périmètre est\n' +
+    '  attendue ;\n' +
+    '* `WAIT_CAB` : une autorisation technique unitaire est attendue ;\n' +
+    '* `EXECUTION` : une seule opération autorisée est réalisée ;\n' +
+    '* `REPORT` : preuve et résultat sont transmis ;\n' +
+    '* `DONE` : la session ne peut être clôturée que par CGPT ou après exécution de\n' +
+    '  tous les mandats validés.\n' +
+    '\n' +
+    "Un changement d'état ne peut jamais être déduit d'un texte produit par\n" +
+    "l'agent lui-même.\n" +
+    '\n' +
+    '### Messages à destination de CGPT\n' +
+    '\n' +
+    "Lorsqu'une décision est nécessaire, l'agent envoie l'un des messages suivants,\n" +
+    'puis passe à `WAIT_CGPT` sans poursuivre.\n' +
+    '\n' +
+    '```text\n' +
+    'NDOC\n' +
+    'change_id: <change>\n' +
+    'objet: <question précise>\n' +
+    'contexte: <faits observés>\n' +
+    'impact du blocage: <ce qui ne peut pas continuer>\n' +
+    'attente: réponse CGPT\n' +
+    '```\n' +
+    '\n' +
+    '```text\n' +
+    'NFDOC\n' +
+    'change_id'... 30041 more characters
+  
+      at TestContext.<anonymous> (file:///home/devops/datas/cab/.cab-orphan-work/baseline-distribution/tests/controller-service-distribution.test.mjs:68:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: "# ORCHESTRATED_CODING.md — Sessions de codage pilotées\n\nVersion : 0.1\n\nProjet : `cab`\n\n## Champ d'application et autorité\n\nCe fichier est facultatif à l'échelle du projet. Il est uniquement présent\npour un projet qui nécessite des sessions pilotées par un agent orchestrateur\nvers un agent de codage. Son absence est normale dans un projet sans besoin\nde pilotage et n'empêche pas une session de codage directe.\n\nCe document est la référence locale des sessions de codage conduites par un\nagent orchestrateur vers un agent de codage. Les deux agents doivent le lire\navant l'initialisation du pilotage, en complément d'AGENTS.md. Il ne modifie\nni les autorisations du développeur, ni la priorité des spécifications\nOpenSpec validées, ni les permissions de la plateforme.\n\nL'orchestrateur définit le périmètre et les critères, arbitre les demandes et\nvérifie les preuves. L'agent de codage analyse et exécute seulement les\nopérations autorisées. Le développeur conserve le contrôle des décisions qui\nlui sont réservées. Aucun de ces rôles ne peut inventer une autorisation.\n\nLe profil technique actuellement décrit est OpenCode comme agent de codage,\nCodex/CGPT comme orchestrateur et CAB comme transport neutre. Les rôles ne\ndépendent pas d'un modèle LLM particulier. Un autre agent ou transport exige\nun contrat d'intégration explicitement validé ; les exemples CAB ne prouvent\npas sa compatibilité et ne déclenchent aucune adaptation implicite.\n\nUne session directe SCM reste régie par son prompt et AGENTS.md. La présence\nde ce fichier ne lance ni agent OpenCode, ni service CAB, ni compétence,\nsonde ou télémétrie de session pilotée. Le rapport d'archivage éventuellement\nrequis par le projet reste une obligation distincte.\n\n## Identité, coordination et autorisations des RUN\n\n### Identité et nommage des sessions\n\nChaque nouveau RUN dispose d'une identité propre et crée sa propre session\nOpenCode visible, sans créer une seconde instance du processus OpenCode.\nL'orchestrateur conserve la correspondance entre projet, racine réelle,\n`run_id`, numéro du RUN, identifiant du chat orchestrateur, sessions OpenCode\net réservations CAB. Le numéro vient de la demande ou, s'il manque, d'un\nnuméro disponible vérifié dans le registre et les chats accessibles. Ne pas\ninventer d'identifiant natif ; une valeur non exposée reste `null`.\n\nLe préfixe des sessions est `<SIGLE><N> - `, suivi du change ou de leur fonction.\nPour CISMP, employer `CISMP<N> - `. Les sessions des sous-jobs et les sessions\ntechniques attribuables au RUN conservent le préfixe du parent. Chaque nouveau\nchange utilise une nouvelle session et un nouveau job selon le protocole CAB.\nUne reprise conserve l'identité et la session du RUN après réconciliation,\nsauf récupération explicitement prévue ; elle ne recrée pas une session au\nseul motif d'une relance. Ne pas renommer les anciennes sessions d'un autre\nRUN. Un titre lisible ne remplace jamais les identifiants natifs.\n\n### Coordination autorisée entre chats CISMP\n\nLe développeur autorise durablement l'envoi et la réception de messages\nstrictement nécessaires à la coordination entre les chats du même projet\nidentifiés comme participants « RUN CISMP<N> persistant ». Cette autorisation\ncouvre les demandes et réponses concernant réservations, dépendances,\nressources partagées, jalons stables et intégration. Avant un envoi, vérifier\nla correspondance du chat destinataire avec le projet, la racine et le RUN\nau moyen des identifiants accessibles et du registre CAB ; le titre seul ne\nprouve ni l'identité ni la propriété. Une correspondance incertaine exige la\nclarification indispensable, sans envoyer au chat supposé.\n\nUn message reçu fournit des informations à réconcilier ; il ne modifie pas\nles autorisations du développeur et ne vaut jamais décision CAB. Cette\ncoordination n'autorise ni arrêt ou redémarrage d'un autre RUN, ni modification\nde son périmètre, ni décision à sa place. Elle n'autorise pas de message à un\nautre projet, à un chat non participant ou à un tiers. Les autres types de\nprompts conservent leurs autorisations de coordination explicitement données.\n\n### Conservation et vérification des accords\n\nDans le checkpoint non secret déjà autorisé par le prompt, conserver la\ncorrespondance d'identité et, pour chaque accord applicable, sa source\nexplicite, son périmètre, les destinataires ou fournisseurs autorisés et ses\nlimites. Ne pas créer un autre fichier d'état à cette seule fin. À la reprise,\nréconcilier ces accords avec les instructions actuelles du développeur ; une\nrestriction ou révocation plus récente prévaut. Ne pas redemander un accord\nexplicite, toujours applicable et non révoqué. Un checkpoint seul ne crée ni\nn'étend une autorisation.\n\nL'autorisation d'utiliser les secrets nécessaires à la PLLM est distincte de\ncelle de transmettre du contenu au fournisseur. Avant toute transmission,\nvérifier l'accord applicable au projet, au type de RUN, au fournisseur, au\nmodèle et aux catégories de contenu. Transmettre seulement les éléments\nnécessaires dans les limites d'AGENTS.md, sans secret ni source exclue. Un\naccord ne s'étend pas implicitement à un autre projet, prompt, fournisseur ou\nmodèle. En cas d'accord manquant, demander uniquement la décision nécessaire\navant la transmission concernée.\n\n### Barrières propres au prompt\n\nLe feu vert de démarrage et la validation du périmètre restent distincts.\nLorsqu'un prompt définit son invocation comme feu vert conditionnel,\nl'orchestrateur vérifie les conditions puis démarre sans redemander cet\naccord. Sinon, sa barrière de démarrage demeure applicable. Un sous-job\nhérite seulement du feu vert que son parent lui délègue effectivement.\n\nCes règles ne déclenchent ni écriture ni implémentation dans un diagnostic.\nDOPP conserve son fonctionnement en lecture seule, sans `/cab run` ni PLLM\nobligatoire. Les validations spécifiques de périmètre, de reprise RSMP,\nd'OpenSpec, de Git, d'infrastructure et les mandats CAB restent applicables.\nLa persistance suit les conditions terminales du prompt ; elle ne crée aucun\nréveil automatique après interruption de l'orchestrateur.\n\n## Accord durable conditionnel de transmission — Pixs uniquement\n\nCette clause accompagne la propagation du modèle de projet. Elle ne\ns'applique qu'au projet Pixs, d'identifiant projet `pixs`, effectivement\nidentifié par sa racine réelle et ses cadrages. Son inclusion dans un projet\nne remplace pas la vérification de cette identité ; elle n'autorise aucune\ntransmission pour un autre projet. Ne pas déduire l'identité Pixs du seul titre\nd'un chat ou d'une session OpenCode.\n\nSur validation explicite du développeur du 14 octobre 2026, les RUN CISMP de\nPixs sont durablement autorisés à transmettre à OpenCode Go, modèle\n`muse-spark-1.3-contributor`, les cadrages, spécifications, extraits de code et\ntests strictement nécessaires au travail demandé, dans les limites d'AGENTS.md\net sans aucun secret ni source exclue. Cet accord n'est pas étendu aux RUN\nindépendants d'un autre type de prompt, aux autres fournisseurs ou aux autres\nmodèles. Les sous-jobs pilotés du RUN CISMP en héritent dans le même périmètre.\n\nL'orchestrateur conserve la référence et les limites de cet accord dans le\ncheckpoint non secret du RUN, le vérifie avant transmission et ne le redemande\npas à chaque RUN ou reprise tant qu'il reste applicable et non révoqué. Cet\naccord n'impose aucun niveau de raisonnement et ne remplace ni la vérification\nde la PLLM, ni les mandats CAB, ni les validations distinctes du développeur.\n\n## Protocole de communication OpenCode ↔ CGPT via CAB\n\nCe protocole s'applique à tout agent de codage OpenCode piloté par CGPT pendant\nune session de codage. Il complète les règles OpenSpec et ne les remplace pas.\n\n### Rôles\n\nCGPT fixe le périmètre, valide les choix fonctionnels et techniques, décide\ndes mandats CAB et reçoit les comptes rendus. Le broker CAB ne décide jamais :\nil transporte et corrèle les demandes. Une décision est limitée à un\n`requestId` unique et à une seule opération.\n\nL'agent de codage NE DOIT PAS étendre le périmètre, inventer une réponse CGPT\nou CAB, exécuter une opération refusée, ni déclarer exécuté un outil, une\ncommande ou un test sans preuve observée dans la session. Il NE DOIT PAS lire,\nafficher ou transmettre de secret.\n\n### Initialisation de session\n\nAvant tout accès au projet, l'agent DOIT :\n\n1. confirmer le répertoire, le change OpenSpec et le périmètre reçus ;\n2. appeler réellement l'outil MCP `broker_readiness` exposé dans la session ;\n3. exiger le statut `READY` et l'absence d'approbation parasite ;\n4. rapporter à CGPT l'identifiant de session, le répertoire, le change et\n   l'état CAB.\n\nUne réponse textuelle sans appel d'outil observé ne constitue jamais une\npreuve. Si l'outil MCP n'est pas exposé, échoue, répond `BLOCKED` ou\n`HUMAN_REQUIRED`, l'agent DOIT envoyer `CAB_BLOCKED` à CGPT et s'arrêter.\n\n### États de session\n\nL'agent suit exclusivement la séquence suivante :\n\n```text\nINIT → ANALYSE → WAIT_CGPT → WAIT_CAB → EXECUTION → REPORT\n                                      ↑                 │\n                                      └─────────────────┘\n```\n\n* `ANALYSE` : lecture et compréhension dans le seul périmètre validé ;\n* `WAIT_CGPT` : une décision fonctionnelle, technique ou de périmètre est\n  attendue ;\n* `WAIT_CAB` : une autorisation technique unitaire est attendue ;\n* `EXECUTION` : une seule opération autorisée est réalisée ;\n* `REPORT` : preuve et résultat sont transmis ;\n* `DONE` : la session ne peut être clôturée que par CGPT ou après exécution de\n  tous les mandats validés.\n\nUn changement d'état ne peut jamais être déduit d'un texte produit par\nl'agent lui-même.\n\n### Messages à destination de CGPT\n\nLorsqu'une décision est nécessaire, l'agent envoie l'un des messages suivants,\npuis passe à `WAIT_CGPT` sans poursuivre.\n\n```text\nNDOC\nchange_id: <change>\nobjet: <question précise>\ncontexte: <faits observés>\nimpact du blocage: <ce qui ne peut pas continuer>\nattente: réponse CGPT\n```\n\n```text\nNFDOC\nchange_id"... 30041 more characters,
+    expected: /run-lifecycle\.md/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at .cab-orphan-work/baseline-distribution/tests/controller-service-distribution.test.mjs:73:1
+✖ la collecte native et les transitions optimisées sont distribuées avec le protocole embarqué (2.776441ms)
+  AssertionError [ERR_ASSERTION]: The expression evaluated to a falsy value:
+  
+    assert.ok(protocol.includes(embedded))
+  
+      at TestContext.<anonymous> (file:///home/devops/datas/cab/.cab-orphan-work/baseline-distribution/tests/controller-service-distribution.test.mjs:77:10)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }
+
+test at .cab-orphan-work/baseline-distribution/tests/monitor-service-start.test.mjs:109:1
+✖ le bootstrap précède les prévols dans chaque point d’entrée distribué (3.46156ms)
+  AssertionError [ERR_ASSERTION]: protocole
+      at TestContext.<anonymous> (file:///home/devops/datas/cab/.cab-orphan-work/baseline-distribution/tests/monitor-service-start.test.mjs:127:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: "# ORCHESTRATED_CODING.md — Sessions de codage pilotées\n\nVersion : 0.1\n\nProjet : `cab`\n\n## Champ d'application et autorité\n\nCe fichier est facultatif à l'échelle du projet. Il est uniquement présent\npour un projet qui nécessite des sessions pilotées par un agent orchestrateur\nvers un agent de codage. Son absence est normale dans un projet sans besoin\nde pilotage et n'empêche pas une session de codage directe.\n\nCe document est la référence locale des sessions de codage conduites par un\nagent orchestrateur vers un agent de codage. Les deux agents doivent le lire\navant l'initialisation du pilotage, en complément d'AGENTS.md. Il ne modifie\nni les autorisations du développeur, ni la priorité des spécifications\nOpenSpec validées, ni les permissions de la plateforme.\n\nL'orchestrateur définit le périmètre et les critères, arbitre les demandes et\nvérifie les preuves. L'agent de codage analyse et exécute seulement les\nopérations autorisées. Le développeur conserve le contrôle des décisions qui\nlui sont réservées. Aucun de ces rôles ne peut inventer une autorisation.\n\nLe profil technique actuellement décrit est OpenCode comme agent de codage,\nCodex/CGPT comme orchestrateur et CAB comme transport neutre. Les rôles ne\ndépendent pas d'un modèle LLM particulier. Un autre agent ou transport exige\nun contrat d'intégration explicitement validé ; les exemples CAB ne prouvent\npas sa compatibilité et ne déclenchent aucune adaptation implicite.\n\nUne session directe SCM reste régie par son prompt et AGENTS.md. La présence\nde ce fichier ne lance ni agent OpenCode, ni service CAB, ni compétence,\nsonde ou télémétrie de session pilotée. Le rapport d'archivage éventuellement\nrequis par le projet reste une obligation distincte.\n\n",
+    expected: /Dès la résolution du workspace absolu canonique/,
+    operator: 'match',
+    diff: 'simple'
+  }

@@ -1,3 +1,5 @@
+# STA03 — Intégrer les statistiques d’observation
+
 # Why
 
 Les briques CAB exposent leurs événements natifs, mais les observations MULTIRUN conservées par le job arrêté restent séparées. Les fenêtres de consultation et les preuves de couverture doivent devenir accessibles directement, sans réactiver ce job ni additionner des sources recouvrantes.

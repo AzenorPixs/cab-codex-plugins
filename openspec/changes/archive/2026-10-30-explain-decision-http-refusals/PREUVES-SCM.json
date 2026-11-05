@@ -1,0 +1,32 @@
+{
+  "version": "2.1.16",
+  "node": {
+    "total": 588,
+    "passed": 560,
+    "skipped": 28,
+    "failed": 0
+  },
+  "python_passed": 80,
+  "native_private_passed": 1,
+  "targeted_direct": 7,
+  "targeted_http": 4,
+  "targeted_distribution_combined": 39,
+  "syntax": {
+    "javascript": 57,
+    "python": 16
+  },
+  "openspec_before": {
+    "standard": 17,
+    "strict": 17
+  },
+  "added_requirements": 3,
+  "archive": "openspec/changes/archive/2026-10-30-explain-decision-http-refusals",
+  "live_test_decision": false,
+  "protocol_sha256": "962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4",
+  "openspec_after": {
+    "standard": 17,
+    "strict": 17
+  },
+  "synced_requirements_verified": 3,
+  "statistics_sections_verified": 6
+}

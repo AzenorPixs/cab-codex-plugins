@@ -1,4 +1,4 @@
-# Compatibilité historique et récupération en avant 1.10.1
+# MAI03 — Compatibilité historique et récupération en avant 1.10.1
 
 ## Why
 Le contrôleur cible refuse des identifiants logiques de navigateur conservés dans des révisions, opérations terminées et accès libérés avant l'introduction des réservations de test. La maintenance réelle est READONLY_RECOVERY_REQUIRED sous HELD, broker déconnecté ; les données ne doivent pas être réécrites pour contourner ce refus.

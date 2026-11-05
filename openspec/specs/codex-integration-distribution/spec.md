@@ -111,15 +111,15 @@ superviseur SHALL annoncer la même version de base.
   l'active pas pour le login
 
 ### Requirement: Skill de statistiques embarqué dans CAB
-Le plugin cab-approval-bridge SHALL distribuer coding-session-statistics et ses métadonnées sans plugin Tools Codex ni skill cgpt externe. Le protocole et la commande SHALL imposer les statistiques après chaque archive réussie selon archive-session-statistics. Les composants versionnés SHALL partager la base 1.10.5 ; le plugin MAY ajouter un cachebuster Codex.
+Le plugin CAB SHALL distribuer coding-session-statistics et ses métadonnées sans plugin Tools Codex ni skill cgpt externe. Le protocole et la commande SHALL imposer les statistiques après chaque archive réussie selon archive-session-statistics. Les composants versionnés SHALL partager la base de version courante ; le plugin MAY ajouter un cachebuster Codex.
 
 #### Scenario: Installation depuis la marketplace CAB
 - **WHEN** le plugin CAB est installé depuis sa marketplace
-- **THEN** les skills approval-bridge et coding-session-statistics sont présents et résolus depuis le manifeste
+- **THEN** les skills CAB et coding-session-statistics sont présents et résolus depuis le manifeste
 
 #### Scenario: Release cohérente
-- **WHEN** la version 1.10.5 est préparée
-- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugin et commande annoncent la même base 1.10.5
+- **WHEN** le patch 2.1.9 est préparé
+- **THEN** broker, contrôleur, superviseur, collecteurs, scripts, plugins et commandes annoncent la même base 2.1.12
 
 ### Requirement: Réinitialisation obligatoire d'une nouvelle session CAB
 
@@ -180,42 +180,43 @@ Aucune ancienne preuve SHALL valider ce prévol.
 - **THEN** seuls ces résultats neufs autorisent le premier mandat
 
 ### Requirement: Prévention des outils natifs en lecture seule
-Le protocole distribué MUST demander à l'orchestrateur de désactiver explicitement bash, edit, write, apply_patch, task et skill pour tout mandat d'inventaire ou d'analyse en lecture seule. Les outils de lecture et recherche autorisés MAY rester disponibles. 
+Le protocole distribué MUST demander à l'orchestrateur de interdire explicitement les actions natives shell, edit (y compris write), subagent et skill par les permissions V2 de la seule session ciblée, relues avant génération pour tout mandat d'inventaire ou d'analyse en lecture seule. Les outils de lecture et recherche autorisés MAY rester disponibles.
 
 #### Scenario: Inventaire protégé
 - **WHEN** un inventaire lecture seule est transmis par l'API de messagerie OpenCode
 - **THEN** ses outils natifs et d'écriture sont désactivés explicitement et aucun mandat exécutable implicite n'est accordé
 
 ### Requirement: Réactivation limitée des outils exécutables
-La restriction lecture seule MUST NOT modifier la configuration persistante OpenCode ni produire une approbation générale. La réactivation MUST limiter les outils au mandat unitaire, utiliser noReply, rétablir ask par PATCH de la seule session ciblée et le vérifier par lecture native avant génération. Le message de génération MUST NOT réécrire tools. Une preuve absente ou divergente MUST suspendre le mandat.
+La restriction lecture seule MUST NOT modifier la configuration persistante OpenCode ni produire une approbation générale. La réactivation MUST limiter les outils au mandat unitaire, rétablir ask sans génération par PATCH V2 de la seule session ciblée et le vérifier par lecture native avant génération. Le prompt V2 MUST NOT réécrire les permissions ni transmettre tools ou noReply. Une preuve absente ou divergente MUST suspendre le mandat.
 
 #### Scenario: Mandat exécutable suivant
 - **WHEN** l'orchestrateur passe d'un inventaire à une opération native
 - **THEN** seuls les outils nécessaires sont réactivés sans génération, ask est rétabli et vérifié, puis l'opération exige sa propre décision CAB
 
 #### Scenario: Réactivation permissive détectée
-- **WHEN** tools true produit une règle allow ou qu'un contrôle natif échoue
+- **WHEN** une activation produit une règle allow ou qu'un contrôle natif échoue
 - **THEN** aucun mandat exécutable n'est généré tant que ask n'est pas prouvé
 
 ### Requirement: Référence locale du protocole de codage piloté
 
-ORCHESTRATED_CODING.md MAY être absent d'un projet sans besoin de pilotage.
-AGENTS.md MUST préciser ce caractère facultatif et conditionnel. Lorsqu'un
-projet nécessite une session orchestrateur–agent de codage, il MUST disposer
-de ce document et les deux agents MUST le lire avant le pilotage. Le document
-MUST définir le protocole technique sans étendre les autorisations.
+Le skill CAB et ses références MUST porter le contrat commun. AGENTS.md MUST
+le résoudre sans copie locale intégrale ORCHESTRATED_CODING.md. La commande
+MUST router vers les procédures utiles, chargées à la demande. La migration
+MUST vérifier la destination des obligations avant retrait du fichier local.
+Une session SCM directe MUST NOT déclencher de pilotage, OpenCode ou de
+télémétrie réservée aux sessions pilotées.
 
 #### Scenario: Session pilotée
-- **WHEN** un orchestrateur prépare une session de codage pilotée dans un projet
-- **THEN** les deux agents lisent le document dédié de ce projet avant les opérations de pilotage
+- **WHEN** les deux agents préparent une session CAB
+- **THEN** ils chargent le noyau distribué commun et les branches nécessaires sans exiger le fichier local supprimé
 
 #### Scenario: Session directe
-- **WHEN** SCM est exécuté directement sans agent de codage piloté
-- **THEN** la référence documentaire ne déclenche ni CAB, ni OpenCode, ni sondes statistiques de pilotage
+- **WHEN** SCM est exécuté directement
+- **THEN** aucune présence du plugin ou du protocole ne déclenche de pilotage implicite
 
 #### Scenario: Projet sans besoin de pilotage
-- **WHEN** le projet ne nécessite pas de session menée par un agent orchestrateur
-- **THEN** l'absence du fichier facultatif est normale et ne bloque pas le travail direct
+- **WHEN** le projet ne nécessite aucune session orchestrée
+- **THEN** l’absence du protocole local est normale et ne bloque pas le travail direct
 
 ### Requirement: Prévol divergent dans la même session
 Après un prévol divergent ou incomplet refusé sans effet, l'orchestrateur MUST conserver session candidate, job, RUN et runtime. Il MUST NOT renouveler la session, abandonner le job ni purger pour cet incident. Le mandat erroné MUST rester refusé sans normalisation.
@@ -241,10 +242,7 @@ Après retry explicite, l'orchestrateur MUST exiger /usr/bin/true exact, change 
 
 ### Requirement: Connexion MCP et création du RUN CAB
 
-Avant de créer une session de codage, `/CAB start` SHALL consulter `GET /mcp` du serveur
-OpenCode et exiger que `cgpt-validation` soit `connected`. En cas d'échec, `/CAB start`
-MAY réinitialiser l'instance par `POST /instance/dispose`, puis SHALL attendre un état
-sain ; `/CAB start` SHALL ne jamais démarrer ni arrêter le broker directement.
+Avant de créer une session, `/CAB start` SHALL lire `/api/mcp` avec authentification V2 et exiger `cgpt-validation: connected` dans la location cible. À une frontière de maintenance autorisée, il MAY reconnecter le MCP ciblé par les seules routes V2 documentées, puis SHALL relire son état. Il MUST NOT utiliser une route V1, `/instance/dispose`, ni gérer directement le processus broker.
 
 #### Scenario: Connexion MCP et création du RUN CAB
 - **WHEN** la purge du nouveau RUN est terminée mais cgpt-validation n'est pas connecté
@@ -256,9 +254,7 @@ sain ; `/CAB start` SHALL ne jamais démarrer ni arrêter le broker directement.
 
 ### Requirement: Messagerie et reprise du même RUN CAB
 
-`/CAB start` MAY réutiliser la session seulement pour la reprise du même RUN, sans
-purge. `/CAB start` SHALL transmettre les mandats par la messagerie native de cette
-session.
+`/CAB start` MAY réutiliser la session seulement pour la reprise du même RUN, sans purge. `/CAB start` SHALL transmettre les mandats via `POST /api/session/{sessionID}/prompt` V2 dans la location persistante, préserver le texte, la corrélation de mandat, les permissions natives et le mode de livraison sans reprise implicite.
 
 #### Scenario: Messagerie et reprise du même RUN CAB
 - **WHEN** CAB reprend le même RUN avec sa session persistante
@@ -286,71 +282,111 @@ ne jamais modifier la configuration choisie par le développeur.
 - **WHEN** une valeur de modèle attendue est absente ou divergente
 - **THEN** CAB publie CAB_INACTIF avec sa cause, ne crée pas de session persistante et ne modifie pas la configuration choisie
 
-### Requirement: Source Git et migration réversible de la marketplace CAB
+### Requirement: Source locale ou Git de la marketplace CAB
+La source publiée par défaut MUST rester le dépôt Git CAB sur `main`, sparse
+`.agents/plugins` et `plugins`. Si une mise à jour locale explicitement demandée
+utilise un paquet plus récent que GitHub, `/CAB update` MUST l'installer avec
+le gestionnaire Codex et conserver sa marketplace locale. Il MUST NOT revenir à
+une publication plus ancienne ; les caches de plugin MUST NOT être édités à la main.
 
-`/CAB update` SHALL vérifier que la marketplace `cab_codex_plugins` utilise la source
-Git `AzenorPixs/cab-codex-plugins`, branche `main`, avec une extraction sparse
-`.agents/plugins` et `plugins`. Si une source locale homonyme est détectée, `/CAB
-update` SHALL mémoriser sa racine, la remplacer par la source Git et la restaurer si
-l'ajout Git échoue.
+#### Scenario: Migration locale vers GitHub
+- **WHEN** la version publiée est au moins celle du paquet local et une
+  marketplace locale homonyme est configurée
+- **THEN** `/CAB update` remplace la source par GitHub, branche `main`, et
+  restaure la racine locale mémorisée si l'ajout Git échoue
 
-#### Scenario: Source Git et migration réversible de la marketplace CAB
-- **WHEN** la marketplace CAB utilise une source locale homonyme et l'ajout Git échoue
-- **THEN** la racine mémorisée est restaurée et les contraintes de source, branche et extraction sparse restent contrôlées
+#### Scenario: Paquet local plus récent que GitHub
+- **WHEN** une mise à jour locale est explicitement demandée et GitHub publie
+  une version antérieure au paquet source
+- **THEN** le plugin est installé par le gestionnaire Codex depuis la source
+  locale, la marketplace locale est conservée et les caches ne sont pas édités
+  manuellement
 
 ### Requirement: Actualisation conditionnelle du plugin CAB
-
-`/CAB update` SHALL actualiser l'instantané Git par `codex plugin marketplace upgrade
-cab_codex_plugins`, comparer le manifeste distant de `cab-approval-bridge` à la version
-installée et appeler `codex plugin add cab-approval-bridge@cab_codex_plugins` seulement
-si le manifeste distant est strictement plus récent. `/CAB update` SHALL refuser une
-version absente ou invalide et SHALL vérifier la version installée après la
-réinstallation.
+/CAB update SHALL actualiser la marketplace GitHub, comparer le manifeste du plugin CAB à la version installée et appeler codex plugin add CAB@cab_codex_plugins si le plugin CAB est absent ou si le manifeste distant est strictement plus récent. La commande SHALL refuser une version absente ou invalide et vérifier la version et l'identité après installation. Les noms CABU et CAB MUST rester sensibles à la casse.
 
 #### Scenario: Actualisation conditionnelle du plugin CAB
-- **WHEN** le manifeste distant fournit une version strictement plus récente
-- **THEN** la commande native réinstalle le plugin puis vérifie la version réellement installée
+- **WHEN** le manifeste distant est strictement plus récent ou l'ancien identifiant est encore installé
+- **THEN** la commande installe CAB puis vérifie son identité et sa version
 
 ### Requirement: Source et remplacement atomique de la commande de profil CAB
-
-`/CAB update` SHALL télécharger `.codex/commands/{CAB,CABU,cab}.md` depuis
-`https://github.com/AzenorPixs/cab-codex-plugins`, branche `main`. Elle SHALL
-valider les trois frontmatters SemVer identiques et préserver les copies locales
-plus récentes ou divergentes à version égale. Les remplacements SHALL être
-atomiques et limités à une version distante plus récente. Les alias absents
-MAY être complétés à version égale si les copies présentes concordent.
+`/CAB update` MUST préparer uniquement CAB.md et CABU.md depuis GitHub/main,
+avec une version SemVer identique. Une préparation invalide MUST laisser le
+profil intact. La publication MUST sauvegarder les fichiers remplacés et
+`cab.md`, installer atomiquement la paire validée, puis retirer `cab.md` ; un
+échec MUST restaurer le profil. Les commandes locales plus récentes ou
+divergentes à version égale MUST rester intactes. `cab.md` MUST NOT servir de
+source canonique ou de référence de version.
 
 #### Scenario: Source et remplacement atomique de la commande de profil CAB
 - **WHEN** la commande GitHub possède une version valide strictement plus récente que la copie de profil
 - **THEN** la copie est remplacée atomiquement après validation de sa source et de son frontmatter
 
+#### Scenario: Jeu distant incohérent
+- **WHEN** l’un des deux fichiers canoniques manque ou porte une version
+  divergente
+- **THEN** aucune commande locale n’est remplacée et le bilan indique l’échec
+
+#### Scenario: Installation héritée avec alias minuscule
+- **WHEN** `CAB.md` ou `CABU.md` est absent et une ancienne copie `cab.md` existe
+- **THEN** l’update prépare le jeu canonique depuis GitHub, sauvegarde les
+  anciennes copies, installe les deux fichiers validés, puis retire `cab.md`
+
+#### Scenario: Alias absent à version égale
+- **WHEN** les deux commandes locales correspondent aux sources distantes et
+  `cab.md` est absent
+- **THEN** aucun alias n’est recréé et le jeu canonique reste inchangé
+
+#### Scenario: Échec pendant publication
+- **WHEN** la publication d’une commande canonique ou le retrait de l’alias
+  échoue
+- **THEN** les copies remplacées sont restaurées, les seuls nouveaux fichiers
+  retirés et l’échec signalé sans succès global
+
 ### Requirement: Préservation des ressources pendant la mise à jour CAB
-Un échec de préparation réseau, source ou version MUST préserver les installations et processus. /CAB update MUST prendre en charge les quatre briques selon active-component-update, avec gel durable, sauvegarde et repli contrôlé. Configurations et sources du projet piloté MUST rester inchangées ; les seules exceptions de configuration MUST rester la migration réversible de marketplace et les unités dédiées.
+Les préparations réseau ou paquet échouées MUST préserver les fichiers et
+services. `/CAB update` MUST arrêter les trois unités, remplacer les quatre
+briques et redémarrer les unités sans lire l'état CAB comme précondition.
+L'absence d'OpenCode MUST NOT bloquer l'installation du broker. Les sources des
+projets pilotés MUST rester inchangées.
 
 #### Scenario: Préservation des ressources pendant la mise à jour CAB
-- **WHEN** le téléchargement échoue ou la version distante n'est pas plus récente
-- **THEN** la commande locale est conservée ; un jeu déjà conforme ne redémarre rien, et un jeu déployé ou actif divergent peut être réconcilié depuis le plugin installé validé
+- **WHEN** la préparation du paquet ou du jeu de commandes échoue
+- **THEN** les fichiers et unités restent inchangés et l'échec est rapporté
+
+#### Scenario: Jeu déjà installé
+- **WHEN** le paquet validé est identique aux fichiers déployés
+- **THEN** les trois unités sont tout de même arrêtées puis redémarrées et le
+  rapport distingue les versions installées et actives
 
 ### Requirement: Déploiement du superviseur sans démarrage
-/CAB update MUST installer le jeu complet des quatre briques et recharger systemd lorsque nécessaire. Un superviseur initialement inactif MUST rester inactif ; une brique initialement active MUST être arrêtée puis redémarrée dans la transaction de maintenance. La commande MUST NOT activer les unités au login.
+`/CAB update` MUST installer le jeu complet des quatre briques, arrêter les
+trois unités systemd CAB, recharger systemd, puis démarrer les trois unités,
+quels que soient leurs états initiaux. La commande MUST NOT activer les unités
+au login.
 
 #### Scenario: Déploiement du superviseur sans démarrage
 - **WHEN** le superviseur initialement inactif est absent ou divergent
-- **THEN** la commande le déploie depuis le plugin et recharge systemd sans activation ni démarrage
+- **THEN** la commande le déploie depuis le plugin et démarre les trois unités
+  sans activation au login
 
 #### Scenario: Superviseur actif actualisé
 - **WHEN** le superviseur fonctionne avec un ancien jeu
-- **THEN** la transaction le redémarre sur le jeu vérifié et préserve les RUN
+- **THEN** les trois unités sont arrêtées puis redémarrées sur le jeu vérifié
 
 ### Requirement: Résumé des versions réellement observées
-/CAB update MUST afficher séparément les versions GitHub, du plugin installé, des fichiers déployés et des processus actifs pour broker, contrôleur, superviseur, Web et commande. Il MUST distinguer inactivité, attente de maintenance et retour arrière. Toute version inconnue MUST rester indisponible ; celle du broker actif MUST provenir de sa readiness réelle.
+`/CAB update` MUST rapporter séparément les versions GitHub, plugin, fichiers et
+processus des briques CAB. Si OpenCode est absent, la version broker runtime MUST
+être `INDISPONIBLE` tandis que sa version de fichier est affichée. Une version
+inconnue MUST NOT être déduite d'un paquet.
 
 #### Scenario: Résumé des versions réellement observées
 - **WHEN** une mise à jour CAB termine avec une version du broker actif inaccessible
-- **THEN** le résumé distingue GitHub et local et indique la valeur indisponible sans la déduire du paquet
+- **THEN** le résumé distingue GitHub, les fichiers broker et sa version runtime
+  `INDISPONIBLE`, puis conclut sur les versions vérifiées des autres services
 
 ### Requirement: Distribution concurrente 1.0.0
-Les garanties d'identité et d'isolation introduites en 1.0.0 MUST être conservées dans les briques 1.10.5 ; les exclusions MUST suivre le nouveau contrat de ressources. Les prompts pilotés des huit projets MUST rester cohérents lors de leur déploiement autorisé. CISM, CAISM et prompts directs MUST rester inchangés. La préparation source MUST NOT modifier consommateurs ou services actifs.
+Les garanties d'identité et d'isolation introduites en 1.0.0 MUST être conservées dans les briques 1.10.5 ; les exclusions MUST suivre le nouveau contrat de ressources. Les prompts pilotés des projets concernés MUST rester cohérents lors de leur déploiement autorisé, quel que soit le nombre de projets. CISM, CAISM et prompts directs MUST rester inchangés. La préparation source MUST NOT modifier consommateurs ou services actifs.
 
 #### Scenario: Isolation concurrente
 - **WHEN** la distribution source est contrôlée
@@ -530,30 +566,44 @@ L'unité du moniteur MUST NOT dépendre des unités CAB de contrôle ou de super
 - **THEN** le moniteur reste disponible pour afficher leur indisponibilité
 
 ### Requirement: Jeu installé du moniteur complet
-Le déploiement du moniteur MUST conserver scripts/ et web-monitor/ comme dossiers frères, avec la fermeture de ses imports et ressources statiques. Les fichiers de configuration MUST rester non secrets et privés. Une configuration existante MUST être préservée sauf actualisation explicitement validée ; aucun fichier env brut MUST être exposé.
+Le paquet du moniteur MUST inclure `scripts/` et `web-monitor/` côte à côte avec leurs imports et ressources statiques. Sa configuration MUST rester privée et sans secret, et MUST être préservée sauf mandat explicite. Aucun fichier env brut MUST être exposé.
 
 #### Scenario: Paquet isolé
-- **WHEN** le moniteur est lancé depuis son seul jeu installé sans composants amont
-- **THEN** la page et l'identité HTTP restent accessibles sans import depuis le dépôt source
+- **WHEN** le moniteur démarre seul depuis son jeu installé
+- **THEN** la page et l’identité HTTP restent accessibles sans import du dépôt source
 
-### Requirement: Bootstrap du monitoring avant les dépendances amont
-Après résolution du workspace canonique, /CAB start, le skill et le protocole de session pilotée MUST appliquer monitor-service avant PLLM, santé OpenCode et prévols modèle/MCP. Ce contrôle MUST couvrir nouvelle entrée, reprise et réutilisation des services. Il MUST terminer une tentative bornée et rapporter son résultat avant de poursuivre. La préparation source MUST NOT exécuter ce bootstrap sur un profil réel.
+### Requirement: Priorité du bootstrap du monitoring
+Après résolution du workspace canonique, `/CAB start` et le skill MUST
+appliquer `monitor-service` avant PLLM, santé OpenCode et prévols. Cela couvre
+entrée, reprise et services CAB réutilisés.
 
-#### Scenario: Prévol indisponible
-- **WHEN** PLLM ou un prévol amont échoue après la résolution du workspace
-- **THEN** la tentative de démarrage ou de vérification du moniteur a déjà eu lieu et son service reste indépendant
+#### Scenario: Contrôleur déjà actif
+- **WHEN** une reprise trouve le contrôleur actif et le moniteur absent
+- **THEN** le moniteur est démarré avant les prévols, sans redémarrer le contrôleur
 
-#### Scenario: Services CAB réutilisés
-- **WHEN** une session pilotée entre ou reprend avec contrôleur et superviseur déjà actifs mais sans moniteur
-- **THEN** elle applique la procédure de déploiement et démarrage du moniteur dans le périmètre autorisé avant les prévols, sans redémarrer les autres services
+### Requirement: Identité minimale du moniteur au bootstrap
+Le bootstrap MUST vérifier version et workspace par `GET /api/identity`, puis
+la page par `GET /`. Il MUST NOT lire `/api/snapshot` pour obtenir cette identité.
 
-#### Scenario: Instance conforme en reprise
-- **WHEN** le moniteur actif annonce version et workspace attendus
-- **THEN** la procédure vérifie page et unité, réutilise l'instance intacte et rapporte son URL réelle
+#### Scenario: Instance conforme
+- **WHEN** l’identité attendue est renvoyée par `/api/identity`
+- **THEN** le bootstrap vérifie `/`, réutilise l’instance et rapporte son URL réelle
 
-#### Scenario: Échec du monitoring
-- **WHEN** l'installation, le démarrage ou les preuves HTTP échouent
-- **THEN** la procédure rapporte la cause et l'URL attendue séparément du statut CAB, sans annoncer le moniteur disponible ni agir sur les autres briques ou RUN
+### Requirement: Résultat borné du bootstrap
+Le bootstrap MUST terminer une tentative bornée et rapporter son résultat
+avant les prévols. Un échec MUST préserver les autres briques et RUN.
+
+#### Scenario: Monitoring indisponible
+- **WHEN** démarrage ou preuve HTTP échoue
+- **THEN** la cause et l’URL attendue sont rapportées séparément du statut CAB
+
+### Requirement: Indépendance du bootstrap source
+La préparation source MUST NOT exécuter le bootstrap sur un profil réel. Un
+échec de PLLM ou d’un prévol amont MUST laisser le moniteur indépendant actif.
+
+#### Scenario: Prévol amont échoué
+- **WHEN** PLLM ou un prévol échoue après la sonde du moniteur
+- **THEN** le moniteur reste actif sans action sur les autres briques
 
 ### Requirement: Distribution cohérente de la récupération 1.9.0
 Le jeu CAB MUST annoncer 1.10.5 avec cachebuster neuf, fermeture d'imports et preuves de qualification. Il MUST distribuer maintenance-proof et le profil frozen-recovery-controller, préserver le rejet seul de notification et distinguer source, code chargé et runtime vivant. Cette préparation MUST NOT installer ou activer les correctifs sur les RUN réels.
@@ -616,17 +666,17 @@ Le contrôle documentaire MUST comparer les exigences courantes de persistent-jo
 - **THEN** le contrôle documentaire réussit sans modifier ni contrôler les archives comme exigences courantes
 
 ### Requirement: Commandes CAB canoniques et alias compatibles
-
-`/CAB` MUST être défini dans `.codex/commands/CAB.md`. L'alias `cab.md`
-MUST charger le fichier frère CAB.md de même version et transmettre les arguments
-inchangés. `CABU.md` MUST charger ce fichier et exécuter exactement `/CAB update`
-dans le même tour, sans procédure dupliquée. CABU MUST refuser les arguments.
-Une dépendance absente ou divergente MUST arrêter l'alias avant effet.
+`/CAB` MUST être défini dans `.codex/commands/CAB.md`. `cab.md` MUST transmettre
+les arguments inchangés ; `CABU.md` MUST charger le fichier frère de même version,
+refuser les arguments et exécuter `/CAB update` jusqu'au rapport terminal. CABU
+ne duplique pas la procédure ; une dépendance absente ou divergente MUST bloquer.
 La préparation source MUST NOT invoquer les services actifs.
 
 #### Scenario: Mise à jour par raccourci
-- **WHEN** `/CABU` est invoqué sans argument avec un fichier canonique de même version
-- **THEN** la procédure `/CAB update` est exécutée avec les mêmes gardes, résultats et reprise
+- **WHEN** `/CABU` est invoqué sans argument avec CAB.md et le plugin de même
+  version
+- **THEN** CABU charge CAB.md, lequel applique la procédure du skill embarqué,
+  et déclenche le même processus d'update sans logique dupliquée
 
 #### Scenario: Alias de compatibilité
 - **WHEN** `/cab status --run A` est invoqué
@@ -635,6 +685,12 @@ La préparation source MUST NOT invoquer les services actifs.
 #### Scenario: Arguments ou dépendance invalides
 - **WHEN** CABU reçoit un argument ou CAB.md manque ou possède une version divergente
 - **THEN** l'alias signale l'erreur et termine avant toute opération réseau ou de maintenance
+
+#### Scenario: Dépendance skill absente ou divergente
+- **WHEN** le skill, sa référence de maintenance, ou CAB.md ne correspond pas
+  au manifeste installé
+- **THEN** l'update s'arrête avant maintenance et indique la dépendance
+  manquante ou divergente
 
 ### Requirement: Jeu de commandes de profil complet
 
@@ -660,3 +716,376 @@ Les alias absents MAY être complétés à version égale si les copies présent
 #### Scenario: Échec pendant publication
 - **WHEN** la publication d'une des commandes échoue
 - **THEN** les seules commandes remplacées sont restaurées, les seuls nouveaux fichiers de cette tentative sont retirés et l'échec est signalé sans succès global
+
+### Requirement: Distribution source CAB 1.10.6
+La préparation source MUST aligner le jeu CAB distribué sur la version 1.10.6
+dans les métadonnées, modules, broker, scripts, services, commande, skill et
+supports décrivant le profil courant. Elle MUST NOT modifier les installations,
+services, caches ou RUN actifs. Les références qualifiées antérieures MUST
+rester exactes.
+
+#### Scenario: Jeu source aligné
+- **WHEN** le jeu 1.10.6 est qualifié
+- **THEN** chaque composant versionné annonce 1.10.6 et les références à 1.10.5 ne désignent que des historiques ou versions chargées compatibles
+
+### Requirement: Plugin CABU et skill d'entrée
+La marketplace CAB SHALL distribuer un plugin autonome `CABU`. Celui-ci SHALL exposer un skill directement invocable qui déclenche la procédure canonique `/CAB update` sans dupliquer cette procédure.
+
+#### Scenario: Invocation directe du skill CABU
+- **WHEN** le skill `CABU` est installé et invoqué
+- **THEN** il exécute `/CAB update` dans la conversation courante et restitue son rapport terminal
+
+#### Scenario: Procédure canonique indisponible
+- **WHEN** le skill `CABU` est invoqué sans commande CAB compatible disponible
+- **THEN** il signale la dépendance absente et n'entame aucune opération de maintenance
+
+### Requirement: Distribution cohérente du plugin et de la commande CABU
+La commande `/CABU` SHALL rester distribuée séparément du plugin dans `.codex/commands/CABU.md`, sans argument et avec la même base de version que le plugin CABU et le plugin CAB. Elle SHALL déléguer à `/CAB update` sans dupliquer sa procédure.
+
+#### Scenario: Plugin et commande distribués à la même version
+- **WHEN** une release CAB est préparée
+- **THEN** la marketplace, le manifeste du plugin CABU, le skill CABU, le plugin CAB et la commande `/CABU` annoncent la base de version commune
+
+#### Scenario: Invocation de la commande CABU
+- **WHEN** `/CABU` est invoquée sans argument
+- **THEN** elle délègue à la procédure `/CAB update` et produit le même rapport terminal
+
+#### Scenario: Arguments CABU refusés avant maintenance
+- **WHEN** `/CABU` est invoquée avec un argument
+- **THEN** elle affiche sa syntaxe et termine avant toute opération réseau ou de maintenance
+
+### Requirement: Configuration MCP OpenCode V2
+Le broker CAB MUST être déclaré comme serveur MCP local `stdio` sous `mcp.servers.cgpt-validation`. La forme V1 plaçant le serveur directement sous `mcp` MUST NOT être utilisée ni réparée automatiquement.
+
+#### Scenario: Configuration compatible
+- **WHEN** la configuration OpenCode V2 est inspectée
+- **THEN** `cgpt-validation` est sous `mcp.servers` avec `type: "local"` et utilise stdio
+
+#### Scenario: Configuration V1 résiduelle
+- **WHEN** le serveur est déclaré directement sous `mcp`
+- **THEN** CAB signale la configuration incompatible sans la réécrire ni démarrer le broker
+
+### Requirement: Identités CAB et CABU en majuscules
+La marketplace MUST identifier les plugins et leurs skills invocables comme
+CAB/CABU et $CAB/$CABU. Les commandes canoniques MUST rester /CAB et /CABU ;
+seul /CAB MUST assurer le pilotage. La marketplace MUST s’afficher CAB Codex
+Plugins. Les chemins techniques MUST rester compatibles ; l’alias /cab MUST
+NOT être reconnu ni distribué. Le skill coding-session-statistics MUST rester
+accessible sous CAB.
+
+#### Scenario: Distribution vérifiée
+- **WHEN** un paquet est préparé
+- **THEN** les entrées marketplace, manifestes et frontmatters annoncent les identifiants majuscules et les sélecteurs CLI utilisent CAB@cab_codex_plugins et CABU@cab_codex_plugins
+
+#### Scenario: Ancien plugin installé
+- **WHEN** une installation utilise encore cab-approval-bridge
+- **THEN** le gestionnaire installe et vérifie CAB avant retrait de l'ancienne entrée, sans édition manuelle du cache ni modification des données métier
+
+### Requirement: Distribution du cycle de vie CAB 2.1.9
+La distribution source MUST aligner ses composants versionnés sur 2.1.12 et inclure le module de cycle de vie dans les fermetures d’import du contrôleur, superviseur et moniteur. Les unités MUST empêcher le redémarrage automatique après un nettoyage incomplet identifié. La préparation MUST NOT installer, activer ou modifier les RUN réels.
+
+#### Scenario: Paquet source qualifié
+- **WHEN** CAB 2.1.9 est préparé
+- **THEN** ses versions et imports sont cohérents et aucune activation réelle n’est déduite des tests
+
+### Requirement: Distribution des gardes de mandat et de l’édition native 2.1.10
+
+La distribution source MUST aligner ses composants versionnés sur 2.1.10 et documenter le mécanisme d’édition partielle réellement qualifié, le catalogue natif distinct de search et l’attente de mandat du superviseur. Cette préparation MUST NOT modifier les briques actives ou leur raccord OpenCode. CABU MUST rester une activation distincte coordonnée.
+
+#### Scenario: Sources préparées sans activation
+- **WHEN** la qualification et les tests source réussissent
+- **THEN** les composants source partagent 2.1.10 et les preuves distinguent source, archivage, publication et activation
+
+### Requirement: Distribution de la récupération native directe 2.1.11
+
+Les composants versionnés CAB MUST partager la base 2.1.11 et documenter la récupération directe strictement qualifiée. Source, archivage, publication, activation et récupération réelle MUST rester distincts. La préparation source MUST NOT modifier les sessions, RUN ou services actifs.
+
+#### Scenario: Sources qualifiées
+- **WHEN** les tests et documents source sont validés
+- **THEN** les artefacts partagent 2.1.11 et une activation ultérieure reste coordonnée séparément
+
+### Requirement: Distribution des diagnostics avant admission 2.1.12
+
+Les composants CAB MUST partager la base 2.1.81 et documenter la corrélation de
+`request_validation`, les décisions durables, la reprise native et l’isolation
+des opérations. Source, archivage, publication et activation MUST rester
+distincts. CABU MUST préserver OpenCode, les RUN et leurs preuves, puis vérifier
+les versions actives.
+
+#### Scenario: Distribution et activation vérifiées
+
+- **WHEN** le correctif est qualifié et publié puis sa maintenance coordonnée est exécutée
+- **THEN** les quatre briques et commandes cibles sont vérifiées indépendamment des sources et le résultat réel est transmis aux sessions
+
+### Requirement: Distribution de la restitution sans effet 2.1.13
+Le jeu source MUST aligner les composants, plugins et commandes sur 2.1.13 et documenter release-unused, ses preuves, son attestation explicite, ses limites et la priorité du nettoyage après mutation. Les tests MUST qualifier les parcours positifs et négatifs isolés, la persistance et la conservation des anciennes gardes. La préparation source MUST NOT modifier les RUN ni activer les briques installées.
+
+#### Scenario: Livraison source et runtime séparés
+- **WHEN** les sources 2.1.13 sont qualifiées et archivées
+- **THEN** l’activation reste distincte et aucune réservation réelle n’est libérée par la qualification
+
+### Requirement: Compatibilité des reçus sans effet
+Les anciens registres sans reçu MUST rester lisibles. Un lecteur ancien ne comprenant pas le reçu enrichi MUST le refuser sans perte de preuve ; une restauration antérieure MUST NOT être utilisée pour effacer ce reçu.
+
+#### Scenario: Retour vers un lecteur ancien
+- **WHEN** le registre contient un reçu unused-no-effect inconnu du lecteur
+- **THEN** ce lecteur refuse le registre plutôt que d’ignorer la nouvelle preuve
+
+### Requirement: Distribution générique de l’isolation MCP 2.1.14
+La distribution MUST aligner les composants et commandes sur 2.1.14, documenter les cibles MCP et le helper de sonde. Les exemples et consignes MUST utiliser des workspaces génériques. La récupération d’un contexte concurrent MUST rester explicite, sous preuves et sans redémarrage OpenCode. Les sources qualifiées MUST précéder l’activation réelle.
+
+#### Scenario: Distribution et activation distinctes
+- **WHEN** les sources et tests isolés sont validés et archivés
+- **THEN** CABU vérifie séparément les versions actives avant notification aux sessions
+
+### Requirement: Distribution du rétablissement CABU 2.1.15
+La distribution MUST aligner ses composants et commandes sur2.1.15 et documenter le budget de démarrage et les phases non terminales de rollback. Les tests MUST couvrir échecs, reprise et invariants métier. L’activation MUST rester séparée de la qualification source et être annoncée seulement après versions actives et readiness vérifiées.
+
+#### Scenario: Reprise après activation échouée
+- **WHEN** les sources corrigées sont publiées et CABU est autorisé
+- **THEN** la procédure conserve les journaux antérieurs et vérifie l’état effectif avant d’informer les sessions
+
+### Requirement: Distribution des diagnostics de décision2.1.16
+La distribution MUST aligner composants et commandes sur2.1.16 et documenter les codes de refus400, decision_recorded et la distinction entre demande et décision. Les tests MUST préserver succès, rejets, gardes natives et absence d’exposition sensible. La source qualifiée MUST précéder CABU et la notification des versions effectivement activées.
+
+#### Scenario: Livraison source puis activation
+- **WHEN** les sources2.1.16 sont qualifiées et archivées
+- **THEN** les versions actives sont vérifiées séparément avant information des sessions
+
+### Requirement: Point de coordination des incidents de codage CAB
+
+Le contrat distribué MUST privilégier le diagnostic local et les récupérations
+qualifiées déjà autorisées. Un incident réparable MUST NOT imposer un nouveau
+chat de correction. Un envoi ou une création de chat MUST nécessiter la demande
+explicite correspondante et respecter une clôture ou révocation existante.
+Les faits, limites, mandats et preuves MUST rester corrélés sans secret.
+
+#### Scenario: Chat existant
+- **WHEN** une coordination est explicitement demandée et son chat est identifié
+- **THEN** l'orchestrateur le réutilise sans doublon, sous réserve d'une clôture ou révocation applicable
+
+#### Scenario: Chat absent
+- **WHEN** la recherche complète accessible ne trouve pas la cible et sa création n'est pas explicitement demandée
+- **THEN** l'incident reste au checkpoint du RUN sans nouveau chat ni attente d'un correctif pour une récupération déjà autorisée
+
+#### Scenario: Chat courant ou cible ambiguë
+- **WHEN** le chat courant est la cible ou plusieurs résultats restent ambigus
+- **THEN** consigner localement dans le premier cas et signaler l'ambiguïté dans le second, sans auto-message ou diffusion multiple ; un outil absent reste déclaré
+
+### Requirement: Suivi d’incident jusqu’à activation vérifiée
+
+Lorsqu'un correctif est nécessaire, son suivi MUST distinguer source qualifiée,
+publication et activation vérifiée. Une récupération locale réussie MAY clore
+l'incident sans nouvelle livraison. Les informations inter-chats MUST respecter
+l'autorisation de communication applicable. Un échec MUST conserver preuves et
+prochaine action sans rejouer une décision ou once ; les travaux disjoints
+autorisés MAY continuer.
+
+#### Scenario: Source publiée mais activation en attente
+- **WHEN** le correctif est publié sans preuve CABU terminale
+- **THEN** la version n'est pas déclarée effective et les preuves de reprise restent conservées
+
+#### Scenario: Activation confirmée
+- **WHEN** CABU confirme versions et readiness
+- **THEN** l'incident peut être clos ; les sessions sont informées dans le seul périmètre de communication autorisé
+
+#### Scenario: Échec de mise à jour
+- **WHEN** CABU échoue ou une dépendance empêche la suite
+- **THEN** l'incident conserve état, preuves et conditions de reprise sans rejeu ni gel des ressources indépendantes
+
+### Requirement: Distribution du contrat modèle explicite2.1.18
+La distribution MUST aligner composants et commandes sur2.1.18 et documenter reasoning en entrée et variant dans les lectures natives. Skill et commande MUST présenter le refus du champ variant et la conversion explicite, sans alias ni repli silencieux. La qualification source MUST préserver les RUN et processus ; une publication MUST NOT être annoncée comme activation.
+
+#### Scenario: Appel corrigé sans modification du codeur
+- **WHEN** un pilote rencontre opencode-model-variant-unsupported
+- **THEN** il prépare un nouvel appel conforme après vérification de l’absence d’effet, sans modifier implicitement son modèle actif ni rejouer de permission
+
+### Requirement: Distribution des transitions à chaud2.1.19
+Les briques, plugins et commandes MUST annoncer2.1.19 et distribuer le raccord V2 ainsi que les transitions du même job. Le protocole MUST distinguer choix explicite libre et PLLM par défaut, secrets et autorisations opérationnelles. La qualification2.2.0 MUST être distincte d’un banc2.2.2. SCM réussi MUST être suivi de CABU et d’une notification des versions actives ; cela MUST NOT appliquer implicitement une clé ou politique aux RUN réels.
+
+#### Scenario: Activation logicielle sans adoption métier implicite
+- **WHEN** le correctif est qualifié, publié et activé par CABU
+- **THEN** les propriétaires reçoivent les procédures et preuves de versions sans changement automatique de leur modèle ni de leur compte
+
+### Requirement: Lanceur fournisseur installé utilisable par lien
+Le helper provider-connect MUST exécuter main lorsqu’il est lancé directement ou via son lien installé, et MUST rester sans effet à l’import en bibliothèque. Un exit0 sans reçu MUST NOT être considéré comme preuve de raccord. Les tests MUST vérifier le lien symbolique avec canal secret privé et effet unique.
+
+#### Scenario: Lien installé
+- **WHEN** Node lance le helper par un lien vers la release gérée
+- **THEN** la CLI produit son reçu et effectue au plus le raccord autorisé, sans exposer la clé
+
+### Requirement: Distribution de la qualification de continuité2.1.20
+Les briques et commandes MUST annoncer2.1.20, distribuer le lanceur corrigé et documenter la différence entre sonde fraîche et continuité historique. La qualification MUST utiliser2.2.0 exact et des métadonnées synthétiques. SCM réussi MUST être suivi de CABU puis notification de l’activation ; une limite native démontrée MUST rester explicite et ne pas être présentée comme correction de l’histoire réelle.
+
+#### Scenario: Livraison avec limite native prouvée
+- **WHEN** le correctif CLI et la qualification sont validés
+- **THEN** la livraison indique séparément les comportements corrigés, les limites démontrées et les opérations réellement activées
+
+### Requirement: Distribution de la projection native de contexte2.1.21
+CAB2.1.21 MUST distribuer le module sans dépendance et sa procédure dans le plugin, le skill et la commande. Le banc exact2.2.0 MUST vérifier chargement à chaud, même compte cible/modèle/SID/PID, conservation des enregistrements et isolation d’un pair. Après SCM, CABU MUST précéder l’application réelle par les propriétaires et leur confirmation de reprise.
+
+#### Scenario: Livraison et application distinctes
+- **WHEN** la source est qualifiée et publiée puis CABU réussit
+- **THEN** les propriétaires reçoivent le mécanisme et vérifient leur continuité réelle avant toute reprise métier, sans confondre les preuves source et runtime
+
+### Requirement: Distribution du contrôle d’entrée2.1.22
+Les briques CAB2.1.22 MUST distribuer le champ, sa dérivation native, la garde avant once et la procédure dans skill/commande. Les tests MUST couvrir source fabriquée, substitution, contenu divergent sans effet et succès exact. Une publication source MUST rester distincte de CABU et de l’adoption sur les nouveaux mandats des propriétaires.
+
+#### Scenario: Adoption après activation
+- **WHEN** SCM puis CABU sont vérifiés
+- **THEN** les propriétaires utilisent l’empreinte sur leurs prochains mandats et conservent les anciennes décisions, preuves et RUN
+
+### Requirement: Distribution du diagnostic vide2.1.23
+Les briques CAB2.1.23 MUST distribuer la projection bornée et ses limites dans skill/commande/référence. Les tests MUST vérifier omission exacte, formes adverses, empreinte brute et absence d’autorité nouvelle. SCM/publications MUST précéder CABU vérifié puis information des sessions, sans changement implicite de leur contexte.
+
+#### Scenario: Livraison et diagnostic réel
+- **WHEN** le correctif est qualifié et activé
+- **THEN** les propriétaires reçoivent la règle exacte et vérifient le diagnostic sans rejouer de mandat ou permission
+
+### Requirement: Distribution de l’observation d’admission2.1.24
+Les briques CAB2.1.24 MUST distribuer l’observation et sa procédure dans skill/commande/référence. Les tests MUST couvrir refus précoce/tardif, demandes inconnues/étrangères, isolation du pair et décision unique après stabilisation. SCM/publications MUST précéder CABU vérifié puis information, sans relance implicite ou mutation de contexte.
+
+#### Scenario: Adoption après activation
+- **WHEN** la version est qualifiée et activée
+- **THEN** les pilotes observent les mêmes identités et gardes sans rejouer de décision, mandat ou permission
+
+### Requirement: Distribution du porte-mandat2.1.25
+Les briques CAB2.1.25 MUST distribuer staging, lanceur et procédure dans skill/commande/référence. Les tests MUST couvrir payload long natif exact, accès/once obligatoires, substitution, altération, contexte étranger et restauration. SCM/publications MUST précéder CABU vérifié puis information des sessions ; aucun plugin ou changement d’OpenCode MUST être imposé.
+
+#### Scenario: Adoption après activation
+- **WHEN** la livraison est qualifiée et activée
+- **THEN** les propriétaires préparent de nouveaux mandats scellés et conservent anciens travaux, permissions et identités
+
+### Requirement: Distribution des remédiations CAB 2.1.26
+CAB 2.1.26 MUST distribuer projection registre, helpers et protocole de reprise dans skill/commande/référence. Le protocole MUST exiger contenu complet revu et preuves réelles de tests, sans assimiler READY, compilation ou proposition à des tests exécutés. Qualification et publications SCM MUST précéder CABU vérifié puis information des sessions, en préservant OpenCode et mandats.
+
+#### Scenario: Reprise après incident
+- **WHEN** la version est effectivement activée
+- **THEN** les sessions reçoivent les diagnostics, invariants et procédure et conservent leur modèle explicite et leurs preuves
+
+### Requirement: Attente des transitions MCP CABU
+CABU MUST observer pending de façon bornée avec le budget existant, sans réémettre connect/disconnect. Une absence de confirmation MUST rester explicite. Un pending persistant MUST conserver un état nonterminal MCP_RECOVERY_REQUIRED dans le même journal, sans boucle native de repli ou nouvelle installation implicite. Les services CAB disponibles MUST rester accessibles lorsque leur code est intact.
+
+#### Scenario: Pending transitoire
+- **WHEN** une connexion devient connected dans le budget
+- **THEN** une seule commande native est émise et versions/readiness restent à vérifier
+
+#### Scenario: Pending persistant
+- **WHEN** le budget expire
+- **THEN** le reçu demeure réconciliable sans second connect/disconnect ni faux succès
+
+### Requirement: Récupération MCP autorisée et unique
+--recover-mcp MUST lier l’autorisation de rechargement global au reçu exact nonterminal, hors profils gelés/reuse-readonly. CABU MUST vérifier la frontière native, journaliser l’intention avant le POST et conserver PID/location/identités des sessions. Une intention déjà émise ou un résultat inconnu MUST NOT être rejoué. Demandes, once et modèles MUST rester hors de cette récupération.
+
+#### Scenario: Récupération explicite
+- **WHEN** l’opérateur autorise le reçu et la frontière est vérifiée
+- **THEN** un seul rechargement global peut être envoyé sans arrêter OpenCode, puis identités, versions et readiness sont contrôlées
+
+#### Scenario: Autorisation absente ou frontière invalide
+- **WHEN** le reçu est étranger/terminal, le profil incompatible ou une activité/permission est présente
+- **THEN** aucun rechargement ni nouvelle transaction n’est exécuté
+
+#### Scenario: Intention durable sans réponse
+- **WHEN** le POST expire ou le processus s’interrompt après intention
+- **THEN** seules des observations peuvent réconcilier cette intention ; aucun second POST n’est envoyé
+
+### Requirement: Clôture du reçu MCP récupéré
+Une installation complète récupérée MUST terminer le même reçu après vérification des artefacts, versions et readiness fraîche. Un repli nécessaire MUST conserver et clore son reçu distinctement sans ouvrir une installation suivante dans cette récupération. Les erreurs historiques MUST rester traçables. Publication SCM MUST précéder CABU vérifié et information des sessions.
+
+#### Scenario: Retour autonome du broker
+- **WHEN** le raccord revient sans rechargement et l’installation est intacte
+- **THEN** la reprise peut vérifier et clore le même reçu sans nouvel effet natif
+
+#### Scenario: Ancien rollback non confirmé
+- **WHEN** une récupération autorisée restaure le raccord
+- **THEN** le même journal est réconcilié avant toute nouvelle installation distincte
+
+### Requirement: Protocole de reprise après gel natif de revue
+Le protocole skill/commande MUST distinguer deny de revue et exigences ask du nouveau mandat. Avant prévol ou opération permissionnée, le propriétaire MUST vérifier la politique avec le garde client, puis, si mandaté, lever explicitement le seul droit nécessaire à frontière sûre, consigner origine/empreintes avant-après et préserver les autres deny. CABU MUST NOT être présumé restaurer les règles. Publication SCM MUST précéder CABU vérifié puis information des sessions.
+
+#### Scenario: Origine et reprise identifiées
+- **WHEN** une revue a laissé shell/edit deny
+- **THEN** le pilote conserve ce fait comme action explicite, contrôle la reprise et ne soumet pas de nouveau prévol avant shell ask prouvé
+
+### Requirement: Fermeture des imports selon leur destination déployée
+L’updater MUST inclure permission-policy dans monitorScripts et vérifier chaque import relatif statiquement déclaré contre sa source et sa destination réelles. Un module présent seulement dans un autre groupe MUST NOT satisfaire l’import. Un paquet incomplet MUST être refusé avant coupure. Les gardes de permissions MUST rester inchangées ; archivage/publications SCM MUST précéder CABU vérifié et information.
+
+#### Scenario: Client du moniteur installé
+- **WHEN** le groupe indépendant est déployé dans son layout géré
+- **THEN** son client ESM charge sa dépendance de politique et expose le garde sans composant source externe
+
+#### Scenario: Dépendance dans le mauvais groupe
+- **WHEN** un import existe dans le paquet mais pas à la destination relative attendue
+- **THEN** update-package-import-missing est émis avant tout arrêt ou reconnexion
+
+### Requirement: Commande CAB unique en majuscules
+`/CAB` MUST être la seule commande de pilotage et MUST être définie dans
+`.codex/commands/CAB.md`. `/CABU` MUST charger le fichier frère `CAB.md` de
+même version, refuser les arguments et exécuter `/CAB update` jusqu’au rapport
+terminal. Aucun fichier `cab.md` ni invocation `/cab` ne MUST être distribué
+ou reconnu. CABU ne duplique pas la procédure ; une dépendance absente ou
+divergente MUST bloquer. La préparation source MUST NOT invoquer les services
+actifs.
+
+#### Scenario: Mise à jour par raccourci
+- **WHEN** `/CABU` est invoqué sans argument avec `CAB.md` et le plugin de même
+  version
+- **THEN** CABU charge `CAB.md`, lequel applique la procédure du skill embarqué,
+  et déclenche le même processus d’update sans logique dupliquée
+
+#### Scenario: Invocation minuscule absente
+- **WHEN** `/cab` est invoqué après la migration des commandes
+- **THEN** aucune commande CAB ne s’exécute ; le développeur doit employer `/CAB`
+
+#### Scenario: Arguments ou dépendance invalides
+- **WHEN** CABU reçoit un argument ou `CAB.md` manque ou possède une version
+  divergente
+- **THEN** CABU signale l’erreur et termine avant toute opération réseau ou de
+  maintenance
+
+#### Scenario: Dépendance skill absente ou divergente
+- **WHEN** le skill, sa référence de maintenance, ou `CAB.md` ne correspond
+  pas au manifeste installé
+- **THEN** l’update s’arrête avant maintenance et indique la dépendance
+  manquante ou divergente
+
+### Requirement: Distribution cohérente CAB 2.2.0
+
+Le paquet, broker, modules, unités, plugins et commandes MUST porter la version
+2.2.0 commune. Les nouveaux modules de continuité, récupération, exécution et
+efficacité MUST appartenir aux fermetures effectivement déployées. Les outils
+de consultation et les nouvelles politiques MUST préserver les contrats
+unitaires de décision, permissions et preuves.
+
+#### Scenario: Import absent d’un groupe déployé
+- **WHEN** un module importé n’est pas inclus dans le groupe cible
+- **THEN** la préparation échoue avant coupure sans modifier les services
+
+### Requirement: Bootstrap résolu depuis la version installée
+
+Le bootstrap MUST déduire la version CAB attendue du manifeste du plugin vérifié installé, sans suffixe de cache. Il MUST comparer cette version à l’identité native du moniteur et MUST NOT exiger une ancienne version fixe. CABU MUST comparer aussi la révision complète des plugins et utiliser le gestionnaire officiel pour une nouvelle révision compatible.
+
+#### Scenario: Nouveau paquet et moniteur conforme
+
+- **WHEN** le paquet installé et le moniteur annoncent la même version de base
+- **THEN** le bootstrap réutilise l’instance conforme sans redémarrage motivé par une ancienne valeur documentaire
+
+### Requirement: Arrêt certifié préservant l’autorité du registre
+
+Pour un transfert préparé, CABU MUST signaler le seul principal du contrôleur avant le groupe, en préservant le helper jusqu’au scellement. Il MUST confirmer MainPID=0 avec état inactive ou failed ; tout PID vivant ou deactivating MUST rester refusé. L’unité MUST utiliser KillMode=mixed. L’adoption exacte reste obligatoire ; un code de sortie ne la remplace pas. CABU MUST préserver OpenCode et les ressources métier et conserver le repli sur échec.
+
+#### Scenario: Ancienne unité en control-group
+
+- **GIVEN** un transfert préparé et une unité qui signale tous les membres du groupe
+- **WHEN** CABU remplace le contrôleur
+- **THEN** SIGTERM cible d’abord le principal ; le helper reste disponible pour sceller, puis le groupe est arrêté
+
+#### Scenario: Principal arrêté en failed
+
+- **WHEN** le principal est absent, MainPID vaut 0 et l’unité est failed
+- **THEN** CABU peut arrêter le groupe et poursuivre, mais le contrôleur cible doit adopter le certificat exact avant tout succès
+
+#### Scenario: Principal qui ne termine pas
+
+- **WHEN** le principal reste vivant ou sa fin ne peut pas être confirmée
+- **THEN** CABU conserve un échec explicite sans inventer un transfert adopté

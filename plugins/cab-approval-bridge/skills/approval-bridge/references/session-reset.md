@@ -27,12 +27,15 @@ crée ni permission ni remédiation des composants observés.
    malsaine ou un ancien job abandonné n'interdit pas la purge d'une nouvelle
    session dont l'inactivité et la propriété sont prouvées.
 3. Déconnecter uniquement `cgpt-validation` par
-   `POST /mcp/cgpt-validation/disconnect?directory=<contexte encodé>`.
+   `POST /api/experimental/mcp/cgpt-validation/disconnect?directory=<contexte encodé>`
+   avec Basic Auth et le credential local privé.
    Vérifier la déconnexion et la libération du verrou du broker. Ne pas tuer
    ni lancer directement le broker ; ne pas fermer ou redémarrer OpenCode.
 4. Résoudre les espaces d'état réellement utilisés. Le broker utilise par
    défaut `<home OpenCode>/.opencode/state/cgpt-approval-bridge/` ; contrôleur et
-   superviseur utilisent `<racine projet>/.opencode/state/cgpt-approval-bridge/`.
+   superviseur utilisent le `runtimeStateDirectory` privé exposé par `/status`,
+   hors projet depuis2.2.40. Le répertoire historique de projet ne fait plus
+   autorité après migration et ne doit pas servir de repli.
    Tenir compte des chemins personnalisés déclarés sans lire de secret ni
    d'environnement complet. Ne pas déduire le home du broker du home Codex.
    Un chemin personnalisé hors des espaces couverts interdit d'annoncer une
@@ -46,7 +49,7 @@ crée ni permission ni remédiation des composants observés.
    Exemple, à adapter aux chemins réellement observés :
 
    ```text
-   <python absolu> <plugin>/scripts/cgpt-approval-bridge-reset.py --confirm-new-session --state-dir <home OpenCode>/.opencode/state/cgpt-approval-bridge --state-dir <projet>/.opencode/state/cgpt-approval-bridge
+   <python absolu> <plugin>/scripts/cgpt-approval-bridge-reset.py --confirm-new-session --state-dir <home OpenCode>/.opencode/state/cgpt-approval-bridge --state-dir <runtimeStateDirectory observé>
    ```
 
 6. Exiger `CAB_STATE_RESET`, un code zéro et l'absence d'ancien contenu dans
@@ -58,9 +61,9 @@ crée ni permission ni remédiation des composants observés.
    un état recréé impose `CAB_INACTIF` ; ne pas poursuivre après une purge
    partielle. Les sources, secrets, configurations, rapports et historiques
    natifs OpenCode/Codex restent hors des espaces purgés.
-7. Reconnecter le broker par
-   `POST /mcp/cgpt-validation/connect?directory=<racine encodée>`, puis vérifier
-   `/global/health`, `/path` et `/mcp` dans ce contexte. Installer et démarrer
+7. Reconnecter le broker par la route V2 authentifiée
+   `POST /api/experimental/mcp/cgpt-validation/connect?directory=<racine encodée>`, puis vérifier
+   `/api/info`, `/api/location` et `/api/mcp` dans cette location. Installer et démarrer
    ensuite les ressources CAB conformément au skill, puis créer une nouvelle
    session maîtresse. Ne pas réadopter l'ancien job ou sa session.
 8. Appeler réellement `broker_readiness` dans cette session et exiger `READY`,

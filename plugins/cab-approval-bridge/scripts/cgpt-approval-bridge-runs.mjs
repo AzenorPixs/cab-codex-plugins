@@ -5,13 +5,14 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-export const VERSION = "1.10.5";
+export const VERSION = "2.3.0";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const validReconciliation = (value) => record(value) &&
   Object.keys(value).length === 14 &&
-  ['transactionId', 'jobId', 'recoveryId', 'operationId', 'approvalId'].every((key) => id(value[key])) &&
+  ['transactionId', 'jobId', 'operationId', 'approvalId'].every((key) => id(value[key])) &&
+  (value.recoveryId === null || id(value.recoveryId)) &&
   typeof value.sessionId === 'string' && value.sessionId.startsWith('ses_') &&
   ['inputDigest', 'nativeToolHash', 'authorizationDigest'].every((key) => sha256(value[key])) &&
   Number.isSafeInteger(value.contextId) && value.contextId > 0 &&
@@ -77,7 +78,7 @@ function readRegistry(path) {
 }
 
 export class RunRegistry {
-  constructor(directory, stateDirectory, { observe = () => {} } = {}) {
+  constructor(directory, stateDirectory, { observe = () => {}, onUnavailable = () => {} } = {}) {
     this.directory = realpathSync(directory);
     this.stateDirectory = stateDirectory;
     if (realTarget(stateDirectory) !== resolve(stateDirectory)) throw new CoordinationError('registry-path-invalid');
@@ -85,6 +86,8 @@ export class RunRegistry {
     this.runs = new Map();
     this.integrationOwner = null;
     this.failed = false;
+    this.authorityClosing = false;
+    this.onUnavailable = onUnavailable;
     this.lock = null;
     this.sequence = 0;
     this.requestOwners = {};
@@ -205,35 +208,53 @@ export class RunRegistry {
     }
   }
 
-  async acquireAuthority() {
+  async acquireAuthority({additionalLockPath,beforeRestore}={}) {
     if (this.lock) return;
     mkdirSync(this.stateDirectory, { recursive: true, mode: 0o700 });
     const helper = fileURLToPath(new URL("./cgpt-approval-bridge-registry-lock.py", import.meta.url));
-    const child = spawn("python3", [helper, join(this.stateDirectory, "registry.instance.lock")],
+    const child = spawn("python3", [helper, join(this.stateDirectory, "registry.instance.lock"), ...(additionalLockPath?[additionalLockPath]:[])],
       { stdio: ["pipe", "pipe", "ignore"] });
     await new Promise((resolveReady, reject) => {
       let ready = false;
       const timer = setTimeout(() => { child.kill(); reject(new CoordinationError("registry-lock-timeout")); }, 5000);
       child.once("error", () => { clearTimeout(timer); reject(new CoordinationError("registry-lock-unavailable")); });
       child.once("exit", () => {
-        this.failed = true;
+        this.unavailable('registry-authority-lost');
         clearTimeout(timer);
         if (!ready) reject(new CoordinationError("registry-already-owned"));
       });
-      child.stdout.once("data", (data) => {
+      child.stdout.once("data", async (data) => {
         if (data.toString().trim() !== "READY") return;
         ready = true;
         clearTimeout(timer);
         this.lock = child;
-        try { this.restore(); } catch (cause) { this.failed = true; child.stdin.end(); reject(cause); return; }
+        try { if(beforeRestore)await beforeRestore();this.restore(); } catch (cause) { this.failed = true; child.stdin.end(); reject(cause); return; }
         resolveReady();
       });
     });
   }
 
-  close() { this.lock?.stdin.end(); }
+  unavailable(reason) {
+    const notify = !this.failed && !this.authorityClosing;
+    this.failed = true;
+    if (notify) this.onUnavailable(reason);
+  }
+  close() {
+    if (this.authorityClosed) return this.authorityClosed;
+    this.authorityClosing = true;
+    const child = this.lock;
+    this.authorityClosed = new Promise((resolveClosed, reject) => {
+      if (!child || child.exitCode !== null || child.signalCode !== null) { resolveClosed(); return; }
+      child.once('exit', (code, signal) => {
+        if (code === 0 && !signal) resolveClosed(); else reject(new Error('registry-close-failed'));
+      });
+      child.stdin.once('error', reject);
+      child.stdin.end();
+    });
+    return this.authorityClosed;
+  }
   assertHealthy() {
-    if (this.failed || !this.lock || this.lock.exitCode !== null) throw new CoordinationError("registry-unavailable", 503);
+    if (this.failed || !this.lock || this.lock.exitCode !== null || this.lock.signalCode !== null) throw new CoordinationError("registry-unavailable", 503);
   }
   snapshot() {
     return structuredClone({ schemaVersion: this.schemaVersion, version: VERSION, project: this.directory,
@@ -258,7 +279,7 @@ export class RunRegistry {
       fd = openSync(this.stateDirectory, constants.O_RDONLY);
       fsyncSync(fd);
     } catch {
-      this.failed = true;
+      this.unavailable("registry-persistence-failed");
       throw new CoordinationError("registry-persistence-failed", 503);
     } finally { if (fd !== undefined) closeSync(fd); }
     this.observe(this.snapshot());
@@ -476,13 +497,13 @@ export class RunRegistry {
     this.requestOwners[requestId] = { runId, digest };
     this.persist();
   }
-  checkRequestReconciliation(runId, requestId, digest, receipt) {
+  checkRequestReconciliation(runId, requestId, digest, receipt, { allowMissing = false } = {}) {
     this.assertHealthy();
     const owner = this.requestOwners[requestId];
-    if (!id(requestId) || owner?.runId !== runId || owner.digest !== digest || !validReconciliation(receipt)) {
+    if (!id(requestId) || (owner ? owner.runId !== runId || owner.digest !== digest : !allowMissing) || !validReconciliation(receipt)) {
       throw new CoordinationError('notification-reconciliation-identity-divergent');
     }
-    const prior = owner.reconciliation;
+    const prior = owner?.reconciliation;
     if (prior && (prior.transactionId !== receipt.transactionId || prior.inputDigest !== receipt.inputDigest)) {
       throw new CoordinationError('notification-reconciliation-transaction-divergent');
     }

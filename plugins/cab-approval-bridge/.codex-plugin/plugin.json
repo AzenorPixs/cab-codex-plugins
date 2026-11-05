@@ -1,15 +1,15 @@
 {
-  "name": "cab-approval-bridge",
-  "version": "1.10.5+codex.20261027095043",
+  "name": "CAB",
+  "version": "2.3.0+codex.20261105193520",
   "description": "Pilote et vérifie le pont de validation OpenCode–Codex.",
   "author": {
     "name": "CAB"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Pilotage OC–Codex",
+    "displayName": "CAB",
     "shortDescription": "Configure et vérifie le pont OpenCode–Codex.",
-    "longDescription": "Ajoute les skills de pilotage CAB et de statistiques de session, ainsi que les scripts locaux de supervision. Exige un rapport après chaque archivage OpenSpec réussi.",
+    "longDescription": "Ajoute les skills de pilotage CAB et de statistiques de session, ainsi que les scripts locaux de supervision. Exige un rapport après chaque archivage OpenSpec réussi. Fournit aussi le skill SGS et son moteur Python réutilisable pour les statistiques globales et les rapports de change, sans pilotage.",
     "developerName": "CAB",
     "category": "Productivity",
     "capabilities": [],

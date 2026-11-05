@@ -1,0 +1,36 @@
+✔ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (6279.117177ms)
+✔ release gérée : processus original lié → nouvelle release → once/complete sans toucher à l’ancienne (6273.338136ms)
+✔ release gérée : après complete, maintenance ordinaire jusqu’aux quatre processus homogènes 1.8.0 (8005.686205ms)
+✔ release gérée : un échec ordinaire restaure les pointeurs et les versions actives précédentes (7962.099484ms)
+✔ maintenance gelée : pair actif et ancienne session DENY, aucune relance avant frontière (3847.979427ms)
+✔ maintenance gelée : reprise de la même transaction après arrêt simulé au reçu (4464.401822ms)
+✔ maintenance gelée : échec du chargement et retour conservatoire au contrôleur original (4204.323967ms)
+✔ maintenance gelée : refus cumulatifs sans arrêt ni modification du job (3940.676395ms)
+✔ maintenance gelée : paquet altéré après reçu refusé avant arrêt (3883.242765ms)
+✔ maintenance gelée : reçu privé altéré refusé à la reprise (3919.70949ms)
+✔ transition mixte : version Web non qualifiée refusée sans arrêt (3510.636018ms)
+✔ transition mixte : un pair inactif sans PAUSE explicite reste bloquant (3908.01443ms)
+✔ maintenance gelée : un autre PENDING global interdit le chargement (4919.659658ms)
+✔ transition mixte : Web initialement inactif reste inactif (4142.390113ms)
+▶ maintenance gelée : interruptions à chaque frontière et reprise sans nouvel effet métier
+  ✔ PREPARED (4465.690128ms)
+  ✔ STOPPING (4412.757812ms)
+  ✔ STOPPED (4467.597369ms)
+  ✔ INSTALLED (4387.932048ms)
+  ✔ RESTARTED (4529.987494ms)
+  ✔ ADOPTED (4461.49659ms)
+  ✔ VERIFIED (4527.045433ms)
+  ✔ COMPLETED (4447.50333ms)
+✔ maintenance gelée : interruptions à chaque frontière et reprise sans nouvel effet métier (35701.450232ms)
+✔ maintenance gelée : preuve expirée ne permet aucun arrêt (3848.996259ms)
+✔ maintenance gelée : entrée installée symbolique refusée sans arrêt (3489.185675ms)
+✔ release gérée : lien absolu hors namespace refusé avant arrêt (3450.981368ms)
+✔ release gérée : rollback du seul pointeur, ancienne release conservée (4104.685896ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 119919.346298

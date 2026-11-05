@@ -1,4 +1,4 @@
-# Maintenance reuse-readonly 1.9.0 vers 1.10.0
+# MAI05 — Maintenance reuse-readonly 1.9.0 vers 1.10.0
 
 ## Why
 Le validateur du paquet 1.10.0 admet 1.7.1, 1.8.0 et VERSION, mais omet le broker 1.9.0 réellement chargé. La preuve exacte est refusée avant effet alors que les trois artefacts externes sont identiques à la cible 1.10.0.

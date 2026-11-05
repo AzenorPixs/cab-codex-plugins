@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-11-01
+goal: Provide a bounded, read-only OpenCode V2 filesystem path for the orchestrator when the coding model lacks native read tools.

@@ -1,0 +1,68 @@
+{
+  "version": "1.10.0",
+  "nodeTests": 20,
+  "nodeFailures": 0,
+  "syntaxFiles": 3,
+  "productionChange": "Ajout de la seule version 1.9.0 ; reste identique au paquet publié",
+  "twoUidScenarios": {
+    "qualification": "two-real-uids",
+    "results": [
+      {
+        "scenario": "success",
+        "originalVersion": "1.9.0",
+        "actualVersions": {
+          "controller": "1.10.0",
+          "supervisor": "1.10.0",
+          "web": "1.10.0",
+          "broker": "1.10.0"
+        },
+        "serviceUids": {
+          "controller": 1000,
+          "supervisor": 1000,
+          "monitor": 1000
+        },
+        "opencodeUid": 1002,
+        "brokerUid": 1002,
+        "sourceUnchanged": true,
+        "kernelWriteDenied": true,
+        "intentChecks": 1,
+        "openCodePreserved": true,
+        "pausesPreserved": true,
+        "artifactDigest": "99658efa0b555cb47405a34b8ce80d679df1948e5258d002a1287ba622d5bc3f"
+      },
+      {
+        "scenario": "disconnect-reply-lost",
+        "originalVersion": "1.9.0",
+        "actualVersions": {
+          "controller": "1.10.0",
+          "supervisor": "1.10.0",
+          "web": "1.10.0",
+          "broker": "1.10.0"
+        },
+        "serviceUids": {
+          "controller": 1000,
+          "supervisor": 1000,
+          "monitor": 1000
+        },
+        "opencodeUid": 1002,
+        "brokerUid": 1002,
+        "sourceUnchanged": true,
+        "kernelWriteDenied": true,
+        "intentChecks": 1,
+        "openCodePreserved": true,
+        "pausesPreserved": true,
+        "artifactDigest": "42fed56580f0a915c6ead72660d2d661d7dff7ea97bba7ddfef40ce474351fdc"
+      }
+    ],
+    "image": "sha256:a717a33469731894e77e912ea7d714e27c2dc38ee6554fd1a3102e92999cfc66",
+    "inputs": "/home/devops/datas/cab/.cab-readonly-work/two-uid-inputs-613fb50677274f16849f8a1a6ccdf4a2",
+    "source_files_copied": 71,
+    "host_uid": 1000,
+    "host_accounts_and_permissions_changed": false
+  },
+  "files": [
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs",
+    "tests/active-component-update.test.mjs",
+    "tests/helpers/readonly-broker-two-uid.mjs"
+  ]
+}
