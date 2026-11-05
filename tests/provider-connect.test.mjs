@@ -12,7 +12,7 @@ function fixture(t) {
   const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile,
     fetchImpl:async(input,options)=>{
       const path=new URL(input).pathname;calls.push({path,method:options.method});
-      if(path==='/api/info')return json({version:'2.2.37',pid:state.pid,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}});
+      if(path==='/api/info')return json({version:'2.2.38',pid:state.pid,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}});
       if(path==='/openapi.json')return json({paths:{'/api/integration/{integrationID}/connect/key':{post:{operationId:'integration.connect.key',requestBody:{content:{'application/json':{schema:{properties:{key:{type:'string'}}}}}},responses:{204:{}}}},'/api/integration/{integrationID}':{get:{operationId:'integration.get'}}}});
       if(path==='/api/session/active')return json({data:state.busy});
       if(path==='/api/location')return json({directory:'/workspace'});
@@ -119,7 +119,7 @@ test('raccord CLI : gestionnaire simulé par pipe privé, aucune clé dans stdou
   const path=new URL(req.url,'http://localhost').pathname;let value;
   if(path==='/status')value={workspace:'/workspace',version:PROVIDER_VERSION};
   else if(path==='/runs')value={runs:[]};
-  else if(path==='/api/info')value={version:'2.2.37',pid:4242,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}};
+  else if(path==='/api/info')value={version:'2.2.38',pid:4242,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}};
   else if(path==='/api/location')value={directory:'/workspace'};
   else if(path==='/openapi.json')value={paths:{'/api/integration/{integrationID}/connect/key':{post:{operationId:'integration.connect.key',requestBody:{content:{'application/json':{schema:{properties:{key:{type:'string'}}}}}},responses:{204:{}}}},'/api/integration/{integrationID}':{get:{operationId:'integration.get'}}}};
   else if(path==='/api/integration')value={data:[]};

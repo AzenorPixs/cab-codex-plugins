@@ -1,4 +1,6 @@
-# Précisions recovery — CAB 2.2.37
+# Précisions recovery — CAB 2.2.38
+
+Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 
 Pour changer le SID courant tout en conservant des effets et accès historiques
 protégés, utiliser la voie distincte [session-handoff](session-handoff.md).

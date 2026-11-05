@@ -1,5 +1,11 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.38 — 2026-11-05
+
+- Skill/plugin/commande : diagnostic autonome par cas, sans relecture globale.
+- Sources courantes,policy couvrante,digests programmatiques,formes de données et clôture broker après retrait.
+- Terminalité liée au gate selon la spécification, sans confondre BLOCKED de diagnostic et fin métier. Aucun runtime fonctionnel changé.
+
 ## 2.2.37 — 2026-11-05
 
 - Contrat : révisions effectives héritées et transport scellé des scripts composés même courts.

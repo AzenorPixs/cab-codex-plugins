@@ -1,4 +1,6 @@
-# Index du protocole CAB 2.2.37
+# Index du protocole CAB 2.2.38
+
+Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).

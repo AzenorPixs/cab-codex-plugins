@@ -18,7 +18,7 @@ utiles (fin, erreur filtrée, modèle/niveau, présence d’outils) sans affiche
 examiner les données chiffrées. Conserver les décisions, anciennes once,
 écritures et contrôles déjà acquis ; ne pas rejouer un outil pour tester.
 
-## Limite native2.2.37 démontrée
+## Limite native2.2.38 démontrée
 
 Le banc privé2.2.0 avec un fournisseur Responses local émet des métadonnées de
 raisonnement SYNTHÉTIQUES liées au compte A. Après passage au compte B, la sonde

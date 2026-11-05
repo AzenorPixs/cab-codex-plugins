@@ -1,4 +1,6 @@
-# Pilotage — CAB 2.2.37
+# Pilotage — CAB 2.2.38
+
+Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 
 ## `/CAB run`
 
@@ -33,10 +35,13 @@ Exécute un job piloté dans la session persistante après un `/CAB start` et un
    éphémère et sans conclure la réponse Codex. Si une interruption empêche ce
    mandat, le superviseur CAB réexamine la même session après 60 secondes ; il
    ne crée ni décision ni session de remplacement.
-6. Le job devient terminal uniquement si tous ses critères sont satisfaits, si
-   CAB retourne `BLOCKED` ou `HUMAN_REQUIRED`, ou si le développeur l’arrête
-   explicitement. À ce moment seulement, publie le bilan final puis clôture le
-   contrat côté CAB.
+6. Le job est terminal lorsque le contrôleur a validé son terminal_gate selon
+   le prompt et l’état déclaré, ou après l’arrêt explicitement demandé.
+   BLOCKED/HUMAN_REQUIRED d’un diagnostic technique ne valide pas ce gate :
+   qualifier la portée et épuiser les récupérations déjà autorisées. Un blocage
+   métier résiduel se clôture selon le prompt, sans le confondre avec une
+   simple attente de décision ou un état périmé. Publier ensuite le bilan et
+   clôturer le contrat dans ce cadre.
 
 ### Statistiques obligatoires après archivage
 

@@ -1,4 +1,6 @@
-# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.37
+# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.38
+
+Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 
 Dans le change et les moyens déjà autorisés, l’orchestrateur propriétaire
 examine les preuves, décide la réconciliation qualifiée et poursuit le mandat.
