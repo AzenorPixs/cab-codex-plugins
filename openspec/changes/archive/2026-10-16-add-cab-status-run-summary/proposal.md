@@ -1,3 +1,5 @@
+# OBS01 — Ajouter le résumé des RUN à cab status
+
 ## Why
 Le développeur demande le même rapport synthétique que le suivi CISMP : nom du change, actions réalisées, en cours et restantes, avec état actif ou attente explicite d'un autre RUN. La commande distribuée ne propose pas status. La référence source est maintenant 1.2.0 ; la cible explicitement validée est 1.2.1.
 

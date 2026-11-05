@@ -1,3 +1,5 @@
+# SUP09 — Autoriser le retry réconcilié après timeout MCP
+
 ## Why
 
 Le contrôleur refuse retry lorsque request_validation expire puis poll_approval ou get_approval fournit le refus natif REJECTED corrélé. Cette asymétrie avec complete bloque une récupération sans effet pourtant réconciliée.

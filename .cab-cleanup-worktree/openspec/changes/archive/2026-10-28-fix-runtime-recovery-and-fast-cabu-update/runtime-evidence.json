@@ -1,0 +1,74 @@
+{
+  "result": {
+    "status": "completed",
+    "version": "2.1.0",
+    "transactionId": "update-b760b16d-3d7a-49c1-bd47-0f70d3159be7",
+    "active": {
+      "controller": true,
+      "supervisor": true,
+      "monitor": true
+    },
+    "brokerConnected": true,
+    "deployedVersions": {
+      "controller": "2.1.0",
+      "supervisor": "2.1.0",
+      "monitor": "2.1.0",
+      "broker": "2.1.0"
+    },
+    "timings": {
+      "preparationMs": 711,
+      "unavailableMs": 7742,
+      "totalMs": 8454
+    },
+    "brokerArtifactVersion": "2.1.0",
+    "brokerRuntimeVersion": "2.1.0",
+    "brokerRuntimeStatus": "VERIFIE",
+    "activeVersions": {
+      "controller": "2.1.0",
+      "supervisor": "2.1.0",
+      "monitor": "2.1.0",
+      "broker": "2.1.0"
+    }
+  },
+  "phases": [
+    {
+      "phase": "PREPARING",
+      "sincePreviousMs": 71
+    },
+    {
+      "phase": "PREPARED",
+      "sincePreviousMs": 512
+    },
+    {
+      "phase": "STOPPING",
+      "sincePreviousMs": 195
+    },
+    {
+      "phase": "INSTALLING",
+      "sincePreviousMs": 1502
+    },
+    {
+      "phase": "RESTARTING",
+      "sincePreviousMs": 73
+    },
+    {
+      "phase": "VERIFYING",
+      "sincePreviousMs": 4052
+    },
+    {
+      "phase": "RELEASING",
+      "sincePreviousMs": 2134
+    },
+    {
+      "phase": "COMPLETED",
+      "sincePreviousMs": 6
+    }
+  ],
+  "checks": {
+    "openCodePidUnchanged": true,
+    "runIdentityUnchanged": true,
+    "runCount": 50,
+    "brokerInstanceChanged": true,
+    "brokerVersion": "2.1.0"
+  }
+}

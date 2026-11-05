@@ -1,4 +1,4 @@
-# CAB Monitor : vue manuelle persistante, en-tête et classement
+# OBS07 — CAB Monitor : vue manuelle persistante, en-tête et classement
 
 ## Why
 

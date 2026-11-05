@@ -20,11 +20,12 @@ Le contrôleur SHALL surveiller OpenCode V2 via son flux d'événements HTTP SSE
 - **THEN** le contrôleur passe en reconnexion et tente une réconciliation avant de rétablir le flux
 
 ### Requirement: Remédiation à privilèges minimaux
-Les remédiations automatiques SHALL être désactivées par défaut, soumises à une allowlist explicite et limitées aux actions déterministes. Toute remédiation ambiguë SHALL exiger une intervention humaine.
+
+Les remédiations automatiques SHALL rester limitées à une politique explicite et aux gardes techniques. Une ambiguïté dans le périmètre validé SHALL être instruite et décidée par l’orchestrateur, sans effet implicite. Une décision humaine SHALL être demandée uniquement pour une extension hors de ce périmètre. Aucune politique SHALL inventer une preuve, supprimer une protection incertaine ou rejouer once.
 
 #### Scenario: Auto-remédiation non autorisée
-- **WHEN** aucune allowlist active n'autorise une action de remédiation
-- **THEN** CAB n'exécute pas cette action automatiquement
+- **WHEN** aucune politique active n’autorise une action de remédiation
+- **THEN** CAB n’exécute pas l’action et invite l’orchestrateur à qualifier sa délégation dans le mandat, sans demande humaine automatique
 
 ### Requirement: Supervision des relances de décision
 CAB SHALL exposer l'état de la dernière relance corrélée et d'une éventuelle
@@ -72,3 +73,37 @@ Le healthcheck et les lectures de statut MUST rester sans permission, acquisitio
 #### Scenario: Attente longue
 - **WHEN** une demande reste bloquée par une opération longue connue
 - **THEN** le diagnostic expose la cause sans libérer les ressources ni redémarrer les services
+
+### Requirement: Recommandation qualifiée des notifications stalled
+Le diagnostic SHALL sélectionner sa recommandation sur les sous-états du snapshot watchdog : SENDING avec lease expirée vers RECOVER_NOTIFICATION_LEASE ; FAILED en retry_overdue ou notification jamais livrée vers RECONCILE_PENDING_APPROVALS ; état mixte/incomplet vers diagnostic ciblé. Il SHALL conserver la cause historique, les gardes et la readiness, sans exécuter de récupération ni activer un automatisme.
+
+#### Scenario: Retry échoué sans lease
+- **GIVEN** une notification PENDING/FAILED, reason retry_overdue et aucune lease
+- **WHEN** le diagnostic est produit
+- **THEN** il recommande d’évaluer la réconciliation ciblée, jamais de récupérer une lease inexistante
+- **AND** la décision, la notification, les opérations, accès et baux restent inchangés
+
+#### Scenario: Lease ou sous-état non qualifié
+- **WHEN** toutes les notifications stalled sont SENDING/lease expirée
+- **THEN** la récupération de lease est recommandée sous ses gardes existantes
+- **WHEN** les sous-états sont mixtes, contradictoires ou manquants
+- **THEN** seul le diagnostic ciblé est recommandé sans récupération automatique
+
+### Requirement: Succès vérifié d’une réconciliation de notification
+RECONCILE_PENDING_APPROVALS SHALL qualifier son résultat sur une décision appliquée ou un terminal observé, une livraison ACK et persistée, ou une livraison déjà observée distincte. Sans preuve suffisante, il SHALL retourner NOTIFICATION_NOT_REESTABLISHED avec rétablissementfalse et tentativeFAILED dans réponse/registre. La clôture manuelle SHALL refuser le faux succès. Budgets, gardes et reçus historiques SHALL rester conservés, sans effet métier ou livraison inventée.
+
+#### Scenario: Notification non livrée
+- **GIVEN** une approbation PENDING sans décision disponible et une notification non confirmée
+- **WHEN** la réconciliation finit sans exception
+- **THEN** absence de rétablissement et tentativeFAILED sont persistées, avec observations filtrées disponibles
+- **AND** aucun succès, nouvelle décision, réinitialisation de budget ou exécution métier n’est inféré
+
+#### Scenario: Livraison ou concurrence qualifiées
+- **WHEN** ACK et DELIVERED sont confirmés, ou qu’un terminal/livraison déjà acquis est relu
+- **THEN** le résultat distingue action réalisée et état concurrent observé sans attribution fictive
+
+#### Scenario: Ancien reçu ou clôture manuelle
+- **WHEN** un résultat contradictoire est fourni pour une nouvelle clôture dite réussie
+- **THEN** la tentative estFAILED, pasCOMPLETED
+- **WHEN** un ancien reçu est lu
+- **THEN** son historique est conservé sans réécriture rétroactive

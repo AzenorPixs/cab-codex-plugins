@@ -1,0 +1,22 @@
+✔ jeu réel : les quatre briques actives passent en 1.7.1, RUN et archives conservés, deuxième invocation sans arrêt (6829.784956ms)
+✔ services initialement inactifs : fichiers actualisés sans les démarrer (1116.93385ms)
+✔ attente puis reprise : aucun arrêt pendant activité et transaction durable réutilisée (1274.197432ms)
+✔ paquet incomplet, import absent, downgrade et syntaxe invalide échouent avant arrêt (1173.882573ms)
+✔ échec de démarrage et mauvaise version broker déclenchent le retour aux artefacts précédents (3839.255122ms)
+✔ interruption pendant installation : récupération des artefacts sans restauration du runtime (1958.317216ms)
+✔ interruption à la libération : réconciliation sans retour arrière après reprise (3342.35728ms)
+✔ cibles projet, liens et journal corrompu sont refusés sans écrasement (249.660219ms)
+✔ une dérive des générations interdit la levée du gel et conserve le diagnostic de récupération (2589.511157ms)
+✔ interruption avant le gel : la même intention de maintenance est récupérée (2015.11173ms)
+✔ autorité flock concurrente refusée, libération et contrat corrompu préservé (3187.784474ms)
+✔ une modification externe pendant attente bloque le déploiement ; annulation conserve cette modification (1488.000122ms)
+✔ stage altéré pendant attente refusé avant tout arrêt (1510.326835ms)
+✔ gel levé par une intervention externe : la récupération ne coupe pas les RUN repris (1410.599151ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 32132.691825

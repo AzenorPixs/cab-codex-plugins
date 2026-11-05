@@ -1,0 +1,57 @@
+{
+  "date": "2026-11-02",
+  "qualification": "isolated service stubs; real syntax checks; no systemd or native service mutation",
+  "samples": [
+    {
+      "version": "2.1.81",
+      "environment": "isolated service stubs and real syntax checks",
+      "cold": {
+        "status": "completed",
+        "timings": {
+          "preparationMs": 999,
+          "unavailableMs": 23,
+          "totalMs": 1022
+        }
+      },
+      "warm": {
+        "status": "completed",
+        "timings": {
+          "preparationMs": 98,
+          "unavailableMs": 23,
+          "totalMs": 121
+        },
+        "stops": 3,
+        "starts": 3,
+        "disconnects": 1
+      },
+      "runtimeSentinelPreserved": true
+    },
+    {
+      "version": "2.2.0",
+      "environment": "isolated service stubs and real syntax checks",
+      "cold": {
+        "status": "completed",
+        "timings": {
+          "preparationMs": 1044,
+          "cutoverMs": 23,
+          "unavailableMs": 23,
+          "measurement": "cutover-to-verified-upper-bound",
+          "totalMs": 1067
+        }
+      },
+      "warm": {
+        "status": "up-to-date",
+        "timings": {
+          "preparationMs": 89,
+          "unavailableMs": 0,
+          "cutoverMs": 0,
+          "totalMs": 89
+        },
+        "stops": 0,
+        "starts": 0,
+        "disconnects": 0
+      },
+      "runtimeSentinelPreserved": true
+    }
+  ]
+}

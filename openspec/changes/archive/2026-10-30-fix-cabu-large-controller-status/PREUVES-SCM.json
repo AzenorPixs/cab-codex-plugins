@@ -1,0 +1,18 @@
+{
+  "version": "2.1.15",
+  "build": "nouveau cachebuster, base inchangée pour reprise du journal",
+  "node": {
+    "total": 576,
+    "passed": 548,
+    "skipped": 28,
+    "failed": 0
+  },
+  "targeted_updater": 48,
+  "prior_unchanged_python_tests": 80,
+  "prior_unchanged_native_tests": 1,
+  "measured_controller_status_bytes": 2327337,
+  "maintenance_get_status_limit_bytes": 16777216,
+  "other_http_limit_bytes": 2097152,
+  "journal_to_resume": "update-44f9925d-c49e-471b-8920-55abb73378be",
+  "manual_journal_edit": false
+}

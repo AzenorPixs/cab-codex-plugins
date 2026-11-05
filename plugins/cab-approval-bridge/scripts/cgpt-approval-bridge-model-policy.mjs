@@ -2,7 +2,7 @@ import { constants, closeSync, fstatSync, openSync, readSync, realpathSync } fro
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 
-export const VERSION = '2.1.2';
+export const VERSION = '2.3.0';
 export const MODEL_SELECTION_PROTOCOL = 'pllm-auto-v1';
 const object = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -30,11 +30,12 @@ export function readModelCatalog(environment = process.env) {
 }
 
 function validateCatalog(catalog, now) {
-  if (!object(catalog) || catalog.schema_version !== 2 || !stamp(catalog.evaluated_at) || !stamp(catalog.published_at) ||
-    !['selected','no_valid_model'].includes(catalog.selection_status) || !Array.isArray(catalog.models) || catalog.models.length !== 6 ||
-    catalog.models.some((entry) => !object(entry) || !Number.isInteger(entry.priority) || entry.priority < 1 || entry.priority > 6 ||
+  const policyCount = catalog?.schema_version === 2 ? 6 : catalog?.schema_version === 3 ? 7 : 0;
+  if (!object(catalog) || policyCount === 0 || !stamp(catalog.evaluated_at) || !stamp(catalog.published_at) ||
+    !['selected','no_valid_model'].includes(catalog.selection_status) || !Array.isArray(catalog.models) || catalog.models.length !== policyCount ||
+    catalog.models.some((entry) => !object(entry) || !Number.isInteger(entry.priority) || entry.priority < 1 || entry.priority > policyCount ||
       entry.mode !== 'mode'+entry.priority || !['Valide','Invalide'].includes(entry.state)) ||
-    new Set(catalog.models.map((entry) => entry.priority)).size !== 6 || Date.parse(catalog.evaluated_at) > now ||
+    new Set(catalog.models.map((entry) => entry.priority)).size !== policyCount || Date.parse(catalog.evaluated_at) > now ||
     Date.parse(catalog.published_at) < Date.parse(catalog.evaluated_at) || Date.parse(catalog.published_at) > now) fail('pllm-catalog-invalid');
   const selected = catalog.models.filter((entry) => entry.selected === true);
   if (catalog.selection_status === 'no_valid_model') fail('pllm-no-valid-model');
@@ -73,7 +74,7 @@ function observedReasoning(user, info) {
   return values.every(value=>identifier(value)&&value===parent[0])?parent[0]:null;
 }
 
-export function selectCodingModel({ catalog, providers, model, reasoning, unavailable = [], now = Date.now() }) {
+export function selectCodingModel({ catalog, providers, model, reasoning, unavailable = [], now = Date.now(), explicitUnrestricted = false }) {
   if (!object(providers) || !Array.isArray(providers.all) || !Array.isArray(providers.connected)) fail('model-provider-observation-invalid');
   if (reasoning !== undefined && !identifier(reasoning)) fail('model-reasoning-invalid', 400);
   let candidates;
@@ -100,7 +101,9 @@ export function selectCodingModel({ catalog, providers, model, reasoning, unavai
     if (!providers.connected.includes(providerID)) fail(model === undefined ? 'model-provider-unavailable' : 'explicit-model-unavailable');
     if (!candidate || !object(candidate.variants)) fail(model === undefined ? 'model-capabilities-unavailable' : 'explicit-model-unavailable');
     const variants = candidate?.variants;
-    const effort = (reasoning ? [reasoning] : ['medium']).find((name) => object(variants) &&
+    const defaults = model !== undefined && explicitUnrestricted
+      ? [...new Set(['medium','high','default',...Object.keys(variants || {})])] : ['medium','high'];
+    const effort = (reasoning ? [reasoning] : defaults).find((name) => identifier(name) && object(variants) &&
       Object.hasOwn(variants,name) && object(variants[name]) && variants[name].disabled !== true &&
       !unavailable.some((proof) => proof.providerID === providerID && proof.modelID === modelID && proof.reasoning === name));
     if (candidate.disabled === true || !effort) {
@@ -117,19 +120,23 @@ export function selectCodingModel({ catalog, providers, model, reasoning, unavai
   fail(historical ? 'pllm-lower-policy-evaluation-required' : 'pllm-no-compatible-model');
 }
 
-export function validCodingModel(value) {
+export function validModelSelection(value) {
   return object(value) && Object.keys(value).every((key) => ['protocol','source','providerID','modelID','reasoning','mode',
     'priority','evaluatedAt','selectedAt','catalogDigest','preflight','unavailabilityProofs','logicalProviderID'].includes(key)) &&
     value.protocol === MODEL_SELECTION_PROTOCOL && ['prompt','pllm-automatic'].includes(value.source) &&
     (value.logicalProviderID === undefined || (value.source === 'pllm-automatic' && identifier(value.logicalProviderID))) &&
     identifier(value.providerID) && modelId(value.modelID) && identifier(value.reasoning) && stamp(value.selectedAt) &&
     (value.source === 'prompt' ? value.mode === null && value.priority === null && value.catalogDigest === null && value.evaluatedAt === null :
-      Number.isInteger(value.priority) && value.priority >= 1 && value.priority <= 6 && value.mode === 'mode'+value.priority &&
+      Number.isInteger(value.priority) && value.priority >= 1 && value.priority <= 7 && value.mode === 'mode'+value.priority &&
       stamp(value.evaluatedAt) && /^[a-f0-9]{64}$/.test(value.catalogDigest)) &&
     (value.unavailabilityProofs === undefined || (Array.isArray(value.unavailabilityProofs) && value.unavailabilityProofs.length <= 12 &&
       value.unavailabilityProofs.every((proof) => object(proof) && Object.keys(proof).every((key) =>
         ['providerID','modelID','reasoning','sessionId','messageId','observedAt'].includes(key)) && identifier(proof.providerID) &&
-        modelId(proof.modelID) && identifier(proof.reasoning) && identifier(proof.sessionId) && identifier(proof.messageId) && stamp(proof.observedAt)))) &&
+        modelId(proof.modelID) && identifier(proof.reasoning) && identifier(proof.sessionId) && identifier(proof.messageId) && stamp(proof.observedAt))));
+}
+
+export function validCodingModel(value) {
+  return validModelSelection(value) &&
     object(value.preflight) && Object.keys(value.preflight).every((key) => ['sessionId','messageId','verifiedAt'].includes(key)) &&
     identifier(value.preflight.sessionId) && identifier(value.preflight.messageId) && stamp(value.preflight.verifiedAt);
 }
@@ -157,14 +164,25 @@ export function reasoningUnavailability({ session, response, parent, workspace, 
     sessionId: session.id, messageId: info.id, observedAt: new Date(info.time.completed).toISOString() };
 }
 
-export function verifyModelPreflight(selection, { session, response, parent, workspace, now = Date.now() }) {
+export function verifyModelPreflight(selection, { session, response, parent, workspace, now = Date.now(), notBefore = null }) {
   const info = response?.info; const user = parent?.info;
+  const legacyParent = user?.model?.providerID === selection.providerID &&
+    user.model.modelID === selection.modelID && observedReasoning(user, info) === selection.reasoning;
+  const sessionModelMatches = session?.model === undefined || (session.model.providerID === selection.providerID &&
+    session.model.modelID === selection.modelID && session.model.variant === selection.reasoning);
+  const nativeParent = session?.model !== undefined && sessionModelMatches && user?.model === undefined && user?.variant === undefined &&
+    info?.nativeSingleExchange === true && info.model?.providerID === selection.providerID &&
+    info.model?.modelID === selection.modelID && info.model?.variant === selection.reasoning &&
+    info.variant === selection.reasoning && Number.isFinite(user?.time?.created) &&
+    user.time.created >= 0 && user.time.created <= info.time?.completed;
   if (!session || session.directory !== workspace || !identifier(session.id) || !info || info.role !== 'assistant' ||
       !identifier(info.id) || info.sessionID !== session.id || info.providerID !== selection.providerID || info.modelID !== selection.modelID ||
       info.error || info.finish !== 'stop' || !Number.isFinite(info.time?.completed) || info.time.completed < 0 || info.time.completed > now ||
       (selection.evaluatedAt && info.time.completed < Date.parse(selection.evaluatedAt)) ||
+      (notBefore !== null && (!stamp(notBefore) || !Number.isFinite(user?.time?.created) ||
+        user.time.created < Date.parse(notBefore) || info.time.completed < Date.parse(notBefore))) ||
       !user || user.role !== 'user' || user.id !== info.parentID || user.sessionID !== session.id ||
-      user.model?.providerID !== selection.providerID || user.model?.modelID !== selection.modelID || observedReasoning(user,info) !== selection.reasoning ||
+      !sessionModelMatches || (!legacyParent && !nativeParent) ||
       !Array.isArray(response.parts) || response.parts.some((part) => part.type === 'tool') ||
       !response.parts.some((part) => part.type === 'text' && typeof part.text === 'string' && part.text.trim())) fail('model-preflight-not-proved');
   return { ...selection, preflight: { sessionId: session.id, messageId: info.id, verifiedAt: new Date(now).toISOString() } };

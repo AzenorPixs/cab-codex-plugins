@@ -57,6 +57,17 @@ async function manage(route, body) {
       body: JSON.stringify(body), signal: AbortSignal.timeout(30000) });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
+    if (route === 'catalog') {
+      if (!validSnapshot(result.snapshot)) {
+        $('#management-status').textContent = 'Rangement enregistré ; affichage non confirmé. Actualisez la vue avant une autre action.';
+        return;
+      }
+      refreshGeneration++;
+      pendingSnapshot = null;
+      model = result.snapshot;
+      lastWebSuccessAt = Date.now();
+      $('#refresh-status').textContent = '';
+    }
     if (result.deferred) {
       webRestart = { startedAt: result.startedAt, deadline: Date.now() + 30000 };
       $('#management-status').textContent = 'Redémarrage du Web demandé. Attente de la reconnexion…';
@@ -106,12 +117,13 @@ function renderHealth() {
   holder.replaceChildren();
   const entries = [['controller', 'Contrôleur', 'Pilotage et décisions', '⌘'], ['supervisor', 'Superviseur', 'Suivi et reprises', '◎'],
     ['broker', 'Broker MCP', 'Connexion MCP native', '⇄'], ['opencode', 'OpenCode', 'Santé HTTP native', '◇'],
-    ['monitor', 'Web', 'Interface et archives locales', '▦']];
+    ['monitor', 'Web', 'Interface et archives locales', '▦'],
+    ['statistics', 'Statistiques', 'Moteur SGS à la demande', '∑']];
   for (const [key, label, subtitle, icon] of entries) {
-    const stale = key === 'monitor' ? lastWebSuccessAt === null || Date.now() - lastWebSuccessAt >= webFreshMs : key === 'broker' ? isStale('mcp') : isStale(key);
+    const stale = key==='statistics' ? model.sources.statistics?.stale!==false : key === 'monitor' ? lastWebSuccessAt === null || Date.now() - lastWebSuccessAt >= webFreshMs : key === 'broker' ? isStale('mcp') : isStale(key);
     const source = model.sources[key];
-    const healthy = key === 'broker' ? model.brokerConnection === 'connected' : key === 'opencode' ? model.nativeHealth === true : true;
-    const status = key === 'monitor' ? stale ? 'Non observé' : 'Disponible' :
+    const healthy = key === 'statistics' ? model.statisticsEngine?.state==='AVAILABLE' : key === 'broker' ? model.brokerConnection === 'connected' : key === 'opencode' ? model.nativeHealth === true : true;
+    const status = key==='statistics' ? stale?'Non observé':model.statisticsEngine?.state==='VERSION_MISMATCH'?'Version divergente':healthy?'Disponible':'Indisponible' : key === 'monitor' ? stale ? 'Non observé' : 'Disponible' :
       stale ? (key === 'broker' ? 'Non confirmé' : source?.lastSuccessAt ? 'Indisponible' : 'Non observé') : healthy ? 'Disponible' : 'Dégradé';
     const card = node('div', 'health-card');
     const name = node('div'); name.append(node('div', 'health-name', label), node('div', 'health-sub', subtitle));
@@ -120,7 +132,7 @@ function renderHealth() {
     const pill = node('span', 'health-status ' + (stale ? 'warn' : healthy ? 'good' : 'bad')); pill.append(node('i', 'dot'), document.createTextNode(status));
     card.append(node('span', 'health-icon', icon), name, pill);
     card.dataset.component = key;
-    if (key !== 'opencode') {
+    if (key !== 'opencode' && key !== 'statistics') {
       const actions = node('div', 'component-actions');
       const occupied = model.runs.some((run) => run.state === 'RESERVED' || run.armed || run.hasMandate || run.pending > 0);
       const currentStale = isStale('controller', Date.now()) || isStale('registry', Date.now());
@@ -132,7 +144,7 @@ function renderHealth() {
         key === 'monitor' ? Boolean(webRestart) : occupied || currentStale));
       card.append(actions);
     }
-    card.title = 'Dernier succès : ' + date(key === 'monitor' ? lastWebSuccessAt === null ? null : new Date(lastWebSuccessAt).toISOString() :
+    card.title = key==='statistics' ? 'Dernière vérification : '+date(model.statisticsEngine?.checkedAt,true) : 'Dernier succès : ' + date(key === 'monitor' ? lastWebSuccessAt === null ? null : new Date(lastWebSuccessAt).toISOString() :
       key === 'broker' ? model.broker.observedAt : source?.lastSuccessAt, true);
     holder.append(card);
   }
@@ -185,6 +197,8 @@ function renderWork() {
       row.dataset.state = runState(value)[0];
       if (row.dataset.state === 'WAITING') row.classList.add('run-waiting');
       if (row.dataset.state === 'BLOCKED') row.classList.add('run-blocked');
+      if (row.dataset.state === 'DONE') row.classList.add('run-done');
+      if (row.dataset.state === 'STOPPED') row.classList.add('run-stopped');
     }
     const identity = node('td'); const button = node('button', isRun ? 'run-button' : 'change-button', isRun ? value.runId : value.changeId);
     button.dataset[isRun ? 'run' : 'change'] = isRun ? value.runId : value.changeId;
@@ -385,10 +399,11 @@ async function refreshView(explicit = true) {
       if (!validSnapshot(value)) throw new Error('invalid snapshot');
       snapshot = { value, receivedAt: Date.now() }; pendingSnapshot = null;
     }
-    if (!explicit && generation !== refreshGeneration) return;
+    if (generation !== refreshGeneration) return;
     model = snapshot.value; lastWebSuccessAt = snapshot.receivedAt;
     $('#refresh-status').textContent = ''; render();
   } catch {
+    if (generation !== refreshGeneration) return;
     model = previous.model; lastWebSuccessAt = previous.lastWebSuccessAt;
     if (model) render();
     $('#refresh-status').textContent = 'Actualisation impossible ; dernière vue conservée.';

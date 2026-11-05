@@ -1,4 +1,4 @@
-# CAB 1.10.7 — propriétaires et demande orpheline en pause
+# MAI08 — CAB 1.10.7 — propriétaires et demande orpheline en pause
 
 ## Why
 La maintenance 1.10.6 refuse une installation dont les trois modules broker appartiennent à l'acteur ADE tandis que leur répertoire et le processus OpenCode/broker appartiennent à devops. Une notification enregistrée par le broker mais refusée avant admission laisse aussi une demande PENDING sans propriétaire contrôleur, impossible à rejeter par la route corrélée.

@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.1.2';
+export const VERSION = '2.3.0';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -32,6 +32,18 @@ function evidence(value) {
     throw new CoordinationError('evidence-references-required', 400);
   }
 }
+function validUnusedNativeProof(proof) {
+  if (!onlyKeys(proof, ['messageCount','toolCount','historyHash','operationClassifications','coverage']) ||
+      !Number.isSafeInteger(proof.messageCount) || proof.messageCount < 0 ||
+      !Number.isSafeInteger(proof.toolCount) || proof.toolCount < 0 || !hash(proof.historyHash)) return false;
+  if (proof.coverage !== undefined && !['complete-native-transcript','operation-ledger-after-compaction'].includes(proof.coverage)) return false;
+  if (proof.operationClassifications === undefined) return true;
+  const allowed = new Set(['cancelled-without-execution','rejected-validation-no-native-effect','cancelled-validation-no-native-effect','read-only-no-effect']);
+  return Array.isArray(proof.operationClassifications) &&
+    new Set(proof.operationClassifications.map((item) => item?.operationId)).size === proof.operationClassifications.length &&
+    proof.operationClassifications.every((item) => onlyKeys(item,['operationId','classification']) &&
+      id(item.operationId) && allowed.has(item.classification));
+}
 function emptyState() {
   return { protocol: COORDINATION_PROTOCOL, sequence: 0, revisions: {}, operations: {}, accesses: {},
     publications: {}, global: null, globalHistory: [], legacySources: [], legacyHandoffs: [] };
@@ -46,18 +58,48 @@ export class ResourceRunRegistry extends RunRegistry {
     super.restore();
     this.migrationRequired = this.schemaVersion < 4 &&
       (this.sequence > 0 || this.runs.size > 0 || this.history.length > 0);
+    const normalizedNativeRejectionProofs = this.schemaVersion === 4 && this.normalizeNativeRejectionProofs(this.resourceState);
     if (this.schemaVersion === 4) this.validateResourceState(this.resourceState);
     else this.resourceState = emptyState();
     if (!this.migrationRequired) this.schemaVersion = 4;
+    let scrubbedReleasedAccessToken = false;
+    if (this.lock) for (const access of Object.values(this.resourceState.accesses)) {
+      if (access.state === 'RELEASED' && Object.hasOwn(access, 'token')) {
+        delete access.token;
+        scrubbedReleasedAccessToken = true;
+      }
+    }
     // Restored executions keep their protection but cannot issue a fresh once.
     this.restoredAccesses = new Set(Object.values(this.resourceState.accesses).filter(active).map((a) => a.accessId));
     this.restoredTests = new Set(Object.values(this.resourceState.testReservations || {}).filter((r) => r.state === 'HELD').map((r) => r.transactionId));
+    if (this.lock && (scrubbedReleasedAccessToken || normalizedNativeRejectionProofs)) this.persist();
+  }
+
+  normalizeNativeRejectionProofs(state) {
+    let changed = false;
+    for (const operation of Object.values(state?.operations || {})) {
+      const operationProof = operation?.nativeRejectionProofDigest;
+      const decisionProof = operation?.decision?.nativeProofDigest;
+      if (operationProof === undefined && decisionProof === undefined) continue;
+      if (operation?.state !== 'CANCELLED' || operation.decision?.status !== 'rejected' || operation.native !== undefined) {
+        throw new CoordinationError('registry-restoration-invalid');
+      }
+      const proofDigest = hash(operationProof) ? operationProof : decisionProof;
+      if (!hash(proofDigest) || operation.completionDigest !== undefined && !hash(operation.completionDigest)) {
+        throw new CoordinationError('registry-restoration-invalid');
+      }
+      operation.completionDigest ||= proofDigest;
+      delete operation.nativeRejectionProofDigest;
+      delete operation.decision.nativeProofDigest;
+      changed = true;
+    }
+    return changed;
   }
 
   validateResourceState(state) {
     const fail = () => { throw new CoordinationError('registry-restoration-invalid'); };
     if (record(state)) { state.legacySources ??= []; state.legacyHandoffs ??= []; }
-    if (!onlyKeys(state, ['protocol','sequence','revisions','operations','accesses','publications','global','globalHistory','legacy','legacySources','legacyHandoffs','testReservations']) || state.protocol !== COORDINATION_PROTOCOL ||
+    if (!onlyKeys(state, ['protocol','sequence','revisions','operations','accesses','publications','global','globalHistory','legacy','legacySources','legacyHandoffs','testReservations','sessionHandoffs']) || state.protocol !== COORDINATION_PROTOCOL ||
         !Number.isSafeInteger(state.sequence) || state.sequence < 0 ||
         !['revisions', 'operations', 'accesses', 'publications'].every((key) => record(state[key])) ||
         !Array.isArray(state.globalHistory) || (state.global !== null && !record(state.global))) fail();
@@ -68,6 +110,28 @@ export class ResourceRunRegistry extends RunRegistry {
         !id(receipt.transactionId) || !hash(receipt.inputDigest) || !hash(receipt.sourceDigest) || !hash(receipt.authorizationDigest) ||
         !hash(receipt.evidenceDigest) || !Number.isSafeInteger(receipt.globalGeneration) || !Number.isFinite(Date.parse(receipt.at))) ||
       (state.legacySources.length && [...this.runs.values()].some((run) => run.state === 'RESERVED'))) fail();
+    if (state.sessionHandoffs !== undefined) {
+      if (!record(state.sessionHandoffs)) fail();
+      for (const [key, receipt] of Object.entries(state.sessionHandoffs)) {
+        const owner = [...this.runs.values(), ...this.history].find(r => r.runId === receipt?.runId && r.contextId === receipt?.contextId);
+        if (!onlyKeys(receipt, ['handoffId','runId','contextId','version','jobId','sourceSessionId','sessionId',
+            'inputDigest','checkpointDigest','boundaryDigest','inventoryDigest','reason','evidenceDigest',
+            'state','preparedAt','committedAt','completedAt','abortedAt','abortDigest']) || !id(key) || receipt.handoffId !== key || !owner ||
+            !id(receipt.jobId) || !Number.isSafeInteger(receipt.version) || receipt.version < receipt.contextId || receipt.version > owner.version ||
+            ![receipt.sourceSessionId, receipt.sessionId].every(s => typeof s === 'string' && /^ses_[A-Za-z0-9_-]+$/.test(s)) ||
+            receipt.sourceSessionId === receipt.sessionId ||
+            !['inputDigest','checkpointDigest','boundaryDigest','inventoryDigest','evidenceDigest'].every(k => hash(receipt[k])) ||
+            typeof receipt.reason !== 'string' || !receipt.reason.length || receipt.reason.length > 500 ||
+            !['PREPARED','COMMITTED','DONE','ABORTED'].includes(receipt.state) || !Number.isFinite(Date.parse(receipt.preparedAt)) ||
+            (['COMMITTED','DONE'].includes(receipt.state) && !Number.isFinite(Date.parse(receipt.committedAt))) ||
+            (receipt.state === 'ABORTED' && (!hash(receipt.abortDigest) || !Number.isFinite(Date.parse(receipt.abortedAt)) || receipt.committedAt !== undefined)) ||
+            (receipt.state === 'DONE' && !Number.isFinite(Date.parse(receipt.completedAt)))) fail();
+        if (['PREPARED','COMMITTED'].includes(receipt.state) && (owner.state !== 'RESERVED' ||
+            owner.sessionId !== (receipt.state === 'PREPARED' ? receipt.sourceSessionId : receipt.sessionId))) fail();
+      }
+      const pending = Object.values(state.sessionHandoffs).filter(h => ['PREPARED','COMMITTED'].includes(h.state));
+      if (pending.some((h,i) => pending.slice(i+1).some(other => h.runId === other.runId && h.contextId === other.contextId))) fail();
+    }
     for (const run of this.runs.values()) if (run.pendingWrites !== undefined &&
       (!record(run.pendingWrites) || Object.entries(run.pendingWrites).some(([key, value]) =>
         typeof key !== 'string' || !Number.isSafeInteger(value) || value < 0 || value > state.sequence))) fail();
@@ -87,7 +151,7 @@ export class ResourceRunRegistry extends RunRegistry {
       const owner = [...this.runs.values(), ...this.history].find((r) => r.runId === op?.runId && r.contextId === op?.contextId);
       if (!id(key) || !onlyKeys(op, ['operationId','accessId','runId','contextId','version','sessionId','requestId',
           'operationDigest','identityDigest','resources','expectedRevisions','state','preparedAt','native','finishedAt',
-          'completionDigest','maintenancePreflight','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence']) || op.operationId !== key || !id(op.runId) ||
+          'completionDigest','maintenancePreflight','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence','decision','nativeRecovery']) || op.operationId !== key || !id(op.runId) ||
           !owner || !id(op.accessId) || !id(op.requestId) || !hash(op.operationDigest) || !hash(op.identityDigest) ||
           !Number.isSafeInteger(op.contextId) || !Number.isSafeInteger(op.version) ||
           op.version < op.contextId || op.version > owner.version || !Number.isFinite(Date.parse(op.preparedAt)) ||
@@ -96,9 +160,13 @@ export class ResourceRunRegistry extends RunRegistry {
           (op.rejectionOnly !== undefined && op.rejectionOnly !== true) ||
           typeof op.sessionId !== 'string' || !['PREPARED', 'ISSUING', 'EXECUTING', 'COMPLETED', 'UNKNOWN', 'CANCELLED'].includes(op.state)) fail();
       try { this.resources(op.resources); this.validateExpected(op.expectedRevisions, op.resources, false); } catch { fail(); }
-      if (op.nativeResult !== undefined && (!onlyKeys(op.nativeResult, ['status','exit']) ||
+      if (op.nativeResult !== undefined && (!onlyKeys(op.nativeResult, ['status','exit','proofStatus','partDigest']) ||
           !['completed','error'].includes(op.nativeResult.status) ||
-          (op.nativeResult.exit !== null && !Number.isInteger(op.nativeResult.exit)))) fail();
+          (op.nativeResult.exit !== null && !Number.isInteger(op.nativeResult.exit)) ||
+          (op.nativeResult.proofStatus !== undefined && !['completed','error'].includes(op.nativeResult.proofStatus)) ||
+          (op.nativeResult.partDigest !== undefined && !hash(op.nativeResult.partDigest)) ||
+          (op.nativeResult.status === 'completed' && op.nativeResult.proofStatus === 'error') ||
+          (op.nativeResult.status === 'error' && op.nativeResult.proofStatus === 'completed' && !hash(op.nativeResult.partDigest)))) fail();
       if (op.testReservationId !== undefined && (!id(op.testReservationId) ||
           state.testReservations?.[op.testReservationId]?.runId !== op.runId ||
           state.testReservations[op.testReservationId].contextId !== op.contextId)) fail();
@@ -111,6 +179,20 @@ export class ResourceRunRegistry extends RunRegistry {
           typeof op.native.permissionId !== 'string' || !Number.isFinite(op.native.startedAt) || !hash(op.native.targetDigest) ||
           (op.native.kind !== undefined && !['bash','edit'].includes(op.native.kind)) ||
           (op.native.onceAcknowledged !== undefined && typeof op.native.onceAcknowledged !== 'boolean'))) fail();
+      if (op.completionDigest !== undefined && !hash(op.completionDigest)) fail();
+      if (op.decision !== undefined && (!onlyKeys(op.decision, ['status','requestId','approvalId','changeId','runId','version',
+          'sessionId','operationDigest','identityDigest','recordedAt']) ||
+          !['approved','rejected','needs_clarification'].includes(op.decision.status) ||
+          op.decision.requestId !== op.requestId || !id(op.decision.approvalId) || !id(op.decision.changeId) ||
+          op.decision.runId !== op.runId || op.decision.version !== op.version || op.decision.sessionId !== op.sessionId ||
+          op.decision.operationDigest !== op.operationDigest || op.decision.identityDigest !== op.identityDigest ||
+          !Number.isFinite(Date.parse(op.decision.recordedAt)))) fail();
+      if (op.nativeRecovery !== undefined && (!onlyKeys(op.nativeRecovery, ['permissionId','callId','proofDigest','observedAt','boundary','logWatermark']) ||
+          (op.nativeRecovery.permissionId !== null && typeof op.nativeRecovery.permissionId !== 'string') ||
+          (op.nativeRecovery.callId !== null && typeof op.nativeRecovery.callId !== 'string') || !hash(op.nativeRecovery.proofDigest) ||
+          !['PERMISSION_PENDING_NO_REPLY','TOOL_TERMINAL_UNCLASSIFIED','TOOL_TERMINAL_SUCCESS','TERMINAL_TURN_NO_EFFECT'].includes(op.nativeRecovery.boundary) ||
+          (op.nativeRecovery.logWatermark !== null && (!Number.isSafeInteger(op.nativeRecovery.logWatermark) || op.nativeRecovery.logWatermark < 0)) ||
+          !Number.isFinite(Date.parse(op.nativeRecovery.observedAt)))) fail();
       if (op.testReservationId && (!Number.isSafeInteger(op.native?.startSequence) || op.native.startSequence < 1 ||
           op.native.startSequence > state.sequence || (op.state === 'COMPLETED' &&
             (!op.nativeResult || !Number.isSafeInteger(op.finishedSequence) || op.finishedSequence <= op.native.startSequence)))) fail();
@@ -120,7 +202,7 @@ export class ResourceRunRegistry extends RunRegistry {
         run.runId === access?.runId && run.contextId === access?.contextId);
       if (!id(key) || !onlyKeys(access, ['accessId','runId','contextId','version','operationDigest','inputDigest',
           'resources','operationIds','expectedRevisions','protection','state','order','requestedAt','token','fencing',
-          'grantedAt','finishedAt','outcome','releaseDigest','reconciliationReceipts']) || access.accessId !== key || !owner ||
+          'grantedAt','finishedAt','outcome','releaseDigest','reconciliationReceipts','timeoutQuarantine']) || access.accessId !== key || !owner ||
           !hash(access.inputDigest) || !hash(access.operationDigest) ||
           !['WAITING', 'HELD', 'EXECUTING', 'UNKNOWN', 'RELEASED', 'CANCELLED', 'STALE'].includes(access.state) ||
           !['SHARED', 'EXCLUSIVE'].includes(access.protection) || !Array.isArray(access.operationIds) ||
@@ -134,6 +216,17 @@ export class ResourceRunRegistry extends RunRegistry {
           Object.entries(access.reconciliationReceipts).some(([key, value]) => !id(key) ||
             !onlyKeys(value,['inputDigest','fencing']) || !hash(value.inputDigest) ||
             !Number.isSafeInteger(value.fencing) || value.fencing < 1 || value.fencing > state.sequence))) fail();
+      if (access.timeoutQuarantine !== undefined) {
+        const quarantine = access.timeoutQuarantine, operation = state.operations[quarantine.operationId];
+        if (!onlyKeys(quarantine,['operationId','quarantineId','inputDigest','proofDigest','fencing','observedAt']) ||
+            !id(quarantine.operationId) || !id(quarantine.quarantineId) || !hash(quarantine.inputDigest) ||
+            !hash(quarantine.proofDigest) || !Number.isSafeInteger(quarantine.fencing) ||
+            quarantine.fencing < 1 || quarantine.fencing > state.sequence || !Number.isFinite(Date.parse(quarantine.observedAt)) ||
+            !operation || operation.runId !== access.runId || operation.contextId !== access.contextId ||
+            !access.operationIds.includes(quarantine.operationId) || !['EXECUTING','UNKNOWN'].includes(operation.state) ||
+            operation.native?.onceAcknowledged !== true || !access.resources.some(resource =>
+              resource.mode === 'write' && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(resource.key))) fail();
+      }
     }
     for (const [requestId, requestOwner] of Object.entries(this.requestOwners)) {
       const receipt = requestOwner.reconciliation;
@@ -144,16 +237,14 @@ export class ResourceRunRegistry extends RunRegistry {
           Object.values(state.accesses).some((access) => access.accessId === op.accessId ||
             access.operationIds.includes(op.operationId))) fail();
     }
-    const held = Object.values(state.accesses).filter(active);
-    for (let i = 0; i < held.length; i++) for (let j = i + 1; j < held.length; j++) {
-      if (held[i].runId === held[j].runId || conflicts(held[i].resources, held[j].resources)) fail();
-    }
+    // Active legacy leases remain protected after restore. `restoredAccesses`
+    // blocks their native reuse, while `blockers()` keeps conflicts waiting.
     if (state.testReservations !== undefined) {
       if (!record(state.testReservations)) fail();
       for (const [key, entry] of Object.entries(state.testReservations)) {
         const owner = [...this.runs.values(), ...this.history].find((r) => r.runId === entry?.runId && r.contextId === entry?.contextId);
         if (!id(key) || !onlyKeys(entry, ['transactionId','runId','contextId','version','resources','inputDigest','state',
-          'order','requestedAt','grantedAt','token','fencing','finishedAt','releaseDigest','proofDigest','reconciliationReceipts']) ||
+          'order','requestedAt','grantedAt','token','fencing','finishedAt','releaseDigest','proofDigest','reconciliationReceipts','unusedReleaseReceipt']) ||
           entry.transactionId !== key || !owner || !hash(entry.inputDigest) ||
           !Number.isSafeInteger(entry.version) || entry.version < entry.contextId || entry.version > owner.version ||
           !['WAITING','HELD','RELEASED','CANCELLED'].includes(entry.state) ||
@@ -165,6 +256,19 @@ export class ResourceRunRegistry extends RunRegistry {
           entry.fencing < entry.order || entry.fencing > state.sequence)) fail();
         if (entry.releaseDigest !== undefined && !hash(entry.releaseDigest)) fail();
         if (entry.proofDigest !== undefined && !hash(entry.proofDigest)) fail();
+        if (entry.unusedReleaseReceipt !== undefined) {
+          const receipt = entry.unusedReleaseReceipt;
+          const lostTokenRelease = receipt?.mode === 'unused-no-effect-lost-token';
+          if (entry.state !== 'RELEASED' || !hash(entry.releaseDigest) || !hash(entry.proofDigest) ||
+              !onlyKeys(receipt, ['mode','authorizationDigest','attestationDigest','boundaryDigest','nativeProof','operationIds','evidenceDigest']) ||
+              !['unused-no-effect','unused-no-effect-lost-token'].includes(receipt.mode) ||
+              (lostTokenRelease && entry.token !== undefined) || entry.proofDigest !== digest(receipt) ||
+              !['authorizationDigest','attestationDigest','boundaryDigest','evidenceDigest'].every((key) => hash(receipt[key])) ||
+              !validUnusedNativeProof(receipt.nativeProof) || !Array.isArray(receipt.operationIds) ||
+              new Set(receipt.operationIds).size !== receipt.operationIds.length ||
+              receipt.operationIds.some((key) => !id(key) || state.operations[key]?.runId !== entry.runId ||
+                state.operations[key]?.contextId !== entry.contextId)) fail();
+        }
         if (entry.reconciliationReceipts !== undefined && (!record(entry.reconciliationReceipts) ||
           Object.entries(entry.reconciliationReceipts).some(([key, value]) => !id(key) ||
             !onlyKeys(value,['inputDigest','fencing']) || !hash(value.inputDigest) ||
@@ -195,6 +299,40 @@ export class ResourceRunRegistry extends RunRegistry {
     }
   }
 
+  monitorRuns() {
+    const values = [...this.runs.values()].sort((a, b) =>
+      Number(b.state === 'RESERVED') - Number(a.state === 'RESERVED') || a.runId.localeCompare(b.runId));
+    return { version: VERSION, snapshot_only: true, totalRuns: values.length, truncated: values.length > 200,
+      runs: values.slice(0, 200).map(run => Object.fromEntries(
+        ['runId', 'changeId', 'sessionId', 'version', 'state', 'phase'].map(key => [key, run[key] ?? null]))) };
+  }
+
+  operationSnapshot(runIdValue, operationId = undefined) {
+    const run = this.runs.get(runIdValue) || this.history.find((item) => item.runId === runIdValue);
+    if (!id(runIdValue) || !run) throw new CoordinationError('run-not-found', 404);
+    if (operationId !== undefined && !id(operationId)) throw new CoordinationError('operation-id-invalid', 400);
+    const values = Object.values(this.resourceState.operations)
+      .filter((op) => op.runId === runIdValue && op.contextId === run.contextId &&
+        (operationId === undefined || op.operationId === operationId))
+      .sort((a, b) => Date.parse(a.preparedAt) - Date.parse(b.preparedAt) || a.operationId.localeCompare(b.operationId));
+    const limit = operationId === undefined ? 200 : 1;
+    return { version: VERSION, runId: runIdValue, snapshot_only: true, totalOperations: values.length,
+      truncated: values.length > limit, operations: values.slice(-limit).map((op) => {
+        const access = this.resourceState.accesses[op.accessId];
+        return { operationId: op.operationId, requestId: op.requestId, sessionId: op.sessionId,
+          contextId: op.contextId, version: op.version, state: op.state, preparedAt: op.preparedAt,
+          decision: op.decision ? { status: op.decision.status, recordedAt: op.decision.recordedAt } : null,
+          onceAcknowledged: op.native ? op.native.onceAcknowledged === true : null,
+          nativeRecovery: op.nativeRecovery ? { permissionId: op.nativeRecovery.permissionId,
+            callId: op.nativeRecovery.callId, boundary: op.nativeRecovery.boundary,
+            logWatermark: op.nativeRecovery.logWatermark, observedAt: op.nativeRecovery.observedAt } : null,
+          native: op.native ? { permissionId: op.native.permissionId, callId: op.native.callId ?? null,
+            kind: op.native.kind ?? null, startedAt: op.native.startedAt,
+            targetDigest: op.native.targetDigest, onceAcknowledged: op.native.onceAcknowledged === true } : null,
+          access: access ? { accessId: access.accessId, state: access.state, fencing: access.fencing ?? null } : null,
+          nativeResult: op.nativeResult ? { status: op.nativeResult.status, exit: op.nativeResult.exit ?? null } : null };
+      }) };
+  }
   snapshot() {
     return { ...super.snapshot(), version: VERSION,
       coordinationProtocol: this.migrationRequired ? 'migration-required' : COORDINATION_PROTOCOL,
@@ -243,13 +381,68 @@ export class ResourceRunRegistry extends RunRegistry {
   testReservations(runId) {
     return Object.values(this.resourceState.testReservations || {}).filter((r) => !runId || r.runId === runId).map((r) =>
       ({ ...copy(r), reconciliationRequired: this.restoredTests.has(r.transactionId),
-        blockers: r.state === 'WAITING' ? this.testBlockers(r) : [] }));
+        blockers: r.state === 'WAITING' ? this.testBlockers(r) : [],
+        ...(r.state === 'HELD' ? { unusedReleaseBoundary: this.unusedTestBoundary(r) } : {}) }));
+  }
+  restoredTestReconciliationSnapshot(runId,transactionId){
+    const entry=this.resourceState.testReservations?.[transactionId],run=this.runs.get(runId);
+    if(!entry||!run||entry.runId!==runId||entry.contextId!==run.contextId||entry.version!==run.version||
+        entry.state!=='HELD'||!this.restoredTests.has(transactionId))throw new CoordinationError('test-reconciliation-boundary-required');
+    const operations=this.operationTests(entry).map(op=>({operationId:op.operationId,state:op.state,
+      operationDigest:op.operationDigest,identityDigest:op.identityDigest,
+      onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null,nativePresent:Boolean(op.native),
+      completionDigest:op.completionDigest??null,completionProved:hash(op.completionDigest),nativeResultStatus:op.nativeResult?.status??null,
+      nativeProofDigest:op.native?.proofDigest??null})).sort((a,b)=>a.operationId.localeCompare(b.operationId));
+    const boundary={runId,contextId:run.contextId,transactionId,version:run.version,fencing:entry.fencing,
+      state:entry.state,resources:entry.resources,inputDigest:entry.inputDigest,operations};
+    return {runId,contextId:run.contextId,transactionId,version:run.version,state:entry.state,
+      reconciliationRequired:true,fencing:entry.fencing,resources:copy(entry.resources),
+      operations:operations.map(({operationId,state,onceAcknowledged,nativePresent,completionProved,nativeResultStatus})=>
+        ({operationId,state,onceAcknowledged,nativePresent,completionProved,nativeResultStatus})),boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  reconcileRestoredTests(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','transactionId','fencing','reconciliationId','boundaryDigest','evidence'])||
+        !id(payload.transactionId)||!id(payload.reconciliationId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('test-reconciliation-invalid',400);
+    const entry=this.resourceState.testReservations?.[payload.transactionId];
+    const inputDigest=digest(payload),prior=entry?.reconciliationReceipts?.[payload.reconciliationId];
+    if(prior){
+      if(entry.runId!==runId||prior.inputDigest!==inputDigest)throw new CoordinationError('test-reconciliation-divergent');
+      return copy(entry);
+    }
+    const snapshot=this.restoredTestReconciliationSnapshot(runId,payload.transactionId),run=this.runs.get(runId);
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||
+        snapshot.boundaryDigest!==payload.boundaryDigest||this.unresolvedTestAccess(runId,snapshot.resources))
+      throw new CoordinationError('test-reconciliation-boundary-changed');
+    if(snapshot.operations.some(op=>!['PREPARED','CANCELLED','COMPLETED'].includes(op.state)||
+        op.state!=='COMPLETED'&&(op.onceAcknowledged===true||op.nativePresent)||
+        op.state==='COMPLETED'&&(!op.completionProved||
+          !['completed','error'].includes(op.nativeResultStatus))))
+      throw new CoordinationError('test-reconciliation-boundary-required');
+    const proofBody={runId,contextId:run.contextId,transactionId:entry.transactionId,version:entry.version,
+      fencing:entry.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationsDigest:digest(snapshot.operations),sessionIdle:true,pendingPermissions:0,
+      transcriptDigest:proof?.transcriptDigest,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.transactionId!==entry.transactionId||
+        proof.version!==entry.version||proof.fencing!==entry.fencing||proof.boundaryDigest!==snapshot.boundaryDigest||
+        proof.sessionId!==run.sessionId||proof.sessionIdle!==true||proof.pendingPermissions!==0||
+        !hash(proof.transcriptDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('test-reconciliation-proof-required');
+    entry.token=randomUUID();entry.fencing=++this.resourceState.sequence;
+    entry.reconciliationReceipts||={};entry.reconciliationReceipts[payload.reconciliationId]={inputDigest,fencing:entry.fencing};
+    this.restoredTests.delete(entry.transactionId);this.persist();return copy(entry);
   }
   testBlockers(entry) {
     return Object.values(this.resourceState.testReservations || {}).filter((other) => other !== entry &&
       reservedTest(other) && (other.state === 'HELD' || other.order < entry.order) &&
       conflicts(entry.resources, other.resources)).map((r) => ({ runId: r.runId,
         transactionId: r.transactionId, reason: 'test-resource-conflict' }));
+  }
+  unresolvedTestAccess(runId, resources, excludeAccessId = null) {
+    return Object.values(this.resourceState.accesses).some((access) => access.runId === runId && access.accessId !== excludeAccessId &&
+      (active(access) || access.state === 'WAITING') && conflicts(resources, access.resources));
   }
   grantTests() {
     if (this.resourceState.global && this.resourceState.global.state !== 'RELEASED') return;
@@ -270,7 +463,11 @@ export class ResourceRunRegistry extends RunRegistry {
       return this.testReservations(runId).find((r) => r.transactionId === prior.transactionId);
     }
     const { run } = this.scope(runId, payload.version, resources);
-    if (run.phase !== 'WORK' || this.unresolvedAccess(runId)) throw new CoordinationError('test-acquisition-boundary-required');
+    const unresolvedTestReservation = Object.values(this.resourceState.testReservations || {}).some((entry) =>
+      entry.runId === runId && reservedTest(entry));
+    if (run.phase !== 'WORK' || unresolvedTestReservation || this.unresolvedTestAccess(runId, resources)) {
+      throw new CoordinationError('test-acquisition-boundary-required');
+    }
     this.resourceState.testReservations ||= {};
     const entry = { transactionId: payload.transactionId, runId, contextId: run.contextId, version: run.version,
       resources, inputDigest, state: 'WAITING', order: ++this.resourceState.sequence, requestedAt: now() };
@@ -325,13 +522,141 @@ export class ResourceRunRegistry extends RunRegistry {
   operationTests(entry) {
     return Object.values(this.resourceState.operations).filter((op) => op.testReservationId === entry.transactionId);
   }
+  unresolvedReservationAccess(entry) {
+    return this.unresolvedTestAccess(entry.runId, entry.resources) ||
+      Object.values(this.resourceState.accesses).some((access) => access.runId === entry.runId &&
+        access.contextId === entry.contextId && (active(access) || access.state === 'WAITING') &&
+        access.operationIds.some((operationId) =>
+          this.resourceState.operations[operationId]?.testReservationId === entry.transactionId));
+  }
+  unusedTestOperations(entry) {
+    return Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId &&
+      op.contextId === entry.contextId && (op.testReservationId === entry.transactionId ||
+        Date.parse(op.preparedAt) >= Date.parse(entry.grantedAt))).sort((a, b) => a.operationId.localeCompare(b.operationId));
+  }
+  isRejectionOnlyOperation(op) {
+    const owner = this.requestOwners[op?.requestId];
+    const receipt = owner?.reconciliation;
+    return Boolean(op && op.rejectionOnly === true && op.state === 'PREPARED' && !op.native &&
+      owner?.runId === op.runId && receipt?.outcome === 'REJECTION_ONLY' && receipt.recoveryId === null &&
+      receipt.operationId === op.operationId && receipt.contextId === op.contextId &&
+      receipt.version === op.version && receipt.sessionId === op.sessionId &&
+      !Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId ||
+        access.operationIds.includes(op.operationId)));
+  }
+  unusedTestOperationClassification(op, decision = null) {
+    if(this.withdrawnUnissuedOperations?.has(op.operationId))return null;
+    if (op.state === 'CANCELLED' && !op.native) return this.reviewedReadOnlyOperations?.has(op.operationId)
+      ? 'read-only-no-effect' : 'cancelled-without-execution';
+    if (this.isRejectionOnlyOperation(op)) return 'rejected-validation-no-native-effect';
+    if (op.state === 'PREPARED' && !op.native && decision === 'rejected') return 'rejected-validation-no-native-effect';
+    if (op.state === 'PREPARED' && !op.native && decision === 'cancelled') return 'cancelled-validation-no-native-effect';
+    if (op.state === 'COMPLETED' && op.native?.onceAcknowledged && op.native.kind === 'bash') {
+      return 'read-only-no-effect';
+    }
+    return null;
+  }
+  unusedTestBoundary(entry) {
+    return digest({ entry, run: this.runs.get(entry.runId),
+      operations: Object.values(this.resourceState.operations).filter((op) => op.runId === entry.runId),
+      accesses: Object.values(this.resourceState.accesses).filter((access) => access.runId === entry.runId),
+      owners: Object.fromEntries(Object.entries(this.requestOwners).filter(([, owner]) => owner.runId === entry.runId)) });
+  }
+  restoredTestForUnusedRecovery(runId, payload) {
+    this.mutable();
+    const run = this.owned(runId, payload.version);
+    const entry = this.resourceState.testReservations?.[payload.transactionId];
+    if (payload.recoveryMode !== 'validated-change-unused' || !entry || entry.runId !== runId || entry.version !== run.version || entry.contextId !== run.contextId ||
+        entry.state !== 'HELD' || !this.restoredTests.has(entry.transactionId)) {
+      throw new CoordinationError('test-unused-recovery-required');
+    }
+    if (payload.contextId !== entry.contextId || payload.sessionId !== run.sessionId) {
+      throw new CoordinationError('test-unused-recovery-identity-divergent');
+    }
+    if (payload.fencing !== entry.fencing) throw new CoordinationError('test-token-invalid');
+    if (!hash(payload.boundaryDigest) || payload.boundaryDigest !== this.unusedTestBoundary(entry)) {
+      throw new CoordinationError('test-unused-boundary-stale');
+    }
+    if (this.unresolvedAccess(runId, false) || this.operationTests(entry).some((op) =>
+        !['COMPLETED','CANCELLED'].includes(op.state))) throw new CoordinationError('test-effects-unresolved');
+    return entry;
+  }
+  unusedTestReplay(runId, payload) {
+    const prior = this.resourceState.testReservations?.[payload.transactionId];
+    if (prior?.state !== 'RELEASED') return null;
+    if (prior.runId !== runId || !prior.unusedReleaseReceipt || prior.releaseDigest !== digest(payload)) {
+      throw new CoordinationError('test-unused-release-divergent');
+    }
+    return copy(prior);
+  }
+  releaseUnusedTests(runId, payload, verifiedNativeProof, { lostTokenRecovery = false, validatedChangeScope = false } = {}) {
+    this.mutable();
+    const replay = this.unusedTestReplay(runId, payload);
+    if (replay) return replay;
+    this.admission(runId);
+    const entry = lostTokenRecovery ? this.restoredTestForUnusedRecovery(runId, payload) : this.testHeld(runId, payload);
+    const run = this.runs.get(runId);
+    evidence(payload.evidence);
+    const attestation = payload.attestation;
+    const allowedKeys = ['version','transactionId',...(lostTokenRecovery ? ['recoveryMode'] : ['token']),
+      'fencing','contextId','sessionId','boundaryDigest',...(lostTokenRecovery ? [] : ['developerAuthorization']),
+      'evidence','attestation','nativeProof'];
+    if (!onlyKeys(payload, allowedKeys) ||
+        (lostTokenRecovery && (payload.recoveryMode !== 'validated-change-unused' || validatedChangeScope !== true)) ||
+        payload.contextId !== entry.contextId || payload.sessionId !== run.sessionId ||
+        (!lostTokenRecovery && (typeof payload.developerAuthorization !== 'string' || !payload.developerAuthorization.trim() ||
+        payload.developerAuthorization.length > 500)) ||
+        !onlyKeys(attestation, ['noEnvironmentMutation','noMutatingMandate','operations']) ||
+        attestation.noEnvironmentMutation !== true || attestation.noMutatingMandate !== true ||
+        !Array.isArray(attestation.operations) || !validUnusedNativeProof(payload.nativeProof) ||
+        digest(payload.nativeProof) !== digest(verifiedNativeProof)) {
+      throw new CoordinationError('test-unused-attestation-required');
+    }
+    if (this.unresolvedAccess(runId, false)) throw new CoordinationError('test-effects-unresolved');
+    if (!hash(payload.boundaryDigest) || payload.boundaryDigest !== this.unusedTestBoundary(entry)) {
+      throw new CoordinationError('test-unused-boundary-stale');
+    }
+    const ops = this.unusedTestOperations(entry);
+    const proofClassifications = new Map((payload.nativeProof.operationClassifications || []).map((item) =>
+      [item.operationId, item.classification]));
+    if (proofClassifications.size !== ops.length || ops.some((op) =>
+        !proofClassifications.has(op.operationId))) throw new CoordinationError('test-unused-operations-divergent');
+    if (payload.nativeProof.coverage === 'operation-ledger-after-compaction' &&
+        (!ops.length || this.unresolvedAccess(runId, false) || ops.some((op) => op.native ||
+          !['PREPARED','CANCELLED'].includes(op.state) ||
+          !['rejected-validation-no-native-effect','cancelled-validation-no-native-effect','cancelled-without-execution']
+            .includes(proofClassifications.get(op.operationId))))) {
+      throw new CoordinationError('test-unused-operation-not-proved');
+    }
+    if (attestation.operations.length !== ops.length || new Set(attestation.operations.map((op) => op?.operationId)).size !== ops.length) {
+      throw new CoordinationError('test-unused-operations-divergent');
+    }
+    for (const op of ops) {
+      const review = attestation.operations.find((review) => review?.operationId === op.operationId);
+      if (!onlyKeys(review, ['operationId','classification']) ||
+          review.classification !== proofClassifications.get(op.operationId) ||
+          review.classification !== this.unusedTestOperationClassification(op, proofClassifications.get(op.operationId) === 'rejected-validation-no-native-effect' ? 'rejected' :
+            proofClassifications.get(op.operationId) === 'cancelled-validation-no-native-effect' ? 'cancelled' : null)) {
+        throw new CoordinationError('test-unused-operation-not-proved');
+      }
+    }
+    entry.unusedReleaseReceipt = { mode: lostTokenRecovery ? 'unused-no-effect-lost-token' : 'unused-no-effect',
+      authorizationDigest: lostTokenRecovery ? digest({mode:'validated-change-scope',runId,contextId:entry.contextId,
+        version:entry.version,changeId:run.changeId}) : digest(payload.developerAuthorization),
+      attestationDigest: digest(attestation), boundaryDigest: payload.boundaryDigest, nativeProof: copy(verifiedNativeProof),
+      operationIds: ops.map((op) => op.operationId), evidenceDigest: digest(payload.evidence) };
+    entry.state = 'RELEASED'; entry.finishedAt = now(); entry.releaseDigest = digest(payload);
+    entry.proofDigest = digest(entry.unusedReleaseReceipt);
+    if (lostTokenRecovery) { delete entry.token; this.restoredTests.delete(entry.transactionId); }
+    this.grantTests(); this.persist(); return copy(entry);
+  }
   releaseTests(runId, payload) {
     this.mutable(); evidence(payload.evidence);
     const prior = this.resourceState.testReservations?.[payload.transactionId];
-    if (prior?.state === 'RELEASED' && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
+    if (prior?.state === 'RELEASED' && !prior.unusedReleaseReceipt && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
     const entry = this.testHeld(runId, payload);
     const ops = this.operationTests(entry);
-    if (this.unresolvedAccess(runId, false) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {
+    if (this.unresolvedReservationAccess(entry) || ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) {
       throw new CoordinationError('test-effects-unresolved');
     }
     if (!Array.isArray(payload.cleanup) || payload.cleanup.length !== entry.resources.length ||
@@ -368,6 +693,10 @@ export class ResourceRunRegistry extends RunRegistry {
       run.changeId === dependency && run.state === 'DELIVERED')) throw new CoordinationError('dependency-not-delivered');
   }
   reserve(payload) {
+    if (Object.values(this.resourceState.sessionHandoffs || {}).some(h => h.state !== 'ABORTED' &&
+        this.runs.get(h.runId)?.state === 'RESERVED' &&
+        (h.sourceSessionId === payload?.sessionId || h.state === 'PREPARED' && h.sessionId === payload?.sessionId)))
+      throw new CoordinationError('session-handoff-session-reserved');
     const previous = this.runs.get(payload?.runId);
     // A closed generation keeps its suspension as history, not as a new admission guard.
     this.admission(previous?.state === 'RESERVED' ? payload.runId : undefined);
@@ -446,25 +775,44 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('resource-revision-stale');
     }
   }
-  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false } = {}) {
+  operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false, checkCurrentRevisions = true,
+    terminalTurnNoEffect = false } = {}) {
     const preflight = Array.isArray(approval.files) && approval.files.length === 0 &&
       approval.commands?.length === 1 && approval.commands[0] === '/usr/bin/true' &&
       Array.isArray(approval.resources) && approval.resources.every((r) => r.mode === 'read');
     if (rejectionOnly) {
       this.mutable();
       if (this.runs.get(runId)?.suspension?.action !== 'PAUSE') throw new CoordinationError('notification-reconciliation-pause-required');
+    } else if(terminalTurnNoEffect){
+      this.mutable();
+      const prior=this.resourceState.operations[approval?.operation_id],access=prior&&this.resourceState.accesses[prior.accessId];
+      const run=this.runs.get(runId);
+      if(!run||run.state!=='RESERVED'||run.phase!=='WORK'||run.suspension||prior?.runId!==runId||
+          prior.contextId!==run.contextId||prior.state!=='UNKNOWN'||prior.decision?.status!=='approved'||
+          prior.native||prior.nativeResult||prior.onceAcknowledged===true||prior.testReservationId||
+          prior.nativeRecovery?.boundary!=='TOOL_TERMINAL_UNCLASSIFIED'||
+          prior.nativeRecovery.permissionId!==null||prior.nativeRecovery.callId!==null||
+          !access||access.runId!==runId||access.contextId!==run.contextId||access.state!=='UNKNOWN'||
+          access.operationIds.length!==1||access.operationIds[0]!==prior.operationId||
+          !this.restoredAccesses.has(access.accessId)||prior.resources.some(resource=>resource.mode!=='write'||
+            !resource.key.startsWith('file:'))){
+        throw new CoordinationError('terminal-turn-no-effect-candidate-required');
+      }
     } else this.admission(runId, preflight);
     const { run, resources } = this.scope(runId, approval.reservation_version, approval.resources);
     if (approval.coordination_protocol !== COORDINATION_PROTOCOL || !id(approval.operation_id) ||
         !hash(approval.operation_digest) || !id(approval.requestId) ||
-        (approval.access_id !== undefined && !id(approval.access_id))) {
+        (approval.access_id !== undefined && !id(approval.access_id)) ||
+        (approval.tool_input_sha256 !== undefined && !hash(approval.tool_input_sha256))) {
       throw new CoordinationError('coordination-upgrade-required');
     }
-    this.validateExpected(approval.expected_revisions, resources);
+    this.validateExpected(approval.expected_revisions, resources, checkCurrentRevisions);
     if (approval.session_id !== run.sessionId && approval.session_id !== candidateSession) throw new CoordinationError('operation-session-divergent');
     const identityDigest = digest(Object.fromEntries(['run_id', 'reservation_version', 'requestId', 'approval_id',
       'change_id', 'session_id', 'directory', 'title', 'summary', 'files', 'commands', 'resources',
-      'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol']
+      'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol',
+      ...(Object.hasOwn(approval,'tool_input_sha256') ? ['tool_input_sha256'] : []),
+      ...(Object.hasOwn(approval,'shell_background') ? ['shell_background'] : [])]
       .map((key) => [key, approval[key] ?? null])));
     const prior = this.resourceState.operations[approval.operation_id];
     if (prior) {
@@ -485,6 +833,263 @@ export class ResourceRunRegistry extends RunRegistry {
       this.persist();
     }
     return copy(op);
+  }
+  recordDecision(runId, operationId, decision) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    const run = this.runs.get(runId);
+    if (!op || !run || op.runId !== runId || op.contextId !== run.contextId ||
+        !decision || !['approved','rejected','needs_clarification'].includes(decision.status) ||
+        decision.requestId !== op.requestId || decision.operationId !== op.operationId ||
+        decision.runId !== runId || decision.changeId !== run.changeId || decision.version !== op.version || decision.sessionId !== op.sessionId ||
+        decision.operationDigest !== op.operationDigest || decision.identityDigest !== op.identityDigest) {
+      throw new CoordinationError('operation-decision-identity-divergent');
+    }
+    const value = { status: decision.status, requestId: op.requestId, approvalId: decision.approvalId,
+      changeId: decision.changeId, runId, version: op.version, sessionId: op.sessionId,
+      operationDigest: op.operationDigest, identityDigest: op.identityDigest,
+      recordedAt: typeof decision.recordedAt === 'string' ? decision.recordedAt : now() };
+    if (!id(value.approvalId) || !id(value.changeId) || !Number.isFinite(Date.parse(value.recordedAt))) {
+      throw new CoordinationError('operation-decision-invalid');
+    }
+    if (op.decision) {
+      if (['status','requestId','approvalId','changeId','runId','version','sessionId','operationDigest','identityDigest']
+        .some((key) => op.decision[key] !== value[key])) throw new CoordinationError('operation-decision-conflict');
+      return copy(op.decision);
+    }
+    op.decision = value;
+    this.persist();
+    return copy(value);
+  }
+  recordRejectedNativeDecision(runId, operationId, decision, proofDigest) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    const run = this.runs.get(runId);
+    if (!hash(proofDigest) || decision?.status !== 'rejected') throw new CoordinationError('native-rejection-decision-invalid');
+    if (op && run && op.runId === runId && op.contextId === run.contextId && op.state === 'CANCELLED' &&
+        decision.runId === runId && decision.changeId === run.changeId && decision.version === op.version &&
+        decision.sessionId === op.sessionId && decision.operationId === op.operationId &&
+        op.completionDigest === proofDigest && op.decision?.status === 'rejected' &&
+        op.decision.requestId === decision?.requestId && op.decision.approvalId === decision?.approvalId &&
+        op.decision.operationDigest === decision?.operationDigest &&
+        op.decision.identityDigest === decision?.identityDigest &&
+        !Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId || access.operationIds.includes(operationId))) {
+      return copy(op.decision);
+    }
+    if (!op || !run || op.runId !== runId || op.contextId !== run.contextId || op.state !== 'PREPARED' || op.native ||
+        !hash(proofDigest) || !decision || decision.status !== 'rejected' ||
+        decision.requestId !== op.requestId || decision.operationId !== op.operationId || decision.runId !== runId ||
+        decision.changeId !== run.changeId || decision.version !== op.version || decision.sessionId !== op.sessionId ||
+        decision.operationDigest !== op.operationDigest || decision.identityDigest !== op.identityDigest ||
+        Object.values(this.resourceState.accesses).some((access) => access.accessId === op.accessId || access.operationIds.includes(operationId))) {
+      throw new CoordinationError('native-rejection-decision-boundary-invalid');
+    }
+    const requestOwner = this.requestOwners[op.requestId];
+    if (!requestOwner || requestOwner.runId !== runId) throw new CoordinationError('native-rejection-owner-missing');
+    const value = { status: 'rejected', requestId: op.requestId, approvalId: decision.approvalId,
+      changeId: run.changeId, runId, version: op.version, sessionId: op.sessionId,
+      operationDigest: op.operationDigest, identityDigest: op.identityDigest,
+      recordedAt: typeof decision.recordedAt === 'string' ? decision.recordedAt : now() };
+    if (!id(value.approvalId) || !Number.isFinite(Date.parse(value.recordedAt))) {
+      throw new CoordinationError('native-rejection-decision-invalid');
+    }
+    if (op.decision || op.completionDigest) {
+      if (op.state === 'CANCELLED' && op.completionDigest === proofDigest &&
+          op.decision?.status === 'rejected' && op.decision.approvalId === value.approvalId) return copy(op.decision);
+      throw new CoordinationError('native-rejection-decision-conflict');
+    }
+    op.decision = value;
+    op.completionDigest = proofDigest;
+    op.state = 'CANCELLED';
+    op.finishedAt = value.recordedAt;
+    this.persist();
+    return copy(value);
+  }
+  releasedReferenceWithdrawal(runId,operationId) {
+    const run=this.runs.get(runId),op=this.resourceState.operations[operationId];
+    const linked=op&&Object.values(this.resourceState.accesses).filter(a=>a.accessId===op.accessId||a.operationIds.includes(operationId));
+    const parent=linked?.[0];
+    if(!run||!op||op.runId!==runId||op.contextId!==run.contextId||op.version!==run.version||op.sessionId!==run.sessionId||
+      op.state!=='PREPARED'||op.decision?.status!=='approved'||op.native||op.nativeResult||op.onceAcknowledged===true||
+      linked.length!==1||!parent||parent.accessId!==op.accessId||parent.operationIds.includes(operationId)||
+      parent.runId!==runId||parent.contextId!==run.contextId||parent.version!==run.version||parent.state!=='RELEASED'||
+      !['COMPLETED','NO_EFFECT','RECONCILED'].includes(parent.outcome)||!hash(parent.releaseDigest)||!Number.isFinite(Date.parse(parent.finishedAt))||
+      parent.operationIds.some(id=>{const member=this.resourceState.operations[id];return !member||member.runId!==runId||
+        member.contextId!==run.contextId||!['COMPLETED','CANCELLED'].includes(member.state)}))
+      throw new CoordinationError('released-reference-withdrawal-invalid');
+    return copy(parent);
+  }
+  recordNativeCancelledValidation(runId, operationId, proofDigest, {allowRejected=false,allowReleasedReference=false}={}) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    const run = this.runs.get(runId);
+    let linkedAccess = op && Object.values(this.resourceState.accesses).some((access) =>
+      access.accessId === op.accessId || access.operationIds.includes(operationId));
+    if(linkedAccess&&allowReleasedReference){this.releasedReferenceWithdrawal(runId,operationId);linkedAccess=false;}
+    if (!hash(proofDigest) || !op || !run || op.runId !== runId || op.contextId !== run.contextId ||
+        op.native || op.nativeResult || (op.decision && op.decision.status !== 'approved'&&
+          !(allowRejected&&op.decision.status==='rejected')) || linkedAccess) {
+      throw new CoordinationError('native-cancellation-boundary-invalid');
+    }
+    const owner = this.requestOwners[op.requestId];
+    if (!owner || owner.runId !== runId) throw new CoordinationError('native-cancellation-owner-missing');
+    if (op.state === 'CANCELLED' && op.completionDigest === proofDigest) return copy(op);
+    if (op.state !== 'PREPARED') throw new CoordinationError('native-cancellation-boundary-invalid');
+    op.state = 'CANCELLED'; op.finishedAt = now(); op.completionDigest = proofDigest;
+    this.persist();
+    return copy(op);
+  }
+  attachedWithdrawalAccess(runId, operationId, {allowReference=false,allowSingleton=false}={}) {
+    const run=this.runs.get(runId),op=this.resourceState.operations[operationId];
+    const linked=op && Object.values(this.resourceState.accesses).filter(a=>
+      a.accessId===op.accessId || a.operationIds.includes(operationId));
+    const access=linked?.[0];
+    const singleton=allowSingleton===true && Boolean(access) && access.accessId===operationId &&
+      access.operationIds.length===1 && access.operationIds[0]===operationId &&
+      !access.timeoutQuarantine && !this.restoredAccesses.has(access.accessId);
+    if(!run || !op || op.runId!==runId || op.contextId!==run.contextId || op.version!==run.version ||
+        op.sessionId!==run.sessionId || op.state!=='PREPARED' || op.decision?.status!=='approved' ||
+        op.native || op.nativeResult || op.onceAcknowledged===true || linked.length!==1 ||
+        (access.accessId===operationId && !singleton) || access.accessId!==op.accessId || access.runId!==runId ||
+        access.contextId!==run.contextId || access.version!==run.version || access.state!=='HELD' ||
+        (!access.operationIds.includes(operationId) && !allowReference) ||
+        access.operationIds.length<(singleton?1:access.operationIds.includes(operationId)?2:1) ||
+        access.operationIds.some(id=>{const other=this.resourceState.operations[id];return !other ||
+          other.runId!==runId || other.contextId!==run.contextId || other.version!==run.version ||
+          other.sessionId!==op.sessionId && !(other.state==='CANCELLED' &&
+            !other.native && !other.nativeResult && other.onceAcknowledged!==true);}) ||
+        op.resources.some(r=>!access.resources.some(held=>covers(held,r))))
+      throw new CoordinationError('attached-withdrawal-parent-invalid');
+    return copy(access);
+  }
+  withdrawRejectedAttachedShell(runId, operationId, proofDigest, parentDigest, options={}) {
+    this.mutable();
+    if(!hash(proofDigest) || !hash(parentDigest))throw new CoordinationError('attached-withdrawal-proof-invalid');
+    const access=this.attachedWithdrawalAccess(runId,operationId,options);
+    if(digest(access)!==parentDigest)throw new CoordinationError('attached-withdrawal-parent-changed');
+    const op=this.resourceState.operations[operationId];
+    if(this.requestOwners[op.requestId]?.runId!==runId)throw new CoordinationError('native-cancellation-owner-missing');
+    // Keep the historical reference or attachment and every field of its live parent.
+    op.state='CANCELLED';op.finishedAt=now();op.completionDigest=proofDigest;
+    this.persist();return copy(op);
+  }
+  terminalReviewAccessBoundary(runId,operationId) {
+    const run=this.runs.get(runId),op=this.resourceState.operations[operationId];
+    if(!run||!op||op.runId!==runId||op.contextId!==run.contextId||op.version!==run.version||
+        op.sessionId!==run.sessionId||op.state!=='PREPARED'||op.decision?.status!=='approved'||op.native||
+        op.nativeResult||op.onceAcknowledged===true||Object.values(this.resourceState.accesses)
+          .some(access=>access.operationIds.includes(operationId)))throw new CoordinationError('terminal-review-boundary-invalid');
+    const parent=this.resourceState.accesses[op.accessId];
+    if(op.accessId===operationId){if(parent)throw new CoordinationError('terminal-review-boundary-invalid');return null;}
+    if(!parent||parent.runId!==runId||parent.contextId!==run.contextId||parent.version!==run.version||
+        parent.state!=='HELD'||op.resources.some(r=>!parent.resources.some(held=>covers(held,r))))
+      throw new CoordinationError('terminal-review-parent-invalid');
+    return copy(parent);
+  }
+  completeReviewedReadOnly(runId, operationId, proofDigest, parentDigest=null) {
+    this.admission(runId);
+    const op=this.resourceState.operations[operationId];
+    if (!op || op.runId!==runId || !hash(proofDigest) || op.native || op.nativeResult || op.decision?.status!=='approved')
+      throw new CoordinationError('terminal-review-boundary-invalid');
+    if(op.state==='COMPLETED'&&op.completionDigest===proofDigest)return copy(op);
+    if(op.state!=='PREPARED')throw new CoordinationError('terminal-review-boundary-invalid');
+    const parent=this.terminalReviewAccessBoundary(runId,operationId);
+    if(parent?digest(parent)!==parentDigest:parentDigest!==null)throw new CoordinationError('terminal-review-parent-changed');
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='COMPLETED';op.finishedAt=now();op.completionDigest=proofDigest;
+    this.persist();return copy(op);
+  }
+  restorePendingNative(runId, operationId, proof) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    const access = op && this.resourceState.accesses[op.accessId];
+    if (!op || op.runId !== runId || !['ISSUING','UNKNOWN'].includes(op.state) ||
+        !op.native || op.native.onceAcknowledged === true || !access || access.runId !== runId ||
+        !['EXECUTING','UNKNOWN'].includes(access.state) || !proof ||
+        proof.permissionId !== op.native.permissionId || proof.callId !== op.native.callId ||
+        proof.pending !== true || proof.toolStatus !== 'running' || proof.executed !== false || !hash(proof.proofDigest)) {
+      throw new CoordinationError('native-pending-proof-required');
+    }
+    op.nativeRecovery = { permissionId: proof.permissionId, callId: proof.callId,
+      proofDigest: proof.proofDigest, observedAt: now(), boundary:'PERMISSION_PENDING_NO_REPLY', logWatermark:null };
+    delete op.native;
+    op.state = 'PREPARED';
+    access.state = 'HELD';
+    delete access.finishedAt;
+    delete access.outcome;
+    this.persist();
+    return copy(op);
+  }
+  markTerminalUnknown(runId, operationId, proof) {
+    this.mutable();
+    const op=this.resourceState.operations[operationId],access=op&&this.resourceState.accesses[op.accessId];
+    if(!op||op.runId!==runId||!['PREPARED','ISSUING','EXECUTING','UNKNOWN'].includes(op.state)||op.decision?.status!=='approved'||
+       op.nativeResult||!access||access.runId!==runId||!access.operationIds.includes(operationId)||
+       !proof||proof.sessionId!==op.sessionId||proof.operationDigest!==op.operationDigest||
+       proof.identityDigest!==op.identityDigest||(proof.callId!==null&&typeof proof.callId!=='string')||
+       op.native?.callId&&proof.callId!==op.native.callId||!active(access)||
+       !['completed','error','absent'].includes(proof.toolStatus)||
+       (proof.executed!==null&&typeof proof.executed!=='boolean')||
+       typeof proof.logSynced!=='boolean'||(proof.logWatermark!==null&&(!Number.isSafeInteger(proof.logWatermark)||proof.logWatermark<0))||
+       !hash(proof.proofDigest))throw new CoordinationError('terminal-native-recovery-proof-required');
+    op.state='UNKNOWN';
+    if(access.state==='HELD'||access.state==='EXECUTING')access.state='UNKNOWN';
+    op.nativeRecovery={permissionId:op.native?.permissionId??null,callId:proof.callId,
+      proofDigest:proof.proofDigest,observedAt:now(),boundary:'TOOL_TERMINAL_UNCLASSIFIED',logWatermark:proof.logWatermark};
+    this.persist();return copy(op);
+  }
+  reconcileTerminalTurnNoEffect(runId,operationId,proof){
+    this.mutable();
+    const op=this.resourceState.operations[operationId],run=this.runs.get(runId),access=op&&this.resourceState.accesses[op.accessId];
+    if(op?.state==='CANCELLED'&&op.runId===runId&&op.nativeRecovery?.boundary==='TERMINAL_TURN_NO_EFFECT'&&
+        op.completionDigest===proof?.proofDigest&&access?.state==='RELEASED'&&access.outcome==='NO_EFFECT')return copy(op);
+    if(!op||!run||op.runId!==runId||op.contextId!==run.contextId||op.state!=='UNKNOWN'||run.state!=='RESERVED'||run.phase!=='WORK'||
+        op.decision?.status!=='approved'||op.native||op.nativeResult||op.testReservationId||
+        op.nativeRecovery?.boundary!=='TOOL_TERMINAL_UNCLASSIFIED'||
+        op.nativeRecovery.permissionId!==null||op.nativeRecovery.callId!==null||
+        !access||access.runId!==runId||access.contextId!==run.contextId||access.state!=='UNKNOWN'||
+        access.operationIds.length!==1||access.operationIds[0]!==operationId||
+        op.resources.some(resource=>resource.mode!=='write'||!resource.key.startsWith('file:'))||
+        access.resources.some(resource=>resource.mode!=='write'||!resource.key.startsWith('file:'))||
+        !this.restoredAccesses.has(access.accessId)||run.suspension||
+        !proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.operationId!==operationId||
+        proof.requestId!==op.requestId||proof.sessionId!==op.sessionId||
+        proof.operationDigest!==op.operationDigest||proof.identityDigest!==op.identityDigest||
+        proof.finish!=='stop'||!id(proof.userMessageId)||!id(proof.requestMessageId)||!id(proof.finalMessageId)||
+        !hash(proof.transcriptDigest)||!hash(proof.eventLogDigest)||!hash(proof.proofDigest)||
+        !Number.isSafeInteger(proof.logWatermark)||proof.logWatermark<0||
+        (op.nativeRecovery.logWatermark!==null&&proof.logWatermark<op.nativeRecovery.logWatermark)){
+      throw new CoordinationError('terminal-turn-no-effect-proof-required');
+    }
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='CANCELLED';op.finishedAt=Number.isFinite(proof.finishedAt)?proof.finishedAt:Date.now();
+    op.completionDigest=proof.proofDigest;
+    op.nativeRecovery={permissionId:null,callId:null,proofDigest:proof.proofDigest,observedAt:now(),
+      boundary:'TERMINAL_TURN_NO_EFFECT',logWatermark:proof.logWatermark};
+    this.finishAccess(access,'NO_EFFECT');
+    access.releaseDigest=digest({operationId,outcome:'NO_EFFECT',proofDigest:proof.proofDigest});
+    this.persist();return copy(op);
+  }
+  completeLoggedNative(runId, operationId, proof) {
+    this.mutable();
+    const op=this.resourceState.operations[operationId],access=op&&this.resourceState.accesses[op.accessId];
+    if(!op||op.runId!==runId||!['UNKNOWN','PREPARED','ISSUING','EXECUTING'].includes(op.state)||op.decision?.status!=='approved'||
+       op.nativeResult||!access||access.runId!==runId||!['HELD','EXECUTING','UNKNOWN'].includes(access.state)||!access.operationIds.includes(operationId)||
+       !proof||proof.sessionId!==op.sessionId||proof.operationDigest!==op.operationDigest||
+       proof.identityDigest!==op.identityDigest||typeof proof.callId!=='string'||
+       op.native?.callId&&proof.callId!==op.native.callId||proof.status!=='completed'||
+       proof.logSynced!==true||!Number.isSafeInteger(proof.logWatermark)||proof.logWatermark<0||
+       !Number.isFinite(proof.finishedAt)||!hash(proof.proofDigest)||!hash(proof.partDigest)) {
+      throw new CoordinationError('logged-native-completion-proof-required');
+    }
+    this.validateExpected(op.expectedRevisions,op.resources);
+    op.state='COMPLETED';op.finishedAt=proof.finishedAt;
+    op.completionDigest=digest({sessionId:proof.sessionId,callId:proof.callId,finishedAt:proof.finishedAt,
+      status:'completed',logWatermark:proof.logWatermark,proofDigest:proof.proofDigest});
+    op.nativeResult={status:'completed',proofStatus:'completed',exit:null,partDigest:proof.partDigest};
+    op.nativeRecovery={permissionId:op.native?.permissionId??null,callId:proof.callId,
+      proofDigest:proof.proofDigest,observedAt:now(),boundary:'TOOL_TERMINAL_SUCCESS',logWatermark:proof.logWatermark};
+    access.state='HELD';this.persist();return copy(op);
   }
   admitValidation(runId, approval, identityDigest, known, options) {
     const prior = this.checkRequestOwner(runId, approval.requestId, identityDigest, known);
@@ -529,17 +1134,36 @@ export class ResourceRunRegistry extends RunRegistry {
     for (const other of Object.values(this.resourceState.accesses)) {
       if (other.accessId === access.accessId) continue;
       if ((active(other) || (other.state === 'WAITING' && other.order < access.order)) &&
-          conflicts(access.resources, other.resources)) result.push({ runId: other.runId,
+          this.accessConflict(access, other)) result.push({ runId: other.runId,
         accessId: other.accessId, reason: other.protection === 'EXCLUSIVE' ? 'resource-promotion-pending' : 'resource-conflict' });
     }
     return result;
+  }
+  accessConflict(candidate, existing) {
+    for (const requested of candidate.resources) for (const held of existing.resources) {
+      if (!(requested.mode === 'write' || held.mode === 'write') || !overlaps(requested.key, held.key)) continue;
+      const timeoutQuarantineRead = candidate.runId === existing.runId &&
+        candidate.contextId === existing.contextId && requested.mode === 'read' && held.mode === 'write' &&
+        candidate.operationIds.every(id => this.resourceState.operations[id]?.sessionId ===
+          this.resourceState.operations[existing.timeoutQuarantine?.operationId]?.sessionId) &&
+        requested.key === held.key && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(requested.key) &&
+        this.validTimeoutQuarantine(existing);
+      if (!timeoutQuarantineRead) return true;
+    }
+    return false;
+  }
+  validTimeoutQuarantine(access) {
+    const quarantine=access?.timeoutQuarantine,operation=quarantine&&this.resourceState.operations[quarantine.operationId];
+    return Boolean(quarantine&&operation&&operation.runId===access.runId&&operation.contextId===access.contextId&&
+      access.operationIds.includes(operation.operationId)&&['EXECUTING','UNKNOWN'].includes(operation.state)&&
+      operation.native?.onceAcknowledged===true&&access.resources.some(resource=>resource.mode==='write'&&
+        /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(resource.key)));
   }
   grantWaiting() {
     if (this.migrationRequired || (this.resourceState.global && this.resourceState.global.state !== 'RELEASED')) return;
     this.grantTests();
     for (const access of Object.values(this.resourceState.accesses).sort((a, b) => a.order - b.order)) {
       if (access.state !== 'WAITING' || this.runs.get(access.runId)?.suspension || this.blockers(access).length) continue;
-      if (Object.values(this.resourceState.accesses).some((other) => other.runId === access.runId && active(other))) continue;
       if (access.resources.some((r) => this.revision(r.key) !== access.expectedRevisions[r.key])) {
         access.state = 'STALE'; access.finishedAt = now(); continue;
       }
@@ -575,12 +1199,6 @@ export class ResourceRunRegistry extends RunRegistry {
         }) || (!operationIds.length && resources.some((r) => r.mode === 'write'))) {
       throw new CoordinationError('access-operation-not-prepared');
     }
-    if (Object.values(this.resourceState.accesses).some((a) => a.runId === runId && active(a))) {
-      throw new CoordinationError('access-extension-while-held');
-    }
-    if (Object.values(this.resourceState.accesses).some((a) => a.runId === runId && a.state === 'WAITING')) {
-      throw new CoordinationError('access-operation-already-pending');
-    }
     if (exclusive && !this.isExclusive(run, resources)) throw new CoordinationError('exclusive-resource-not-proved');
     const access = { accessId: payload.operationId, runId, contextId: run.contextId, version: run.version,
       operationDigest: payload.operationDigest, inputDigest, resources, operationIds,
@@ -593,6 +1211,11 @@ export class ResourceRunRegistry extends RunRegistry {
   operationAdmission(runId, operation, requestId, stage = 'prepare') {
     const op = this.resourceState.operations[operation.operationId];
     this.admission(runId, op?.maintenancePreflight && operation.kind === 'bash' && operation.target === '/usr/bin/true');
+    if (Object.values(this.resourceState.sessionHandoffs || {}).some(h => h.runId === runId &&
+        h.contextId === this.runs.get(runId)?.contextId &&
+        h.state !== 'ABORTED' && (h.state !== 'DONE' || h.sourceSessionId === operation.sessionId))) {
+      throw new CoordinationError('session-handoff-permission-revoked');
+    }
     this.scope(runId, operation.reservationVersion, operation.resources);
     this.testsForOperation(runId, operation.resources);
     if (!op || op.requestId !== requestId || op.operationDigest !== operation.operationDigest ||
@@ -602,6 +1225,8 @@ export class ResourceRunRegistry extends RunRegistry {
     if (stage === 'prepare') return true;
     if (op.rejectionOnly) throw new CoordinationError('notification-reconciliation-rejection-only');
     let access = this.resourceState.accesses[op.accessId];
+    if (access?.operationIds.some(id => this.resourceState.operations[id]?.sessionId !== op.sessionId))
+      throw new CoordinationError('session-handoff-historical-access-protected');
     if (!access && op.accessId === op.operationId && this.isExclusive(this.runs.get(runId), op.resources)) {
       access = this.acquireAccess(runId, { operationId: op.accessId, version: op.version, resources: op.resources,
         expectedRevisions: op.expectedRevisions, operationDigest: op.operationDigest, operationIds: [op.operationId] }, true);
@@ -657,16 +1282,39 @@ export class ResourceRunRegistry extends RunRegistry {
       return;
     }
     op.state = 'COMPLETED'; op.finishedAt = proof.finishedAt; op.completionDigest = digest(proof);
+    op.nativeResult = { status: proof.status, proofStatus: proof.status,
+      exit: Number.isInteger(proof.exit) ? proof.exit : null };
+    const access = this.resourceState.accesses[op.accessId];
+    if (access?.timeoutQuarantine?.operationId === operationId) delete access.timeoutQuarantine;
     if (op.testReservationId) {
-      op.nativeResult = { status: proof.status, exit: Number.isInteger(proof.exit) ? proof.exit : null };
       op.finishedSequence = ++this.resourceState.sequence;
     }
     if (op.maintenancePreflight) op.preflightSucceeded = proof.status === 'completed' && proof.exit === 0;
-    const access = this.resourceState.accesses[op.accessId];
     if (access.operationIds.every((key) => !['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(this.resourceState.operations[key].state))) {
       access.state = 'HELD';
     }
     this.persist();
+  }
+  recordNativeOutcome(runId, operationId, outcome, completionDigest) {
+    this.mutable();
+    const op = this.resourceState.operations[operationId];
+    if (!op || op.runId !== runId || op.state !== 'COMPLETED' || op.completionDigest !== completionDigest ||
+        !record(outcome) || !['completed','error'].includes(outcome.status) ||
+        !['completed','error'].includes(outcome.proofStatus) ||
+        (outcome.exit !== null && !Number.isInteger(outcome.exit)) ||
+        (outcome.partDigest !== undefined && !hash(outcome.partDigest)) ||
+        (outcome.status === 'completed' && outcome.proofStatus === 'error') ||
+        (outcome.status === 'error' && outcome.proofStatus === 'completed' && !hash(outcome.partDigest))) {
+      throw new CoordinationError('native-outcome-not-proved');
+    }
+    const prior = op.nativeResult;
+    if (prior?.partDigest && (prior.status !== outcome.status || prior.proofStatus !== outcome.proofStatus ||
+        prior.exit !== outcome.exit || prior.partDigest !== outcome.partDigest)) {
+      throw new CoordinationError('native-outcome-divergent');
+    }
+    op.nativeResult = { status: outcome.status, proofStatus: outcome.proofStatus, exit: outcome.exit,
+      ...(outcome.partDigest ? { partDigest: outcome.partDigest } : {}) };
+    this.persist(); return copy(op);
   }
   held(runId, payload) {
     this.mutable();
@@ -729,14 +1377,25 @@ export class ResourceRunRegistry extends RunRegistry {
   finishAccess(access, outcome) {
     const ops = access.operationIds.map((key) => this.resourceState.operations[key]);
     if (ops.some((op) => ['ISSUING', 'EXECUTING', 'UNKNOWN'].includes(op.state))) throw new CoordinationError('access-effects-unresolved');
-    const changed = ops.some((op) => op.state === 'COMPLETED' && op.resources.some((r) => r.mode === 'write'));
+    const completedWrites = ops.filter((op) => op.state === 'COMPLETED' && op.resources.some((r) => r.mode === 'write'));
+    if (completedWrites.some((op) => !op.nativeResult)) throw new CoordinationError('access-native-outcome-unverified');
+    const failedEditWithoutEffect = (op) => op.native?.kind === 'edit' && op.nativeResult?.status === 'error' &&
+      (op.nativeResult.proofStatus === 'error' || hash(op.nativeResult.partDigest || ''));
+    const changed = completedWrites.some((op) => !failedEditWithoutEffect(op));
+    if (outcome === 'NO_EFFECT' && access.resources.some((resource) =>
+        this.revision(resource.key) !== access.expectedRevisions[resource.key])) {
+      throw new CoordinationError('access-outcome-revision-divergent');
+    }
+    if (outcome === 'COMPLETED' && ops.some((op) => op.nativeResult?.status === 'error')) {
+      throw new CoordinationError('access-native-failure');
+    }
     if (!['COMPLETED', 'NO_EFFECT', 'RECONCILED'].includes(outcome) || (outcome === 'NO_EFFECT' && changed)) {
       throw new CoordinationError('access-outcome-invalid');
     }
     if (outcome === 'COMPLETED' && ops.some((op) => !['COMPLETED','CANCELLED'].includes(op.state))) throw new CoordinationError('access-effects-unresolved');
     if (changed) {
       const revision = ++this.resourceState.sequence;
-      for (const op of ops.filter((op) => op.state === 'COMPLETED')) for (const r of op.resources) {
+      for (const op of completedWrites.filter((op) => !failedEditWithoutEffect(op))) for (const r of op.resources) {
         if (r.mode === 'write') {
           this.resourceState.revisions[r.key] = revision;
           const run = this.runs.get(access.runId);
@@ -753,20 +1412,182 @@ export class ResourceRunRegistry extends RunRegistry {
       delete this.runs.get(access.runId).maintenancePreflightRequired;
     }
     access.state = 'RELEASED'; access.finishedAt = now(); access.outcome = outcome;
+    delete access.token;
+    delete access.timeoutQuarantine;
     this.restoredAccesses.delete(access.accessId);
   }
   releaseAccess(runId, payload) {
     evidence(payload.evidence);
     const prior = this.resourceState.accesses[payload.operationId];
-    if (prior?.state === 'RELEASED' && prior.runId === runId && prior.token === payload.token &&
+    if (prior?.state === 'RELEASED' && prior.runId === runId &&
         prior.fencing === payload.fencing && prior.releaseDigest === digest(payload)) return copy(prior);
     const access = this.held(runId, payload);
     this.finishAccess(access, payload.outcome); access.releaseDigest = digest(payload);
     this.grantWaiting(); this.persist(); return copy(access);
   }
+  reconcileQuiescentPort(runId, operationId, proofDigest) {
+    this.admission(runId);
+    const run = this.runs.get(runId), op = this.resourceState.operations[operationId];
+    const access = op && this.resourceState.accesses[op.accessId];
+    if (!hash(proofDigest) || !run || !op || op.runId !== runId || op.contextId !== run.contextId ||
+        !['EXECUTING','UNKNOWN'].includes(op.state) || op.native?.onceAcknowledged !== true || op.nativeResult ||
+        op.testReservationId || op.resources.length !== 1 || op.resources[0].mode !== 'write' ||
+        !/^port:[A-Za-z0-9_.-]+\/[1-9][0-9]{0,4}$/.test(op.resources[0].key) ||
+        !access || access.runId !== runId || access.contextId !== run.contextId ||
+        !['HELD','UNKNOWN'].includes(access.state) || access.operationIds.length !== 1 || access.operationIds[0] !== operationId ||
+        access.timeoutQuarantine?.operationId !== operationId || access.resources.length !== 1 ||
+        access.resources[0].key !== op.resources[0].key || access.resources[0].mode !== 'write')
+      throw new CoordinationError('port-recovery-boundary-invalid');
+    op.state = 'CANCELLED'; op.finishedAt = now(); op.completionDigest = proofDigest;
+    this.resourceState.revisions[op.resources[0].key] = ++this.resourceState.sequence;
+    this.finishAccess(access, 'RECONCILED'); access.releaseDigest = proofDigest;
+    this.grantWaiting(); this.persist();
+    return { operation: copy(op), access: copy(access) };
+  }
   accesses(runId) {
     return Object.values(this.resourceState.accesses).filter((a) => !runId || a.runId === runId).map((a) =>
       ({ ...copy(a), blockers: a.state === 'WAITING' ? this.blockers(a) : [] }));
+  }
+  restoredAccessReconciliationSnapshot(runId,operationId){
+    const access=this.resourceState.accesses[operationId],run=this.runs.get(runId);
+    if(!access||!run||access.runId!==runId||access.contextId!==run.contextId||
+        access.version!==run.version||access.state!=='HELD'||!this.restoredAccesses.has(access.accessId))
+      throw new CoordinationError('access-reconciliation-boundary-required');
+    const operations=access.operationIds.map(id=>this.resourceState.operations[id]).map(op=>({
+      operationId:op.operationId,state:op.state,operationDigest:op.operationDigest,identityDigest:op.identityDigest,
+      decisionStatus:op.decision?.status??null,completionDigest:op.completionDigest??null,
+      nativeResultStatus:op.nativeResult?.status??null,onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null,
+      nativePresent:Boolean(op.native)})).sort((a,b)=>a.operationId.localeCompare(b.operationId));
+    const boundary={runId,contextId:run.contextId,accessId:access.accessId,version:run.version,fencing:access.fencing,
+      state:access.state,resources:access.resources,expectedRevisions:access.expectedRevisions,
+      inputDigest:access.inputDigest,operationIds:access.operationIds,operations};
+    return {runId,contextId:run.contextId,accessId:access.accessId,version:run.version,state:access.state,
+      fencing:access.fencing,resources:copy(access.resources),expectedRevisions:copy(access.expectedRevisions),
+      operations:operations.map(({operationId,state,decisionStatus,nativeResultStatus,onceAcknowledged})=>
+        ({operationId,state,decisionStatus,nativeResultStatus,onceAcknowledged})),
+      boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  reconcileRestoredAccess(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','operationId','fencing','reconciliationId','boundaryDigest','evidence'])||
+        !id(payload.operationId)||!id(payload.reconciliationId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('access-reconciliation-invalid',400);
+    const access=this.resourceState.accesses[payload.operationId],prior=access?.reconciliationReceipts?.[payload.reconciliationId];
+    const inputDigest=digest(payload);
+    if(prior){
+      if(access.runId!==runId||prior.inputDigest!==inputDigest)throw new CoordinationError('access-reconciliation-divergent');
+      return copy(access);
+    }
+    const snapshot=this.restoredAccessReconciliationSnapshot(runId,payload.operationId),run=this.runs.get(runId);
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||
+        snapshot.boundaryDigest!==payload.boundaryDigest)throw new CoordinationError('access-reconciliation-boundary-changed');
+    if(this.blockers(access).length)throw new CoordinationError('access-reconciliation-conflict');
+    if(this.unresolvedTestAccess(runId,access.resources,access.accessId))throw new CoordinationError('access-reconciliation-test-resource-active');
+    if(this.resourceState.global&&this.resourceState.global.state!=='RELEASED')throw new CoordinationError('global-coordination-suspended');
+    if(run.suspension)throw new CoordinationError('run-suspended');
+    if(run.phase!=='WORK')throw new CoordinationError('access-reconciliation-phase-invalid');
+    const operationDetails=access.operationIds.map(id=>this.resourceState.operations[id]).map(op=>({state:op.state,
+      completionDigest:op.completionDigest??null,nativeResultStatus:op.nativeResult?.status??null,
+      decisionStatus:op.decision?.status??null,nativePresent:Boolean(op.native),
+      onceAcknowledged:op.native?.onceAcknowledged??op.onceAcknowledged??null}));
+    if(operationDetails.some(op=>!['PREPARED','CANCELLED','COMPLETED'].includes(op.state)||
+        op.state!=='COMPLETED'&&(op.nativePresent||op.onceAcknowledged===true)))
+      throw new CoordinationError('access-reconciliation-boundary-required');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&!op.completionDigest))
+      throw new CoordinationError('access-reconciliation-completion-unproved');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&!['completed','error'].includes(op.nativeResultStatus)))
+      throw new CoordinationError('access-reconciliation-native-result-unproved');
+    if(operationDetails.some(op=>op.state==='COMPLETED'&&op.decisionStatus!=='approved'))
+      throw new CoordinationError('access-reconciliation-approval-unproved');
+    this.validateExpected(access.expectedRevisions,access.resources);
+    const proofBody={runId,contextId:run.contextId,accessId:access.accessId,version:run.version,
+      fencing:access.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationsDigest:digest(snapshot.operations),sessionIdle:true,pendingPermissions:0,
+      transcriptDigest:proof?.transcriptDigest,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.accessId!==access.accessId||
+        proof.version!==run.version||proof.fencing!==access.fencing||proof.boundaryDigest!==snapshot.boundaryDigest||
+        proof.sessionId!==run.sessionId||proof.sessionIdle!==true||proof.pendingPermissions!==0||
+        !hash(proof.transcriptDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('access-reconciliation-proof-required');
+    for(const id of access.operationIds){
+      const op=this.resourceState.operations[id];
+      if(op.state==='PREPARED')op.state='CANCELLED';
+    }
+    access.token=randomUUID();access.fencing=++this.resourceState.sequence;
+    access.reconciliationReceipts||={};access.reconciliationReceipts[payload.reconciliationId]={inputDigest,fencing:access.fencing};
+    this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
+  }
+  timeoutQuarantineSnapshot(runId,operationId){
+    const access=this.resourceState.accesses[operationId],run=this.runs.get(runId);
+    const alreadyQuarantined=Boolean(access?.timeoutQuarantine);
+    if(!access||!run||access.runId!==runId||access.contextId!==run.contextId||access.version!==run.version||
+        !(alreadyQuarantined?access.state==='HELD':['EXECUTING','UNKNOWN'].includes(access.state))||
+        !this.restoredAccesses.has(access.accessId)||
+        access.operationIds.length!==1||access.operationIds[0]!==operationId)
+      throw new CoordinationError('timeout-quarantine-boundary-required');
+    const operation=this.resourceState.operations[operationId];
+    if(!operation||operation.runId!==runId||operation.contextId!==run.contextId||
+        !['EXECUTING','UNKNOWN'].includes(operation.state)||operation.native?.onceAcknowledged!==true||
+        !operation.native?.callId||operation.nativeResult||operation.decision?.status!=='approved'||
+        access.resources.length!==1||access.resources[0].mode!=='write'||
+        !/^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(access.resources[0].key))
+      throw new CoordinationError('timeout-quarantine-boundary-required');
+    const boundary={runId,contextId:run.contextId,accessId:access.accessId,operationId,version:run.version,
+      fencing:access.fencing,state:access.state,resources:access.resources,expectedRevisions:access.expectedRevisions,
+      inputDigest:access.inputDigest,operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+      operationState:operation.state,decisionStatus:operation.decision.status,permissionId:operation.native.permissionId,
+      callId:operation.native.callId,onceAcknowledged:operation.native.onceAcknowledged,targetDigest:operation.native.targetDigest,
+      timeoutQuarantine:access.timeoutQuarantine??null};
+    return {runId,contextId:run.contextId,accessId:access.accessId,operationId,version:run.version,
+      fencing:access.fencing,state:access.state,resources:copy(access.resources),expectedRevisions:copy(access.expectedRevisions),
+      operation:{operationId,state:operation.state,decisionStatus:operation.decision.status,
+        onceAcknowledged:operation.native.onceAcknowledged,kind:operation.native.kind||'bash'},
+      timeoutQuarantineRequired:!alreadyQuarantined,
+      ...(alreadyQuarantined?{timeoutQuarantine:{quarantineId:access.timeoutQuarantine.quarantineId,
+        proofDigest:access.timeoutQuarantine.proofDigest}}:{}),
+      boundaryDigest:digest(boundary),snapshot_only:true};
+  }
+  quarantineTimedOutPortAccess(runId,payload,proof){
+    this.mutable();evidence(payload?.evidence);
+    if(!onlyKeys(payload,['version','operationId','fencing','quarantineId','boundaryDigest','evidence'])||
+        !id(payload.operationId)||!id(payload.quarantineId)||!hash(payload.boundaryDigest)||
+        !Number.isSafeInteger(payload.version)||!Number.isSafeInteger(payload.fencing))
+      throw new CoordinationError('timeout-quarantine-request-invalid',400);
+    const access=this.resourceState.accesses[payload.operationId],prior=access?.timeoutQuarantine;
+    const inputDigest=digest(payload);
+    if(prior){
+      if(access.runId!==runId||prior.quarantineId!==payload.quarantineId||prior.inputDigest!==inputDigest)
+        throw new CoordinationError('timeout-quarantine-divergent');
+      return copy(access);
+    }
+    const snapshot=this.timeoutQuarantineSnapshot(runId,payload.operationId),run=this.runs.get(runId);
+    const operation=this.resourceState.operations[payload.operationId];
+    if(snapshot.version!==payload.version||snapshot.fencing!==payload.fencing||snapshot.boundaryDigest!==payload.boundaryDigest)
+      throw new CoordinationError('timeout-quarantine-boundary-changed');
+    if(this.blockers(access).length)throw new CoordinationError('timeout-quarantine-conflict');
+    if(this.resourceState.global&&this.resourceState.global.state!=='RELEASED')
+      throw new CoordinationError('global-coordination-suspended');
+    if(run.suspension||run.phase!=='WORK')throw new CoordinationError('timeout-quarantine-run-not-quiescent');
+    this.validateExpected(access.expectedRevisions,access.resources);
+    const proofBody={runId,contextId:run.contextId,accessId:access.accessId,operationId:operation.operationId,
+      version:run.version,fencing:access.fencing,boundaryDigest:snapshot.boundaryDigest,sessionId:run.sessionId,
+      operationDigest:operation.operationDigest,identityDigest:operation.identityDigest,
+      permissionId:operation.native.permissionId,callId:operation.native.callId,
+      timeoutPartDigest:proof?.timeoutPartDigest,transcriptDigest:proof?.transcriptDigest,
+      shellInventoryDigest:proof?.shellInventoryDigest,sessionIdle:true,pendingPermissions:0,observedAt:proof?.observedAt};
+    if(!proof||proof.runId!==runId||proof.contextId!==run.contextId||proof.accessId!==access.accessId||
+        proof.operationId!==operation.operationId||proof.version!==run.version||proof.fencing!==access.fencing||
+        proof.boundaryDigest!==snapshot.boundaryDigest||proof.sessionId!==run.sessionId||
+        proof.operationDigest!==operation.operationDigest||proof.identityDigest!==operation.identityDigest||
+        proof.permissionId!==operation.native.permissionId||proof.callId!==operation.native.callId||
+        proof.sessionIdle!==true||proof.pendingPermissions!==0||!hash(proof.timeoutPartDigest)||
+        !hash(proof.transcriptDigest)||!hash(proof.shellInventoryDigest)||proof.proofDigest!==digest(proofBody))
+      throw new CoordinationError('timeout-quarantine-proof-required');
+    access.timeoutQuarantine={quarantineId:payload.quarantineId,operationId:operation.operationId,
+      inputDigest,proofDigest:proof.proofDigest,fencing:++this.resourceState.sequence,observedAt:now()};
+    access.state='HELD';access.fencing=this.resourceState.sequence;access.token=randomUUID();access.grantedAt=now();
+    this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
   }
   unresolvedAccess(runId, includeTests = true) {
     return Object.values(this.resourceState.accesses).some((a) => a.runId === runId && (active(a) || a.state === 'WAITING')) ||
@@ -776,6 +1597,48 @@ export class ResourceRunRegistry extends RunRegistry {
     this.admission(runId);
     if (this.unresolvedAccess(runId)) throw new CoordinationError('run-accesses-unresolved');
     this.resources(payload.resources); return super.extend(runId, payload);
+  }
+  manifestDigest(runId) {
+    const run = this.runs.get(runId);
+    if (!run) throw new CoordinationError('run-not-reserved');
+    return digest(run.resources);
+  }
+  compatibleExtension(runId, payload, apply = false) {
+    this.admission(runId);
+    const run = this.owned(runId, payload.version);
+    if (run.phase !== 'WORK' || payload.ownerId !== run.ownerId ||
+        typeof payload.authorization !== 'string' || !payload.authorization.trim() || payload.authorization.length > 500 ||
+        !hash(payload.expectedManifestDigest) || payload.expectedManifestDigest !== this.manifestDigest(runId))
+      throw new CoordinationError('compatible-extension-boundary-invalid');
+    if (this.integrationOwner && this.integrationOwner !== runId ||
+        !this.integrationOwner && this.integrationQueue.length && run.integrationReady)
+      throw new CoordinationError('integration-suspended');
+    evidence(payload.evidence);
+    const additions = this.resources(payload.resources);
+    const namespace = key => key.startsWith('file:') ? 'file:' + key.slice(5).split('/').slice(0,-1).join('/')
+      : key.includes('/') ? key.slice(0,key.lastIndexOf('/')) : key;
+    if (additions.some(resource => !run.resources.some(existing => namespace(existing.key) === namespace(resource.key) &&
+        (existing.mode === 'write' || resource.mode === 'read'))))
+      throw new CoordinationError('compatible-extension-outside-namespace');
+    if (additions.some(resource => run.resources.some(existing => covers(existing, resource) || overlaps(existing.key, resource.key))))
+      throw new CoordinationError('compatible-extension-not-additive');
+    const protectedResources = [
+      ...Object.values(this.resourceState.accesses).filter(access => active(access) || access.state === 'WAITING' || access.state === 'STALE'),
+      ...Object.values(this.resourceState.testReservations || {}).filter(reservedTest),
+      ...Object.values(this.resourceState.operations).filter(op => ['ISSUING','EXECUTING','UNKNOWN'].includes(op.state)),
+    ].flatMap(item => item.resources);
+    if (additions.some(resource => protectedResources.some(existing => overlaps(existing.key, resource.key))))
+      throw new CoordinationError('compatible-extension-overlap');
+    const resources = this.validate({ ...run, resources: [...run.resources, ...additions] }).resources;
+    this.checkConflicts({ ...run, resources });
+    const result = { beforeDigest: this.manifestDigest(runId), afterDigest: digest(resources), resources, additions };
+    if (apply) {
+      run.resources = resources; run.requiresPublication ||= additions.some(resource => resource.mode === 'write');
+      run.integrationReady = false;
+      // An additive manifest CAS does not invalidate already issued effects or lease tokens.
+      this.persist();
+    }
+    return copy(result);
   }
   reduce(runId, payload) {
     this.admission(runId);
@@ -851,6 +1714,95 @@ export class ResourceRunRegistry extends RunRegistry {
     this.mutable();
     if (this.unresolvedAccess(runId)) throw new CoordinationError('run-accesses-unresolved');
     return super.transfer(runId, sessionId);
+  }
+  sessionHandoffs(runId) {
+    const run = this.runs.get(runId);
+    return copy(Object.values(this.resourceState.sessionHandoffs || {}).filter(h =>
+      h.runId === runId && h.contextId === run?.contextId));
+  }
+  sessionHandoffInventory(runId) {
+    const run = this.runs.get(runId);
+    const scoped = entries => Object.values(entries || {}).filter(e => e.runId === runId && e.contextId === run?.contextId);
+    return digest({run, operations:scoped(this.resourceState.operations), accesses:scoped(this.resourceState.accesses),
+      tests:scoped(this.resourceState.testReservations)});
+  }
+  prepareSessionHandoff(runId, payload) {
+    this.admission(runId);
+    const run = this.owned(runId, payload.version);
+    if (!onlyKeys(payload,['handoffId','ownerId','version','jobId','expectedSessionId','sessionId','checkpointDigest','boundaryDigest','reason','evidence']) ||
+        !id(payload.handoffId) || !id(payload.jobId) || payload.ownerId !== run.ownerId ||
+        payload.expectedSessionId !== run.sessionId || !/^ses_[A-Za-z0-9_-]+$/.test(payload.sessionId || '') ||
+        payload.sessionId === run.sessionId || !hash(payload.checkpointDigest) || !hash(payload.boundaryDigest) ||
+        typeof payload.reason !== 'string' || !payload.reason.length || payload.reason.length > 500) {
+      throw new CoordinationError('session-handoff-contract-invalid',400);
+    }
+    evidence(payload.evidence);
+    const prior = this.resourceState.sessionHandoffs?.[payload.handoffId];
+    if (prior) {
+      if (prior.runId !== runId || prior.contextId !== run.contextId || prior.inputDigest !== digest(payload))
+        throw new CoordinationError('session-handoff-replay-divergent');
+      return copy(prior);
+    }
+    if (this.sessionHandoffs(runId).some(h => !['DONE','ABORTED'].includes(h.state))) throw new CoordinationError('session-handoff-pending');
+    if ([...this.runs.values(), ...this.history].some(r => r.sessionId === payload.sessionId) ||
+        Object.values(this.resourceState.operations).some(o => o.sessionId === payload.sessionId) ||
+        Object.values(this.resourceState.sessionHandoffs || {}).some(h =>
+          [h.sessionId,h.sourceSessionId].includes(payload.sessionId))) throw new CoordinationError('session-handoff-session-reused');
+    for (const op of Object.values(this.resourceState.operations).filter(o => o.runId === runId && o.contextId === run.contextId)) {
+      if (op.native && !op.native.onceAcknowledged || ['ISSUING','UNKNOWN'].includes(op.state) && !op.native?.onceAcknowledged)
+        throw new CoordinationError('session-handoff-native-intent-unresolved');
+      if (op.native?.onceAcknowledged && !['COMPLETED','CANCELLED'].includes(op.state) &&
+          !Object.values(this.resourceState.accesses).some(a => active(a) && a.operationIds.includes(op.operationId)))
+        throw new CoordinationError('session-handoff-effect-unprotected');
+    }
+    const receipt = {handoffId:payload.handoffId,runId,contextId:run.contextId,version:run.version,jobId:payload.jobId,
+      sourceSessionId:run.sessionId,sessionId:payload.sessionId,inputDigest:digest(payload),checkpointDigest:payload.checkpointDigest,
+      boundaryDigest:payload.boundaryDigest,inventoryDigest:this.sessionHandoffInventory(runId),reason:payload.reason,
+      evidenceDigest:digest(payload.evidence),state:'PREPARED',preparedAt:now()};
+    (this.resourceState.sessionHandoffs ||= {})[receipt.handoffId] = receipt;
+    this.persist(); return copy(receipt);
+  }
+  sessionHandoffReplay(runId, payload) {
+    const receipt = this.resourceState.sessionHandoffs?.[payload.handoffId];
+    if (!receipt) return null;
+    const run = this.runs.get(runId);
+    if (receipt.runId !== runId || receipt.contextId !== run?.contextId || receipt.inputDigest !== digest(payload))
+      throw new CoordinationError('session-handoff-replay-divergent');
+    return copy(receipt);
+  }
+  commitSessionHandoff(runId, handoffId) {
+    this.admission(runId);
+    const receipt = this.resourceState.sessionHandoffs?.[handoffId];
+    const run = this.runs.get(runId);
+    if (!receipt || receipt.runId !== runId || receipt.contextId !== run?.contextId) throw new CoordinationError('session-handoff-not-prepared');
+    if (receipt.state !== 'PREPARED') return copy(receipt);
+    if (run.sessionId !== receipt.sourceSessionId || this.sessionHandoffInventory(runId) !== receipt.inventoryDigest)
+      throw new CoordinationError('session-handoff-inventory-divergent');
+    // One registry write commits pilot identity and receipt. Historical identities and fences do not move.
+    run.sessionId = receipt.sessionId;
+    receipt.state = 'COMMITTED'; receipt.committedAt = now();
+    this.persist(); return copy(receipt);
+  }
+  completeSessionHandoff(runId, handoffId) {
+    this.mutable();
+    const receipt = this.resourceState.sessionHandoffs?.[handoffId];
+    const run = this.runs.get(runId);
+    if (!receipt || receipt.runId !== runId || receipt.contextId !== run?.contextId || !['COMMITTED','DONE'].includes(receipt.state) ||
+        run.sessionId !== receipt.sessionId) throw new CoordinationError('session-handoff-not-committed');
+    if (receipt.state !== 'DONE') { receipt.state = 'DONE'; receipt.completedAt = now(); this.persist(); }
+    return copy(receipt);
+  }
+  abortSessionHandoff(runId, payload) {
+    this.mutable(); evidence(payload.evidence);
+    const run = this.owned(runId,payload.version), receipt = this.resourceState.sessionHandoffs?.[payload.handoffId];
+    if (!onlyKeys(payload,['handoffId','ownerId','version','evidence']) || payload.ownerId !== run.ownerId ||
+        !receipt || receipt.runId !== runId || receipt.contextId !== run.contextId ||
+        !['PREPARED','ABORTED'].includes(receipt.state) || run.sessionId !== receipt.sourceSessionId)
+      throw new CoordinationError('session-handoff-abort-forbidden');
+    if (receipt.state === 'ABORTED') {
+      if (receipt.abortDigest !== digest(payload)) throw new CoordinationError('session-handoff-replay-divergent');
+    } else { receipt.state = 'ABORTED'; receipt.abortedAt = now(); receipt.abortDigest = digest(payload); this.persist(); }
+    return copy(receipt);
   }
   suspend(runId, payload) {
     this.mutable(); evidence(payload.evidence);

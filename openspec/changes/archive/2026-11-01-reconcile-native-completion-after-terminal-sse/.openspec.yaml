@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-01
+goal: Éviter de laisser une opération EXECUTING lorsque le transcript natif
+  apporte une preuve complète, y compris pour une commande terminée avec exit
+  non nul.

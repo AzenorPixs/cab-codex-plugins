@@ -1,0 +1,29 @@
+{
+  "version": "2.1.28",
+  "node": {
+    "cases": 676,
+    "passed": 645,
+    "failed": 0,
+    "skipped": 31
+  },
+  "python": {
+    "passed": 81,
+    "failed": 0
+  },
+  "native": {
+    "version": "2.2.0",
+    "passed": 4,
+    "failed": 0,
+    "pendingObserved": true,
+    "singleReloadPreservesPidAndSessions": true
+  },
+  "syntax": {
+    "js": 70,
+    "py": 16
+  },
+  "openspecBefore": {
+    "standard": 17,
+    "strict": 17
+  },
+  "requirementsAdded": 4
+}

@@ -1,0 +1,71 @@
+{
+  "version": "2.2.2",
+  "date": "2026-11-02T22:37:08.573235+00:00",
+  "node": {
+    "pass": 829,
+    "fail": 0,
+    "skip": 31
+  },
+  "python": {
+    "pass": 93,
+    "fail": 0
+  },
+  "native": {
+    "pass": 1,
+    "fail": 0
+  },
+  "log_sha256": {
+    "/tmp/cab-222-node.txt": "a60e726b9e543f378d3e5f2a53c843fcfac3ae51236fb936c2f26c0dddf16062",
+    "/tmp/cab-222-python.txt": "b8eecad2db0fb916acf6ba9a9cb75c61f2291928b984213ca19bed3cce25c2aa",
+    "/tmp/cab-222-native.txt": "8b13c83b034265536ee633484c0f9bd1855909aae5b4c5892931abeb59849817",
+    "/tmp/cab-222-targeted.txt": "c24c960331c6c973300997be8f652bae70bbb89febaef2700c196b45515a1b63"
+  },
+  "qualified_files": {
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs": "8d10ff178b945adde5d3ad6175b49e2b2be4a1886c99aa464ea27e3da57768dd",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs": "dff171283945a820a10fa8d36fbad1b4203bf622dde13f299cc2461459acbe5d",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs": "39b0f261ea12535182090e0a5a3d7e65d58a3189cd7e731bd573e27acc02d3b0",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs": "db9e2b6f65cc9113252ea4141ce5f2c6b8887ed8aeb66fad3fa986ed518ce387",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs": "f8b04fb9ef7374500dbad9cebd7aaa2f0f516fcfc7e7965cacf6eef854a84af2",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update-credential.mjs": "6275dcade2336a75473e5687100ffece50173f5dd55cade6acabc64e4c609c48",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs": "7a6aa56aba5d1ee574051616effba7cd510e63d5f73029232734b73b8aadd5a8",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs": "2f6219152a3521482dba27c0594ba9db7a61b7a31003f622fcabe0e0ffacbb92",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs": "fa0d17e10668f303d11a4df74450602b268331c07042d1e4fe375e7856e1c0e4",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prepare-model-policy.mjs": "6d97238ab37b9e9929e4bedc7d973c547d61b71ac4b480ce5a6ebc65d69ec02a",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs": "ec9b2aac40263352f065fae753673d60479e95692e1866a39b240f4f6c6856ad",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs": "9815e1ea074e8c00af7d640de76ec07d53b8b591ef622c31108bd3cd9fb9801c",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-permission-policy.mjs": "031d74a078d3dfd8e3c9b322fb0737ca10034ad95aa6b306f80c055c0c3f3ef3",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-transition.mjs": "aa0aa514eb09ec461846d0b25821e1365366d83d78daa8b52afd79711e21887c",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-context-portability.mjs": "86e8f32f4ecbe98488ec7ebcf6c8075182fb86eb74bf4fb0c08270ffd0b31486",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs": "0bc971aec65de7c25f95a88350ace4d9966d91f9bcf52cd564e5f56a38af1f7f",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs": "62668400a6134feae546a8bb53e436e5a1e0786e8ac546b3f45189be360e894b",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs": "2b095fa4954bb8227f929d7753b43e500562d57c9bba9d200e109c548fe7f808",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs": "d0d8a21505afed966c4ce3d5c9d2a5a44c9780dda86ff4ff52914419bd3a737d",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs": "5f3f03f66d5b5aafff06d812d5d43d794337e0a24a702fa93bdb1cc54a498be7",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs": "ceab5d3bb5239b70b3a7d98f0fb9c5724ca28aa3d4f79243b649e64df1ab0281",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs": "3ddc177fbd7e0339c8311a390a6de9e27cfa9bdd5e9a0d5dae7d3c2b8f6c19d7",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-source-read.mjs": "186221929fc6298ef373150138dfe82d5be8376ed7072d6c781825ef0633ec2d",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs": "726a49d168d5f02c4c720012026f6a14c673bf8ee5e60384ceed4ca747326c3b",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs": "e59bd09e0fd123e895f6e647cad0aca4b8518bb824e31a025000f181484544dd",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs": "ac9156516bc0eed224a3a786e632f2cdacf551b864f014142874a8420466838c",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-shell-stage.mjs": "9d0c945c69bcf4f8b32fc17c059b1427018528a79f470cc35b56c85503abde31",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs": "ffdfe5ee2a97afb3693e2bad63c648e29528e0ef6855196a69d37d06871a3d64",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs": "1ae51468c7ae65176d9eca192eb5cc8714cf25b1c80159ac9e2aa1ec7b124171",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs": "05f04ff5c15f0710de3e48fb1dc227d0386b5eb36e599cfa641fa0ad130d3ef5",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs": "8e08c344d3db6442a5d1548ea86ec5961d057ad86144a3f1d2c42150bdba86b4",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-forward-repair.mjs": "f09e1e494731f7185e178ffdb4ed66b682f57cbf3434aa7240b9ea4ffc062852",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-provider-connect.mjs": "66e1dd7e6d789f7084ceb342e2a59b8e41bde0baaad1908fee9a29a0d858d013",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs": "9593d24ac09f5737a8ee9bb6fb6c370de3d193b54fe7d04725c81d059e0dc5aa",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-recovery.mjs": "82739f7dd105e9dcaa462699568849d0829936d3f6ae07e81ec784fa530e2167",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-shell-lifecycle.mjs": "9b07e24c9e153eee3411d3225ecb598a4613b73291800dd65d8262ecd542c6d7",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-efficiency.mjs": "871f6e10fe027bd60498e05256a7cbbf40f53053ae39d0db8f2efc53bd3c6028",
+    "src/cgpt_approval_bridge_server.py": "24ae27f42764bfc0aec447437b2a2bed0e7de95d46c036192028eb19a51bb55c",
+    "src/cgpt_approval_bridge_router.py": "548eb1ca42b3cb8ab8f489c1a62119a531eca71bf67382a5951d6ae19d2ca642",
+    "src/cgpt_approval_bridge_journal.py": "27f5cf432267f2dd691ba4bb944d75d9e2fd2f034083d4168341be0507c7b9dd",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service": "9fd4726913e8cd3626a39ab481827036c680db0a98596769f2e2e0ee3ee4f358",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service": "55a81b48d05ce0761316e955ecf128a0623ac40588aa4904637e67968c01c218",
+    "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service": "7d4cf5b91794e5dd0304f2caf911fa3450f6130aa88d39c13ece31571c79c563",
+    "pyproject.toml": "52b1972f3c41e2da55d2b698785b828ca066e0c2dd3c95cdee76a672b2fd7a41",
+    ".codex/commands/CAB.md": "ff5a03ff5ae48813908104d061cfd39ceb7c41e9d1d5b67eba2fa1b9bfd6bf17",
+    ".codex/commands/CABU.md": "39c5a14bb94a8076dac3ae63814eec91d2c901c87e9e573a7a361dd12dcd5333"
+  }
+}

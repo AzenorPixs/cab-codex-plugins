@@ -27,7 +27,7 @@ utiliser l'outil natif de lecture des quotas sans exiger le skill `cgpt`.
 ### Requirement: Rapport obligatoire après chaque archivage réussi
 
 Après chaque archivage OpenSpec explicitement autorisé et réussi, l'orchestrateur SHALL
-faire produire `STATISTIQUES.md` dans le dossier réel
+faire produire `STATISTICS.md` dans le dossier réel
 `openspec/changes/archive/<archive>/`. L'orchestrateur CAB SHALL relever les quotas
 finaux et la fin de session après archivage et avant la synthèse. Le rapport SHALL
 respecter les six sections du skill, les pourcentages, les preuves disponibles, les
@@ -65,17 +65,24 @@ CAB MUST rester neutre.
 
 ### Requirement: Sondes périodiques sans attente du créneau
 
-Pendant une session de codage pilotée, l'orchestrateur MUST prévoir les sondes
-statistiques toutes les 30 minutes (1 800 secondes), en complément des sondes
-initiale et finale. Il MUST poursuivre le travail entre les échéances et
-MUST NOT arrêter le travail pour attendre un créneau ou maintenir une attente
-bloquante de trente minutes. La collecte MUST rester distincte du contexte de
-travail de l'agent de codage.
+Pendant une session pilotée, la collecte MUST utiliser en priorité les mesures
+natives intégrées et attribuables. Une relève périodique toutes les trente
+minutes MAY agréger ces mesures sans créer de tour LLM dédié si les données
+sont disponibles. Les sondes nécessaires aux mesures non exposées MUST rester
+distinctes du travail du codeur, bornées et non bloquantes. Le travail MUST
+continuer entre les échéances ; aucune donnée absente ne peut être inventée.
+
+#### Scenario: Télémétrie native disponible
+- **WHEN** les compteurs attribuables sont déjà collectés par les composants
+- **THEN** la relève les agrège sans nouveau tour LLM ni pause du RUN
+
+#### Scenario: Mesure indisponible
+- **WHEN** une source native ou une sonde requise est indisponible
+- **THEN** la mesure reste N/A motivé et le RUN continue les travaux autorisés compatibles
 
 #### Scenario: Travail entre deux sondes
-
-- **WHEN** la prochaine échéance statistique n'est pas encore atteinte
-- **THEN** l'orchestrateur poursuit les mandats autorisés sans arrêter le travail pour attendre le créneau
+- **WHEN** la prochaine échéance statistique n’est pas encore atteinte
+- **THEN** l’orchestrateur poursuit les mandats autorisés sans arrêter le travail pour attendre le créneau
 
 ### Requirement: Échec statistique distinct d'un échec PLLM
 

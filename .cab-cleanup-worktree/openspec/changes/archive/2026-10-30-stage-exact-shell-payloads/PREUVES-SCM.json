@@ -1,0 +1,30 @@
+{
+  "version": "2.1.25",
+  "node": {
+    "cases": 650,
+    "passed": 620,
+    "skipped": 30,
+    "failed": 0
+  },
+  "python": {
+    "passed": 81,
+    "failed": 0
+  },
+  "native": {
+    "version": "2.2.0",
+    "passed": 3,
+    "failed": 0,
+    "payloadBytes": 9860,
+    "sameLengthCorruptionRefused": true,
+    "modelRecopiedPayload": false
+  },
+  "syntax": {
+    "js": 69,
+    "py": 16
+  },
+  "openspecBefore": {
+    "standard": 17,
+    "strict": 17
+  },
+  "requirementsAdded": 4
+}

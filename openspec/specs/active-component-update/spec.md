@@ -28,7 +28,7 @@ L'outil MUST limiter les écritures aux destinations CAB explicites hors workspa
 - **THEN** la release originale reste identique et les processus broker/Web ainsi que les liens non concernés sont préservés
 
 ### Requirement: Exception explicite pour les sources CAB
-La politique `cab-source` MUST autoriser uniquement les trois modules broker nommés dans `<workspace>/src`, sans managed-release. Le projet MUST être nommé `cab` dans pyproject.toml et son manifeste local du plugin CAB MUST être identique au paquet installé. Les contrôles de type, propriétaire et absence de liens MUST rester applicables. Toute autre destination dans le workspace ou les caches MUST rester refusée.
+La politique cab-source MUST limiter le broker aux trois modules ordinaires de <workspace>/src. managed-release MAY gérer les scripts des services et le Web. Le projet MUST être nommé cab dans pyproject.toml et son manifeste CAB MUST correspondre au paquet installé. Les contrôles de type, propriétaire et absence de liens broker MUST rester applicables. Toute autre destination dans le workspace ou les caches MUST être refusée.
 
 #### Scenario: Broker source du dépôt CAB
 - **WHEN** la politique `cab-source` vise exactement src/ dans un dépôt CAB identifié et conforme au manifeste CAB installé
@@ -37,6 +37,10 @@ La politique `cab-source` MUST autoriser uniquement les trois modules broker nom
 #### Scenario: Exception source non prouvée
 - **WHEN** le projet, le manifeste CAB, le chemin src/ ou les contrôles de liens ne sont pas conformes
 - **THEN** l'outil refuse avant arrêt des services ou création du journal de transaction
+
+#### Scenario: Installation mixte prouvée
+- **WHEN** cab-source et managed-release sont fournis ensemble avec trois modules broker source ordinaires
+- **THEN** les services et le Web basculent par liens gérés, les seuls trois modules broker sont remplacés en fichiers ordinaires et le repli restaure chaque type original
 
 ### Requirement: Workspace des services conservé
 Avec `cab-source`, l'option explicite `--service-workspace` MAY désigner le workspace absolu existant des services, distinct de la racine source CAB. Les vérifications HTTP et les appels natifs MCP MUST utiliser ce workspace. Les configurations existantes MUST rester intactes. La récupération MUST conserver le même journal et les mêmes destinations d'artefacts.
@@ -53,29 +57,33 @@ Le jeu indépendant du moniteur MUST inclure le client OpenCode V2 importé par 
 - **THEN** les imports du moniteur sont tous présents et le client V2 est sauvegardé et remplacé transactionnellement
 
 ### Requirement: Mise à jour forcée des services CAB
-Le profil ordinaire MUST valider et sauvegarder le paquet, arrêter controller,
-supervisor et monitor, remplacer les quatre briques, recharger systemd puis
-démarrer les trois unités. Il MUST NOT consulter les RUN, permissions,
-coordinations globales ou états de service comme précondition. OpenCode absent
-MUST NOT bloquer l'installation des fichiers broker. Le profil gelé reste
-distinct ; aucun profil ne décide ni ne rejoue une permission métier.
 
-#### Scenario: RUN ou coordination active
-- **WHEN** des RUN, permissions ou une coordination globale sont actifs au
-  début de `/CAB update`
-- **THEN** l'update ne les consulte pas pour décider de poursuivre, arrête les
-  trois unités systemd CAB, remplace les artefacts et les redémarre.
+Le profil ordinaire MUST préparer et vérifier les artefacts avant coupure,
+comparer empreintes et processus, puis basculer les seuls groupes nécessaires.
+Il MUST préserver l'état métier sans attendre les commandes longues. Une
+frontière de transfert indisponible MUST laisser l'ancienne version en service
+et différer la bascule compatible. Les profils gelés et reuse-readonly MUST
+conserver leurs gardes spécifiques.
+
+#### Scenario: Jeu déjà conforme
+- **WHEN** les empreintes et versions actives sont conformes
+- **THEN** CABU retourne up-to-date sans arrêt, reconnexion MCP ou nouvelle récupération métier
+
+#### Scenario: Mise à jour compatible pendant une commande
+- **WHEN** une commande native est en cours et le transfert contrôlé est disponible
+- **THEN** CABU prépare à chaud et bascule sans attendre cette commande ni rejouer sa permission
 
 #### Scenario: OpenCode absent
-- **WHEN** l'API ou le processus OpenCode est absent
-- **THEN** l'update remplace tout de même les trois fichiers broker et les
-  autres artefacts, démarre les trois unités, puis rapporte le broker runtime
-  `INDISPONIBLE` sans bloquer la réussite des autres briques.
+- **WHEN** l’absence d’OpenCode est prouvée
+- **THEN** les fichiers peuvent être installés et la version broker chargée reste INDISPONIBLE
+
+#### Scenario: RUN ou coordination active
+- **WHEN** des RUN, permissions ou une coordination sont actifs au début de CABU
+- **THEN** la préparation continue sans attendre la fin des commandes et la bascule préserve les identités et gardes de ces opérations
 
 #### Scenario: États CAB actifs
-- **WHEN** des RUN ou une coordination globale sont actifs avant l'update
-- **THEN** l'update les laisse intacts pendant son déroulement et ne les utilise
-  pas comme précondition d'arrêt, remplacement ou redémarrage
+- **WHEN** des RUN ou une coordination sont actifs avant la mise à jour
+- **THEN** leur état métier reste intact et une frontière de transfert indisponible diffère seulement la bascule
 
 ### Requirement: Déploiement des quatre briques
 Le profil ordinaire MUST installer broker, contrôleur, superviseur et Web, puis
@@ -125,17 +133,16 @@ interruption MUST être récupérable avant une autre transaction.
 - **THEN** les artefacts précédents et états initiaux sont rétablis lorsque le repli reste possible ; un repli incomplet ou une frontière reuse-readonly franchie conserve le gel et signale la récupération nécessaire
 
 ### Requirement: Redémarrage systématique et bilan explicite
-Chaque invocation ordinaire de `/CAB update` MUST arrêter puis redémarrer les
-trois unités CAB, y compris lorsque les versions de fichiers sont déjà
-conformes. Le bilan MUST distinguer le paquet, les fichiers déployés, les
-versions réellement actives, le broker non vérifiable, ainsi que tout échec de
-remplacement ou de démarrage. Une opération MUST conserver ses sauvegardes et
-son repli atomique.
+
+Le redémarrage MUST être limité aux groupes dont les artefacts ou processus
+doivent changer. Une installation de commandes ou d’instructions seules MUST
+préserver les services conformes. Le bilan MUST distinguer paquet, fichiers,
+versions servies, coupure et continuité vérifiée. Les sauvegardes et reçus
+MUST rester disponibles pour le repli compatible.
 
 #### Scenario: Deuxième invocation inchangée
-- **WHEN** les empreintes et versions sont conformes
-- **THEN** les trois unités systemd sont arrêtées puis redémarrées et le bilan
-  indique les versions observées après redémarrage
+- **WHEN** une installation terminée reste conforme sur disque et dans les processus
+- **THEN** la nouvelle vérification ne redémarre aucune brique et conserve les identités des RUN
 
 ### Requirement: Alignement ordinaire des releases gérées
 managed-release MUST préparer les artefacts dans les racines autorisées et
@@ -154,14 +161,14 @@ un profil distinct et conserve sa preuve stricte.
   résultat du repli sont rapportés sans modifier les anciennes releases
 
 ### Requirement: Transition mixte bornée au rétablissement
-Le profil gelé MAY charger le contrôleur 1.10.5 avec broker, superviseur et Web 1.7.1 conservés, uniquement pour maintenance et récupération resource-scoped-v1 qualifiées. Il MUST publier séparément version du paquet, empreinte du contrôleur chargé et versions des processus préservés. Une autre version ou une capacité inconnue MUST refuser cette transition ; elle MUST NOT annoncer tout le runtime aligné en 1.10.5.
+Le profil gelé MAY charger le contrôleur 2.1.9 avec broker, superviseur et Web 1.7.1 conservés, uniquement pour maintenance et récupération resource-scoped-v1 qualifiées. Il MUST publier séparément version du paquet, empreinte du contrôleur chargé et versions des processus préservés. Une autre version ou une capacité inconnue MUST refuser cette transition ; elle MUST NOT annoncer tout le runtime aligné en 2.1.9.
 
 #### Scenario: Broker original conservé jusqu'au prévol
-- **WHEN** le contrôleur 1.10.5 réconcilie puis reprend le prévol via le broker 1.7.1 conservé
+- **WHEN** le contrôleur 2.1.9 réconcilie puis reprend le prévol via le broker 1.7.1 conservé
 - **THEN** les échanges MCP et la permission fraîche restent corrélés, le broker reste vivant et l'état mixte reste explicitement annoncé
 
 ### Requirement: Frontière avant reprise métier
-Le profil mixte MUST conserver les pairs sous PAUSE explicite et limiter la reprise ciblée au prévol. complete MUST NOT valoir autorisation de mandat métier dans ce profil. Le pilotage MUST attendre un alignement homogène 1.10.5 vérifié par maintenance ordinaire distinctement autorisée, puis une reprise explicite ; aucune reconnexion ou relance MUST découler du seul incrément de version.
+Le profil mixte MUST conserver les pairs sous PAUSE explicite et limiter la reprise ciblée au prévol. complete MUST NOT valoir autorisation de mandat métier dans ce profil. Le pilotage MUST attendre un alignement homogène 2.1.9 vérifié par maintenance ordinaire distinctement autorisée, puis une reprise explicite ; aucune reconnexion ou relance MUST découler du seul incrément de version.
 
 #### Scenario: Prévol réparé, processus encore mixtes
 - **WHEN** complete a réussi avec le broker original conservé
@@ -199,7 +206,7 @@ La politique ordinaire brokerPolicy=reuse-readonly MUST exiger une autorisation 
 Les trois fichiers broker MUST être réguliers, sans liens ou alias, sous le répertoire réel déclaré, avec propriétaire, groupe et empreintes autorisés et contenu identique au paquet cible. Une dérive MUST être refusée avant arrêt ou suspendre la récupération. La maintenance MUST NOT écrire, remplacer, compiler sur place, changer les droits ou restaurer ces fichiers.
 
 #### Scenario: Source déjà cible et processus ancien
-- **WHEN** les fichiers sont 1.10.5 mais le broker vivant est encore 1.7.1
+- **WHEN** les fichiers sont 2.1.9 mais le broker vivant est encore 1.7.1
 - **THEN** le bilan distingue ces versions et aucun fichier broker n'est remplacé pour provoquer son chargement
 
 ### Requirement: Intention durable et récupération conservatoire
@@ -239,7 +246,7 @@ La politique ordinaire reuse-readonly de CAB 1.10.5 MUST accepter une preuve exa
 - **THEN** la reprise utilise le même journal, conserve le gel jusqu'à réconciliation et ne restaure ni ancien processus ni état métier
 
 ### Requirement: Registre de maintenance borné à seize Mio
-L'updater ordinaire MUST lire intégralement jusqu'à 16 Mio le GET exact /runs et le fichier privé controller-runs.json. Les autres réponses HTTP MUST conserver 2 Mio et les autres fichiers 4 Mio. Il MUST compter les octets reçus avant de parser le JSON. Un dépassement MUST être refusé sans troncature, purge ou admission partielle. Les contrôles d'identité, génération, permissions, PAUSE et HELD MUST rester appliqués.
+L'updater ordinaire MUST lire intégralement jusqu'à 16 Mio les GET exacts /runs et /status et le fichier privé controller-runs.json. Les autres réponses HTTP MUST conserver 2 Mio et les autres fichiers 4 Mio. Il MUST compter les octets reçus avant de parser le JSON. Un dépassement MUST être refusé sans troncature, purge ou admission partielle. Les contrôles d'identité, génération, permissions, PAUSE et HELD MUST rester appliqués.
 
 #### Scenario: Registre valide au-delà des anciennes limites
 - **WHEN** le snapshot dépasse 2 Mio et le fichier privé dépasse 4 Mio, chacun sous 16 Mio
@@ -250,8 +257,16 @@ L'updater ordinaire MUST lire intégralement jusqu'à 16 Mio le GET exact /runs 
 - **THEN** la lecture échoue avec update-response-too-large avant utilisation du snapshot
 
 #### Scenario: Autre réponse volumineuse
-- **WHEN** /status dépasse 2 Mio
-- **THEN** sa limite reste appliquée et aucune augmentation globale n'est déduite de l'exception /runs
+- **WHEN** /api/snapshot dépasse 2 Mio
+- **THEN** sa limite reste appliquée et aucune augmentation globale n'est déduite des exceptions /runs et /status
+
+#### Scenario: Statut contrôleur volumineux
+- **WHEN** GET /status dépasse2Mio et reste au plus16Mio
+- **THEN** le statut complet est lu sans troncature pour vérifier les versions et la readiness
+
+#### Scenario: Statut au-delà de la borne
+- **WHEN** GET /status dépasse16Mio
+- **THEN** update-response-too-large est conservé et aucun démarrage ou rollback réussi n’est déduit
 
 ### Requirement: Réparation explicite du lecteur sous gel existant
 Une réparation autorisée MUST conserver le même identifiant de maintenance, HELD et générations, vérifier PAUSE, quiescence native, OpenCode et broker déconnecté. Elle MUST préserver le journal et stages initiaux et ne réviser que le candidat de code explicitement qualifié. Le registre métier et les anciennes releases MUST NOT être réécrits. Une dérive MUST refuser avant application.
@@ -323,18 +338,33 @@ La preuve reuse-readonly MUST accepter les champs optionnels artifactOwnerUid et
 - **THEN** la maintenance refuse ou conserve son gel selon la frontière franchie, sans élargissement de permission
 
 ### Requirement: Coupure rapide et restauration sans notification
-CABU MUST préparer, vérifier et sauvegarder les artefacts avant la coupure. Il MUST arrêter et redémarrer les trois services sur les versions cibles sans avertir ni modifier les RUN. Les états persistants et décisions consommées MUST être conservés. Les nouvelles opérations dépendantes du transport MUST rester bloquées pendant la coupure. Une issue inconnue MUST NOT être rejouée implicitement.
+
+CABU MUST préparer les artefacts, leur fermeture d’imports, leur compatibilité
+et leur reprise avant interruption. Les nouvelles validations MAY attendre
+brièvement pendant la bascule ; les commandes natives déjà lancées MUST
+continuer. Les demandes, décisions, accès et baux sains MUST survivre à un
+transfert certifié. Une déconnexion MUST NOT devenir à elle seule un effet
+inconnu. Une issue réellement incertaine MUST rester protégée sans rejeu.
 
 #### Scenario: Coupure pendant un RUN actif
-- **WHEN** CABU est déclenché pendant une session
-- **THEN** les briques disparaissent sans notification, puis restaurent leurs états durables sans nouvelle permission implicite
+- **WHEN** CABU bascule un jeu compatible pendant la session
+- **THEN** la communication reprend ses identités et acquittements sans réarmement, pause globale ou invalidation générale des baux
 
 ### Requirement: Broker actif rechargé et versions prouvées
-Si OpenCode est actif, CABU MUST recharger le broker par les routes natives et vérifier sa version cible et une readiness postérieure à la reconnexion. Un OpenCode absent MAY laisser uniquement le runtime broker indisponible. Les trois services MUST toujours être actifs et servir la version cible pour conclure au succès.
+
+Si les artefacts du broker changent, CABU MUST employer les routes natives
+pour sa transition et vérifier une readiness fraîche portant la version cible.
+Un broker déjà conforme MUST être préservé et vérifié sans reconnexion
+inutile. Les services cibles MUST servir le jeu compatible attendu ; un
+processus absent ou divergent MUST NOT être annoncé actif.
+
+#### Scenario: Broker conforme et moniteur modifié
+- **WHEN** seul le groupe du moniteur doit changer
+- **THEN** le broker et les composants conformes restent chargés et le moniteur cible est vérifié indépendamment
 
 #### Scenario: OpenCode lancé
-- **WHEN** le serveur OpenCode est actif
-- **THEN** le broker est reconnecté et sa version chargée est prouvée ; une erreur de reconnexion interdit le succès global
+- **WHEN** OpenCode est actif et les artefacts du broker changent
+- **THEN** CABU effectue sa transition native et exige sa version cible et une readiness postérieure avant de conclure
 
 ### Requirement: Durées mesurées
 CABU MUST rapporter préparation, indisponibilité et durée totale. Le banc contrôlé SHOULD atteindre une indisponibilité inférieure à cinq secondes. Les validations en cache MUST être liées au contenu exact et recontrôlées avant coupure.
@@ -342,3 +372,243 @@ CABU MUST rapporter préparation, indisponibilité et durée totale. Le banc con
 #### Scenario: Paquet inchangé déjà vérifié
 - **WHEN** les empreintes et le runtime de validation sont identiques
 - **THEN** les validations syntaxiques en cache sont réutilisées sans supprimer les contrôles d'intégrité ni le redémarrage
+
+### Requirement: Credential contrôlé avant coupure
+L’updater MUST vérifier le credential privé avant toute coupure. L’option --opencode-password-env-file MAY le provisionner depuis la seule affectation littérale OPENCODE_PASSWORD du project.env source ou des services. Les sources ambiguës MUST être refusées sans arrêt. Le credential MUST être régulier, privé et détenu par l’utilisateur. Un credential existant différent MUST rester intact. Les valeurs secrètes MUST NOT figurer dans les reçus, empreintes, arguments, environnement ou sorties.
+
+#### Scenario: Credential absent sans source explicite
+- **WHEN** le credential est absent et aucune source explicite n’est fournie
+- **THEN** la préparation échoue avec une cause dédiée avant toute coupure
+
+#### Scenario: Source explicite valide
+- **WHEN** project.env contient une unique affectation littérale valide et le credential cible est absent ; les autres variables sont ignorées sans interprétation shell
+- **THEN** seul le processus local provisionne le credential en 0600 puis poursuit sans exposer sa valeur
+
+#### Scenario: Source ambiguë ou conflit
+- **WHEN** la source contient une clé dupliquée, une valeur vide, des échappements/interpolations, un chemin non autorisé ou une valeur différente d’un credential existant
+- **THEN** l’updater refuse sans remplacement du credential existant ni arrêt de service
+
+### Requirement: Cause systemd conservée par service
+Un échec de démarrage ou de vérification MUST conserver dans le reçu une cause filtrée par composant avant tout repli, ainsi que le résultat de ce repli. Le bilan CLI MUST rapporter ces causes même après restauration réussie. Les seules données systemd admises MUST être le composant, ActiveState, SubState, Result et ExecMainStatus ; aucune sortie brute ou secret MUST être exposé.
+
+#### Scenario: Échec de credential au démarrage
+- **WHEN** une unité retourne 243/CREDENTIALS après remplacement
+- **THEN** le rapport nomme cette unité, son statut 243 et le résultat du repli sans assimiler systemctl start réussi à une application opérationnelle
+
+### Requirement: Empreinte stable de la transition historique
+L’empreinte de maintenance MUST protéger toutes les données du registre, sauf les champs déjà neutralisés version et coordination.global et l’annonce publique testResourceProtocol. Cette annonce MUST être absente ou égale à test-resources-v1 ; toute autre valeur MUST être refusée. Son exclusion MUST NOT autoriser une réservation de test ni exclure les données de réservation de l’empreinte.
+
+#### Scenario: Annonce ajoutée sans changement métier
+- **WHEN** un lecteur récent ajoute seulement testResourceProtocol=test-resources-v1 à l’observation du registre historique
+- **THEN** l’empreinte métier demeure identique sans attribuer cette capacité au processus historique
+
+#### Scenario: Annonce inconnue ou registre modifié
+- **WHEN** l’annonce porte une valeur inconnue ou un autre champ métier du registre change
+- **THEN** la valeur inconnue est refusée ou l’empreinte change, interdisant une adoption sous l’ancienne preuve
+
+### Requirement: Horodatage cohérent du sceau de maintenance
+La création du sceau BOOTSTRAP_HELD MUST utiliser un seul instant pour createdAt et expiresAt, avec expiresAt égal à createdAt plus 60000 ms. La garde de durée maximale MUST rester strictement 60000 ms ; les contrôles d’expiration, d’identité et de preuve MUST rester conservés.
+
+#### Scenario: Frontière de milliseconde
+- **WHEN** l’horloge change de milliseconde pendant la création du sceau
+- **THEN** sa durée reste exactement 60000 ms et une reprise par ailleurs admissible n’est pas refusée pour une durée artificiellement excessive
+
+### Requirement: Attente bornée du contrôleur effectivement démarré
+L’updater MUST attendre la version réelle du contrôleur dans le budget waitMs existant, au démarrage cible comme au rollback. Un démarrage non confirmé MUST rester distinct d’un échec de rechargement du broker. Le dépassement MUST refuser le succès, sans changer les exigences de versions, identités et readiness.
+
+#### Scenario: Contrôleur prêt après dix secondes
+- **WHEN** le contrôleur devient prêt après dix secondes mais avant expiration du budget configuré
+- **THEN** l’updater poursuit seulement après observation de la version attendue
+
+#### Scenario: Contrôleur indisponible jusqu’au terme
+- **WHEN** la version attendue n’est pas observée dans le budget
+- **THEN** l’activation échoue avec un diagnostic de démarrage et aucune réussite n’est déduite du seul état systemd
+
+### Requirement: Échec de rollback durablement non terminal
+Un échec après coupure ou durant la récupération MUST conserver le journal et ses sauvegardes dans une phase non terminale. ROLLBACK_FAILED MUST NOT devenir PREPARATION_FAILED. La reprise MUST traiter ce journal avant toute nouvelle transaction ; seul un rollback vérifié MAY devenir ROLLED_BACK.
+
+#### Scenario: Reprise du rollback encore en échec
+- **WHEN** une reprise d’un journal ROLLBACK_FAILED ne peut pas confirmer les services restaurés
+- **THEN** le même journal reste ROLLBACK_FAILED et aucune nouvelle transaction ni donnée métier restaurée n’est créée
+
+#### Scenario: Réparation et reprise ultérieure
+- **WHEN** les conditions techniques permettent enfin de vérifier les versions et le broker restaurés
+- **THEN** le rollback du même journal peut être confirmé sans modifier les RUN ni rejouer once
+
+### Requirement: Récupération globale explicite d’un reçu MCP avec broker failed
+Dans un cycle CABU autorisé, CAB MAY récupérer pending persistant ou failed sous l’accord permanent explicite et révocable du développeur, sans nouvelle question par reçu. Le flag MUST cibler le reçu non terminal exact. CAB MUST vérifier snapshot inactive sans permission partagée, intention unique, identités, versions et readiness. Sans flag ou si une garde échoue, aucun POST. Aucun autre profil ni effet métier n’est autorisé.
+
+#### Scenario: Broker failed avec reçu exact et locations inactives
+- **WHEN** le reçu est autorisé, OpenCode conserve sa même identité et la
+  snapshot montre zéro session active et zéro permission partagée
+- **THEN** l’updater persiste l’intention, envoie un POST global unique,
+  vérifie PID/version/location/sessions et clôt le même reçu seulement après
+  confirmation du broker cible et de sa readiness
+
+#### Scenario: Accord permanent et reçu admissible
+- **GIVEN** un cycle CABU autorisé et l’accord permanent explicite non révoqué
+- **WHEN** le reçu est admissible et les contrôles frais de la frontière sont satisfaits
+- **THEN** l’orchestrateur fournit le flag du reçu exact sans redemander un accord unitaire
+- **AND** les snapshots, l’intention unique, les contrôles de continuité et les limites métier restent obligatoires
+
+#### Scenario: Coordination des locations et formulaires
+- **WHEN** une autre location ou un formulaire connu exige une décision non couverte
+- **THEN** le pilote conserve le reçu et ne suppose pas que la reconstruction globale peut l’annuler
+
+#### Scenario: Accord révoqué ou cas hors cadre
+- **WHEN** l’accord permanent est révoqué ou le cas exige un autre profil ou une décision hors de son cadre
+- **THEN** l’orchestrateur conserve le reçu et les protections et demande seulement l’autorisation manquante
+
+#### Scenario: Broker failed sans autorisation exacte
+- **WHEN** `--recover-mcp` manque, vise un autre reçu ou le reçu est terminal
+- **THEN** l’updater refuse avant le POST global et conserve le reçu courant
+
+#### Scenario: Session active, permission ou identité divergente
+- **WHEN** une session est active, une permission partagée existe, la snapshot
+  est invalide ou l’identité OpenCode diverge
+- **THEN** l’updater refuse sans POST, arrêt ou redémarrage OpenCode
+
+#### Scenario: Résultat inconnu après l’intention
+- **WHEN** l’intention globale existe déjà, la réponse est perdue ou le broker
+  reste failed après le reload
+- **THEN** l’updater conserve le même reçu non terminal et ne rejoue pas le POST
+
+### Requirement: Clôture explicite d’un reçu dépassé
+CAB MUST clore en `SUPERSEDED` un reçu `MCP_RECOVERY_REQUIRED` en reprise
+`RESTARTING` uniquement après récupération MCP vérifiée et autorisée sur son
+identifiant exact. CAB MUST conserver l’historique du reçu et MUST NOT démarrer
+d’installation dans cette invocation.
+
+#### Scenario: Récupération autorisée du reçu historique
+- **WHEN** le reçu exact est autorisé, le reload global est déjà vérifié, les
+  sessions et permissions partagées sont absentes et les preuves d’artefacts
+  et de readiness satisfont leurs exigences
+- **THEN** l’updater consigne la supersession dans le même reçu et retourne
+  `SUPERSEDED`, sans rejouer le reload ni arrêter un service
+
+### Requirement: Preuve d’artefacts et versions avant supersession
+CAB MUST vérifier que chaque artefact hors broker correspond à l’empreinte du
+reçu. Les trois artefacts broker MUST correspondre octet pour octet au paquet
+CAB courant, plus récent que le reçu. La readiness fraîche MUST confirmer les
+versions des services du reçu et un broker supérieur au reçu, au plus égal à
+la version du paquet courant.
+
+#### Scenario: Seul le broker a avancé vers le paquet CAB courant
+- **WHEN** les artefacts hors broker correspondent au reçu et les trois
+  artefacts broker correspondent au paquet courant plus récent
+- **THEN** l’updater accepte la preuve de supersession si les versions actives
+  et la readiness respectent l’intervalle défini
+
+#### Scenario: Un artefact hors broker ou une version diverge
+- **WHEN** un autre artefact diffère, un fichier broker ne correspond pas au
+  paquet courant ou la readiness/version active ne satisfait pas les bornes
+- **THEN** l’updater garde le reçu non terminal et refuse `SUPERSEDED`
+
+### Requirement: Nouvelle transaction après supersession
+CAB MUST utiliser un nouvel identifiant pour l’installation complète qui suit
+un reçu `SUPERSEDED` et MUST conserver ce reçu historique sans le réécrire.
+
+#### Scenario: Reprise du reçu superseded
+- **WHEN** un appel CABU ultérieur rencontre le reçu terminal `SUPERSEDED`
+- **THEN** il ouvre une nouvelle transaction avec un nouvel identifiant et
+  installe le jeu complet courant ; il ne relance pas le reload global du reçu
+
+### Requirement: Vérifier le reçu de reprise avant CABU
+
+L’updater MAY reprendre seulement le reçu exact `ROLLBACK_FAILED` causé par `update-controller-start-unconfirmed`, avec un paquet GitHub publié au moins aussi récent et un manifeste cohérent. Il MUST vérifier l’identité OpenCode et l’empreinte `beforeHash` ou `afterHash` de chaque destination. Sous `cab-source`, les fichiers broker MAY aussi correspondre exactement au paquet courant publié. Toute autre divergence est refusée.
+
+#### Scenario: Reprendre en avant le reçu exact après rollback incomplet
+
+- **GIVEN** un reçu `ROLLBACK_FAILED` avec cause contrôleur vérifiée et artefacts connus
+- **WHEN** une source GitHub au moins aussi récente et cohérente demande la reprise de cet identifiant exact
+- **THEN** le reçu est admis pour une reprise liée, sans arrêter OpenCode ni lire ou modifier les RUN
+
+#### Scenario: Reçu ou artefact divergent
+
+- **GIVEN** un autre état de reçu, une version antérieure, une identité OpenCode modifiée ou une destination hors de ses deux empreintes
+- **WHEN** la reprise avant est demandée
+- **THEN** l’updater refuse sans écriture ni nouvel arrêt de service
+
+#### Scenario: Source broker locale déjà publiée
+
+- **GIVEN** `brokerPolicy=cab-source` et les trois fichiers broker identiques au paquet GitHub courant
+- **WHEN** le reçu d’échec est repris
+- **THEN** ces fichiers sont admis comme déjà avancés et revérifiés pendant le nouveau déploiement
+
+#### Scenario: Broker déjà déconnecté par la reprise précédente
+
+- **GIVEN** `brokerState=disabled` et un reçu enfant lié à un reçu parent `SUPERSEDED` avec déconnexion native confirmée et identité OpenCode identique
+- **WHEN** le reçu enfant exact est repris en avant
+- **THEN** l’updater accepte la transition terminale du parent sans reload global
+
+### Requirement: Préserver les preuves pendant une reprise avant
+
+L’updater MUST conserver l’ancien reçu et ses sauvegardes, puis lier le nouveau reçu au précédent par `recoveryOf`. Il MUST NOT effacer les preuves, fermer OpenCode, recharger ses locations, ni activer une source locale.
+
+#### Scenario: Reçu d’échec conservé
+
+- **WHEN** une reprise en avant est préparée après le contrôle des empreintes
+- **THEN** le reçu `ROLLBACK_FAILED` reste archivé `SUPERSEDED` avec sa cause et ses sauvegardes
+- **AND** le nouveau reçu est lié à son identifiant exact
+
+#### Scenario: MCP incertain
+
+- **GIVEN** un état MCP `pending`, `failed` ou `needs_auth`, ou une identité OpenCode modifiée
+- **WHEN** une reprise en avant est demandée
+- **THEN** aucun rechargement global ni changement de reçu n’est effectué
+
+### Requirement: Vérifier la déconnexion parent d’une reprise liée
+
+L’updater MAY reprendre un reçu enfant `ROLLBACK_FAILED` avec `brokerWasConnected=false` seulement si `recoveryOf` désigne un parent `SUPERSEDED` dont l’identité OpenCode et la déconnexion `CONFIRMED` concordent. MCP MUST être `disabled` ou `connected`. Un état incertain ou un parent absent MUST être refusé avant coupure.
+
+#### Scenario: Enfant lié et broker déjà déconnecté
+
+- **GIVEN** un reçu enfant `ROLLBACK_FAILED`, son parent superseded prouvant la déconnexion, une identité OpenCode stable et MCP `disabled`
+- **WHEN** la reprise avant exacte est demandée depuis un paquet publié cohérent
+- **THEN** l’updater préserve les reçus, prépare une transaction liée et reconnecte le broker après le démarrage contrôleur vérifié
+
+#### Scenario: Parent, MCP ou broker divergent
+
+- **GIVEN** un parent absent ou altéré, ou MCP `pending`/`failed`/`needs_auth`
+- **WHEN** la reprise avant est demandée
+- **THEN** elle est refusée avant arrêt ou mutation du RUN
+
+### Requirement: Préserver les brokers source déjà avancés
+
+Sous `cab-source`, l’updater MAY accepter un fichier broker local plus récent que les empreintes du reçu seulement s’il est identique au fichier de même nom dans le paquet GitHub courant. Le nouveau reçu MUST recontrôler ces empreintes. Toute différence est refusée avant remplacement.
+
+#### Scenario: Broker local identique au paquet courant
+
+- **GIVEN** les trois fichiers broker locaux sont identiques au paquet publié courant
+- **WHEN** une reprise en avant s’effectue avec `cab-source`
+- **THEN** l’updater les conserve et les inclut dans le contrôle du jeu complet
+
+#### Scenario: Broker local divergent
+
+- **GIVEN** un seul fichier broker local diffère du paquet publié courant
+- **WHEN** une reprise en avant s’effectue avec `cab-source`
+- **THEN** l’updater refuse avant la coupure et conserve le reçu
+
+### Requirement: Compatibilité du registre avant bascule
+
+CABU MUST vérifier la compatibilité du lecteur cible avec l’état conservé avant
+coupure. Un retour arrière MUST restaurer seulement le code compatible et
+MUST NOT restaurer les RUN, décisions ou permissions depuis un ancien snapshot.
+Sans repli compatible, CABU MUST conserver le reçu et proposer la récupération
+en avant sans annoncer un rollback réussi.
+
+#### Scenario: Ancien lecteur incompatible avec de nouveaux effets
+- **WHEN** une reprise de code ancien ne peut pas lire les preuves conservées
+- **THEN** CABU refuse ce repli et préserve le même reçu et l’état métier
+
+### Requirement: Durée de bascule et continuité qualifiées ensemble
+
+Les durées de préparation, interruption réelle, rattrapage et total MUST être
+distinctes. La cible d’une seconde SHOULD guider la préparation hors coupure.
+Un délai dépassé MUST NOT supprimer un contrôle ou prouver une fin. La
+qualification MUST tester pertes de réponse, crashs aux frontières critiques,
+RUN concurrents et retour automatique de communication sans effet dupliqué.
+
+#### Scenario: Préparation longue et bascule courte
+- **WHEN** les vérifications de préparation prennent plusieurs secondes
+- **THEN** ces secondes ne sont pas comptées comme indisponibilité lorsque les services continuent à répondre

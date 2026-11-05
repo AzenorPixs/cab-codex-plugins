@@ -1,0 +1,519 @@
+# persistent-job-supervision Specification
+
+## Purpose
+Cette capacité maintient un contrat de job durable et observable afin qu'une
+interruption conversationnelle ne soit jamais confondue avec une fin de job.
+
+## Requirements
+
+### Requirement: Compactage coordonné des deux sessions
+
+L'orchestrateur SHOULD compacter selon la pression native du contexte et à
+une frontière sûre. Il MUST conserver mandat, checkpoint, permissions et
+preuves, et vérifier les API disponibles. Un échec ou une API absente MUST
+laisser continuer un contexte dont la continuité est prouvée. Un compactage
+en cours ou un contexte perdu MUST suspendre les seuls effets concernés
+jusqu'à réconciliation, sans rejeu ni preuve inventée.
+
+#### Scenario: Contexte exploitable après quatre-vingt-dix minutes
+- **WHEN** le contexte reste exploitable et aucune limite observée n’exige de compactage
+- **THEN** le RUN poursuit ses mandats sans interruption fondée sur cette seule durée
+
+#### Scenario: Pression de contexte à une frontière sûre
+- **WHEN** une limite de contexte est observée entre deux mandats
+- **THEN** les sessions accessibles sont compactées avec leurs preuves natives et le checkpoint est réconcilié avant reprise
+
+#### Scenario: Échéance entre deux mandats
+- **WHEN** la politique constate une pression de contexte entre deux mandats et les API sont disponibles
+- **THEN** les deux compactages sont coordonnés et leurs preuves natives sont vérifiées avant reprise
+
+#### Scenario: Échéance pendant une exécution
+- **WHEN** une pression de contexte est observée pendant une opération autorisée
+- **THEN** cette opération est conservée et le compactage attend une frontière sûre avec checkpoint
+
+#### Scenario: Compactage de l'orchestrateur non prouvé
+- **WHEN** seul le compactage de la session de codage est prouvé
+- **THEN** aucune réussite conjointe n’est annoncée et la continuité des sessions accessibles détermine la poursuite
+
+#### Scenario: Aucun compactage disponible
+- **WHEN** aucune API de compactage n’est exposée et le contexte reste exploitable
+- **THEN** les opérations non exécutées sont consignées et le RUN continue sans attendre une API absente
+
+#### Scenario: Échec de compactage avec contexte préservé
+- **WHEN** le compactage échoue mais la continuité est prouvée
+- **THEN** le RUN continue les seuls mandats autorisés sans classement bloquant fondé sur cet échec seul
+
+#### Scenario: Réconciliation non sûre
+- **WHEN** le compactage reste actif, le contexte est perdu ou une permission est ambiguë
+- **THEN** les effets concernés restent suspendus et les travaux indépendants prouvés compatibles peuvent continuer
+
+### Requirement: Contrat de job durable et non secret
+
+CAB SHALL enregistrer atomiquement un contrat de job local avant sa supervision. Le
+contrat SHALL contenir un identifiant de job, l'identifiant de la session OpenCode, le
+répertoire absolu, le change OpenSpec éventuel, les critères de fin, le dernier jalon
+prouvé, le mandat courant éventuel, `terminal_gate` et les métadonnées de reprise. Le
+contrat SHALL exclure tout secret, contenu de fichier du projet et décision CAB.
+
+#### Scenario: Reprise après redémarrage du superviseur
+
+- **WHEN** le superviseur redémarre alors qu'un contrat possède
+  `terminal_gate: OPEN`
+- **THEN** il restaure ce contrat, le rend observable et reprend son contrôle
+  sans le déclarer terminal
+
+### Requirement: Reprise limitée par le gate terminal
+
+Le superviseur SHALL considérer un job terminal uniquement lorsque le
+contrôleur a validé son `terminal_gate` pour l'état déclaré `TERMINÉ` ou
+`BLOQUÉ`. Tant que le gate est ouvert, une session close, un tour terminé, un
+silence SSE, un délai ou un mandat terminé SHALL rester des états non
+terminaux. Le superviseur SHALL conserver le job armé et publier la cause
+observée.
+
+#### Scenario: Tour OpenCode terminé sans gate valide
+
+- **WHEN** le superviseur observe un tour terminé et que le gate terminal du
+  contrat est ouvert
+- **THEN** il conserve le job dans un état non terminal et planifie son examen
+  de reprise
+
+### Requirement: Relance technique corrélée à la session
+
+Pour un job historique sans RUN, après le délai configurable de 60 secondes par défaut, le superviseur SHALL vérifier OpenCode, SSE, readiness CAB et gate avant un message corrélé demandant examen de l’état, du SSE et de CAB puis poursuite du premier jalon non prouvé. Ce message MUST NOT créer mandat ou permission et SHALL interdire une réponse finale tant que le gate reste ouvert.
+
+#### Scenario: Session inactive et reprise admissible
+
+- **WHEN** la session historique sans RUN enregistrée est inactive, que le gate est ouvert et que
+  les contrôles techniques sont exploitables après la pause de reprise
+- **THEN** le superviseur envoie un unique message de reprise à cette session
+  et mémorise sa tentative
+
+#### Scenario: Contrôle technique non exploitable
+
+- **WHEN** OpenCode, le SSE ou la readiness CAB ne permet pas une reprise sûre
+- **THEN** le superviseur ne relance pas la session, conserve le gate ouvert et
+  publie la cause ainsi que l'action recommandée
+
+### Requirement: Observabilité sans secret
+
+Le superviseur SHALL publier localement, sans secret, l'identité du job,
+l'état de supervision, le dernier jalon prouvé, l'âge de la dernière activité,
+le nombre et le résultat des tentatives de reprise, le gate terminal et la
+cause courante. Jalons et gate SHALL provenir du contrat observé du contrôleur.
+Les transitions SHALL être journalisées dans le magasin local du superviseur.
+
+#### Scenario: Consultation d'un job non terminal
+- **WHEN** un client local consulte l'état d'un job dont le gate est ouvert
+- **THEN** il reçoit l'état de supervision et la raison de non-terminalité sans contenu de projet, secret ni décision détaillée
+
+#### Scenario: Jalon et gate observés
+- **WHEN** le superviseur réconcilie un job portant un jalon prouvé et un gate OPEN
+- **THEN** son statut publie ce jalon et ce gate pour l'identité du job observé
+
+#### Scenario: Réconciliation indisponible
+- **WHEN** le contrat courant ne peut plus être relu
+- **THEN** le statut rend l'échec et la dernière réconciliation observables sans présenter une nouvelle preuve de jalon ou de gate
+
+### Requirement: Gel des relances pendant une récupération
+Le superviseur MUST suspendre les messages de reprise lorsque le contrat expose une récupération en cours. Il MUST NOT relancer l'ancienne session ou la candidate pendant le prévol. Après transfert confirmé, il MUST suivre exclusivement la nouvelle session du même job et conserver le gate OPEN. Il MUST NOT créer la session candidate ni décider le transfert.
+
+#### Scenario: Récupération préparée
+- **WHEN** le contrat expose une récupération préparée non terminée
+- **THEN** le superviseur attend avec une cause observable sans envoyer de message
+
+#### Scenario: Récupération terminée
+- **WHEN** le contrôleur a confirmé le transfert
+- **THEN** le superviseur reprend ses contrôles sur la nouvelle session sans relancer l'ancienne
+
+### Requirement: Attente humaine sans réessai PLLM automatique
+
+Sans politique PLLM admissible, l'orchestrateur MUST conserver le RUN, son choix éventuel et ses preuves, avertir le développeur avec la cause horodatée et attendre son instruction sans benchmark ni réessai automatique. Il MUST NOT poursuivre de mandat, test, maintenance ou sonde pendant cette attente. Il MUST NOT déclarer une clôture réussie ni arrêter ou redémarrer les processus partagés du seul fait de cette indisponibilité.
+
+#### Scenario: Évaluation sans politique admissible
+
+- **WHEN** une évaluation requise échoue ou ne fournit aucune politique admissible
+- **THEN** le RUN conserve ses preuves et attend une instruction humaine sans programmer de nouvelle tentative automatique
+
+#### Scenario: Instruction reçue pendant l'attente
+
+- **WHEN** le développeur autorise une nouvelle évaluation ou demande l'arrêt du RUN en attente
+- **THEN** l'orchestrateur traite cette instruction dans son périmètre après réconciliation, sans rejouer une permission consommée
+
+### Requirement: Échéance PLLM historique sans effet automatique
+
+Une ancienne échéance PLLM MUST rester une preuve historique. Sa présence, son dépassement ou sa restauration MUST NOT déclencher une évaluation, un benchmark ou un prévol automatique. Toute tentative encore en cours ou d'effet inconnu MUST être réconciliée avant une action autorisée ; une reprise MUST NOT dupliquer son effet.
+
+#### Scenario: Ancienne échéance dépassée à la reprise
+
+- **WHEN** le checkpoint restauré conserve une échéance PLLM déjà atteinte
+- **THEN** l'orchestrateur conserve cette trace sans réactiver de tentative et applique la politique courante d'attente ou de conservation du choix
+
+### Requirement: Checkpoint des tentatives PLLM
+
+Le checkpoint non secret MUST conserver l'identité du RUN, le choix PLLM vérifié éventuel et sa provenance, la cause horodatée de l'attente, les résultats des tentatives et le dernier jalon prouvé. Sans politique admissible, sa prochaine action MUST être l'attente d'une instruction humaine, sans programmer de nouvelle échéance automatique. Après interruption, l'orchestrateur MUST réconcilier les preuves avant toute reprise et MUST NOT dupliquer une tentative d'effet inconnu.
+
+#### Scenario: Interruption pendant l'attente
+
+- **WHEN** le pilotage du même RUN reprend après une interruption en attente PLLM
+- **THEN** l'orchestrateur restaure le choix et les preuves, réconcilie toute tentative en cours ou d'effet inconnu et conserve l'attente humaine sans programmer de réessai
+
+### Requirement: Supervision pendant l'attente PLLM
+
+Une indisponibilité PLLM seule MUST NOT être assimilée à une clôture réussie ni justifier la fermeture ou le redémarrage des processus partagés. Les états de supervision et les preuves MUST être conservés. Leur maintien MUST NOT déclencher de nouveau mandat, sonde ou benchmark automatique pendant l'attente humaine ; une instruction explicite d'arrêt MUST suivre les gates et réconciliations applicables.
+
+#### Scenario: Benchmark indisponible et CAB sain
+
+- **WHEN** aucune politique PLLM admissible n'est disponible sans blocage CAB distinct
+- **THEN** le RUN reste en attente humaine avec ses preuves et les processus partagés préservés, sans nouvelle activité automatique de l'orchestrateur
+
+### Requirement: Réconciliation avant reprise après benchmark
+
+Après une évaluation autorisée réussie, l'orchestrateur MUST réconcilier les contextes, la santé OpenCode, MCP, la readiness CAB réelle et les permissions avant reprise. Tout nouveau choix MUST être qualifié par son prévol natif. La réussite MUST NOT constituer une décision CAB, rejouer un mandat consommé ou contourner un blocage distinct. Une reprise non sûre MUST appliquer la récupération CAB avec une cause observable.
+
+#### Scenario: Benchmark rétabli
+
+- **WHEN** une évaluation autorisée fournit une politique admissible et les contrôles de reprise sûre sont satisfaits
+- **THEN** l'orchestrateur reprend le même RUN au premier jalon non prouvé après prévol du nouveau choix, en conservant les mandats CAB unitaires
+
+#### Scenario: Réussite sans reprise sûre
+
+- **WHEN** l'évaluation réussit mais une permission non corrélée ou un blocage CAB distinct subsiste
+- **THEN** l'orchestrateur applique la récupération CAB sans autoriser le travail par le seul résultat du benchmark
+
+### Requirement: SSE temps réel et contrôle CAB toutes les trois secondes
+
+L’orchestrateur MUST traiter les changements via les événements CAB/OpenCode
+dès leur réception, sans attendre une cadence fixe de trois secondes. Le
+polling SHOULD servir de repli borné en cas de transport indisponible et de
+réconciliation périodique de santé. Les reprises MUST conserver leur curseur
+ou déclarer explicitement une lacune ; aucun événement ne vaut permission.
+
+#### Scenario: Demande ou rapport reçu
+- **WHEN** une demande corrélée arrive pendant l’analyse du codeur
+- **THEN** elle est traitée dès l’événement sans pause artificielle imposée
+
+### Requirement: Vérifications de progression espacées de sept secondes
+
+Les vérifications MUST être déclenchées par les changements utiles et MUST
+éviter les lectures répétées d’un état inchangé. Les pauses fixes de sept
+secondes MUST NOT être imposées au parcours nominal. Le repli technique MUST
+rester borné et distinct des échéances métier et des décisions attendues.
+
+#### Scenario: État inchangé sans action requise
+- **WHEN** la session travaille sans nouvelle demande ni anomalie
+- **THEN** CAB ne sollicite pas un échange LLM ou un rapport identique à chaque intervalle fixe
+
+#### Scenario: Demande pendant une analyse
+- **WHEN** une demande CAB arrive alors que le codeur analyse ou rédige
+- **THEN** l’événement est traité sans pause de sept secondes et les vérifications de santé restent indépendantes
+
+### Requirement: Activité corrélée à la session du job
+Le superviseur SHALL attribuer l'activité SSE uniquement à la session du job
+surveillé, avec vérification du répertoire lorsqu'il est fourni. Les trames
+étrangères, de transport, invalides ou sans identité exploitable SHALL NOT
+actualiser cette horloge. Un changement de job, session ou répertoire SHALL
+invalider l'ancienne activité. Le gel de récupération SHALL rester prioritaire.
+
+#### Scenario: Activité de la session surveillée
+- **WHEN** un événement de session, message ou permission identifie la session du job et ne présente pas de répertoire divergent
+- **THEN** le superviseur actualise l'activité de ce contexte
+
+#### Scenario: Trafic étranger continu
+- **WHEN** des événements d'une autre session ou d'un autre répertoire arrivent pendant l'inactivité du job
+- **THEN** ils ne retardent pas son examen de reprise à l'échéance configurée
+
+#### Scenario: Transport ou événement non exploitable
+- **WHEN** une trame est un heartbeat, un événement de connexion, invalide ou sans session identifiable
+- **THEN** l'horloge d'activité du job reste inchangée sans fabriquer de progression
+
+#### Scenario: Session transférée ou contexte remplacé
+- **WHEN** le contrat admet un nouveau job, répertoire ou identifiant de session
+- **THEN** l'activité de l'ancien contexte ne repousse pas la reprise du nouveau
+
+#### Scenario: Récupération gelée
+- **WHEN** le contrat expose une récupération en cours
+- **THEN** aucun événement SSE ne déverrouille une relance ni ne remplace la décision de transfert
+
+### Requirement: Reprise métier après prévol corrigé dans la même session
+L'orchestrateur MUST conserver le RUN, le job, les jalons, critères et preuves pendant les retries du prévol dans la candidate conservée. Il MUST reprendre seulement après complete au premier jalon non prouvé sans rejouer écriture validée ou autorisation consommée. Le superviseur MUST rester gelé pendant retry.
+
+#### Scenario: Tentatives successives
+- **WHEN** les prévols divergent sans effet et chaque frontière est réconciliée
+- **THEN** les nouvelles tentatives explicites conservent la candidate et le job, sans concurrence ni doublon, avec suivi à la cadence existante
+- **AND** le checkpoint conserve numéro, identifiants, horodatages, causes et références des preuves natives
+
+#### Scenario: Reprise sûre
+- **WHEN** le prévol corrigé est prouvé et complete réussit
+- **THEN** le superviseur suit la candidate devenue session du job sans rejeu du travail prouvé
+
+#### Scenario: Interruption ou arrêt explicite
+- **WHEN** une tentative reste non réconciliée ou le développeur demande l'arrêt
+- **THEN** aucune tentative supplémentaire ne part avant réconciliation ou autorisation appropriée
+
+### Requirement: Compteur persistant des tentatives de reprise
+
+Le superviseur MUST exposer `resumeAttemptCount` par job. Un job neuf MUST
+commencer à zéro. Avant chaque émission de reprise, le compteur connu MUST
+être incrémenté et persisté avec la tentative ; un échec de persistance MUST
+interdire l'émission. Le compteur MUST distinguer tentative et succès et
+survivre au redémarrage et au transfert de session du même job.
+
+#### Scenario: Émission réussie ou échouée
+- **WHEN** une requête de reprise est émise puis réussit ou échoue
+- **THEN** elle compte une tentative et son résultat reste publié séparément
+
+#### Scenario: Préparation sans émission
+- **WHEN** une relance est refusée, gelée ou abandonnée avant son émission
+- **THEN** le compteur ne change pas
+
+#### Scenario: Persistance impossible
+- **WHEN** l'enregistrement du compteur et de la tentative échoue
+- **THEN** aucune requête de reprise n'est émise
+
+#### Scenario: Même job après interruption ou transfert
+- **WHEN** le superviseur redémarre ou suit une nouvelle session du même job
+- **THEN** il conserve le compteur connu de ce job
+
+### Requirement: Compatibilité du statut de supervision historique
+
+Un état ancien dépourvu de compteur MUST rester lisible et publier
+`resumeAttemptCount: null` pour ce job. Le superviseur MUST NOT reconstruire
+le nombre de tentatives depuis la dernière tentative. Un nouveau job MUST
+réinitialiser son compteur à zéro et MUST NOT hériter du jalon ou du gate
+du job précédent.
+
+#### Scenario: Ancien état sans compteur
+- **WHEN** le superviseur restaure un état historique sans compteur pour le même job
+- **THEN** le compteur reste inconnu, y compris après de nouvelles tentatives de ce job
+
+#### Scenario: Nouveau job
+- **WHEN** le contrat observé désigne un autre job
+- **THEN** son compteur commence à zéro et son jalon et son gate proviennent de son propre contrat
+
+### Requirement: Sessions accessibles et traces du compactage commun
+
+Lorsque les deux API sont disponibles, l'orchestrateur SHALL lancer les deux compactages
+en parallèle ; sinon, l'orchestrateur SHALL compacter les seules sessions accessibles et
+tracer les opérations non exécutées. Le cycle SHALL conserver un identifiant commun, les
+identifiants de session disponibles et ceux explicitement non exposés, les horodatages,
+résultats natifs et éventuels retards dans le checkpoint non secret.
+
+#### Scenario: Sessions accessibles et traces du compactage commun
+- **WHEN** une seule API native de compactage est exposée
+- **THEN** l'orchestrateur compacte cette session et trace l'autre comme non exécutée sous le même identifiant de cycle
+
+### Requirement: Échéance suivante du compactage commun
+
+Le prochain compactage MUST dépendre du besoin natif de contexte ou d'une
+instruction explicite, sans calendrier fixe ni attente d'une API absente.
+L'absence de capacité MUST être réévaluée lors d'un changement utile ou du
+prochain besoin réel. Un échec MUST rester tracé sans réussite rétroactive.
+
+#### Scenario: Échéance suivante du compactage commun
+- **WHEN** un cycle de compactage commence après un retard de fin de mandat
+- **THEN** la suite dépend du besoin de contexte observé sans transformer un ancien échec en réussite
+
+### Requirement: Preuves natives du compactage conjoint
+
+Un accusé de lancement, un résumé manuel ou le compactage d'une session auxiliaire SHALL
+NOT constituer la preuve de compactage de l'orchestrateur réel. Les deux fins natives
+corrélées SHALL être requises pour déclarer une réussite conjointe, pas pour reprendre
+un RUN dont l'état reste exploitable.
+
+#### Scenario: Preuves natives du compactage conjoint
+- **WHEN** seul un accusé de lancement ou le compactage d'une session auxiliaire existe
+- **THEN** aucune réussite conjointe des deux sessions réelles n'est déclarée
+
+### Requirement: Continuité et réconciliation après compactage
+
+Une API de compactage absente SHALL NOT être assimilée à une perte de contexte lorsque
+la conversation active, le checkpoint et les preuves disponibles permettent de vérifier
+la continuité ; les identifiants non exposés SHALL être signalés sans être inventés.
+Avant reprise des mandats, l'orchestrateur SHALL réconcilier les deux contextes, la
+santé OpenCode, MCP et la readiness CAB, et vérifier l'absence d'approbation parasite.
+
+#### Scenario: Continuité et réconciliation après compactage
+- **WHEN** une API est absente mais la conversation active et le checkpoint restent exploitables
+- **THEN** la continuité est vérifiée sans inventer d'identifiant, puis contextes, santé, MCP, readiness et approbations sont réconciliés
+
+### Requirement: Compactage incomplet avec reprise sûre
+
+Si une API requise est indisponible ou si un compactage échoue, l'orchestrateur SHALL
+conserver le cycle incomplet et signaler sa cause sans annoncer une synchronisation
+réussie. Ce seul écart SHALL NOT classer le RUN `BLOQUÉ`, arrêter CAB, demander une
+dérogation humaine ni différer les statistiques ; après réconciliation sûre,
+l'orchestrateur SHALL poursuivre les mandats déjà autorisés.
+
+#### Scenario: Compactage incomplet avec reprise sûre
+- **WHEN** le compactage échoue mais la réconciliation confirme une reprise sûre
+- **THEN** le cycle reste incomplet avec sa cause et les mandats autorisés continuent sans blocage fondé sur ce seul échec ni report des statistiques
+
+### Requirement: Suspension et neutralité du compactage
+
+Un compactage encore en cours ou une réconciliation impossible SHALL suspendre les
+opérations concernées selon le protocole CAB. L'orchestrateur SHALL NOT répéter
+aveuglément une opération d'effet inconnu ni attendre une API absente ; l'orchestrateur
+SHALL réexaminer sa disponibilité à la prochaine échéance du cycle. Ce cycle SHALL NOT
+créer une approbation, rejouer une opération, changer le modèle ni fermer ou redémarrer
+les processus des agents.
+
+#### Scenario: Suspension et neutralité du compactage
+- **WHEN** un compactage reste en cours ou son effet est inconnu
+- **THEN** les opérations concernées sont suspendues sans répétition aveugle, nouvelle approbation, rejeu ou redémarrage d'agent
+
+### Requirement: Restauration sans jalon inventé
+
+Une instance redémarrée SHALL restaurer le contrat sans déduire de jalon ni d'état
+terminal.
+
+#### Scenario: Restauration sans jalon inventé
+- **WHEN** une instance redémarre avec un contrat persistant valide
+- **THEN** elle restaure ce contrat sans déduire un jalon ou un état terminal
+
+### Requirement: Tentative unique et neutralité de la relance
+
+Le superviseur SHALL limiter une relance à une tentative en cours et conserver le
+résultat observé. Le message de reprise SHALL ne créer ni décision, ni approbation, ni
+mandat.
+
+#### Scenario: Tentative unique et neutralité de la relance
+- **WHEN** une tentative de reprise est encore en cours
+- **THEN** le superviseur n'en lance pas une seconde et ne crée ni décision, ni approbation, ni mandat
+
+### Requirement: Supervision de plusieurs RUN
+Le superviseur MUST isoler activité SSE, session, gate, reprise, récupération et attentes de ressources par RUN. Les relances MUST rester techniques et corrélées. Pause, arrêt ou conflit d'un RUN MUST NOT interrompre les pairs indépendants. Une attente de verrou MUST NOT devenir un état terminal ou déclencher une relance métier.
+
+#### Scenario: Isolation concurrente
+- **WHEN** un événement de A arrive
+- **THEN** l'horloge de B reste inchangée
+
+#### Scenario: Attente de ressource
+- **WHEN** A attend une ressource détenue par B et C travaille indépendamment
+- **THEN** A reste non terminal sans relance métier, B et C continuent selon leurs propres contrats
+
+### Requirement: Suspension conforme à la cible
+Une pause ou un arrêt MUST fermer les nouvelles admissions dans sa cible explicite. Les effets en cours MUST atteindre une frontière sûre ou conserver leurs protections. Le superviseur MUST NOT relancer le travail suspendu ni déduire une cible globale d'un arrêt de RUN.
+
+#### Scenario: Pause ciblée
+- **WHEN** le développeur suspend A seulement
+- **THEN** A ne reçoit aucun nouveau mandat et B continue
+
+#### Scenario: Arrêt avec effet incertain
+- **WHEN** l'arrêt ciblé de A survient pendant un effet d'issue inconnue
+- **THEN** A conserve checkpoint et protections sans être déclaré livré
+
+### Requirement: Reprise après attente ciblée
+La disponibilité d'une ressource MUST seulement permettre un nouveau contrôle corrélé de l'opération. La reprise MUST vérifier génération, protections et révisions des preuves sans réutiliser une permission consommée. Les pauses explicites MUST rester prioritaires sur cette disponibilité.
+
+#### Scenario: Verrou disponible pendant pause
+- **WHEN** une ressource devient libre alors que le RUN reste suspendu explicitement
+- **THEN** aucun mandat ni relance métier n'est créé
+
+### Requirement: Restauration compatible du cycle
+Les anciens jobs sans lifecycle MUST rester lisibles avec étape inconnue. Un lifecycle présent mais invalide MUST refuser la restauration sans réparation. Un réarmement du même job et une récupération dans le même RUN MUST conserver son historique ; un nouveau job MUST démarrer sans déclaration d'étape.
+
+#### Scenario: Redémarrage après retour en implémentation
+- **WHEN** le contrôleur redémarre après un passage REVIEW puis IMPLEMENTATION persisté
+- **THEN** il restaure Implémentation 6/11 et les deux passages dans leur ordre
+
+### Requirement: Interruption technique sans clôture métier
+La fermeture technique de CAB après disparition prouvée d’OpenCode MUST conserver les RUN, jobs, réservations, décisions, gates et gels existants. Elle MUST NOT purger, libérer de protection, synthétiser de décision ou de clôture métier, ni rejouer une permission consommée. La reprise MUST rester explicite et soumise à réconciliation ; les effets inconnus MUST rester protégés.
+
+#### Scenario: Plusieurs RUN dont une récupération gelée
+- **WHEN** le serveur commun disparaît avec des RUN réservés et un gel de récupération
+- **THEN** les composants se ferment et leurs états métier et protections restent conservés
+
+### Requirement: Attente de mandat destinée à l’orchestrateur
+
+Pour un RUN piloté sans mandat courant, le superviseur MUST publier une attente observable destinée à l’orchestrateur et MUST NOT envoyer de prompt générateur à OpenCode. Le job et le gate MUST être conservés. Un mandat courant, une récupération, une pause, un accès ou une permission non résolus MUST NOT être contournés par cette attente.
+
+#### Scenario: RUN sans mandat après récupération
+- **WHEN** la récupération est achevée et le RUN ne déclare aucun mandat courant
+- **THEN** le superviseur publie l’attente de l’orchestrateur sans prompt OpenCode, commande, décision ou fermeture du job
+
+#### Scenario: Analyse ou mandat déjà déclaré
+- **WHEN** le RUN déclare un mandat courant ou conserve un effet non résolu
+- **THEN** le superviseur conserve la garde correspondante et ne génère aucun travail supplémentaire
+
+### Requirement: Transition durable du modèle dans le même job
+CAB MUST proposer prepare, commit et cancel pour un choix de modèle sous PAUSE et frontière sûre. Il MUST conserver RUN, job, session, réservations, jalons, écritures connues et ancien choix ou absence historique. L’armement ordinaire MUST rester immuable. Les versions divergentes, demandes, permissions ou effets non réconciliés MUST empêcher la transition. L’historique MUST rester non secret et atomiquement persisté avec le choix adopté.
+
+#### Scenario: Job historique sans choix négocié
+- **WHEN** son propriétaire autorise une transition avec prévol qualifié
+- **THEN** le même job adopte le nouveau choix et conserve null comme ancien choix, sans historique inventé ni réarmement
+
+#### Scenario: Job durable réorienté
+- **WHEN** une transition explicite ou PLLM est qualifiée
+- **THEN** la session et le job restent identiques et l’ancien choix est conservé dans l’historique avant adoption du nouveau
+
+### Requirement: Reprise après interruption de transition
+Une transition en cours MUST bloquer la supervision et les nouveaux mandats métier. Avant effet natif, elle MUST persister sa phase. Après un effet incertain ou une persistance échouée, elle MUST rester non terminale et permettre une observation/réconciliation sans rejeu aveugle. Cancel MUST être refusé après possibilité d’effet. Aucune transition MUST lever automatiquement PAUSE ou rejouer une once.
+
+#### Scenario: Effet natif puis interruption
+- **WHEN** la session peut avoir changé de modèle avant confirmation durable
+- **THEN** la reprise relit le choix natif et conserve la frontière jusqu’à cohérence prouvée
+
+#### Scenario: Annulation préparée sans effet
+- **WHEN** le propriétaire annule avant toute mutation native
+- **THEN** CAB conserve le choix précédent et l’événement d’annulation sans réarmement
+
+### Requirement: Connexion fournisseur corrélée à la transition
+La préparation MUST conserver la référence opaque de la connexion native lorsqu’elle existe et l’identité serveur. Commit et réconciliation MUST vérifier que cette connexion n’a pas changé autour du prévol et de l’application. Aucune valeur secrète MUST être enregistrée. Une préparation sans effet MAY être annulée après divergence fournisseur sans prétendre restaurer le compte précédent.
+
+#### Scenario: Compte remplacé pendant préparation
+- **WHEN** la connexion opaque change avant commit
+- **THEN** le changement de modèle est refusé sans effet et la préparation peut être annulée sous frontière sûre
+
+### Requirement: Transfert du pilotage avec historique protégé
+Le contrôleur MUST offrir une API distincte pour changer le SID courant dans
+le même RUN, après décision du propriétaire liée au checkpoint et à deux
+frontières natives stables. Les identités métier et les protections historiques
+MUST être conservées. Les anciennes autorisations MUST rester non exécutables.
+La candidate MUST prouver une readiness CodeMode courante, sans effet métier,
+sous ask et avec le même contrat modèle.
+
+#### Scenario: Ancien effet protégé et continuation disjointe
+- **GIVEN** un ancien once acquitté avec accès conservé
+- **WHEN** le propriétaire change de session à une frontière qualifiée
+- **THEN** les ressources historiques restent protégées et les nouveaux mandats disjoints suivent toutes les décisions et permissions ordinaires
+
+#### Scenario: Ancienne approbation ou ressource recouvrante
+- **WHEN** une ancienne approbation est présentée dans la candidate ou un nouveau mandat recouvre une protection historique
+- **THEN** aucune permission ancienne n'est transférée et le verrouillage ordinaire interdit l'effet recouvrant
+
+### Requirement: Journal durable et reprise sans effet du transfert
+Le contrôleur MUST persister l'intention avant la bascule et conserver un
+reçu idempotent lié au checkpoint. Une reprise après COMMITTED MUST achever
+uniquement les métadonnées attestées, avant toute admission. Une divergence
+MUST geler le seul RUN concerné. Les événements historiques MUST rester
+observables sans rendre leur session admissible. Aucun rollback, once,
+NO_EFFECT ou libération de ressources ne MUST être inventé.
+
+#### Scenario: Réponse perdue ou redémarrage après commit
+- **WHEN** la réponse est perdue ou le contrôleur redémarre entre registre et checkpoint
+- **THEN** le même identifiant retrouve le reçu et termine la même transition sans permission native ni nouvelle identité
+
+#### Scenario: Permission, call ou checkpoint divergent
+- **WHEN** une permission persiste, un nouveau call est actif ou les empreintes changent
+- **THEN** la transition n'est pas engagée et les identités et protections restent intactes
+
+#### Scenario: Frontière native occupée ou non qualifiée
+- **GIVEN** une session non idle, une permission, un nouveau call actif, une intention sans ACK, une candidate sans ask ou une readiness étrangère
+- **WHEN** le transfert est demandé
+- **THEN** aucune identité ni autorisation ne change
+
+### Requirement: Opposabilité des transitions persistées au handoff
+Le handoff MUST refuser un job dont recovery ou modelTransition est présent,
+même hors requête inFlight et après redémarrage. Les observations readonly
+antérieures MUST rester historiques ; seule la dernière readiness MUST
+prouver READY, zéro pending, le RUN et la version courante avant le transfert.
+
+#### Scenario: Transition restaurée hors appel actif
+- **WHEN** le contrôleur restaure une récupération ou une transition modèle préparée ou non confirmée
+- **THEN** le transfert est refusé sans changer le SID, le checkpoint ou les protections
+
+#### Scenario: Candidate readonly conservée pendant une mise à jour
+- **GIVEN** une ancienne readiness readonly liée au même RUN
+- **WHEN** la candidate obtient une nouvelle readiness qualifiée à la version courante
+- **THEN** cette observation récente permet la préparation dans le même SID, sans transformer l’ancienne en preuve fraîche

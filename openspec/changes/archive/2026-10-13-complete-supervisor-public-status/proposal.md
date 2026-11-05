@@ -1,3 +1,5 @@
+# SUP08 — Compléter le statut public du superviseur
+
 ## Why
 
 L'ACSM du 2026-10-13 constate que le statut public du superviseur ne renseigne

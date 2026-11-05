@@ -1,0 +1,11 @@
+# Conception
+
+POST /runs/<run>/shell-stage prépare sans exécution un payload Bash UTF-8 revu, hash et identités explicites. Une frontière idle/ask/strict est requise ; le staging ne crée ni validation, décision ni accès. Stockage privé atomique et borné ; même stage identique idempotent, substitution refusée. Réponse : métadonnées/digests et commande courte, sans corps long. SHA du payload incorporé littéralement au lanceur approuvé, jamais déduit du texte libre.
+
+Le lanceur fixe utilise Python3 système isolé (-I -S), HTTP loopback sans proxy/redirect implicite et contrôle status/longueur/hash/CWD avant exec Bash -c ; stdin/environnement/CWD/exit restent sous l’exécution native. Seules des nouvelles opérations explicitement approuvées comme payload Bash utilisent cette voie ; aucun mandat ancien n’est réinterprété. Les octets ne sont ni normalisés ni tronqués ; NUL/UTF-8 ambigu, >64Kio ou dépassement du plafond commande configuré sont refusés. Aucun secret ne doit être placé dans le corps, comme dans les commandes CAB existantes.
+
+GET payload ne délivre que pour la même opération approuvée, la même cible courte, un accès natif EXECUTING avec once acquittée et non restauré, dans le contexte courant. Il n’exécute rien ; l’enfant natif ne peut le demander avant once. Le corps est vérifié en mémoire avant exec, sans fichier TOCTOU. Un refus de transport/hash/contexte termine avant payload, sans retry. Les preuves de décision, permission/call et fin native demeurent distinctes de la seule livraison HTTP.
+
+Le stage persiste pour traçabilité ; une restauration de contrôleur n’autorise pas de redélivrer une opération restaurée/inconnue, et aucun launcher/once ne se rejoue automatiquement. Un changement de génération ou un effet inconnu exige réconciliation et nouvelle identité selon le protocole courant. L’interpréteur est explicitement Bash ; aucune équivalence avec d’autres shells n’est supposée.
+
+Une course technique ISSUING peut attendre au plus une seconde avant les contrôles finaux ; aucune décision ou acquisition n’est réessayée. Le validateur automatique reçoit le corps depuis le stage privé exactement corrélé, séparément de l’invocation courte fournie au codeur.

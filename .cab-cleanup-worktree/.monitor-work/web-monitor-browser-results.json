@@ -1,0 +1,58 @@
+[
+  {
+    "browser": "Chromium",
+    "version": "155.0.8059.79",
+    "passed": [
+      "rendu",
+      "limite effective",
+      "RUN et changes",
+      "3/14 puis 4/14",
+      "ETAT et ÉTAPE distincts",
+      "versions des briques",
+      "cycle de onze étapes",
+      "retour Revue 8/11 vers Implémentation 6/11",
+      "historique conservé",
+      "WAITING jaune et BLOCKED rouge sur les lignes des jobs",
+      "filtres",
+      "SSE",
+      "panne UNKNOWN",
+      "reconnexion",
+      "mobile sans débordement",
+      "navigation STATS/MONITOR",
+      "fenêtre 7 jours et filtre RUN",
+      "cumul distinct",
+      "prévisualisation et annulation",
+      "purge et protection active",
+      "statistiques anciennes",
+      "STATS mobile sans débordement"
+    ]
+  },
+  {
+    "browser": "Firefox",
+    "version": "153.5.0",
+    "passed": [
+      "rendu",
+      "limite effective",
+      "RUN et changes",
+      "3/14 puis 4/14",
+      "ETAT et ÉTAPE distincts",
+      "versions des briques",
+      "cycle de onze étapes",
+      "retour Revue 8/11 vers Implémentation 6/11",
+      "historique conservé",
+      "WAITING jaune et BLOCKED rouge sur les lignes des jobs",
+      "filtres",
+      "SSE",
+      "panne UNKNOWN",
+      "reconnexion",
+      "mobile sans débordement",
+      "navigation STATS/MONITOR",
+      "fenêtre 7 jours et filtre RUN",
+      "cumul distinct",
+      "prévisualisation et annulation",
+      "purge et protection active",
+      "statistiques anciennes",
+      "STATS mobile sans débordement"
+    ]
+  }
+]

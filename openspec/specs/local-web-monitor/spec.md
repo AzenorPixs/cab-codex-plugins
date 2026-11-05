@@ -156,22 +156,30 @@ La colonne ETAT MUST regrouper l'ancien état observé et remplacer PHASE dans l
 - **THEN** le tableau affiche ETAT WAITING et ÉTAPE Implémentation 6/11, avec phase technique conservée dans son détail
 
 ### Requirement: Surbrillance du job selon son état
-La ligne du job dans Espace de travail MUST présenter un fond jaune pour WAITING et rouge pour BLOCKED. Le texte ETAT MUST rester lisible et la sélection distincte. La couleur MUST NOT modifier l'étape ou remplacer le code d'état. Une source périmée donnant UNKNOWN MUST retirer cette surbrillance courante.
+La ligne du job dans Espace de travail MUST présenter un fond jaune pour WAITING, bleu pour BLOCKED, vert pour DONE et orange pour STOPPED. Le texte ETAT MUST rester lisible et la sélection distincte. La couleur MUST NOT modifier l'étape ou remplacer le code d'état. Une source périmée donnant UNKNOWN MUST retirer cette surbrillance courante.
 
 #### Scenario: Attente devenue blocage
 - **WHEN** l'état actuel d'un job passe de WAITING à BLOCKED
-- **THEN** sa ligne passe du jaune au rouge par mise à jour SSE, sans modifier son étape
+- **THEN** sa ligne passe du jaune au bleu par mise à jour SSE, sans modifier son étape
 
 #### Scenario: Blocage prioritaire sur une attente
 - **WHEN** un job possède une demande en attente et une cause actuelle d'effets inconnus ou HUMAN_REQUIRED
-- **THEN** ETAT est BLOCKED et sa ligne rouge, sans masquer le blocage sous WAITING
+- **THEN** ETAT est BLOCKED et sa ligne bleue, sans masquer le blocage sous WAITING
+
+#### Scenario: Terminaison et arrêt
+- **WHEN** l’état observé devient DONE ou STOPPED
+- **THEN** la ligne devient respectivement verte ou orange et sa sélection reste distincte
 
 ### Requirement: Identité publique du workspace observé
-GET /api/snapshot MUST exposer identity.workspace avec le workspace absolu configuré, canonique au lancement CLI. Cette identité MUST rester disponible sans contrôleur ni superviseur. Elle MUST NOT exposer de variable secrète et sa lecture MUST rester sans effet métier.
+GET /api/snapshot MUST exposer identity.workspace avec le workspace absolu
+configuré, canonique au lancement CLI. Cette identité MUST rester disponible
+sans contrôleur ni superviseur. Elle MUST NOT exposer de variable secrète et
+sa lecture MUST rester sans effet métier.
 
 #### Scenario: Vérification avant réutilisation
-- **WHEN** /cab start interroge une instance déjà active
-- **THEN** il peut comparer son workspace et sa version attendus sans lire de fichier runtime privé
+- **WHEN** `/CAB start` interroge une instance déjà active
+- **THEN** il peut comparer son workspace et sa version attendus sans lire de
+  fichier runtime privé
 
 ### Requirement: En-tête et navigation de gestion
 MONITOR MUST afficher CENTRE D’OBSERVATION en grand et gras. Dernière vue et Collecte/vue MUST suivre CAB / Supervision et WORKSPACE LOCAL sur une ligne sans élargir le document. Actualisation MUST rester disponible. ARCHIVES MUST suivre MONITOR et STATS. Navigation MUST rester accessible au clavier et responsive sans interrompre SSE ni statistiques. Tout le travail., Une vue commune. et leur paragraphe MUST être absents.
@@ -241,7 +249,7 @@ Le moniteur MUST afficher une colonne « codes de lot » en deuxième position d
 - **THEN** la deuxième cellule reste vide
 
 ### Requirement: Source explicite du code de lot
-Le code MUST provenir du début du premier titre Markdown de niveau 1 hors blocs de code de proposal.md : 1 à 10 lettres majuscules puis 2 à 4 chiffres, seuls ou suivis de « — », « – », « - » ou « : » et d'un intitulé. Une source absente, dangereuse, sans titre ou sans code reconnu MUST donner une valeur vide. Le moniteur MUST NOT inférer le code depuis le dossier ou tasks.md. Les bornes et protections de lecture MUST être conservées.
+Le code MUST provenir du début du premier titre Markdown de niveau 1 hors blocs de code de proposal.md : 1 à 10 lettres majuscules puis 2 à 4 chiffres, ou exactement L1 ou L2, seuls ou suivis de « — », « – », « - » ou « : » et d'un intitulé. Toute source absente, dangereuse, sans titre ou sans code reconnu MUST donner une valeur vide. Le moniteur MUST NOT inférer le code depuis le dossier ou tasks.md. Les bornes et protections de lecture MUST être conservées.
 
 #### Scenario: Formats reconnus
 - **WHEN** le titre commence par PA01, PA02, C08, O26 ou B02 avec un séparateur explicite et un intitulé
@@ -250,3 +258,72 @@ Le code MUST provenir du début du premier titre Markdown de niveau 1 hors blocs
 #### Scenario: Absence de source admissible
 - **WHEN** le document est absent, dangereux, sans titre ou sans code reconnu en tête du premier titre
 - **THEN** aucun code n'est exposé
+
+#### Scenario: Codes historiques conservés
+- **WHEN** le premier titre admissible commence par exactement L1 ou L2, seul ou suivi d’un séparateur reconnu et d’un intitulé
+- **THEN** le code historique est extrait à l’identique, sans renumérotation ni ajout de zéro
+
+#### Scenario: Exception historique strictement limitée
+- **WHEN** le titre porte L0, L3, PA1, un suffixe accolé à L1 ou L2, ou un code historique seulement dans le corps ou un bloc de code
+- **THEN** aucun code n’est exposé depuis cette mention et les règles du premier titre admissible restent applicables
+
+### Requirement: Fin du serveur OpenCode suivi
+Le moniteur MUST appliquer cab-process-lifecycle à son serveur OpenCode local identifié. Il MUST rester indépendant d’une panne isolée du contrôleur ou du superviseur ; leur indisponibilité MUST NOT constituer une preuve de fermeture d’OpenCode.
+
+#### Scenario: Contrôleur seul arrêté
+- **WHEN** le contrôleur tombe mais le serveur OpenCode identifié vit encore
+- **THEN** le moniteur reste disponible et expose la panne
+
+#### Scenario: Serveur OpenCode terminé
+- **WHEN** la disparition de l’instance OpenCode suivie est prouvée localement
+- **THEN** le moniteur ferme ses flux et son serveur sans modifier les RUN
+
+### Requirement: Projection bornée du registre pour le moniteur
+CAB MUST exposer GET /monitor/runs avec au plus 200 identités de réservation, actives d’abord, total et indicateur de troncature. Cette lecture MUST NOT sérialiser historique, demandes, ressources ou corps de commandes. Le moniteur MUST utiliser cette projection sans repli vers le registre complet et conserver son plafond de 2 Mio.
+
+#### Scenario: Registre historique volumineux
+- **WHEN** le registre complet dépasse 2 Mio
+- **THEN** la projection fournit les champs de navigation nécessaires sans mutation ni perte de fraîcheur due à l’historique
+
+### Requirement: Causes bornées des pannes de source
+Le moniteur MUST distinguer dépassement de taille, format invalide, erreur HTTP et timeout par des codes publics fixes. Il MUST conserver les dernières observations comme périmées, sans exposer corps ou erreur libre et sans présenter une panne comme saine.
+
+#### Scenario: Projection trop volumineuse ou invalide
+- **WHEN** la source dépasse le plafond ou retourne un format invalide
+- **THEN** le snapshot indique la cause précise et conserve les anciennes observations datées
+
+### Requirement: Projection minimale d’identité du moniteur
+`GET /api/identity` MUST retourner exactement `version` et `identity.workspace`,
+avec le workspace absolu canonique. La réponse MUST NOT contenir de RUN,
+change, session, événement ou source amont. L’endpoint MUST rester disponible
+sans contrôleur/superviseur, sans collecte, avec les gardes loopback/origine ;
+les autres méthodes MUST être refusées. `/api/snapshot` et SSE MUST conserver
+leur contrat multi-RUN.
+
+#### Scenario: Bootstrap du moniteur
+- **WHEN** `/CAB start` vérifie une instance de moniteur active
+- **THEN** `GET /api/identity` permet de valider version et workspace sans
+  transmettre au bootstrap le snapshot multi-RUN
+
+#### Scenario: Sources amont indisponibles
+- **WHEN** le contrôleur et le superviseur sont inaccessibles
+- **THEN** `/api/identity` retourne toujours la version et le workspace du
+  moniteur sans sonder les sources amont
+
+#### Scenario: Requête étrangère ou méthode invalide
+- **WHEN** une requête cible une origine/host interdit ou une méthode autre que GET
+- **THEN** le serveur refuse la requête sans collecte ni effet métier
+
+### Requirement: Sentinelle de cause sans blocage
+
+Le moniteur MUST interpréter la sentinelle `NONE` comme l'absence de cause et MUST NOT la convertir en `BLOCKED`. Les causes réelles, états de readiness, pending et gates MUST garder leur effet courant.
+
+#### Scenario: RUN sain avec cause NONE
+
+- **WHEN** un RUN est `RESERVED`, readiness `READY`, cause `NONE`, pending nul et sans blocker
+- **THEN** sa cause projetée est absente et son état opérationnel n'est pas `BLOCKED`
+
+#### Scenario: Cause réelle conservée
+
+- **WHEN** un RUN possède la cause réelle `resource-effects-unknown`
+- **THEN** le moniteur le maintient `BLOCKED`

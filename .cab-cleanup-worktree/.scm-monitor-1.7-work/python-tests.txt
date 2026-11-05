@@ -1,0 +1,8 @@
+...................................................................
+----------------------------------------------------------------------
+Ran 67 tests in 13.784s
+
+OK
+SYNTHETIC_BENCHMARK {"approvals": 694, "initial_events": 16774, "initial_journal_bytes": 7521590, "recovery_journal_reads": 5, "recovery_seconds": 2.108, "isolated_mcp_process_seconds": 5.694}
+SYNTHETIC_RECONCILIATION_BENCHMARK {"approvals": 694, "events": 16774, "journal_reads": 1, "seconds": 0.366}
+SYNTHETIC_LIST_BENCHMARK {"approvals": 694, "events": 16774, "journal_bytes": 7706222, "journal_reads": 1, "seconds": 0.216}

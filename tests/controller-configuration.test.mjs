@@ -359,7 +359,7 @@ test("CGP05 refuse le gate tant qu'une validation manuelle locale reste indécis
     change_id: "change-gate-pending", title: "Validation sans effet", summary: "Test isolé",
     session_id: "ses_gate_pending", directory, files: [], commands: ["printf fixture"],
   } })).status, 202);
-  assert.equal((await (await fetch(`${baseUrl}/status`)).json()).activeValidationCount, 0);
+  assert.equal((await (await fetch(`${baseUrl}/status`)).json()).activeValidationCount, 1);
   for (const state of ["TERMINÉ", "BLOQUÉ"]) {
     assert.equal((await post("/job/terminal-gate", { state })).status, 409);
   }

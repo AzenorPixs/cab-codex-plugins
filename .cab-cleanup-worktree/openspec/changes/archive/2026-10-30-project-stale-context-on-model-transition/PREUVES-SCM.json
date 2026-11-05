@@ -1,0 +1,39 @@
+{
+  "version": "2.1.21",
+  "sourceQualified": true,
+  "node": {
+    "cases": 637,
+    "passed": 607,
+    "skipped": 30,
+    "failed": 0
+  },
+  "python": {
+    "passed": 80,
+    "failed": 0
+  },
+  "native": {
+    "version": "2.2.0",
+    "passed": 3,
+    "failed": 0,
+    "sameModelContextProjection": true,
+    "completedToolPreserved": true,
+    "newTools": 0
+  },
+  "syntax": {
+    "javascript": 66,
+    "python": 16
+  },
+  "openspec": {
+    "before": {
+      "standard": 17,
+      "strict": 17
+    },
+    "after": {
+      "standard": 16,
+      "strict": 16
+    }
+  },
+  "publicationProvenHere": false,
+  "activationProvenHere": false,
+  "realSessionsResumedHere": false
+}

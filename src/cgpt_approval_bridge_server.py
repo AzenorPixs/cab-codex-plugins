@@ -12,6 +12,7 @@ Persistance :
 Transitions metier journalisees :
 
   APPROVAL_CREATED
+  APPROVAL_NOT_ADMITTED
   APPROVAL_APPROVED
   APPROVAL_REJECTED
   APPROVAL_NEEDS_CLARIFICATION
@@ -50,6 +51,7 @@ Dependances externes Python : aucune.
 
 import fcntl
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -69,8 +71,19 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.1.2"
+SERVER_VERSION = "2.3.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
+MCP_SERVER_INSTRUCTIONS = (
+    "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
+    "methodes de ce serveur. Faites d'abord une discovery search complete, puis "
+    "appelez uniquement le nom exact decouvert, par exemple "
+    'tools["cgpt-validation"].request_validation(...). '
+    "Ne lancez pas les methodes de ce serveur comme outils MCP natifs directs, "
+    "ne devinez pas leur nom et ne remplacez pas par shell. Si execute ou la "
+    "discovery exacte manque, arretez-vous et signalez le blocage. Les autres "
+    "clients MCP suivent leur propre contrat. Les decisions CAB et permissions "
+    "natives requises restent obligatoires."
+)
 
 STORE_SCHEMA_VERSION = 2
 
@@ -91,9 +104,11 @@ DEFAULT_CONTROLLER_URL = "http://127.0.0.1:8788"
 
 DEFAULT_POLL_TIMEOUT_SECONDS = 600
 DEFAULT_POLL_INTERVAL_SECONDS = 5
-DEFAULT_REQUEST_TIMEOUT_SECONDS = 0
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 120
 
 CONTROLLER_HTTP_TIMEOUT_SECONDS = 2
+# Notification admission includes native evidence checks; keep below its lease.
+CONTROLLER_NOTIFICATION_TIMEOUT_SECONDS = 10
 CONTROLLER_TCP_TIMEOUT_SECONDS = 1
 
 NOTIFICATION_RETRY_INITIAL_SECONDS = 5
@@ -405,6 +420,7 @@ KNOWN_NOTIFICATIONS = (
 
 VALID_STATES = (
     "PENDING",
+    "NOT_ADMITTED",
     "APPROVED",
     "REJECTED",
     "NEEDS_CLARIFICATION",
@@ -413,6 +429,7 @@ VALID_STATES = (
 )
 
 TERMINAL_STATES = (
+    "NOT_ADMITTED",
     "APPROVED",
     "REJECTED",
     "NEEDS_CLARIFICATION",
@@ -425,6 +442,7 @@ DECIDABLE = (
 )
 
 STATUS_EVENT_TYPES = {
+    "NOT_ADMITTED": "APPROVAL_NOT_ADMITTED",
     "APPROVED": "APPROVAL_APPROVED",
     "REJECTED": "APPROVAL_REJECTED",
     "NEEDS_CLARIFICATION": "APPROVAL_NEEDS_CLARIFICATION",
@@ -483,6 +501,9 @@ SESSION_WATCHDOG_LOCK = threading.Lock()
 SESSION_WATCHDOG_STOP = threading.Event()
 READINESS_PUBLISH_STOP = threading.Event()
 READINESS_PUBLISH_INTERVAL_SECONDS = 30
+ERASURE_PREPARED = None
+ERASURE_PREPARATION_ERROR = None
+ERASURE_LOCK = threading.Lock()
 SESSION_WATCHDOG_STATE = {}
 SESSION_WATCHDOG_LAST_RUN_AT = ""
 SESSION_WATCHDOG_LAST_ERROR = ""
@@ -1904,7 +1925,7 @@ def terminal_event_actor(item):
         "status"
     )
 
-    if status == "EXPIRED":
+    if status in ("EXPIRED", "NOT_ADMITTED"):
         return "BROKER"
 
     if status == "CANCELLED":
@@ -1991,6 +2012,14 @@ def terminal_event_data(item):
                         "",
                     ),
                 ),
+            }
+        )
+
+    elif status == "NOT_ADMITTED":
+        payload.update(
+            {
+                "not_admitted_at": item.get("not_admitted_at", ""),
+                "notification_diagnostic": item.get("notification_diagnostic", {}),
             }
         )
 
@@ -2187,18 +2216,33 @@ def journal_controller_event(
     )
 
 
-def controller_length_failure(exc):
-    """Reconstruit uniquement le diagnostic de longueur connu, sans texte distant."""
-    if exc.code != 400:
-        return None
+CONTROLLER_NOTIFICATION_ERROR_CODES = {
+    503: frozenset(("native-validation-evidence-unavailable", "broker-coordination-not-ready")),
+    400: frozenset(("expected-revisions-invalid", "command-too-long")),
+    409: frozenset((
+        "resource-revision-stale", "reservation-version-stale",
+        "operation-outside-reservation", "validation-reservation-divergent",
+        "run-mandate-already-active", "coordination-upgrade-required",
+        "native-validation-not-correlated", "native-permission-ask-required",
+        "native-permission-context-divergent", "native-permission-control-unavailable",
+        "validation-session-not-admitted", "run-not-reserved", "run-transition-in-flight",
+    )),
+}
+
+
+def controller_error_payload(exc):
+    """Lit un diagnostic JSON borné, sans propager de texte distant."""
     try:
         body = exc.read(1025)
         if len(body) > 1024:
             return None
-        payload = json.loads(body.decode("utf-8"))
+        return json.loads(body.decode("utf-8"))
     except (OSError, HTTPException, ValueError, UnicodeError):
         return None
-    if not isinstance(payload, dict):
+
+
+def controller_length_diagnostic(status, payload):
+    if status != 400 or not isinstance(payload, dict):
         return None
     maximum = payload.get("maxLength")
     actual = payload.get("actualLength")
@@ -2208,6 +2252,44 @@ def controller_length_failure(exc):
         return None
     return ("command-too-long: longueur %d, limite autorisée %d (utf16)."
             % (actual, maximum))
+
+
+def controller_length_failure(exc):
+    """Compatibilité du diagnostic de longueur déjà publié."""
+    return controller_length_diagnostic(exc.code, controller_error_payload(exc))
+
+
+def filtered_notification_diagnostic(value):
+    if not isinstance(value, dict) or set(value) != {"http_status", "error_code"}:
+        return None
+    status, code = value["http_status"], value["error_code"]
+    if type(status) is not int or not 100 <= status <= 599:
+        return None
+    if code is not None and (not isinstance(code, str)
+            or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())):
+        return None
+    return {"http_status": status, "error_code": code}
+
+
+def pre_admission_refusal(item):
+    if item.get("status") != "PENDING" or item.get("notification_status") != "FAILED":
+        return None
+    diagnostic = filtered_notification_diagnostic(item.get("notification_diagnostic"))
+    return diagnostic if diagnostic is not None and diagnostic.get("http_status") in (400, 409) and diagnostic.get("error_code") is not None and diagnostic.get("error_code") != "run-transition-in-flight" else None
+
+
+def mark_not_admitted(item):
+    """Close only a deterministically refused controller notification, never as a decision."""
+    if pre_admission_refusal(item) is None:
+        return False
+    now = utc_now()
+    item["status"] = "NOT_ADMITTED"
+    item["not_admitted_at"] = now
+    item["updated_at"] = now
+    item["notification_next_retry_at"] = ""
+    item["notification_lease_id"] = ""
+    item["notification_lease_until"] = ""
+    return True
 
 
 def notify_controller(
@@ -2257,12 +2339,14 @@ def notify_controller(
     delivered = False
     status = None
     failure = ""
+    diagnostic = None
+    transport_retry_seconds = None
 
     try:
         with request.urlopen(
             http_request,
             timeout=(
-                CONTROLLER_HTTP_TIMEOUT_SECONDS
+                CONTROLLER_NOTIFICATION_TIMEOUT_SECONDS
             ),
         ) as response:
             status = response.status
@@ -2279,15 +2363,32 @@ def notify_controller(
     except error.HTTPError as exc:
         status = exc.code
         with exc:
-            failure = controller_length_failure(exc) or "HTTPError: %s" % status
+            payload = controller_error_payload(exc)
+            if (status == 503 and isinstance(payload, dict)
+                    and set(payload) == {"error", "retry_after_ms"}
+                    and payload["error"] == "transport-update-in-progress"
+                    and type(payload["retry_after_ms"]) is int
+                    and 50 <= payload["retry_after_ms"] <= 1000):
+                transport_retry_seconds = payload["retry_after_ms"] / 1000
+            length_failure = controller_length_diagnostic(status, payload)
+            code = payload.get("error") if isinstance(payload, dict) else None
+            if (not isinstance(code, str) or code not in CONTROLLER_NOTIFICATION_ERROR_CODES.get(status, ())
+                    or (code == "command-too-long" and not length_failure)):
+                code = None
+            diagnostic = filtered_notification_diagnostic({"http_status": status, "error_code": code})
+            failure = length_failure or "HTTPError: %s" % status
 
     except error.URLError as exc:
+        if isinstance(exc.reason, (ConnectionError, TimeoutError)):
+            transport_retry_seconds = 0.25
         failure = (
             "URLError: %s"
             % exc.reason
         )
 
     except OSError as exc:
+        if isinstance(exc, (ConnectionError, TimeoutError)):
+            transport_retry_seconds = 0.25
         failure = (
             "OSError: %s"
             % exc
@@ -2320,6 +2421,9 @@ def notify_controller(
             "error": failure,
         }
 
+    if diagnostic is not None:
+        event_data["diagnostic"] = diagnostic
+
     journal_controller_event(
         item,
         event_type,
@@ -2335,6 +2439,8 @@ def notify_controller(
         "delivered": delivered,
         "http_status": status,
         "error": failure,
+        "diagnostic": diagnostic,
+        "transport_retry_seconds": transport_retry_seconds,
     }
 
 
@@ -2425,7 +2531,7 @@ def decision_fingerprint(decision):
     ).hexdigest()[:24]
 
 
-def controller_decision(item):
+def controller_decision(item, *, wait_ms=0):
     request_id = item.get(
         "requestId",
         "",
@@ -2442,6 +2548,8 @@ def controller_decision(item):
             safe="",
         )
     )
+    if type(wait_ms) is int and 0 < wait_ms <= 1000:
+        url += "?wait_ms=%d" % wait_ms
 
     journal_controller_event(
         item,
@@ -2821,6 +2929,10 @@ def validate_controller_decision(
     ):
         return False
 
+    if (item.get("tool_input_sha256") != decision.get("tool_input_sha256")
+            or item.get("shell_background") != decision.get("shell_background")):
+        return False
+
     if item.get("run_id") and (decision.get("run_id") != item["run_id"] or
             decision.get("reservation_version") != item.get("reservation_version")):
         return False
@@ -2891,6 +3003,8 @@ def notification_retry_delay(
 ):
     if attempts < 1:
         attempts = 1
+    if attempts > 64:
+        return NOTIFICATION_RETRY_MAX_SECONDS
 
     delay = (
         NOTIFICATION_RETRY_INITIAL_SECONDS
@@ -2933,6 +3047,9 @@ def notification_retry_due(item):
     if item.get(
         "notification_status"
     ) == "DELIVERED":
+        return False
+
+    if pre_admission_refusal(item) is not None:
         return False
 
     if notification_lease_active(
@@ -2980,7 +3097,8 @@ def acquire_notification_lease(
             item
         )
 
-        if expired:
+        not_admitted = False if expired else mark_not_admitted(item)
+        if expired or not_admitted:
             save_store(
                 path,
                 data,
@@ -3044,6 +3162,8 @@ def complete_notification_lease(
     approval_id,
     lease_id,
     delivered,
+    diagnostic=None,
+    transport_retry_seconds=None,
 ):
     path = store_path()
 
@@ -3104,6 +3224,8 @@ def complete_notification_lease(
         ] = ""
 
         if delivered:
+            item.pop("notification_transport_retries", None)
+            item.pop("notification_standard_attempts", None)
             item[
                 "notification_status"
             ] = "DELIVERED"
@@ -3117,19 +3239,44 @@ def complete_notification_lease(
                 "notification_status"
             ] = "FAILED"
 
+            fast_retries = item.get("notification_transport_retries", 0)
+            if type(fast_retries) is not int or not 0 <= fast_retries <= 10:
+                fast_retries = 0
+            standard_attempts = item.get("notification_standard_attempts", attempts - 1)
+            if type(standard_attempts) is not int or standard_attempts < 0:
+                standard_attempts = attempts - 1
+            fast_retry = (type(transport_retry_seconds) in (int, float)
+                          and 0.05 <= transport_retry_seconds <= 1 and fast_retries < 10)
+            delay = notification_retry_delay(standard_attempts + 1)
+            if fast_retry:
+                delay = transport_retry_seconds
+                item["notification_transport_retries"] = fast_retries + 1
+                item["notification_standard_attempts"] = standard_attempts
+            elif transport_retry_seconds is None:
+                item.pop("notification_transport_retries", None)
+            if not fast_retry and "notification_standard_attempts" in item:
+                item["notification_standard_attempts"] = standard_attempts + 1
             item[
                 "notification_next_retry_at"
             ] = utc_from_timestamp(
                 time.time()
-                + notification_retry_delay(
-                    attempts
-                )
+                + delay
             )
+
+        safe_diagnostic = filtered_notification_diagnostic(diagnostic)
+        if not delivered and safe_diagnostic is not None:
+            item["notification_diagnostic"] = safe_diagnostic
+        else:
+            item.pop("notification_diagnostic", None)
+
+        not_admitted = mark_not_admitted(item)
 
         save_store(
             path,
             data,
         )
+        if not_admitted:
+            repair_journal_for_item(item)
 
 
 def maybe_notify_controller(item):
@@ -3167,6 +3314,8 @@ def maybe_notify_controller(item):
             "lease_id"
         ],
         delivered,
+        notification_result.get("diagnostic"),
+        notification_result.get("transport_retry_seconds"),
     )
 
     return delivered
@@ -3493,7 +3642,12 @@ def validate_existing_approval(
     directory,
     commands,
     run_identity=None,
+    tool_input_sha256=None,
+    shell_background=None,
 ):
+    if (item.get("tool_input_sha256") != tool_input_sha256
+            or item.get("shell_background") != shell_background):
+        return False
     if bool(item.get("run_id")) != bool(run_identity):
         return False
     if run_identity and any(item.get(k) != v for k, v in run_identity.items()):
@@ -3580,6 +3734,26 @@ def do_propose(args):
         "directory",
         500,
     )
+
+    tool_input_sha256 = args.get("tool_input_sha256")
+    if "tool_input_sha256" in args and (
+        not isinstance(tool_input_sha256, str)
+        or not re.fullmatch(r"[a-f0-9]{64}", tool_input_sha256)
+        or not ((len(files) == 1 and not commands) or (len(commands) == 1 and not files))
+        or not session_id or not directory
+    ):
+        raise ValidationError("tool_input_sha256 exige un mandat unitaire natif et une empreinte SHA256")
+
+    shell_background = args.get("shell_background")
+    if "shell_background" in args and (
+        shell_background is not True or files or len(commands) != 1
+        or tool_input_sha256 is None or not args.get("run_id")
+        or not isinstance(args.get("resources"), list)
+        or not any(isinstance(r, dict) and r.get("mode") == "write"
+                   and isinstance(r.get("key"), str) and r["key"].startswith("port:")
+                   for r in args["resources"])
+    ):
+        raise ValidationError("shell_background exige un shell unitaire exact et un port write reserve")
 
     run_id = optional_str(args, "run_id", 100)
     run_identity = {}
@@ -3756,6 +3930,8 @@ def do_propose(args):
                 directory,
                 commands,
                 run_identity,
+                tool_input_sha256,
+                shell_background,
             ):
                 raise ValidationError(
                     "retry incompatible avec "
@@ -3812,10 +3988,27 @@ def do_propose(args):
                     % approval_id
                 )
 
+            if (os.path.exists(journal.journal_path() + ".erasure-epoch.json")
+                    or (os.path.exists(journal.journal_path() + ".hmac.key")
+                        and os.path.exists(journal.checkpoint_path()))):
+                admission = request.Request(controller_url() + "/cleanup/admission",
+                    data=json.dumps({"runId":run_identity.get("run_id"),
+                        "version":run_identity.get("reservation_version"),
+                        "changeId":change_id,"sessionId":session_id}).encode("utf-8"),
+                    headers={"Content-Type":"application/json","x-cab-continuity":"cab-continuity-v1"},method="POST")
+                try:
+                    with request.urlopen(admission, timeout=2) as response:
+                        if json.loads(response.read(4096)).get("accepted") is not True:
+                            raise ValidationError("erasure-admission-refused")
+                except (error.URLError, OSError, ValueError) as exc:
+                    raise ValidationError("erasure-admission-unavailable-or-retired") from exc
+
             now = utc_now()
 
             item = {
                 **run_identity,
+                **({"tool_input_sha256": tool_input_sha256} if tool_input_sha256 is not None else {}),
+                **({"shell_background": True} if shell_background is True else {}),
                 "approval_id": approval_id,
                 "requestId": request_id,
                 "legacy_requestIds": [],
@@ -3897,7 +4090,20 @@ def do_propose(args):
     return result
 
 
-def do_get(args):
+def do_lookup_validation(args):
+    keys = ("requestId", "run_id", "session_id", "operation_id", "operation_digest")
+    identity = {key: require_str(args, key, 100) for key in keys}
+    with locked_store(store_path()):
+        data, _ = migrate_store(raw_load_store(store_path()))
+        item = find_by_request_id(data["approvals"], identity["requestId"])
+        if item is None or any(item.get(key) != value for key, value in identity.items()):
+            return {"found": False, "snapshot_only": True}
+        return {"found": True, "snapshot_only": True, **identity,
+                "approval_id": item["approval_id"], "status": item["status"],
+                "next_action": "poll_approval"}
+
+
+def do_get(args, *, wait_ms=0):
     approval_id = optional_str(
         args,
         "approval_id",
@@ -3932,7 +4138,8 @@ def do_get(args):
             item
         )
 
-        if expired:
+        not_admitted = False if expired else mark_not_admitted(item)
+        if expired or not_admitted:
             save_store(
                 path,
                 data,
@@ -3965,9 +4172,7 @@ def do_get(args):
     decision = None
 
     if should_check_decision:
-        decision = controller_decision(
-            snapshot
-        )
+        decision = (controller_decision(snapshot, wait_ms=wait_ms) if wait_ms else controller_decision(snapshot))
 
     with locked_store(
         path
@@ -4042,10 +4247,12 @@ def wait_for_approval(
         ):
             raise RequestCancelled()
 
+        started = time.monotonic()
+        decision_wait_ms = 1000 if deadline is None else min(1000, max(0, int((deadline - started) * 1000)))
         item = do_get(
             {
                 "approval_id": approval_id,
-            }
+            }, wait_ms=decision_wait_ms
         )
 
         if item.get(
@@ -4053,9 +4260,10 @@ def wait_for_approval(
         ) in TERMINAL_STATES:
             return item
 
+        finished = started if deadline is not None and started >= deadline else time.monotonic()
         if (
             deadline is not None
-            and time.monotonic()
+            and finished
             >= deadline
         ):
             result = dict(
@@ -4080,15 +4288,18 @@ def wait_for_approval(
 
             return result
 
+        if finished - started >= decision_wait_ms / 1000 * 0.8 and decision_wait_ms:
+            continue
+        fallback_interval = min(interval_seconds, 1)
         if cancel_event is not None:
             if cancel_event.wait(
-                interval_seconds
+                fallback_interval
             ):
                 raise RequestCancelled()
 
         else:
             time.sleep(
-                interval_seconds
+                fallback_interval
             )
 
 
@@ -4130,7 +4341,7 @@ def do_request_validation(
     ) = validate_wait_parameters(
         args,
         DEFAULT_REQUEST_TIMEOUT_SECONDS,
-        allow_no_timeout=True,
+        allow_no_timeout=False,
     )
 
     item = do_propose(
@@ -4206,9 +4417,9 @@ def do_list(args):
         for item in data[
             "approvals"
         ].values():
-            if check_expired(
-                item
-            ):
+            expired = check_expired(item)
+            not_admitted = False if expired else mark_not_admitted(item)
+            if expired or not_admitted:
                 changed = True
 
         #
@@ -4729,6 +4940,7 @@ def store_journal_consistency_snapshot():
         ).append(event)
 
     terminal_by_event = {
+        "APPROVAL_NOT_ADMITTED": "NOT_ADMITTED",
         "APPROVAL_APPROVED": "APPROVED",
         "APPROVAL_REJECTED": "REJECTED",
         "APPROVAL_NEEDS_CLARIFICATION": "NEEDS_CLARIFICATION",
@@ -5574,7 +5786,7 @@ CONTROLLED_REMEDIATION_GUARDRAILS = {
         "max_attempts": 3,
         "cooldown_seconds": 60,
         "idempotence_scope": "approval_id_and_controller_decision",
-        "success_condition": "decision_applied_or_notification_reestablished",
+        "success_condition": "decision_applied_or_terminal_observed_or_notification_delivery_confirmed",
         "abort_conditions": [
             "approval_terminal",
             "controller_unreachable",
@@ -6050,6 +6262,7 @@ def do_finish_remediation_attempt(args, success):
         )
 
     action_code = attempt.get("action_code", "")
+    success = bool(success) and controlled_remediation_result_success(action_code, result)
     scope_key = attempt.get("scope_key", "")
     approval_id = attempt.get("approval_id", "")
     event_type = (
@@ -7039,20 +7252,32 @@ def execute_reconcile_pending_approval(approval_id):
         data = load_store(path)
         current = data.get("approvals", {}).get(approval_id)
         if current is None:
-            raise ValidationError(
-                "approval_id '%s' disparu apres renotification"
-                % approval_id
-            )
-        return {
+            raise ValidationError("approval_id '%s' disparu apres renotification" % approval_id)
+        status = current.get("status", "")
+        notification_status = current.get("notification_status", "")
+        if status in TERMINAL_STATES:
+            outcome = "ALREADY_TERMINAL"
+        elif notification_status == "DELIVERED":
+            outcome = "NOTIFICATION_REESTABLISHED" if delivered else "NOTIFICATION_ALREADY_DELIVERED"
+        else:
+            outcome = "NOTIFICATION_NOT_REESTABLISHED"
+        result = {
             "approval_id": approval_id,
-            "outcome": "NOTIFICATION_REESTABLISHED",
-            "status": current.get("status", ""),
+            "outcome": outcome,
+            "status": status,
             "notification_delivered": bool(delivered),
-            "notification_status": current.get(
-                "notification_status", ""
-            ),
-            "notification_reestablished": True,
+            "notification_status": notification_status,
+            "notification_reestablished": outcome == "NOTIFICATION_REESTABLISHED",
+            "notification_delivery_observed": notification_status == "DELIVERED",
+            "notification_diagnostic": filtered_notification_diagnostic(current.get("notification_diagnostic")),
         }
+        attempts = current.get("notification_attempts")
+        result["notification_attempts"] = attempts if type(attempts) is int and attempts >= 0 else None
+        for key in ("notification_updated_at", "notification_next_retry_at", "notification_lease_until"):
+            value = current.get(key, "")
+            result[key] = value if isinstance(value, str) and (not value or parse_utc(value) is not None) else ""
+        return result
+
 
 def execute_retry_reconciliation():
     """Relance explicitement une reconciliation globale et verifie son resultat."""
@@ -7190,6 +7415,26 @@ def execute_controlled_remediation(
     )
 
 
+def controlled_remediation_result_success(action_code, result):
+    """Qualifie le resultat de reconciliation sans inventer une livraison."""
+    if action_code != "RECONCILE_PENDING_APPROVALS":
+        return True
+    if not isinstance(result, dict):
+        return False
+    outcome = result.get("outcome")
+    if outcome == "DECISION_APPLIED":
+        return result.get("status") in ("APPROVED", "REJECTED", "NEEDS_CLARIFICATION")
+    if outcome == "ALREADY_TERMINAL":
+        return result.get("status") in TERMINAL_STATES
+    if result.get("status") != "PENDING" or result.get("notification_status") != "DELIVERED":
+        return False
+    if outcome == "NOTIFICATION_REESTABLISHED":
+        return result.get("notification_delivered") is True and result.get("notification_reestablished") is True
+    if outcome == "NOTIFICATION_ALREADY_DELIVERED":
+        return result.get("notification_delivery_observed") is True and result.get("notification_reestablished") is False
+    return False
+
+
 def do_execute_controlled_remediation(args):
     """Execute manuellement une remediation CONTROLLED admissible.
 
@@ -7311,6 +7556,7 @@ def do_execute_controlled_remediation(args):
             "attempt": failure,
         }
 
+    success = controlled_remediation_result_success(action_code, result)
     completed = do_finish_remediation_attempt(
         {
             "attempt_id": attempt_id,
@@ -7321,11 +7567,11 @@ def do_execute_controlled_remediation(args):
             ),
             "result": result,
         },
-        True,
+        success,
     )
 
     return {
-        "status": "COMPLETED",
+        "status": "COMPLETED" if success else "FAILED",
         "action_code": action_code,
         "approval_id": approval_id,
         "attempt_id": attempt_id,
@@ -7399,7 +7645,7 @@ def remediation_catalog_snapshot():
     }
 
 
-def recommended_action_for_root_cause(root_cause):
+def recommended_action_for_root_cause(root_cause, pending_watchdog=None):
     """Retourne une recommandation structuree sans executer de remediaton."""
     actions = {
         "NONE": {
@@ -7519,6 +7765,25 @@ def recommended_action_for_root_cause(root_cause):
             "reason": "cause racine inconnue du catalogue d'actions",
         },
     ))
+    if root_cause == "NOTIFICATION_LEASE_STUCK" and pending_watchdog is not None:
+        approvals = pending_watchdog.get("approvals", {}) if isinstance(pending_watchdog, dict) else {}
+        stalled = [value for value in approvals.values() if isinstance(value, dict)
+                   and value.get("state") == "STALLED_NOTIFICATION"] if isinstance(approvals, dict) else []
+        lease_only = bool(stalled) and all(
+            value.get("reason") == "notification_lease_expired"
+            and value.get("notification_status") == "SENDING" for value in stalled
+        )
+        retry_only = bool(stalled) and all(
+            value.get("reason") == "retry_overdue" and value.get("notification_status") == "FAILED"
+            or value.get("reason") == "notification_never_delivered"
+            and value.get("notification_status", "") in ("", "PENDING") for value in stalled
+        )
+        if retry_only:
+            action = dict(actions["CONTROLLER_DECISION_PATH_STALLED"])
+            action["reason"] = "notification sans lease active : evaluer la reconciliation ciblee avant renotification"
+        elif not lease_only:
+            action = dict(actions["PENDING_WATCHDOG_ERROR"])
+            action["reason"] = "sous-etats de notification mixtes ou incomplets : identifier la cible avant remediation"
     class_meta = remediation_class_metadata(action.get("mode", "DIAGNOSTIC"))
     action["class"] = action.get("mode", "DIAGNOSTIC")
     action["mutates_state"] = class_meta["mutates_state"]
@@ -7670,7 +7935,7 @@ def classify_root_cause(
     return {
         "status": status,
         "root_cause": root_cause,
-        "recommended_action": recommended_action_for_root_cause(root_cause),
+        "recommended_action": recommended_action_for_root_cause(root_cause, pending_watchdog),
         "contributing_factors": factors,
         "diagnosed_at": utc_now(),
     }
@@ -7817,6 +8082,7 @@ def do_health():
             "integrity": journal_integrity,
             "business_events": [
                 "APPROVAL_CREATED",
+                "APPROVAL_NOT_ADMITTED",
                 "APPROVAL_APPROVED",
                 "APPROVAL_REJECTED",
                 "APPROVAL_NEEDS_CLARIFICATION",
@@ -8037,6 +8303,7 @@ def do_readiness(args=None):
         "schema_version": 1,
         "status": status,
         "ready": status == "READY",
+        "broker_process": {"pid": os.getpid(), "started_at": PROCESS_STARTED_AT},
         "server_version": SERVER_VERSION,
         "instance_id": INSTANCE_ID,
         "root_cause": diagnosis.get("root_cause", "NONE"),
@@ -8119,7 +8386,13 @@ def do_readiness(args=None):
 
 def publish_readiness_to_controller():
     """Publie le snapshot readiness au controleur local."""
+    global ERASURE_PREPARATION_ERROR
     snapshot = do_readiness()
+    with ERASURE_LOCK:
+        if ERASURE_PREPARED:
+            snapshot["erasure_prepared"] = ERASURE_PREPARED["transactionId"]
+        if ERASURE_PREPARATION_ERROR:
+            snapshot["erasure_prepare_error"] = dict(ERASURE_PREPARATION_ERROR)
     endpoint = controller_url() + "/broker/readiness"
     payload = json.dumps(snapshot, ensure_ascii=False).encode("utf-8")
     http_request = request.Request(
@@ -8128,8 +8401,20 @@ def publish_readiness_to_controller():
     )
     try:
         with request.urlopen(http_request, timeout=2) as response:
+            body = response.read(1024 * 1024)
+            value = json.loads(body) if body else {}
+            if not isinstance(value, dict):
+                return False
+            if value.get("erasure_prepare") is not None:
+                try:
+                    prepare_terminal_erasure(value["erasure_prepare"])
+                    ERASURE_PREPARATION_ERROR = None
+                except (ValidationError, StoreError, OSError, journal.JournalError) as exc:
+                    code = str(exc)
+                    ERASURE_PREPARATION_ERROR = {"transactionId":value["erasure_prepare"].get("transactionId"),
+                        "code":code if re.fullmatch(r"erasure-[a-z0-9-]+",code) else "erasure-broker-preparation-failed"}
             return 200 <= response.status < 300
-    except (error.URLError, error.HTTPError, OSError):
+    except (error.URLError, error.HTTPError, OSError, ValueError):
         return False
 
 
@@ -8158,6 +8443,260 @@ def start_readiness_publisher():
 
 def stop_readiness_publisher():
     READINESS_PUBLISH_STOP.set()
+
+
+def erasure_control_signature(value, key):
+    material = json.dumps(value, sort_keys=True, separators=(",", ":"),
+                          ensure_ascii=False).encode("utf-8")
+    digest = hashlib.sha256(material).hexdigest().encode("ascii")
+    return hmac.new(key, digest, hashlib.sha256).hexdigest()
+
+
+def erasure_journal_snapshot_unlocked(path):
+    """Verifie l'ancre avant acquittement puis avant preparation hors ligne."""
+    events = journal.read_events_unlocked(path)
+    journal.validate_sequences(events)
+    journal.calculate_chain_tip(events)
+    checkpoint = journal.verify_checkpoint(events, path)
+    if not checkpoint.get("ok"):
+        raise ValidationError("erasure-journal-integrity-invalid")
+    if not checkpoint.get("enabled") and os.path.exists(journal.checkpoint_path()):
+        raise ValidationError("erasure-journal-authentication-unavailable")
+    if checkpoint.get("enabled") and journal.checkpoint_key(allow_unanchored=True) is None:
+        raise ValidationError("erasure-primary-signing-key-unavailable")
+    return events, checkpoint
+
+
+def prepare_terminal_erasure(signed):
+    """Accepte seulement l'intention locale scellee, sans encore effacer."""
+    global ERASURE_PREPARED
+    from pathlib import Path
+    import stat
+    if not isinstance(signed, dict):
+        raise ValidationError("erasure-control-invalid")
+    value = dict(signed)
+    signature = value.pop("signature", "")
+    root = value.get("controlRoot", "")
+    if (value.get("protocol") != "cab-change-erasure-v1"
+            or not os.path.isabs(root) or os.path.realpath(root) != root
+            or not re.fullmatch(r"erasure-[a-f0-9-]{36}", value.get("transactionId", ""))):
+        raise ValidationError("erasure-control-invalid")
+    path = str(Path(root) / "change-erasure.key")
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
+                or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size != 32):
+            raise ValidationError("erasure-control-key-unsafe")
+        key = os.read(fd, 32)
+    finally:
+        os.close(fd)
+    if not hmac.compare_digest(signature, erasure_control_signature(value, key)):
+        raise ValidationError("erasure-control-signature-invalid")
+    scope = value.get("scope", {})
+    if (not isinstance(scope.get("ids"), list) or not scope["ids"]
+            or not isinstance(scope.get("runIds"), list)):
+        raise ValidationError("erasure-control-scope-invalid")
+    with locked_store(store_path()):
+        items = list(load_store(store_path())["approvals"].values())
+        if any(item.get("directory") != scope.get("workspace") for item in items
+               if item.get("change_id") == scope.get("changeId") or item.get("run_id") in scope["runIds"]):
+            raise ValidationError("erasure-broker-ownership-ambiguous")
+        if any(item.get("status") not in TERMINAL_STATES for item in items
+               if item.get("change_id") == scope.get("changeId")
+               or item.get("run_id") in scope["runIds"]):
+            raise ValidationError("erasure-broker-pending")
+    with ERASURE_LOCK:
+        if ERASURE_PREPARED and ERASURE_PREPARED != signed:
+            raise ValidationError("erasure-broker-already-prepared")
+    with journal.locked_journal(journal.journal_path()):
+        erasure_journal_snapshot_unlocked(journal.journal_path())
+    with ERASURE_LOCK:
+        ERASURE_PREPARED = signed
+
+
+def prepare_terminal_erasure_bundle():
+    """Apres arret des producteurs, prepare le journal rescellable hors ligne.
+
+    Le pilote applique les candidats uniquement apres disparition de ce PID.
+    Aucun ancien contenu cible n'est sauvegarde par ce prepareur.
+    """
+    import stat
+    def private_parent(directory):
+        if os.path.realpath(directory) != os.path.abspath(directory):
+            return False
+        while True:
+            metadata = os.stat(directory, follow_symlinks=False)
+            if stat.S_ISDIR(metadata.st_mode) and metadata.st_uid == os.getuid() and not metadata.st_mode & 0o077:
+                return True
+            parent = os.path.dirname(directory)
+            if parent == directory:
+                return False
+            directory = parent
+    with ERASURE_LOCK:
+        signed = ERASURE_PREPARED
+    if signed is None:
+        return
+    prepare_terminal_erasure(signed)
+    value = dict(signed)
+    value.pop("signature")
+    # Un simple redemarrage CABU ne doit pas preparer un ancien effacement.
+    control_path = os.path.join(value["controlRoot"], "change-erasure.json")
+    fd = os.open(control_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size > 128 * 1024 * 1024:
+            raise ValidationError("erasure-control-intent-unsafe")
+        with os.fdopen(os.dup(fd), "r", encoding="utf-8") as handle:
+            intent = json.load(handle)
+    finally:
+        os.close(fd)
+    intent_signature = intent.pop("signature", "")
+    fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if info.st_size != 32 or info.st_mode & 0o077 or info.st_uid != os.getuid():
+            raise ValidationError("erasure-control-key-unsafe")
+        control_key = os.read(fd, 32)
+    finally:
+        os.close(fd)
+    if not hmac.compare_digest(intent_signature, erasure_control_signature(intent, control_key)):
+        raise ValidationError("erasure-control-signature-invalid")
+    if intent.get("phase") != "STOPPING":
+        return
+    if intent.get("transactionId") != value["transactionId"] or intent.get("scope") != value["scope"]:
+        raise ValidationError("erasure-control-intent-divergent")
+    scope = dict(value["scope"])
+    ids = set(scope["ids"])
+    identity_keys = {"runId", "run_id", "changeId", "change_id", "sessionId", "session_id",
+                     "requestId", "approval_id", "operation_id", "access_id"}
+    with locked_store(store_path()):
+        data = load_store(store_path())
+        for item in data["approvals"].values():
+            if item.get("change_id") == scope["changeId"] or item.get("run_id") in scope["runIds"]:
+                ids.update(v for k, v in item.items() if k in identity_keys and isinstance(v, str) and v)
+                ids.update(item_request_ids(item))
+    scope["ids"] = sorted(ids)
+    path = journal.journal_path()
+    with journal.locked_journal(path):
+        events, checkpoint = erasure_journal_snapshot_unlocked(path)
+        selected = []
+        def owns_event(node, field=""):
+            if isinstance(node, dict):
+                return any((key in identity_keys and isinstance(item, str) and item in ids)
+                           or (key == "event_key" and isinstance(item, str)
+                               and any(token in ids and token != scope["changeId"] for token in item.split(":")))
+                           or owns_event(item, key) for key, item in node.items())
+            if isinstance(node, list):
+                return any((field in {"approval_ids", "requestIds", "runIds", "sessionIds"}
+                            and isinstance(item, str) and item in ids) or owns_event(item, field)
+                           for item in node)
+            return False
+
+        def foreign_reference(node):
+            if isinstance(node, dict):
+                return any((key in {"run_id", "runId"} and isinstance(item, str) and item not in scope["runIds"])
+                           or (key == "directory" and isinstance(item, str) and item != scope["workspace"])
+                           or foreign_reference(item) for key, item in node.items())
+            if isinstance(node, list):
+                return any(foreign_reference(item) for item in node)
+            return False
+
+        for event in events:
+            if owns_event(event):
+                if event.get("change_id") and event["change_id"] != scope["changeId"]:
+                    raise ValidationError("erasure-journal-foreign-reference")
+                if foreign_reference(event):
+                    raise ValidationError("erasure-journal-foreign-reference")
+                selected.append(event["event_id"])
+        next_events = journal.prepare_erasure_reanchor(events, selected)
+        signing_key = journal.checkpoint_key(allow_unanchored=True)
+        if signing_key is None:
+            if checkpoint.get("enabled"):
+                raise ValidationError("erasure-primary-signing-key-unavailable")
+            key_path = path + ".hmac.key"
+            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            try:
+                signing_key = os.urandom(32)
+                if os.write(fd, signing_key) != len(signing_key):
+                    raise OSError("erasure-key-write-incomplete")
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            directory_fd = os.open(os.path.dirname(path), os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        next_checkpoint = journal.build_checkpoint(len(next_events), journal.calculate_chain_tip(next_events), path, key=signing_key)
+        entries = []
+        for target, replacement in [(path, "".join(json.dumps(event, ensure_ascii=False, separators=(",", ":"))+"\n" for event in next_events)),
+                                    (journal.checkpoint_path(), json.dumps(next_checkpoint, ensure_ascii=False, separators=(",", ":"))+"\n")]:
+            before = None
+            if os.path.exists(target):
+                fd = os.open(target, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+                try:
+                    info = os.fstat(fd)
+                    parent = os.stat(os.path.dirname(target), follow_symlinks=False)
+                    if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid()
+                            or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or not private_parent(os.path.dirname(target))):
+                        raise ValidationError("erasure-broker-file-unsafe")
+                    with os.fdopen(os.dup(fd), "rb") as handle:
+                        before = hashlib.sha256(handle.read()).hexdigest()
+                finally:
+                    os.close(fd)
+            entries.append({"path":target,"before":before,"text":replacement,"remove":False})
+    epoch_path = journal.journal_path() + ".erasure-epoch.json"
+    epoch_before = None
+    previous_epoch = 0
+    previous_generation = 0
+    if os.path.exists(epoch_path):
+        fd = os.open(epoch_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid():
+                raise ValidationError("erasure-epoch-file-unsafe")
+            with os.fdopen(os.dup(fd), "rb") as handle:
+                raw_epoch = handle.read()
+                epoch_before = hashlib.sha256(raw_epoch).hexdigest()
+                old_epoch = json.loads(raw_epoch)
+                previous_epoch = int(old_epoch["epoch"])
+                previous_generation = int(old_epoch["generation"])
+                if previous_epoch < 0 or previous_generation < 0:
+                    raise ValidationError("erasure-epoch-invalid")
+        finally:
+            os.close(fd)
+    epoch = {"epoch":str(max(time.time_ns(), previous_epoch + 1)),
+             "generation":max(scope["registrySequence"], previous_generation)}
+    entries.append({"path":epoch_path,"before":epoch_before,"text":json.dumps(epoch,separators=(",", ":"))+"\n","remove":False})
+    roots = {store_path(), path, journal.checkpoint_path(), AUTO_REMEDIATION_CIRCUIT_STATE_PATH}
+    for state_file in (store_path(), path, journal.checkpoint_path()):
+        parent = os.path.dirname(state_file)
+        if any(part.startswith(("cab-approval-bridge", "cgpt-approval-bridge")) or part == "broker"
+               for part in parent.split(os.sep)):
+            roots.add(parent)
+    bundle = {"protocol":value["protocol"],"transactionId":value["transactionId"],"scope":scope,
+              "roots":sorted(roots),
+              "journalPaths":[path,journal.checkpoint_path()],"entries":entries,"brokerPid":os.getpid()}
+    bundle["locks"] = {"instance":instance_lock_path(),"store":store_path()+".lock","journal":journal.journal_lock_path(path)}
+    fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size != 32:
+            raise ValidationError("erasure-control-key-unsafe")
+        key = os.read(fd, 32)
+    finally:
+        os.close(fd)
+    bundle["schema_version"] = STORE_SCHEMA_VERSION
+    bundle["signature"] = erasure_control_signature(bundle, key)
+    bundle_path = os.path.join(value["controlRoot"], "broker-erasure.json")
+    save_store(bundle_path, bundle)
+    fd = os.open(bundle_path, os.O_RDONLY | os.O_NOFOLLOW)
+    try:
+        os.fchmod(fd, 0o600)
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def reconcile_pending_approvals():
@@ -8235,6 +8774,9 @@ def reconcile_pending_approvals():
                         "notification_next_retry_at"
                     ] = ""
 
+                    changed = True
+
+                if mark_not_admitted(item):
                     changed = True
 
             #
@@ -8394,6 +8936,9 @@ def start_background_reconciliation():
 
 
 APPROVAL_REQUEST_PROPERTIES = {
+    "shell_background": {"const": True, "description": "Shell background explicite, arguments exacts, timeout natif positif et port write reserve."},
+    "tool_input_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$",
+        "description": "Empreinte canonique SHA256 des arguments natifs write/edit/shell exacts approuves ; verifiee avant once."},
     "run_id": {"type": "string"},
     "reservation_version": {"type": "integer", "minimum": 1},
     "coordination_protocol": {"const": "resource-scoped-v1"},
@@ -8401,7 +8946,9 @@ APPROVAL_REQUEST_PROPERTIES = {
     "operation_digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
     "expected_revisions": {"type": "object", "maxProperties": 256,
         "additionalProperties": {"type": "integer", "minimum": 0}},
-    "access_id": {"type": "string", "maxLength": 100},
+    "access_id": {"type": "string", "minLength": 1, "maxLength": 100,
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$",
+        "description": "Identifiant optionnel d un acces existant ; omettre la cle si absent, jamais une chaine vide."},
     "resources": {"type": "array", "items": {"type": "object",
         "properties": {"key": {"type": "string"}, "mode": {"enum": ["read", "write"]}},
         "required": ["key", "mode"], "additionalProperties": False}},
@@ -8446,6 +8993,17 @@ APPROVAL_REQUEST_PROPERTIES = {
 
 TOOLS = [
     {
+        "name": "lookup_validation",
+        "description": "Retrouve le recu existant apres perte de reponse, sans creation ni notification.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {key: {"type": "string", "minLength": 1, "maxLength": 100}
+                           for key in ("requestId", "run_id", "session_id", "operation_id", "operation_digest")},
+            "required": ["requestId", "run_id", "session_id", "operation_id", "operation_digest"],
+            "additionalProperties": False,
+        },
+    },
+    {
         "name": "request_validation",
         "description": (
             "Cree ou retrouve une validation "
@@ -8457,9 +9015,15 @@ TOOLS = [
                 **APPROVAL_REQUEST_PROPERTIES,
                 "timeout_seconds": {
                     "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3600,
+                    "default": DEFAULT_REQUEST_TIMEOUT_SECONDS,
                 },
                 "interval_seconds": {
                     "type": "integer",
+                    "minimum": 1,
+                    "maximum": 60,
+                    "default": DEFAULT_POLL_INTERVAL_SECONDS,
                 },
             },
             "required": [
@@ -8761,6 +9325,14 @@ TOOLS = [
         },
     },
 ]
+
+MCP_CODEMODE_TOOL_HINT = (
+    "OpenCode Code Mode : utilisez execute apres search, avec le nom exact "
+    "decouvert ; ne lancez pas cette methode directement depuis le catalogue "
+    "natif. Les autres clients MCP suivent leur propre contrat. "
+)
+for _tool in TOOLS:
+    _tool["description"] = MCP_CODEMODE_TOOL_HINT + _tool["description"]
 
 
 def ok_result(
@@ -9160,6 +9732,7 @@ def handle_request(
                         "name": SERVER_NAME,
                         "version": SERVER_VERSION,
                     },
+                    "instructions": MCP_SERVER_INSTRUCTIONS,
                 },
             )
 
@@ -9212,6 +9785,9 @@ def handle_request(
             payload = do_propose(
                 args
             )
+
+        elif name == "lookup_validation":
+            payload = do_lookup_validation(args)
 
         elif name == "get_approval":
             payload = do_get(
@@ -9945,6 +10521,18 @@ def main():
                 flush=True,
             )
 
+        if ERASURE_PREPARED:
+            try:
+                deadline = time.monotonic() + 15
+                for worker in threading.enumerate():
+                    if worker is not threading.current_thread() and worker.name.startswith("cgpt-mcp-"):
+                        worker.join(max(0, deadline - time.monotonic()))
+                        if worker.is_alive():
+                            raise ValidationError("erasure-background-writer-active")
+                prepare_terminal_erasure_bundle()
+            except (OSError, ValueError, ValidationError, StoreError, journal.JournalError,
+                    journal.JournalValidationError):
+                print("cgpt-approval-bridge: erasure-bundle-unavailable", file=sys.stderr, flush=True)
         release_instance_lock()
 
     return 0

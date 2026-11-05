@@ -1,3 +1,5 @@
+# DIS07 — Ajouter les commandes canoniques CAB et CABU
+
 ## Why
 
 La commande distribuée est nommée `/cab` alors que la forme attendue est `/CAB`.
