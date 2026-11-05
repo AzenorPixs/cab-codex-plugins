@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.36 — 2026-11-05
+
+- Notification : délai dédié10s sous lease15s ; lectures2s conservées.
+- Tests HTTP retardés et expiration sans décision, procédure distribuée et reprise exacte.
+
 ## 2.2.35 — 2026-11-05
 
 - Résultat de RECONCILE_PENDING_APPROVALS lié à la décision/terminal/livraison réellement confirmés ; absence de rétablissement marquée FAILED dans réponse et registre.

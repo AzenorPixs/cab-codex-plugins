@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.35
+# Index du protocole CAB 2.2.36
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
