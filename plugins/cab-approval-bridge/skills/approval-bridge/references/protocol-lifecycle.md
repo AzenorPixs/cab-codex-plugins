@@ -1,4 +1,4 @@
-# Statistiques et nettoyage final — CAB 2.2.40
+# Statistiques et nettoyage final — CAB 2.3.2
 
 ## Statistiques des sessions pilotées
 
@@ -51,10 +51,16 @@ Un arrêt pour dépendances manquantes utilise les relevés de fin de cette
 session ; il ne les présente pas comme des relevés après archivage.
 
 L'agent de codage présente le chemin, les ajouts proposés et leurs preuves.
-L'orchestrateur les valide puis confie l'édition de ce seul fichier à l'agent
-de codage sous mandat unitaire distinct de ceux de `BLOCKERS.md`, de `tasks.md`
+L’orchestrateur les valide puis confie l’édition du rapport et de son candidat
+adjacent exact <rapport>.sgs-candidate à l’agent de codage sous mandat unitaire distinct de ceux de `BLOCKERS.md`, de `tasks.md`
 et de l'archivage, avec les accès et permissions du profil. Il vérifie ensuite
 le fichier par relecture et le référence dans le checkpoint existant.
+Les preuves sont transmises sur stdin à CHANGE (--evidence -) ; aucun fichier
+de preuves partagé entre RUN n’est écrit. Le moteur verrouille le répertoire
+du rapport, sans lecture ou récupération du global. Un ancien contexte REPORT
+à un seul fichier doit être réancré par /closing sans accès en cours avant
+d’utiliser son candidat. Pour une variante identifiée, fournir --report ;
+la structure historique est conservée avec annexe si nécessaire.
 
 Chaque rapport couvre uniquement le change auquel il est rattaché. Appliquer
 le contrat réel du skill, avec les tableaux des agents de codage et
@@ -69,6 +75,16 @@ le détail des mesures sans effacer les constats factuels utiles.
 Le nom des rapports créés est exclusivement `STATISTICS.md`, même si un skill
 ou une copie de cadrage emploie une autre convention. L'amendement du rapport
 existant d'une revalidation conserve l'emplacement identifié ci-dessus.
+
+### Maintenance globale distincte
+
+Après vérification du rapport, l’orchestrateur appelle le moteur DELTA sous
+l’autorisation statistique distincte du prompt et le verrou SGS. Cette action
+n’est pas un mandat d’édition métier et ne délègue aucun fichier global au
+codeur en REPORT. Ne pas élargir REPORT et ne pas créer un RUN de substitution.
+Si cette autorisation manque ou que le delta est impossible, signaler la limite
+et mandater SGS manuel ; le seul échec global ne bloque pas la clôture. Aucun
+REBUILD automatique n’est autorisé. Une variante non canonique reste exclue.
 
 ### Continuité et échec du rapport
 
@@ -157,6 +173,13 @@ Conserver le chat et le checkpoint de l'orchestrateur, les rapports,
 `BLOCKERS.md` encore utile, les travaux et les preuves métier. Les historiques
 CAB restent nécessaires jusqu’à la clôture sûre ; leur
 [effacement terminal ciblé](change-erasure.md) suit ensuite ce nettoyage natif.
+Cet effacement inclut obligatoirement les données statistiques rattachées au
+change : contextes, admissions, événements, observations natives et imports,
+sur disque et dans les instances rechargées. Les données des pairs restent
+conservées. Le rapport individuel est la preuve durable et reste dans le projet,
+avec le registre global et les preuves métier. Le seul échec du delta global
+ne bloque pas ce nettoyage. Aucune purge de rétention globale ne le remplace.
+
 Préserver les sessions d'autres travaux et la continuité des services partagés.
 Lors d'un arrêt pour dépendances insatisfaites, préserver aussi la dernière
 session métier désignée ci-dessus et son historique natif ; aucun arrêt de

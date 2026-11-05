@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import {digest as observationDigest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs';
+import { SessionStatistics } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync,chmodSync,statSync,existsSync } from 'node:fs';
 import {erasureMonitorEndpoint} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs';
@@ -176,3 +178,40 @@ test('directory cleanup skips file roots and preserves peer data and symlink gua
   assert.throws(()=>removeErasureDirectories([link],scope()),/symlink-refused/);
 }));
 
+
+
+test('terminal cleanup removes change statistics, preserves peer observations and restores clean stores',()=>fixture(root=>{
+  let at=1000;const statistics=new SessionStatistics(root,{persist:false,intervalMs:0,now:()=>at,project:'/fixture'});
+  statistics.registry({...registry(),runs:[{...run,state:'RESERVED'},peer],integrationOwner:run.runId,integrationQueue:[],referenceVersion:0});
+  at=2000;statistics.advance();statistics.registry({...registry(),integrationOwner:null,integrationQueue:[],referenceVersion:0});
+  for(const c of [run,peer])statistics.observations.event({id:'tool-'+c.runId,runId:c.runId,contextId:c.contextId,
+    changeId:c.changeId,at,kind:'tool',status:'completed',name:'read',durationMs:1});
+  const bundle={schemaVersion:1,sourceId:'fixture',datasetId:'mixed-statistics',project:'/fixture',
+    pollMs:5000,gapMs:15000,quota:[],evidence:[],...structuredClone(statistics.observations.data.native)};
+  statistics.observations.data.datasets=[{bundle,hash:observationDigest(bundle)}];
+  const tampered=structuredClone(statistics.observations.data);tampered.datasets[0].hash='f'.repeat(64);
+  assert.throws(()=>projectErasure(tampered,scope()),/erasure-statistics-import-invalid/);
+  const originalPeer=structuredClone(statistics.data.contexts[statistics.key(peer)]);
+  const peerEvents=statistics.observations.data.native.events.filter(e=>e.runId===peer.runId);
+  const projectedStatistics=projectErasure(statistics.data,scope());
+  const projectedObservations=projectErasure(statistics.observations.data,scope());
+  assert.deepEqual(erasureReferences(projectedStatistics,scope()),[]);
+  assert.deepEqual(erasureReferences(projectedObservations,scope()),[]);
+  assert.deepEqual(projectedStatistics.contexts[statistics.key(peer)],originalPeer);
+  assert.deepEqual(projectedObservations.native.events.filter(e=>e.runId===peer.runId),peerEvents);
+  assert.ok(projectedObservations.native.intervals.length);
+  assert.equal(projectedObservations.datasets.length,1);
+  assert.equal(projectedObservations.datasets[0].hash,observationDigest(projectedObservations.datasets[0].bundle));
+  assert.ok(projectedObservations.datasets[0].bundle.catalog.every(c=>c.runId===peer.runId));
+  assert.ok(projectedObservations.native.intervals.every(i=>i.integrationOwner===null&&i.contexts.every(c=>c.runId===peer.runId)));
+  writeRuntimeJson(join(root,'controller-statistics.json'),projectedStatistics);
+  writeRuntimeJson(join(root,'controller-observations.json'),projectedObservations);
+  const restored=new SessionStatistics(root,{persist:true,intervalMs:0,now:()=>at,project:'/fixture'});
+  assert.equal(restored.error,null);assert.equal(restored.observations.error,null);
+  assert.deepEqual(erasureReferences(restored.data,scope()),[]);
+  assert.deepEqual(erasureReferences(restored.observations.data,scope()),[]);
+  assert.deepEqual(restored.data.contexts[restored.key(peer)],originalPeer);
+  restored.registry({...projectErasure(registry(),scope()),integrationOwner:null,integrationQueue:[],referenceVersion:0});
+  assert.deepEqual(erasureReferences(restored.data,scope()),[]);
+  assert.deepEqual(erasureReferences(restored.observations.data,scope()),[]);
+}));

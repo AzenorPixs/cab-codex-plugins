@@ -56,7 +56,7 @@ l’examen. La revue est un fichier technique temporaire autorisé par SGS.
 
 ## Preuves de session pour CHANGE
 
-`.STATISTICS.session.json` contient les champs obligatoires `schema_version:1`,
+Les preuves JSON sur stdin (--evidence -) contiennent les champs obligatoires `schema_version:1`,
 `session_id`, `scope` et `contribution` complète. `scope` vaut `cumulative`
 (instantané de l’ensemble du change) ou `increment` (session disjointe).
 Un cumul remplace les compteurs antérieurs dans le calcul, sans effacer leur
@@ -72,7 +72,7 @@ et limites de collecte. Les quotas éventuellement autorisés par une session
 pilotée restent dans ces détails individuels ; ils ne sont jamais extraits
 dans SGS. Aucune donnée sensible ou sortie brute n’est admise.
 
-Le rapport conserve les six sections de niveau2 et un commentaire
+Un nouveau rapport canonique conserve les six sections de niveau2 et un commentaire
 `CAB_SGS_SESSIONS_V1` avec les sessions structurées. Un ancien rapport est
 préservé, ses mesures initiales deviennent un relevé historique ; les nouveaux
 faits sont ajoutés dans chacune de ses sections. Le moteur ne modifie ni tâches,
@@ -176,3 +176,48 @@ deux livrables manquent. Un couple partiel/divergent ou une transaction en atten
 échoue sans mutation. Les empreintes sources sont celles de la génération
 publiée ; `VERIFY --sources` contrôle explicitement leur actualité. INSPECT
 consulte directement un rapport, y compris un change ouvert encore exclu du global.
+
+
+## Isolation du rapport individuel — CAB2.3.2
+
+CHANGE accepte --evidence - (stdin, limité à64Mio comme un fichier). Un fichier
+explicitement réservé reste compatible ; sa préparation et lecture doivent
+être isolées. CHANGE ne récupère jamais le global pour générer son rapport.
+Le verrou local porte sur l’inode du répertoire du rapport, sans fichier
+persistant supplémentaire. Le seul candidat est <rapport>.sgs-candidate,
+nettoyé après remplacement ou échec propre. Ne pas supprimer un candidat
+préexistant qui n’appartient pas à cette invocation.
+
+--report sélectionne un fichier existant dans le change ciblé. Une variante
+connue sans sélection explicite est ambiguë et ne crée pas STATISTICS.md.
+Une structure autre que six sections reçoit une annexe de niveau3 ou inférieur,
+sans modification de ses titres H2 ou de son contenu historique. Une variante
+reste exclue du global ; --maintain-global retourne not-admissible pour elle.
+
+--maintain-global produit d’abord le rapport sous sa protection locale, puis
+appelle DELTA sous le verrou global. Une erreur globale attendue est restituée
+dans global.status=error, avec cause ; le statut individuel et le code0 restent
+ceux du rapport réussi. L’absence de --maintain-global n’accède à aucun état
+transactionnel global. Le consommateur vérifie les deux statuts séparément.
+
+Sous CAB, REPORT réserve le rapport et son candidat exact. La restauration
+accepte aussi les anciennes réservations du seul rapport ; /closing les
+réancre explicitement avant utilisation du candidat. Le delta est appelé
+par l’orchestrateur sous autorisation distincte, hors du mandat REPORT du codeur.
+
+
+## Point de départ du suivi
+
+Dès l’amorçage de la session, après résolution des sources requises et avant
+l’exploration métier, l’appelant vérifie VERSION puis
+initialise en mémoire schema_version:1, session_id stable, scope:cumulative
+et contribution:blank(). Il fournit la borne de début UTC attestée dans
+contribution.bounds.start et les agents connus ; la borne de fin reste null.
+Il conserve project_root et change_id dans le contexte de son historique ou
+checkpoint déjà autorisé. Ces deux champs ne sont pas ajoutés au JSON CHANGE,
+car ils sont fournis par les arguments explicites --project-root et --change.
+change_id reste null jusqu’à la sélection autorisée et est fixé avant la
+première tâche ; aucune cible fictive n’est créée pour initialiser le suivi.
+Les compteurs absents restent unavailable. L’appelant alimente les preuves
+pendant les tâches ; le moteur ne dispose pas d’un observateur universel des
+agents. Aucun nouveau fichier de suivi partagé n’est requis.

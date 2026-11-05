@@ -134,7 +134,8 @@ test('publication et REPORT sont observés en une seule transition durable', asy
   assert.equal(observed[0].schemaVersion, 3);
   assert.deepEqual(registry.integrationQueue.map((r) => r.runId), ['b']);
   const report = registry.owned('a', receipt.version);
-  assert.deepEqual(report.resources, [{ key: 'file:' + request.completion.reportFile, mode: 'write' }]);
+  assert.deepEqual(report.resources, [{ key: 'file:' + request.completion.reportFile, mode: 'write' },
+    { key:'file:'+request.completion.reportFile+'.sgs-candidate',mode:'write'}]);
   assert.throws(() => registry.covers('a', a.version, a.resources), /version-stale/);
   assert.throws(() => registry.covers('a', receipt.version, a.resources), /outside-reservation/);
   assert.deepEqual(registry.completeIntegration('a', request), receipt);

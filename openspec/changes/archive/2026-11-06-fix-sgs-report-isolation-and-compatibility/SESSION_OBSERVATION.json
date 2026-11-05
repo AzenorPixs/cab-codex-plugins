@@ -1,0 +1,895 @@
+{
+  "schema_version": 1,
+  "source": "Métadonnées natives Codex read_thread, sans sorties",
+  "thread_id": "01a1abe8-30fb-7161-ac06-591d20cb7ae7",
+  "scope": "Mandat commun CAB/prompts ; commandes communes non ventilées arbitrairement entre projets ; relevé après archivages, avant rapports et livraisons",
+  "cutoff_updated_at": 1793921874,
+  "turns": [
+    {
+      "id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "start": 1793920158,
+      "end": null,
+      "status": "inProgress"
+    },
+    {
+      "id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "start": 1793918288,
+      "end": 1793919291,
+      "status": "interrupted"
+    }
+  ],
+  "commands": [
+    {
+      "id": "exec-51be46d2-cb63-4be9-a5ed-cd82865a3736",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git status --short | head -12'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-1b926f94-5180-4b7c-9d47-924dc304b54d",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'ls output/sgs-fixes-2.3.2; test ! -f output/sgs-fixes-2.3.2/node-results.json || cat output/sgs-fixes-",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-6d4abe57-1235-4f2d-8da7-92fbb5c4a8c1",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess\np=Path('output/sgs-fixes-2.3.2/node-tes",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-f6d12ee4-1f8d-47a2-8a39-e6108b03d370",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"git -C /home/devops/datas/prompts status --short | tail -12; git diff --stat | tail -2; head -14 opens",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-162f9694-0000-44ac-a79f-07b6b0bfd3c1",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport hashlib,json,re\nroots=[Path('/home/devops/datas/ca",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-407787e3-c0bf-4c8b-bd9c-e5bb9043db30",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nroot=Path('/home/devops/datas/prompts');names=['ACSP','CG",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-073db89e-9d2f-4085-8989-4ce11d9554bf",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess,tempfile,os,json\nfiles=[str(p) for base",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-32ca1ef5-8ff9-4745-9e3f-784d7431b4ac",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git diff --check'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-e3e7dc88-9a20-4397-9939-8dd3f5bb21c9",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git diff --check'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-507b2ee2-f1f7-429d-99f4-43c7ca879545",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n 'purge|delete|remove|statistics' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statis",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-7a83434d-8d3f-4694-96dc-9912aa9cc5ac",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'cat plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-3cf60917-13c0-4cb0-8fda-02b3b63a1e08",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n 'class RunStatistics|constructor|observe\\\\(|admission|track\\\\(|context\\\\(|contexts|this.runs|que",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-32f2000b-75a3-4c73-93df-e9a060774bd2",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n 'statistics|observations|contexts|tombstone|suppres' plugins/cab-approval-bridge/scripts/cgpt-ap",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-ba73d78a-547e-4bf0-91a0-01acac982e05",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '1,175p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs; sed -n '1",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-077d0f1a-0d7c-4292-8354-21a2e6b093ff",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '98,158p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs; cat plug",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-bcef0dd4-2825-4c6b-9c8d-77c1305b0f47",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '150,176p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs;",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-9121da6e-0a4c-4a16-8266-dc06cbdd87b7",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '35,68p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs; s",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-271e4f1e-01bb-4189-91a1-6ebb440ce347",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nlines=Path('output/sgs-fixes-2.3.2/node-tests.log').read_",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-aa0b8c19-7f86-47b8-a0ab-7b36ae5771d7",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n 'aucun refus à fabriquer' tests/*.test.mjs; sed -n '110,127p' plugins/cab-approval-bridge/script",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-6e816e54-083b-4b4a-89ec-1133370c1747",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\ncab=Path('/home/devops/datas/cab');prompts=Path('/home/de",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-58bb128f-a7ec-41cc-9f94-9c7843c34f54",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate fix-sgs-report-isolation-and-compatibility --strict --no",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-0482e65d-e463-45f6-8422-f6c792ee7812",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate align-sgs-session-contracts --strict --no-interactive'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-6f87edbb-5ae7-44d3-9af5-ec985c505b11",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('plugins/cab-approval-bridge/scripts/cgpt-approval",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-c8c80c0a-7c58-4334-8c28-9237d6d3778c",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 1,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc 'node --test tests/change-erasure.test.mjs'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-dda0782f-11b2-4f17-9cc0-5f735184c671",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('plugins/cab-approval-bridge/scripts/cgpt-approval",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-65a60577-e03b-4565-b14e-5d8e73c34724",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'node --test tests/change-erasure.test.mjs'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-816776f4-a53f-4069-a749-7a19fed3fdbc",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"node --test --test-name-pattern 'retrait non émis : aucun refus à fabriquer' tests/concurrent-controll",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-3c4284c1-1cde-40e8-bbac-de7b4f6771f8",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('plugins/cab-approval-bridge/scripts/cgpt-approval",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-b5d24579-f44a-420d-a4d6-3b6432ba631c",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'node --test tests/change-erasure.test.mjs tests/statistics-maintenance.test.mjs'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-31b11f31-9624-40d3-808c-f2e48e0b695f",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nroot=Path('/home/devops/datas/prompts');names=['ACSP','CG",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-a24f836c-fe03-4e63-b6dd-391951dfd803",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git diff --check'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-e5697599-0da3-4061-8799-4b566034d4d9",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git diff --check'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-1f117f4f-eac9-4a2b-83c6-0f25f085df25",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 1,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess,time,json\nout=Path('output/sgs-fixes-2.",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-f192e830-30ce-458b-bd08-b8c598c2b8f3",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '309,333p' tests/controller-service-distribution.test.mjs; sed -n '96,116p' tests/concurrent-co",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-a0fbcc87-4eb4-4c80-aa05-cfc601926192",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"node --test --test-name-pattern 'Code Mode brut : matrice' tests/concurrent-controller.test.mjs\"",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-a3051709-b4bb-4d86-b1c9-acca1c9e867f",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '26,54p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs; rg -n 'S",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-fcaaca38-8ee0-45e4-adde-921289d10322",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport json,hashlib\np=Path('plugins/cab-approval-bridge/s",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-2c998af7-d1a4-43d1-93ba-432b62ed4aac",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport re,json\nroot=Path('/home/devops/datas/prompts');na",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-9c23abba-5915-4e10-a7a5-03dcb7c839aa",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'node --test tests/controller-service-distribution.test.mjs tests/protocol-distribution.test.mjs tests/",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-8e8a631a-ba96-45f9-b6fb-bab67e11411f",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git fetch --no-tags github main'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-7502b78a-c037-407e-8fa8-3bc434f3f914",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 128,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc 'git fetch --no-tags github main'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-a15cb467-aa0c-4c1d-97cf-e5ebb7c48bbe",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git status --short | tail -12; git -C /home/devops/datas/prompts status --short | tail -10; git -C /ho",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-a53a52ee-5386-4f39-896f-0ab411e5b84e",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git rev-parse HEAD; git -C /home/devops/datas/prompts rev-parse HEAD; git -C /home/devops/datas/prompt",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-f871e0ad-55e7-4759-9a49-3032969a93e0",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport json\npaths=json.loads(\\\"[\\\\\\\".STATISTICS.session.j",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-ccb3d96a-0704-4ae1-81ab-f375f6e510dd",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport re,subprocess,json\npairs=[(Path('/home/devops/data",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-e18bc782-a9e7-499d-962c-818dacad6f3c",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'python3 -B /home/adema261/.codex/skills/.system/skill-creator/scripts/quick_validate.py plugins/cab-ap",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-fe15fce1-c6e4-4a9d-aef0-226a4ea45a93",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate --all --strict --no-interactive'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-7b3c4614-31b6-43bb-9e78-71ab20bf2b82",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate --all --strict --no-interactive'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-80e1b30d-a796-4518-a4bf-4627f27685de",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nfor root,version in [(Path('/home/devops/datas/cab'),'2.3",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-ace26576-1508-4d6d-a916-b94c3bcae7ee",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess,tempfile,os,json\nfiles=[str(p) for base",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-e938e411-93a1-4d4f-8d8f-c56497976103",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nlines=Path('output/sgs-fixes-2.3.2/node-final.log').read_",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-db6be142-0f83-4302-8522-e3411189c25e",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '695,735p' tests/concurrent-controller.test.mjs; rg -n 'run-not-quiescent|native-session-not-qu",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-f5af7954-4754-43b0-8dae-b47559948b0c",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '2788,2830p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs; sed -n '4",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-19d54fd2-bc20-40ec-96cc-362646c78ae9",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('tests/concurrent-controller.test.mjs');s=p.read_t",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-c5086912-1336-488e-afb6-5909938fdcfd",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git diff --check'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-d39f6478-053c-4994-bda9-027d3f0e35d9",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"node --test --test-name-pattern 'réconcilie un accès HELD restauré' tests/concurrent-controller.test.m",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-5f2b79f8-d64f-490f-8826-2a67f31d6a4b",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess,json\nnames=subprocess.check_output(['gi",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-d66b9d3c-5631-4741-8a8a-f3a936c26c68",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 1,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess,json,time\nout=Path('output/sgs-fixes-2.",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-0b4d77ab-b555-47ae-b3ca-8f5c2e207f1b",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess\nfor root in [Path('/home/devops/datas/c",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-7eaaf388-5cb5-49ed-8365-f3d44c74049d",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nimport subprocess,json\nfrom pathlib import Path\nr=subprocess.run(['node','--test',",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-467ee219-60c5-4157-9386-5e4c1c79077d",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport re,json\nroot=Path('/home/devops/datas/prompts');na",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-41c56a0c-c1a3-4ee9-bf5c-4927f8bc66d1",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess\nr=subprocess.run(['python3','-B','-m','",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-069e86f9-09f3-4e36-be22-73fb0ab3c22e",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport json,re\nout=Path('output/sgs-fixes-2.3.2');full=js",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-487a782e-089e-41ee-9922-f3611689239c",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec archive fix-sgs-report-isolation-and-compatibility --yes --json'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-0d04ca87-0adf-46f3-8dbc-214baaa3e0f6",
+      "turn_id": "01a1adf9-4b60-7d83-ac40-f0ed199ddcb3",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec archive align-sgs-session-contracts --yes --json'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-134e9f0d-d14d-432c-868f-ca18ef1bb3d0",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git status --short'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-cab9dedf-a3b1-4876-a6bc-1f2b18576cf1",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git status --short'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-3becf386-5578-4e58-a0ac-7dfc53a1e07d",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n 'Dossier des prompts|Index des prompts|/bin/openspec' DEVOPS.md; head -16 pyproject.toml; ls ope",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-43d6f4a1-0acd-4193-bbc4-797eaa2c026b",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n 'Dossier des prompts|Index des prompts|/bin/openspec' DEVOPS.md; ls openspec/changes; rg --files",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-9b59a28b-a059-470f-8330-d01b6705d3ff",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport re\nfor root in ['/home/devops/datas/cab','/home/de",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-27ccdab8-35cc-4b91-85ea-b8b9b2192169",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '1,95p' /home/devops/datas/prompts/AGENTS.md; sed -n '130,160p' /home/devops/datas/prompts/TECH",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-dc0c7044-8417-4291-8359-ecf77469822f",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '1,120p' openspec/specs/global-project-statistics/spec.md; rg -n '\"'^  (closing|reportTarget|re",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-c9cf5dc9-6f97-48bf-bad3-360c418224e7",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '1590,1655p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-ad98bcb4-d373-42b6-9ac8-2c1680b4be94",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '1458,1484p' plugins/cab-approval-bridge/scripts/cab_sgs.py; sed -n '1540,1584p' plugins/cab-ap",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-f2413e29-8b4d-4771-b8c8-6c97f80e402c",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '170,210p' plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs; sed -n '385,463p'",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-10a5d503-f47a-45c3-846d-5d47aa707bd5",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B /home/adema261/.codex/plugins/cache/tools-codex/prompt/0.7.26/skills/prompt/scripts/resolve",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-eb4299d5-3f88-4efc-91db-e7f27bd3063b",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'sudo -n -l -- /usr/local/bin/diu projects cicd cab 2.3.2'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-27862f85-9a00-44a0-bdac-324313bbbff6",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'sudo -n -l -- /usr/local/bin/diu projects cicd prompts 1.0.3'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-18c1b861-496f-48b7-bb6e-6068672412d8",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '1742,1765p' plugins/cab-approval-bridge/scripts/cab_sgs.py; sed -n '350,371p' plugins/cab-appr",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-c4d7df9e-7419-47ed-99bb-55a393fa17b1",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n '\"'^### Requirement:'\"' openspec/specs/concurrent-run-coordination/spec.md | tail -12; head -20 ",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-36aa83c9-a5f5-4b9f-aee1-c0161703995f",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport re\ncab=Path('/home/devops/datas/cab');prompts=Path",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-5b5e5c5e-64a3-4b8f-9d2c-e1e69d3bca02",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate fix-sgs-report-isolation-and-compatibility --strict --no",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-ca49fec2-516e-4868-aef5-3fe91a9a737f",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate align-sgs-session-contracts --strict --no-interactive'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-7be55c48-00d8-4df9-8e80-ba7fe568a1c0",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('plugins/cab-approval-bridge/scripts/cab_sgs.py');",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-9897f884-0062-4bb8-b21b-0390366b1048",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 1,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc 'python3 -B -m unittest discover -s tests -p test_sgs.py -q'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-2e955665-4201-4ebd-996e-85994b595521",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('plugins/cab-approval-bridge/scripts/cgpt-approval",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-9165379f-bd71-48bd-9f7c-3e461c538de9",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'node --test tests/concurrent-run-registry.test.mjs tests/resource-coordination.test.mjs'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-3081c9ef-732b-491b-be70-b415f837f8d4",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"sed -n '326,356p' tests/resource-coordination.test.mjs; sed -n '430,455p' tests/test_sgs.py; sed -n '4",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-22b95121-6853-4dc0-a6d4-7bbb73aa28b1",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 1,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('plugins/cab-approval-bridge/scripts/cgpt-approval",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-0af3e989-ede1-44a5-a9da-91c0ee2c2f0a",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('tests/test_sgs.py');s=p.read_text();a=s.index('  ",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-6391c4d2-f7a0-4f93-b186-d4722959b914",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'python3 -B -m unittest discover -s tests -p test_sgs.py -q'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-ea657536-05b4-4899-86f9-489b041dbae1",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'node --test tests/concurrent-run-registry.test.mjs tests/resource-coordination.test.mjs'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-909a6be6-c413-409b-a299-b48664fba176",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('tests/resource-coordination.test.mjs');s=p.read_t",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-c510e318-f451-49c7-9e02-d8c445345a12",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nroot=Path('/home/devops/datas/prompts')\nfiles=['ACSP','CG",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-3a2a8adc-a79b-4d1f-8d9a-dfdef140322d",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('plugins/cab-approval-bridge/skills/sgs/SKILL.md')",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-ea7582ba-d108-43f0-b028-88e051a8cf43",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 1,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc 'node --test tests/resource-coordination.test.mjs'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-5de28480-d352-4cb0-b3e5-2359fbb07075",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nroot=Path('/home/devops/datas/prompts')\nstartup='''\nIniti",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-61d5c6b7-6335-4da1-9353-678c711e256b",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"rg -n 'resources.length \"'!== 1|resources.length === 1|seul.*STATISTICS|seul.*STATISTIQUES'\"' plugins/",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-422ece35-6023-45c6-ac5a-15a868629123",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\np=Path('tests/resource-coordination.test.mjs');s=p.read_t",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-fb5316c7-4144-4308-b823-9290fb5322a7",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"node --test --test-name-pattern 'legacy REPORT|SGS REPORT|report target' tests/resource-coordination.t",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-2f8e82a6-df22-421a-80dd-1bde6f282b97",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc 'git -C /home/devops/datas/prompts remote -v; git -C /home/devops/datas/prompts diff --check'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-0e3c828a-9056-40d1-8ed5-e2d441c96d0f",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess,json,hashlib\nfrom datetime import datet",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-e2c7a41b-389f-4a4a-b86a-6fef6e8cf2f8",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nimport subprocess\nfrom pathlib import Path\nr=subprocess.run(['python3','-B','-m','",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-d03fcbfd-dd7a-407c-9549-349701771e2b",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nroot=Path('/home/devops/datas/prompts');names=['ACSP','CG",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-04243d95-c6f9-45db-a72b-19739e5cc450",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport subprocess,os\nout=Path('output/sgs-fixes-2.3.2').r",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-b3ec4fda-296d-4d23-b4d5-e5762d25ce46",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nfrom pathlib import Path\nimport json,hashlib\np=Path('plugins/cab-approval-bridge/s",
+      "preview_truncated": true
+    },
+    {
+      "id": "exec-2cf604a4-1430-4cea-b86a-ddee8e9dda68",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate --all --strict --no-interactive'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-e8cb115b-b294-4c46-b2e6-a901e9eee623",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": 0,
+      "status": "completed",
+      "preview": "/usr/bin/zsh -lc '/home/devops/.local/npm/bin/openspec validate --all --strict --no-interactive'",
+      "preview_truncated": false
+    },
+    {
+      "id": "exec-435ce08c-860d-4b0c-81ab-6cade3fb7efc",
+      "turn_id": "01a1addc-c298-7963-8eed-4e46fdd686dd",
+      "exit_code": -1,
+      "status": "failed",
+      "preview": "/usr/bin/zsh -lc \"python3 -B - <<'PY'\nimport subprocess,json,time,re\nfrom pathlib import Path\nout=Path('output/sgs-fixes",
+      "preview_truncated": true
+    }
+  ]
+}
