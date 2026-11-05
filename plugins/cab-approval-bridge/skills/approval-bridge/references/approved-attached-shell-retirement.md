@@ -1,4 +1,4 @@
-# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.33
+# Shell ou edit APPROVED refusé attaché à un parent HELD — CAB 2.2.34
 
 Le propriétaire traite ce cas dans le périmètre validé sans solliciter le
 correcteur. Le parent peut protéger un effet antérieur incertain : ne jamais
@@ -20,7 +20,7 @@ nativeResult ni onceAcknowledged=true, toujours dans le même RUN/contexte/versi
 Un ancien SID actif ou porteur d’un effet reste inadmissible.
 
 GET `/runs/<run>/recovery/native-evidence?operationId=<enfant>` doit montrer
-un unique shell correspondant exactement à commands[0], ou un edit V2 visant
+un unique shell correspondant exactement à commands[0], ou un edit ou write V2 visant
 le fichier unique approuvé, error/aborted,
 executed=false, son reçu privé reject ACKNOWLEDGED HTTP204 lié au même
 processus/version, SID, directory, call, permission et empreinte de commande.
@@ -157,3 +157,36 @@ effet natif, once, ACK manquant, cible différente, outil supplémentaire ou
 frontière changée restent refusés. Si un redémarrage non certifié intervient
 entre les deux étapes, la garde restored reste applicable : ne pas forcer une
 libération ordinaire. Ni le retrait ni RECONCILED ne valent succès de l’édition.
+
+## Write V2 refusé sous permission edit
+
+OpenCode peut présenter une permission de catégorie edit pour une part native
+write. Cette part reste write, nativeTool=write, nativeFormat=opencode-v2 ;
+son schéma qualifié est exactement {path,content}, deux chaînes, sans alias
+ni clé supplémentaire. L’edit conserve son propre schéma fermé
+{path,oldString,newString,replaceAll?}. Aucun write n’est converti en edit.
+
+Le diagnostic native-evidence doit montrer le call write et son digest d’input
+ainsi que le reçu SDK lié au même call/permission. Une couverture absente dans
+le journal événementiel reste MISSING_RELEVANT_CALLS ; elle n’efface pas le call
+ni le reçu privé et ne devient jamais une preuve NO_EFFECT.
+
+Le retrait exige toujours la cible unique approuvée exacte, le digest du corps
+natif observé et le digest de part exacts, distincts du digest approuvé, puis
+l’ACK204 de rejet CAB_CLIENT_PROGRAMMATIC lié au même PID/version/SID/directory,
+call, permission et cible de catégorie edit. Error/aborted/executed=false seul
+ne suffit pas. SID idle, permission0 et deux frontières natives identiques
+restent obligatoires. Contenu/chemin/fins de ligne ne sont jamais normalisés.
+
+La voie existante withdraw-unissued-validation couvre ce format sur les mêmes
+frontières dédiées, attachées ou seulement référencées admissibles. L’enfant
+seul devient CANCELLED ; APPROVED historique et parent/protections restent
+inchangés, aucun native/nativeResult/once ou fichier écrit n’est inventé.
+release-access reste une seconde action distincte après état terminal.
+
+Avant reprise après cette évolution de projection, relire plan et native-evidence
+frais. Ne pas réutiliser un ancien digest qui omettait write, ni un actionId
+ayant déjà rendu409 : conserver ce reçu et choisir une action neuve après revue.
+Après réponse perdue d’une même action, relire son reçu exact sans nouveau
+reject, write ou once. ACK absent/non204, call supplémentaire, cible/empreinte
+ou identité divergente restent refusés ; les autres gardes de parent s’appliquent.

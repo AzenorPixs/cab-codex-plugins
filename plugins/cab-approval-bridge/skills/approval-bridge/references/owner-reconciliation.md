@@ -1,4 +1,4 @@
-# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.33
+# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.34
 
 Dans le change et les moyens déjà autorisés, l’orchestrateur propriétaire
 examine les preuves, décide la réconciliation qualifiée et poursuit le mandat.
@@ -69,3 +69,6 @@ Token perdu par compactage, parent HELD non restauré et tous membres terminaux 
 
 Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 [retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.
+
+Write V2 refusé (permission edit), call/ACK masqués dans un ancien diagnostic :
+[preuve et retrait qualifiés](approved-attached-shell-retirement.md#write-v2-refusé-sous-permission-edit), sans conversion ni exécution de l’input divergent.

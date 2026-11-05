@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.34 — 2026-11-05
+
+- Projection des calls write et de leurs reçus ACK existants, même sans événement de journal.
+- Retrait Write V2/path+content sous preuve de rejet exacte, sans rendre l’input divergent exécutable ; parent et libération séparée conservés.
+
 ## 2.2.33 — 2026-11-05
 
 - Retrait propriétaire de l’unique membre d’un accès dédié HELD après rejet natif avant once ; parent conservé, puis libération ordinaire déléguée sous reçu distinct.
