@@ -20,7 +20,7 @@ test('métadonnées : lecture de la seule observation native préexistante par G
   const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/project',
     passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE,fetchImpl:async(input)=>{
       const url=new URL(input);calls.push(url.pathname);
-      if(url.pathname==='/api/info')return Response.json({version:'2.2.32',pid:42,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}});
+      if(url.pathname==='/api/info')return Response.json({version:'2.2.33',pid:42,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}});
       if(url.pathname==='/api/session/ses_technical')return Response.json({data:{id:'ses_technical',directory:'/project',permissions:[]}});
       if(url.pathname==='/api/session/ses_technical/message')return Response.json({data:[{id:'msg_technical',type:'assistant',time:{created:1},content:[
         {type:'tool',id:'part-health',name:'cgpt-validation_broker_health',executed:true,time:{created:1,ran:2,completed:1000},
@@ -38,7 +38,7 @@ test('métadonnées : aucune exécution pour observation absente ou contexte div
   const client=(session,messages=[])=>createOpenCodeV2Client({baseUrl:input.opencodeUrl,directory:input.directory,
     passwordFile:fixtureEnvironment.OC_Codex_OPENCODE_PASSWORD_FILE,fetchImpl:async(url)=>{
       const path=new URL(url).pathname;
-      if(path==='/api/info')return Response.json({version:'2.2.32',pid:42,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}});
+      if(path==='/api/info')return Response.json({version:'2.2.33',pid:42,hostname:'127.0.0.1',urls:[],paths:{tmp:'/tmp'}});
       if(path.startsWith('/api/session/')&&path.endsWith('/message'))return Response.json({data:messages,cursor:{next:null,previous:null}});
       if(path.startsWith('/api/session/'))return Response.json({data:session});
       return Response.json({}, {status:404});

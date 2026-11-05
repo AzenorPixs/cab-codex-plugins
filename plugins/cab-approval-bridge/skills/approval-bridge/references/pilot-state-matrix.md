@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.32
+# Grille de décision du pilotage — CAB 2.2.33
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -127,3 +127,6 @@ Edit ou shell refusé avant once avec parent HELD seulement référencé :
 Notification stalled/FAILED sans lease : [qualifier le sous-état](technical-recovery.md#notification-bloquée--qualifier-le-sous-état) avant toute action ciblée.
 
 Accès HELD non restauré, membres terminaux et token perdu : [libération owner](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage), sans restitution implicite des baux ou effets inconnus.
+
+Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
+[retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.
