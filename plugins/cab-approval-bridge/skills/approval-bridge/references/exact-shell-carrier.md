@@ -1,5 +1,7 @@
 # Payload Bash exact sans recopie — CAB2.1.25
 
+Pour un payload généré ou un rapport de build, suivre [la prévalidation par couche](generated-payload-validation.md) avant staging.
+
 ## Portée
 
 Pour un nouveau mandat Bash long, multiligne ou composé, le codeur propose le corps ; l’orchestrateur le relit et valide ses octets/syntaxe/ressources. Il peut ensuite le transmettre directement au contrôleur comme payload scellé. Le modèle ne recopie plus ce long corps dans request_validation et shell : il émet uniquement l’invocation courte retournée. Cette invocation reste exacte et peut être refusée si le modèle l’altère ; aucune correction silencieuse n’est faite.

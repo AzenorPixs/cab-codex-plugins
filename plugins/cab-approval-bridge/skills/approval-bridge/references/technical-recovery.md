@@ -1,4 +1,4 @@
-# Précisions recovery — CAB 2.2.38
+# Précisions recovery — CAB 2.2.39
 
 Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 

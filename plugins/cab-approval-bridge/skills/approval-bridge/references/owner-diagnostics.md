@@ -1,4 +1,4 @@
-# Diagnostic propriétaire autonome — CAB 2.2.38
+# Diagnostic propriétaire autonome — CAB 2.2.39
 
 Dans le change autorisé, l’orchestrateur qualifie et décide les récupérations
 existantes. Solliciter le développeur pour une décision hors de ce périmètre,
@@ -12,6 +12,7 @@ Une preuve absente reste à établir ; elle n’autorise jamais un effet incerta
 | État busy, monitoring périmé,401 brut, readiness globale ou executed ambigu | [Sources courantes](live-state-sources.md) |
 | Policy présente mais action non autorisée | [Couverture de policy](owner-policy-coverage.md) |
 | Empreinte, schéma, checkpoint, erreur du helper | [Préparation locale](local-preparation-errors.md) |
+| Payload généré, helper embarqué ou JSON de build invalide | [Prévalidation des payloads](generated-payload-validation.md) |
 | PENDING après retrait et accès libéré | [Clôture broker](broker-pending-after-withdrawal.md) |
 | Révision enfant absente ou shell multiligne/composé | [Soumission](validation-submission.md#révisions-effectives-et-scripts-composés) et [carrier](exact-shell-carrier.md) |
 | Accès HELD aux membres terminaux, jeton perdu | [Libération propriétaire](recovery-policy.md#libérer-un-accès-après-perte-de-token-par-compactage) |
