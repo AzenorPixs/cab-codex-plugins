@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.2.37
+version: 2.2.38
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -15,11 +15,11 @@ de l'environnement et les mandats métier restent distincts. Un mandat SCM ou
 un changement de version ne vaut pas activation. Le profil spécial
 frozen-recovery-controller exige son accord de maintenance spécifique.
 
-Résoudre le skill CAB du plugin installé et ses références à la même version.
+Résoudre le skill CAB installé et ses références de même version.
 Lire seulement la procédure de l'argument reçu ci-dessous. Une consultation ne
 charge pas les branches de pilotage, prévol, mise à jour ou statistiques LLM.
 Un argument manquant, ambigu ou inconnu affiche la syntaxe sans collecte ni
-mutation. Une commande ne lance jamais une autre sous-commande implicitement.
+mutation. Jamais de sous-commande implicite.
 
 | Arguments | Référence dans le skill CAB installé |
 |---|---|
@@ -41,7 +41,7 @@ bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
 par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
 
-Pour un incident, lire `references/incident-triage.md` ;un signalement n’autorise pas implicitement un prévol ou un effet supplémentaire.
+Pour un incident, lire `references/owner-diagnostics.md`, puis `references/incident-triage.md` ;un signalement n’autorise pas implicitement un prévol ou un effet supplémentaire.
 
 Pour un changement explicite de SID dans le même RUN avec historique protégé,
 lire `references/session-handoff.md`. Les commandes run/resume ne réalisent
