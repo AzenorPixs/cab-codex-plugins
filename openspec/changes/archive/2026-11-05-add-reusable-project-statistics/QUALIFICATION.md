@@ -1,3 +1,89 @@
+# Clôture SCM du change — CAB 2.3.1
+
+## État actuel et périmètre
+
+Le change add-reusable-project-statistics est archivé depuis le 5 novembre 2026.
+Ses 13 tâches sont validées. Le canon global-project-statistics contient les
+11 exigences synchronisées par l’archivage normal. Aucun nouvel archivage,
+aucune nouvelle tâche et aucun changement fonctionnel ne sont engagés pour
+cette clôture. La reprise consigne la publication 2.3.0 et les limites réelles,
+amende le rapport individuel et termine la maintenance documentaire ciblée.
+La distribution est alignée sur 2.3.1 pour la nouvelle livraison imposée par SCM.
+
+## Publication déjà vérifiée — 2.3.0
+
+La commande `sudo -n /usr/local/bin/diu projects cicd cab 2.3.0` a été exécutée,
+puis rejouée après réconciliation de la tentative interrompue. Le rejeu a
+terminé avec code 0 et état « terminé avec indisponibilités ».
+
+| Destination ou étape | Résultat vérifié |
+|---|---|
+| Commit local 2.3.0 | af940d265f02965f3d5df7c1e8d1169aef2475c9 |
+| Tag GitHub v2.3.0 | Pointe sur af940d26, tag annoté publié |
+| GitHub main après réconciliation | d2dd0b33c3428bda4f40bb138e7ceabce89dd586 |
+| Historiques préservés | Parents af940d26 et 2ffa370f8ba87c571cf2a093ff1fb976c042aa86 |
+| Périmètre complet | Les 3 453 fichiers de .cab-cleanup-worktree sont conservés ; aucun retrait de publication |
+| Synchronisation locale | Avance rapide vers la tête réconciliée ; aucun amendement de commit ou de tag |
+| Forgejo | Indisponible, publication non confirmée |
+| GitLab | Non configuré, ignoré |
+| Docker / Debian / artefacts | Non applicables selon les étapes DIU |
+| Activation | Aucun CABU ni runtime démarré dans cette session |
+
+Le seul écart entre les arbres du commit tagué et de la fusion distante est
+DEVOPS.md, document généré enrichi de 22 lignes. Les fichiers produit sont
+identiques. Le journal assaini est dans output/sgs-upstream-integration ;
+ce répertoire reste une preuve locale non versionnée.
+
+## Revalidation de clôture — 2.3.1
+
+Python : 185 tests réussis, 0 échec. Contrôle syntaxique : 24 fichiers, code 0.
+Chromium et Firefox : qualification réussie sur la distribution 2.3.1.
+OpenSpec strict : deux commandes réussies, 21 éléments contrôlés à chaque fois ;
+21 éléments ne représentent pas 21 exécutions. Skill SGS :quick_validate réussi.
+La suite Node complète a réussi : 1 315 cas, 1 284 réussis, 31 ignorés,
+0 échec ; durée observée 564 497 ms. Le bilan produit final contient
+1 469 tests exécutés, sans cumul avec les campagnes précédentes.
+Les tests finaux ne seront pas additionnés à leurs campagnes précédentes.
+
+## Statistiques globales distinctes de la clôture
+
+Le couple a été vérifié en génération 8 avec 177 archives sous l’empreinte
+SGS du recalcul. SGS 1.19 a changé ensuite sans changement de numéro de version.
+Le contrat courant diverge et les versions de source 2.3.1 ne sont pas reflétées
+dans ce stock ancien. Le rapport individuel a été amendé dans ses six sections
+par CHANGE ; seule une tentative de DELTA est autorisée, jamais REBUILD.
+Un échec du seul global ne bloque pas la finalisation selon SCM actuel.
+Le DELTA a été tenté une seule fois après CHANGE : code 1, « Couple ou contrat incompatible : SGS manuel requis ; aucune
+reconstruction automatique ». Les empreintes des deux fichiers sont identiques avant et après
+la tentative ; aucune transaction ne reste en attente. La maintenance globale
+n’est pas réussie. Mandater SGS manuellement pour régénérer le global.
+Cette limite est non bloquante pour la clôture selon SCM.
+
+## Matrice de cohérence de clôture
+
+| Document | État et preuve |
+|---|---|
+| Projet réel | Même comportement que 2.3.0 ; seules constantes de version alignées, suites de qualification ci-dessus |
+| AGENTS.md | Inchangé : SCM direct, protections et priorité des spécifications conservées |
+| PROJECT.md | Amendé : section de clôture 2.3.1 et référence à ce bilan |
+| TECHNICAL.md | Même amendement ; architecture du moteur et format cab-sgs-1 inchangés |
+| BUILD.md | Même amendement ; distribution versionnée cohérente, aucun service supplémentaire |
+| DEVOPS.md | Version publiée réconciliée relue : chemins des prompts et d’OpenSpec vérifiés ; pas d’édition manuelle |
+| DEVELOPMENT_MAP.md | Seule entrée du change amendée sur les preuves d’archivage et de publication |
+| openspec/BATCH_CODES.md | Même amendement ciblé ; code non attribué conservé, ACL recommandé |
+| README.md | Usages existants conservés ; clôture et limite non bloquante du global explicitées |
+| CHANGELOG.md | Entrée 2.3.1 : clôture documentaire, versions et limites ; historique 2.3.0 conservé |
+| OpenSpec | Canon inchangé, archive existante conservée, aucune coche d’archive modifiée |
+| Skill et commande SGS | Version distribuée 2.3.1 ; modes, schéma et distinction manuel/delta inchangés |
+| Référentiel prompts | SCM/INDEX/SGS relus dans leur projet propre ; pas d’édition ou publication dans cette reprise CAB |
+
+## Historique de qualification et de reprise
+
+Les états futurs ou attentes mentionnés ci-dessous appartiennent aux relevés
+antérieurs. Ils ne remplacent pas l’état courant décrit ci-dessus.
+
+---
+
 # Qualification — CAB 2.3.0, statistiques réutilisables
 
 ## État vérifié avant archivage

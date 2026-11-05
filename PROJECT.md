@@ -1,5 +1,14 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Clôture des statistiques réutilisables — CAB 2.3.1
+
+La capacité SGS livrée en 2.3.0 est archivée et qualifiée. La version 2.3.1
+consigne sa clôture et aligne les versions distribuées, sans nouvelle capacité.
+La tentative de delta global reste distincte du rapport individuel obligatoire :
+un échec du seul global est signalé et ne bloque pas la clôture SCM. Les preuves
+et résultats de livraison sont dans [la qualification du change](openspec/changes/archive/2026-11-05-add-reusable-project-statistics/QUALIFICATION.md).
+
+
 ## Statistiques de projet et de change — CAB 2.3.0
 
 Le plugin CAB distribue le skill `sgs`, la commande `/SGS` en MAJUSCULES et
@@ -245,9 +254,9 @@ déjà fourni par Debian ; aucun paquet ni droit système supplémentaire ajout�
 
 ## 1. Objet
 
-Version de référence des briques CAB : `2.2.39`.
+Version de référence des briques CAB : `2.3.1`.
 
-CAB 2.2.39 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
+CAB 2.3.1 communique uniquement avec OpenCode V2 par HTTP Basic Auth et les
 routes `/api`. Le nom Basic Auth V2 est `opencode`, le serveur reçoit le mot de
 passe via `OPENCODE_PASSWORD`, et CAB le lit depuis un fichier local privé
 transmis aux services par systemd credentials. OpenCode 1.x est refusé ; aucune
