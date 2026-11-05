@@ -1,5 +1,21 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Diagnostics autonomes SCM 2.2.38
+
+[document-autonomous-owner-diagnostics](openspec/changes/archive/2026-11-05-document-autonomous-owner-diagnostics/), code non attribué : ARCHIVÉ, contrat documentaire qualifié.
+Cinq références ciblées : sources courantes,policy couvrante,formes/empreintes,
+PENDING après retrait et niveaux de preuve d’exécution ; routage skill/plugin/
+commande et gate terminal explicites.255tests finaux ciblés réussis sur70empreintes,
+runtime inchangé hors versions. Publication,activation et reprise métier séparées.
+Voir QUALIFICATION.md ; convergence ACL ultérieure, aucune attribution implicite.
+
+```mermaid
+flowchart LR
+    autonomousDiagnostics["document-autonomous-owner-diagnostics<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class autonomousDiagnostics provisional
+```
+
 ## Préparation sans ambiguïté SCM 2.2.37
 
 [clarify-effective-revisions-and-shell-carrier](openspec/changes/archive/2026-11-05-clarify-effective-revisions-and-shell-carrier/), code non attribué : ARCHIVÉ, contrat documentaire qualifié.
