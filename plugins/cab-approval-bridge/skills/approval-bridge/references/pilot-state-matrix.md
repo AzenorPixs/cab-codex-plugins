@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.33
+# Grille de décision du pilotage — CAB 2.2.34
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -130,3 +130,6 @@ Accès HELD non restauré, membres terminaux et token perdu : [libération owner
 
 Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 [retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.
+
+Write V2 refusé (permission edit), call/ACK masqués dans un ancien diagnostic :
+[preuve et retrait qualifiés](approved-attached-shell-retirement.md#write-v2-refusé-sous-permission-edit), sans conversion ni exécution de l’input divergent.

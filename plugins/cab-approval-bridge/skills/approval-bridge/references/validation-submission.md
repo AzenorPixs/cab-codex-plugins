@@ -1,4 +1,4 @@
-# Soumettre, décider et acquérir — CAB 2.2.33
+# Soumettre, décider et acquérir — CAB 2.2.34
 
 Parcours propriétaire d’une unité déjà autorisée. Il complète
 [les mandats](technical-mandates.md) et [les accès](concurrent-runs.md).

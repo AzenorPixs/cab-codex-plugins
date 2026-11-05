@@ -2,15 +2,15 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.2.33';
+export const VERSION = '2.2.34';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 
 export function nativeEvidenceView({ run, operation, approval, parts, native, activeSessions, permissions, journal, replies }) {
-  const calls = parts.filter(part => part?.type === 'tool' && ['bash','edit'].includes(part.tool)).map(part => ({
-    tool:part.tool, inputSha256:part.state?.input&&typeof part.state.input==='object'&&!Array.isArray(part.state.input)?digest(part.state.input):null,
+  const calls = parts.filter(part => part?.type === 'tool' && ['bash','edit','write'].includes(part.tool)).map(part => ({
+    tool:part.tool, nativeTool:part.nativeTool || null, inputSha256:part.state?.input&&typeof part.state.input==='object'&&!Array.isArray(part.state.input)?digest(part.state.input):null,
     callId: part.callID || part.callId || null, status: part.state?.status || null,
     executed: typeof part.executed === 'boolean' ? part.executed : null,
     observedExit:Number.isInteger(part.state?.metadata?.exit)?part.state.metadata.exit:null,
@@ -313,15 +313,18 @@ export function rejectedEditWithdrawalProof(view, candidates, approval) {
      view.replyReceiptsTruncated||view.replyError||!Array.isArray(candidates)||candidates.length!==1||
      approval?.files?.length!==1||approval.commands?.length!==0)fail('withdraw-rejected-edit-boundary-invalid');
   const part=candidates[0],input=part.state?.input,callId=part.callID||part.callId;
-  if(part.tool!=='edit'||part.nativeTool!=='edit'||part.nativeFormat!=='opencode-v2'||part.executed!==false||
+  const write=part.tool==='write' && part.nativeTool==='write';
+  const edit=part.tool==='edit' && part.nativeTool==='edit';
+  if((!write&&!edit)||part.nativeFormat!=='opencode-v2'||part.executed!==false||
      part.state?.status!=='error'||part.nativeErrorType!=='aborted'||!id(callId)||!input||
-     Object.keys(input).some(key=>!['path','oldString','newString','replaceAll'].includes(key))||
-     typeof input.path!=='string'||typeof input.oldString!=='string'||!input.oldString||typeof input.newString!=='string'||
-     input.replaceAll!==undefined&&typeof input.replaceAll!=='boolean')fail('withdraw-rejected-edit-native-invalid');
+     Object.keys(input).some(key=>!(write?['path','content']:['path','oldString','newString','replaceAll']).includes(key))||
+     typeof input.path!=='string'||
+     (write?typeof input.content!=='string':typeof input.oldString!=='string'||!input.oldString||typeof input.newString!=='string'||
+       input.replaceAll!==undefined&&typeof input.replaceAll!=='boolean'))fail('withdraw-rejected-edit-native-invalid');
   const target=resolve(approval.directory,input.path),expected=resolve(approval.directory,approval.files[0]);
   if(target!==expected||!target.startsWith(approval.directory+'/'))fail('withdraw-rejected-edit-target-divergent');
   const inputSha256=digest(input),observed=(view.calls||[]).filter(call=>call.callId===callId);
-  if(observed.length!==1||observed[0].tool!=='edit'||observed[0].inputSha256!==inputSha256||
+  if(observed.length!==1||observed[0].tool!==part.tool||observed[0].inputSha256!==inputSha256||
      observed[0].partDigest!==digest(part))fail('withdraw-rejected-edit-input-divergent');
   const receipts=(view.replyReceipts||[]).filter(receipt=>receipt.callId===callId);
   if(receipts.length!==1)fail('withdraw-rejected-edit-receipt-required');
@@ -333,7 +336,7 @@ export function rejectedEditWithdrawalProof(view, candidates, approval) {
      !Number.isFinite(start)||!Number.isFinite(end)||end<start||!Number.isFinite(created)||created<start||created>end||
      !Number.isFinite(ack)||ack<created)fail('withdraw-rejected-edit-receipt-divergent');
   return {kind:'REJECTED_UNISSUED_EDIT',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
-    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',rejectedEdit:{callId,permissionId:receipt.permissionId,
+    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',rejectedEdit:{callId,nativeTool:part.nativeTool,permissionId:receipt.permissionId,
       nativeInputSha256:inputSha256,approvedInputSha256:approval.tool_input_sha256||null,
       partDigest:digest(part),receiptDigest:digest(receipt)}};
 }
