@@ -1,5 +1,21 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Préparation sans ambiguïté SCM 2.2.37
+
+[clarify-effective-revisions-and-shell-carrier](openspec/changes/archive/2026-11-05-clarify-effective-revisions-and-shell-carrier/), code non attribué : ARCHIVÉ, contrat documentaire qualifié.
+Révision effective = max des recouvrements ; transport scellé des scripts
+composés même courts ; gardes et historique conservés.255tests finaux ciblés
+réussis sur70empreintes ; runtime/tests identiques à2.2.36 hors versions.
+Publication, activation et reprise PA01 séparées ; voir QUALIFICATION.md.
+Convergence ACL ultérieure, aucune attribution de code.
+
+```mermaid
+flowchart LR
+    unambiguousPreparation["clarify-effective-revisions-and-shell-carrier<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class unambiguousPreparation provisional
+```
+
 ## Délai de notification SCM 2.2.36
 
 [bound-notification-admission-response](openspec/changes/archive/2026-11-05-bound-notification-admission-response/), code non attribué : ARCHIVÉ, correctif source qualifié.

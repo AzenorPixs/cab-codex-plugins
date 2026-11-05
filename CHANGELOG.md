@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.37 — 2026-11-05
+
+- Contrat : révisions effectives héritées et transport scellé des scripts composés même courts.
+- Refus légitimes, retrait qualifié et nouvelle unité documentés ; aucune garde runtime modifiée.
+
 ## 2.2.36 — 2026-11-05
 
 - Notification : délai dédié10s sous lease15s ; lectures2s conservées.

@@ -3,7 +3,7 @@
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
 
-## Restitution ciblée d’un bail — évolution 2.2.36
+## Restitution ciblée d’un bail — évolution 2.2.37
 
 La restitution ordinaire examine les opérations liées au bail et les accès
 qui recouvrent ses ressources. Après cleanup et vérification natifs distincts
@@ -51,7 +51,7 @@ Après STOP et libération réconciliée, le même propriétaire peut réserver 
 ## Préparation, décision et accès
 
 1. Déclarer entrées, écritures et ressources logiques exactes. Une commande sans manifeste exploitable est refusée ; CAB ne devine pas ses effets et ne réserve pas automatiquement project:*.
-2. Lire GET /runs/<runId>/locks pour les révisions. Une lecture stable acquiert brièvement son ensemble en lecture, lit puis libère ; une observation non stable ne prouve pas une validation.
+2. Lire GET /runs/<runId>/locks pour les révisions. Chaque révision effective est le maximum des clés qui se recouvrent (ancêtres et descendants inclus) ; une clé enfant absente ne vaut pas automatiquement zéro. Voir [la préparation](validation-submission.md#révisions-effectives-et-scripts-composés). Une lecture stable acquiert brièvement son ensemble en lecture, lit puis libère ; une observation non stable ne prouve pas une validation.
 3. Préparer le contenu exact. request_validation conserve ses champs et ajoute coordination_protocol=resource-scoped-v1, run_id, reservation_version, operation_id, operation_digest, resources et expected_revisions. Une édition exige un fichier unique couvert en écriture ; une commande décrit son manifeste complet. L'empreinte représente le contenu examiné par l'orchestrateur.
 Si `request_validation` est relayé par un wrapper CodeMode qui a terminé en erreur après admission durable, CAB peut corréler la notification uniquement si le normaliseur atteste l'appel natif unique exact et `nativeMcpError`. Cette corrélation n'est ni une décision ni une permission ; une demande déjà `NOT_ADMITTED` reste terminale et exige un requestId neuf.
 4. Attendre la décision explicite sans garder inutilement une écriture exclusive. Une base modifiée impose relecture, nouveau contenu et nouvelle demande ; aucune décision terminale n'est remplacée.

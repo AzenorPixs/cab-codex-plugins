@@ -1,4 +1,4 @@
-# Précisions native — CAB 2.2.36
+# Précisions native — CAB 2.2.37
 
 Pour choisir sans relecture globale : [grille de décision](pilot-state-matrix.md) ;
 pour une unité ordinaire : [soumission, décision et acquisition](validation-submission.md).
@@ -254,7 +254,7 @@ Appliquer [admission-state.md](admission-state.md) : GET /runs/<run>/decision/<r
 
 
 
-## Longs mandats Bash sans recopie — CAB 2.1.32
+## Mandats Bash longs ou composés sans recopie — CAB 2.1.32
 
 Appliquer la [procédure du transport scellé](exact-shell-carrier.md) pour un nouveau payload Bash revu. L’orchestrateur dépose les octets exacts et leur SHA256 via `POST /runs/<run>/shell-stage` ; le codeur transmet seulement `command` retournée, dans `request_validation` puis dans l’appel shell natif. La décision examine également le corps privé scellé, fourni au validateur automatique par CAB. Le staging n’autorise rien : conserver décision corrélée, accès HELD, `once`, fin native et réconciliation. Aucun mandat ancien n’est réinterprété. Un refus du lanceur après `once` ne permet jamais de rejouer cette permission.
 
@@ -264,7 +264,7 @@ Appliquer la [procédure du transport scellé](exact-shell-carrier.md) pour un n
 
 Appliquer [la reprise des permissions natives](native-permission-resume.md) : une revue peut laisser shell/edit deny, sans mutation par CABU. Avant tout prompt de prévol ou opération permissionnée, utiliser client.prompt(...,{directory,requiredNativeAsk:['shell']}), ou ['edit'] pour write/edit. Inspection nativePermissionPolicy en lecture seule ; aucun rétablissement automatique. Le propriétaire lève explicitement le seul droit nécessaire après revue terminée et frontière sûre, avec preuve avant/après, autres deny conservés. Les prompts de revue sans outil restent possibles sous deny. Le contrôleur revérifie indépendamment ; allow, règle absente/spécifique, mauvais SID et policy changée ne permettent aucun contournement.
 
-## Appel MCP terminé avec erreur du wrapper —2.2.36
+## Appel MCP terminé avec erreur du wrapper —2.2.37
 
 Le chemin brut corrèle completed/error=true avec un request_validation interne
 completed sur son input natif exact ; cette observation n’est pas une réussite
@@ -286,7 +286,7 @@ edit natif direct. Le préfixe commun du mandat reste stable, les valeurs
 variables appartiennent à son suffixe ; aucun cache hit n’est supposé.
 
 
-## Préambule readonly attendu — CAB2.2.36
+## Préambule readonly attendu — CAB2.2.37
 
 La projection qualifie `const schema = search({...}); return await tools[...]...({...});`
 et sa forme `const schema = await search({...}); return await tools[...]...({...});`,
@@ -302,7 +302,7 @@ Cette reconnaissance ne promet pas une projection anticipée de JavaScript
 arbitraire et ne ferme pas les coordinations REJECTED historiques.
 
 
-## Assertion de chemin de discovery — CAB 2.2.36
+## Assertion de chemin de discovery — CAB 2.2.37
 
 Après le binding const de search (avec await optionnel), une seule assertion
 readonly peut vérifier le résultat avant le retour MCP littéral :

@@ -1,4 +1,4 @@
-# Suivi événementiel et efficacité — CAB 2.2.36
+# Suivi événementiel et efficacité — CAB 2.2.37
 
 ## Cadences de pilotage
 
