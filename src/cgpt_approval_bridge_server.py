@@ -70,7 +70,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.2.34"
+SERVER_VERSION = "2.2.35"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
@@ -5765,7 +5765,7 @@ CONTROLLED_REMEDIATION_GUARDRAILS = {
         "max_attempts": 3,
         "cooldown_seconds": 60,
         "idempotence_scope": "approval_id_and_controller_decision",
-        "success_condition": "decision_applied_or_notification_reestablished",
+        "success_condition": "decision_applied_or_terminal_observed_or_notification_delivery_confirmed",
         "abort_conditions": [
             "approval_terminal",
             "controller_unreachable",
@@ -6241,6 +6241,7 @@ def do_finish_remediation_attempt(args, success):
         )
 
     action_code = attempt.get("action_code", "")
+    success = bool(success) and controlled_remediation_result_success(action_code, result)
     scope_key = attempt.get("scope_key", "")
     approval_id = attempt.get("approval_id", "")
     event_type = (
@@ -7230,20 +7231,32 @@ def execute_reconcile_pending_approval(approval_id):
         data = load_store(path)
         current = data.get("approvals", {}).get(approval_id)
         if current is None:
-            raise ValidationError(
-                "approval_id '%s' disparu apres renotification"
-                % approval_id
-            )
-        return {
+            raise ValidationError("approval_id '%s' disparu apres renotification" % approval_id)
+        status = current.get("status", "")
+        notification_status = current.get("notification_status", "")
+        if status in TERMINAL_STATES:
+            outcome = "ALREADY_TERMINAL"
+        elif notification_status == "DELIVERED":
+            outcome = "NOTIFICATION_REESTABLISHED" if delivered else "NOTIFICATION_ALREADY_DELIVERED"
+        else:
+            outcome = "NOTIFICATION_NOT_REESTABLISHED"
+        result = {
             "approval_id": approval_id,
-            "outcome": "NOTIFICATION_REESTABLISHED",
-            "status": current.get("status", ""),
+            "outcome": outcome,
+            "status": status,
             "notification_delivered": bool(delivered),
-            "notification_status": current.get(
-                "notification_status", ""
-            ),
-            "notification_reestablished": True,
+            "notification_status": notification_status,
+            "notification_reestablished": outcome == "NOTIFICATION_REESTABLISHED",
+            "notification_delivery_observed": notification_status == "DELIVERED",
+            "notification_diagnostic": filtered_notification_diagnostic(current.get("notification_diagnostic")),
         }
+        attempts = current.get("notification_attempts")
+        result["notification_attempts"] = attempts if type(attempts) is int and attempts >= 0 else None
+        for key in ("notification_updated_at", "notification_next_retry_at", "notification_lease_until"):
+            value = current.get(key, "")
+            result[key] = value if isinstance(value, str) and (not value or parse_utc(value) is not None) else ""
+        return result
+
 
 def execute_retry_reconciliation():
     """Relance explicitement une reconciliation globale et verifie son resultat."""
@@ -7381,6 +7394,26 @@ def execute_controlled_remediation(
     )
 
 
+def controlled_remediation_result_success(action_code, result):
+    """Qualifie le resultat de reconciliation sans inventer une livraison."""
+    if action_code != "RECONCILE_PENDING_APPROVALS":
+        return True
+    if not isinstance(result, dict):
+        return False
+    outcome = result.get("outcome")
+    if outcome == "DECISION_APPLIED":
+        return result.get("status") in ("APPROVED", "REJECTED", "NEEDS_CLARIFICATION")
+    if outcome == "ALREADY_TERMINAL":
+        return result.get("status") in TERMINAL_STATES
+    if result.get("status") != "PENDING" or result.get("notification_status") != "DELIVERED":
+        return False
+    if outcome == "NOTIFICATION_REESTABLISHED":
+        return result.get("notification_delivered") is True and result.get("notification_reestablished") is True
+    if outcome == "NOTIFICATION_ALREADY_DELIVERED":
+        return result.get("notification_delivery_observed") is True and result.get("notification_reestablished") is False
+    return False
+
+
 def do_execute_controlled_remediation(args):
     """Execute manuellement une remediation CONTROLLED admissible.
 
@@ -7502,6 +7535,7 @@ def do_execute_controlled_remediation(args):
             "attempt": failure,
         }
 
+    success = controlled_remediation_result_success(action_code, result)
     completed = do_finish_remediation_attempt(
         {
             "attempt_id": attempt_id,
@@ -7512,11 +7546,11 @@ def do_execute_controlled_remediation(args):
             ),
             "result": result,
         },
-        True,
+        success,
     )
 
     return {
-        "status": "COMPLETED",
+        "status": "COMPLETED" if success else "FAILED",
         "action_code": action_code,
         "approval_id": approval_id,
         "attempt_id": attempt_id,

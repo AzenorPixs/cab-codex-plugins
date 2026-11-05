@@ -1,4 +1,4 @@
-# Précisions recovery — CAB 2.2.34
+# Précisions recovery — CAB 2.2.35
 
 Pour changer le SID courant tout en conservant des effets et accès historiques
 protégés, utiliser la voie distincte [session-handoff](session-handoff.md).
@@ -291,3 +291,46 @@ modifier ses révisions/IDs ni libérer les accès/baux pour réparer la communi
 Après action réellement mandatée : relire reçu, état broker, admission locale
 et readiness du seul RUN ; conserver les décisions et once historiques.
 Une récupération technique n’autorise aucun effet métier supplémentaire.
+
+## Résultat vérifié d’une réconciliation de notification
+
+Le statut natif completed du tool signifie que l’appel a rendu son résultat,
+pas que sa récupération a réussi. Lire séparément :
+
+| Champ | Sens |
+|---|---|
+| payload.status | tentative de remédiation COMPLETED ou FAILED |
+| payload.result.status | état réel de l’approbation broker |
+| notification_delivered | ACK de livraison obtenu par cette tentative |
+| notification_delivery_observed | état DELIVERED relu dans le magasin |
+| notification_reestablished | livraison par cette tentative ET état DELIVERED confirmé |
+
+Pour RECONCILE_PENDING_APPROVALS, DECISION_APPLIED exige un état terminal de
+décision corrélée. ALREADY_TERMINAL conserve le terminal observé sans causalité
+inventée. NOTIFICATION_REESTABLISHED exige l’ACK et la persistance DELIVERED.
+NOTIFICATION_ALREADY_DELIVERED signifie livraison déjà observée, pas envoyée
+par cette tentative ; notification_delivered/reestablished peuvent alors être
+false et delivery_observed=true. Aucun de ces cas n’est une exécution métier.
+
+Sans livraison confirmée ni décision/terminal acquis, le résultat est
+NOTIFICATION_NOT_REESTABLISHED, notification_reestablished=false, et la tentative
+est FAILED dans la réponse ET le registre/journal. Une exception n’est pas
+nécessaire pour déclarer cet échec fonctionnel. La clôture manuelle ne peut pas
+marquer COMPLETED un résultat contradictoire/incomplet pour cette action.
+Les autres exécuteurs, préconditions, budgets, cooldowns et escalades restent
+inchangés ; ne pas lancer une nouvelle tentative à l’aveugle ni réinitialiser
+un compteur après mise à jour.
+
+Le résultat conserve les observations filtrées disponibles : diagnostic
+HTTP/code reconnu ou null, nombre de tentatives et dates techniques
+notification_updated_at/next_retry_at/lease_until. updated_at seul est métier
+et ne mesure pas chaque notification. Une absence de diagnostic ne prouve
+aucun HTTP ni cause réseau. Faux, échec et absence d’une nouvelle tentative
+ne deviennent jamais une attestation de livraison. Les reçus historiques
+contradictoires restent inchangés pour l’audit ; confronter leurs flags et
+l’état réel, sans réécrire le journal ni reprendre leurs effets.
+
+La correction du reçu ne corrige pas automatiquement la cause de non-admission.
+L’opérateur garde la même identité et ses protections, observe le refus exact
+et décide la suite autorisée. Aucun statut COMPLETED technique ne vaut
+APPROVED/once, réussite d’un test ou livraison métier.

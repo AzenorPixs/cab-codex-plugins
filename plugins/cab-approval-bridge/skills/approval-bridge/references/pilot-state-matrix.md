@@ -1,4 +1,4 @@
-# Grille de décision du pilotage — CAB 2.2.34
+# Grille de décision du pilotage — CAB 2.2.35
 
 Cette grille couvre les dimensions de décision connues, pas une promesse de
 connaître tout incident futur. Lire la ligne du cas, puis seulement sa référence.
@@ -133,3 +133,5 @@ Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 
 Write V2 refusé (permission edit), call/ACK masqués dans un ancien diagnostic :
 [preuve et retrait qualifiés](approved-attached-shell-retirement.md#write-v2-refusé-sous-permission-edit), sans conversion ni exécution de l’input divergent.
+
+Remédiation COMPLETED avec livraisonfalse : [distinguer exécution et résultat vérifié](technical-recovery.md#résultat-vérifié-dune-réconciliation-de-notification), sans consommer un nouveau budget à l’aveugle.

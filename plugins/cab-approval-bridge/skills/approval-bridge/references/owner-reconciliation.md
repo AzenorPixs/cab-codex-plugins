@@ -1,4 +1,4 @@
-# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.34
+# Réconcilier et reprendre sans arbitrage hors sujet — CAB 2.2.35
 
 Dans le change et les moyens déjà autorisés, l’orchestrateur propriétaire
 examine les preuves, décide la réconciliation qualifiée et poursuit le mandat.

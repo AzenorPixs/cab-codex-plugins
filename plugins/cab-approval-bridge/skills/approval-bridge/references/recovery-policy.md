@@ -1,4 +1,4 @@
-# Récupération par RUN — CAB 2.2.34
+# Récupération par RUN — CAB 2.2.35
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.
@@ -100,3 +100,5 @@ Les baux de test et autres accès ne sont pas libérés par cette action.
 
 Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 [retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.
+
+Remédiation COMPLETED avec livraisonfalse : [distinguer exécution et résultat vérifié](technical-recovery.md#résultat-vérifié-dune-réconciliation-de-notification), sans consommer un nouveau budget à l’aveugle.

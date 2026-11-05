@@ -1,5 +1,10 @@
 ## 2.2.27 — 2026-11-04
 
+## 2.2.35 — 2026-11-05
+
+- Résultat de RECONCILE_PENDING_APPROVALS lié à la décision/terminal/livraison réellement confirmés ; absence de rétablissement marquée FAILED dans réponse et registre.
+- Clôture manuelle contradictoire refusée en succès, observations filtrées conservées, budgets et reçus historiques inchangés.
+
 ## 2.2.34 — 2026-11-05
 
 - Projection des calls write et de leurs reçus ACK existants, même sans événement de journal.
