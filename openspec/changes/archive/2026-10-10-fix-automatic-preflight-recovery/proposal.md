@@ -1,3 +1,5 @@
+# SUP04 — Corriger la récupération des prévols automatiques
+
 ## Why
 
 Un prévol de récupération refusé parce qu'un champ ou un délai prescrit est

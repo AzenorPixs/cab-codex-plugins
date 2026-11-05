@@ -1,0 +1,29 @@
+✖ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (4518.299915ms)
+✔ transition mixte : un pair inactif sans PAUSE explicite reste bloquant (3951.552778ms)
+✔ maintenance gelée : un autre PENDING global interdit le chargement (4992.732395ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 13525.188224
+
+✖ failing tests:
+
+test at tests/maintenance-bootstrap.test.mjs:179:1
+✖ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (4518.299915ms)
+  Error: maintenance-http-refused
+      at maintenanceError (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:14:57)
+      at maintenanceHttp (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:101:43)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async maintainFrozenController (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs:699:21)
+      at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:185:18)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'maintenance-http-refused',
+    status: 409,
+    httpStatus: 409,
+    refusal: 'maintenance-frozen-proof-changed'
+  }

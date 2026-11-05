@@ -1,0 +1,172 @@
+[
+  {
+    "path": "src/cgpt_approval_bridge_journal.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "src/cgpt_approval_bridge_server.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "src/cgpt_approval_bridge_router.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/web-monitor/app.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/web-monitor/stats.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/native-opencode.test.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/test_session_reset.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/controller-service-distribution.test.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/test_crash_recovery.py",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/concurrent-controller.test.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/web-monitor.test.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/web-monitor-browser.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/monitor-service-start.test.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  },
+  {
+    "path": "tests/monitor-management.test.mjs",
+    "exit": 0,
+    "diagnostic": ""
+  }
+]

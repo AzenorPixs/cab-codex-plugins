@@ -1,0 +1,110 @@
+{
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs": {
+    "sha256": "7ae7afa371cdc12f85f1f949ed820470361067541d023ea82ba8764cf1deb47f",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs": {
+    "sha256": "e2257ceb975536fda5dc41cf47ddc023e30575a2ddc21f2128c932c85de9a45e",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs": {
+    "sha256": "5ccdc37e0496d52e3bb53f036b4493200dced15172331df8fac718cd70efc3b0",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs": {
+    "sha256": "ec37789bd0a389002a12a49b8af46117794f4e445862dd3b96f45d3de9d5dfe6",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs": {
+    "sha256": "d33380c168675a9e61fdaf6e325ebb4db57644cb2a4509aa02214c557011be9b",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs": {
+    "sha256": "38c567ea037aea558f7f1c55892b79462535c7c4265b702ecdc70b6951cb3baf",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs": {
+    "sha256": "a922aa655091155d8fa6dbfe90d2f904ce728de50a41a46094cea7746615e0d2",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs": {
+    "sha256": "68fd2a26e3bb5a7e13aea05b8e6641023fe9921fd6998e455099023ed2cf7d79",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs": {
+    "sha256": "48e3786d59175b6a83006afe81dd72df0d8d41c1537043dd44160c41d3b9647e",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs": {
+    "sha256": "06727a2d3334442ad9a650ce5a57b67549d01145bee9a7e9b15e03cdc124f464",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs": {
+    "sha256": "3b784e34a19a876e9e8e064d8ba8888f00b0022bff857d9a7cb271656040f0f9",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs": {
+    "sha256": "952090d2c938e880da765041d24d362c41f1c95b199d507587ba1a0006d4df8d",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs": {
+    "sha256": "00988799d8cbfd545201091e048d6af3a7c37f9573896091ffdf89f4845e83d4",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py": {
+    "sha256": "3ad9709d41363a2a288c39a822917c7e548b581010614faf137aefeffc4eed9e",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py": {
+    "sha256": "729876e267df1614e7c0315d50c841331dc814f7aa2e17e7ddb5ae7f84b4074e",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py": {
+    "sha256": "69d7c1f67f72fa9ee810376dc9dc1f57ec3526cd243d67434ccf7c25ec0aa3c6",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs": {
+    "sha256": "45487a9806567dd39e7b66cbdb45c8f5caf59890c452199a211d5c1a924acb1d",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs": {
+    "sha256": "fc576ba999eeb98c947c1be38cb4f4183b977de7e84c4c7bb41cc151c00587c3",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs": {
+    "sha256": "d70f5f12fc4cb4f48c841a03cb889f69e31c4044cb153867d241cb10a7752543",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs": {
+    "sha256": "6e5dc0263a87a8f8d92588a68bb82c6311a2ae76579cb622a310f243c50d71de",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs": {
+    "sha256": "65747a9dc641816a22c81ef9060775523429aa5296caf546f95c30e6e51312a9",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs": {
+    "sha256": "157adda126cf8ffeaba36b60bfc212e4c820dc4af7df6502765796dc115af12e",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs": {
+    "sha256": "b642167eada39e1baa2073e2a8daf741acec0e8d974ac829e557d4433c9458c4",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs": {
+    "sha256": "e71538136a8b4b9af183a2f645186340fedbf8a71b60a6689f445cd818c019e5",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py": {
+    "sha256": "dd65bd6534ee82dd0f58b0287a8c122f198dd9c3a03569d01bd86f06f9dc4dee",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py": {
+    "sha256": "cc7d1187a79d41ce34010b0cefc7f0b8822e7148106d1e00f0b83892ff99f66a",
+    "matches_pre_1_10": true
+  },
+  "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py": {
+    "sha256": "d08c192610b3f9be8f5dedeb62931e63502e82d11acc517c068b8b334c75627d",
+    "matches_pre_1_10": true
+  }
+}

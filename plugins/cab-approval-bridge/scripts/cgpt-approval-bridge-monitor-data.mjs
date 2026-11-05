@@ -1,13 +1,17 @@
-import { constants } from 'node:fs';
+import { constants,existsSync } from 'node:fs';
+import { readRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { lstat, open, readdir, realpath } from 'node:fs/promises';
 import { isAbsolute, join } from 'node:path';
 import { homedir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.1.2';
+export const VERSION = '2.3.0';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -17,6 +21,33 @@ const stamp = (value) => typeof value === 'string' && Number.isFinite(Date.parse
 const code = (value) => typeof value === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(value) ? value : null;
 const componentVersion = (value) => typeof value === 'string' && value.length <= 100 &&
   /^\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)*$/.test(value) ? value : null;
+const executeFile = promisify(execFile);
+
+export async function statisticsComponent({ directory = fileURLToPath(new URL('.',import.meta.url)), execute = executeFile } = {}) {
+  let version=null;
+  try {
+    for(const name of ['cab_sgs.py','cgpt-approval-bridge-sgs.py']) {
+      const path=join(directory,name),info=await lstat(path);
+      if(!info.isFile()||info.nlink!==1||info.size>1024*1024||(info.mode&0o002))throw new Error('engine-files-unreadable');
+      const stream=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW);
+      let source;
+      try{source=await stream.readFile({encoding:'utf8'});}finally{await stream.close();}
+      const declared=componentVersion(source.match(/^VERSION\s*=\s*["']([^"']+)["']/m)?.[1]);
+      if(!declared)throw new Error('engine-version-unavailable');
+      version??=declared;
+      if(declared!==VERSION||declared!==version)return {state:'VERSION_MISMATCH',available:false,version:declared,reason:'engine-version-mismatch'};
+    }
+    const result=await execute('python3',['-B',join(directory,'cgpt-approval-bridge-sgs.py'),'VERSION'],
+      {timeout:1500,maxBuffer:4096,windowsHide:true});
+    const response=JSON.parse(result.stdout);
+    if(response.version!==version||response.engine_format!=='cab-sgs-1')throw new Error('engine-response-invalid');
+    return {state:'AVAILABLE',available:true,version,reason:null};
+  } catch(cause) {
+    return {state:'UNAVAILABLE',available:false,version,reason:cause.code==='ENOENT' ?
+      version?'python-or-entry-unavailable':'engine-files-unavailable':
+      cause.killed?'engine-check-timeout':'engine-check-failed'};
+  }
+}
 
 export function monitorConfiguration(environment = process.env) {
   const get = (key) => environment['OC_Codex_' + key] ?? environment['OC_CGPT_' + key];
@@ -55,18 +86,22 @@ export function monitorConfiguration(environment = process.env) {
 }
 
 export async function fetchJson(url, timeoutMs, fetcher = fetch) {
+  const fail = code => { throw Object.assign(new Error(code), { code }); };
   const response = await fetcher(url, { signal: AbortSignal.timeout(timeoutMs), redirect: 'error',
     headers: { accept: 'application/json' } });
-  if (!response.ok || !response.body) throw new Error('source-unavailable');
+  if (!response.ok) fail('source-http-error');
+  if (!response.body) fail('source-invalid');
   const chunks = [];
   let bytes = 0;
   for await (const chunk of response.body) {
     bytes += chunk.length;
-    if (bytes > 2 * 1024 * 1024) throw new Error('source-too-large');
+    if (bytes > 2 * 1024 * 1024) fail('source-too-large');
     chunks.push(chunk);
   }
-  const result = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-  if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('source-invalid');
+  let result;
+  try { result = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks))); }
+  catch { fail('source-invalid'); }
+  if (!result || typeof result !== 'object' || Array.isArray(result)) fail('source-invalid');
   return result;
 }
 
@@ -102,7 +137,7 @@ export function parseChangeTitle(markdown) {
     const heading = line.match(/^ {0,3}#\s+(.+)$/);
     if (!heading) continue;
     const title = heading[1].trim().replace(/\s+#+\s*$/, '');
-    const lotCode = title.match(/^([A-Z]{1,10}[0-9]{2,4})(?:\s+[—–:-]\s+.+)?$/)?.[1] || null;
+    const lotCode = title.match(/^([A-Z]{1,10}[0-9]{2,4}|L[12])(?:\s+[—–:-]\s+.+)?$/)?.[1] || null;
     return { title: title.slice(0, 160), lotCode };
   }
   return { title: null, lotCode: null };
@@ -123,7 +158,7 @@ async function document(directory, name) {
   } finally { await file.close(); }
 }
 
-export async function readChanges(workspace, referenced = []) {
+export async function readChanges(workspace, referenced = [], {referencedOnly=false} = {}) {
   const unavailable = (changeId, reason) => ({ changeId, title: changeId, lotCode: null, location: 'unknown',
     progress: { available: false, reason, completed: null, total: null, tasks: [] } });
   try {
@@ -133,7 +168,8 @@ export async function readChanges(workspace, referenced = []) {
     await regularDirectory(specs);
     await regularDirectory(changes);
     const entries = (await readdir(changes, { withFileTypes: true })).slice(0, 1000);
-    const selected = entries.filter((entry) => entry.name !== 'archive' && id(entry.name) && entry.isDirectory())
+    const selected = entries.filter((entry) => entry.name !== 'archive' && id(entry.name) && entry.isDirectory()&&
+      (!referencedOnly||referenced.includes(entry.name)))
       .slice(0, 200).map((entry) => ({ changeId: entry.name, directory: join(changes, entry.name), location: 'active' }));
     const missing = [...new Set(referenced.filter(id))].filter((value) => !selected.some((entry) => entry.changeId === value));
     if (missing.length) {
@@ -184,11 +220,12 @@ export function normalizeRuns(controller = {}, registry = {}, supervisor = {}, s
     const gate = record(status.terminalGate || job.terminalGate);
     const coordination = record(status.coordination);
     const lifecycle = lifecycleView(job.lifecycle);
+    const causeCode = code(coordination.reason || status.brokerReadiness?.root_cause);
     return { runId, changeId: id(job.changeId) || id(reservation.changeId), sessionId: id(job.sessionId) || id(reservation.sessionId),
       generation: Number.isSafeInteger(reservation.version) ? reservation.version : id(job.jobId),
       state: code(reservation.state), phase: code(coordination.phase || reservation.phase),
       step: lifecycle.current, stepHistory: lifecycle.history, stepSequence: lifecycle.sequence, stepHistoryTruncated: lifecycle.truncated,
-      readiness: code(status.brokerReadiness?.status), cause: code(coordination.reason || status.brokerReadiness?.root_cause),
+      readiness: code(status.brokerReadiness?.status), cause: causeCode === 'NONE' ? null : causeCode,
       lastProvenMilestone: text(job.lastProvenMilestone), currentMandate: code(job.currentCabMandate), hasMandate: Boolean(job.currentCabMandate),
       armed: typeof job.armed === 'boolean' ? job.armed : null, gate: { status: code(gate.status), declaredState: text(gate.declaredState, 40) },
       updatedAt: stamp(job.updatedAt), nativeActivity: code(sessions[job.sessionId || reservation.sessionId]?.type),
@@ -209,7 +246,7 @@ export function operationalState(run, { controllerFresh = true, registryFresh = 
   if (['run-pause', 'global-coordination-suspended'].includes(run.cause)) return 'PAUSED';
   if (run.readiness === 'HUMAN_REQUIRED') return 'BLOCKED';
   if (['resource-conflict','test-resource-conflict'].includes(run.cause)) return 'WAITING';
-  if (run.cause || ['BLOCKED', 'HUMAN_REQUIRED'].includes(run.readiness)) return 'BLOCKED';
+  if ((run.cause && run.cause !== 'NONE') || ['BLOCKED', 'HUMAN_REQUIRED'].includes(run.readiness)) return 'BLOCKED';
   if (run.pending > 0) return 'WAITING';
   if (run.readiness === 'DEGRADED') return 'DEGRADED';
   if (run.state === 'RELEASED') return 'RELEASED';
@@ -219,15 +256,27 @@ export function operationalState(run, { controllerFresh = true, registryFresh = 
 }
 
 export class MonitorState {
-  constructor(configuration, { now = () => Date.now(), fetcher = fetch } = {}) {
+  constructor(configuration, { now = () => Date.now(), fetcher = fetch, statisticsProbe = statisticsComponent } = {}) {
     this.configuration = configuration; this.now = now; this.fetcher = fetcher;
     this.openCode = createOpenCodeV2ClientFromEnv({ directory: configuration.workspace,
       baseUrl: configuration.opencodeUrl, fetchImpl: fetcher });
+    const policyPath=join(configuration.stateDirectory,'catalog-policy.json');
+    const policy=existsSync(policyPath)?readRuntimeJson(policyPath).value:null;
+    if(policy&&policy.referencedOnly!==true)throw new Error('monitor-catalog-policy-invalid');
+    this.referencedOnly=policy?.referencedOnly===true;
     this.startedAt = new Date(now()).toISOString(); this.sources = {}; this.events = [];
     this.changes = { available: false, changes: [] }; this.running = false; this.listeners = new Set();
     this.coverage = { instanceId: null, truncated: false, restarted: false, stream: 'connecting' };
     this.instances = [];
     this.lastSequence = 0;
+    this.statisticsProbe=statisticsProbe;
+    this.statistics={state:'UNOBSERVED',available:false,version:null,reason:null,checkedAt:null};
+  }
+  async collectStatistics() {
+    if(this.statistics.checkedAt&&this.now()-Date.parse(this.statistics.checkedAt)<Math.min(5000,this.configuration.staleMs/2))return;
+    let value;
+    try{value=await this.statisticsProbe();}catch{value={state:'UNAVAILABLE',available:false,version:null,reason:'engine-check-failed'};}
+    this.statistics={...value,checkedAt:new Date(this.now()).toISOString()};
   }
   ingest(journal) {
     if (!journal || !id(journal.instanceId) || !Array.isArray(journal.events)) return;
@@ -256,12 +305,13 @@ export class MonitorState {
         await fetchJson(urlOrLoader, this.configuration.timeoutMs, this.fetcher);
       if ((name === 'registry' && !Array.isArray(value.runs)) ||
           (name === 'opencode' && (typeof value.version !== 'string' || !/^2\./.test(value.version) || !Number.isSafeInteger(value.pid))) ||
-          (name === 'observations' && (!id(value.instanceId) || !Array.isArray(value.events)))) throw new Error('source-invalid');
+          (name === 'observations' && (!id(value.instanceId) || !Array.isArray(value.events)))) throw Object.assign(new Error('source-invalid'), { code: 'source-invalid' });
       this.sources[name] = { available: true, attemptedAt, lastSuccessAt: new Date(this.now()).toISOString(), value };
     } catch (cause) {
       this.sources[name] = { ...previous, available: false, attemptedAt, lastSuccessAt: previous.lastSuccessAt || null,
-        error: ['opencode-auth-required', 'opencode-v2-required', 'opencode-credential-unavailable']
-          .includes(cause.code) ? cause.code : 'source-unavailable' };
+        error: ['opencode-auth-required', 'opencode-v2-required', 'opencode-credential-unavailable',
+          'source-too-large', 'source-invalid', 'source-http-error'].includes(cause.code) ? cause.code :
+          ['TimeoutError', 'AbortError'].includes(cause.name) ? 'source-timeout' : 'source-unavailable' };
     }
   }
   async collect() {
@@ -275,14 +325,14 @@ export class MonitorState {
     const c = this.configuration;
     try {
       await Promise.all([this.source('controller', c.controllerUrl + '/status'),
-        this.source('registry', c.controllerUrl + '/runs'), this.source('supervisor', c.supervisorUrl + '/status'),
+        this.source('registry', c.controllerUrl + '/monitor/runs'), this.source('supervisor', c.supervisorUrl + '/status'),
         this.source('opencode', () => this.openCode.info()),
-        this.source('mcp', () => this.openCode.mcp(c.workspace)),
+        this.source('mcp', () => this.openCode.mcp()),
         this.source('sessions', () => this.openCode.sessionStatus(c.workspace)),
-        this.source('observations', c.controllerUrl + '/monitor/events')]);
+        this.source('observations', c.controllerUrl + '/monitor/events'),this.collectStatistics()]);
       this.ingest(this.sources.observations?.value);
       const runs = this.runs();
-      this.changes = await readChanges(c.workspace, runs.map((run) => run.changeId));
+      this.changes = await readChanges(c.workspace, runs.map((run) => run.changeId),{referencedOnly:this.referencedOnly});
       this.publish();
     } finally { this.running = false; }
   }
@@ -296,6 +346,10 @@ export class MonitorState {
       stale: !source.available || !source.lastSuccessAt || now - Date.parse(source.lastSuccessAt) > this.configuration.staleMs,
       error: source.error || null }]));
     const controller = this.sources.controller?.value || {};
+    const statsAge=this.statistics.checkedAt?Math.max(0,now-Date.parse(this.statistics.checkedAt)):null;
+    sources.statistics={available:this.statistics.available,attemptedAt:this.statistics.checkedAt,
+      lastSuccessAt:this.statistics.available?this.statistics.checkedAt:null,ageMs:statsAge,
+      stale:statsAge===null||statsAge>this.configuration.staleMs,error:this.statistics.reason};
     const limit = controller.configuration?.maxCommandLength;
     return { version: VERSION, identity: { workspace: this.configuration.workspace },
       startedAt: this.startedAt, generatedAt: new Date(now).toISOString(), sources,
@@ -303,7 +357,9 @@ export class MonitorState {
       componentVersions: { controller: componentVersion(controller.version),
         supervisor: componentVersion(this.sources.supervisor?.value?.version),
         broker: componentVersion(controller.brokerReadiness?.server_version),
-        opencode: componentVersion(this.sources.opencode?.value?.version), monitor: VERSION },
+        opencode: componentVersion(this.sources.opencode?.value?.version), monitor: VERSION,
+        statistics:componentVersion(this.statistics.version) },
+      statisticsEngine:this.statistics,
       nativeHealth: this.sources.opencode?.available === true && /^2\./.test(this.sources.opencode?.value?.version || '') ? true : null,
       brokerConnection: code(this.sources.mcp?.value?.['cgpt-validation']?.status),
       runsTruncated: !Array.isArray(this.sources.registry?.value?.runs) || this.sources.registry.value.runs.length > 200 ||

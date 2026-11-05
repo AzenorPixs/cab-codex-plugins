@@ -1,0 +1,35 @@
+{
+  "version": "2.1.24",
+  "sourceQualified": true,
+  "node": {
+    "cases": 643,
+    "passed": 613,
+    "skipped": 30,
+    "failed": 0
+  },
+  "python": {
+    "passed": 81,
+    "failed": 0
+  },
+  "native": {
+    "version": "2.2.0",
+    "passed": 3,
+    "failed": 0
+  },
+  "syntax": {
+    "javascript": 66,
+    "python": 16
+  },
+  "openspec": {
+    "before": {
+      "standard": 17,
+      "strict": 17
+    },
+    "after": {
+      "standard": 16,
+      "strict": 16
+    }
+  },
+  "admissionSnapshotNotAuthorization": true,
+  "activationProvenHere": false
+}

@@ -1,0 +1,7 @@
+# Contrat minimal
+
+providerMaxBytes est un entier JavaScript sûr strictement positif, exprimé en octets. Omission : 2*1024*1024 pour compatibilité. Null, chaîne, fraction, zéro, négatif et valeur hors entier sûr sont refusés avant lecture du catalogue ou requête native. Le paramètre est local à la résolution, transmis uniquement à modelObservation('/provider', budget). Les autres appels de modelObservation gardent leur défaut de 2 Mio ; le lecteur du catalogue public reste inchangé.
+
+Le lecteur compte les octets du flux et interrompt à dépassement avant parsing JSON. Les sorties restent les décisions filtrées de modèle ou des codes d'erreur fixes, sans corps /provider ni valeur privée dans les erreurs/journaux/jobs. Le paramètre n'est ni une sélection LLM ni une configuration globale ; il doit être répété dans modelSelection lors de l'armement et dans une nouvelle résolution. Les modèles et prévols existants gardent leurs contrats.
+
+Les tests HTTP utilisent des données synthétiques : budget exact, un octet de moins, plus de 16 Mio pour prouver l'absence de plafond fixe arbitraire, réémission sans paramètre, valeurs invalides avant appel réseau, armement, autres observations à 2 Mio et confidentialité des retours/persistance. La qualification de déploiement utilise le paquet original 1.10.1 sauvegardé et deux UID, broker créé depuis un thread, grand registre, succès/récupération et OpenCode conservé. La release source devient 1.10.2 et le validateur garde 1.10.1 dans les versions chargées admissibles.

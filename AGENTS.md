@@ -1,6 +1,6 @@
 # AGENTS.md — Codex Approval Bridge
 
-Version : 0.4
+Version : 0.6
 
 ## 1. Contexte
 
@@ -11,8 +11,38 @@ Version : 0.4
 * Cadrage technique : `TECHNICAL.md` ;
 * Cadrage de déploiement : `BUILD.md` ;
 * Envrionnement de développement : `DEVOPS.md` ;
-* Protocole des sessions de codage pilotées : `ORCHESTRATED_CODING.md`
-  (facultatif, uniquement si le projet nécessite ce pilotage) ;
+* Cartographie et progression du développement : `DEVELOPMENT_MAP.md` ;
+* Protocole des sessions de codage pilotées : résolution décrite en section 7
+  (contrat distribué CAB pour CAB, protocole explicitement retenu sinon) ;
+
+La propagation des règles générales vers un projet consommateur conserve
+son identité et sa racine.
+Une adaptation locale ou une propagation vers d'autres consommateurs nécessite
+l'autorisation applicable ; elle ne modifie pas implicitement le référentiel.
+
+`DEVOPS.md` est généré automatiquement. Son contenu dépend de l'environnement
+de développement local dans lequel il est généré et décrit l'état observé
+au moment de cette génération. Il est susceptible d'être régénéré en cours
+de session de codage. Après une régénération, l'agent DOIT relire les
+informations nécessaires à la poursuite du travail avant de s'y référer.
+
+`DEVELOPMENT_MAP.md` fait partie des fichiers de cadrage du projet.
+Il constitue une synthèse de navigation et d’aide à la décision reliant
+les codes de lot, les changes OpenSpec actifs et archivés, leurs ensembles
+et sous-ensembles fonctionnels ou techniques, leurs dépendances et leur
+avancement vérifiable.
+
+Son rôle principal est d’aider à orienter le choix des changes à engager :
+privilégier les travaux dont les prérequis sont vérifiés, puis favoriser
+un nombre et une difficulté faibles de dépendances non satisfaites,
+avant de considérer les travaux dont la réalisation débloque d’autres
+travaux. Il distingue l’avancement
+documentaire, la réalisabilité, les validations, la livraison et l’activation,
+sur la base de sources identifiées et de preuves datées.
+
+Cette cartographie ne lance aucune session et ne remplace aucune validation
+requise. Les informations déterminantes DOIVENT être revérifiées avant
+d’engager les travaux concernés.
 
 L'agent NE DOIT PAS créer, modifier ou supprimer de fichier hors de la racine
 applicable à son environnement sans validation explicite du développeur.
@@ -30,6 +60,11 @@ En cas de contradiction, appliquer cet ordre :
 7. Environnement de développement : `DEVOPS.md` ;
 8. documentation officielle du projet ;
 9. code existant.
+
+`DEVELOPMENT_MAP.md` est une synthèse de cadrage subordonnée aux sources
+de vérité et aux preuves applicables. Il ne modifie pas leur ordre de
+priorité. Toute divergence DOIT être signalée et résolue avant d’utiliser
+l’information concernée.
 
 Un prompt demandé explicitement pour exécution prévaut sur les fichiers de cadrage du projet.
 
@@ -52,9 +87,19 @@ Avant toute intervention, l'agent DOIT lire uniquement ce qui est nécessaire, d
 3. `TECHNICAL.md` ;
 4. `BUILD.md` ;
 5. `DEVOPS.md` ;
-6. spécifications ou évolution OpenSpec applicables ;
-7. conventions applicables du projet ;
-8. code et documentation concernés.
+6. `DEVELOPMENT_MAP.md`, pour les lots, changes et dépendances concernés ;
+7. spécifications ou évolution OpenSpec applicables ;
+8. conventions applicables du projet ;
+9. code et documentation concernés.
+
+Si `DEVELOPMENT_MAP.md` est absent, vide ou réduit à un squelette, l’agent
+DOIT le signaler et recommander le prompt ACL, sans le lancer automatiquement.
+Il poursuit le travail autorisé à partir des sources et preuves accessibles.
+Ce constat n’autorise ni la création ni la complétion de la cartographie.
+
+La création, la reconstruction ou la complétion globale de cette cartographie
+nécessite une validation explicite. Les amendements ciblés d’un document
+exploitable restent soumis aux autorisations du processus applicable.
 
 L'agent DOIT privilégier :
 
@@ -181,27 +226,32 @@ Toute modification de la configuration OpenCode nécessite une validation explic
 
 ### Sessions de codage pilotées par un agent orchestrateur
 
-`ORCHESTRATED_CODING.md` est un fichier facultatif. Il est uniquement présent
-pour les projets qui nécessitent un pilotage par agent orchestrateur vers un
-agent de codage. Son absence est normale pour les autres projets et ne bloque
-pas une session de codage directe.
+Une session de codage directe ne nécessite aucun protocole de pilotage.
 
-Lorsqu'une session pilotée est nécessaire, les deux agents DOIVENT lire intégralement
-[ORCHESTRATED_CODING.md](ORCHESTRATED_CODING.md) à la racine de ce projet,
-avant toute opération de pilotage. Ce fichier dédié définit le protocole,
-les rôles, les échanges, les mandats, les preuves et les détails techniques
-de la session pilotée.
+Pour une session pilotée via CAB, le protocole fait autorité dans le skill
+`CAB` et son index de références distribués avec le plugin CAB. L'orchestrateur
+DOIT charger le noyau du contrat et les références nécessaires à l'action,
+vérifier la version applicable et transmettre à l'agent de codage les
+obligations correspondant à son mandat. Les deux agents DOIVENT connaître ces
+obligations avant leur exécution. Une copie locale historique ne prévaut pas
+sur le contrat CAB distribué.
 
-Cette référence complète les règles générales d'AGENTS.md et les
-spécifications OpenSpec validées, sans étendre les autorisations du développeur.
-Si un pilotage devient nécessaire et que le fichier est absent ou incohérent,
-l'agent DOIT signaler ce besoin et faire valider sa création ou sa correction
-avant de poursuivre ce pilotage.
+Pour un pilotage utilisant un autre protocole explicitement retenu par le
+projet, celui-ci définit les rôles, échanges, mandats et preuves ; les deux
+agents DOIVENT en prendre connaissance avant ce pilotage.
+
+Le protocole retenu complète `AGENTS.md` et les spécifications OpenSpec validées
+sans étendre les autorisations du développeur. S'il est inaccessible ou
+incohérent, l'agent DOIT diagnostiquer la référence ou la distribution concernée
+et utiliser uniquement les récupérations déjà autorisées. Il ne doit ni inventer
+une autorisation ni relancer un effet incertain ; les travaux indépendants et
+déjà autorisés peuvent continuer. Toute correction hors mandat nécessite sa
+validation explicite.
 
 ### Statistiques d'archivage
 
 Après chaque archivage OpenSpec autorisé et réussi, produire un rapport par
-archive dans `openspec/changes/archive/<archive>/STATISTIQUES.md`, avec un
+archive dans `openspec/changes/archive/<archive>/STATISTICS.md`, avec un
 mandat d'édition distinct pour ce seul fichier lorsque le protocole CAB
 s'applique. Vérifier les six sections, UTF-8/LF et les totaux ; afficher `N/A`
 motivé pour les mesures absentes. Ne pas déclarer `TERMINÉ` sans preuve du
@@ -226,14 +276,15 @@ Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimé
 
 * `.gitignore`
 * `AGENTS.md`
-* `ORCHESTRATED_CODING.md`
 * `BUILD.md`
 * `CHANGELOG.md`
 * `DEVOPS.md`
+* `DEVELOPMENT_MAP.md`
 * `LICENSE`
 * `PROJECT.md`
 * `README.md`
 * `TECHNICAL.md`
+* `project.env` (à la racine du projet)
 * `.opencode/commands/`
 * `.opencode/skills/`
 * `.opencode/config/opencode.json`
@@ -241,6 +292,10 @@ Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimé
 * `openspec/changes/`
 * `openspec/specs/`
 * `openspec/specs/`
+
+`project.env` est un fichier local protégé situé à la racine du projet.
+L'agent NE DOIT PAS le créer, le modifier ou le régénérer. Sa consultation
+est limitée à l'extraction définie en section « Sources du projet ».
 
 ## 9. Sources du projet
 
@@ -251,7 +306,7 @@ Les fichiers du projet non explicitement exclus PEUVENT être utilisés comme so
 * d'informations techniques ;
 * d'informations fonctionnelles.
 
-Hors exception limitée d’extraction de l’identité non secrète définie ci-dessous,
+Hors exception limitée d’extraction des variables locales non secrètes définie ci-dessous,
 les sources exclues NE DOIVENT PAS être lues, analysées, indexées ou utilisées :
 
 ```text id="6zj1eg"
@@ -311,27 +366,36 @@ tmp/
 venv/
 ```
 
-### Exception limitée — identité non secrète du projet
+### Exception limitée — variables locales non secrètes de project.env
 
-Lorsqu’un prompt explicitement demandé utilise `PROJECT_NAME` et `PROJECT_ID`
-définis dans `project.env` à la racine du projet concerné, l’agent PEUT lancer
-une extraction locale filtrée de ces deux seules valeurs non secrètes, sans
-validation supplémentaire. Cette exception prévaut sur l’exclusion générale
-des fichiers `.env` et sur l’interdiction d’ouvrir un fichier sensible de la
-section « Secrets », uniquement pour ce traitement local.
+Pour les besoins du projet et du travail autorisé, l’agent PEUT lancer, sans
+validation supplémentaire, une extraction locale filtrée de toutes les
+variables non secrètes disponibles dans `project.env`, situé à la racine du
+projet concerné. Cette autorisation couvre notamment `PROJECT_*`,
+`LOCAL_DEFAULT_BRANCH`, `GIT_*` et `REMOTE_*`, sans se limiter à ces noms ou
+préfixes. Elle ne dépend pas de l’exécution d’un prompt particulier.
+Cette exception prévaut sur l’exclusion générale des fichiers `.env` et sur
+l’interdiction d’ouvrir un fichier sensible de la section « Secrets »,
+uniquement pour ce traitement local.
 
-Seul le processus local parcourt le fichier ; l’agent ne reçoit que les
-valeurs des deux clés après validation. Les autres variables sont ignorées,
-sans affichage, journalisation, copie, indexation ni transmission au modèle.
+Seul le processus local parcourt le fichier ; l’agent ne reçoit que les noms
+et valeurs des variables validées comme non secrètes et utiles au travail
+autorisé. Un nom ou un préfixe autorisé ne garantit pas l’absence de secret :
+les mots de passe, jetons, clés et autres données sensibles restent exclus,
+y compris dans les familles ci-dessus ou dans une URL contenant des secrets.
+Toute valeur dont le caractère non secret ne peut être établi est exclue de
+la restitution. Les valeurs exclues ne DOIVENT être ni affichées,
+journalisées, copiées, indexées, ni transmises au modèle.
 Le fichier ne DOIT JAMAIS être exécuté ou chargé dans l’environnement :
 `source`, `eval`, substitutions de commandes et interpolations sont interdits.
 Seules les affectations littérales sur une seule ligne sont acceptées ; les
 clés dupliquées et les syntaxes nécessitant une interprétation sont ambiguës.
 Aucune ligne rejetée ni sortie brute du fichier ne DOIT être restituée.
 
-Si le fichier est absent ou inaccessible, si une clé manque ou si une valeur
-est vide ou ambiguë, demander uniquement les valeurs non secrètes manquantes
-ou non vérifiables au développeur. Ne pas créer ni modifier `project.env`.
+Si le fichier est absent ou inaccessible, si une variable nécessaire manque
+ou si sa valeur est vide ou ambiguë, demander uniquement les valeurs non
+secrètes nécessaires et manquantes ou non vérifiables au développeur.
+L’agent NE DOIT PAS créer, modifier ou régénérer `project.env`.
 Cette exception n’autorise aucun autre accès aux fichiers exclus ni aux
 secrets, et ne s’applique pas si le développeur interdit précisément cette
 extraction.
@@ -343,14 +407,15 @@ Les inclusions suivantes prévalent sur les exclusions générales et PEUVENT ê
 ```text id="3ewy6y"
 .gitignore
 AGENTS.md
-ORCHESTRATED_CODING.md
 BUILD.md
 CHANGELOG.md
 DEVOPS.md
+DEVELOPMENT_MAP.md
 LICENSE
 PROJECT.md
 README.md
 TECHNICAL.md
+project.env
 .opencode/commands/
 .opencode/config/opencode.json
 .opencode/skills/
@@ -361,6 +426,11 @@ openspec/specs/
 output/
 reports/
 ```
+
+L’inclusion de `project.env` concerne exclusivement le fichier situé à la
+racine du projet et l’extraction locale filtrée définie ci-dessus. Elle
+n’autorise ni sa lecture brute, ni l’accès aux secrets, ni sa création,
+sa modification ou sa régénération.
 
 Ces éléments ne constituent pas nécessairement une source de vérité fonctionnelle.
 
@@ -399,7 +469,8 @@ Les données sensibles comprennent notamment :
 * identifiants de connexion.
 
 Pour un fichier sensible, l'agent PEUT uniquement signaler sa présence à partir de son nom ou chemin.
-L’extraction locale de l’identité non secrète du projet constitue la seule
+L’extraction locale des variables non secrètes de `project.env` à la racine
+du projet constitue la seule
 exception définie dans la section « Sources du projet » ; elle n’autorise
 jamais la transmission d’un secret au modèle.
 
@@ -578,16 +649,9 @@ Les types TypeScript NE remplacent PAS la validation des données reçues à l'e
 
 En TypeScript, l'utilisation de `any` ou d'une suppression de diagnostic DOIT être limitée et justifiée.
 
-Les vérifications minimales comprennent les tests et la construction applicables définis dans `package.json`.
+Avant de déclarer une modification valide, l’agent DOIT exécuter les tests et les constructions applicables au périmètre modifié, avec les commandes et configurations définies par le projet.
 
 Lorsqu'une application web nécessite des tests unitaires pour sa partie frontend, ces tests DOIVENT être exécutés dans les navigateurs web déclarés dans `DEVOPS.md`, en mode headless.
-
-Pour le frontend Pixs actuel :
-
-```bash
-npm --prefix frontend test
-npm --prefix frontend run build
-```
 
 Les contrôles de lint et de types DOIVENT également être exécutés lorsqu'ils sont configurés.
 

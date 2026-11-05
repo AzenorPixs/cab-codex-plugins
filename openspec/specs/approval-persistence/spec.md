@@ -24,11 +24,33 @@ contrat de démarrage ; aucune trace ni décision de la session précédente SHA
 - **AND** aucune ancienne demande, décision ou trace de codage n'est restaurée
 
 ### Requirement: Journal vérifiable
-CAB SHALL consigner les transitions métier dans un journal append-only chaîné par SHA-256. Lorsqu'un checkpoint HMAC est configuré, CAB SHALL vérifier son intégrité sans exposer la clé dans ses sorties.
+CAB SHALL consigner les transitions métier dans un journal append-only chaîné
+par SHA-256. Avec un checkpoint HMAC configuré, CAB SHALL vérifier son intégrité
+sans exposer la clé. La seule exception de réécriture ciblée SHALL être
+l’effacement terminal qualifié selon change-state-erasure, avec réancrage
+satisfaisant les garanties ci-dessous.
 
 #### Scenario: Intégrité du journal invalide
-- **WHEN** le journal ou son checkpoint ne passe pas les vérifications d'intégrité
-- **THEN** CAB signale une cause de santé non saine et ne prétend pas que l'état est fiable
+- **WHEN** le journal ou son checkpoint ne passe pas les vérifications d’intégrité
+- **THEN** CAB signale une cause de santé non saine et ne prétend pas que l’état est fiable
+
+#### Scenario: Réancrage après clôture et nettoyage natif
+- **WHEN** un effacement terminal qualifié retire les événements du change cible
+- **THEN** CAB vérifie le journal avant la réécriture et le journal rescellé après celle-ci
+- **AND** les événements des autres RUN conservent leur contenu métier et leurs identités
+- **AND** aucune copie ou empreinte propre aux événements retirés n’est conservée après succès
+
+#### Scenario: Interruption entre journal et checkpoint
+- **WHEN** le processus s’interrompt après la préparation durable d’un réancrage
+- **THEN** CAB reprend la même transaction authentifiée avant toute lecture métier ou append
+- **AND** il refuse un fichier divergent des versions préparées au lieu de le remplacer
+- **AND** il ne restitue pas READY tant que le journal et son checkpoint ne sont pas cohérents
+
+#### Scenario: Premier ancrage authentifié
+- **WHEN** le profil ne possédait aucune clé ni checkpoint HMAC et la chaîne structurelle est valide
+- **THEN** CAB prépare une clé privée durable et le checkpoint du journal réancré
+- **AND** la simple présence de la clé préparée ne change pas le mode de l’ancien journal avant application
+- **AND** la perte de cette clé après le réancrage empêche de déclarer le journal sain
 
 ### Requirement: Reprise non ambiguë
 CAB SHALL seulement réparer automatiquement une divergence technique non ambiguë. Une divergence qui empêcherait d'établir la décision métier SHALL conduire à HUMAN_REQUIRED.
@@ -182,3 +204,220 @@ CAB MUST conserver propriétaire, identité intégrale de l'opération et reçu 
 #### Scenario: Panne de persistance
 - **WHEN** l'enregistrement durable échoue
 - **THEN** aucune validation exploitable ni permission n'est créée et le registre refuse les mutations suivantes
+
+### Requirement: Fermeture du transport MCP
+Le broker MUST terminer et libérer son verrou sur fermeture de son entrée MCP, y compris avec une demande en attente. Il MUST conserver le magasin durable et MUST NOT inventer de décision ou purger les approbations pour terminer.
+
+#### Scenario: EOF avec demande en attente
+- **WHEN** le transport MCP ferme pendant une attente de validation
+- **THEN** le processus termine, le verrou devient réacquérable et la demande reste récupérable sans approbation inventée
+
+### Requirement: Décision d’opération durable et restauration exacte
+
+Une décision terminale d’une opération concurrente MUST être persistée avec
+son identité exacte avant toute réponse de permission native. Après
+redémarrage, CAB MUST restaurer la validation seulement à partir d’une demande
+native terminée et d’un résultat natif terminal qui correspondent au même
+requestId, approvalId, operationId, operationDigest, RUN, session, génération
+et révisions. Le texte libre, une sortie incomplète ou une identité ambiguë
+MUST NOT restaurer une décision.
+
+#### Scenario: Décision approuvée avant réponse native
+
+- **WHEN** CAB redémarre après l’enregistrement durable d’une approbation,
+  mais avant l’envoi de la réponse native
+- **THEN** il restaure uniquement la décision et l’opération exactement
+  corrélées
+- **AND** il ne crée aucune nouvelle demande ni permission
+
+#### Scenario: Réponse d’approbation divergente
+
+- **WHEN** l’historique est incomplet, dupliqué, libre ou diverge sur une
+  identité ou empreinte
+- **THEN** CAB ne restaure pas la décision, ne répond pas à la permission et
+  conserve l’opération protégée
+
+#### Scenario: Rejet après redémarrage
+
+- **WHEN** le rejet exact est durable et confirmé par son historique natif
+- **THEN** CAB restaure le rejet sans acquérir d’accès ni répondre `once`
+
+### Requirement: Continuation native après preuve de permission pendante
+
+Après une interruption, CAB MUST reprendre une réponse `once` uniquement si
+OpenCode prouve que la permission exacte est toujours pendante, son callID
+correspond à l’opération persistée, l’historique natif ne contient aucune
+réponse ni démarrage, et les gardes d’identité, accès et révisions sont
+toujours satisfaites. Un accusé durable, une permission absente, un outil
+démarré ou une preuve incomplète MUST NOT entraîner un nouvel envoi.
+
+#### Scenario: Réponse perdue et permission toujours pendante
+
+- **WHEN** le processus redémarre et la permissionId/callID exacte reste
+  pendante sans événement de réponse ou de démarrage
+- **THEN** CAB peut continuer une seule fois la réponse déjà décidée, après
+  revalidation de l’accès et des révisions
+
+#### Scenario: Réponse déjà acquittée ou effet inconnu
+
+- **WHEN** onceAcknowledged est vrai, l’outil est en cours ou l’historique ne
+  prouve pas l’état encore pendant
+- **THEN** CAB ne renvoie pas `once`
+
+### Requirement: Frontière native inconnue protégée
+
+Une opération dont la frontière native reste inconnue MUST conserver son
+accès et MUST NOT être libérée sans une preuve terminale corrélée.
+
+#### Scenario: Effet potentiellement lancé
+
+- **WHEN** OpenCode ne prouve ni permission encore pendante ni fin native
+- **THEN** CAB conserve l’opération dans un état protégé jusqu’à une preuve
+  native terminale
+
+#### Scenario: Résultat natif terminal
+
+- **WHEN** l’historique natif prouve le résultat terminal de la permission et
+  de l’outil corrélés
+- **THEN** CAB persiste ce résultat et clôt uniquement l’opération concernée
+
+### Requirement: Réconciliation terminale depuis le journal durable de session
+
+Après redémarrage, CAB MUST lire le journal natif durable de la session exacte
+en mode fini et MUST exiger `log.synced` comme watermark avant de prendre en
+compte ses événements. CAB MUST corréler les événements terminaux au même
+sessionID, callID, operationId, requestId, approvalId et empreintes durables.
+Le journal MUST NOT être utilisé pour inférer un événement `permission.replied`
+qu’il ne contient pas.
+
+#### Scenario: Fin d’outil native réussie
+
+- **WHEN** une unique entrée `session.tool.success` correspond au callID et au
+  mandat approuvés avant le watermark vérifié
+- **THEN** CAB persiste la fin `COMPLETED` et le résultat lié à l’opération
+- **AND** il ne répond pas à la permission et ne rejoue pas `once`
+
+#### Scenario: Erreur native ambiguë
+
+- **WHEN** une entrée `session.tool.failed` existe mais son erreur ne prouve pas
+  un refus avant effet
+- **THEN** CAB conserve `UNKNOWN` et l’accès protégé
+
+#### Scenario: Erreur native reconnue sans effet
+
+- **WHEN** une entrée terminale prouve un refus avant exécution pour le même
+  callID et toutes les révisions écrites restent inchangées
+- **THEN** CAB peut enregistrer `NO_EFFECT` sans émettre de permission
+
+#### Scenario: Absence d’événement avant watermark
+
+- **WHEN** le journal atteint `log.synced` sans événement terminal pour le
+  callID, ou si le watermark manque
+- **THEN** CAB conserve `UNKNOWN` et ne déduit pas `NO_EFFECT`
+
+### Requirement: Inconnu terminal protégé après restauration
+
+Si une décision native `APPROVED` et un tool part exact sont terminés mais
+qu’aucune fin durable exploitable n’est retrouvée, CAB MUST restaurer la
+décision exacte, marquer l’opération `UNKNOWN` et protéger ses ressources
+d’origine. L’absence de permission pendante ou `executed=false` MUST NOT
+débloquer une écriture ni autoriser un nouvel envoi.
+
+#### Scenario: Permission absente et outil terminé non classifié
+
+- **WHEN** l’approbation exacte est terminée, la permission a disparu et le
+  résultat du tool part est non structuré
+- **THEN** CAB conserve l’opération et son accès en `UNKNOWN`
+- **AND** il n’envoie aucun `once` et ne crée aucune nouvelle demande
+
+### Requirement: NO_EFFECT depuis un tour assistant terminal sans appel natif d’effet
+
+Après restauration, CAB MAY clôturer `NO_EFFECT` une opération approuvée sans
+callID natif uniquement si le contrat de preuve distinct ci-dessous est
+satisfait. Il MUST invalider l’accord local avant la libération. Toute garde
+absente ou divergente conserve `UNKNOWN`. Cette voie locale exacte MAY
+s’exécuter même si la readiness globale du broker n’est pas `READY`; les autres
+récupérations restent fermées.
+
+#### Scenario: Tour complet sans permission ni appel d’effet
+
+- **WHEN** une demande `request_validation` exacte figure dans un wrapper Code Mode achevé, non tronqué et `executed=false`, suivie dans le même tour utilisateur d’un assistant `finish=stop`; deux lectures complètes du transcript et du journal V2 `log.synced` sont identiques; la session est idle, sans permission pendante, appel shell/édition ni événement natif d’effet dans le tour; l’opération n’a aucun permissionId, callID, état natif ou `once`, son accès UNKNOWN ne contient qu’elle, aucune opération sœur n’est active sur la session et les révisions sont inchangées
+- **THEN** CAB invalide l’accord local, clôture `NO_EFFECT`, libère l’accès sans modifier les révisions et n’émet ni permission ni `once`
+
+#### Scenario: Frontière ambiguë ou effet natif présent
+
+- **WHEN** le wrapper/transcript est incomplet, le tour n’est pas terminal, une permission/callID/événement d’effet existe, une opération sœur est active ou les révisions diffèrent
+- **THEN** CAB conserve l’opération et l’accès `UNKNOWN` sans nouvel envoi
+
+#### Scenario: Broker global bloqué par un autre RUN
+
+- **WHEN** la preuve terminale locale est complète et stable tandis que la readiness globale reste bloquée pour une cause étrangère à cette opération
+- **THEN** CAB invalide puis clôt uniquement cette opération `NO_EFFECT` sans changer la readiness, l’autre RUN ou ses accès
+
+#### Scenario: Opération sœur active sur la session
+
+- **WHEN** une autre opération du RUN et de la session reste active ou indécise
+- **THEN** CAB conserve l’opération courante et son accès `UNKNOWN`
+
+#### Scenario: Aucun événement ne prouve une réponse de permission
+
+- **WHEN** le journal ne contient aucun événement `permission.replied` mais qu’une autre garde de preuve manque
+- **THEN** CAB conserve `UNKNOWN` sans déduire que la permission a été consommée ou refusée
+
+### Requirement: Limiter le journal NO_EFFECT au watermark du tour terminal
+
+La preuve `NO_EFFECT` MUST rester liée au tour exact et à un journal V2
+synchronisé. Un événement durable strictement postérieur au watermark conservé
+MUST NOT être attribué au tour antérieur. Une frontière non corrélée ou un
+événement d’effet dans le tour MUST conserver `UNKNOWN`.
+
+#### Scenario: Événement read-only postérieur sans messageId
+
+- **WHEN** une lecture read-only ultérieure est présente dans le journal après le watermark du classement UNKNOWN mais n’a pas de messageId
+- **THEN** elle n’invalide pas le tour terminal exact ; les deux lectures complètes restent identiques et l’eventLogDigest couvre le journal complet
+
+#### Scenario: Événement non corrélé à la frontière
+
+- **WHEN** un événement sans messageId n’a pas de séquence supérieure au watermark conservé ou sa séquence manque
+- **THEN** CAB refuse `NO_EFFECT` et garde l’accès UNKNOWN
+
+#### Scenario: Effet natif dans le tour prouvé
+
+- **WHEN** un shell, edit, write, apply_patch ou autre outil non autorisé apparaît dans le tour assistant ciblé
+- **THEN** CAB conserve UNKNOWN sans nouvel accès ni permission `once`
+
+### Requirement: Anti-rejeu après effacement ciblé
+CAB SHALL préserver les compteurs globaux d’allocation et une époque de
+maintenance non identifiante lors d’un effacement ciblé. CAB SHALL NOT
+réutiliser une identité technique de demande, opération, accès, job ou
+transaction retirée. Un identifiant fonctionnel de session tel que CISMP5
+SHALL pouvoir être réutilisé après la preuve d’absence avec une nouvelle
+génération. La renumérotation de la chaîne du journal SHALL NOT remettre à
+zéro les compteurs d’autorité, de fencing ou de once.
+
+#### Scenario: Réutilisation du nom fonctionnel
+- **WHEN** une nouvelle session adopte un nom fonctionnel dont l’ancien périmètre a été effacé
+- **THEN** elle reçoit de nouvelles identités techniques et une génération supérieure
+- **AND** aucun ancien reçu, token, once ou certificat de clôture ne l’autorise
+
+### Requirement: Préservation authentifiée des événements conservés
+Le réancrage terminal SHALL conserver exactement identités, types, dates,
+acteurs, clés d’idempotence et données métier des événements des pairs.
+Seules les séquences et métadonnées de format/chaînage SHALL pouvoir changer.
+Le nouveau checkpoint SHALL être authentifié avec la clé applicable,
+chargée localement sans restitution au modèle.
+
+#### Scenario: Retrait de la cible dans un journal partagé
+- **WHEN** une transaction qualifiée retire les événements de la cible
+- **THEN** chaque événement des pairs conserve son identité et ses données métier sous le nouveau chaînage
+
+### Requirement: Préconditions cryptographiques du réancrage
+CAB SHALL vérifier la chaîne et le checkpoint attendu avant retrait. Une
+intégrité invalide, une clé de signature indisponible ou un checkpoint attendu
+non authentifiable SHALL empêcher la préparation. Un profil auparavant sans
+HMAC SHALL pouvoir créer sa clé locale privée et son premier checkpoint,
+sans prétendre authentifier rétrospectivement son passé.
+
+#### Scenario: Ancien checkpoint sans clé
+- **WHEN** un checkpoint existe mais aucune clé ne permet son authentification
+- **THEN** CAB refuse avant la coupure et ne le remplace pas par un premier ancrage

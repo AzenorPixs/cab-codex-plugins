@@ -1,0 +1,7 @@
+# Conception
+
+Le sérialiseur commun modelReference devient la frontière de refus du champ propre variant, même s’il vaut undefined, null ou s’il coexiste avec reasoning. Le refus ne cite aucune valeur fournie et ne convertit pas une forme ambiguë. La garde est appelée avant les lectures réseau de création, de changement de modèle et de prompt ; la sonde la possède déjà avant découverte MCP. Le format de sortie normalizeSession garde variant, conforme au schéma natif lu.
+
+Le message stable conseille model.reasoning. Les appels valides continuent à produire model.variant natif à partir de reasoning. Le défaut sans niveau explicitement fourni reste intentionnel et conservé. Les validations provider/model existantes restent en place. Les tests vérifient l’absence totale de fetch sur erreur pour les quatre méthodes, la conservation du mapping de reasoning et le cycle lecture/conversion explicite/écriture. Aucun test ni effet sur RUN réel n’est nécessaire.
+
+Périmètre documentaire : OpenSpec avant code ; référence model-policy, skill, commande CAB et cadrages publics avec exemples génériques. Version commune et cachebuster ne modifient pas les autres algorithmes. Qualification ciblée puis globale, archive/statistiques et publications SCM ; aucun CABU déduit de la publication. Les codes attestés existants sont conservés, sans allocation ; entrée provisoire distincte « code non attribué » selon ACL.

@@ -1,0 +1,18 @@
+{
+  "version": "1.10.1+codex.20261025201637",
+  "files": {
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs": "69d044bf536b6867ff4a7caded1a6b6f0d8bd6d18ee65a5a02110457f370bc93",
+    "tests/active-component-update.test.mjs": "20eb19c61421661cfce631c248a471a3746e856480b7a8d842e2972419753b58",
+    "tests/helpers/readonly-broker-two-uid.mjs": "957d67387353bcc1a549c22a931a9568efd82bcc4f4623aceb317913ae3e4f40",
+    "tests/helpers/run-readonly-broker-two-uid.py": "f12735b07c2fb3313c408cc1d5fcfcbd73fe57c2b9ef9674df457e8a24423d02",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md": "2b77f1f43f9071eb0e379fdbe2a330926adc4e16be1af29294b3a9da22ba5b2e",
+    "TECHNICAL.md": "6cf64a90840c7efc1d7770ca03db6b58259bf0a5e1bd7b0751b08dbe845a830d",
+    "BUILD.md": "ece8f1bdfe178b1dc74e58e993c3e272c04ef8caa9041746ac1343055707695a",
+    "PROJECT.md": "f19d97bf2b90256f078b17fad2cdc6d4fa2b4cc9846d6cdd54f8aa6f334a79d9",
+    "README.md": "fa14e236218985910b9b5a36156d3144c4f220a7261ab6ad8951abbf407d6cae",
+    "CHANGELOG.md": "b0a07492f34cdbf6cc5822c4de8e59924480cee20a1605f3f842b38c9934035d",
+    "plugins/cab-approval-bridge/.codex-plugin/plugin.json": "795d6908e5d1e368e18d4fa4a52673789328b71cf8aa821bc39cd7651ffeaf07"
+  },
+  "syntaxChecks": 4,
+  "gitInspected": false
+}

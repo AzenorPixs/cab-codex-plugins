@@ -103,7 +103,7 @@ Lorsqu'une notification reçoit HTTP 400 et un diagnostic `command-too-long` val
 Le broker MUST borner sa lecture du corps d'erreur et MUST NOT recopier le message distant ni des champs supplémentaires. Une réponse non reconnue, excessive, malformée ou illisible MUST conserver le diagnostic HTTP générique.
 
 #### Scenario: Diagnostic non fiable
-- **WHEN** le corps contient un message arbitraire, des longueurs invalides, un autre code, une autre unité, un contenu excessif ou une erreur de lecture
+- **WHEN** le corps contient un message arbitraire, des longueurs invalides, un code hors de la liste fermée du statut HTTP, une autre unité, un contenu excessif ou une erreur de lecture
 - **THEN** le broker conserve le diagnostic HTTP générique sans journaliser ce contenu
 
 ### Requirement: Notification réconciliée limitée au rejet
@@ -112,3 +112,140 @@ Une validation créée par réconciliation de notification MUST accepter uniquem
 #### Scenario: Tentative d'approbation
 - **WHEN** une décision approved ou une acquisition vise l'opération réconciliée
 - **THEN** elle est refusée sans modifier la décision, les accès ou les permissions
+
+### Requirement: Diagnostic de notification structuré et filtré
+
+Le broker MUST conserver un diagnostic optionnel du dernier échec de notification : statut HTTP et code reconnu dans une liste fermée pour ce statut, sinon code inconnu. La lecture MUST rester bornée à1024 octets et MUST NOT recopier un message distant ou des champs arbitraires. Le diagnostic command-too-long existant MUST être préservé. Un échec de notification MUST NOT créer de décision, admission ou permission.
+
+#### Scenario: Révision attendue périmée
+- **WHEN** le contrôleur retourne409 avec resource-revision-stale
+- **THEN** le broker expose ce code filtré et conserve PENDING/FAILED sans décision implicite
+
+#### Scenario: Corps non fiable
+- **WHEN** le corps est inconnu, trop grand, invalide ou contient des champs arbitraires
+- **THEN** aucun contenu distant arbitraire n’est exposé et le diagnostic HTTP générique reste disponible
+
+### Requirement: Persistance du diagnostic sous lease courante
+
+Le diagnostic MUST être enregistré seulement par la lease courante de notification. Une ancienne lease MUST NOT l’écraser. Une livraison suivante MUST actualiser son état sans faire passer l’ancien échec pour un refus courant. Les anciennes approbations sans diagnostic MUST rester compatibles ; tentatives et statut métier MUST rester distincts.
+
+#### Scenario: Lecture après échec
+- **WHEN** la notification échoue sous sa lease courante puis l’approbation est relue
+- **THEN** son diagnostic filtré reste disponible avec ses tentatives sans altérer sa décision métier
+
+#### Scenario: Lease périmée ou livraison réussie
+- **WHEN** un résultat périmé arrive ou que la notification suivante réussit
+- **THEN** le résultat périmé est ignoré et une livraison réussie ne conserve aucun faux refus courant
+
+### Requirement: Attente bornée de request_validation
+
+`request_validation` MUST utiliser un timeout fini, 120 secondes par défaut, et
+refuser un timeout nul. À expiration, le broker MUST retourner le même approval
+ID comme non terminal et pollable ; il MUST NOT créer une nouvelle demande,
+décision ou permission. Une notification livrée MUST NOT être présentée comme
+une réponse terminale.
+
+#### Scenario: Décision absente après notification
+
+- **WHEN** la notification est livrée mais aucune décision terminale n’arrive dans le budget
+- **THEN** le broker rend `validation_timeout` avec le même approval ID et l’appel se termine
+
+### Requirement: Clôture d’un refus déterministe avant admission
+Pour une approval `PENDING`, le broker MUST produire `NOT_ADMITTED` lorsqu’une
+notification au contrôleur échoue avec un diagnostic HTTP 400 ou 409 filtré,
+connu et déterministe. L’état MUST rester distinct de toute décision humaine
+et MUST préserver le diagnostic d’origine.
+
+#### Scenario: Refus de révision périmée
+- **WHEN** le contrôleur refuse l’admission avec `resource-revision-stale`
+- **THEN** `request_validation` et le poll corrélé retournent `NOT_ADMITTED`,
+  sans `decision_id`, accès, permission native ou nouvelle notification
+
+#### Scenario: Diagnostic déterministe préexistant
+- **WHEN** une approval historique reste `PENDING` avec `notification_status=FAILED`
+  et un diagnostic filtré HTTP 400/409 connu
+- **THEN** le prochain poll ou la réconciliation broker la clôt en
+  `NOT_ADMITTED` et journalise la transition sans écraser l’erreur
+
+### Requirement: Conservation des erreurs non déterministes
+Le broker MUST conserver `PENDING` lorsque la notification échoue sans
+diagnostic filtré connu, après un timeout réseau, ou avec un statut HTTP hors
+de la liste déterministe. Il MUST préserver les règles actuelles de retry
+borné sans transformer l’échec en approbation ou rejet.
+
+#### Scenario: Erreur réseau ou code inconnu
+- **WHEN** le contrôleur est inaccessible, retourne un 5xx, ou renvoie un code
+  absent de la liste autorisée
+- **THEN** l’approval reste `PENDING`, son diagnostic inconnu n’est pas
+  inventé et le comportement de retry existant s’applique
+
+### Requirement: Aucun retry du même refus
+Une approval `NOT_ADMITTED` MUST être terminale et non décidable. Toute nouvelle
+tentative exige une nouvelle identité de requête et des révisions relues ;
+elle n’est jamais créée automatiquement par le broker.
+
+#### Scenario: Nouvelle demande après révision actualisée
+- **WHEN** l’orchestrateur relit les révisions et prépare une nouvelle demande
+  exacte après `NOT_ADMITTED`
+- **THEN** seul le nouveau `requestId` peut être soumis à une décision CAB
+  indépendante ; l’ancienne approval ne reçoit ni décision ni permission
+
+### Requirement: Réponse de notification bornée sous sa lease
+Le broker MUST réserver un délai HTTP de10 secondes à la notification au
+contrôleur, inférieur à sa lease de15 secondes. Les lectures de décision MUST
+conserver leur délai de2 secondes. Un dépassement ou un refus MUST préserver
+les identifiants, la décision métier et les protections. MATCHED seul MUST NOT
+être présenté comme une admission ou une livraison. Une reprise MUST réobserver
+l’état et utiliser la même approval dans les voies autorisées, sans rejeu métier.
+
+#### Scenario: Vérification native lente mais réponse valide
+- **WHEN** le contrôleur répond202 après plus de2s et avant10s
+- **THEN** la notification est DELIVERED sous sa lease et aucune décision métier n’est inventée
+
+#### Scenario: Refus après vérification lente
+- **WHEN** une réponse de refus arrive après2s et avant10s
+- **THEN** son diagnostic filtré est observé sans fausse livraison
+
+#### Scenario: Délai de notification dépassé
+- **WHEN** aucune réponse ne parvient dans le délai dédié
+- **THEN** la même approval reste sans décision implicite et l’échec de transport est conservé
+
+### Requirement: Documentation des révisions effectives
+Le contrat distribué MUST préciser que la révision effective est le maximum
+des révisions des clés qui se recouvrent, avec zéro par défaut en l’absence
+de correspondance. L’absence de clé enfant ou de fichier MUST NOT être
+assimilée automatiquement à zéro.
+
+#### Scenario: Cache enfant absent
+- **WHEN** un enfant absent a un parent dont la révision vaut11369
+- **THEN** la préparation utilise au moins11369, jamais zéro par défaut
+
+### Requirement: Documentation des scripts composés et des reprises
+Le contrat MUST orienter un script composé même court vers le transport scellé
+lorsque les cibles natives divergent de la commande complète. Une tentative
+pendante MUST suivre le rejet/retrait qualifié avant une nouvelle unité ;
+les gardes runtime et anciennes identités MUST rester inchangées.
+
+#### Scenario: Script court et permission segmentée
+- **WHEN** une permission présente plusieurs fragments au lieu de la commande complète
+- **THEN** l’orchestrateur conserve le refus, retire la tentative par la voie qualifiée et prépare un nouveau transport scellé
+
+### Requirement: Documentation de prévalidation des payloads générés
+Le contrat MUST faire vérifier les octets finaux rendus pour chaque langage
+embarqué, sans exécuter les helpers ni charger de secrets. Une syntaxe valide
+de l’enveloppe MUST NOT qualifier la syntaxe interne ou le sens des constantes
+échappées. La couverture des helpers MUST être explicite avant staging.
+
+#### Scenario: Helper Python invalide dans une enveloppe Bash valide
+- **WHEN** bash -n réussit mais le helper Python rendu contient un littéral cassé
+- **THEN** le propriétaire corrige le générateur et analyse le helper exact sans lancer de build
+
+### Requirement: Documentation de rapports structurés et effets distingués
+Le contrat MUST orienter la sérialisation vers le producteur et conserver un
+parseur JSON strict. Un rapport local échoué MUST être distingué des effets
+réels du build. Une réutilisation MUST vérifier l’artefact existant sous les
+accès appropriés ; elle MUST NOT être remplacée par un rebuild implicite.
+
+#### Scenario: Artefact construit et rapport JSON invalide
+- **WHEN** le build est observé mais un champ tabulé non échappé fait échouer le rapport
+- **THEN** le propriétaire conserve l’exit global échoué, sérialise correctement, réconcilie et réobserve l’artefact avant la première recette non prouvée

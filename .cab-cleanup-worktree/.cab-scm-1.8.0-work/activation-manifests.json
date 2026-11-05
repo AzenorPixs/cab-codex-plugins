@@ -1,0 +1,40 @@
+{
+  "source": {
+    "entry": "/home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+    "buildDigest": "8f68fe66db0a9096cff007ed986654e714f1dbc2f7a05bc44a7ba6b08805f370",
+    "manifest": {
+      "cgpt-approval-bridge-controller.mjs": "ef1bcbd280102598853f0b383b05e570685cabc6f2a55f8e73c538153ce08f19",
+      "cgpt-approval-bridge-job-context.mjs": "07db6fb1fb567feb741caba568bb83966c2f8355a3bbe3b67fec9cd464298a28",
+      "cgpt-approval-bridge-maintenance-proof.mjs": "ebea4d05b0bacd20ad79ac383e4d269f415dc8ea59b603537c55bed20eef37eb",
+      "cgpt-approval-bridge-monitor-events.mjs": "71f100007847d7820a22a781c1a04a981b23740149f0bb46852c75319d4b0856",
+      "cgpt-approval-bridge-monitor-management.mjs": "613f78d7745b19631fc29aed0289ac6bad978cbeb51117e16a2471c5d3afcae4",
+      "cgpt-approval-bridge-observation-statistics.mjs": "f0c80f79eb1605dac33c0efd941314f77ddeb12e5093cfa8e8fa5f64790058be",
+      "cgpt-approval-bridge-registry-lock.py": "fb5feb4fa3793b5f325bc5929f27c066e37359f9cd8c25249b4bc8f50f24d3c5",
+      "cgpt-approval-bridge-resource-coordination.mjs": "69b250bb6f90ebbdbbee30451d99ba8bc37599044bed327c8255086894d143ea",
+      "cgpt-approval-bridge-run-steps.mjs": "f68a0c9c82120aac0daa32e225d55a32af57f3a6e07220bfbe209dddfa46894f",
+      "cgpt-approval-bridge-runs.mjs": "3aa22078856e4ab93f4363d2d9fcfc8f3e3e91b3e1c64c684276673761032675",
+      "cgpt-approval-bridge-statistics-maintenance.mjs": "7f7c3b88c89a9dc07c169d657cc24dc2a1f85b0a358e2324022ae785dda7101c",
+      "cgpt-approval-bridge-statistics.mjs": "d2c2f802bf39e97cc08db353dc34494de2321b0b447af46498017404aa5cc821"
+    }
+  },
+  "installed": {
+    "logicalEntry": "/home/ade/.local/share/cab-approval-bridge/cgpt-approval-bridge-controller.mjs",
+    "realEntry": "/home/ade/.local/share/cab-approval-bridge/releases/1.7.1+codex.20261020164727/scripts/cgpt-approval-bridge-controller.mjs",
+    "managedSymlinks": true,
+    "profileAdmissible": false,
+    "buildDigest": "855b04a4118cc9bb7f2f5b41dfe71fb5e10c11610d65351f59f6a95d310d562d",
+    "manifest": {
+      "cgpt-approval-bridge-controller.mjs": "3cfb31247836605ea0f04fec4d4ff449c0fc34e8c5b5ee97382d379bfb40913b",
+      "cgpt-approval-bridge-job-context.mjs": "3c318df48a39e0ff3acc7321027496c3a78e601369de6bc92f1ba8d111c49920",
+      "cgpt-approval-bridge-monitor-events.mjs": "f545af15b481a98f5522a7bdb78501aa1ee05720ff6d8df2359f2942a0a635af",
+      "cgpt-approval-bridge-monitor-management.mjs": "f849e7875e1817c4a59296f1d9dcc8b191ec24c6853b155da3a06bee885bf5d4",
+      "cgpt-approval-bridge-observation-statistics.mjs": "f7077d2cbdbef58d7f12b665c0edd3c0038044b8ffc265959fdb2b61b18465fd",
+      "cgpt-approval-bridge-registry-lock.py": "cda6118fda68ac53fde4f18ef0f3dfc3903e683b25710d23dddfb3b7430449dd",
+      "cgpt-approval-bridge-resource-coordination.mjs": "4d5acbac8c62d3e271b17a8b42e187711f858a4370ef2218fed04c0cff183c5b",
+      "cgpt-approval-bridge-run-steps.mjs": "b0c8a18f324aca9730af54d3579689b29cdca6c85eb15a17761bef04b066e498",
+      "cgpt-approval-bridge-runs.mjs": "990257b31f5d33690a76b2f52a6c6a99348a2fcd3d83e93b9ac8afa49a49a29a",
+      "cgpt-approval-bridge-statistics-maintenance.mjs": "458ae4cba0c17b7af4f2d91c6fc15811955666d6ee01ef907b2f0b786548d920",
+      "cgpt-approval-bridge-statistics.mjs": "d33979159355345bf626697d58095fb84334ccd55ffb4dcdfc26f98272650eba"
+    }
+  }
+}

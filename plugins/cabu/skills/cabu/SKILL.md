@@ -10,20 +10,24 @@ conversation la commande CAB `/CAB update` jusqu'à son rapport terminal ; ne
 te limite pas à présenter la commande ou à proposer de la lancer. La procédure
 de maintenance reste définie par CAB et n'est pas dupliquée ici.
 
-GitHub est la référence de version par défaut pour toutes les briques CAB
-(broker, contrôleur, superviseur et Web), les plugins CAB/CABU et les commandes.
-Applique la procédure distante de `/CAB update` depuis
-`AzenorPixs/cab-codex-plugins`, branche `main`, même si une marketplace ou un
-paquet local existe. La présence de sources locales n'autorise pas à sauter
-la vérification GitHub. Une source distante indisponible ou incohérente arrête
-la préparation avant toute maintenance ; aucun repli local implicite.
-Une installation locale exige une demande explicite pour cette invocation.
-
-Avant toute opération, vérifie que la commande CAB compatible est disponible.
-Si elle manque ou si sa version ne correspond pas à celle du plugin CAB
-installé, termine en indiquant la dépendance exacte et n'entame aucune
-opération réseau ou de maintenance.
+Vérifie d'abord que la commande CAB compatible est disponible ; si elle manque
+ou si sa version diffère du plugin CAB installé, indique cette dépendance et
+termine avant réseau ou maintenance. CAB résout la provenance GitHub et les
+exceptions locales explicitement demandées, les destinations, la préparation,
+la continuité et le repli. Ne duplique pas ces procédures ni les instructions
+de credential dans ce skill.
 
 N'exécute ni `/CAB start`, ni `/CAB run`, ni `/CAB test`, ni bootstrap du
-monitoring. Restitue le rapport terminal de `/CAB update`, en séparant les
-versions des fichiers des versions des processus réellement observés.
+monitoring. Restitue le résultat de `/CAB update`, avec versions des fichiers,
+processus réellement observés, mesures de bascule et état du même reçu en cas
+d'attente. Une préparation ou une copie de fichiers ne prouve pas l'activation.
+
+Pour MCP_RECOVERY_REQUIRED, lire `references/mcp-pending-recovery.md` dans le
+skill CAB : l’accord permanent du développeur couvre la récupération bornée
+au reçu exact, avec contrôles frais et intention unique. Ne pas redemander cet
+accord pour chaque reçu admissible ; les cas hors de cette classe restent distincts.
+
+L’accord permanent de restauration ASK bornée relève de
+`references/native-permission-grants.md` du skill CAB : aucune sollicitation
+répétée des sessions. Cette maintenance distincte ne se lance pas implicitement
+avec CABU ; elle conserve son plan, ses gardes et son reçu exacts.

@@ -1,0 +1,1329 @@
+{
+  "change": "add-container-test-resource-locking",
+  "version": "1.10.0",
+  "sessionType": "SCM directe Codex",
+  "generatedAt": "2026-10-25T12:08:29+01:00",
+  "archive": {
+    "command": [
+      "/home/devops/.local/npm/bin/openspec",
+      "archive",
+      "add-container-test-resource-locking",
+      "--yes",
+      "--json"
+    ],
+    "exit": 0,
+    "output": "{\n  \"archive\": {\n    \"change\": \"add-container-test-resource-locking\",\n    \"archivedAs\": \"2026-10-25-add-container-test-resource-locking\",\n    \"path\": \"/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking\",\n    \"specsUpdated\": true,\n    \"totals\": {\n      \"added\": 13,\n      \"modified\": 20,\n      \"removed\": 0,\n      \"renamed\": 0\n    }\n  },\n  \"root\": {\n    \"path\": \"/home/devops/datas/cab\",\n    \"source\": \"nearest\"\n  }\n}\n"
+  },
+  "validation": {
+    "node": {
+      "counts": {
+        "tests": 392,
+        "pass": 367,
+        "fail": 0,
+        "skipped": 25
+      },
+      "entries": [
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/active-component-update.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 11.11,
+          "log": "output/scm/add-container-test-resource-locking/node-1.log",
+          "counts": {
+            "tests": 19,
+            "pass": 19,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/approval-metadata.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.068,
+          "log": "output/scm/add-container-test-resource-locking/node-2.log",
+          "counts": {
+            "tests": 3,
+            "pass": 3,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/concurrent-controller.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 21.607,
+          "log": "output/scm/add-container-test-resource-locking/targeted-2.log",
+          "counts": {
+            "tests": 72,
+            "pass": 72,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/concurrent-run-registry.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.892,
+          "log": "output/scm/add-container-test-resource-locking/node-4.log",
+          "counts": {
+            "tests": 25,
+            "pass": 25,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/concurrent-supervisor.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 6.784,
+          "log": "output/scm/add-container-test-resource-locking/targeted-3.log",
+          "counts": {
+            "tests": 5,
+            "pass": 5,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/controller-configuration.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 3.428,
+          "log": "output/scm/add-container-test-resource-locking/node-6.log",
+          "counts": {
+            "tests": 27,
+            "pass": 27,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/controller-healthcheck-compatibility.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.879,
+          "log": "output/scm/add-container-test-resource-locking/node-7.log",
+          "counts": {
+            "tests": 6,
+            "pass": 6,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/controller-job-restoration.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 2.359,
+          "log": "output/scm/add-container-test-resource-locking/node-8.log",
+          "counts": {
+            "tests": 29,
+            "pass": 29,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/controller-service-distribution.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.089,
+          "log": "output/scm/add-container-test-resource-locking/targeted-4.log",
+          "counts": {
+            "tests": 22,
+            "pass": 22,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/controller-session-recovery.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 8.206,
+          "log": "output/scm/add-container-test-resource-locking/node-10.log",
+          "counts": {
+            "tests": 42,
+            "pass": 42,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.101,
+          "log": "output/scm/add-container-test-resource-locking/node-11.log",
+          "counts": {
+            "tests": 25,
+            "pass": 0,
+            "fail": 0,
+            "skipped": 25
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/model-policy.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.087,
+          "log": "output/scm/add-container-test-resource-locking/targeted-1.log",
+          "counts": {
+            "tests": 11,
+            "pass": 11,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/monitor-management.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.181,
+          "log": "output/scm/add-container-test-resource-locking/node-13.log",
+          "counts": {
+            "tests": 9,
+            "pass": 9,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/monitor-service-start.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.285,
+          "log": "output/scm/add-container-test-resource-locking/node-14.log",
+          "counts": {
+            "tests": 5,
+            "pass": 5,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/native-opencode.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 1.223,
+          "log": "output/scm/add-container-test-resource-locking/native-1.log",
+          "counts": {
+            "tests": 1,
+            "pass": 1,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/native-statistics.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.154,
+          "log": "output/scm/add-container-test-resource-locking/node-16.log",
+          "counts": {
+            "tests": 11,
+            "pass": 11,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/observation-statistics.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.097,
+          "log": "output/scm/add-container-test-resource-locking/node-17.log",
+          "counts": {
+            "tests": 11,
+            "pass": 11,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/persistent-job-supervisor.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 9.219,
+          "log": "output/scm/add-container-test-resource-locking/node-18.log",
+          "counts": {
+            "tests": 11,
+            "pass": 11,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/resource-coordination.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 1.562,
+          "log": "output/scm/add-container-test-resource-locking/node-19.log",
+          "counts": {
+            "tests": 30,
+            "pass": 30,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/run-lifecycle.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.074,
+          "log": "output/scm/add-container-test-resource-locking/node-20.log",
+          "counts": {
+            "tests": 5,
+            "pass": 5,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/statistics-maintenance.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.165,
+          "log": "output/scm/add-container-test-resource-locking/node-21.log",
+          "counts": {
+            "tests": 11,
+            "pass": 11,
+            "fail": 0,
+            "skipped": 0
+          }
+        },
+        {
+          "command": [
+            "/home/devops/node/current/bin/node",
+            "--test",
+            "/home/devops/datas/cab/tests/web-monitor.test.mjs"
+          ],
+          "exit": 0,
+          "durationSeconds": 0.15,
+          "log": "output/scm/add-container-test-resource-locking/node-22.log",
+          "counts": {
+            "tests": 12,
+            "pass": 12,
+            "fail": 0,
+            "skipped": 0
+          }
+        }
+      ]
+    },
+    "python": {
+      "tests": 73,
+      "exit": 0,
+      "log": "output/scm/add-container-test-resource-locking/python-1.log"
+    },
+    "browsers": [
+      {
+        "browser": "Chromium",
+        "version": "156.0.8078.47",
+        "passed": [
+          "rendu",
+          "limite effective",
+          "RUN et changes",
+          "3/14 puis 4/14",
+          "ETAT et ÉTAPE distincts",
+          "versions des briques",
+          "cycle de onze étapes",
+          "retour Revue 8/11 vers Implémentation 6/11",
+          "historique conservé",
+          "WAITING jaune et BLOCKED rouge sur les lignes des jobs",
+          "filtres",
+          "SSE",
+          "panne UNKNOWN",
+          "reconnexion",
+          "mobile sans débordement",
+          "navigation STATS/MONITOR",
+          "fenêtre 7 jours et filtre RUN",
+          "cumul distinct",
+          "prévisualisation et annulation",
+          "purge et protection active",
+          "statistiques anciennes",
+          "STATS mobile sans débordement",
+          "réponse automatique tardive écartée après passage Manuel",
+          "neuf choix de cadence",
+          "cadence effective 3s",
+          "préférence mémorisée",
+          "Manuel sans mise à jour SSE",
+          "clic Actualiser",
+          "Web disponible malgré perte SSE",
+          "Web expiré après 30 minutes",
+          "échecs HTTP et snapshot invalide sans renouvellement",
+          "titre simplifié et gras",
+          "cinq cartes dont Web",
+          "boutons actifs protégés",
+          "commandes trois briques",
+          "archivage RUN et change",
+          "navigation ARCHIVES",
+          "désarchivage sans reprise",
+          "annulation suppression",
+          "suppression logique persistante",
+          "sources intactes",
+          "archives mobile",
+          "redémarrage Web avec reconnexion"
+        ]
+      },
+      {
+        "browser": "Firefox",
+        "version": "153.5.1",
+        "passed": [
+          "rendu",
+          "limite effective",
+          "RUN et changes",
+          "3/14 puis 4/14",
+          "ETAT et ÉTAPE distincts",
+          "versions des briques",
+          "cycle de onze étapes",
+          "retour Revue 8/11 vers Implémentation 6/11",
+          "historique conservé",
+          "WAITING jaune et BLOCKED rouge sur les lignes des jobs",
+          "filtres",
+          "SSE",
+          "panne UNKNOWN",
+          "reconnexion",
+          "mobile sans débordement",
+          "navigation STATS/MONITOR",
+          "fenêtre 7 jours et filtre RUN",
+          "cumul distinct",
+          "prévisualisation et annulation",
+          "purge et protection active",
+          "statistiques anciennes",
+          "STATS mobile sans débordement",
+          "réponse automatique tardive écartée après passage Manuel",
+          "neuf choix de cadence",
+          "cadence effective 3s",
+          "préférence mémorisée",
+          "Manuel sans mise à jour SSE",
+          "clic Actualiser",
+          "Web disponible malgré perte SSE",
+          "Web expiré après 30 minutes",
+          "échecs HTTP et snapshot invalide sans renouvellement",
+          "titre simplifié et gras",
+          "cinq cartes dont Web",
+          "boutons actifs protégés",
+          "commandes trois briques",
+          "archivage RUN et change",
+          "navigation ARCHIVES",
+          "désarchivage sans reprise",
+          "annulation suppression",
+          "suppression logique persistante",
+          "sources intactes",
+          "archives mobile",
+          "redémarrage Web avec reconnexion"
+        ]
+      }
+    ],
+    "syntaxFiles": 45,
+    "sourceFilesBeforeArchive": 77,
+    "openspecBeforeArchive": {
+      "command": [
+        "/home/devops/.local/npm/bin/openspec",
+        "validate",
+        "--all",
+        "--strict",
+        "--no-interactive"
+      ],
+      "exit": 0
+    },
+    "limits": [
+      "25 tests maintenance sans CAB_TEST_ORIGINAL_PLUGIN ; non exécutés",
+      "Aucun benchmark fournisseur réel high/xhigh",
+      "Aucun test de restitution physique LXC réel",
+      "Source uniquement ; aucun runtime actif ni prompt consommateur modifié"
+    ]
+  },
+  "openspecAfterArchive": {
+    "command": [
+      "/home/devops/.local/npm/bin/openspec",
+      "validate",
+      "--all",
+      "--strict",
+      "--no-interactive"
+    ],
+    "exit": 0
+  },
+  "static": {
+    "changed": [
+      ".codex/commands/cab.md",
+      "BUILD.md",
+      "CHANGELOG.md",
+      "ORCHESTRATED_CODING.md",
+      "PROJECT.md",
+      "README.md",
+      "TECHNICAL.md",
+      "openspec/specs/active-component-update/spec.md",
+      "openspec/specs/codex-integration-distribution/spec.md",
+      "openspec/specs/coding-model-policy/spec.md",
+      "openspec/specs/concurrent-run-coordination/spec.md",
+      "openspec/specs/local-web-monitor/spec.md",
+      "openspec/specs/native-session-statistics/spec.md",
+      "plugins/cab-approval-bridge/.codex-plugin/plugin.json",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs",
+      "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/monitor-service.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/references/observations.md",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service",
+      "plugins/cab-approval-bridge/web-monitor/app.mjs",
+      "plugins/cab-approval-bridge/web-monitor/index.html",
+      "plugins/cab-approval-bridge/web-monitor/style.css",
+      "pyproject.toml",
+      "src/cgpt_approval_bridge_journal.py",
+      "src/cgpt_approval_bridge_router.py",
+      "src/cgpt_approval_bridge_server.py",
+      "tests/active-component-update.test.mjs",
+      "tests/concurrent-controller.test.mjs",
+      "tests/concurrent-supervisor.test.mjs",
+      "tests/controller-service-distribution.test.mjs",
+      "tests/maintenance-bootstrap.test.mjs",
+      "tests/model-policy.test.mjs",
+      "tests/monitor-service-start.test.mjs",
+      "tests/native-opencode.test.mjs",
+      "tests/resource-coordination.test.mjs",
+      "tests/test_crash_recovery.py",
+      "tests/test_session_reset.py",
+      "tests/web-monitor-browser.mjs",
+      "tests/web-monitor.test.mjs"
+    ],
+    "removed": [],
+    "syntax": [
+      {
+        "path": "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "plugins/cab-approval-bridge/web-monitor/app.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "plugins/cab-approval-bridge/web-monitor/app.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "src/cgpt_approval_bridge_journal.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "src/cgpt_approval_bridge_journal.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "src/cgpt_approval_bridge_router.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "src/cgpt_approval_bridge_router.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "src/cgpt_approval_bridge_server.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "src/cgpt_approval_bridge_server.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/active-component-update.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/active-component-update.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/concurrent-controller.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/concurrent-controller.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/concurrent-supervisor.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/concurrent-supervisor.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/controller-service-distribution.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/controller-service-distribution.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/maintenance-bootstrap.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/maintenance-bootstrap.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/model-policy.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/model-policy.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/monitor-service-start.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/monitor-service-start.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/native-opencode.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/native-opencode.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/resource-coordination.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/resource-coordination.test.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/test_crash_recovery.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "tests/test_crash_recovery.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/test_session_reset.py",
+        "command": [
+          "/home/devops/python/current/bin/python3",
+          "-m",
+          "py_compile",
+          "tests/test_session_reset.py"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/web-monitor-browser.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/web-monitor-browser.mjs"
+        ],
+        "exit": 0
+      },
+      {
+        "path": "tests/web-monitor.test.mjs",
+        "command": [
+          "/home/devops/node/current/bin/node",
+          "--check",
+          "tests/web-monitor.test.mjs"
+        ],
+        "exit": 0
+      }
+    ],
+    "encoding": "UTF-8/LF",
+    "brokerCopiesIdentical": true,
+    "AGENTSUnchanged": true,
+    "externalChanges": {
+      "DEVOPS.md": {
+        "initialSha256": "b810acc9e9da2159823146ae40d208e4f8846a64e043c4b78c78d28f2ab2e989",
+        "currentSha256": "f75c3c15a1cef724024983fa02243badbb998ed8b48e8c6c74c2fa51966b2807",
+        "difference": "Horodatage du relevé DIU uniquement : 08:33:52Z vers 10:10:46Z ; contenu métier inchangé ; fichier non écrit par SCM."
+      }
+    }
+  },
+  "preArchiveScopeAudit": {
+    "versionOnly": [
+      "plugins/cab-approval-bridge/.codex-plugin/plugin.json",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/monitor-service.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/references/observations.md",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service",
+      "pyproject.toml",
+      "src/cgpt_approval_bridge_journal.py",
+      "src/cgpt_approval_bridge_router.py",
+      "src/cgpt_approval_bridge_server.py",
+      "tests/active-component-update.test.mjs",
+      "tests/controller-service-distribution.test.mjs",
+      "tests/maintenance-bootstrap.test.mjs",
+      "tests/monitor-service-start.test.mjs",
+      "tests/native-opencode.test.mjs",
+      "tests/test_crash_recovery.py"
+    ],
+    "functionalDocumentationAndSpecifications": [
+      ".codex/commands/cab.md",
+      "BUILD.md",
+      "CHANGELOG.md",
+      "ORCHESTRATED_CODING.md",
+      "PROJECT.md",
+      "README.md",
+      "TECHNICAL.md",
+      "openspec/changes/add-container-test-resource-locking/.openspec.yaml",
+      "openspec/changes/add-container-test-resource-locking/design.md",
+      "openspec/changes/add-container-test-resource-locking/proposal.md",
+      "openspec/changes/add-container-test-resource-locking/specs/active-component-update/spec.md",
+      "openspec/changes/add-container-test-resource-locking/specs/codex-integration-distribution/spec.md",
+      "openspec/changes/add-container-test-resource-locking/specs/coding-model-policy/spec.md",
+      "openspec/changes/add-container-test-resource-locking/specs/concurrent-run-coordination/spec.md",
+      "openspec/changes/add-container-test-resource-locking/specs/local-web-monitor/spec.md",
+      "openspec/changes/add-container-test-resource-locking/specs/native-session-statistics/spec.md",
+      "openspec/changes/add-container-test-resource-locking/tasks.md",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs",
+      "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md",
+      "plugins/cab-approval-bridge/web-monitor/app.mjs",
+      "plugins/cab-approval-bridge/web-monitor/index.html",
+      "plugins/cab-approval-bridge/web-monitor/style.css",
+      "tests/concurrent-controller.test.mjs",
+      "tests/concurrent-supervisor.test.mjs",
+      "tests/model-policy.test.mjs",
+      "tests/resource-coordination.test.mjs",
+      "tests/test_session_reset.py",
+      "tests/web-monitor-browser.mjs",
+      "tests/web-monitor.test.mjs"
+    ],
+    "externalChanges": {
+      "DEVOPS.md": {
+        "initialSha256": "b810acc9e9da2159823146ae40d208e4f8846a64e043c4b78c78d28f2ab2e989",
+        "currentSha256": "f75c3c15a1cef724024983fa02243badbb998ed8b48e8c6c74c2fa51966b2807",
+        "difference": "Horodatage du relevé DIU uniquement : 08:33:52Z vers 10:10:46Z ; contenu métier inchangé ; fichier non écrit par SCM."
+      }
+    }
+  },
+  "inventory": {
+    "total": 86,
+    "modified": 69,
+    "created": 17,
+    "deleted": 0,
+    "files": [
+      ".codex/commands/cab.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/.openspec.yaml",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/PREUVES-SCM.json",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/QUALIFICATION.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/STATISTIQUES.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/design.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/proposal.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/active-component-update/spec.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/codex-integration-distribution/spec.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/coding-model-policy/spec.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/concurrent-run-coordination/spec.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/local-web-monitor/spec.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/native-session-statistics/spec.md",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/tasks.md",
+      "BUILD.md",
+      "CHANGELOG.md",
+      "ORCHESTRATED_CODING.md",
+      "PROJECT.md",
+      "README.md",
+      "TECHNICAL.md",
+      "openspec/specs/active-component-update/spec.md",
+      "openspec/specs/codex-integration-distribution/spec.md",
+      "openspec/specs/coding-model-policy/spec.md",
+      "openspec/specs/concurrent-run-coordination/spec.md",
+      "openspec/specs/local-web-monitor/spec.md",
+      "openspec/specs/native-session-statistics/spec.md",
+      "plugins/cab-approval-bridge/.codex-plugin/plugin.json",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs",
+      "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/monitor-service.md",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/references/observations.md",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service",
+      "plugins/cab-approval-bridge/web-monitor/app.mjs",
+      "plugins/cab-approval-bridge/web-monitor/index.html",
+      "plugins/cab-approval-bridge/web-monitor/style.css",
+      "pyproject.toml",
+      "src/cgpt_approval_bridge_journal.py",
+      "src/cgpt_approval_bridge_router.py",
+      "src/cgpt_approval_bridge_server.py",
+      "tests/active-component-update.test.mjs",
+      "tests/concurrent-controller.test.mjs",
+      "tests/concurrent-supervisor.test.mjs",
+      "tests/controller-service-distribution.test.mjs",
+      "tests/maintenance-bootstrap.test.mjs",
+      "tests/model-policy.test.mjs",
+      "tests/monitor-service-start.test.mjs",
+      "tests/native-opencode.test.mjs",
+      "tests/resource-coordination.test.mjs",
+      "tests/test_crash_recovery.py",
+      "tests/test_session_reset.py",
+      "tests/web-monitor-browser.mjs",
+      "tests/web-monitor.test.mjs"
+    ],
+    "sha256": {
+      ".codex/commands/cab.md": "8e0d650a247c7b28ca29bf17e735c078ccf204fd68d8f045c73c036696d31049",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/.openspec.yaml": "d002983090acfe222597827aa3c481b59d3a566c704a6e91e0d50bb1d209297d",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/QUALIFICATION.md": "3e396b95cec243c2e9597de79585bf8549ee6790261e811acc0053311faee837",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/STATISTIQUES.md": "1fad5c39e469f26724d086bacf4ff3db87a3d723b20a39f76b31fc938df9a2a6",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/design.md": "6a2623cbb513c2074f134e6c2a624da8f60c5e1d95889ab9ee4b31fa3a72d44b",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/proposal.md": "29d1cd2ad75a1644f6eedd848068358a02e111e02a9756d891f2ef394a0bf32c",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/active-component-update/spec.md": "87ae01e3fbb2a65e6b08290653bb3078651e356738924428edcc973e9cf9a901",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/codex-integration-distribution/spec.md": "2c2d700eb18febd85c0c9fc41f3798ea60ae3a1cbd42081adaba0f6c4d8ca16d",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/coding-model-policy/spec.md": "23682fbb0ee2333ceaee16910bc299ee22197e5becefa199e8c4f257b340476d",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/concurrent-run-coordination/spec.md": "2ca25b03a72daad123676810cce138e4a498352d6be20345c706be1308731f5e",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/local-web-monitor/spec.md": "b3ae09e7031a5c6b2c2e699f1e89439c446adf6e82057296ea291836583d8918",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/specs/native-session-statistics/spec.md": "9aa7fd2c5e394394f848df6a543bce991cf0bde5afde71dbb11079cbadb85f7b",
+      "/home/devops/datas/cab/openspec/changes/archive/2026-10-25-add-container-test-resource-locking/tasks.md": "60d90a44e5a9892c4b7a099619fb7d6258f431e559d511a796c97b60f3a23dd3",
+      "BUILD.md": "3e611e8d0822f2da6f3a3c10977b104df5c8efbeb3a58473362694cd66a7dfa7",
+      "CHANGELOG.md": "cd9ba44b91fb6617b1b0c94c8e481167a9cf7deddf6b57005c32f622ff45ea90",
+      "ORCHESTRATED_CODING.md": "459f16745d300b4f159315c6c903571d391ec9fbae6a4f6a239bc220e17daa17",
+      "PROJECT.md": "13a9b0c3e6435e9b0b7243418ad43462a28e1efe554f73b424d5e3d3555cedef",
+      "README.md": "c5bc35c5c8b0d3bed7e916bfba28b10f120b479dcd3386fe0a2f927c5389ecd6",
+      "TECHNICAL.md": "48a799399f78e04cdc6275f7d129836675470b57af2a20104dc3bbc6521ce7d6",
+      "openspec/specs/active-component-update/spec.md": "a9bd5b95a816d527588043a6f7f29c10ca19444e06e61152cb128bccdb03ce06",
+      "openspec/specs/codex-integration-distribution/spec.md": "cd564d331255c3f192a65f3061f1f86e0aa14d39a16af7e27b31be460e3ca01f",
+      "openspec/specs/coding-model-policy/spec.md": "f4b5f0e4456024b0e79f28f4e75eb00b8df57b2846f4c537b72aab8fc1f4dac0",
+      "openspec/specs/concurrent-run-coordination/spec.md": "824548edc908c11f26b9cc8253f4d397b97c9969646f503709ad2181e90488f6",
+      "openspec/specs/local-web-monitor/spec.md": "607fec1336ecf609506a0bf0f6c752a8621fbc5255506a362a9fa9113ecea31b",
+      "openspec/specs/native-session-statistics/spec.md": "88629a81181839af7fa0f73b78cf4d8a427f591835a2f7b7572170f10fd8cc26",
+      "plugins/cab-approval-bridge/.codex-plugin/plugin.json": "6512d63119d791524254ca9d81208905c080b76e746bc7dbddcfa1ea312df541",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_journal.py": "3bed5d70988ae78ac45ac2b86dd2b3d1cc8141f55057d3e07fa89ae9123e6d0d",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_router.py": "13ed29e2d401184fb6e455a48ac0479a0c60b02ce4929c5950cf10f438fddc45",
+      "plugins/cab-approval-bridge/broker/cgpt_approval_bridge_server.py": "b7e4f87dbf205e1e4d85bd0b3eaa04137695cadc47c3a5d9c847e60ce1b8de07",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-approval-metadata.mjs": "2ad775cc961432182bdce45be0cb112520fca912bf5661f6d9b408b0d27f57ac",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs": "0d98805fcc30c2b27af5511bcc463d9639c0e39ae6bf3ad6a199f0be4de70905",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs": "bbceb1f92a7c4df2b4c7b40542bad7fb4d0912f37f83ff8824aacedf2663f207",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs": "f4eb4672d9f24e8caf90221e697c404f1254180581225b549b79c668bb8c3a6b",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs": "c4094b99dc321af9efe30efdd87f6f371e463f3fc6cf5d97e2f117979f121de2",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs": "45ecdd58ce2f1cb9757138621530710e3b13cc2ed725ba2b3f2239ffaf166b52",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs": "d552f7d1d83722ad9f5a595a2bb87c89eb1a82c0c5e52f545d749f79d11484ea",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-model-policy.mjs": "cfa0ea435a70f3f0a61a260163918b52533ba06e9e1b49958cf599b8fcf13466",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs": "9785d5f8e79c27f1f2dbad045a2b22ceb7178f34c36d7e0bf3a4003784aa3ecd",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs": "06cdf08617a9322e3b38cc2a9bf582f111e0bc8ee5139776dce35093163cb624",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-management.mjs": "724c8f4c0716db88febc8b53feb75b0d9c5730a9b493a2c81d7de607eb639090",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs": "c895d36188e9948e30687d25173b7a77dd519979d840adac0f271b2648bf60aa",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs": "06d98b936eff6d076de3077f28df871acd14669567dbe731fd91e7e4e41ff24a",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs": "48046151c6d57eb26cd8a5582f79d51b3d198895ffe8101f2406429ab46b7ea8",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py": "8946282412918c2d91ed9b307033c834156633d37224dd341e46c9b1e0388ec4",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py": "d47bf6f0556f780389465171fa914fa72b95fef94e09230ab4682bcc924f64fc",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py": "637936898a2ef2f191d6481e2ba8aa073f5009754779c38a8a661fad349893d1",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs": "735ba0ba95b5cbc0db1bfa2ffe0e15a6b22ea951d5a6826f78c004c5e294c050",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs": "35f565067e05f93449937697cbac4aa792948f7a79d2c0d6e55572343e4b528e",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs": "018d530fd36fc8fb487ee3e998a1961671e865c0cf1f18f31821d86a6a5b9885",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-maintenance.mjs": "170ee980995bc03a60234977204d8b63efdce69288a018796c90131cffd810fc",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs": "17c364cdcebe2500e40afd6fd001a524511708d70b2b73d3a7b90e85e3020166",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs": "b87bdb9048eeb87ee29ee0d589273cf7257d823ce4ea0b2da108caf4cf8cfd04",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs": "1710fbe655091965c58682cb7b5163ebc6c07b40fcf02322bebb7bde460ac60b",
+      "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs": "ee7cbdae19f945a164b46003d530349fff334a5297a7019c3d7c28d771bdd690",
+      "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "26c773e0910c93be3057f050eaad38dba75b2d37c6cb8163366617d066c59a87",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md": "6eba9874b20928352c24060bd8dab26e8783ecdaf85918018cb8e358e99f0d25",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md": "b33233d7ad8457a4c0f11deb926c2b19340834584b98baa257fd2cb3162407fc",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/model-policy.md": "a100cccc112229b97ef66531e97fc0b1010b2fd4283a8c5e13e24a3114e63c99",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/monitor-service.md": "04574ed216debc43704de13b5ab06ebd65ff40062bee4677d9cbc840241725a3",
+      "plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md": "0d457a657ebac12fb31b133d5d62f2ece8f7a6384afa61967644997ebf98353b",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md": "935962876eac6b1b9b96dadddb205f2281f8a3153a34ec5444804542950309d9",
+      "plugins/cab-approval-bridge/skills/coding-session-statistics/references/observations.md": "3ae0dfcb0776c38fc776243400794c7284725f219083d138b7186153e740ff7f",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-controller.service": "6f3a6c14a3fd3e30e341e4f8d2412a13d0d37805df88f1d62544af66ad4c47bb",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-monitor.service": "9760a4fd5c6d12f45861cc4609db933101cac1961481725b0b70c14cb9b2dfa1",
+      "plugins/cab-approval-bridge/systemd/cgpt-approval-bridge-supervisor.service": "1861bb231939d053133b9650d6faa96d68c935734635f68f6e9ef9f4ccedc75c",
+      "plugins/cab-approval-bridge/web-monitor/app.mjs": "b121af76b34db0c4dd90c39844ed23b3254a0d3aa4cc33a4eb66163be97d03bb",
+      "plugins/cab-approval-bridge/web-monitor/index.html": "7a4213d623ea131972df615b0084182dcf04130fc6e42a7b84033ad67995732c",
+      "plugins/cab-approval-bridge/web-monitor/style.css": "a04a40a91225608c883622f532c4956e3d1333530d18e268ba0136a886cdbca3",
+      "pyproject.toml": "4bc7ff3874f6bc7ba44c661edbb1da382fb716708cddb5744a34921b36710cde",
+      "src/cgpt_approval_bridge_journal.py": "3bed5d70988ae78ac45ac2b86dd2b3d1cc8141f55057d3e07fa89ae9123e6d0d",
+      "src/cgpt_approval_bridge_router.py": "13ed29e2d401184fb6e455a48ac0479a0c60b02ce4929c5950cf10f438fddc45",
+      "src/cgpt_approval_bridge_server.py": "b7e4f87dbf205e1e4d85bd0b3eaa04137695cadc47c3a5d9c847e60ce1b8de07",
+      "tests/active-component-update.test.mjs": "cff56023e27bb812b41b646da07c01fdd20231ce3bd6002400e7dc17df0addb1",
+      "tests/concurrent-controller.test.mjs": "b295da6eac0124011bafd7d4f1033f9447da7727c4370b43d8c8a5a34a711af1",
+      "tests/concurrent-supervisor.test.mjs": "58179eaaf8ae92b3047eeb7ca7a8585068597549ac1f5181b658a846f17faef3",
+      "tests/controller-service-distribution.test.mjs": "4cc4339a4b1c3c4800bdddb94e9443246b546fef9917c24f4930c0fb6e70b6d8",
+      "tests/maintenance-bootstrap.test.mjs": "29e359ac01e27c4ef7db9e52088d8f1c4561f5a10b5be1b939a2e96f4b236433",
+      "tests/model-policy.test.mjs": "ed2db594b588693f4584c70242c33b3f75638c1e8f91aee0732d6edb5e14344c",
+      "tests/monitor-service-start.test.mjs": "d7d053932b8fefb41ec72095bbbf188d37470f0ced543075bb3936d8953effb5",
+      "tests/native-opencode.test.mjs": "929ea1af7e3d142686fab871014f67f8a7777f2098f3979698f4bafeb10a9c0d",
+      "tests/resource-coordination.test.mjs": "6af617f9010ee0080675d1fe72925649c5068cbda1294bff2ee53f22686ea4e8",
+      "tests/test_crash_recovery.py": "43bef7ec7630d6ec33a164d94b627e2eb6584b0c00b74ff5b5657e4ee1af256a",
+      "tests/test_session_reset.py": "8ae2845892eeaf3995a7b19477813c756651c4627d402350df1a16f3aec866af",
+      "tests/web-monitor-browser.mjs": "58b65a07847504018eacdcc79115db4a3e00010107346ad66a31f4b0a3a06438",
+      "tests/web-monitor.test.mjs": "19a55dcd14b2b3674ae2ce896586625fd8e1de33c7260575cdaf520bdee373b4"
+    }
+  },
+  "statistics": {
+    "sections": 6,
+    "encoding": "UTF-8",
+    "lineEndings": "LF",
+    "verified": true,
+    "unitTestsExecuted": 440,
+    "unitTestsSkipped": 25,
+    "unitTestsTotal": 465
+  },
+  "runtimeActivation": false,
+  "gitInspected": false,
+  "gitModified": false,
+  "logSha256": {
+    "output/scm/add-container-test-resource-locking/browser-1.log": "ac0678c88ff1870f026ebb61839dbd2e5c1623ec1b876c15bf4029fe842df2a5",
+    "output/scm/add-container-test-resource-locking/native-1.log": "f4ad789e9ee4607becee5049a5cf2ccd8cbe203b16bd2a9ecc1415edb12bd929",
+    "output/scm/add-container-test-resource-locking/node-1.log": "3b08b5216a18dac21dd8b53fd985cefa6a5624043c6b4c548d9b1369caf4c273",
+    "output/scm/add-container-test-resource-locking/node-10.log": "0f4f958638269a135e29e71bda036dec24349a9b1c35c731ba7dd11df5e60db2",
+    "output/scm/add-container-test-resource-locking/node-11.log": "122d58701eac85c12267bcce2ad2b8e057b1d18798ae1c5361615deb6a0b71b4",
+    "output/scm/add-container-test-resource-locking/node-13.log": "9e1a8bc5a630278208c0ce944722158b38405375aabd6acf233b937c01df394c",
+    "output/scm/add-container-test-resource-locking/node-14.log": "e265488359c3254376257c34457787e4a10673c938e78c4345e5a5a9fb639280",
+    "output/scm/add-container-test-resource-locking/node-16.log": "72cc88c7e638bd626fc49082fdfbb846f31e6e6802c20dc7041b3106a416df85",
+    "output/scm/add-container-test-resource-locking/node-17.log": "c756a81ee66818978f630e256f6cf72bbd0f11d86e45200cd9f1f24eb5dc001e",
+    "output/scm/add-container-test-resource-locking/node-18.log": "ede6fa191f025a2bdb4288f5aa56251ef7a684c800040c9a2471f6f4edd5fdf9",
+    "output/scm/add-container-test-resource-locking/node-19.log": "842374de66a8306dda1c4a774e0132e57c2b0202c1e5b6a2c207eb1de29aa52c",
+    "output/scm/add-container-test-resource-locking/node-2.log": "a43bfec95e48e29a031a284c56b9e8a7785b35c31ee315119556bba7cc2b2f7f",
+    "output/scm/add-container-test-resource-locking/node-20.log": "4bcfceef8fd3fc2263f4a94f6787f76a2b83c8e4fe332fec0f8686757753011a",
+    "output/scm/add-container-test-resource-locking/node-21.log": "e469fc9140d88368817860cc71cd88b98dd40dc292a09ceef3753e8dea90fee0",
+    "output/scm/add-container-test-resource-locking/node-22.log": "e0c266d7fe7e00750cf6c1303223e63a8ef96b1ac0a35d734dd8b653992d0ef0",
+    "output/scm/add-container-test-resource-locking/node-4.log": "428e86e4c2405a0d3d517cbfcc905f9b0dda4a1343e255e88774d63d2030e4e1",
+    "output/scm/add-container-test-resource-locking/node-6.log": "c91bbc4ed36eca13d6d6ffb21a2b3eeb9c1f0401c77cbcf4359494a8bd196e00",
+    "output/scm/add-container-test-resource-locking/node-7.log": "20040102c1efb1b4f83cf2d9420a02f957192bc72500e6c6bdab0e9809f7671e",
+    "output/scm/add-container-test-resource-locking/node-8.log": "7ad9b9e2aa56da3fee42bd936af1948bcc7abb2e23507343e06ba76fe352ddde",
+    "output/scm/add-container-test-resource-locking/python-1.log": "b7d9d4c65084f11f8591f6e3343976dc14958941233c90c92e75c5c7e76affb4",
+    "output/scm/add-container-test-resource-locking/targeted-1.log": "63a65a49c61b9a4fe7122d135f0e8a328639222adf44be092bd799c7ab64c274",
+    "output/scm/add-container-test-resource-locking/targeted-2.log": "36611f7b1d4a366f267f1f44981fea45957083f09bc163512b067fe3d33af8af",
+    "output/scm/add-container-test-resource-locking/targeted-3.log": "1ea65efa614772aa11bad79353d4e6574940529cc5dd409b165652e78689e508",
+    "output/scm/add-container-test-resource-locking/targeted-4.log": "094099096bd59e7b0c6d1f26364fc144c3076c4917e3ac529742e7d6a642dfbd"
+  }
+}

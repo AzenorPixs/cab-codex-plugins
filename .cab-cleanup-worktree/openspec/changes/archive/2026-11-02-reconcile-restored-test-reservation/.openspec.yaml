@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Permettre au propriétaire exact de renouveler le token/fencing d’un bail
+  USED après redémarrage, en conservant le même bail HELD et en exigeant une
+  frontière native idle stable.

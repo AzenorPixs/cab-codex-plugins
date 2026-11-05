@@ -1,0 +1,40 @@
+{
+  "change": "release-unused-test-reservations",
+  "version": "2.1.13",
+  "node": {
+    "total": 562,
+    "passed": 534,
+    "skipped": 28,
+    "failed": 0
+  },
+  "python": {
+    "total": 80,
+    "passed": 80
+  },
+  "native_regression": {
+    "total": 1,
+    "passed": 1,
+    "isolated": true
+  },
+  "targeted": {
+    "registry_distribution": 67,
+    "http": 7
+  },
+  "syntax": {
+    "javascript": 56,
+    "python": 16
+  },
+  "openspec_before": {
+    "standard": 17,
+    "strict": 17
+  },
+  "archive": "2026-10-29-release-unused-test-reservations",
+  "activation": false,
+  "real_reservation_mutation": false,
+  "proofs_directory": "output/scm-unused-test-reservations",
+  "openspec_after": {
+    "standard": 16,
+    "strict": 16
+  },
+  "synchronized_requirements_verified": 7
+}

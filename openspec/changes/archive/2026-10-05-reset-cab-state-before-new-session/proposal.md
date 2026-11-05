@@ -1,3 +1,5 @@
+# BR03 — Réinitialiser l’état CAB avant une nouvelle session
+
 ## Why
 
 Un nouveau démarrage CAB réutilise actuellement les approbations et le journal

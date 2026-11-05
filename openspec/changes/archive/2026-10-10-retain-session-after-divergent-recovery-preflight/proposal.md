@@ -1,3 +1,5 @@
+# SUP06 — Conserver la session après un prévol de récupération divergent
+
 ## Why
 Le prévol divergent provoque actuellement une nouvelle session CAB et une purge. Le développeur demande de poursuivre dans la session du prévol fautif, avec les refus, preuves et contrôles CAB conservés.
 

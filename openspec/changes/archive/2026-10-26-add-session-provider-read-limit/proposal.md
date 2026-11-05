@@ -1,4 +1,4 @@
-# Budget de lecture fournisseur défini par la session
+# MOD02 — Budget de lecture fournisseur défini par la session
 
 ## Why
 Le catalogue natif /provider dépasse 2 Mio et bloque la résolution du modèle. Le développeur exige que la session de pilotage définisse ce budget, puis CAB applique la valeur fournie, plutôt qu'un nouveau plafond fixe de 16 Mio.

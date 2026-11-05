@@ -2,6 +2,7 @@ const fixturePassword = 'synthetic-v2-test-password';
 const fixtureAuthorization = `Basic ${Buffer.from(`opencode:${fixturePassword}`).toString('base64')}`;
 
 function v2Message(message) {
+  if (message?.nativeV2) return structuredClone(message.nativeV2);
   const info = message?.info || {};
   const role = info.role || (Array.isArray(message?.parts) && message.parts.length ? 'assistant' : 'system');
   const id = info.id || 'msg_fixture';
@@ -16,7 +17,7 @@ function v2Message(message) {
     ...(model ? { model } : {}), finish: info.finish || 'stop', ...(info.error ? { error: info.error } : {}),
     metadata: { parentID: info.parentID },
     content: (message.parts || []).map((part) => part.type === 'tool' ? ({ type: 'tool', id: part.callID || 'call_fixture',
-      name: part.tool, executed: true, time: { created: part.state?.time?.start || 1,
+      name: part.tool, executed: part.executed ?? true, time: { created: part.state?.time?.start || 1,
         ...(Number.isFinite(part.state?.time?.start) ? { ran: part.state.time.start } : {}),
         ...(Number.isFinite(part.state?.time?.end) ? { completed: part.state.time.end } : {}) },
       state: { status: part.state?.status, input: part.state?.input || {},
@@ -29,15 +30,16 @@ function v2Message(message) {
 
 function v2Permission(permission) {
   return { id: permission.id, sessionID: permission.sessionID, action: permission.permission,
-    resources: [permission.metadata?.command || permission.metadata?.filepath].filter(Boolean),
-    metadata: permission.metadata || {}, source: { type: 'tool', messageID: 'msg_fixture', id: permission.tool?.callID || 'call_fixture' } };
+    resources: permission.resources || [permission.metadata?.command || permission.metadata?.filepath].filter(Boolean),
+    metadata: permission.metadata || {}, source: { type: 'tool', messageID: permission.messageID || 'msg_fixture',
+      id: permission.tool?.callID || 'call_fixture' } };
 }
 
 function v2Session(session, directory) {
-  return { ...session, ...(session.model ? { model: { providerID: session.model.providerID, id: session.model.modelID,
+  return { ...session, projectID:session.projectID||'project-fixture', ...(session.model ? { model: { providerID: session.model.providerID, id: session.model.modelID,
       ...(session.model.variant ? { variant: session.model.variant } : {}) } } : {}), directory: session.directory || directory,
     permissions: Array.isArray(session.permission) ? session.permission.map((rule) => rule && typeof rule === 'object'
-      ? ({ action: rule.permission, resource: rule.pattern, effect: rule.action }) : rule) : session.permission };
+      ? ({ action: rule.permission==='bash'?'shell':rule.permission, resource: rule.pattern, effect: rule.action }) : rule) : session.permission };
 }
 
 function v2ProviderData(legacy) {
@@ -72,13 +74,16 @@ function v2ModelData(legacy) {
 }
 
 function legacyPath(path) {
+  let match = path.match(/^\/api\/experimental\/session\/([^/]+)\/log$/);
+  if (match) return `/session/${match[1]}/log`;
+  if (path === '/api/shell') return '/shell';
   if (path === '/api/mcp') return '/mcp';
   if (path === '/api/session/active') return '/session/status';
   if (path === '/api/permission/request') return '/permission';
   if (path === '/api/provider' || path === '/api/model') return '/provider';
   const mcp = path.match(/^\/api\/experimental\/mcp\/([^/]+)\/(connect|disconnect)$/);
   if (mcp) return `/mcp/${mcp[1]}/${mcp[2]}`;
-  let match = path.match(/^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/);
+  match = path.match(/^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/);
   if (match) return `/session/${match[1]}/permissions/${match[2]}`;
   match = path.match(/^\/api\/session\/([^/]+)\/prompt$/);
   if (match) return `/session/${match[1]}/message`;
@@ -103,6 +108,7 @@ function transform(path, method, payload, directory) {
   if (path === '/api/permission/request') return { location: { directory }, data: (payload || []).map(v2Permission) };
   if (path === '/api/provider') return { location: { directory }, data: v2ProviderData(payload) };
   if (path === '/api/model') return { location: { directory }, data: v2ModelData(payload) };
+  if (path === '/api/shell') return payload;
   if (path.startsWith('/api/experimental/mcp/')) return null;
   if (/^\/api\/session\/[^/]+\/permission\/[^/]+\/reply$/.test(path)) return null;
   if (/^\/api\/session\/[^/]+\/model$/.test(path)) return null;
@@ -116,7 +122,8 @@ function transform(path, method, payload, directory) {
 }
 
 export function openCodeV2TestHandler(handler, { directory, locationDirectory = () => directory, onModelSwitch,
-  allowNonApi = false, allowLegacyTestCalls = false } = {}) {
+  allowNonApi = false, allowLegacyTestCalls = false, sourceFiles = {}, sourceEntries = [], onFsRequest,
+  savedPermissions = [], onSavedPermissionDelete, sessionPermissions } = {}) {
   return async (request, response) => {
     const incoming = new URL(request.url, 'http://localhost');
     const path = incoming.pathname;
@@ -131,7 +138,7 @@ export function openCodeV2TestHandler(handler, { directory, locationDirectory = 
     }
     if (path === '/api/info') {
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ version: '2.2.0', pid: 42, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }));
+      response.end(JSON.stringify({ version: '2.2.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }));
       return;
     }
     if (path === '/api/location') {
@@ -139,6 +146,48 @@ export function openCodeV2TestHandler(handler, { directory, locationDirectory = 
       response.writeHead(200, { 'content-type': 'application/json' });
       response.end(JSON.stringify(transform(path, request.method, null, targetDirectory)));
       return;
+    }
+    if(request.method==='GET'&&/^\/api\/session\/ses_[^/]+$/.test(path)&&sessionPermissions!==undefined){
+      const rules=typeof sessionPermissions==='function'?await sessionPermissions():sessionPermissions;
+      if(rules!==undefined){response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({data:v2Session({id:decodeURIComponent(path.split('/').at(-1)),permission:rules},directory)}));return;}
+    }
+    if(path==='/api/permission/saved'&&request.method==='GET'){
+      response.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({data:savedPermissions}));return;
+    }
+    if(path.startsWith('/api/permission/saved/')&&request.method==='DELETE'){
+      const id=decodeURIComponent(path.split('/').at(-1)),mode=await onSavedPermissionDelete?.(id);
+      if(mode==='fail-before'){response.writeHead(503).end();return;}
+      const index=savedPermissions.findIndex(row=>row.id===id);
+      if(index<0){response.writeHead(404).end();return;}
+      savedPermissions.splice(index,1);
+      if(mode==='drop-response'){response.destroy();return;}
+      response.writeHead(204).end();return;
+    }
+    if (path.startsWith('/api/fs/read/')) {
+      onFsRequest?.(path, incoming);
+      if (incoming.searchParams.get('location[directory]') !== directory ||
+          request.headers['x-opencode-directory'] !== directory) {
+        response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'fixture-location-divergent' })); return;
+      }
+      const relative = path.slice('/api/fs/read/'.length).split('/').map(decodeURIComponent).join('/');
+      if (!Object.hasOwn(sourceFiles, relative)) {
+        response.writeHead(404, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'file-not-found' })); return;
+      }
+      response.writeHead(200, { 'content-type': 'application/octet-stream' });
+      response.end(Buffer.from(sourceFiles[relative], 'utf8')); return;
+    }
+    if (path === '/api/fs/list' || path === '/api/fs/find') {
+      onFsRequest?.(path, incoming);
+      if (incoming.searchParams.get('location[directory]') !== directory ||
+          request.headers['x-opencode-directory'] !== directory) {
+        response.writeHead(400, { 'content-type': 'application/json' }).end(JSON.stringify({ error: 'fixture-location-divergent' })); return;
+      }
+      const requestedPath = incoming.searchParams.get('path') || '';
+      const query = incoming.searchParams.get('query') || '';
+      const entries = sourceEntries.filter(entry => path === '/api/fs/find'
+        ? entry.path.includes(query) : (!requestedPath || entry.path.startsWith(requestedPath.replace(/\/$/, '') + '/')));
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ location: { directory }, data: entries })); return;
     }
     if (/^\/api\/session\/[^/]+\/model$/.test(path)) {
       const chunks = [];

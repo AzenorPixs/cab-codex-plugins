@@ -1,11 +1,43 @@
 ---
 name: coding-session-statistics
-description: Préparer et produire des statistiques détaillées et auditables d'une session de codage ou de pilotage OpenCode, notamment la télémétrie périodique des agents de codage, les messages, outils, approbations, refus, fichiers, commandes et accès web. Utiliser lorsqu'un utilisateur demande de mesurer une session, des statistiques, un bilan quantifié ou un rapport STATISTIQUES.md sur une session de développement.
+description: Préparer et produire des statistiques détaillées et auditables d'une session de codage ou de pilotage OpenCode, notamment la télémétrie périodique des agents de codage, les messages, outils, approbations, refus, fichiers, commandes et accès web. Utiliser lorsqu'un utilisateur demande de mesurer une session, des statistiques, un bilan quantifié ou un rapport STATISTICS.md sur une session de développement.
 ---
 
 # Statistiques de session de codage
 
 Produire un rapport factuel à partir de l'historique persistant de la session concernée. Ne pas inventer les données absentes.
+
+## Collecte native CAB 2.3.0
+
+La collecte statistique native continue et GET /runs/<run_id>/efficiency sont
+prioritaires sur un tour LLM périodique pour recueillir des mesures déjà
+exposées. Les sondes initiale et finale et le rapport par archive restent
+requis selon le mandat. Une relève utile peut être native sans réveiller
+l'orchestrateur ; ne pas additionner snapshots cumulatifs et messages natifs.
+Conserver couverture, source, modèle, fournisseur, zéros réels et N/A motivé.
+Les sondes de substitution manuelles ne s'appliquent qu'aux mesures manquantes,
+sans duplication des résultats déjà disponibles ni reconstruction rétroactive.
+Une sonde statistique échouée reste distincte d'un échec du benchmark PLLM et
+ne suspend pas, à elle seule, le RUN. Poursuivre sans arrêter le travail pour
+attendre un créneau.
+
+## Rendu par le moteur de statistiques CAB
+
+La collecte et les preuves restent celles de cette compétence. Le rendu et
+l’amendement du rapport de change utilisent le mode CHANGE du moteur Python
+du [skill SGS](../sgs/SKILL.md), depuis des preuves structurées. Conserver au
+minimum la richesse des rapports Pixs : agents complets, rôles/parties/outils,
+décisions, chemins, commandes, web, durées, sondes et quotas autorisés. Utiliser
+les tableaux et notes du schéma, sans éliminer une donnée disponible pour
+simplifier le rapport. Les quotas restent exclus du seul global SGS.
+
+Un export public CAB rattaché au contexte peut fournir directement les
+ventilations exposées ; les données privées ou absentes ne sont pas devinées.
+Le rapport d’un arrêt pour dépendance conserve ses six sections et ses sessions ;
+le même fichier est amendé lors de la reprise et de l’archivage. Le mandat
+d’édition du rapport et sa vérification restent obligatoires. L’actualisation
+du global relève de DELTA sous mandat distinct : absent, ne rien créer ;
+incompatible, recommander SGS manuel sans reconstruction automatique.
 
 ## Sources et méthode
 
@@ -146,7 +178,7 @@ OpenSpec réussi, même sans demande supplémentaire de rapport.
 2. Effectuer les contrôles finaux de collecte et le relevé de quota après
    archivage, puis fixer la fin de l'intervalle avant rédaction de la synthèse.
 3. Faire autoriser un mandat d'édition distinct pour le seul fichier
-   `openspec/changes/archive/<archive>/STATISTIQUES.md` du projet piloté.
+   `openspec/changes/archive/<archive>/STATISTICS.md` du projet piloté.
 4. Produire les six sections ci-dessous, puis vérifier l'existence, l'encodage
    UTF-8/LF, les six titres de niveau 2 et la cohérence des totaux.
 5. Rapporter le chemin et les validations observées à l'orchestrateur avant
@@ -192,7 +224,7 @@ Utiliser des tableaux Markdown pour les comparaisons répétées. Pour les chemi
 
 ## Production de fichier
 
-Dans un cycle CAB, créer systématiquement `STATISTIQUES.md` dans le dossier réel de chaque évolution OpenSpec archivée, selon le protocole ci-dessus. Hors de ce cycle, si l'utilisateur demande un fichier, utiliser l'emplacement explicitement demandé. Respecter les autorisations du projet, UTF-8 et une fin de ligne Unix LF, puis vérifier qu'il existe exactement six titres de niveau 2.
+Dans un cycle CAB, créer systématiquement `STATISTICS.md` dans le dossier réel de chaque évolution OpenSpec archivée, selon le protocole ci-dessus. Hors de ce cycle, si l'utilisateur demande un fichier, utiliser l'emplacement explicitement demandé. Respecter les autorisations du projet, UTF-8 et une fin de ligne Unix LF, puis vérifier qu'il existe exactement six titres de niveau 2.
 
 ## Attribution concurrente CAB 1.0.0
 
@@ -204,6 +236,36 @@ entre sessions. Publier un rapport par archive et vérifier ses six sections,
 UTF-8/LF et totaux avant la libération normale de la réservation. Une session
 SCM directe n'invoque pas cette compétence ni ses sondes.
 
-## Consultations et observations CAB 2.1.2
+## Consultations et observations CAB 2.1.32
 
 Les agrégats, fenêtres et imports filtrés sont décrits dans [la référence observations](references/observations.md). La consultation est ponctuelle et en lecture seule ; elle ne déclenche ni sondes, ni RUN d'observation, ni intervention sur les sessions. Les sources natives et importées restent séparées, les lacunes inconnues et les quotas partagés. Les durées de contention et d'exception peuvent se recouvrir. Cette capacité de consultation ne transforme pas SCM en session pilotée et n'autorise pas l'invocation de cette compétence pendant SCM.
+
+## Collecte native OpenCode V2
+
+Observer `session.text.delta` avec `data.sessionID` pour le premier et le
+dernier delta de texte. Ne pas confondre ces événements avec
+`session.reasoning.delta`. Corréler la sonde, sa session et son répertoire ;
+mesurer le TTMT depuis l’envoi observé jusqu’au premier delta de texte.
+Ne pas attendre exclusivement les événements historiques `message.part.*`.
+
+Lire les tokens natifs de la réponse assistant V2 (`tokens` au premier niveau,
+normalisé `info.tokens`) et le coût natif (`cost`, normalisé `info.cost`), ou
+l’événement corrélé `session.usage.updated` s’il est effectivement conservé.
+Ne pas additionner la réponse et l’événement qui décrivent le même usage.
+Le débit exige des tokens de sortie réels et une durée premier/dernier delta
+strictement positive ; une valeur absente reste N/A motivée. Les zéros natifs
+sont préservés. Aucune métrique d’une sonde ancienne ne se reconstruit à partir
+du texte ou des seules clés de sa réponse ; ne pas relancer une sonde pour
+combler rétrospectivement une mesure absente sans mandat propre.
+
+
+## Isolation de la sonde — CAB 2.1.32
+
+Créer la session jetable avec createProbeSession({title,model}) du client CAB
+courant, dans la location MCP partagée et avec tous les outils interdits.
+Utiliser son directory retourné pour prompt, messages et suppression de sa
+seule session ; conserver exactement le modèle et le raisonnement du codeur.
+Un workspace technique distinct peut initialiser un contexte MCP concurrent :
+ne pas l’utiliser pour cette sonde. En cas d’échec, rapporter INCOMPLETE sans
+reconnexion automatique ni reconstruction des créneaux manqués. Voir
+[la procédure CAB](../approval-bridge/references/mcp-location-isolation.md).

@@ -1,0 +1,34 @@
+✔ processus original 1.7.1 → chargement L2 réel → rejectionOnly/refus/poll/retry, broker conservé (4218.337304ms)
+✔ maintenance gelée : pair actif et ancienne session DENY, aucune relance avant frontière (3883.836371ms)
+✔ maintenance gelée : reprise de la même transaction après arrêt simulé au reçu (4195.015063ms)
+✖ maintenance gelée : échec du chargement et retour conservatoire au contrôleur original (4047.00401ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 3
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16404.76246
+
+✖ failing tests:
+
+test at tests/maintenance-bootstrap.test.mjs:220:1
+✖ maintenance gelée : échec du chargement et retour conservatoire au contrôleur original (4047.00401ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+  
+  + 'ROLLBACK_FAILED'
+  - 'ROLLED_BACK_FROZEN'
+         ^
+  
+      at TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:227:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'ROLLBACK_FAILED',
+    expected: 'ROLLED_BACK_FROZEN',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

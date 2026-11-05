@@ -1,0 +1,34 @@
+{
+  "syntax": [
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+      "exit": 0
+    },
+    {
+      "file": "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/concurrent-controller.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/concurrent-run-registry.test.mjs",
+      "exit": 0
+    },
+    {
+      "file": "tests/controller-session-recovery.test.mjs",
+      "exit": 0
+    }
+  ],
+  "retry_identical_to_original_cache": true,
+  "retry_sha256": "6dcbb0ac71745215e04fb000fa5a8534433ee591ca4c882bb903719fc3bc335a"
+}

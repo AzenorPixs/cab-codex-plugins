@@ -1,0 +1,34 @@
+{
+  "version": "2.1.27",
+  "node": {
+    "cases": 657,
+    "passed": 627,
+    "failed": 0,
+    "skipped": 30
+  },
+  "python": {
+    "passed": 81,
+    "failed": 0
+  },
+  "native": {
+    "version": "2.2.0",
+    "passed": 3,
+    "failed": 0
+  },
+  "browsers": {
+    "Chromium": "156.0.8078.73",
+    "Firefox": "153.6.0",
+    "fullCampaigns": 2,
+    "catalogCampaigns": 2
+  },
+  "syntax": {
+    "js": 69,
+    "py": 16
+  },
+  "openspecBefore": {
+    "standard": 17,
+    "strict": 17
+  },
+  "requirementsAdded": 1,
+  "requirementsModified": 1
+}

@@ -1,4 +1,29 @@
-# Mise à jour autonome des briques CAB — CAB 2.1.2
+# Mise à jour autonome des briques CAB — CAB 2.2.40
+
+## États privés CAB2.2.40 et fichiers projet0775
+
+Les fichiers de projet conservent leurs droits0775, y compris après DIU.
+Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
+`<home exécution>/.local/state/cab-approval-bridge/<SHA256 du workspace résolu>/cgpt-approval-bridge/`.
+Les répertoires privés sont0700 et les fichiers0600. La racine optionnelle
+`OC_Codex_RUNTIME_STATE_ROOT` (alias historique `OC_CGPT_RUNTIME_STATE_ROOT`
+seulement si le nom principal est absent) remplace `.local/state` ; elle doit
+être absolue, hors projet et protégée. Le broker conserve son magasin de profil
+hors projet. `/status` expose `runtimeStateDirectory` ; ne pas deviner ce chemin.
+Seul le verrou public de coordination reste dans le projet en0775, pour
+exclure une ancienne instance ; il ne contient aucune décision ou secret.
+
+Le premier CABU depuis2.2.6 vérifie le registre source et le transcript des
+validations actives, puis copie les seuls états CAB connus sans changer les
+anciens fichiers. Le reçu `cab-private-state-migration-v1` garde explicitement
+la continuité LEGACY, sans certificat source inventé. Le contrôleur démarre
+avec les mutations et permissions suspendues ; CABU vérifie versions, identité
+native, RUN, opérations et once, puis active le reçu exact de façon idempotente.
+Une interruption après copie reprend en avant avec le même reçu et le même
+stockage privé ; revenir aux anciens fichiers de projet est interdit. Les
+anciennes protections incertaines restent en place, sans once ni commande rejouée.
+Les mises à jour suivantes utilisent de nouveau le transfert certifié ordinaire.
+
 
 ## Association du skill et des commandes
 
@@ -9,58 +34,59 @@ ce lien avant mutation. `/CABU` MUST charger le fichier frère `CAB.md` de même
 version et lui déléguer exactement `update` ; il ne contient pas de procédure
 de maintenance parallèle.
 
-## Processus forcé de `/CAB update` et `/CABU`
+Les unités gérées sont cgpt-approval-bridge-controller.service,
+cgpt-approval-bridge-supervisor.service et cgpt-approval-bridge-monitor.service.
+Leurs fichiers et le broker sont vérifiés séparément des processus.
 
-`/CABU` sans argument charge le fichier frère `CAB.md` de même version et lui
-délègue exactement `update`. La procédure est portée par `CAB.md` et cette
-référence ; elle ne se duplique pas dans l'alias.
+## Préparation à chaud et bascule sélective
 
-L'update valide le manifeste, le skill, cette référence, l'updater, les trois
-commandes, les versions du paquet, la fermeture des imports, les syntaxes, les
-destinations explicites et les sauvegardes. Il ne consulte aucun RUN, job,
-permission, gel global ni état de service pour décider de commencer. Il ne
-demande pas `SHARED_MAINTENANCE`, ne suspend pas les RUN et ne relit pas le
-registre métier avant l'arrêt.
+/CABU délègue /CAB update dans le même tour. La provenance distante et les
+validations de paquet restent requises. Préparer entièrement les artefacts,
+fermetures d'imports, syntaxes, destinations et sauvegardes avant la coupure.
+Comparer les empreintes déployées et les versions réellement servies : un jeu
+conforme renvoie up-to-date, sans arrêt ni reconnexion. Un fichier hors de la
+fermeture active s'installe sans redémarrage. Le Web et les unités ne déclenchent
+que les groupes réellement affectés ; daemon-reload est limité aux unités
+modifiées. Aucune activation au login.
 
-Après validation et staging, l'updater appelle systématiquement, dans l'ordre,
-`systemctl --user stop` pour les unités
-`cgpt-approval-bridge-controller.service`,
-`cgpt-approval-bridge-supervisor.service` et
-`cgpt-approval-bridge-monitor.service`.
-Il remplace atomiquement tous les fichiers des quatre briques, y compris les
-trois fichiers Python broker dans le répertoire explicitement déclaré, conserve
-les sauvegardes privées, recharge systemd, puis appelle systématiquement
-`systemctl --user start` pour les trois unités. Les unités ne sont jamais
-activées au login. Une invocation dont les versions sont déjà égales effectue
-tout de même cet arrêt et ce redémarrage.
+La bascule compatible utilise [transport-continuity](transport-continuity.md).
+Elle prépare et scelle une frontière courte des communications sans attendre
+la fin des commandes longues. Le même reçu et la même transaction servent à
+la reprise après réponse perdue. Une frontière occupée laisse les services
+actifs et retourne waiting ; ne pas multiplier les préparations ni purger le
+stage. Ne pas fabriquer SHARED_MAINTENANCE pour une mise à jour ordinaire.
 
-OpenCode reste ouvert. L'updater détecte sa disponibilité avant la coupure,
-sans lire les RUN. Si OpenCode est actif, il déconnecte le broker via la route
-native V2 après arrêt des services, installe les fichiers, démarre les trois
-services puis reconnecte le broker. Une readiness fraîche doit prouver sa
-version cible. Un échec d'authentification, de location, de reconnexion ou de
-version sur un OpenCode actif interdit le succès et déclenche le repli.
+Exécuter `systemctl --user stop` puis `systemctl --user start` seulement pour
+les composants requis par le plan vérifié.
+OpenCode reste ouvert ; ne reconnecter le broker que si son code ou son état
+chargé l'exige. Une reconnexion native conserve les décisions en attente et
+ne rejoue aucune permission. La readiness fraîche et les versions observées
+restent nécessaires avant succès. L'absence prouvée d'OpenCode seule permet
+INDISPONIBLE pour la version chargée ; une présence incertaine ne suffit pas.
 
-L'absence prouvée du processus OpenCode autorise l'installation des fichiers
-broker sans version chargée ; le rapport indique alors `INDISPONIBLE`. Une
-présence incertaine ne vaut pas preuve d'absence. systemd est rechargé si les
-unités changent ; les trois services sont toujours arrêtés et redémarrés.
+Après remplacement, vérifier l'adoption du reçu compatible et les identités,
+accès et baux antérieurs ; une divergence conserve le repli protégé. Depuis
+2.1.81, le certificat nouveau n'existe pas : annoncer explicitement LEGACY,
+sans promettre la même continuité que pour deux versions compatibles.
+Le repli restaure les artefacts et leurs seuls services affectés, jamais un
+ancien état métier. Annuler avant coupure retire seulement la barrière de
+transport. Distinguer preparationMs, cutoverMs, communicationUnavailableMs,
+unavailableMs et totalMs ; une borne de vérification n'est pas une mesure
+exacte de coupure réseau. Ne promettre aucune durée non mesurée.
 
 Pour le dépôt CAB, la destination du broker est le répertoire `src/` sous la
 racine CAB : BUILD.md y définit le point d'entrée source et les trois modules
 importables. Cette destination ne dépend pas d'un processus OpenCode en cours. Utiliser
 `--broker-policy cab-source` : cette exception exige exactement src/, le projet
 `cab` dans pyproject.toml et un manifeste local identique au paquet installé.
-Les liens, caches, autres destinations dans le workspace et le layout
-managed-release restent refusés pour cette politique.
+Les liens broker, caches et autres destinations dans le workspace restent refusés.
+Le layout managed-release est admis pour les scripts des services et le Web ;
+les trois modules broker src/ restent des fichiers ordinaires, y compris au repli.
 
-Après redémarrage, l'updater vérifie les versions réellement servies par le
-contrôleur, le superviseur et le moniteur, et leur workspace. Il produit un
-rapport complet des versions publiées, du plugin installé, des fichiers
-déployés, des processus observés et du résultat transactionnel. Un échec de
-validation de paquet ou de destination survient avant l'arrêt. Un échec après
-arrêt restaure les seuls artefacts sauvegardés, recharge systemd et redémarre
-les trois unités ; il conserve le journal et signale le repli.
+Après bascule, vérifier chaque composant réellement actif, son workspace et
+sa version ; produire le bilan source/paquet/fichiers/processus et le résultat
+transactionnel. Une erreur précoce préserve les services ; une erreur après
+bascule conserve le reçu et qualifie le repli. Ne pas effacer les historiques.
 
 ## Profil de récupération gelée
 
@@ -91,7 +117,7 @@ Web restent ouverts ; aucun connect/disconnect ni instance/dispose n'est permis.
 Les pairs doivent conserver une PAUSE explicitement autorisée. Après complete,
 la récupération ne vaut pas autorisation métier dans l'état mixte : une
 maintenance ordinaire distinctement autorisée doit aligner réellement les
-quatre briques en 2.1.2, puis chaque reprise est validée. Cette seconde étape
+quatre briques sur la version cible du paquet, puis chaque reprise est validée. Cette seconde étape
 peut reconnecter le broker et relancer le Web, sans fermer OpenCode.
 Un autre PENDING ou un écart entre compteurs global/RUN/session bloque le
 profil ; aucune demande inconnue n'est annulée ou attribuée par déduction.
@@ -170,7 +196,7 @@ La politique ordinaire explicite `--broker-policy reuse-readonly` exige
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
-doit être la cible 2.1.2 ; la version chargée est vérifiée indépendamment.
+doit être la version cible du paquet ; la version chargée est vérifiée indépendamment.
 Les trois fichiers sont seulement lus et comparés au paquet. Aucun stage,
 backup restaurable, remplacement, nouveau lien ou compilation sur place du
 broker n'est effectué. Les droits et propriétaires restent conservés.
@@ -225,23 +251,19 @@ Le paquet complet est vérifié puis sauvegardé. Les empreintes des fichiers
 installés sont recontrôlées avant remplacement ; une modification concurrente
 des artefacts cibles est préservée et bloque avant arrêt.
 
-L'outil arrête systématiquement les trois unités systemd CAB, tente une
-déconnexion native du broker si OpenCode répond, remplace atomiquement les
-fichiers des quatre briques, puis exécute `systemctl --user daemon-reload` et
-démarre controller, supervisor et monitor. Aucune unité n'est activée au login.
-OpenCode n'est ni fermé ni tué. Si son API est absente, le broker reste
-`INDISPONIBLE` côté runtime mais ses fichiers sont installés. Aucun état de RUN
-ou schéma métier n'est modifié par cette opération.
-
-Le succès exige les versions des trois unités après redémarrage et la version
-des fichiers broker. La version runtime broker vient uniquement d'une readiness
-postérieure au rechargement ; sans elle, le rapport indique `INDISPONIBLE`.
-Chaque invocation redémarre les trois unités, même si le jeu est déjà conforme.
+L'outil applique le plan sélectif décrit plus haut. La syntaxe, le staging,
+les sauvegardes et les empreintes concurrentes sont vérifiés avant arrêt.
+Les composants déjà conformes restent actifs. La readiness du broker et les
+versions réellement servies doivent correspondre à la cible ; les processus
+absents sont distingués des versions de fichiers. La barrière compatible
+préserve la communication ; un premier passage LEGACY reste explicitement
+non certifié. Les états métier ne sont jamais restaurés depuis une sauvegarde.
 
 ## Retour arrière
 
 Une erreur après le début des arrêts déclenche le retour aux seuls artefacts
-sauvegardés, recharge systemd et redémarre les trois unités. Les fichiers runtime,
+sauvegardés, recharge systemd si nécessaire et redémarre les seules unités
+affectées par le plan. Les fichiers runtime,
 décisions consommées, RUN et archives ne sont jamais restaurés depuis une
 ancienne copie. Un échec de repli conserve la phase ROLLBACK_FAILED et interdit
 d'annoncer un succès.
@@ -249,7 +271,23 @@ d'annoncer un succès.
 Une invocation suivante réconcilie d'abord un reçu interrompu. L'option
 `--rollback`, avec les mêmes cibles, permet un repli explicite sur les seules
 sauvegardes correspondantes. Aucune coordination globale n'est créée ou
-libérée par le chemin ordinaire forcé.
+libérée par le chemin ordinaire.
+
+Si le reçu est `ROLLBACK_FAILED` avec `failureCode=update-controller-start-unconfirmed`,
+`--resume-forward <transactionId>` peut reprendre uniquement ce reçu après
+vérification d’un OpenCode inchangé, d’une transition broker confirmée et de
+toutes les empreintes installées. La source publiée doit être au moins aussi
+récente que celle du reçu. CAB conserve l’ancien journal et ses sauvegardes,
+le marque `SUPERSEDED`, puis ouvre un nouveau reçu lié par `recoveryOf`. Cette
+reprise ne recharge pas les locations OpenCode et ne lit ni ne modifie les RUN.
+Avec `--broker-policy cab-source`, un fichier broker local déjà identique au
+paquet GitHub courant est accepté comme avancé et revérifié dans le nouveau reçu.
+Si un reçu précédent a déjà confirmé la déconnexion et le reçu courant est lié
+à son parent `SUPERSEDED`, l’état MCP `disabled` est admis sous la même identité
+OpenCode ; `pending`, `failed` et `needs_auth` restent refusés.
+Un MCP `pending`, `failed` ou `needs_auth`, une identité native changée ou une
+empreinte inconnue conserve le reçu sans action ; un rechargement global reste
+soumis à son autorisation exacte distincte.
 
 Les sauvegardes et reçus restent privés et ne sont pas purgés automatiquement.
 Le bilan sépare fichiers déployés, versions actives, inactivité, attente,
@@ -258,11 +296,11 @@ présenté comme vérifié sur la seule base d'un test simulé.
 
 ## Transition ordinaire depuis 1.9.0 vers 1.10.5
 
-Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.10.7, 1.10.8, 1.10.9, 1.10.10 et la cible 2.1.2. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la cible 2.1.2, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
+Le profil reuse-readonly accepte les versions chargées qualifiées 1.7.1, 1.8.0, 1.9.0, 1.10.0, 1.10.1, 1.10.2, 1.10.3, 1.10.4, 1.10.5, 1.10.6, 1.10.7, 1.10.8, 1.10.9, 1.10.10 et les versions 2.1.32, 2.1.33 et 2.1.35. Cette liste reste fermée ; un numéro inconnu ou un cachebuster fourni comme version chargée est refusé. Les artefacts doivent toujours être identiques à la version cible du paquet, et la preuve doit conserver la version réellement chargée avant reconnexion. Les contrôles de propriétaire, manifeste, processus, PAUSE, HELD et récupération ne sont pas assouplis. Le banc historique à deux UID qualifie le cycle complet 1.10.3 vers 1.10.4, avec succès et réponse de déconnexion perdue ; les comptes et fichiers hôte ne sont pas modifiés. Les qualifications des origines plus anciennes restent identifiées dans leurs archives.
 
 ## Registre de maintenance volumineux — 1.10.9
 
-Dans le profil ordinaire, seul GET /runs sans suffixe et le lecteur privé de controller-runs.json acceptent jusqu'à 16 Mio. Les autres réponses HTTP gardent 2 Mio et les autres fichiers 4 Mio. La lecture reste intégrale et bornée ; un dépassement est refusé, sans troncature ni purge. Identités, schéma, permissions, génération, PAUSE, HELD et preuves restent recontrôlés. Le banc grand registre vérifie les deux UID réels, les deux issues et le refus d'écriture au broker.
+Dans le profil ordinaire, seuls GET /runs et GET /status sans suffixe et le lecteur privé de controller-runs.json acceptent jusqu'à 16 Mio. Les autres réponses HTTP gardent 2 Mio et les autres fichiers 4 Mio. La lecture reste intégrale et bornée ; un dépassement est refusé, sans troncature ni purge. Identités, schéma, permissions, génération, PAUSE, HELD et preuves restent recontrôlés. Le banc grand registre vérifie les deux UID réels, les deux issues et le refus d'écriture au broker.
 
 Une mise à jour locale explicitement demandée utilise le jeu local qualifié et conserve sa provenance et ses sauvegardes. Le plugin est installé par le mécanisme pris en charge ; son cache n'est pas édité manuellement. Une publication distante antérieure ne doit pas remplacer implicitement le jeu local plus récent. Le bilan distingue cet état de la publication GitHub et conserve les informations nécessaires pour rétablir l'origine distante après sa publication autorisée. Aucun commit ou push n'est déduit d'une installation locale.
 
@@ -295,9 +333,10 @@ Pour `cab-source`, si les services sont configurés pour un autre projet, fourni
 `--service-workspace <workspace-absolu-observé>` : les contrôles de version et
 les appels MCP ciblent ce workspace réel sans modifier les configurations.
 La récupération conserve le même journal et les mêmes destinations. Le jeu Web
-indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs.
+indépendant inclut aussi cgpt-approval-bridge-opencode-client.mjs,
+cgpt-approval-bridge-permission-policy.mjs et cgpt-approval-bridge-process-lifecycle.mjs.
 
-### CABU 2.1.2 : coupure courte et reprise
+### CABU 2.1.32 : coupure courte et reprise
 
 CABU délègue au seul updater de `/CAB update`. La préparation, la compilation
 et les sauvegardes précèdent la coupure. Les validations syntaxiques peuvent
@@ -312,14 +351,14 @@ transport bloque leurs nouvelles opérations CAB ; les effets déjà lancés cô
 OpenCode peuvent continuer. Au retour, les états durables sont restaurés et les
 effets inconnus restent protégés jusqu'à réconciliation, sans rejeu de once.
 
-Les trois services doivent servir 2.1.2 en fin de transaction. OpenCode actif
+Les trois services doivent servir la version cible du paquet en fin de transaction. OpenCode actif
 exige une déconnexion/reconnexion native du broker et une readiness fraîche
 portant la version cible. Une API ou une reconnexion non vérifiable interdit
 le succès ; seule l'absence prouvée d'OpenCode autorise un broker runtime
 INDISPONIBLE. Les durées preparationMs, unavailableMs et totalMs sont publiées ;
 la cible est moins de cinq secondes de coupure dans le banc contrôlé.
 
-Contrat courant CABU 2.1.2 : les tolérances historiques de broker non vérifiable
+Contrat courant CABU : les tolérances historiques de broker non vérifiable
 ne permettent plus le succès si OpenCode est actif. Une absence prouvée est
 requise pour la seule exception broker. Appliquer le contrat de coupure courte
 de component-update.md ; ne prévenir ni modifier les RUN pour cet update.
@@ -341,3 +380,159 @@ Le broker MCP unique appartient à la location serveur OpenCode, découverte via
 GET /api/location sans en-tête de projet. Les requêtes MCP utilisent cette
 location ; les requêtes de session gardent le workspace du RUN via
 x-opencode-directory. Ne pas créer un deuxième broker dans un projet distinct.
+
+
+## Prévol du credential et installation mixte — 2.1.32
+
+Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
+
+Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0600 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
+
+Cette option est facultative : les projets sans OpenCode ou session pilotée n’ont pas à définir OPENCODE_PASSWORD. Sans option, le credential privé existant suffit et aucun project.env n’est lu. Cette préparation source ne provisionne rien dans le profil réel.
+
+Pour une installation mixte, utiliser `--broker-policy cab-source --layout managed-release` : le broker dans src/ reste ordinaire ; seuls les scripts des services et le Web utilisent les releases gérées. Les anciens liens et releases sont sauvegardés et restaurables ; aucune conversion manuelle des liens n’est nécessaire. `--service-workspace` conserve le workspace réel des services.
+
+Un échec après coupure expose `failureCode`, `serviceFailures` (composant, ActiveState, SubState, Result, ExecMainStatus), `transactionId` et `recoveryPhase`. Un code 243 désigne un échec systemd CREDENTIALS avant Node.js. Un retour 0 de systemctl start seul ne prouve pas la santé de l’application. La cause filtrée reste dans le reçu après repli, sans sortie brute du journal ou de systemctl.
+
+
+### Permissions réappliquées par DIU
+
+DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.32, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
+
+Le provisionnement d’un credential absent exige en revanche un répertoire détenu par l’utilisateur et non modifiable par le groupe ou les autres. Si DIU a remis `0770` et que le fichier manque, rétablir les permissions sûres du seul répertoire CAB, par exemple `0700`, avant le raccord explicitement autorisé à OPENCODE_PASSWORD. Préserver le credential et son mode lors des mises à jour DIU ; ne jamais afficher sa valeur. La variable reste facultative pour les projets qui n’utilisent pas OpenCode.
+
+### Arrêt technique 2.1.32
+
+Le paquet inclut process-lifecycle dans les scripts communs et ceux du moniteur. La disparition prouvée de l’instance serveur OpenCode suivie ferme les trois services ; une simple déconnexion MCP pendant update ne ferme pas le serveur et ne déclenche pas cet arrêt. Les unités empêchent la relance du statut de nettoyage incomplet 78. Une installation en absence initiale d’OpenCode reste possible : les services attendent leur premier rattachement. Les données métier et les contrôles de reprise restent conservés.
+
+## Réconciliation humaine du rejet après redémarrage — 2.1.32
+
+Après accord humain spécifique, utiliser la phase `reconcile-rejected` de
+`POST /runs/<run_id>/job/recover` avec les mêmes jobId, expectedSessionId,
+sessionId et recoveryId, previousPreflightRequestId courant, un
+preflightRequestId inédit, developerAuthorization et rejectedPreflightProof
+(nativeToolCount et nativeToolHash SHA-256 du JSON canonique des outils
+natifs complets). Le contrôleur n'accepte qu'un rejet natif corrélé sans
+effet et scelle un reçu non exécutable. Ne reconstruire aucune décision.
+
+Sous gel GLOBAL_RECONCILIATION, joindre globalTransactionId exact. Après
+réconciliation, confirmer puis libérer cette transaction avec authorization,
+evidence et rejectedRecovery : runId, jobId, recoveryId, prochain
+preflightRequestId et nativeToolHash retourné dans la dernière tentative.
+Le contrôleur recontrôle le reçu, l'historique inchangé et la cohorte.
+Aucun outil ne doit être envoyé entre le sceau et la libération. Toute autre
+récupération non réconciliée ou effet inconnu interdit la levée. Le nouveau
+prévol normal exige ensuite ask, décision, once, exit 0 et READY avant
+complete. Cette voie ne remplace ni retry ni la procédure CABU.
+
+## Raccord Code Mode OpenCode 2.2 — 2.1.32
+
+Le client reconnaît seulement le retour direct d'un appel MCP cgpt-validation
+avec objet de données littérales. Les clés peuvent être des identifiants
+statiques non cités ; les valeurs restent des données JSON. Les métadonnées
+toolCalls doivent concorder et la sortie ne doit pas être tronquée. CAB
+n'évalue aucun programme. La découverte search reconnue reste diagnostique.
+Une transformation de résultat, une variable, un calcul, un appel caché ou
+une provenance fabriquée conserve une enveloppe execute bloquante. Le sceau
+couvre l'enveloppe native complète et les anciens outils directs restent
+stables. Les clés de provenance internes reçues dans les métadonnées sont
+écartées puis produites seulement par la projection vérifiée.
+
+OpenCode 2.2 nomme sa commande native shell. Le client conserve sa source
+native et la rattache au contrat interne bash. Il vérifie l'appel source,
+la commande, l'absence de background et le workdir courant avant once. Les
+permissions d'écriture relatives sont rapprochées du fichier du contexte
+et de l'appel natif. Les règles shell: ask doivent couvrir le nouvel appel ;
+une seule règle historique bash: ask ne suffit pas pour transmettre once.
+Le drapeau executed ne prouve pas l'effet : OpenCode 2.2 termine réellement
+shell et write avec ce drapeau faux. CAB exige permission once acquittée,
+identité d'appel, cible, dates et résultat ; shell exige sa fin et son exit
+natifs. Une fin non corrélée garde ses protections.
+
+Le rejet réconcilié accepte les découvertes reconnues, un polling interrompu
+en lecture seule et le relais natif du rejected décidé par CGPT, avec rejet
+terminal exact obligatoire. Aucun ancien accord n'est restauré comme
+exécutable. Qualifier avec CAB_TEST_OPENCODE=/chemin/vers/opencode-2.2
+et le banc tests/native-opencode-codemode.test.mjs : serveur privé, fournisseur
+synthétique loopback, broker réel, prévol et écriture sous once, puis contrôle
+de disparition du broker et nettoyage. Aucune configuration ou credential
+réel n'est copié. Après archive et publication, CABU précède le recovery réel.
+
+## Découverte non autorisante — complément 2.1.32
+
+Le diagnostic Code Mode admet aussi un unique search à données littérales
+suivi du retour d'une chaîne littérale fixe. La liste toolCalls doit être
+exacte, terminée, concordante et non tronquée. La projection reste
+cab_codemode_discovery ; le texte, même APPROVED, n'a aucune autorité.
+Une variable, un appel ajouté ou une expression inconnue conserve le refus.
+Ce complément ne change ni admission MCP, ni permissions, ni once, ni fin.
+La distribution commune est celle du paquet vérifié ; les preuves 2.1.8 restent historiques.
+
+## Récupération directe et pagination — source 2.1.32
+
+Le retry historique du refus `access_id` vide reconnaît aussi les erreurs MCP
+natives directes qualifiées, en plus de Code Mode : partie assistant tool pour
+request_validation/get_approval, executed faux, error de type tool.execution,
+itemId natif fc_ lié exactement au call_, et temps created/ran/completed
+entiers positifs ordonnés. Le client dérive la provenance et l’empreinte de
+la partie complète ; une marque libre ne suffit pas. Le refus déterministe,
+les identités/génération exactes, `/usr/bin/true` unique, le lookup natif inconnu
+corrélé, la quiescence et l’absence d’effet restent requis. Le prévol suivant
+a une identité neuve dans la même candidate. Aucun -32602 n’est fabriqué et
+aucun once n’est rejoué. Les autres formes restent refusées.
+
+Pour les historiques volumineux, le client conserve le plafond de 2 Mio et
+réduit par moitié la limite de la même page seulement après
+`opencode-response-too-large`, de 200 jusqu’à un minimum de un. Il n’avance pas
+le curseur et ne conserve aucune réponse partielle lors de cette réduction.
+Les pages complètes, l’ordre, les curseurs et la borne de 100 pages restent
+contrôlés ; un message unique trop volumineux échoue explicitement. Les autres
+erreurs ne sont pas masquées ni réessayées par ce mécanisme. Ne pas purger
+ni tronquer le transcript pour franchir cette limite.
+
+Les tests et lectures filtrées qualifient les sources. L’activation CABU et
+la récupération réelle du RUN restent des étapes distinctes, coordonnées
+séparément ; les services actifs ne sont pas modifiés par cette préparation.
+
+
+## Attente du contrôleur et échec de récupération — CAB2.1.32
+
+L’attente de la version réelle du contrôleur utilise le budget --wait-ms
+existant (120000ms par défaut, borne maximale900000ms), y compris au rollback.
+Un service déclaré active par systemd ne suffit pas. Un dépassement conserve
+update-controller-start-unconfirmed, distinct du rechargement du broker.
+Aucun délai ne remplace la vérification des versions et de la readiness.
+
+Après la coupure, un rollback non confirmé reste ROLLBACK_FAILED, non terminal.
+La reprise doit traiter le même journal avant une nouvelle transaction ;
+elle ne peut pas le reclasser PREPARATION_FAILED. Ne jamais modifier le
+journal pour fabriquer un succès. Les anciens journaux déjà classés à tort
+par une version antérieure restent conservés comme preuves ; observer les
+artefacts et processus effectivement restaurés séparément, sans réécrire
+leur historique. Les RUN, demandes et once ne sont pas restaurés depuis
+une sauvegarde. Seul un retour réellement vérifié peut être annoncé.
+
+
+## Statut contrôleur volumineux — build corrigé2.1.32
+
+Les seuls GET exacts /runs et /status des services CAB acceptent16Mio,
+comptés avant parsing. Les POST, /api/snapshot et autres réponses gardent2Mio.
+Le client OpenCode, ses messages et catalogues gardent leurs plafonds propres.
+Un statut contrôleur complet supérieur2Mio doit pouvoir être vérifié sans
+tronquer ses contextes ni purger des RUN. Au-delà16Mio, conserver
+update-response-too-large sans le masquer comme une absence de démarrage.
+Le rollback non confirmé reste non terminal et est repris avant installation
+du build corrigé ; aucun journal n’est édité manuellement.
+
+
+## MCP pending — 2.1.32
+
+La [procédure dédiée](mcp-pending-recovery.md) distingue attente bornée, MCP_RECOVERY_REQUIRED et récupération globale explicitement autorisée par --recover-mcp <transactionId>, y compris le statut failed avec snapshot idle et sans permission partagée. `needs_auth` reste une erreur. Une intention durable n’est jamais rejouée. Le chemin ordinaire ne recharge pas toutes les locations et ne modifie pas ses préconditions de RUN ; ce parcours de récupération distinct contrôle sa frontière native. Un reçu `RESTARTING` dépassé peut être clos `SUPERSEDED` uniquement si les autres artefacts restent conformes et si les trois modules broker sont identiques au paquet courant plus récent ; aucune nouvelle installation ne démarre dans ce même appel.
+
+## Fermeture de distribution — 2.1.32
+
+Le groupe monitorScripts inclut permission-policy, dépendance du client. Avant coupure, chaque import relatif statique doit trouver le même artefact source à la destination relative attendue ; une présence dans le seul groupe primaire ne suffit pas. update-package-import-missing refuse le paquet incomplet avant arrêt. Les contrôles ask, permissions et mandats restent inchangés.
+
+La récupération MCP globale suit [l’accord permanent borné](mcp-pending-recovery.md) :
+contrôles frais, reçu exact et intention unique, sans nouvelle question si toutes
+les conditions sont satisfaites. Ne pas étendre cet accord à un autre profil.

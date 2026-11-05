@@ -203,6 +203,39 @@ class ControllerDecisionCorrelationTest(
             result = bridge.notify_controller(self.item, "fixture-lease")
         self.assertEqual(result["error"], "HTTPError: 400")
 
+    def test_notification_refusal_code_is_filtered_and_bound_to_http_status(self):
+        for status, payload, expected in [
+            (409, {"error": "resource-revision-stale", "message": "PRIVATE", "extra": "PRIVATE"}, "resource-revision-stale"),
+            (400, {"error": "expected-revisions-invalid"}, "expected-revisions-invalid"),
+            (400, {"error": "resource-revision-stale"}, None),
+            (409, {"error": "untrusted-secret-code"}, None),
+            (500, {"error": "resource-revision-stale"}, None),
+            (409, {"error": ["resource-revision-stale"]}, None),
+            (409, {"error": "resource-revision-stale", "extra": "x" * 1025}, None),
+        ]:
+            with self.subTest(status=status, expected=expected):
+                exc = bridge.error.HTTPError("http://controller", status, "Failure", {}, io.BytesIO(json.dumps(payload).encode()))
+                with (patch.object(bridge.request, "urlopen", side_effect=exc),
+                      patch.object(bridge, "journal_controller_event") as event,
+                      patch.object(bridge, "note_session_activity")):
+                    result = bridge.notify_controller(self.item, "current-lease")
+                self.assertEqual(result["diagnostic"], {"http_status": status, "error_code": expected})
+                self.assertFalse(result["delivered"])
+                self.assertNotIn("PRIVATE", json.dumps(result))
+                self.assertNotIn("untrusted-secret-code", json.dumps(result))
+                self.assertEqual(event.call_args.args[3]["diagnostic"], result["diagnostic"])
+                self.assertTrue(exc.fp.closed)
+
+    def test_unreadable_notification_diagnostic_remains_unknown(self):
+        exc = bridge.error.HTTPError("http://controller", 409, "Failure", {}, io.BytesIO())
+        with (patch.object(exc, "read", side_effect=OSError("PRIVATE")),
+              patch.object(bridge.request, "urlopen", side_effect=exc),
+              patch.object(bridge, "journal_controller_event"),
+              patch.object(bridge, "note_session_activity")):
+            result = bridge.notify_controller(self.item, "lease")
+        self.assertEqual(result["diagnostic"], {"http_status": 409, "error_code": None})
+        self.assertNotIn("PRIVATE", json.dumps(result))
+
 
 class UnitaryOperationValidationTest(
     unittest.TestCase,

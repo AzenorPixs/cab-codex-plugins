@@ -1,0 +1,28 @@
+✔ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (5362.621262ms)
+✔ maintenance gelée : pair actif et ancienne session DENY, aucune relance avant frontière (3860.277552ms)
+✔ maintenance gelée : reprise de la même transaction après arrêt simulé au reçu (4135.449297ms)
+✔ maintenance gelée : échec du chargement et retour conservatoire au contrôleur original (4046.665441ms)
+✔ maintenance gelée : refus cumulatifs sans arrêt ni modification du job (3848.509991ms)
+✔ maintenance gelée : paquet altéré après reçu refusé avant arrêt (3819.104941ms)
+✔ maintenance gelée : reçu privé altéré refusé à la reprise (3935.320222ms)
+✔ transition mixte : version Web non qualifiée refusée sans arrêt (3388.422014ms)
+✔ transition mixte : Web initialement inactif reste inactif (4144.96084ms)
+▶ maintenance gelée : interruptions à chaque frontière et reprise sans nouvel effet métier
+  ✔ PREPARED (4252.485165ms)
+  ✔ STOPPING (4117.562002ms)
+  ✔ STOPPED (4149.499113ms)
+  ✔ INSTALLED (4085.386385ms)
+  ✔ RESTARTED (4137.551052ms)
+  ✔ ADOPTED (4227.028926ms)
+  ✔ VERIFIED (4212.108697ms)
+  ✔ COMPLETED (4141.06342ms)
+✔ maintenance gelée : interruptions à chaque frontière et reprise sans nouvel effet métier (33323.951393ms)
+✔ maintenance gelée : preuve expirée ne permet aucun arrêt (3823.795105ms)
+ℹ tests 19
+ℹ suites 0
+ℹ pass 19
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 73766.589412

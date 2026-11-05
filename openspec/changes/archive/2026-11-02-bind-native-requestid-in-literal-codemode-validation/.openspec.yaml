@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Corréler les wrappers OpenCode V2 directs qui injectent le requestId par
+  variable, sans évaluer le code ni élargir les appels admis.

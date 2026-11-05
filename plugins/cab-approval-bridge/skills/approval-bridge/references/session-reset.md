@@ -33,7 +33,9 @@ crée ni permission ni remédiation des composants observés.
    ni lancer directement le broker ; ne pas fermer ou redémarrer OpenCode.
 4. Résoudre les espaces d'état réellement utilisés. Le broker utilise par
    défaut `<home OpenCode>/.opencode/state/cgpt-approval-bridge/` ; contrôleur et
-   superviseur utilisent `<racine projet>/.opencode/state/cgpt-approval-bridge/`.
+   superviseur utilisent le `runtimeStateDirectory` privé exposé par `/status`,
+   hors projet depuis2.2.40. Le répertoire historique de projet ne fait plus
+   autorité après migration et ne doit pas servir de repli.
    Tenir compte des chemins personnalisés déclarés sans lire de secret ni
    d'environnement complet. Ne pas déduire le home du broker du home Codex.
    Un chemin personnalisé hors des espaces couverts interdit d'annoncer une
@@ -47,7 +49,7 @@ crée ni permission ni remédiation des composants observés.
    Exemple, à adapter aux chemins réellement observés :
 
    ```text
-   <python absolu> <plugin>/scripts/cgpt-approval-bridge-reset.py --confirm-new-session --state-dir <home OpenCode>/.opencode/state/cgpt-approval-bridge --state-dir <projet>/.opencode/state/cgpt-approval-bridge
+   <python absolu> <plugin>/scripts/cgpt-approval-bridge-reset.py --confirm-new-session --state-dir <home OpenCode>/.opencode/state/cgpt-approval-bridge --state-dir <runtimeStateDirectory observé>
    ```
 
 6. Exiger `CAB_STATE_RESET`, un code zéro et l'absence d'ancien contenu dans

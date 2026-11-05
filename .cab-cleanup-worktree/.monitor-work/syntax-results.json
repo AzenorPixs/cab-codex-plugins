@@ -1,0 +1,33 @@
+{
+  "checked": 28,
+  "files": [
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-healthcheck.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-import-observations.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-sse-client.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-prompts.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-registry-lock.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-reset.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor-context.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-supervisor.mjs",
+    "src/cgpt_approval_bridge_journal.py",
+    "src/cgpt_approval_bridge_router.py",
+    "src/cgpt_approval_bridge_server.py",
+    "tests/concurrent-controller.test.mjs",
+    "tests/controller-service-distribution.test.mjs",
+    "tests/native-opencode.test.mjs",
+    "tests/test_crash_recovery.py",
+    "tests/test_session_reset.py",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs",
+    "plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs",
+    "plugins/cab-approval-bridge/web-monitor/app.mjs",
+    "tests/web-monitor-browser.mjs",
+    "tests/web-monitor.test.mjs"
+  ]
+}

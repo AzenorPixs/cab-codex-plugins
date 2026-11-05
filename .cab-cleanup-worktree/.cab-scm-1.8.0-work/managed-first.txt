@@ -1,0 +1,98 @@
+✔ tests/approval-metadata.test.mjs (36.03621ms)
+✖ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (6299.661169ms)
+✖ release gérée : processus original lié → nouvelle release → once/complete sans toucher à l’ancienne (3368.104868ms)
+✔ release gérée : lien absolu hors namespace refusé avant arrêt (3446.266303ms)
+✖ release gérée : rollback du seul pointeur, ancienne release conservée (3425.837018ms)
+ℹ tests 5
+ℹ suites 0
+ℹ pass 2
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 16600.226933
+
+✖ failing tests:
+
+test at tests/maintenance-bootstrap.test.mjs:250:1
+✖ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (6299.661169ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+    {
+  +   'cgpt-approval-bridge-controller.mjs': 'ef1bcbd280102598853f0b383b05e570685cabc6f2a55f8e73c538153ce08f19',
+  +   'cgpt-approval-bridge-job-context.mjs': '07db6fb1fb567feb741caba568bb83966c2f8355a3bbe3b67fec9cd464298a28',
+  +   'cgpt-approval-bridge-maintenance-proof.mjs': '6e11130f5c41ebcb18ce0fce5dac3dd33fd87c3d0a9600df980a76db61c432ea',
+  +   'cgpt-approval-bridge-monitor-events.mjs': '71f100007847d7820a22a781c1a04a981b23740149f0bb46852c75319d4b0856',
+  +   'cgpt-approval-bridge-monitor-management.mjs': '613f78d7745b19631fc29aed0289ac6bad978cbeb51117e16a2471c5d3afcae4',
+  +   'cgpt-approval-bridge-observation-statistics.mjs': 'f0c80f79eb1605dac33c0efd941314f77ddeb12e5093cfa8e8fa5f64790058be',
+  +   'cgpt-approval-bridge-registry-lock.py': 'fb5feb4fa3793b5f325bc5929f27c066e37359f9cd8c25249b4bc8f50f24d3c5',
+  +   'cgpt-approval-bridge-resource-coordination.mjs': '69b250bb6f90ebbdbbee30451d99ba8bc37599044bed327c8255086894d143ea',
+  +   'cgpt-approval-bridge-run-steps.mjs': 'f68a0c9c82120aac0daa32e225d55a32af57f3a6e07220bfbe209dddfa46894f',
+  +   'cgpt-approval-bridge-runs.mjs': '3aa22078856e4ab93f4363d2d9fcfc8f3e3e91b3e1c64c684276673761032675',
+  +   'cgpt-approval-bridge-statistics-maintenance.mjs': '7f7c3b88c89a9dc07c169d657cc24dc2a1f85b0a358e2324022ae785dda7101c',
+  +   'cgpt-approval-bridge-statistics.mjs': 'd2c2f802bf39e97cc08db353dc34494de2321b0b447af46498017404aa5cc821'
+  -   'cgpt-approval-bridge-controller.mjs': '3cfb31247836605ea0f04fec4d4ff449c0fc34e8c5b5ee97382d379bfb40913b',
+  -   'cgpt-approval-bridge-job-context.mjs': '3c318df48a39e0ff3acc7321027496c3a78e601369de6bc92f1ba8d111c49920',
+  -   'cgpt-approval-bridge-monitor-events.mjs': 'f545af15b481a98f5522a7bdb78501aa1ee05720ff6d8df2359f2942a0a635af',
+  -   'cgpt-approval-bridge-monitor-management.mjs': 'f849e7875e1817c4a59296f1d9dcc8b191ec24c6853b155da3a06bee885bf5d4',
+  -   'cgpt-approval-bridge-observation-statistics.mjs': 'f7077d2cbdbef58d7f12b665c0edd3c0038044b8ffc265959fdb2b61b18465fd',
+  -   'cgpt-approval-bridge-registry-lock.py': 'cda6118fda68ac53fde4f18ef0f3dfc3903e683b25710d23dddfb3b7430449dd',
+  -   'cgpt-approval-bridge-resource-coordination.mjs': '4d5acbac8c62d3e271b17a8b42e187711f858a4370ef2218fed04c0cff183c5b',
+  -   'cgpt-approval-bridge-run-steps.mjs': 'b0c8a18f324aca9730af54d3579689b29cdca6c85eb15a17761bef04b066e498',
+  -   'cgpt-approval-bridge-runs.mjs': '990257b31f5d33690a76b2f52a6c6a99348a2fcd3d83e93b9ac8afa49a49a29a',
+  -   'cgpt-approval-bridge-statistics-maintenance.mjs': '458ae4cba0c17b7af4f2d91c6fc15811955666d6ee01ef907b2f0b786548d920',
+  -   'cgpt-approval-bridge-statistics.mjs': 'd33979159355345bf626697d58095fb84334ccd55ffb4dcdfc26f98272650eba'
+    }
+  
+      at TestContext.transitionAndRecovery (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:246:12)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: { 'cgpt-approval-bridge-controller.mjs': 'ef1bcbd280102598853f0b383b05e570685cabc6f2a55f8e73c538153ce08f19', 'cgpt-approval-bridge-job-context.mjs': '07db6fb1fb567feb741caba568bb83966c2f8355a3bbe3b67fec9cd464298a28', 'cgpt-approval-bridge-maintenance-proof.mjs': '6e11130f5c41ebcb18ce0fce5dac3dd33fd87c3d0a9600df980a76db61c432ea', 'cgpt-approval-bridge-monitor-events.mjs': '71f100007847d7820a22a781c1a04a981b23740149f0bb46852c75319d4b0856', 'cgpt-approval-bridge-monitor-management.mjs': '613f78d7745b19631fc29aed0289ac6bad978cbeb51117e16a2471c5d3afcae4', 'cgpt-approval-bridge-observation-statistics.mjs': 'f0c80f79eb1605dac33c0efd941314f77ddeb12e5093cfa8e8fa5f64790058be', 'cgpt-approval-bridge-registry-lock.py': 'fb5feb4fa3793b5f325bc5929f27c066e37359f9cd8c25249b4bc8f50f24d3c5', 'cgpt-approval-bridge-resource-coordination.mjs': '69b250bb6f90ebbdbbee30451d99ba8bc37599044bed327c8255086894d143ea', 'cgpt-approval-bridge-run-steps.mjs': 'f68a0c9c82120aac0daa32e225d55a32af57f3a6e07220bfbe209dddfa46894f', 'cgpt-approval-bridge-runs.mjs': '3aa22078856e4ab93f4363d2d9fcfc8f3e3e91b3e1c64c684276673761032675', 'cgpt-approval-bridge-statistics-maintenance.mjs': '7f7c3b88c89a9dc07c169d657cc24dc2a1f85b0a358e2324022ae785dda7101c', 'cgpt-approval-bridge-statistics.mjs': 'd2c2f802bf39e97cc08db353dc34494de2321b0b447af46498017404aa5cc821' },
+    expected: { 'cgpt-approval-bridge-controller.mjs': '3cfb31247836605ea0f04fec4d4ff449c0fc34e8c5b5ee97382d379bfb40913b', 'cgpt-approval-bridge-job-context.mjs': '3c318df48a39e0ff3acc7321027496c3a78e601369de6bc92f1ba8d111c49920', 'cgpt-approval-bridge-monitor-events.mjs': 'f545af15b481a98f5522a7bdb78501aa1ee05720ff6d8df2359f2942a0a635af', 'cgpt-approval-bridge-monitor-management.mjs': 'f849e7875e1817c4a59296f1d9dcc8b191ec24c6853b155da3a06bee885bf5d4', 'cgpt-approval-bridge-observation-statistics.mjs': 'f7077d2cbdbef58d7f12b665c0edd3c0038044b8ffc265959fdb2b61b18465fd', 'cgpt-approval-bridge-registry-lock.py': 'cda6118fda68ac53fde4f18ef0f3dfc3903e683b25710d23dddfb3b7430449dd', 'cgpt-approval-bridge-resource-coordination.mjs': '4d5acbac8c62d3e271b17a8b42e187711f858a4370ef2218fed04c0cff183c5b', 'cgpt-approval-bridge-run-steps.mjs': 'b0c8a18f324aca9730af54d3579689b29cdca6c85eb15a17761bef04b066e498', 'cgpt-approval-bridge-runs.mjs': '990257b31f5d33690a76b2f52a6c6a99348a2fcd3d83e93b9ac8afa49a49a29a', 'cgpt-approval-bridge-statistics-maintenance.mjs': '458ae4cba0c17b7af4f2d91c6fc15811955666d6ee01ef907b2f0b786548d920', 'cgpt-approval-bridge-statistics.mjs': 'd33979159355345bf626697d58095fb84334ccd55ffb4dcdfc26f98272650eba' },
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+test at tests/maintenance-bootstrap.test.mjs:253:1
+✖ release gérée : processus original lié → nouvelle release → once/complete sans toucher à l’ancienne (3368.104868ms)
+  Error: maintenance-managed-owner-divergent
+      at maintenanceError (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:14:57)
+      at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:15:32)
+      at inspectControllerInstallation (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:91:57)
+      at async maintainFrozenController (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs:642:28)
+      at async transitionAndRecovery (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:187:18)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    code: 'maintenance-managed-owner-divergent',
+    status: 409
+  }
+
+test at tests/maintenance-bootstrap.test.mjs:410:1
+✖ release gérée : rollback du seul pointeur, ancienne release conservée (3425.837018ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /fixture managed install failure/. Input:
+  
+  'Error: maintenance-managed-owner-divergent'
+  
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:413:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: maintenance-managed-owner-divergent
+        at maintenanceError (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:14:57)
+        at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:15:32)
+        at inspectControllerInstallation (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:91:57)
+        at async maintainFrozenController (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs:642:28)
+        at async waitForActual (node:assert:646:5)
+        at async strict.rejects (node:assert:769:25)
+        at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:413:5)
+        at async Test.run (node:internal/test_runner/test:1409:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:974:7),
+    expected: /fixture managed install failure/,
+    operator: 'rejects',
+    diff: 'simple'
+  }

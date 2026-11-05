@@ -1,0 +1,9 @@
+# Conception
+
+La commande MCP est émise au plus une fois par transition, puis seuls des GET observent pending jusqu’au budget waitMs existant. Une erreur de transport après émission reste un effet technique incertain, pas un motif de réémission. Aucun délai ni body cap relevé. Un état final incompatible ou needs_auth conserve une erreur explicite.
+
+MCP_RECOVERY_REQUIRED stocke phase d’origine et observation, sans nouveau journal ni restauration métier. L’installation complète peut se terminer dans ce reçu après versions/readiness vérifiées. Une préparation intacte peut reprendre son staging ; une coupure avant installation ou un ancienROLLBACK_FAILED exige le repli du même reçu, puis retour terminal sans ouvrir une autre installation implicitement.
+
+--recover-mcp lie l’autorisation au reçu nonterminal exact et signifie rechargement global des locations (permissions/formulaires en attente annulés), pas arrêt du processus. Vérifier frontière native inactive et permissions du raccord partagé absentes ; l’opérateur coordonne les autres locations. Capturer PID/version/location et empreinte des IDs globaux des sessions, sans contenu. Sauver l’intention AVANT POST /api/location/reload. Une intention déjà présente n’est jamais rejouée ; une réponse inconnue peut seulement être réconciliée en lecture. Vérifier mêmePID et sessions après reconstruction avant toute réussite. Aucun reset de permissions, changement de modèle/compte ou annulation de demande CAB.
+
+Tests : pending transitoire/persistant, timeout connect/disconnect, absence de retry/globalreload implicite, mauvais reçu/profil/busy/permission, réponse perdue, crash après intention, changement de PID/sessions, reprise sans rechargement après retour autonome, anciennes récupérations et garde de versions. Native2.2.0 privé : connexion retardée, contrôle pending et rechargement sans arrêt avec sessions conservées.

@@ -1,4 +1,4 @@
-# Proposal
+# SUP02 — Proposal
 
 ## Why
 Le contrôleur interdit tout remplacement de session, y compris après une récupération sûre d'un écart sans effet. Le RUN CISMP Pixs a atteint ce refus malgré un nouveau prévol réussi. La corrélation stricte peut aussi perdre son verrou quand la session diverge.

@@ -130,6 +130,7 @@ openspec/**
 !openspec/specs/
 !openspec/specs/**
 !openspec/AGENTS.md
+!openspec/BATCH_CODES.md
 !openspec/config.yaml
 
 # ----------------------------------------------------------
@@ -199,3 +200,7 @@ id_rsa
 id_ed25519
 secrets.json
 secrets.yaml
+variables.sh
+
+# Verrou, journal et preuves temporaires SGS (jamais versionnés)
+/.STATISTICS.*

@@ -17,10 +17,11 @@ test('PLLM automatique choisit medium même lorsque le modèle expose high et xh
  const selected=choose(); assert.equal(selected.providerID,'provider1');assert.equal(selected.modelID,'model1');
  assert.equal(selected.reasoning,'medium');assert.equal(selected.mode,'mode1');assert.equal(selected.source,'pllm-automatic');
 });
-test('medium absent ou désactivé examine la politique PLLM suivante',()=>{
+test('medium absent ou désactivé choisit high sur la même candidate',()=>{
  const p=providers();p.all[0].models.model1.variants.medium.disabled=true;
- assert.equal(choose({providers:p}).mode,'mode2');
- delete p.all[0].models.model1.variants.medium;assert.equal(choose({providers:p}).mode,'mode2');
+ assert.equal(choose({providers:p}).mode,'mode1');assert.equal(choose({providers:p}).reasoning,'high');
+ delete p.all[0].models.model1.variants.medium;assert.equal(choose({providers:p}).reasoning,'high');
+ p.all[0].models.model1.variants.high.disabled=true;assert.equal(choose({providers:p}).mode,'mode2');
 });
 test('medium absent impose la priorité PLLM suivante',()=>{
  const p=providers();p.all[0].models.model1.variants={low:{}};
@@ -78,11 +79,12 @@ function unavailableProof(reasoning='medium',statusCode=400,param='reasoning_eff
  response:{info:{role:'assistant',id:'msg_error',sessionID:'ses_probe',parentID:'msg_user',providerID:'provider1',modelID:'model1',
  time:{completed:now-10},error:{name:'APIError',data:{statusCode,responseBody:JSON.stringify({error:{code:'unsupported_value',param,message:'diagnostic privé fictif'}})}}},parts:[]}};
 }
-test('une incompatibilité native prouvée de medium permet la politique suivante sans corps brut',()=>{
+test('une incompatibilité native prouvée de medium permet high avant la politique suivante sans corps brut',()=>{
  const medium=reasoningUnavailability(unavailableProof());
- const next=choose({unavailable:[medium]});assert.equal(next.mode,'mode2');
+ const next=choose({unavailable:[medium]});assert.equal(next.mode,'mode1');assert.equal(next.reasoning,'high');
  assert.equal(JSON.stringify(next).includes('diagnostic privé fictif'),false);
- assert.throws(()=>choose({model:'provider1/model1',unavailable:[medium]}),/explicit-model-unavailable/);
+ assert.equal(choose({model:'provider1/model1',unavailable:[medium]}).reasoning,'high');
+ assert.throws(()=>choose({model:'provider1/model1',reasoning:'medium',unavailable:[medium]}),/explicit-model-unavailable/);
 });
 test('authentification, quotas, paramètre étranger et ancien échec ne prouvent pas une incompatibilité',()=>{
  for(const status of [401,403,429,500])assert.throws(()=>reasoningUnavailability(unavailableProof('medium',status)),/model-unavailability-not-proved/);
@@ -162,8 +164,56 @@ test('prévol natif : contradictions, champs invalides, absence parent, troncatu
 test('indisponibilité native imbriquée de medium et refus des variantes contradictoires',()=>{
  const {c,p}=goFixtures();const input=unavailableProof();input.parent.info.model={providerID:'opencode-go',modelID:'model1',variant:'medium'};delete input.parent.info.variant;
  input.response.info.providerID='opencode-go';input.response.info.variant='medium';const medium=reasoningUnavailability(input);
- assert.equal(choose({catalog:c,providers:p,unavailable:[medium]}).mode,'mode2');
+ assert.equal(choose({catalog:c,providers:p,unavailable:[medium]}).reasoning,'high');
  for(const change of [q=>q.parent.info.variant='low',q=>q.response.info.variant='low',q=>delete q.parent.info.model.variant]){
   const q=structuredClone(input);change(q);assert.throws(()=>reasoningUnavailability(q),/model-unavailability-not-proved/);
  }
+});
+
+
+function catalog3() {
+ const c=catalog();c.schema_version=3;c.models.push({...c.models[5],mode:'mode7',priority:7,provider:'provider7',model_id:'model7',selected:false});return c;
+}
+function providers7() {
+ const p=providers();p.connected.push('provider7');p.all.push({id:'provider7',models:{model7:{variants:{medium:{}}}}});return p;
+}
+test('formats stricts 2/6 et 3/7 : préparation sans mutation et sélection de mode7',t=>{
+ const root=mkdtempSync(join(tmpdir(),'cab-catalog3-'));t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'data'));
+ const path=join(root,'data/pllm-current.json');
+ for(const c of [catalog(),catalog3()]) {
+  const source=JSON.stringify(c);writeFileSync(path,source);
+  assert.equal(prepareControllerModelPolicy({activeSkillRoot:root,now}).catalogPath,path);
+  assert.deepEqual(readModelCatalog({OC_Codex_PLLM_CATALOG:path}),c);
+  assert.equal(choose({catalog:c,providers:providers7()}).mode,'mode1');
+ }
+ const c=catalog3(),p=providers7();for(const row of p.all.slice(0,6))for(const model of Object.values(row.models))model.variants={low:{}};
+ const selected=choose({catalog:c,providers:p});assert.equal(selected.mode,'mode7');assert.equal(selected.priority,7);assert.equal(selected.reasoning,'medium');
+ const verified=verifyModelPreflight(selected,nativeProof(selected));assert.equal(validCodingModel(verified),true);assert.equal(validCodingModel({...verified,priority:8,mode:'mode8'}),false);
+});
+test('schémas et cardinalités incohérents, priorités dupliquées et modes ambigus restent refusés',()=>{
+ for(const c of [{...catalog(),schema_version:3}, {...catalog3(),schema_version:2}, {...catalog3(),schema_version:4}, {...catalog(),schema_version:'2'}, {...catalog3(),schema_version:null}])
+  assert.throws(()=>choose({catalog:c,providers:providers7()}),/pllm-catalog-invalid/);
+ for(const change of [c=>c.models[6].priority=6,c=>c.models[6].mode='mode6',c=>c.models[6].priority=8,c=>c.models[6].priority=0]){
+  const c=catalog3();change(c);assert.throws(()=>choose({catalog:c,providers:providers7()}),/pllm-catalog-invalid/);
+ }
+});
+test('format 3/7 : dates, sélection unique et preuve courante restent exigées',()=>{
+ for(const change of [c=>c.published_at=new Date(now+1000).toISOString(),c=>c.evaluated_at='invalid',c=>c.models[1].selected=true,c=>c.models[0].evaluated_this_run=false,c=>c.models[0].state='Invalide']){
+  const c=catalog3();change(c);assert.throws(()=>choose({catalog:c,providers:providers7()}),/pllm-catalog-invalid/);
+ }
+ const c=catalog3();c.models[0].evaluated_this_run=false;c.models[0].selected=false;c.models[6].selected=true;c.selected_mode='mode7';
+ assert.equal(choose({catalog:c,providers:providers7()}).mode,'mode2');
+});
+
+test('transition explicite libre : un niveau natif hors medium/high reste sélectionnable sans catalogue',()=>{
+ const providers={connected:['other'],all:[{id:'other',models:{model:{variants:{low:{}}}}}]};
+ assert.throws(()=>selectCodingModel({providers,model:'other/model'}),{code:'explicit-model-unavailable'});
+ const selected=selectCodingModel({providers,model:'other/model',explicitUnrestricted:true});
+ assert.equal(selected.reasoning,'low');assert.equal(selected.source,'prompt');assert.equal(selected.catalogDigest,null);
+});
+
+test('contexte Responses chiffré lié au compte : jamais une preuve d’indisponibilité de medium',()=>{
+ const proof=unavailableProof('medium',400);
+ proof.response.info.error.data.responseBody=JSON.stringify({error:{code:'invalid_request_error',param:null,message:'reasoning encrypted_content was not issued to this caller'}});
+ assert.throws(()=>reasoningUnavailability(proof),{code:'model-unavailability-not-proved'});
 });

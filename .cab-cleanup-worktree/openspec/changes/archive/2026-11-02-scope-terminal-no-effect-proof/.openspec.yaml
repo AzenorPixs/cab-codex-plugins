@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Ignorer les événements durables strictement postérieurs au watermark
+  terminal conservé sans accepter d’événement ambigu à la frontière.

@@ -1,3 +1,5 @@
+# SPE03 — Réconcilier les deltas OpenSpec CAB actifs
+
 ## Why
 
 L'ACSM du 2026-10-13 relève deux changes actifs dont les exigences ADDED

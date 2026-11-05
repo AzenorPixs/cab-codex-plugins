@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-10-27
+goal: Make CABU lead the forced CAB 1.10.9 update, restart all three systemd
+  services after replacing all four component files, and report broker runtime
+  as unavailable rather than blocking when OpenCode is absent.

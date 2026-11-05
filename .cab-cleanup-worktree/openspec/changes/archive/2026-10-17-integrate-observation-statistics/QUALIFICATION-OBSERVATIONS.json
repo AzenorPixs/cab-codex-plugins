@@ -1,0 +1,315 @@
+{
+  "version": "1.3.0",
+  "offline": true,
+  "datasetId": "audit-17178822d83f1240a6acfb0dc315b6d3",
+  "sha256": "b6027c03c165e26c2d2484275ea9e254b8b6348d3930244404a63ea36860f8b0",
+  "firstReceipt": "imported",
+  "repeatedReceipt": "already-imported",
+  "intervals": 1502,
+  "events": 127,
+  "contexts": 49,
+  "quota": 2,
+  "evidence": 1,
+  "windows": {
+    "current": {
+      "start": 1792091156902,
+      "end": 1792133436388,
+      "contexts": 2,
+      "categories": {
+        "reservation": {
+          "monoMs": 35760902,
+          "multiMs": 5395127,
+          "zeroMs": 0,
+          "unknownMs": 1123457,
+          "exactlyTwoMs": 5395127,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": 6.628370750123213,
+          "monoShare": 0.868910409213678,
+          "multiShare": 0.13108959078632199,
+          "coverage": 0.9734278463082545
+        },
+        "changes": {
+          "monoMs": 35760902,
+          "multiMs": 5395127,
+          "zeroMs": 0,
+          "unknownMs": 1123457,
+          "exactlyTwoMs": 5395127,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": 6.628370750123213,
+          "monoShare": 0.868910409213678,
+          "multiShare": 0.13108959078632199,
+          "coverage": 0.9734278463082545
+        },
+        "native": {
+          "monoMs": 2695063,
+          "multiMs": 530008,
+          "zeroMs": 37885950,
+          "unknownMs": 1168465,
+          "exactlyTwoMs": 530008,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": 5.084947774373217,
+          "monoShare": 0.8356600521352863,
+          "multiShare": 0.16433994786471368,
+          "coverage": 0.9723633111339149
+        },
+        "nativeChanges": {
+          "monoMs": 2695063,
+          "multiMs": 530008,
+          "zeroMs": 37885950,
+          "unknownMs": 1168465,
+          "exactlyTwoMs": 530008,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": 5.084947774373217,
+          "monoShare": 0.8356600521352863,
+          "multiShare": 0.16433994786471368,
+          "coverage": 0.9723633111339149
+        }
+      }
+    },
+    "last": {
+      "start": 1792125111199,
+      "end": 1792132101354,
+      "contexts": 1,
+      "categories": {
+        "reservation": {
+          "monoMs": 6990155,
+          "multiMs": 0,
+          "zeroMs": 0,
+          "unknownMs": 0,
+          "exactlyTwoMs": 0,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": null,
+          "monoShare": 1,
+          "multiShare": 0,
+          "coverage": 1
+        },
+        "changes": {
+          "monoMs": 6990155,
+          "multiMs": 0,
+          "zeroMs": 0,
+          "unknownMs": 0,
+          "exactlyTwoMs": 0,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": null,
+          "monoShare": 1,
+          "multiShare": 0,
+          "coverage": 1
+        },
+        "native": {
+          "monoMs": 1240027,
+          "multiMs": 0,
+          "zeroMs": 5750128,
+          "unknownMs": 0,
+          "exactlyTwoMs": 0,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": null,
+          "monoShare": 1,
+          "multiShare": 0,
+          "coverage": 1
+        },
+        "nativeChanges": {
+          "monoMs": 1240027,
+          "multiMs": 0,
+          "zeroMs": 5750128,
+          "unknownMs": 0,
+          "exactlyTwoMs": 0,
+          "threeOrMoreMs": 0,
+          "ratioMonoMulti": null,
+          "monoShare": 1,
+          "multiShare": 0,
+          "coverage": 1
+        }
+      }
+    },
+    "24h": {
+      "start": 1792047036388,
+      "end": 1792133436388,
+      "contexts": 49,
+      "categories": {
+        "reservation": {
+          "monoMs": 0,
+          "multiMs": 41156029,
+          "zeroMs": 44045511,
+          "unknownMs": 1198460,
+          "exactlyTwoMs": 34200876,
+          "threeOrMoreMs": 6955153,
+          "ratioMonoMulti": 0,
+          "monoShare": 0,
+          "multiShare": 1,
+          "coverage": 0.9861289351851852
+        },
+        "changes": {
+          "monoMs": 1375027,
+          "multiMs": 39781002,
+          "zeroMs": 44045511,
+          "unknownMs": 1198460,
+          "exactlyTwoMs": 35720909,
+          "threeOrMoreMs": 4060093,
+          "ratioMonoMulti": 0.03456491618788285,
+          "monoShare": 0.03341009891892145,
+          "multiShare": 0.9665899010810786,
+          "coverage": 0.9861289351851852
+        },
+        "native": {
+          "monoMs": 3805092,
+          "multiMs": 1250019,
+          "zeroMs": 80101421,
+          "unknownMs": 1243468,
+          "exactlyTwoMs": 1160015,
+          "threeOrMoreMs": 90004,
+          "ratioMonoMulti": 3.044027330784572,
+          "monoShare": 0.7527217503235833,
+          "multiShare": 0.2472782496764166,
+          "coverage": 0.9856080092592593
+        },
+        "nativeChanges": {
+          "monoMs": 3500081,
+          "multiMs": 905014,
+          "zeroMs": 80751437,
+          "unknownMs": 1243468,
+          "exactlyTwoMs": 845011,
+          "threeOrMoreMs": 60003,
+          "ratioMonoMulti": 3.867432989986895,
+          "monoShare": 0.7945528984051422,
+          "multiShare": 0.20544710159485777,
+          "coverage": 0.9856080092592593
+        }
+      }
+    },
+    "7d": {
+      "start": 1791528636388,
+      "end": 1792133436388,
+      "contexts": 49,
+      "categories": {
+        "reservation": {
+          "monoMs": 14630376,
+          "multiMs": 64783188,
+          "zeroMs": 90842335,
+          "unknownMs": 434544101,
+          "exactlyTwoMs": 53542927,
+          "threeOrMoreMs": 11240261,
+          "ratioMonoMulti": 0.2258359993027821,
+          "monoShare": 0.18423019019773498,
+          "multiShare": 0.815769809802265,
+          "coverage": 0.281507769510582
+        },
+        "changes": {
+          "monoMs": 31342353,
+          "multiMs": 42996090,
+          "zeroMs": 95917456,
+          "unknownMs": 434544101,
+          "exactlyTwoMs": 38935997,
+          "threeOrMoreMs": 4060093,
+          "ratioMonoMulti": 0.7289582145725344,
+          "monoShare": 0.4216170225679868,
+          "multiShare": 0.5783829774320132,
+          "coverage": 0.281507769510582
+        },
+        "native": {
+          "monoMs": 15160377,
+          "multiMs": 2105041,
+          "zeroMs": 152945473,
+          "unknownMs": 434589109,
+          "exactlyTwoMs": 2000037,
+          "threeOrMoreMs": 105004,
+          "ratioMonoMulti": 7.201939059619266,
+          "monoShare": 0.8780776115585501,
+          "multiShare": 0.12192238844144984,
+          "coverage": 0.281433351521164
+        },
+        "nativeChanges": {
+          "monoMs": 11800285,
+          "multiMs": 1175022,
+          "zeroMs": 157235584,
+          "unknownMs": 434589109,
+          "exactlyTwoMs": 1115019,
+          "threeOrMoreMs": 60003,
+          "ratioMonoMulti": 10.042607712876865,
+          "monoShare": 0.9094416802623629,
+          "multiShare": 0.09055831973763703,
+          "coverage": 0.281433351521164
+        }
+      }
+    },
+    "30d": {
+      "start": 1789541436388,
+      "end": 1792133436388,
+      "contexts": 49,
+      "categories": {
+        "reservation": {
+          "monoMs": 14630376,
+          "multiMs": 64783188,
+          "zeroMs": 90842335,
+          "unknownMs": 2421744101,
+          "exactlyTwoMs": 53542927,
+          "threeOrMoreMs": 11240261,
+          "ratioMonoMulti": 0.2258359993027821,
+          "monoShare": 0.18423019019773498,
+          "multiShare": 0.815769809802265,
+          "coverage": 0.0656851462191358
+        },
+        "changes": {
+          "monoMs": 31342353,
+          "multiMs": 42996090,
+          "zeroMs": 95917456,
+          "unknownMs": 2421744101,
+          "exactlyTwoMs": 38935997,
+          "threeOrMoreMs": 4060093,
+          "ratioMonoMulti": 0.7289582145725344,
+          "monoShare": 0.4216170225679868,
+          "multiShare": 0.5783829774320132,
+          "coverage": 0.0656851462191358
+        },
+        "native": {
+          "monoMs": 15160377,
+          "multiMs": 2105041,
+          "zeroMs": 152945473,
+          "unknownMs": 2421789109,
+          "exactlyTwoMs": 2000037,
+          "threeOrMoreMs": 105004,
+          "ratioMonoMulti": 7.201939059619266,
+          "monoShare": 0.8780776115585501,
+          "multiShare": 0.12192238844144984,
+          "coverage": 0.06566778202160493
+        },
+        "nativeChanges": {
+          "monoMs": 11800285,
+          "multiMs": 1175022,
+          "zeroMs": 157235584,
+          "unknownMs": 2421789109,
+          "exactlyTwoMs": 1115019,
+          "threeOrMoreMs": 60003,
+          "ratioMonoMulti": 10.042607712876865,
+          "monoShare": 0.9094416802623629,
+          "multiShare": 0.09055831973763703,
+          "coverage": 0.06566778202160493
+        }
+      }
+    }
+  },
+  "comparison": {
+    "start": "2026-10-13T19:17:05.197010+00:00",
+    "end": "2026-10-16T05:00:00+02:00",
+    "deltaSeconds": {
+      "reservationMonoSeconds": -0.0007876625058997888,
+      "reservationMultiSeconds": -1.063744514467544,
+      "reservationZeroSeconds": -0.00038794516876805574,
+      "reservationExactlyTwoSeconds": -1.06372253990412,
+      "reservationThreeOrMoreSeconds": -2.197456342400983e-05,
+      "changesMonoSeconds": -3.4361221542349085,
+      "changesMultiSeconds": 2.3701192245498532,
+      "changesZeroSeconds": 0.0010828075464814901,
+      "changesExactlyTwoSeconds": 2.3701192245498532,
+      "nativeMonoSeconds": -0.004331933974754065,
+      "nativeMultiSeconds": 0.0021831245422845313,
+      "nativeZeroSeconds": -1.062771312717814,
+      "nativeExactlyTwoSeconds": 0.0028473587036614845,
+      "nativeThreeOrMoreSeconds": -0.0006642341613769531,
+      "nativeChangesMonoSeconds": -0.004557865142487572,
+      "nativeChangesMultiSeconds": -0.0001636905670352462,
+      "nativeChangesZeroSeconds": -1.0601985664397944,
+      "nativeChangesExactlyTwoSeconds": -0.0001636905670352462
+    },
+    "policy": "bornes millisecondes, deux lectures connues et portée inchangée ; lacunes et bornes non prouvées restent inconnues"
+  }
+}

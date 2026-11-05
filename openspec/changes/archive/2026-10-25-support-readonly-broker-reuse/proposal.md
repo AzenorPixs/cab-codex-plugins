@@ -1,3 +1,5 @@
+# MAI06 — Réutiliser le broker externe en lecture seule
+
 ## Why
 
 Le broker peut être chargé depuis un jeu source déjà 1.9.0 sous un compte

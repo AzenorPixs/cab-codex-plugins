@@ -1,0 +1,6 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Accepter uniquement l’appel natif request_validation exact visible pendant
+  que son wrapper execute est encore running, sans laisser l’approbation ou
+  l’accès dépendre d’une validation globale; conserver toutes les protections de
+  refus, d’identité et de permission.

@@ -1,4 +1,4 @@
-# Supervision web locale CAB
+# OBS02 — Supervision web locale CAB
 
 ## Why
 

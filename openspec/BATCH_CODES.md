@@ -1,0 +1,530 @@
+# Registre des codes de lot — Codex Approval Bridge
+
+## Statistiques réutilisables SCM — 5 novembre 2026
+
+[add-reusable-project-statistics](changes/archive/2026-11-05-add-reusable-project-statistics/), code non attribué : ARCHIVÉ.
+Moteur Python, skill CAB, commande SGS et carte Statistiques du moniteur.
+Interface CLI/JSON agnostique des agents et orchestrateurs, avec QUERY sans
+mutation.185tests Python et1284tests Node réussis, Chromium/Firefox qualifiés ;
+177archives dans le global vérifié sous SGS1.19, contribution ajoutée une fois.
+Archivage et nettoyage du bilan réussis ; livraison SCM en cours.
+Aucune activation attestée. Voir QUALIFICATION.md du change.
+Attribution et normalisation définitive par ACL ultérieure.
+
+```mermaid
+flowchart LR
+    reusableStatistics["add-reusable-project-statistics<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class reusableStatistics provisional
+```
+
+## Effacement terminal SCM 2.2.40
+
+[purge-change-state-after-opencode-cleanup](changes/archive/2026-11-05-purge-change-state-after-opencode-cleanup/), code non attribué : source qualifiée, archivage SCM.
+1068 tests produit réussis ; purge ciblée après nettoyage OC, réancrage authentifié,
+pairs et protections conservés. Publication, CABU et reprise métier distincts ;
+voir QUALIFICATION.md et DELIVERY.md. Convergence ACL ultérieure.
+
+## Annulation Code Mode SCM 2.2.27
+
+[qualify-formatted-native-cancellation](changes/archive/2026-11-04-qualify-formatted-native-cancellation/), code non attribué : ARCHIVÉ, source2.2.27 qualifiée.
+Matcher lexical fermé et diagnostics sans effet ;769tests uniques finaux réussis.
+Identités, quiescence et autres protections conservées. Publication/activation
+et convergence native distinctes ; QUALIFICATION.md du change. ACL ultérieure.
+
+```mermaid
+flowchart LR
+    cancelFormatting["qualify-formatted-native-cancellation<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class cancelFormatting provisional
+```
+
+## Lectures et retrait SCM 2.2.26
+
+[recognize-native-reads-during-rejected-withdrawal](changes/archive/2026-11-04-recognize-native-reads-during-rejected-withdrawal/), code non attribué : ARCHIVÉ, source2.2.26 qualifiée.
+Read V2 sans mutation distingué des effets ;745tests uniques finaux réussis.
+Rejet/ACK/frontières et parent conservés. Publication/activation distinctes ;
+voir QUALIFICATION.md du change. Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    readObservation["recognize-native-reads-during-rejected-withdrawal<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class readObservation provisional
+```
+
+## Retrait edit attaché SCM 2.2.25
+
+[retire-rejected-attached-edit-with-cancelled-history](changes/archive/2026-11-04-retire-rejected-attached-edit-with-cancelled-history/), code non attribué : ARCHIVÉ, source2.2.25 qualifiée.
+Deux gardes ciblées, historique CANCELLED sans émission et retrait edit qualifié ;
+655tests uniques finaux réussis, parent et émission crossSID protégés.
+Publication/activation distinctes ; voir QUALIFICATION.md du change. ACL ultérieure.
+
+```mermaid
+flowchart LR
+    attachedEdit["retire-rejected-attached-edit-with-cancelled-history<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class attachedEdit provisional
+```
+
+## Réconciliation autonome SCM 2.2.24
+
+[document-autonomous-owner-reconciliation](changes/archive/2026-11-04-document-autonomous-owner-reconciliation/), code non attribué : ARCHIVÉ, source2.2.24 qualifiée.
+Reprise propriétaire, API versus appairage et portée du résumé BLOCKED ;
+615tests uniques réussis, moteurs inchangés hors version. Prévol C12 READY
+sous2.2.23 et préparation reprise ; publication/activation24 distinctes.
+Voir QUALIFICATION.md du change. Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    ownerRecovery["document-autonomous-owner-reconciliation<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class ownerRecovery provisional
+```
+
+## Accord permanent MCP SCM 2.2.23
+
+[document-standing-bounded-mcp-recovery](changes/archive/2026-11-04-document-standing-bounded-mcp-recovery/), code non attribué : ARCHIVÉ, source2.2.23 qualifiée.
+Politique bornée distribuée dans skills, plugin et commandes ;248tests uniques
+réussis, moteurs inchangés hors version. Publication/activation distinctes ;
+voir QUALIFICATION.md du change. Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    standingMcp["document-standing-bounded-mcp-recovery<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class standingMcp provisional
+```
+
+## Reprise des transitions SCM 2.2.22
+
+[clarify-transient-run-transition-retries](changes/archive/2026-11-04-clarify-transient-run-transition-retries/), code non attribué : ARCHIVÉ, source2.2.22 qualifiée.
+Routage de la course BUSY/STABLE et contrôle des identités entre unités ;
+622tests uniques finaux réussis, moteurs inchangés hors version.
+Publication/activation distinctes ; voir QUALIFICATION.md du change. Attribution par ACL ultérieure.
+
+```mermaid
+flowchart LR
+    transientRun["clarify-transient-run-transition-retries<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional fill:#fff3cd,stroke:#9a6700,stroke-dasharray:5 5
+    class transientRun provisional
+```
+
+## Assertion native SCM 2.2.18
+
+[recognize-literal-discovery-path-assertion](changes/archive/2026-11-04-recognize-literal-discovery-path-assertion/), code non attribué : ARCHIVÉ, source 2.2.18 qualifiée.
+Wrapper réel reconnu ; admission anticipée prouvée sur native isolée ;333 tests réussis. Livraison distincte.
+
+## Projection native SCM2.2.17
+
+[recognize-awaited-codemode-discovery](changes/archive/2026-11-04-recognize-awaited-codemode-discovery/), code non attribué : ARCHIVÉ, source 2.2.17 qualifiée.
+Projection anticipée prouvée sur OpenCode isolé ;332 tests uniques réussis. Livraison distincte.
+
+## Shell sans accès SCM 2.2.16
+
+[document-approved-shell-retirement](changes/archive/2026-11-03-document-approved-shell-retirement/), code non attribué : ARCHIVÉ, source2.2.16qualifiée.
+Composition conditionnelle documentée ;298cas uniques réussis. Livraison distincte.
+
+## Documentation de reprise SCM 2.2.15
+
+[document-approved-held-retirement](changes/archive/2026-11-03-document-approved-held-retirement/), code non attribué : ARCHIVÉ, source 2.2.15 qualifiée.
+Retrait autonome documenté, moteur conservé ;298cas uniques réussis.
+Procédure PA01 déjà confirmée sous2.2.14 ; livraison2.2.15distincte.
+
+## Garde de handoff SCM 2.2.14
+
+[guard-persisted-transitions-during-session-handoff](changes/archive/2026-11-03-guard-persisted-transitions-during-session-handoff/), code non attribué : ARCHIVÉ, source 2.2.14 qualifiée.
+Transitions persistées opposables ; 367 cas uniques réussis. Publication/activation distinctes.
+
+## Changement de session SCM 2.2.13
+
+[handoff-pilot-session-with-protected-history](changes/archive/2026-11-03-handoff-pilot-session-with-protected-history/), code non attribué : ARCHIVÉ, source 2.2.13 qualifiée.
+Même RUN/job/change/checkpoint ; 461 cas uniques réussis, historique protégé.
+Publication et activation distinctes.
+
+## Correctif SCM courant2.2.12
+
+[withdraw-rejected-unissued-native-edit](changes/archive/2026-11-03-withdraw-rejected-unissued-native-edit/), code non attribué :ARCHIVÉ, source2.2.12 qualifiée.
+Retrait borné après refus natif edit ;aucun SID ou lease modifié.
+266Node,94Python,1natif :361cas ;OpenSpec20/20puis19/19. Activation séparée.
+
+## Clarification documentaire authentification
+
+[clarify-authenticated-opencode-access](changes/archive/2026-11-03-clarify-authenticated-opencode-access/), code non attribué :ARCHIVÉ.
+GET401 sans authentification versus client local ;base2.2.11 inchangée.
+37tests etOpenSpec20/20puis19/19 ;publication/CABU séparés.
+
+## Cadrage SCM courant2.2.11
+
+[clarify-incident-triage-and-feedback](changes/archive/2026-11-03-clarify-incident-triage-and-feedback/), code non attribué :ARCHIVÉ, source2.2.11 qualifiée.
+Qualification/capitalisation canonique des faux positifs ;aucune garde modifiée.
+236Node et94Python :330cas ;OpenSpec20/20puis19/19. Activation séparée.
+
+## Correctif SCM courant2.2.10
+
+[journal-rejection-of-multipart-shell-permissions](changes/archive/2026-11-03-journal-rejection-of-multipart-shell-permissions/), code non attribué :ARCHIVÉ, source2.2.10 qualifiée.
+Rejet shell journalisé, garde once inchangée.236Node,94Python,1natif :331cas ;
+OpenSpec20/20puis19/19. Publication et activation attestées séparément.
+
+## Correctif SCM courant2.2.9
+
+[enforce-private-runtime-creation-modes](changes/archive/2026-11-03-enforce-private-runtime-creation-modes/), code non attribué :ARCHIVÉ, source2.2.9 qualifiée.
+Objet restauré conservé après renotification ;créations privées0600 et verrou
+projet0775.154Node,94Python,1natif :249cas qualifiés ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier sont attestées séparément.
+
+## Correctif SCM courant2.2.8
+
+[read-large-legacy-registry-for-private-migration](changes/archive/2026-11-03-read-large-legacy-registry-for-private-migration/), code non attribué :ARCHIVÉ, source2.2.8 qualifiée.
+Registre réel lu à la borne runtime64Mio après refus sûr avant coupure.
+153Node,94Python,1natif :248réussites ;OpenSpec20/20puis19/19.
+Publication, activation et reprise métier restent séparées.
+
+
+## Correctif SCM courant2.2.7
+
+[correlate-completed-mcp-call-with-outer-error](changes/archive/2026-11-03-correlate-completed-mcp-call-with-outer-error/), code non attribué : ARCHIVÉ, source2.2.7 qualifiée.
+Admission transitoire et états privés hors projet compatibles0775.
+937cas Node uniques qualifiés,94Python,1natif ;31ignorés. Une dernière
+fixture en timeout passe isolément ; pas de passe globale entièrement verte.
+OpenSpec20/20avant puis19/19après. Publication et activation séparées.
+
+
+## Correctif SCM courant2.2.6
+
+[reuse-closed-validation-review-evidence](changes/archive/2026-11-03-reuse-closed-validation-review-evidence/), code non attribué : ARCHIVÉ, source2.2.6 qualifiée.
+Réemploi des revues closes et retrait avant émission, sans effet ni once
+inventés. Qualification :920Node,93Python,1natif,1014réussites ;31ignorés.
+Index final15/15 ; OpenSpec20/20avant puis19/19après archive. Activation séparée.
+
+
+## Correctif SCM courant 2.2.5
+
+[restore-proven-validation-boundaries](changes/archive/2026-11-03-restore-proven-validation-boundaries/), code non attribué : ARCHIVÉ, source 2.2.5 qualifiée.
+Deux frontières : PENDING perdu par le contexte et terminal de lecture sans
+preuve once. Actions propriétaires bornées ; aucun rejeu ou résultat natif
+inventé. Qualification finale : 904 Node, 93 Python et 1 native, 998 réussites ;
+31 ignorés ; OpenSpec strict 20/20 avant puis 19/19 après archive. Publication
+et activation distinctes.
+
+## Entrée provisoire SCM — CAB 2.2.4
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-autonomous-scoped-recovery | ARCHIVÉ, source 2.2.4 qualifiée ; attribution ACL ultérieure | [validation](changes/archive/2026-11-03-fix-autonomous-scoped-recovery/VALIDATION.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.3
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-cabu-stopped-controller-status | ARCHIVÉ, source 2.2.3 qualifiée ; publication et activation distinctes | [validation](changes/archive/2026-11-02-fix-cabu-stopped-controller-status/VALIDATION.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.2
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | fix-cabu-authority-shutdown | ARCHIVÉ, source 2.2.2 qualifiée ; publication et activation distinctes | [validation](changes/archive/2026-11-02-fix-cabu-authority-shutdown/VALIDATION.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.1
+
+| Code | Identifiant | État | Source |
+|---|---|---|---|
+| code non attribué | reconcile-approved-native-cancellation | ARCHIVÉ, source 2.2.1 qualifiée ; publication et activation distinctes, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-approved-native-cancellation/tasks.md) |
+
+
+## Entrée provisoire SCM — CAB 2.2.0
+
+| Code | Identifiant technique | État documentaire | Source |
+|---|---|---|---|
+| code non attribué | track-background-shell-lifecycle | ARCHIVÉ, source CAB 2.2.0 qualifiée le 2 novembre 2026 ; activation distincte | [proposition](changes/archive/2026-11-02-track-background-shell-lifecycle/proposal.md), [tâches](changes/archive/2026-11-02-track-background-shell-lifecycle/tasks.md), [validation](changes/archive/2026-11-02-track-background-shell-lifecycle/VALIDATION.md), [statistiques](changes/archive/2026-11-02-track-background-shell-lifecycle/STATISTICS.md) |
+
+Cette entrée ne crée aucun code ni réservation ; l’attribution relève d’ACL.
+
+Relevé et application : 28 octobre 2026 (Europe/Paris). Plan CAB-ACL-R1 explicitement validé par le développeur pour les trois volets.
+
+## Périmètre et convention
+
+Au relevé ACL : 72 changes archivés, aucun change actif. 72 correspondances vérifiées : 70 attributions nouvelles et deux codes historiques conservés à l’identique, L1 et L2. Aucun code en attente ni réservation supplémentaire attestée dans les sources examinées.
+
+Les codes sont des repères documentaires distincts des identifiants techniques, RUN, tâches, versions et sous-lots. Les nouvelles séries utilisent deux chiffres. L’allocation initiale suit le tri lexicographique des chemins d’archive au sein de chaque famille, sans prétendre à une chronologie de création ou à une priorité de réalisation. Après cette attribution, un code reste stable ; ne jamais renuméroter pour combler un trou. Une attribution future nécessite l’autorisation applicable et le contrôle des codes utilisés et réservés dans tous les états.
+
+Les familles suivent la responsabilité principale documentée dans chaque proposition ; les capacités ci-dessous en expliquent le périmètre. La série historique L reste conservée sans extension : son libellé générique ne définit pas un domaine global pour les autres changes.
+
+| Famille | Responsabilité et rattachement | Sources de domaine | Codes occupés |
+|---|---|---|---|
+| BR | Persistance et journal du broker | approval-persistence | BR01, BR02, BR03 |
+| CT | Contrôle, transport natif, corrélation et validations | controller-transport ; approval-workflow ; opencode-v2-transport | CT01, CT02, CT03, CT04, CT05, CT06, CT07, CT08, CT09, CT10, CT11, CT12, CT13, CT14 |
+| SUP | Supervision persistante et récupération des sessions | persistent-job-supervision | SUP01, SUP02, SUP03, SUP04, SUP05, SUP06, SUP07, SUP08, SUP09, SUP10 |
+| CO | Concurrence, réservations et coordination des ressources | concurrent-run-coordination | CO01, CO02, CO03, CO04, CO05 |
+| STA | Collecte, restitution et conservation des statistiques | archive-session-statistics ; native-session-statistics ; web-statistics-retention | STA01, STA02, STA03, STA04 |
+| OBS | Observation, affichage et gestion du moniteur | local-web-monitor ; monitor-management ; codex-integration-distribution | OBS01, OBS02, OBS03, OBS04, OBS05, OBS06, OBS07, OBS08, OBS09 |
+| MOD | Sélection des modèles, catalogue et prévol | coding-model-policy ; codex-integration-distribution | MOD01, MOD02, MOD03, MOD04, MOD05 |
+| MAI | Maintenance des composants installés | active-component-update | MAI01, MAI02, MAI03, MAI04, MAI05, MAI06, MAI07, MAI08, MAI09, MAI10, MAI11 |
+| DIS | Distribution, commandes et identités publiques | codex-integration-distribution | DIS01, DIS02, DIS03, DIS04, DIS05, DIS06, DIS07, DIS08, DIS09 |
+| SPE | Cohérence et réconciliation documentaire OpenSpec | propositions et deltas des changes SPE | SPE01, SPE02, SPE03, SPE04 |
+| L historique | Admission orpheline (L1), maintenance en récupération gelée (L2) | [Qualification historique](changes/archive/2026-10-25-support-frozen-recovery-controller-maintenance/QUALIFICATION.md) | L1, L2 |
+
+## Correspondances vérifiées
+
+Tous les chemins sont relatifs à openspec/. Pour les 70 nouveaux codes : **Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1**. Cette annotation ne représente pas leur code d’origine et ne modifie ni date de création ni statut historique. La proposition liée porte effectivement le code dans son titre principal.
+
+| Code | Identifiant technique | Titre sans préfixe | État | Dossier | Preuve d’attribution |
+|---|---|---|---|---|---|
+| BR01 | fix-crash-recovery-journal-scans | Indexer le journal pendant la récupération après crash | ARCHIVÉ | [2026-10-03-fix-crash-recovery-journal-scans](changes/archive/2026-10-03-fix-crash-recovery-journal-scans/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-03-fix-crash-recovery-journal-scans/proposal.md) |
+| BR02 | fix-pending-list-journal-index | Indexer le journal pendant la liste des approbations | ARCHIVÉ | [2026-10-05-fix-pending-list-journal-index](changes/archive/2026-10-05-fix-pending-list-journal-index/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-05-fix-pending-list-journal-index/proposal.md) |
+| BR03 | reset-cab-state-before-new-session | Réinitialiser l’état CAB avant une nouvelle session | ARCHIVÉ | [2026-10-05-reset-cab-state-before-new-session](changes/archive/2026-10-05-reset-cab-state-before-new-session/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-05-reset-cab-state-before-new-session/proposal.md) |
+| CO01 | add-concurrent-cismp-runs | Prendre en charge les RUN CISMP concurrents | ARCHIVÉ | [2026-10-13-add-concurrent-cismp-runs](changes/archive/2026-10-13-add-concurrent-cismp-runs/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-add-concurrent-cismp-runs/proposal.md) |
+| CO02 | minimize-integration-exclusion | Réduire l'exclusion d'intégration — premier lot validé | ARCHIVÉ | [2026-10-16-minimize-integration-exclusion](changes/archive/2026-10-16-minimize-integration-exclusion/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-16-minimize-integration-exclusion/proposal.md) |
+| CO03 | add-resource-scoped-coordination-1-3-0 | CAB 1.3.0 — coordination atomique par ressource | ARCHIVÉ | [2026-10-17-add-resource-scoped-coordination-1-3-0](changes/archive/2026-10-17-add-resource-scoped-coordination-1-3-0/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-17-add-resource-scoped-coordination-1-3-0/proposal.md) |
+| CO04 | fix-stopped-run-rereservation | Reprise d'un RUN après arrêt et libération | ARCHIVÉ | [2026-10-20-fix-stopped-run-rereservation](changes/archive/2026-10-20-fix-stopped-run-rereservation/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-fix-stopped-run-rereservation/proposal.md) |
+| CO05 | add-container-test-resource-locking | CAB 1.10.0 — ressources de test et rafraîchissement du moniteur | ARCHIVÉ | [2026-10-25-add-container-test-resource-locking](changes/archive/2026-10-25-add-container-test-resource-locking/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-25-add-container-test-resource-locking/proposal.md) |
+| CT01 | fix-decision-request-id-correlation | Corriger la corrélation des décisions par requestId | ARCHIVÉ | [2026-09-11-fix-decision-request-id-correlation](changes/archive/2026-09-11-fix-decision-request-id-correlation/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-11-fix-decision-request-id-correlation/proposal.md) |
+| CT02 | add-manual-cab-decision-mode | Ajouter le mode de décision manuelle CAB | ARCHIVÉ | [2026-09-15-add-manual-cab-decision-mode](changes/archive/2026-09-15-add-manual-cab-decision-mode/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-15-add-manual-cab-decision-mode/proposal.md) |
+| CT03 | allow-generic-controller-workspace | Accepter un workspace générique pour le contrôleur | ARCHIVÉ | [2026-09-15-allow-generic-controller-workspace](changes/archive/2026-09-15-allow-generic-controller-workspace/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-15-allow-generic-controller-workspace/proposal.md) |
+| CT04 | fix-native-command-correlation | Corriger la corrélation des commandes natives | ARCHIVÉ | [2026-09-15-fix-native-command-correlation](changes/archive/2026-09-15-fix-native-command-correlation/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-15-fix-native-command-correlation/proposal.md) |
+| CT05 | add-pending-approval-controller-reminders | Proposition | ARCHIVÉ | [2026-09-18-add-pending-approval-controller-reminders](changes/archive/2026-09-18-add-pending-approval-controller-reminders/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-18-add-pending-approval-controller-reminders/proposal.md) |
+| CT06 | validate-decision-request-id-e2e | Valider de bout en bout la corrélation requestId | ARCHIVÉ | [2026-09-25-validate-decision-request-id-e2e](changes/archive/2026-09-25-validate-decision-request-id-e2e/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-25-validate-decision-request-id-e2e/proposal.md) |
+| CT07 | fix-manual-controller-reminders | Préserver la décision manuelle pendant les rappels | ARCHIVÉ | [2026-10-06-fix-manual-controller-reminders](changes/archive/2026-10-06-fix-manual-controller-reminders/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-06-fix-manual-controller-reminders/proposal.md) |
+| CT08 | fix-controller-job-restoration-errors | Traiter explicitement les erreurs de restauration du job | ARCHIVÉ | [2026-10-10-fix-controller-job-restoration-errors](changes/archive/2026-10-10-fix-controller-job-restoration-errors/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-10-fix-controller-job-restoration-errors/proposal.md) |
+| CT09 | add-terminal-gate | Proposal | ARCHIVÉ | [2026-10-13-add-terminal-gate](changes/archive/2026-10-13-add-terminal-gate/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-add-terminal-gate/proposal.md) |
+| CT10 | reject-invalid-restored-job-contracts | Refuser les contrats de job restaurés invalides | ARCHIVÉ | [2026-10-13-reject-invalid-restored-job-contracts](changes/archive/2026-10-13-reject-invalid-restored-job-contracts/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-reject-invalid-restored-job-contracts/proposal.md) |
+| CT11 | prevent-native-permission-bypass | Prévenir les exécutions natives sans permission CAB | ARCHIVÉ | [2026-10-14-prevent-native-permission-bypass](changes/archive/2026-10-14-prevent-native-permission-bypass/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-14-prevent-native-permission-bypass/proposal.md) |
+| CT12 | configure-controller-command-length-limit | Limite configurable des commandes du contrôleur CAB | ARCHIVÉ | [2026-10-20-configure-controller-command-length-limit](changes/archive/2026-10-20-configure-controller-command-length-limit/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-configure-controller-command-length-limit/proposal.md) |
+| CT13 | support-opencode-v2-only-transport | Migration exclusive vers OpenCode V2 | ARCHIVÉ | [2026-10-28-support-opencode-v2-only-transport](changes/archive/2026-10-28-support-opencode-v2-only-transport/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-28-support-opencode-v2-only-transport/proposal.md) |
+| CT14 | fix-native-v2-pagination-and-preflight-2-1-5 | Pagination et preuve native OpenCode — CAB 2.1.5 | ARCHIVÉ | [fix-native-v2-pagination-and-preflight-2-1-5](changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/) | Attribution ACL du 28 octobre 2026, plan CAB-ACL-R3 ; [titre](changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/proposal.md) |
+| DIS01 | correct-plugin-layout-traceability | Corriger la traçabilité de l’arborescence du plugin | ARCHIVÉ | [2026-09-11-correct-plugin-layout-traceability](changes/archive/2026-09-11-correct-plugin-layout-traceability/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-11-correct-plugin-layout-traceability/proposal.md) |
+| DIS02 | add-cab-plugin-update-command | Ajouter la commande de mise à jour du plugin CAB | ARCHIVÉ | [2026-09-19-add-cab-plugin-update-command](changes/archive/2026-09-19-add-cab-plugin-update-command/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-19-add-cab-plugin-update-command/proposal.md) |
+| DIS03 | add-cab-command-profile-update | Actualiser la commande CAB du profil Codex | ARCHIVÉ | [2026-09-21-add-cab-command-profile-update](changes/archive/2026-09-21-add-cab-command-profile-update/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-21-add-cab-command-profile-update/proposal.md) |
+| DIS04 | add-cab-update-version-summary | Résumer les versions après mise à jour CAB | ARCHIVÉ | [2026-09-21-add-cab-update-version-summary](changes/archive/2026-09-21-add-cab-update-version-summary/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-21-add-cab-update-version-summary/proposal.md) |
+| DIS05 | align-cab-components-1-1-0 | Alignement des briques CAB sur 1.1.0 | ARCHIVÉ | [2026-10-15-align-cab-components-1-1-0](changes/archive/2026-10-15-align-cab-components-1-1-0/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-15-align-cab-components-1-1-0/proposal.md) |
+| DIS06 | align-cab-components-1-2-0 | Aligner les briques CAB sur 1.2.0 | ARCHIVÉ | [2026-10-16-align-cab-components-1-2-0](changes/archive/2026-10-16-align-cab-components-1-2-0/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-16-align-cab-components-1-2-0/proposal.md) |
+| DIS07 | add-cab-uppercase-update-alias | Ajouter les commandes canoniques CAB et CABU | ARCHIVÉ | [2026-10-27-add-cab-uppercase-update-alias](changes/archive/2026-10-27-add-cab-uppercase-update-alias/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-27-add-cab-uppercase-update-alias/proposal.md) |
+| DIS08 | add-cabu-skill-plugin-command | Proposal | ARCHIVÉ | [2026-10-27-add-cabu-skill-plugin-command](changes/archive/2026-10-27-add-cabu-skill-plugin-command/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-27-add-cabu-skill-plugin-command/proposal.md) |
+| DIS09 | align-uppercase-cab-identities-2-1-1 | Aligner les identités publiques CAB sur 2.1.1 | ARCHIVÉ | [2026-10-28-align-uppercase-cab-identities-2-1-1](changes/archive/2026-10-28-align-uppercase-cab-identities-2-1-1/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-28-align-uppercase-cab-identities-2-1-1/proposal.md) |
+| L1 | fix-orphaned-validation-admission | Corriger l’admission des validations orphelines | ARCHIVÉ | [2026-10-25-fix-orphaned-validation-admission](changes/archive/2026-10-25-fix-orphaned-validation-admission/) | Code historique : [qualification commune](changes/archive/2026-10-25-support-frozen-recovery-controller-maintenance/QUALIFICATION.md) ; [titre consolidé](changes/archive/2026-10-25-fix-orphaned-validation-admission/proposal.md) |
+| L2 | support-frozen-recovery-controller-maintenance | Maintenir le contrôleur pendant une récupération gelée | ARCHIVÉ | [2026-10-25-support-frozen-recovery-controller-maintenance](changes/archive/2026-10-25-support-frozen-recovery-controller-maintenance/) | Code historique : [qualification commune](changes/archive/2026-10-25-support-frozen-recovery-controller-maintenance/QUALIFICATION.md) ; [titre consolidé](changes/archive/2026-10-25-support-frozen-recovery-controller-maintenance/proposal.md) |
+| MAI01 | update-active-cab-components | Mise à jour contrôlée des briques CAB actives | ARCHIVÉ | [2026-10-20-update-active-cab-components](changes/archive/2026-10-20-update-active-cab-components/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-update-active-cab-components/proposal.md) |
+| MAI02 | fix-broker-worker-child-proof | Reconnaissance du broker créé depuis un thread OpenCode | ARCHIVÉ | [2026-10-25-fix-broker-worker-child-proof](changes/archive/2026-10-25-fix-broker-worker-child-proof/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-25-fix-broker-worker-child-proof/proposal.md) |
+| MAI03 | fix-historical-test-resource-recovery | Compatibilité historique et récupération en avant 1.10.1 | ARCHIVÉ | [2026-10-25-fix-historical-test-resource-recovery](changes/archive/2026-10-25-fix-historical-test-resource-recovery/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-25-fix-historical-test-resource-recovery/proposal.md) |
+| MAI04 | fix-large-maintenance-registry-1-10-1 | CAB 1.10.1 — lectures bornées du registre de maintenance | ARCHIVÉ | [2026-10-25-fix-large-maintenance-registry-1-10-1](changes/archive/2026-10-25-fix-large-maintenance-registry-1-10-1/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-25-fix-large-maintenance-registry-1-10-1/proposal.md) |
+| MAI05 | fix-readonly-broker-1-9-upgrade-1-10 | Maintenance reuse-readonly 1.9.0 vers 1.10.0 | ARCHIVÉ | [2026-10-25-fix-readonly-broker-1-9-upgrade-1-10](changes/archive/2026-10-25-fix-readonly-broker-1-9-upgrade-1-10/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-25-fix-readonly-broker-1-9-upgrade-1-10/proposal.md) |
+| MAI06 | support-readonly-broker-reuse | Réutiliser le broker externe en lecture seule | ARCHIVÉ | [2026-10-25-support-readonly-broker-reuse](changes/archive/2026-10-25-support-readonly-broker-reuse/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-25-support-readonly-broker-reuse/proposal.md) |
+| MAI07 | automate-cab-update-lifecycle-1-10-8 | Forcer la mise à jour CABU et aligner les briques en 1.10.9 | ARCHIVÉ | [2026-10-27-automate-cab-update-lifecycle-1-10-8](changes/archive/2026-10-27-automate-cab-update-lifecycle-1-10-8/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-27-automate-cab-update-lifecycle-1-10-8/proposal.md) |
+| MAI08 | fix-maintenance-ownership-and-paused-orphan-rejection | CAB 1.10.7 — propriétaires et demande orpheline en pause | ARCHIVÉ | [2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection](changes/archive/2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-27-fix-maintenance-ownership-and-paused-orphan-rejection/proposal.md) |
+| MAI09 | fix-runtime-recovery-and-fast-cabu-update | Fiabiliser la récupération runtime et accélérer CABU | ARCHIVÉ | [2026-10-28-fix-runtime-recovery-and-fast-cabu-update](changes/archive/2026-10-28-fix-runtime-recovery-and-fast-cabu-update/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-28-fix-runtime-recovery-and-fast-cabu-update/proposal.md) |
+| MAI10 | fix-update-credentials-and-mixed-layout-2-1-3 | Fiabiliser la mise à jour CAB 2.1.3 | ARCHIVÉ | [2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3](changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3/proposal.md) |
+| MAI11 | qualify-historical-bootstrap-2-1-5 | Qualifier le banc historique CAB 1.7.1 vers 2.1.5 | ARCHIVÉ | [2026-10-28-qualify-historical-bootstrap-2-1-5](changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R4 ; [titre](changes/archive/2026-10-28-qualify-historical-bootstrap-2-1-5/proposal.md) |
+| MOD01 | add-opencode-model-preflight | Ajouter le prévol du modèle OpenCode | ARCHIVÉ | [2026-10-13-add-opencode-model-preflight](changes/archive/2026-10-13-add-opencode-model-preflight/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-add-opencode-model-preflight/proposal.md) |
+| MOD02 | add-session-provider-read-limit | Budget de lecture fournisseur défini par la session | ARCHIVÉ | [2026-10-26-add-session-provider-read-limit](changes/archive/2026-10-26-add-session-provider-read-limit/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-26-add-session-provider-read-limit/proposal.md) |
+| MOD03 | fix-pllm-controller-binding-and-native-preflight | Raccord PLLM, fournisseur natif et variante OpenCode | ARCHIVÉ | [2026-10-26-fix-pllm-controller-binding-and-native-preflight](changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/proposal.md) |
+| MOD04 | use-medium-coding-reasoning-1-10-6 | Utiliser medium comme raisonnement automatique par défaut | ARCHIVÉ | [2026-10-27-use-medium-coding-reasoning-1-10-6](changes/archive/2026-10-27-use-medium-coding-reasoning-1-10-6/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-27-use-medium-coding-reasoning-1-10-6/proposal.md) |
+| MOD05 | support-pllm-catalog-3-7-2-1-4 | Compatibilité PLLM 2/6 et 3/7 — CAB 2.1.4 | ARCHIVÉ | [2026-10-28-support-pllm-catalog-3-7-2-1-4](changes/archive/2026-10-28-support-pllm-catalog-3-7-2-1-4/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-28-support-pllm-catalog-3-7-2-1-4/proposal.md) |
+| OBS01 | add-cab-status-run-summary | Ajouter le résumé des RUN à cab status | ARCHIVÉ | [2026-10-16-add-cab-status-run-summary](changes/archive/2026-10-16-add-cab-status-run-summary/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-16-add-cab-status-run-summary/proposal.md) |
+| OBS02 | add-local-web-monitor | Supervision web locale CAB | ARCHIVÉ | [2026-10-20-add-local-web-monitor](changes/archive/2026-10-20-add-local-web-monitor/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-add-local-web-monitor/proposal.md) |
+| OBS03 | add-monitor-management-1-7-0 | Gestion locale du moniteur CAB 1.7.0 | ARCHIVÉ | [2026-10-20-add-monitor-management-1-7-0](changes/archive/2026-10-20-add-monitor-management-1-7-0/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-add-monitor-management-1-7-0/proposal.md) |
+| OBS04 | add-run-lifecycle-steps | Étapes du RUN et versions observées | ARCHIVÉ | [2026-10-20-add-run-lifecycle-steps](changes/archive/2026-10-20-add-run-lifecycle-steps/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-add-run-lifecycle-steps/proposal.md) |
+| OBS05 | bootstrap-monitor-before-preflight | Préparer le moniteur avant les prévols | ARCHIVÉ | [2026-10-20-bootstrap-monitor-before-preflight](changes/archive/2026-10-20-bootstrap-monitor-before-preflight/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-bootstrap-monitor-before-preflight/proposal.md) |
+| OBS06 | start-monitor-with-cab | Démarrage du monitoring par /cab start | ARCHIVÉ | [2026-10-20-start-monitor-with-cab](changes/archive/2026-10-20-start-monitor-with-cab/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-start-monitor-with-cab/proposal.md) |
+| OBS07 | fix-monitor-manual-view-and-task-order | CAB Monitor : vue manuelle persistante, en-tête et classement | ARCHIVÉ | [2026-10-26-fix-monitor-manual-view-and-task-order](changes/archive/2026-10-26-fix-monitor-manual-view-and-task-order/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-26-fix-monitor-manual-view-and-task-order/proposal.md) |
+| OBS08 | add-monitor-lot-code-column | Colonne codes de lot du moniteur — CAB 2.1.2 | ARCHIVÉ | [2026-10-28-add-monitor-lot-code-column](changes/archive/2026-10-28-add-monitor-lot-code-column/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-28-add-monitor-lot-code-column/proposal.md) |
+| OBS09 | fix-monitor-historical-lot-codes | Reconnaître les codes historiques L1 et L2 dans le moniteur | ARCHIVÉ | [2026-10-28-fix-monitor-historical-lot-codes](changes/archive/2026-10-28-fix-monitor-historical-lot-codes/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R2 ; [titre](changes/archive/2026-10-28-fix-monitor-historical-lot-codes/proposal.md) |
+| SPE01 | establish-project-consistency | Établir la cohérence du projet CAB | ARCHIVÉ | [2026-09-11-establish-project-consistency](changes/archive/2026-09-11-establish-project-consistency/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-11-establish-project-consistency/proposal.md) |
+| SPE02 | clarify-cab-specification-consistency | Clarifier la cohérence des spécifications CAB | ARCHIVÉ | [2026-10-13-clarify-cab-specification-consistency](changes/archive/2026-10-13-clarify-cab-specification-consistency/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-clarify-cab-specification-consistency/proposal.md) |
+| SPE03 | reconcile-active-cab-spec-deltas | Réconcilier les deltas OpenSpec CAB actifs | ARCHIVÉ | [2026-10-13-reconcile-active-cab-spec-deltas](changes/archive/2026-10-13-reconcile-active-cab-spec-deltas/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-reconcile-active-cab-spec-deltas/proposal.md) |
+| SPE04 | reconcile-pllm-waiting-policy | Réconcilier la politique d’attente PLLM | ARCHIVÉ | [2026-10-27-reconcile-pllm-waiting-policy](changes/archive/2026-10-27-reconcile-pllm-waiting-policy/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-27-reconcile-pllm-waiting-policy/proposal.md) |
+| STA01 | add-cab-archive-statistics | Ajouter les statistiques d’archivage CAB | ARCHIVÉ | [2026-10-13-add-cab-archive-statistics](changes/archive/2026-10-13-add-cab-archive-statistics/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-add-cab-archive-statistics/proposal.md) |
+| STA02 | optimize-cab-statistics-and-integration | Statistiques natives et réduction des attentes CAB | ARCHIVÉ | [2026-10-15-optimize-cab-statistics-and-integration](changes/archive/2026-10-15-optimize-cab-statistics-and-integration/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-15-optimize-cab-statistics-and-integration/proposal.md) |
+| STA03 | integrate-observation-statistics | Intégrer les statistiques d’observation | ARCHIVÉ | [2026-10-17-integrate-observation-statistics](changes/archive/2026-10-17-integrate-observation-statistics/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-17-integrate-observation-statistics/proposal.md) |
+| STA04 | add-web-statistics-and-retention-1-6-0 | Statistiques web et purge des historiques CAB 1.6.0 | ARCHIVÉ | [2026-10-20-add-web-statistics-and-retention-1-6-0](changes/archive/2026-10-20-add-web-statistics-and-retention-1-6-0/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-20-add-web-statistics-and-retention-1-6-0/proposal.md) |
+| SUP01 | add-persistent-job-supervisor | Proposal | ARCHIVÉ | [2026-09-25-add-persistent-job-supervisor](changes/archive/2026-09-25-add-persistent-job-supervisor/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-09-25-add-persistent-job-supervisor/proposal.md) |
+| SUP02 | fix-cab-session-recovery | Proposal | ARCHIVÉ | [2026-10-08-fix-cab-session-recovery](changes/archive/2026-10-08-fix-cab-session-recovery/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-08-fix-cab-session-recovery/proposal.md) |
+| SUP03 | allow-cab-reset-after-failed-recovery | Autoriser la réinitialisation après récupération échouée | ARCHIVÉ | [2026-10-10-allow-cab-reset-after-failed-recovery](changes/archive/2026-10-10-allow-cab-reset-after-failed-recovery/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-10-allow-cab-reset-after-failed-recovery/proposal.md) |
+| SUP04 | fix-automatic-preflight-recovery | Corriger la récupération des prévols automatiques | ARCHIVÉ | [2026-10-10-fix-automatic-preflight-recovery](changes/archive/2026-10-10-fix-automatic-preflight-recovery/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-10-fix-automatic-preflight-recovery/proposal.md) |
+| SUP05 | fix-cab-terminal-gate-and-supervision-scope | Corriger le gate terminal et le périmètre de supervision | ARCHIVÉ | [2026-10-10-fix-cab-terminal-gate-and-supervision-scope](changes/archive/2026-10-10-fix-cab-terminal-gate-and-supervision-scope/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-10-fix-cab-terminal-gate-and-supervision-scope/proposal.md) |
+| SUP06 | retain-session-after-divergent-recovery-preflight | Conserver la session après un prévol de récupération divergent | ARCHIVÉ | [2026-10-10-retain-session-after-divergent-recovery-preflight](changes/archive/2026-10-10-retain-session-after-divergent-recovery-preflight/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-10-retain-session-after-divergent-recovery-preflight/proposal.md) |
+| SUP07 | update-cab-orchestration-cadences | Définir les cadences de l’orchestration CAB | ARCHIVÉ | [2026-10-10-update-cab-orchestration-cadences](changes/archive/2026-10-10-update-cab-orchestration-cadences/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-10-update-cab-orchestration-cadences/proposal.md) |
+| SUP08 | complete-supervisor-public-status | Compléter le statut public du superviseur | ARCHIVÉ | [2026-10-13-complete-supervisor-public-status](changes/archive/2026-10-13-complete-supervisor-public-status/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-13-complete-supervisor-public-status/proposal.md) |
+| SUP09 | fix-recovery-retry-after-mcp-timeout | Autoriser le retry réconcilié après timeout MCP | ARCHIVÉ | [2026-10-14-fix-recovery-retry-after-mcp-timeout](changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/) | Attribution rétrospective ACL du 28 octobre 2026, plan CAB-ACL-R1 ; [titre](changes/archive/2026-10-14-fix-recovery-retry-after-mcp-timeout/proposal.md) |
+| SUP10 | fix-cab-shutdown-on-opencode-exit | Fermeture propre de CAB avec OpenCode — 2.1.6 | ARCHIVÉ | [fix-cab-shutdown-on-opencode-exit](changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/) | Attribution ACL du 28 octobre 2026, plan CAB-ACL-R5 ; [titre](changes/archive/2026-10-28-fix-cab-shutdown-on-opencode-exit/proposal.md) |
+
+## Entrées provisoires sans code
+
+Actualisation SCM du 28 octobre 2026 : **76 archives, 0 change actif**. 76 correspondances code/change vérifiées après attribution SUP10 (CAB-ACL-R5). Les 75 codes antérieurs, dont OBS09, CT14 et MAI11, sont conservés. Aucune entrée provisoire sans code à cette date. Aucune réservation supplémentaire de code à cette date.
+État SCM vérifié le 2 novembre 2026 : 134 archives et aucun change actif. `fix-native-permission-reply-location-scope`, `expose-safe-run-native-operation-state`, `restore-approved-native-operations`, `bind-native-requestid-in-literal-codemode-validation` et `reconcile-persisted-native-rejections`, `forward-recover-cabu-after-controller-rollback-failure` et `preserve-conflicting-restored-accesses` sont archivés sans code ; cette session n’attribue ni ne réserve de code.
+
+
+
+Actualisation du 29 octobre 2026 : entrée provisoire ci-dessous, distincte des correspondances attribuées. Attribution ultérieure par ACL, sans réservation de code dans cette session.
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | fix-codemode-discovery-literal-ack | ARCHIVÉ, source 4/4 validée ; cible 2.1.9 | [qualification](changes/archive/2026-10-29-fix-codemode-discovery-literal-ack/QUALIFICATION.md) |
+| code non attribué | fix-opencode-codemode-native-proof-correlation | ARCHIVÉ, source 5/5 lots validés ; CABU 2.1.8 vérifié ; complément diagnostique en cours | [tâches](changes/archive/2026-10-29-fix-opencode-codemode-native-proof-correlation/tasks.md) |
+| code non attribué | fix-rejected-preflight-recovery-after-restart | ARCHIVÉ, source validée 5/5 ; CABU 2.1.7 vérifié le 29 octobre ; PA01 suspendu au raccord Code Mode | [qualification](changes/archive/2026-10-29-fix-rejected-preflight-recovery-after-restart/QUALIFICATION.md) |
+
+### Entrées provisoires SCM — 1er et 2 novembre 2026
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
+| code non attribué | require-native-recovery-preflight | ARCHIVÉ, source 2.1.37 qualifiée ; CABU et activation font l'objet d'une preuve distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-require-native-recovery-preflight/tasks.md) |
+| code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
+| code non attribué | fix-native-permission-reply-location-scope | ARCHIVÉ, source 2.1.61 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-fix-native-permission-reply-location-scope/tasks.md) |
+| code non attribué | expose-safe-run-native-operation-state | ARCHIVÉ, source 2.1.62 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-expose-safe-run-native-operation-state/tasks.md) |
+| code non attribué | restore-approved-native-operations | ARCHIVÉ, source 2.1.63 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-restore-approved-native-operations/tasks.md) |
+| code non attribué | reconcile-terminal-native-operations | ARCHIVÉ, source 2.1.64 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-terminal-native-operations/tasks.md) |
+| code non attribué | correlate-running-codemode-validation | ARCHIVÉ, source 2.1.65 publiée et activée via CABU ; quatre composants vérifiés, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-correlate-running-codemode-validation/tasks.md) |
+| code non attribué | reconcile-running-codemode-validation | ARCHIVÉ, source 2.1.65 publiée et activée via CABU ; quatre composants vérifiés, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-running-codemode-validation/tasks.md) |
+| code non attribué | bind-native-requestid-in-literal-codemode-validation | ARCHIVÉ, source 2.1.66 qualifiée ; publication et CABU en cours séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-bind-native-requestid-in-literal-codemode-validation/tasks.md) |
+| code non attribué | reconcile-persisted-native-rejections | ARCHIVÉ, source 2.1.67 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-persisted-native-rejections/tasks.md) |
+| code non attribué | forward-recover-cabu-after-controller-rollback-failure | ARCHIVÉ, source 2.1.68 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-forward-recover-cabu-after-controller-rollback-failure/tasks.md) |
+| code non attribué | preserve-conflicting-restored-accesses | ARCHIVÉ, source 2.1.69 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-preserve-conflicting-restored-accesses/tasks.md) |
+| code non attribué | continue-cabu-forward-recovery-after-disconnect | ARCHIVÉ, source 2.1.70 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-continue-cabu-forward-recovery-after-disconnect/tasks.md) |
+
+Les références C08, PA01, PA02, O26 et B02 présentes dans les sources sont externes ou illustratives ; elles ne sont pas attribuées aux changes CAB.
+
+## Portée et limites
+
+Ces annotations ne rouvrent aucune archive et ne revalident ni tâches, ni tests, ni livraison, ni activation. Aucun scénario, métadonnée, preuve ou rapport historique n’est modifié.
+
+Lors du relevé ACL, le contrat exigeait deux à quatre chiffres et le moniteur ne reconnaissait pas L1/L2. Le [correctif source demandé ensuite](changes/archive/2026-10-28-fix-monitor-historical-lot-codes/proposal.md) admet exactement L1 et L2 en complément des formats existants, conformément au [contrat actualisé](specs/local-web-monitor/spec.md). Ces codes sont conservés à l’identique. Cette correction source ne prouve pas le chargement d’un moniteur installé.
+
+Voir la [Development Map](../DEVELOPMENT_MAP.md) pour les dépendances documentées, l’avancement et les limites de réalisabilité.
+
+### Entrée provisoire SCM — 29 octobre 2026
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | fix-native-edit-and-supervisor-mandates | ARCHIVÉ ; sources 2.1.10 qualifiées, Node 502/28 ignorés, Python 75/75 et natif 1/1 ; activation distincte | [tâches](changes/archive/2026-10-29-fix-native-edit-and-supervisor-mandates/tasks.md) |
+
+### Actualisation SCM directe — 29 octobre 2026
+
+`fix-direct-native-mcp-error-recovery` : ARCHIVÉ, **code non attribué**, source 2.1.11 ; provenance directe et retry qualifiés sur banc isolé, pagination adaptative testée ; Node519 réussis/28 ignorés, Python75/75 et natif1/1 ; archive vérifiée. [Proposition](changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/proposal.md), [tâches](changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/tasks.md). Aucune activation ; attribution ACL ultérieure.
+
+### Actualisation SCM diagnostics — 29 octobre 2026
+
+`fix-notification-admission-diagnostics` : ARCHIVÉ, **code non attribué**, source2.1.12. Sources qualifiées : Node520 réussis/28 ignorés, Python80/80, natif1/1 ; archive vérifiée ; activation CABU à suivre séparément. [Proposition](changes/archive/2026-10-29-fix-notification-admission-diagnostics/proposal.md), [tâches](changes/archive/2026-10-29-fix-notification-admission-diagnostics/tasks.md). CABU explicitement autorisé après clôture source et coordination ; attribution ACL ultérieure.
+
+### Restitution sans effet — SCM 2.1.13
+
+`release-unused-test-reservations` : ARCHIVÉ, **code non attribué**, 5/5 unités qualifiées ; Node534/28 ignorés, Python80/80, HTTP7/7, natif1/1 ; archive vérifiée ; aucune activation. [Proposition](changes/archive/2026-10-29-release-unused-test-reservations/proposal.md), [tâches](changes/archive/2026-10-29-release-unused-test-reservations/tasks.md). Attribution ACL ultérieure.
+
+### Isolation MCP — SCM 2.1.14
+
+`isolate-shared-mcp-location` : ARCHIVÉ, **code non attribué**, 5/5 unités qualifiées ; Node543/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation non réalisée. [Proposition](changes/archive/2026-10-30-isolate-shared-mcp-location/proposal.md), [tâches](changes/archive/2026-10-30-isolate-shared-mcp-location/tasks.md). Attribution ACL ultérieure.
+
+### Récupération CABU — SCM2.1.15
+
+`fix-cabu-startup-recovery` : ARCHIVÉ, **code non attribué**, 4/4 unités qualifiées, Node545/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation non confirmée. [Proposition](changes/archive/2026-10-30-fix-cabu-startup-recovery/proposal.md), [tâches](changes/archive/2026-10-30-fix-cabu-startup-recovery/tasks.md). Attribution ACL ultérieure.
+
+### Lecture du statut CABU — complément2.1.15
+
+`fix-cabu-large-controller-status` : ARCHIVÉ, **code non attribué**, 3/3 unités qualifiées, Node548/28 ignorés, updater48/48 ; archive vérifiée. [Proposition](changes/archive/2026-10-30-fix-cabu-large-controller-status/proposal.md), [tâches](changes/archive/2026-10-30-fix-cabu-large-controller-status/tasks.md). Build2.1.15 corrigé, activation non confirmée ; attribution ACL ultérieure.
+
+### Diagnostics de décision — SCM2.1.16
+
+`explain-decision-http-refusals` : ARCHIVÉ, **code non attribué**, 4/4 unités qualifiées ; Node560/28 ignorés, Python80/80 et natif1/1 ; archive vérifiée, activation suivie séparément. [Proposition](changes/archive/2026-10-30-explain-decision-http-refusals/proposal.md), [tâches](changes/archive/2026-10-30-explain-decision-http-refusals/tasks.md). Attribution ACL ultérieure.
+
+### Coordination des incidents — SCM2.1.17
+
+`coordinate-cab-coding-incidents` : ARCHIVÉ, **code non attribué**, règle documentaire de signalement au chat « Correctif CAB - OC » et suivi jusqu’à CABU ; source qualifiée : Node560/28 ignorés, Python80/80, distribution32/32 ; activation vérifiée séparément. [Proposition](changes/archive/2026-10-30-coordinate-cab-coding-incidents/proposal.md), [tâches](changes/archive/2026-10-30-coordinate-cab-coding-incidents/tasks.md). Attribution ACL ultérieure.
+
+### Entrées modèle explicites — SCM2.1.18
+
+`reject-native-variant-model-input` : ARCHIVÉ, **code non attribué**, refus du champ natif variant dans les écritures client ; reasoning et lecture native conservés. [Proposition](changes/archive/2026-10-30-reject-native-variant-model-input/proposal.md), [tâches](changes/archive/2026-10-30-reject-native-variant-model-input/tasks.md). Source qualifiée : Node568/28 ignorés en deux groupes, Python80/80 et natif1/1 ; activation distincte. Attribution ACL ultérieure.
+
+### Transitions à chaud — SCM2.1.19
+
+`support-hot-model-transitions` : ARCHIVÉ, **code non attribué**, raccord fournisseur V2 et transition du même job ; choix explicite libre, PLLM en son absence. [Proposition](changes/archive/2026-10-30-support-hot-model-transitions/proposal.md), [tâches](changes/archive/2026-10-30-support-hot-model-transitions/tasks.md). Source qualifiée : Node601/29 ignorés, Python80/80, natif2.2.0 exact2/2 ; activation distincte ; attribution ACL ultérieure.
+
+### Continuité liée au compte — SCM2.1.20
+
+`qualify-account-bound-history-continuity` : ARCHIVÉ — source2.1.20 qualifiée ; activation non déduite, **code non attribué**, lanceur par lien et qualification de la continuité historique Responses ; une limite native démontrée fait partie du livrable, sans réparation fictive. [Proposition](changes/archive/2026-10-30-qualify-account-bound-history-continuity/proposal.md), [tâches](changes/archive/2026-10-30-qualify-account-bound-history-continuity/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+
+### Projection portable du contexte — SCM2.1.21
+
+`project-stale-context-on-model-transition` : ARCHIVÉ — source2.1.21 qualifiée ; activation non déduite, **code non attribué**, hook natif de projection après transition PLLM/compte. [Proposition](changes/archive/2026-10-30-project-stale-context-on-model-transition/proposal.md), [tâches](changes/archive/2026-10-30-project-stale-context-on-model-transition/tasks.md). Qualification source et reprise réelle distinctes ; attribution ACL ultérieure.
+
+
+### Entrée native exacte — SCM2.1.22
+
+`bind-native-write-input-before-once` : ARCHIVÉ — source2.1.22 qualifiée ; activation non déduite, **code non attribué**, empreinte des arguments write/edit et garde avant once. [Proposition](changes/archive/2026-10-30-bind-native-write-input-before-once/proposal.md), [tâches](changes/archive/2026-10-30-bind-native-write-input-before-once/tasks.md). Qualification, publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Readiness vide — SCM2.1.23
+
+`qualify-empty-readiness-metadata-input` : ARCHIVÉ — source2.1.23 qualifiée ; activation non déduite, **code non attribué**, projection native de l’omission input du seul diagnostic readiness vide. [Proposition](changes/archive/2026-10-30-qualify-empty-readiness-metadata-input/proposal.md), [tâches](changes/archive/2026-10-30-qualify-empty-readiness-metadata-input/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+
+### Admission observée — SCM2.1.24
+
+`expose-run-admission-state` : ARCHIVÉ — source2.1.24 qualifiée ; activation non déduite, **code non attribué**, instantanés d’admission et refus de transition explicites sans contournement. [Proposition](changes/archive/2026-10-30-expose-run-admission-state/proposal.md), [tâches](changes/archive/2026-10-30-expose-run-admission-state/tasks.md). Qualification et activation distinctes ; attribution ACL ultérieure.
+
+
+### Transport shell scellé — SCM 2.1.25
+
+`stage-exact-shell-payloads` : ARCHIVÉ — source 2.1.25 qualifiée, **code non attribué**. Corps Bash privé immuable, invocation courte, contrôle SHA256 et revue du corps ; décision, accès et once natifs conservés. [Proposition](changes/archive/2026-10-30-stage-exact-shell-payloads/proposal.md), [tâches](changes/archive/2026-10-30-stage-exact-shell-payloads/tasks.md), [qualification](changes/archive/2026-10-30-stage-exact-shell-payloads/QUALIFICATION.md). Publication et activation restent distinctes ; attribution ACL ultérieure.
+
+
+### Incidents natifs et moniteur — SCM 2.1.26
+
+`remediate-native-coding-and-monitor-incidents` : ARCHIVÉ — source 2.1.26 qualifiée, **code non attribué**. Projection compacte du registre, pannes de source explicites, helpers natifs et protocole de reprise sans assouplir les gardes. [Proposition](changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/proposal.md), [tâches](changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/tasks.md), [qualification](changes/archive/2026-10-30-remediate-native-coding-and-monitor-incidents/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Rangement et couleurs Web — SCM2.1.27
+
+`fix-monitor-catalog-feedback-and-state-colors` : ARCHIVÉ — source2.1.27 qualifiée, **code non attribué**. Vue catalogue immédiate en Manuel sans rollback par lecture ancienne ; lignes BLOCKED bleues, DONE vertes, STOPPED orange. [Proposition](changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/proposal.md), [tâches](changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/tasks.md), [qualification](changes/archive/2026-10-30-fix-monitor-catalog-feedback-and-state-colors/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### MCP pending et récupération — SCM2.1.28
+
+`recover-cabu-pending-mcp` : ARCHIVÉ — source2.1.28 qualifiée, **code non attribué**. Attente bornée, reçuMCP_RECOVERY_REQUIRED et récupération globale explicitement liée avec intention durable unique ; PID/sessions/versions contrôlés. [Proposition](changes/archive/2026-10-30-recover-cabu-pending-mcp/proposal.md), [tâches](changes/archive/2026-10-30-recover-cabu-pending-mcp/tasks.md), [qualification](changes/archive/2026-10-30-recover-cabu-pending-mcp/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Permissions avant prévol — SCM2.1.29
+
+`check-native-ask-before-preflight` : ARCHIVÉ — source2.1.29 qualifiée, **code non attribué**. Garde client requiredNativeAsk avant prompt, politique partagée sans changement et sortie explicite des deny de revue ; aucune restauration automatique. [Proposition](changes/archive/2026-10-30-check-native-ask-before-preflight/proposal.md), [tâches](changes/archive/2026-10-30-check-native-ask-before-preflight/tasks.md), [qualification](changes/archive/2026-10-30-check-native-ask-before-preflight/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Distribution du garde de permissions — SCM2.1.30
+
+`close-monitor-permission-policy-distribution` : ARCHIVÉ — source2.1.30 qualifiée, **code non attribué**. Dépendance permission-policy incluse dans le moniteur et imports relatifs vérifiés par destination ; correction de livraison liée au29, sans changement de permissions. [Proposition](changes/archive/2026-10-30-close-monitor-permission-policy-distribution/proposal.md), [tâches](changes/archive/2026-10-30-close-monitor-permission-policy-distribution/tasks.md), [qualification](changes/archive/2026-10-30-close-monitor-permission-policy-distribution/QUALIFICATION.md). Publication et activation distinctes ; attribution ACL ultérieure.
+
+
+### Rattachement après fin native — SCM 2.1.31
+
+`fix-native-completion-before-attach` : ARCHIVÉ — source 2.1.31 qualifiée, **code non attribué**, attribution ACL ultérieure. [Proposition](changes/archive/2026-10-31-fix-native-completion-before-attach/proposal.md), [tâches](changes/archive/2026-10-31-fix-native-completion-before-attach/tasks.md). Validation source acquise ; publication et activation distinctes.
+
+
+### Réattachement du plugin de contexte après arrêt — CAB 2.1.32
+
+`rebind-portability-plugin-after-dead-pid` : ARCHIVÉ — CAB 2.1.32 qualifié, code non attribué, attribution ACL ultérieure. Un PID préparé mort permet le rattachement au processus courant en mémoire ; PID actif ou état inconnu restent bloquants. Tests ciblés, globaux et OpenCode privé réussis ; activation distincte selon CABU. [Proposition](changes/archive/2026-10-31-rebind-portability-plugin-after-dead-pid/proposal.md), [tâches](changes/archive/2026-10-31-rebind-portability-plugin-after-dead-pid/tasks.md).
+
+### Jetons des accès libérés — SCM 2.1.35
+
+`discard-released-access-tokens` : ARCHIVÉ — source 2.1.35 ; jetons bruts
+supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
+**code non attribué**, attribution ACL ultérieure. [Proposition](changes/archive/2026-10-31-discard-released-access-tokens/proposal.md), [tâches](changes/archive/2026-10-31-discard-released-access-tokens/tasks.md), [statistiques](changes/archive/2026-10-31-discard-released-access-tokens/STATISTICS.md). Activation à vérifier après CABU.
+
+### Entrées provisoires SCM — 1er et 2 novembre 2026
+
+| Code | Change | État | Preuve |
+| --- | --- | --- | --- |
+| code non attribué | reconcile-native-completion-after-terminal-sse | ARCHIVÉ, source 2.1.36 qualifiée ; activation CABU non réalisée ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-reconcile-native-completion-after-terminal-sse/tasks.md) |
+| code non attribué | require-native-recovery-preflight | ARCHIVÉ, source 2.1.37 qualifiée ; CABU et activation font l'objet d'une preuve distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-require-native-recovery-preflight/tasks.md) |
+| code non attribué | enforce-recovery-preflight-discovery | ARCHIVÉ, source 2.1.38 qualifiée ; activation CABU distincte ; attribution ACL ultérieure | [tâches](changes/archive/2026-11-01-enforce-recovery-preflight-discovery/tasks.md) |
+| code non attribué | fix-native-permission-reply-location-scope | ARCHIVÉ, source 2.1.61 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-fix-native-permission-reply-location-scope/tasks.md) |
+| code non attribué | expose-safe-run-native-operation-state | ARCHIVÉ, source 2.1.62 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-expose-safe-run-native-operation-state/tasks.md) |
+| code non attribué | restore-approved-native-operations | ARCHIVÉ, source 2.1.63 qualifiée ; activation CABU distincte, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-restore-approved-native-operations/tasks.md) |
+| code non attribué | reconcile-terminal-native-operations | ARCHIVÉ, source 2.1.64 qualifiée ; CABU/activation distincts, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-terminal-native-operations/tasks.md) |
+| code non attribué | correlate-running-codemode-validation | ARCHIVÉ, source 2.1.65 publiée et activée via CABU ; quatre composants vérifiés, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-correlate-running-codemode-validation/tasks.md) |
+| code non attribué | reconcile-running-codemode-validation | ARCHIVÉ, source 2.1.65 publiée et activée via CABU ; quatre composants vérifiés, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-running-codemode-validation/tasks.md) |
+| code non attribué | bind-native-requestid-in-literal-codemode-validation | ARCHIVÉ, source 2.1.66 qualifiée ; publication et CABU en cours séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-bind-native-requestid-in-literal-codemode-validation/tasks.md) |
+| code non attribué | reconcile-persisted-native-rejections | ARCHIVÉ, source 2.1.67 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-reconcile-persisted-native-rejections/tasks.md) |
+| code non attribué | forward-recover-cabu-after-controller-rollback-failure | ARCHIVÉ, source 2.1.68 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-forward-recover-cabu-after-controller-rollback-failure/tasks.md) |
+| code non attribué | preserve-conflicting-restored-accesses | ARCHIVÉ, source 2.1.69 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-preserve-conflicting-restored-accesses/tasks.md) |
+| code non attribué | continue-cabu-forward-recovery-after-disconnect | ARCHIVÉ, source 2.1.70 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-continue-cabu-forward-recovery-after-disconnect/tasks.md) |

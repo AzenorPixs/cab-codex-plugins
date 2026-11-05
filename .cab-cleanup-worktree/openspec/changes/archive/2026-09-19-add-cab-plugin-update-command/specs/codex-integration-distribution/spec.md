@@ -1,0 +1,56 @@
+## MODIFIED Requirements
+
+### Requirement: Commande de pilotage sûre
+La commande Codex `/cab` SHALL être versionnée dans
+`.codex/commands/cab.md` et proposer `start`, `run`, `test`, `update` et
+`stop`. Elle SHALL orchestrer les ressources de communication CAB entre le
+broker MCP et l'agent Codex, sans rendre de décision d'approbation ni modifier
+le projet piloté. Elle SHALL préserver OpenCode et le broker MCP géré par
+OpenCode lors de l'arrêt.
+
+Avant de créer une session de codage, `/cab start` SHALL consulter `GET /mcp`
+du serveur OpenCode et exiger que `cgpt-validation` soit `connected`. En cas
+d'échec, elle MAY réinitialiser l'instance par `POST /instance/dispose`, puis
+SHALL attendre un état sain ; elle SHALL ne jamais démarrer ni arrêter le
+broker directement. Après ce contrôle, elle SHALL créer ou réutiliser une
+session OpenCode persistante et SHALL transmettre les mandats par la
+messagerie native de cette session.
+
+`/cab update` SHALL vérifier que la marketplace `cab_codex_plugins` et le
+plugin `cab-approval-bridge` sont configurés, comparer leurs versions SemVer de
+base et appeler `codex plugin marketplace upgrade cab_codex_plugins` seulement
+si la version de la marketplace est strictement plus récente. Elle SHALL
+refuser une version absente ou invalide et SHALL vérifier la version installée
+après l'actualisation. Elle SHALL ne démarrer, arrêter ni modifier aucune
+ressource CAB, configuration Codex ou source du marketplace.
+
+#### Scenario: Démarrage CAB
+- **WHEN** `/cab start` est exécutée
+- **THEN** elle vérifie `/mcp`, initialise ou reprend le contrôleur et la supervision CAB, puis crée ou réutilise une session persistante sans prendre de décision métier
+
+#### Scenario: MCP non connecté
+- **WHEN** `GET /mcp` ne présente pas `cgpt-validation` comme `connected`
+- **THEN** `/cab start` réinitialise seulement l'instance OpenCode, attend une preuve de connexion et échoue sans créer de session si cette preuve reste absente
+
+#### Scenario: Test CAB
+- **WHEN** `/cab test` est exécutée
+- **THEN** elle vérifie le chemin de validation complet dans la session persistante, sans modifier le projet piloté
+
+#### Scenario: Arrêt CAB
+- **WHEN** `/cab stop` est exécutée
+- **THEN** elle ferme seulement les ressources CAB qu'elle a créées et ne ferme ni OpenCode ni le broker MCP géré par OpenCode
+
+#### Scenario: Mise à jour disponible
+- **WHEN** `/cab update` constate une version marketplace strictement plus
+  récente que la version installée
+- **THEN** elle exécute une seule fois l'actualisation native Codex et annonce
+  le succès seulement après vérification de la version installée
+
+#### Scenario: Plugin déjà à jour
+- **WHEN** `/cab update` constate une version installée égale ou plus récente
+- **THEN** elle n'exécute aucune actualisation et signale que le plugin est à jour
+
+#### Scenario: Métadonnées non exploitables
+- **WHEN** la marketplace, le plugin ou l'une des versions nécessaires est
+  absent ou invalide
+- **THEN** `/cab update` échoue sans actualiser ni modifier de configuration

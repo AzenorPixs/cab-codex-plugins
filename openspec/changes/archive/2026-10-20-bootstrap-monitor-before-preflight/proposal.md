@@ -1,3 +1,5 @@
+# OBS05 — Préparer le moniteur avant les prévols
+
 ## Why
 
 Le monitoring est appelé après le prévol et peut être omis lors de la réutilisation des services. Une panne PLLM ou MCP laisse alors le site indisponible alors que son serveur accepte déjà des sources absentes.

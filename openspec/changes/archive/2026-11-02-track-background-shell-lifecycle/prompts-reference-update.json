@@ -1,0 +1,78 @@
+{
+  "authorization": "2026-11-02: Oui, adapter ces seuls renvois ; Oui, autoriser cette extension aux 18 fichiers",
+  "scope": "references only; business goals, authority and termination preserved",
+  "files": {
+    "SCMP.md": {
+      "before": "a0af9e5a98e31a6e72a19e63f90158bf8e49241c04579f87b812b452f96c718f",
+      "after": "abc9e3fa96ee01b8efd5f1ad57953b2f451895e30a01769315ed6f897576e3de"
+    },
+    "CISMP.md": {
+      "before": "19b740dab74b27519d19c53357ea4397695ae395b8c47a3bc1d0c55349334e2d",
+      "after": "3d2a5ad534120039a8de8433c3f1b774f60239c362154e8867a872ef5b11acb6"
+    },
+    "ISMP.md": {
+      "before": "40e2c636a7590c73300e36ffc2bd12e509654c9cae23b13247868dca7568d586",
+      "after": "521bd0e69eb51d0266087ffc8e13af2292a37ac091a655443406b49177422750"
+    },
+    "SPCMP.md": {
+      "before": "132b0771a652b36bcee1101540bbbbf578f73265ba580c76d0b81f00a94b57bc",
+      "after": "ee4125b5db680a17421f0e9a3afdbfa2d34c7018372102ce89553db0284d7103"
+    },
+    "GSCMP.md": {
+      "before": "dcc2e779d324926caac89b27c882d6a0e0aa891359b5c13ba06a39707766334e",
+      "after": "42a165527f5baff066cf794d0e2ac978db23d5fff1e72d7460e1ad53e2866686"
+    },
+    "ACSP.md": {
+      "before": "ef4f551c2354a672234ee175ad7fe29ba2c7e45a8de318931dd5e76052f1b489",
+      "after": "8dfe325ac8f0d1a1e198aaec8081089dad6f01f56974fae54b693c82709637f2"
+    },
+    "RCAM.md": {
+      "before": "f8ef3e30c743b7f6a398dfe3b7178339c623bdd44053d79ede980d5e9dca4d8a",
+      "after": "ffd42adf6347324f05e9682c3bbeb5db3784224d6776d998a6c243e7c8d1e0dc"
+    },
+    "RSMP.md": {
+      "before": "22cf5aa9aaefcd29f96adc88731ae33f2109640af96b5316d64641b76d2a262e",
+      "after": "c21c51e388beb7f4c39cf9d7e121073951bdadccceda09211622dea84d2bf096"
+    },
+    "RCAMP.md": {
+      "before": "0ebef89efa37febe979a58a3d8deaf18c9fa882077f47a18c2446c82df055f1c",
+      "after": "b5532b629268a1309d8819ed7fef1647246b978f187692333c6148255dc563f1"
+    },
+    "PPSCP.md": {
+      "before": "d3af2b4666fb53a1c7ba8d5dacae7f881fbaac2c0a6ae4138098c83f912b8c7b",
+      "after": "99197564cab6e5a9e4deaf668603d5a9c23ad46d0c5b27a4bc451575cc16c649"
+    },
+    "DOPP.md": {
+      "before": "2b4b686fbcf622ab251fb0890a091bcde56b000fa2e9dd82a40d719b056e16da",
+      "after": "53634b47101431c08876a3bf9345d27e14e3b0e15414b851acbf8866c7758882"
+    },
+    "ACSMP.md": {
+      "before": "bd0252da8a1b22c4658dbc49c83fea39ecf628a4eacfec1f2a7c6942df1cee76",
+      "after": "6bb8d4919f6e971f6761a74f6ec87d12961728c2054f12251169771da321bc1a"
+    },
+    "INDEX.md": {
+      "before": "612bc0fc12db0f570ab462e607f4c5a8385e9a3d43cf388e7f232b1d752ea004",
+      "after": "327160e894ae9acb3668cfad8f6dad9c7544d721ddeb8a76715f3d46ffe1a878"
+    },
+    "README.md": {
+      "before": "65191e71fd96cdf10b9dd1328151663600de6bb908b3d80e91cb5cf0bc3daa6c",
+      "after": "b1a86a6ad58b870cb7c9fbebe7ce026a34cf31d4bd191e31f0b918bdce09ff6d"
+    },
+    "PROJECT.md": {
+      "before": "4d061e57cde1e184d6eb34d717ce87d5fafc8d93b6d381b3f09f1456d485e4ab",
+      "after": "9a95773fd2f1e97a02bcd0edd229a479da248e9f032dc075f2a3342cdb11abc3"
+    },
+    "TECHNICAL.md": {
+      "before": "3028b4bbe9c28e3e43cf6e34ac1984fcc5607f38820075f16517087eacf92bc9",
+      "after": "ae889379cd180d1da18c1f18d2ea2527e3f4700f5519b9a351cbd46676f19541"
+    },
+    "SGS.md": {
+      "before": "f2604535dbc24a3f335866190a300827a03e12fb365611ffe6e82871f0e4c2be",
+      "after": "5ed9031e4c440a2d8924c2ff67d79336a25d413dc288d52a392bdb9078870e27"
+    },
+    "openspec/specs/orchestrated-pllm-session/spec.md": {
+      "before": "bbe623a9671bf1a33d5f619b0205cb172540c464f565bf7c0fb5bcd11dd4cbd2",
+      "after": "7c6ef22ae6038b0de9479a062fabc0b4f92cab0d7145093ab7b6375c535dd056"
+    }
+  }
+}

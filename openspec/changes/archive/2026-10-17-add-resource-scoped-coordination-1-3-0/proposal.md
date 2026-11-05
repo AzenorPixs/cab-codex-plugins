@@ -1,4 +1,4 @@
-# CAB 1.3.0 — coordination atomique par ressource
+# CO03 — CAB 1.3.0 — coordination atomique par ressource
 
 ## Why
 

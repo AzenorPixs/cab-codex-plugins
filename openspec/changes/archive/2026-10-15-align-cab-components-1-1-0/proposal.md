@@ -1,4 +1,4 @@
-# Alignement des briques CAB sur 1.1.0
+# DIS05 — Alignement des briques CAB sur 1.1.0
 
 ## Why
 Le développeur demande explicitement la version 1.1.0 pour toutes les briques

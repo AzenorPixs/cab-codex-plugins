@@ -1,4 +1,4 @@
-# Colonne codes de lot du moniteur — CAB 2.1.2
+# OBS08 — Colonne codes de lot du moniteur — CAB 2.1.2
 
 ## Why
 Les tableaux RUN et CHANGE ne permettent pas de repérer directement les codes courts des lots OpenSpec, tels que PA01, PA02, C08, O26 ou B02.

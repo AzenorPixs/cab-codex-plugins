@@ -1,0 +1,4 @@
+schema: spec-driven
+created: 2026-10-28
+goal: Faire fonctionner toutes les briques CAB uniquement avec OpenCode V2, en
+  conservant la corrélation et la permission native once.

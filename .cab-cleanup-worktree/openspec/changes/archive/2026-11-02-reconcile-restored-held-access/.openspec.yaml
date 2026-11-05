@@ -1,0 +1,5 @@
+schema: spec-driven
+created: 2026-11-02
+goal: Permettre au propriétaire exact de renouveler token/fencing d’un accès
+  HELD dont les opérations sont terminales et prouvées, sans admission par
+  contexte local perdu ni libération des ressources.

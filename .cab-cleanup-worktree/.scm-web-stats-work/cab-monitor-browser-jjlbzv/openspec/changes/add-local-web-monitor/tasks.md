@@ -1,0 +1,14 @@
+- [x] Définir les contrats d’observation
+- [x] Exposer la configuration effective
+- [x] Collecter les états des composants
+- [x] Construire le tableau de bord
+- [ ] Définir les contrats d’observation
+- [ ] Exposer la configuration effective
+- [ ] Collecter les états des composants
+- [ ] Construire le tableau de bord
+- [ ] Définir les contrats d’observation
+- [ ] Exposer la configuration effective
+- [ ] Collecter les états des composants
+- [ ] Construire le tableau de bord
+- [ ] Définir les contrats d’observation
+- [ ] Exposer la configuration effective

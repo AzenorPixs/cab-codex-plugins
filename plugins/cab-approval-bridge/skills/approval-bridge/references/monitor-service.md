@@ -1,4 +1,4 @@
-# Service web de monitoring — CAB 2.1.2
+# Service web de monitoring — CAB 2.2.40
 
 Cette procédure est obligatoire pendant `/CAB start` et à chaque entrée ou
 reprise de session de codage pilotée autorisée, dès la résolution du workspace
@@ -28,6 +28,15 @@ Si les options non secrètes connues ne suffisent pas à vérifier une instance
 existante, signaler cette limite et demander les seules valeurs manquantes,
 sans tenter de les deviner ni réécrire le fichier.
 
+## Version attendue du jeu installé
+
+Résoudre la version de base du plugin CAB installé depuis
+`<plugin>/.codex-plugin/plugin.json` : retirer le suffixe `+codex.…` de son
+champ `version`. Cette valeur est la version attendue pour le jeu source et
+l'API du moniteur. Ne pas la remplacer par une ancienne version copiée dans
+une procédure. Une version de manifeste absente ou invalide donne un diagnostic
+borné et ne justifie aucun arrêt d'une instance active.
+
 ## 2. Réutilisation d'une instance active
 
 L'unité attendue est `cgpt-approval-bridge-monitor.service`. Consulter ses
@@ -37,7 +46,7 @@ attendue dans le profil utilisateur et son appartenance à cette installation.
 
 Si elle est active, interroger uniquement l'URL loopback attendue :
 
-- GET /api/snapshot doit réussir et annoncer version 2.1.2 ainsi que
+- GET /api/identity doit réussir et annoncer la version de base attendue du plugin installé ainsi que
   identity.workspace exactement égal au workspace canonique attendu ;
 - GET / doit servir la page CAB Monitor ;
 - l'unité doit utiliser Restart=on-failure.
@@ -60,10 +69,17 @@ scripts/
   cgpt-approval-bridge-monitor-data.mjs
   cgpt-approval-bridge-monitor-management.mjs
   cgpt-approval-bridge-monitor-events.mjs
+  cgpt-approval-bridge-continuity.mjs
   cgpt-approval-bridge-run-steps.mjs
   cgpt-approval-bridge-statistics-maintenance.mjs
   cgpt-approval-bridge-observation-statistics.mjs
+  cgpt-approval-bridge-state-layout.mjs
   cgpt-approval-bridge-opencode-client.mjs
+  cgpt-approval-bridge-permission-replies.mjs
+  cgpt-approval-bridge-permission-policy.mjs
+  cgpt-approval-bridge-process-lifecycle.mjs
+  cgpt-approval-bridge-sgs.py
+  cab_sgs.py
 web-monitor/
   index.html
   app.mjs
@@ -72,7 +88,7 @@ web-monitor/
 ```
 
 Conserver ces deux dossiers frères : les imports et ressources sont résolus
-relativement aux modules. Vérifier la version 2.1.2 et la présence de chaque
+relativement aux modules. Vérifier la version de base attendue et la présence de chaque
 fichier avant publication du jeu. Provisionner le credential OpenCode partagé
 dans `~/.config/cab-approval-bridge/opencode.password` avec les permissions
 `0600`; l'unité le charge via `LoadCredential`. Aucune dépendance tierce n'est installée.
@@ -113,7 +129,7 @@ systemctl --user is-active cgpt-approval-bridge-monitor.service
 ```
 
 Ne jamais utiliser systemctl --user enable : aucune activation au login.
-Vérifier ensuite GET /api/snapshot et GET / comme dans la section 2, avec
+Vérifier ensuite GET /api/identity et GET / comme dans la section 2, avec
 requêtes bornées selon le timeout configuré et au plus cinq tentatives. Un
 HTTP 200 d'un autre processus ou un fichier installé ne prouve pas le succès.
 Afficher l'URL réelle uniquement comme disponible après preuve conjointe du
@@ -146,7 +162,7 @@ ce bootstrap ne déclenche aucun arrêt du moniteur. Il continue à présenter l
 observations disponibles et les sources indisponibles ; son démarrage ne prouve
 pas à lui seul un diagnostic PLLM ou un prévol réussi.
 
-## 6. Gestion depuis le Web 2.1.2
+## 6. Gestion depuis le Web 2.1.33
 
 La page propose des commandes explicites des briques. Les unités fixes
 contrôleur/superviseur et leur PID/workspace sont contrôlés ; le broker passe
@@ -160,3 +176,12 @@ OC_Codex_MONITOR_STATE_DIR permet un parent absolu personnalisé ; le catalogue
 reste séparé par empreinte de workspace. Sources OpenSpec, RUN et preuves
 restent conservés. Désarchiver un RUN ne reprend aucune exécution. Les
 procédures /CAB stop et reset continuent de préserver le service Web.
+
+## Brique Statistiques SGS
+
+Le jeu installé inclut les deux modules Python SGS. La carte Statistiques
+présente leur version et la disponibilité de VERSION sous un délai borné,
+avec cache court. Elle distingue une absence, une erreur d’exécution et une
+version divergente ; aucun chemin interne ou sortie brute n’est publié.
+Le moteur est à la demande, sans unité systemd ni boutons de service.
+L’absence du moteur ne doit pas empêcher les cinq autres cartes de fonctionner.

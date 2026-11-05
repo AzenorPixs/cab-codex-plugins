@@ -1,0 +1,56 @@
+✖ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (3904.222734ms)
+✖ transition mixte : un pair inactif sans PAUSE explicite reste bloquant (3828.989149ms)
+✔ maintenance gelée : un autre PENDING global interdit le chargement (4961.652268ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 1
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12773.19406
+
+✖ failing tests:
+
+test at tests/maintenance-bootstrap.test.mjs:178:1
+✖ processus original 1.7.1 → contrôleur 1.8.0 → rejectionOnly/refus/poll/retry/once/complete, broker conservé (3904.222734ms)
+  Error: maintenance-broker-pending-unattributed
+      at maintenanceError (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:14:57)
+      at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:15:32)
+      at collectFrozenProof (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:134:103)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async maintainFrozenController (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs:660:21)
+      at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:182:18)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:387:3) {
+    code: 'maintenance-broker-pending-unattributed',
+    status: 409
+  }
+
+test at tests/maintenance-bootstrap.test.mjs:320:1
+✖ transition mixte : un pair inactif sans PAUSE explicite reste bloquant (3828.989149ms)
+  AssertionError [ERR_ASSERTION]: The input did not match the regular expression /maintenance-peer-pause-required/. Input:
+  
+  'Error: maintenance-broker-pending-unattributed'
+  
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:324:5)
+      at async Test.run (node:internal/test_runner/test:1409:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: Error: maintenance-broker-pending-unattributed
+        at maintenanceError (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:14:57)
+        at fail (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:15:32)
+        at collectFrozenProof (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs:134:103)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async maintainFrozenController (file:///home/devops/datas/cab/plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs:660:21)
+        at async waitForActual (node:assert:646:5)
+        at async strict.rejects (node:assert:769:25)
+        at async TestContext.<anonymous> (file:///home/devops/datas/cab/tests/maintenance-bootstrap.test.mjs:324:5)
+        at async Test.run (node:internal/test_runner/test:1409:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:974:7),
+    expected: /maintenance-peer-pause-required/,
+    operator: 'rejects',
+    diff: 'simple'
+  }
