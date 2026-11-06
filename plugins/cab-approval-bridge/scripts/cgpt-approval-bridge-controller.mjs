@@ -29,7 +29,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.3.5";
+const version = "2.3.6";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -1617,6 +1617,13 @@ registry.quarantineProbeCandidate = (run,approval) => {
       approval.files?.length !== 0 || approval.commands?.length !== 1 ||
       proofHash(approval.commands[0]) !== permit.commandDigest || approval.resources?.length !== 1 ||
       approval.resources[0].key !== permit.resourceKey || approval.resources[0].mode !== 'read') return null;
+  if(permit.stageId){
+    const stage=shellStages.get(permit.stageId);
+    if(!stage||stage.requestId!==approval.requestId||stage.approvalId!==approval.approval_id||
+        stage.operationId!==approval.operation_id||stage.sessionId!==approval.session_id||
+        stage.contextId!==run.contextId||stage.reservationVersion!==run.version||
+        stage.payloadSha256!==permit.payloadSha256||stage.command!==approval.commands[0])return null;
+  }
   const op = registry.resourceState.operations[permit.operationId];
   return op && proofHash(op) === permit.operationDigest ? op.operationId : null;
 };
@@ -1626,6 +1633,45 @@ async function portProbeInfrastructure() {
   const identity = await processIdentity(broker.broker_process.pid);
   if (!identity || identity.state === 'Z') throw new CoordinationError('port-recovery-broker-identity-unavailable');
   return [{ pid: identity.pid, startTime: identity.startTime }];
+}
+async function preparePortProbe(run, operationId, nonce, runtimeDirectories) {
+  const {op,port:targetPort,resourceKey}=portRecoveryCandidate(run,operationId);
+  const evidence=await collectRecoveryEvidence(run,op),instance=evidence.view.nativeInstanceEvidence;
+  if(!instance)throw new CoordinationError('port-recovery-native-instance-unverified');
+  const input={workspace:run.directory,nativePid:evidence.view.nativePid,
+    nativeApiPort:Number(new URL(envValue('OC_Codex_OPENCODE_URL')||'http://127.0.0.1:4096').port||80),port:targetPort,
+    runtimeDirectories,nonce,resourceKey,excludedInfrastructure:await portProbeInfrastructure(),instanceObservedAt:instance.observedAt,
+    instanceStartTime:instance.startTime,instanceEvidenceKind:instance.kind,
+    ...(instance.kind==='kernel-reboot-after-call'?{kernelBootMs:instance.kernelBootMs,bootIdSha256:instance.bootIdSha256,historicalEndedAt:instance.historicalEndedAt}:{})};
+  if(!Array.isArray(runtimeDirectories)||!runtimeDirectories.includes('.'))throw new CoordinationError('port-recovery-complete-project-scope-required');
+  for(const directory of runtimeDirectories)if(directory!=='.')registry.scope(run.runId,run.version,[{key:'file:'+directory,mode:'read'}]);
+  const inline=portProbeDescription(input),executionSessionId=instance.kind==='kernel-reboot-after-call'?run.sessionId:op.sessionId;
+  return {op,input,inline,executionSessionId};
+}
+function portProbeStage(run, prepared) {
+  const matches=[...shellStages.stages.values()].filter(stage=>stage.runId===run.runId&&stage.operationId===prepared.input.nonce);
+  if(matches.length>1)throw new CoordinationError('port-probe-stage-ambiguous');
+  const stage=matches[0];if(!stage)return null;
+  if(stage.sessionId!==prepared.executionSessionId||stage.contextId!==run.contextId||stage.reservationVersion!==run.version||
+      stage.jobId!==contexts.get(run.runId)?.publicJob()?.jobId||stage.payload!==prepared.inline.command||
+      stage.payloadSha256!==prepared.inline.commandSha256)throw new CoordinationError('port-probe-stage-payload-divergent');
+  return stage;
+}
+function portProbeResponse(run,prepared) {
+  const stage=portProbeStage(run,prepared);
+  const description=stage?{...prepared.inline,command:stage.command,
+    commandSha256:createHash('sha256').update(stage.command).digest('hex'),transport:'sealed-bash-v1',
+    stageId:stage.stageId,requestId:stage.requestId,approvalId:stage.approvalId,payloadSha256:stage.payloadSha256,payloadBytes:stage.bytes}:prepared.inline;
+  if(prepared.input.instanceEvidenceKind==='kernel-reboot-after-call'){
+    for(const [key,permit]of portProbeCommands)if(permit.expiresAt<Date.now())portProbeCommands.delete(key);
+    const key=run.runId+'\0'+prepared.input.nonce;
+    if(portProbeCommands.size>=1000&&!portProbeCommands.has(key))throw new CoordinationError('port-probe-preparation-capacity');
+    portProbeCommands.set(key,{sessionId:run.sessionId,operationId:prepared.op.operationId,operationDigest:proofHash(prepared.op),
+      commandDigest:proofHash(description.command),resourceKey:prepared.input.resourceKey,
+      ...(stage?{stageId:stage.stageId,payloadSha256:stage.payloadSha256}:{}),expiresAt:Date.now()+120000});
+  }
+  const nativeInput=stage?{command:stage.command,workdir:run.directory,timeout:30000}:null;
+  return {...description,...(nativeInput?{nativeInput,nativeToolInputSha256:nativeToolInputDigest(nativeInput)}:{}),executionSessionId:prepared.executionSessionId};
 }
 async function reconcilePortFromProbes(run, payload, actionId) {
   registry.admission(run.runId); validatePortReview(payload.review, run.ownerId);
@@ -1671,12 +1717,20 @@ async function reconcilePortFromProbes(run, payload, actionId) {
       runtimeDirectories: payload.review.runtimeDirectories, nonce: probe.operationId, resourceKey, excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: instance.observedAt,
       instanceStartTime: instance.startTime, instanceEvidenceKind: instance.kind,
       ...(instance.kind==='kernel-reboot-after-call'?{kernelBootMs:instance.kernelBootMs,bootIdSha256:instance.bootIdSha256,historicalEndedAt:instance.historicalEndedAt}:{}) };
-    const command = portProbeCommand(expected);
-    if (probe.native.targetDigest !== createHash('sha256').update(JSON.stringify(['bash', command])).digest('hex'))
-      throw new CoordinationError('port-recovery-probe-command-divergent');
     const matches = allParts.filter(part => (part.callID || part.callId) === probe.native.callId);
     if (matches.length !== 1) throw new CoordinationError('port-recovery-probe-operation-unverified');
-    const capture = parsePortCapture(matches[0], expected);
+    const inline=portProbeCommand(expected),nativeCommand=matches[0].state?.input?.command;
+    if(nativeCommand!==inline){
+      const reviewed=shellStages.review({kind:'bash',target:nativeCommand,runId:run.runId,sessionId:probe.sessionId,
+        directory:run.directory,reservationVersion:probe.version,operationId:probe.operationId},probe.requestId);
+      const stage=reviewed&&shellStages.get(reviewed.stageId);
+      if(!stage||stage.payload!==inline||stage.payloadSha256!==createHash('sha256').update(inline).digest('hex')||
+          stage.contextId!==run.contextId||stage.opencodePid!==first.view.nativePid||stage.approvalId!==probe.decision.approvalId)
+        throw new CoordinationError('port-recovery-probe-stage-unverified');
+    }
+    if(probe.native.targetDigest!==createHash('sha256').update(JSON.stringify(['bash',nativeCommand])).digest('hex'))
+      throw new CoordinationError('port-recovery-probe-command-divergent');
+    const capture = parsePortCapture(matches[0], expected, {command:nativeCommand});
     if (capture.cgroupDigest !== instance.cgroupDigest || capture.nativeStartTime !== nativeIdentity.startTime || capture.nativeUid !== nativeUid ||
         capture.observedAt < Date.parse(access.timeoutQuarantine.observedAt) ||
         Date.now() - capture.observedAt > 120000 || capture.observedAt > Date.now() + 5000)
@@ -2515,25 +2569,8 @@ async function handleRequest(request, response) {
         if ([...url.searchParams.keys()].some(key => !['operationId','nonce','runtimeDirectory'].includes(key)) ||
             url.searchParams.getAll('operationId').length !== 1 || url.searchParams.getAll('nonce').length !== 1)
           throw new CoordinationError('recovery-request-invalid', 400);
-        const { op, port, resourceKey } = portRecoveryCandidate(run, url.searchParams.get('operationId'));
-        const evidence = await collectRecoveryEvidence(run, op);
-        if (!evidence.view.nativeInstanceEvidence) throw new CoordinationError('port-recovery-native-instance-unverified');
-        const input = { workspace: run.directory, nativePid: evidence.view.nativePid, nativeApiPort: Number(new URL(envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096').port || 80), port,
-          runtimeDirectories: url.searchParams.getAll('runtimeDirectory'), nonce: url.searchParams.get('nonce'), resourceKey,
-          excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: evidence.view.nativeInstanceEvidence.observedAt,
-          instanceStartTime: evidence.view.nativeInstanceEvidence.startTime, instanceEvidenceKind: evidence.view.nativeInstanceEvidence.kind,
-          ...(evidence.view.nativeInstanceEvidence.kind==='kernel-reboot-after-call'?{kernelBootMs:evidence.view.nativeInstanceEvidence.kernelBootMs,bootIdSha256:evidence.view.nativeInstanceEvidence.bootIdSha256,historicalEndedAt:evidence.view.nativeInstanceEvidence.historicalEndedAt}:{}) };
-        if (!input.runtimeDirectories.includes('.')) throw new CoordinationError('port-recovery-complete-project-scope-required');
-        for (const directory of input.runtimeDirectories) if (directory !== '.')
-          registry.scope(runId, run.version, [{ key: 'file:' + directory, mode: 'read' }]);
-        const description = portProbeDescription(input);
-        if (input.instanceEvidenceKind === 'kernel-reboot-after-call') {
-          for (const [key,permit] of portProbeCommands) if (permit.expiresAt < Date.now()) portProbeCommands.delete(key);
-          if (portProbeCommands.size >= 1000) throw new CoordinationError('port-probe-preparation-capacity');
-          portProbeCommands.set(run.runId+'\0'+input.nonce,{sessionId:run.sessionId,operationId:op.operationId,
-            operationDigest:proofHash(op),commandDigest:proofHash(description.command),resourceKey,expiresAt:Date.now()+120000});
-        }
-        json(response, 200, {...description,executionSessionId:input.instanceEvidenceKind==='kernel-reboot-after-call'?run.sessionId:op.sessionId}); return;
+        const prepared=await preparePortProbe(run,url.searchParams.get('operationId'),url.searchParams.get('nonce'),url.searchParams.getAll('runtimeDirectory'));
+        json(response,200,portProbeResponse(run,prepared));return;
       }
       if (request.method === 'GET' && url.pathname === '/recovery/native-evidence') {
         if ([...url.searchParams.keys()].some(key => key !== 'operationId') || url.searchParams.getAll('operationId').length !== 1)
@@ -2588,7 +2625,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile', '/validation/cancel-reviewed', '/validation/restore-pending', '/validation/withdraw-unissued', '/validation/reconcile-reviewed-terminal', '/locks/reconcile-quiescent-port'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/recovery/port-probe-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile', '/validation/cancel-reviewed', '/validation/restore-pending', '/validation/withdraw-unissued', '/validation/reconcile-reviewed-terminal', '/locks/reconcile-quiescent-port'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -2644,6 +2681,25 @@ async function handleRequest(request, response) {
             current.directory !== run.directory || currentJob?.sessionId !== run.sessionId ||
             currentJob?.directory !== run.directory) throw new CoordinationError('source-read-run-changed');
         json(response, 200, { ...result, runId, reservationVersion: initialVersion }); return;
+      }
+      if(request.method==='POST'&&url.pathname==='/recovery/port-probe-stage'){
+        if(!payload||Object.keys(payload).some(key=>!['operationId','nonce','stageId','requestId','approvalId','runtimeDirectories'].includes(key)))
+          throw new CoordinationError('recovery-request-invalid',400);
+        registry.admission(runId);const job=context.publicJob(),version=run.version;
+        if(!job?.armed||job.strictCommands!==true||job.sessionId!==run.sessionId||job.directory!==run.directory||
+            job.recovery||job.modelTransition||context.hasUnresolvedValidation())throw new CoordinationError('shell-stage-boundary-invalid');
+        const prepared=await preparePortProbe(run,payload.operationId,payload.nonce,payload.runtimeDirectories);
+        if(prepared.executionSessionId!==run.sessionId)throw new CoordinationError('port-probe-stage-session-divergent');
+        await checkNative(run.sessionId,true);await context.assertNativeShellAsk();
+        const existing=portProbeStage(run,prepared);
+        if(existing&&existing.stageId!==payload.stageId)throw new CoordinationError('port-probe-stage-identity-conflict');
+        const stageInput={stageId:payload.stageId,jobId:job.jobId,sessionId:run.sessionId,reservationVersion:run.version,
+          requestId:payload.requestId,approvalId:payload.approvalId,operationId:payload.nonce,payload:prepared.inline.command,payloadSha256:prepared.inline.commandSha256};
+        const binding={runId,contextId:run.contextId,directory:run.directory,host,port:server.address().port,opencodePid:prepared.input.nativePid};
+        checkCommandLength({commands:[stageInput.payload]},maxCommandLength);
+        const preview=shellStages.preview(stageInput,binding);checkCommandLength({commands:[preview.command]},maxCommandLength);
+        registry.admission(runId);registry.owned(runId,version);shellStages.create(stageInput,binding);
+        json(response,201,portProbeResponse(run,prepared));return;
       }
       if(request.method==='POST' && url.pathname==='/shell-stage') {
         registry.admission(runId);

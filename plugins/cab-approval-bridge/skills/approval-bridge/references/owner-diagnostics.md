@@ -61,3 +61,15 @@ filtrer les seules clés utiles et prendre max(overlaps) avec l’export du plug
 actif. Ne pas transmettre le reste de ce snapshot à l’agent. Une erreur
 resource-revision-stale reste légitime si une révision enfant diffère ; refaire
 une demande d’IDs et digests neufs après relecture, sans changer la garde.
+
+## Opération prétendument disparue : comparer les identifiants exacts
+
+Avant toute réparation, rapprocher byte pour byte requestId/approval_id/
+operation_id de la demande native persistée, de la décision et de l’URL lue.
+Ne pas reconstruire un identifiant depuis le titre, le nom du helper ou un
+suffixe descriptif ; un mot ajouté suffit à filtrer une opération inexistante.
+Afficher localement représentation et longueur des chaînes, puis lookup exact
+dans GET /runs coordination.operations sur la même origine et le même PID
+controller. Une liste tronquée n’est pas preuve d’absence. Si l’entrée exacte
+est PREPARED/approved, reprendre l’acquisition déjà autorisée après contrôles
+d’identité/révisions ; ne pas recréer, redécider ou réconcilier une fausse cible.

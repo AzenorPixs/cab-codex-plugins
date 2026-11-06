@@ -143,3 +143,24 @@ Les codes publics source-too-large, source-invalid, source-http-error et source-
 ## Permissions de la session après revue
 
 Appliquer [native-permission-resume.md](native-permission-resume.md) avant nouveau prévol : requiredNativeAsk est une exigence structurée avant prompt, indépendante de nativeCodingMandate et de l’inactivité. Aucun deny n’est levé automatiquement.
+
+## CLI, instance et SID homonyme — CAB2.3.6
+
+Un SID seul n’identifie pas une instance. Le CLI run --session peut créer ce
+SID s’il est absent du serveur choisi par défaut. Un historique court, modèle
+différent ou permissions absentes ne prouve donc pas une panne CAB. Comparer
+d’abord origineHTTP,PID/version de /api/info,location et SID du RUN. Ne pas
+comparer deux historiques provenant de serveurs différents ni corriger une
+pagination sur cette seule observation. Aucune suppression de la copie
+homonyme ni mutation de cet autre serveur n’est implicite.
+
+Préférer le client CAB authentifié vers l’origine contrôlée, nativeCodingMandate
+puis prompt avec requiredNativeAsk explicite. Si le CLI est employé dans un
+chemin déjà qualifié, fixer --server à cette origine, --session, --agent build
+et --model provider/model#variant correspondant exactement au modèle mandaté.
+Ne pas utiliser --auto. Relever ensuite le tuple agent/fournisseur/modèle/variant
+du message natif sur CETTE instance avant reprise. Un modèle fautif d’une autre
+instance ne justifie ni nouvelle évaluationPLLM ni changement du modèle du RUN.
+Réamorcer en deux tours : broker_readiness seul, validation sur preuve native,
+puis lectures sur chemins exacts autorisés. Le shell d’analyse ne parcourt pas
+les chemins exclus, même si l’instance étrangère l’aurait laissé exécuter.

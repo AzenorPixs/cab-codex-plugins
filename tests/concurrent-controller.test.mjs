@@ -183,21 +183,31 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     assert.equal(acquired.status, 200, JSON.stringify(acquired));
     return { approval: value, access: acquired.body };
   }
-  async function execute(value) {
+  async function execute(value,nativeInput) {
+    if(nativeInput){
+      const messageID='msg_staged_'+value.requestId,stamp=Date.now();
+      native.messages[value.session_id].push({info:{id:messageID,sessionID:value.session_id,role:'assistant'},nativeV2:{id:messageID,type:'assistant',time:{created:stamp},content:[{type:'tool',id:'call-'+value.requestId,name:'shell',executed:false,time:{created:stamp,ran:stamp},state:{status:'running',input:structuredClone(nativeInput),content:[],metadata:{}}}]}});
+      native.permissions.push({id:'perm-'+value.requestId,sessionID:value.session_id,permission:'shell',messageID,tool:{callID:'call-'+value.requestId},metadata:{command:value.commands[0]}});
+      const checked=await nativeClient.permissions(directory,{sessionIds:[value.session_id],verifyInputs:true});
+      if(checked.length)assert.equal(checked[0].metadata.nativeToolInputSha256,value.tool_input_sha256);
+      try{await waitFor(()=>native.replies.some(reply=>reply.path.endsWith('/perm-'+value.requestId)))}catch(cause){const state=(await get('/runs/'+value.run_id+'/status')).body;throw new Error(JSON.stringify({reason:cause.message,lastEvent:state.lastEvent,nativeGuard:state.nativePermissionGuard}));}return;
+    }
     native.permissions.push({ id: 'perm-' + value.requestId, sessionID: value.session_id,
       permission: value.commands.length ? 'bash' : 'edit', tool: { callID: 'call-' + value.requestId },
       metadata: value.commands.length ? { command: value.commands[0] } : { filepath: directory + '/' + value.files[0] } });
     await waitFor(() => native.replies.some((r) => r.path.endsWith('/perm-' + value.requestId)));
   }
-  async function completeTool(value, exit = 0, { error = false, output = 'synthetic native result', nativeShell = false } = {}) {
+  async function completeTool(value, exit = 0, { error = false, output = 'synthetic native result', nativeShell = false, nativeInput } = {}) {
     const op = (await get('/runs')).body.coordination.operations[value.operation_id];
     const stamp = Math.max(Date.now(), op.native.startedAt) + 1;
     const part = { type: 'tool', id: 'part-' + value.requestId, callID: 'call-' + value.requestId,
       sessionID: value.session_id, tool: value.commands.length ? (nativeShell ? 'shell' : 'bash') : 'edit',
       ...(nativeShell ? { executed: false } : {}), state: { status: 'completed',
-        input: value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] },
+        input: nativeInput || (value.commands.length ? { command: value.commands[0] } : { filePath: directory + '/' + value.files[0] }),
         output, time: { start: stamp, end: stamp + 1 }, metadata: { exit, ...(nativeShell ? { status: 'completed' } : {}), ...(error ? { error: true } : {}) } } };
-    native.messages[value.session_id].push({ parts: [part] });
+    const prior=nativeInput&&native.messages[value.session_id].find(message=>message.nativeV2?.content?.some(item=>item.id===part.callID));
+    if(prior){const item=prior.nativeV2.content.find(item=>item.id===part.callID);item.time.ran=stamp;item.time.completed=stamp+1;item.state={status:'completed',input:structuredClone(nativeInput),content:[{type:'text',text:output}],metadata:{truncated:false,exit,status:'completed'}};}
+    else native.messages[value.session_id].push({ parts: [part] });
     native.emit({ type: 'message.part.updated', properties: { part } });
   }
   async function approvedEditAccess(run, requestId, filePath) {
@@ -2138,7 +2148,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.3.5');
+  assert.equal(initialized.result.serverInfo.version, '2.3.6');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3888,7 +3898,7 @@ test('revue : transport NOT_ADMITTED audité ignoré sans masquer une admission 
  assert.equal(result.body.state,'CANCELLED');assert.equal(result.body.executionOutcome,'UNDETERMINED_READ_ONLY');
 });
 
-async function portReconciliationFixture(t,{reboot=false,handoff=false}={}) {
+async function portReconciliationFixture(t,{reboot=false,handoff=false,sealed=false}={}) {
  const packageContent=JSON.stringify({scripts:{dev:'vite'}}),port={key:'port:host-a/5173',mode:'write'},file={key:'file:frontend',mode:'write'};
  const h=await setup(t,{sourceFiles:{'frontend/package.json':packageContent}}),run=await h.reserve('reconcile-port',{resources:[port,file]});
  const approval=h.approval(run,'reconcile-port-original');approval.resources=[port];approval.expected_revisions={[port.key]:0};
@@ -3913,7 +3923,7 @@ async function portReconciliationFixture(t,{reboot=false,handoff=false}={}) {
   const old=run.sessionId,next='ses_reboot_current',base='/runs/'+run.runId;
   h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};
   h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
-  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.5'})}}]}];
+  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.6'})}}]}];
   const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
   const result=await h.post(base+'/session-handoff',{handoffId:'port-reboot-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:old,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'continue read-only probes after qualified handoff',evidence:['fixture/native handoff']});
   assert.equal(result.status,201,JSON.stringify(result));run.sessionId=next;
@@ -3925,18 +3935,30 @@ async function portReconciliationFixture(t,{reboot=false,handoff=false}={}) {
   const descriptor=await h.get('/runs/'+run.runId+'/recovery/port-probe-command?operationId='+approval.operation_id+'&nonce=op-'+nonce+'&runtimeDirectory=.');
   assert.equal(descriptor.status,200,JSON.stringify(descriptor));
   const params=descriptor.body.parameters;
-  const probe=h.approval(run,nonce);probe.commands=[portProbeCommand(params)];probe.resources=[{...port,mode:'read'}];probe.expected_revisions={[port.key]:0};
+  let nativeInput;const probe=h.approval(run,nonce);probe.commands=[portProbeCommand(params)];probe.resources=[{...port,mode:'read'}];probe.expected_revisions={[port.key]:0};
+  if(sealed){
+   const staged=await h.post('/runs/'+run.runId+'/recovery/port-probe-stage',{operationId:approval.operation_id,nonce:probe.operation_id,
+     stageId:'stage-'+nonce,requestId:probe.requestId,approvalId:probe.approval_id,runtimeDirectories:['.']});
+   assert.equal(staged.status,201,JSON.stringify(staged));assert.equal(staged.body.transport,'sealed-bash-v1');assert.equal(staged.body.nativeToolInputSha256,nativeToolInputDigest(staged.body.nativeInput));assert.equal(staged.body.nativeInput.timeout,30000);
+   assert.equal(staged.body.payloadSha256,createHash('sha256').update(portProbeCommand(params)).digest('hex'));
+   assert.ok(staged.body.command.length<2000);assert.ok(!JSON.stringify(staged.body).includes('async function observePortBoundary'));
+   const refreshed=await h.get('/runs/'+run.runId+'/recovery/port-probe-command?operationId='+approval.operation_id+'&nonce='+probe.operation_id+'&runtimeDirectory=.');
+   assert.equal(refreshed.status,200,JSON.stringify(refreshed));assert.equal(refreshed.body.command,staged.body.command);
+   probe.commands=[staged.body.command];nativeInput=staged.body.nativeInput;probe.tool_input_sha256=staged.body.nativeToolInputSha256;
+   const beforeDelivery=await fetch(h.base+'/runs/'+run.runId+'/shell-stage/stage-'+nonce+'/payload');assert.equal(beforeDelivery.status,409);
+  }
   h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(probe);
   assert.equal((await h.post('/validation/request',{approval:probe})).status,202);
   assert.equal((await h.post('/runs/'+run.runId+'/decision/'+probe.requestId,{decision:'approved'})).status,201);
   const acquired=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:probe.operation_id,operationDigest:probe.operation_digest,resources:probe.resources,expectedRevisions:probe.expected_revisions});
-  assert.equal(acquired.status,200,JSON.stringify(acquired));await h.execute(probe);
+  assert.equal(acquired.status,200,JSON.stringify(acquired));assert.equal(acquired.body.state,'HELD');await h.execute(probe,nativeInput);
+  if(sealed){const delivered=await fetch(h.base+'/runs/'+run.runId+'/shell-stage/stage-'+nonce+'/payload');assert.equal(delivered.status,200);assert.equal(await delivered.text(),portProbeCommand(params));}
   const capture={protocol:'cab-port-boundary-v1',nonce:params.nonce,nativePid:native,port:5173,runtimeDirectories:['.'],workspace:h.directory,
    ...(reboot?{kernelBootMs:instance.kernelBootMs,bootIdSha256:instance.bootIdSha256,historicalEndedAt:instance.historicalEndedAt}:{}),
    observedAt:Date.now(),instanceObservedAt:instance.observedAt,instanceEvidenceKind:instance.kind,nativeStartedAtMs:reboot?instance.kernelBootMs+1000:instance.observedAt-1000,nativeStartedAtUpperBound:reboot?instance.kernelBootMs+2000:instance.observedAt,complete:true,quiescent:true,nativeUid:process.getuid(),nativeStartTime:identity.startTime,cgroupDigest:instance.cgroupDigest,netnsDigest:'d'.repeat(64),
    listening:false,matchingProcessCount:0,matchingProcesses:[],matchingProcessesDigest:proofHash([])};
   capture.captureDigest=proofHash(capture);
-  await h.completeTool(probe,0,{nativeShell:true,output:'CAB_PORT_BOUNDARY_V1:'+Buffer.from(JSON.stringify(capture)).toString('base64')+'\n'});
+  await h.completeTool(probe,0,{nativeShell:true,nativeInput,output:'CAB_PORT_BOUNDARY_V1:'+Buffer.from(JSON.stringify(capture)).toString('base64')+'\n'});
   const released=await h.releaseOperation(run,probe,acquired.body,'NO_EFFECT');assert.equal(released.status,200,JSON.stringify(released));
   assert.equal((await h.get('/runs/'+run.runId+'/operations?operationId='+probe.operation_id)).body.operations[0].state,'COMPLETED');probes.push(probe.operation_id);
  }
@@ -4313,7 +4335,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.3.5'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.3.6'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4891,7 +4913,7 @@ for(const handoff of [false,true])test('port après reboot : réconciliation HTT
 test('retraite historique HTTP : ancien SID révoqué sans réactiver sa permission',async t=>{
  const {h,run,approval,base}=await unissuedWithdrawalFixture(t,'rejected'),next='ses_retirement_current';
  h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
- h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.5'})}}]}];
+ h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.6'})}}]}];
  const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
  const handoff=await h.post(base+'/session-handoff',{handoffId:'retirement-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:run.sessionId,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'qualified owner handoff',evidence:['audit/handoff']});assert.equal(handoff.status,201,JSON.stringify(handoff));
  const current=(await h.get('/runs')).body.runs.find(r=>r.runId===run.runId);
@@ -4957,4 +4979,46 @@ test('frontière PENDING : observation noyau additive conserve le digest compati
  assert.ok(nativeKernelEpoch);assert.equal(nativeBoundaryDigest,proofHash(legacy));
  payload.input.nativeBoundaryDigest=proofHash(legacy);
  assert.equal((await h.post(base+'/recovery/action',payload)).status,200);
+});
+
+for(const handoff of [false,true])test('port scellé : deux once et corps exacts avec SID '+(handoff?'courant':'source'),async t=>{
+ const {h,run,approval,payload}=await portReconciliationFixture(t,{reboot:true,handoff,sealed:true});
+ const replies=h.native.replies.length,result=await h.post('/runs/'+run.runId+'/recovery/action',payload);
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.evidenceAuthority,'VERIFIED_NATIVE_PORT_PROBES');
+ assert.equal(h.native.replies.length,replies);assert.equal(result.body.executionOutcome,'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT');
+ await h.stop();await h.start();assert.deepEqual((await h.post('/runs/'+run.runId+'/recovery/action',payload)).body,result.body);
+});
+
+for(const variant of ['free-payload','scope','identity-conflict','changed-directories'])test('port scellé refuse un stage non conforme : '+variant,async t=>{
+ const {h,run,approval}=await portReconciliationFixture(t,{reboot:true,handoff:true,sealed:true});
+ const body={operationId:approval.operation_id,nonce:'op-probe-port-a',stageId:'stage-probe-port-a',requestId:'probe-port-a',approvalId:'probe-port-a',runtimeDirectories:['.']};
+ if(variant==='free-payload')body.payload='unreviewed';if(variant==='scope')body.resources=[{key:'file:foreign',mode:'write'}];
+ if(variant==='identity-conflict')body.stageId='foreign-stage';if(variant==='changed-directories')body.runtimeDirectories.push('frontend');
+ const replies=h.native.replies.length,result=await h.post('/runs/'+run.runId+'/recovery/port-probe-stage',body);
+ assert.ok([400,409].includes(result.status),JSON.stringify(result));assert.equal(h.native.replies.length,replies);
+ const original=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(original.access.state,'HELD');
+});
+for(const variant of ['other-launcher','expired'])test('port scellé refuse une capture non qualifiée : '+variant,async t=>{
+ const {h,run,approval,payload}=await portReconciliationFixture(t,{reboot:true,handoff:true,sealed:true});
+ const op=(await h.get('/runs')).body.coordination.operations[payload.input.probeOperationIds[0]];
+ const raw=h.native.messages[run.sessionId].find(message=>message.nativeV2?.content?.some(part=>part.id===op.native.callId));
+ const nativePart=raw?.nativeV2.content.find(part=>part.id===op.native.callId);
+ const part=nativePart?{state:{...nativePart.state,output:nativePart.state.content[0].text}}:h.native.messages[run.sessionId].flatMap(message=>message.parts||[]).find(part=>part.callID===op.native.callId);
+ if(variant==='other-launcher')part.state.input.command='/usr/bin/true';
+ else{const value=JSON.parse(Buffer.from(part.state.output.split(':')[1].trim(),'base64').toString());delete value.captureDigest;value.observedAt=Date.now()-120001;value.captureDigest=proofHash(value);part.state.output='CAB_PORT_BOUNDARY_V1:'+Buffer.from(JSON.stringify(value)).toString('base64')+'\n';}
+ if(nativePart){nativePart.state.input=part.state.input;nativePart.state.content=[{type:'text',text:part.state.output}];}
+ const count=h.native.replies.length,result=await h.post('/runs/'+run.runId+'/recovery/action',payload);
+ assert.equal(result.status,409,JSON.stringify(result));assert.equal(h.native.replies.length,count);
+ const original=(await h.get('/runs/'+run.runId+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(original.access.state,'HELD');assert.equal(original.onceAcknowledged,true);
+});
+
+for(const field of ['requestId','approval_id'])test('port scellé : une identité de validation divergente ne reçoit pas le permit inter-SID '+field,async t=>{
+ const {h,run,approval}=await portReconciliationFixture(t,{reboot:true,handoff:true,sealed:true}),base='/runs/'+run.runId;
+ const child=h.approval(run,'probe-identity');
+ const staged=await h.post(base+'/recovery/port-probe-stage',{operationId:approval.operation_id,nonce:child.operation_id,stageId:'stage-identity',requestId:child.requestId,approvalId:child.approval_id,runtimeDirectories:['.']});assert.equal(staged.status,201,JSON.stringify(staged));
+ child.commands=[staged.body.command];child.resources=[{key:'port:host-a/5173',mode:'read'}];child.expected_revisions={'port:host-a/5173':0};child[field]+='-different';
+ h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(child);
+ assert.equal((await h.post('/validation/request',{approval:child})).status,202);assert.equal((await h.post(base+'/decision/'+child.requestId,{decision:'approved'})).status,201);
+ const result=await h.post(base+'/locks/acquire',{version:run.version,operationId:child.operation_id,operationDigest:child.operation_digest,resources:child.resources,expectedRevisions:child.expected_revisions});
+ assert.equal(result.body.state,'WAITING',JSON.stringify(result));
 });

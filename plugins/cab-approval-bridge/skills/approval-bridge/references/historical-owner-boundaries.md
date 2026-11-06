@@ -123,3 +123,34 @@ et possédée aux deux observations, sans sceller les autres connexions. Un
 changement d’identité ou l’absence de paire stable reste refusé. Après CABU,
 préparer deux nouvelles descriptions/mandats ; ne pas recycler une capture
 non qualifiée et ne pas libérer la ressource historique avant revue et preuve.
+
+## Sondes scellées sans recopie — CAB2.3.6
+
+Préférer POST /runs/<RUN>/recovery/port-probe-stage pour les commandes longues.
+Corps exact : operationId historique, nonce égal à la future operation_id,
+stageId,requestId,approvalId uniques et runtimeDirectories incluant".". Le
+serveur génère lui-même le payload qualifié ; aucun payload libre ou scope
+supplémentaire n’est accepté. Il renvoie lanceur court, paramètres, empreintes
+et nativeInput exact. Le corps reste dans le stage privé, hors des arguments
+produits par le modèle de codage. Le propriétaire revoit le générateur qualifié,
+les paramètres et la liaison des empreintes avant toute décision.
+
+Préparer les DEUX stages, la revue de sources et le payload de réconciliation
+AVANT la première capture. Pour chaque unité : request_validation avec
+commands=[command courte], files=[], identités retournées, portread et révisions fraîches ;
+conserver le tool_input_sha256 exact de nativeInput selon le contrat courant.
+APPROVED,acquisition,GO,once restent distincts. Le codeur utilise nativeInput
+sans reformulation ni champ ajouté et termine par un compte rendu court, sans
+recopier le corps ou le marqueur base64. La preuve vient du résultat natif.
+
+GET port-probe-command avec les mêmes nonce/opération/répertoires rafraîchit
+le permit et renvoie le même lanceur lorsqu’un stage unique correspond encore
+exactement au générateur. Ne pas revenir à une commande inline après admission.
+La fenêtre120s des captures ne change pas. Deux calls/onces distincts exit0,
+libérationsread et revue restent nécessaires ; appliquer ensuite l’action
+existante de réconciliation avec ces deux operation_id.
+
+Un autre lanceur, stage, payload, SID, génération ou répertoire est refusé.
+Une once n’est jamais rejouée. Après redémarrage, un accès restauré ne délivre
+pas le corps : utiliser la récupération déjà qualifiée avant de nouvelles
+identités. La voie inline reste compatible pour les captures exactes.
