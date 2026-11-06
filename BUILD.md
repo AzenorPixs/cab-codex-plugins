@@ -1,5 +1,19 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Compatibilité carrier2.3.6 :512stages maximum,16Mio inchangés. Après utilisation
+au-delà128entrées, un ancien lecteur peut refuser le registre ; reprise en
+avant qualifiée requise, sans restauration d’un ancien état métier.
+
+## Reprise classique et preuves scellées — CAB2.3.6
+
+CABU conserve le layout du reçu classique ou managed, arrête les services
+résiduels et audite les brokers avancés vérifiés. Les sondes de port utilisent
+un carrier lié exactement au générateur et aux identités, sans recopie modèle.
+Deux once/captures distinctes et120s de fraîcheur restent exigées. Les reprises
+CLI vérifient l’instance native et évitent un SID homonyme sur un autre serveur.
+Voir [la maintenance](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md)
+et [les sondes scellées](plugins/cab-approval-bridge/skills/approval-bridge/references/historical-owner-boundaries.md).
+
 ## Reprises protégées après CABU — CAB2.3.5
 
 CABU valide le lecteur cible sur une copie isolée avant migration, y compris

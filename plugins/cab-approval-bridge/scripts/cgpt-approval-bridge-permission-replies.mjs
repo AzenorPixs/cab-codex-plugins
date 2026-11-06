@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.5';
+export const VERSION = '2.3.6';
 const protocol = 'cab-native-permission-reply-v1';
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code }); };

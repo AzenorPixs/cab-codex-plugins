@@ -1,5 +1,13 @@
 ## 2.3.3 — 2026-11-06
 
+## 2.3.6 — 2026-11-06
+
+- Reprend les reçus classiques sans forcer managed-release, y compris les
+  résidus de repli et le broker avancé dont le code est vérifié et audité.
+- Transporte les sondes de port par carrier scellé, lié au permit exact, sans
+  longue recopie par le modèle ; fraîcheur, deux once et protections préservées.
+- Documente la provenance d’instance, le SID homonyme et la reprise CLI cadrée.
+
 ## 2.3.5 — 2026-11-06
 
 - Prévol du lecteur cible sur copie privée avant migration legacy, reprise

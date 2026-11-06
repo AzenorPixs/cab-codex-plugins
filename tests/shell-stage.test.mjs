@@ -64,3 +64,11 @@ test('lanceur : statut, redirection, hash et CWD invalides restent sans payload 
     const result=await launch(command,directory);assert.equal(result.exit,125);assert.equal(result.stdout,'');assert.equal(result.stderr.trim(),'CAB_SHELL_PAYLOAD_REFUSED');assert.equal(calls,1);
   }
 });
+
+test('capacité : au-delà128 sans purge,512stages restaurables puis refus sans mutation',t=>{
+ const path=fixture(t),store=new ShellStageStore(path);
+ for(let index=0;index<512;index++)store.create({...input(),stageId:'stage-'+index,requestId:'request-'+index,approvalId:'approval-'+index,operationId:'op-'+index},binding());
+ assert.equal(new ShellStageStore(path).stages.size,512);assert.equal(store.get('stage-0').payload,input().payload);
+ const before=readFileSync(path);assert.ok(before.length<16*1024*1024);
+ assert.throws(()=>store.create({...input(),stageId:'stage-overflow'},binding()),/store-limit/);assert.deepEqual(readFileSync(path),before);
+});
