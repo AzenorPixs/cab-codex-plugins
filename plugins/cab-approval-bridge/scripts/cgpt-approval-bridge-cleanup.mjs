@@ -11,7 +11,7 @@ import { authority } from './cgpt-approval-bridge-update.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION='2.3.8';
+export const VERSION='2.3.9';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const exec=promisify(execFile);
 const unit=name=>'cgpt-approval-bridge-'+name+'.service';
@@ -42,10 +42,10 @@ async function executeCleanup(input,dependencies) {
     const chunks=[];let length=0;for await(const part of response.body){length+=part.length;if(length>64*1024*1024)fail('erasure-response-too-large');chunks.push(part)}
     const result=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!response.ok)fail(result.error||'erasure-source-refused');return result;
   });
-  if(['prepare','seal','status'].includes(input.action)) {
+  if(['preview','prepare','seal','status'].includes(input.action)) {
     const identity=await http(controller,'/transport/status');
     if(identity.workspace!==workspace||identity.version!==VERSION)fail('erasure-component-identity-invalid');
-    if(input.action==='prepare')return http(controller,'/cleanup/prepare',input.request||readRuntimeJson(input.input).value);
+    if(['preview','prepare'].includes(input.action))return http(controller,'/cleanup/'+input.action,input.request||readRuntimeJson(input.input).value);
     if(input.action==='seal')return http(controller,'/cleanup/seal',{transactionId:input.transactionId});
     return http(controller,'/cleanup/status',{});
   }

@@ -1,5 +1,9 @@
 ## 2.3.3 — 2026-11-06
 
+## 2.3.9
+
+- Prévol et revue explicite de l’effacement d’un change multi-RUN/multi-owner ; attributions revalidées à prepare/seal, gate final et jobs désarmés exigés, aucune réécriture des propriétaires ni suppression des pairs.
+
 ## 2.3.8
 
 - Masquage des jetons des accès actifs/restaurés dans les GET publics ; stockage, POST propriétaires, fencing, once et libérations préservés. Tests HTTP et consignes de diagnostic distribuées.

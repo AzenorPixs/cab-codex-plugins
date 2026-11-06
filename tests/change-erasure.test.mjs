@@ -6,7 +6,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import {erasureMonitorEndpoint} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { erasureScope, extendErasureScope, projectErasure, erasureFilePlan, ErasureTransaction,
+import { erasureScope, extendErasureScope, projectErasure, erasureFilePlan, ErasureTransaction, erasureInventory,
   erasureReferences, removeErasureDirectories } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
 import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {createObservationJournal} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
@@ -215,3 +215,24 @@ test('terminal cleanup removes change statistics, preserves peer observations an
   assert.deepEqual(erasureReferences(restored.data,scope()),[]);
   assert.deepEqual(erasureReferences(restored.observations.data,scope()),[]);
 }));
+
+function multiOwnerFixture(){const r=registry(),old={...structuredClone(run),runId:'run-older-12345',ownerId:'older-owner',contextId:1,version:3,sessionId:'ses_older12345'};r.runs[0].contextId=2;r.runs.push(old);r.coordination.operations={};return r;}
+function ownershipReview(r){const p=erasureInventory(r,run.changeId,'owner');return {inventoryDigest:p.inventoryDigest,runBindings:p.runBindings,evidence:['developer:whole-change-cleanup-reviewed']};}
+test('effacement multi-owner : revue complète et projection ciblée sans réécriture des propriétaires',()=>{
+ const r=multiOwnerFixture(),before=JSON.stringify(r),review=ownershipReview(r);
+ assert.throws(()=>erasureScope(r,run.changeId,'owner'),/foreign/);
+ const selected=erasureScope(r,run.changeId,'owner',{ownershipReview:review});assert.equal(selected.runIds.length,2);
+ assert.equal(JSON.stringify(r),before);assert.deepEqual(projectErasure(r,selected).runs,[peer]);
+});
+for(const variant of ['missing','duplicate','owner','version','digest','evidence','extra-change','active','new-context'])test('effacement multi-owner refuse '+variant,()=>{
+ const r=multiOwnerFixture(),review=ownershipReview(r);
+ if(variant==='missing')review.runBindings.pop();if(variant==='duplicate')review.runBindings.push(review.runBindings[0]);
+ if(variant==='owner')review.runBindings[0].ownerId='foreign';if(variant==='version')r.runs[0].version++;
+ if(variant==='digest')review.inventoryDigest='0'.repeat(64);if(variant==='evidence')review.evidence=[];
+ if(variant==='extra-change')r.history.push({...r.runs[0],changeId:'foreign-change'});
+ if(variant==='active')r.runs[0].state='RESERVED';
+ if(variant==='new-context')r.history.push({...r.runs[0],contextId:99});
+ assert.throws(()=>erasureScope(r,run.changeId,'owner',{ownershipReview:review}),/erasure-/);
+});
+
+test('inventaire multi-owner : propriétaire ambigu du même contexte refusé',()=>{const r=multiOwnerFixture();r.history.push({...r.runs[0],ownerId:'other-owner'});assert.throws(()=>erasureInventory(r,run.changeId,'owner'),/owner-ambiguous/);});

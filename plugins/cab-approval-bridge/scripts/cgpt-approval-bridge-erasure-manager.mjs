@@ -1,17 +1,38 @@
 import { existsSync,constants,openSync,closeSync,fstatSync,readFileSync,realpathSync } from 'node:fs';
 import {createHash} from 'node:crypto';
 import {dirname} from 'node:path';
-import { join } from 'node:path';
-import { ErasureTransaction, erasureScope, erasureFiles, extendErasureScope } from './cgpt-approval-bridge-change-erasure.mjs';
+import { join,relative } from 'node:path';
+import { ErasureTransaction, erasureScope, erasureFiles, extendErasureScope, erasureInventory } from './cgpt-approval-bridge-change-erasure.mjs';
 import { readRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { canonicalContinuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION='2.3.8';
+export const VERSION='2.3.9';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409})};
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
 export function erasureMonitorEndpoint(host='127.0.0.1',port='8790') {
   if(!['127.0.0.1','::1'].includes(host)||!/^\d+$/.test(String(port))||Number(port)<1024||Number(port)>65535)fail('erasure-monitor-address-invalid');
   return `http://${host==='::1'?'[::1]':host}:${Number(port)}/api/maintenance-identity`;
+}
+function validateTerminalJobs(jobs,scope,ownerId,branch,retainedSessionId,stateDirectory) {
+    if(!jobs.length||jobs.some(({job})=>job.armed!==false))fail('erasure-terminal-gate-unverified');
+    if(scope.ownershipReview){
+      const latest=Math.max(...scope.runBindings.map(row=>row.contextId));
+      const anchors=scope.runBindings.filter(row=>row.contextId===latest&&row.ownerId===ownerId);
+      if(anchors.length!==1)fail('erasure-terminal-owner-unverified');
+      const anchor=anchors[0];let finalJob=false;
+      for(const {job,path} of jobs){
+        const parts=relative(stateDirectory,path).match(/^runs\/([^/]+)\/(\d+)\/controller-job\.json$/);
+        const binding=parts&&scope.runBindings.find(row=>row.runId===parts[1]&&row.contextId===Number(parts[2]));
+        if(!binding||job.runId!==undefined&&job.runId!==binding.runId||job.contextId!==undefined&&job.contextId!==binding.contextId)fail('erasure-job-owner-unverified');
+        if(binding.runId===anchor.runId&&binding.contextId===anchor.contextId){
+          if(job.terminalGate?.status!=='VALIDATED'||job.terminalGate.declaredState!==branch)fail('erasure-terminal-gate-unverified');
+          finalJob=true;
+        }
+      }
+      if(!finalJob)fail('erasure-terminal-gate-unverified');
+    }else if(jobs.some(({job})=>job.terminalGate?.status!=='VALIDATED'||job.terminalGate.declaredState!==branch))fail('erasure-terminal-gate-unverified');
+    if(branch==='BLOQUÉ'&&(!retainedSessionId||!jobs.some(({job})=>job.sessionId===retainedSessionId)))
+      fail('erasure-retained-business-session-required');
 }
 export class ChangeErasureManager {
   constructor({workspace,stateDirectory,registry,openCode,monitorIdentity,broker=()=>null,terminalProofs=()=>[]}) {
@@ -31,8 +52,22 @@ export class ChangeErasureManager {
     const value=this.public();if(!value)return null;
     const {scope,sessionIds,retainedSessionId,roots,...status}=value;return status;
   }
+  preview(input) {
+    if(!exact(input,['changeId','ownerId']))fail('erasure-input-invalid');
+    const snapshot=this.registry.snapshot();if(snapshot.project!==this.workspace)fail('erasure-workspace-divergent');
+    const inventory=erasureInventory(snapshot,input.changeId,input.ownerId),jobs=[];
+    for(const path of erasureFiles(this.stateDirectory)){
+      if(!path.endsWith('/controller-job.json'))continue;
+      const {value}=readRuntimeJson(path);if(value.changeId!==input.changeId)continue;
+      const parts=relative(this.stateDirectory,path).match(/^runs\/([^/]+)\/(\d+)\/controller-job\.json$/);
+      jobs.push({runId:parts?.[1]??null,contextId:parts?Number(parts[2]):null,armed:value.armed,
+        terminalGate:value.terminalGate?{status:value.terminalGate.status,declaredState:value.terminalGate.declaredState}:null});
+    }
+    return {...inventory,jobs};
+  }
   async prepare(input) {
-    if(!exact(input,['changeId','ownerId','branch','retainedSessionId','evidence','dependencyEvidence'])||
+    if(!(exact(input,['changeId','ownerId','branch','retainedSessionId','evidence','dependencyEvidence'])||
+      exact(input,['changeId','ownerId','branch','retainedSessionId','evidence','dependencyEvidence','ownershipReview']))||
       !['TERMINÉ','BLOQUÉ'].includes(input.branch)||!Array.isArray(input.evidence)||!input.evidence.length||
       !input.evidence.every(value=>typeof value==='string'&&value.length>0&&value.length<=500)||
       !(input.retainedSessionId===null||typeof input.retainedSessionId==='string'&&/^ses_[A-Za-z0-9_.-]{1,100}$/.test(input.retainedSessionId))||
@@ -40,7 +75,7 @@ export class ChangeErasureManager {
     if(this.pending())fail('erasure-transaction-in-progress');
     const snapshot=this.registry.snapshot();
     if(snapshot.project!==this.workspace)fail('erasure-workspace-divergent');
-    let scope=erasureScope(snapshot,input.changeId,input.ownerId,{terminalProofs:this.terminalProofs()});
+    let scope=erasureScope(snapshot,input.changeId,input.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:input.ownershipReview});
     if(input.branch==='TERMINÉ'&&input.dependencyEvidence!==null)fail('erasure-input-invalid');
     if(input.branch==='BLOQUÉ') {
       const proof=input.dependencyEvidence;
@@ -58,12 +93,9 @@ export class ChangeErasureManager {
     for(const path of erasureFiles(this.stateDirectory)) {
       if(!path.endsWith('.json')||path.endsWith('/change-erasure.json')||path.endsWith('/broker-erasure.json'))continue;
       const {value}=readRuntimeJson(path);documents.push(value);
-      if(path.endsWith('/controller-job.json')&&value.changeId===input.changeId)jobs.push(value);
+      if(path.endsWith('/controller-job.json')&&value.changeId===input.changeId)jobs.push({job:value,path});
     }
-    if(!jobs.length||jobs.some(job=>job.armed!==false||job.terminalGate?.status!=='VALIDATED'||
-      job.terminalGate.declaredState!==input.branch))fail('erasure-terminal-gate-unverified');
-    if(input.branch==='BLOQUÉ'&&(!input.retainedSessionId||!jobs.some(job=>job.sessionId===input.retainedSessionId)))
-      fail('erasure-retained-business-session-required');
+    validateTerminalJobs(jobs,scope,input.ownerId,input.branch,input.retainedSessionId,this.stateDirectory);
     scope=extendErasureScope(scope,documents);
     const native=await this.openCode.listSessions(this.workspace);
     const sessions=new Set(scope.ids.filter(id=>id.startsWith('ses_')));
@@ -85,7 +117,12 @@ export class ChangeErasureManager {
     const value=this.pending();
     if(!exact(input,['transactionId'])||!value||input.transactionId!==value.transactionId)fail('erasure-transaction-divergent');
     if(value.phase!=='PREPARED'&&value.phase!=='SEALED')fail('erasure-phase-invalid');
-    erasureScope(this.registry.snapshot(),value.scope.changeId,value.scope.ownerId,{terminalProofs:this.terminalProofs()});
+    erasureScope(this.registry.snapshot(),value.scope.changeId,value.scope.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:value.scope.ownershipReview});
+    const jobs=[];
+    for(const path of erasureFiles(this.stateDirectory))if(path.endsWith('/controller-job.json')){
+      const {value:job}=readRuntimeJson(path);if(job.changeId===value.scope.changeId)jobs.push({job,path});
+    }
+    validateTerminalJobs(jobs,value.scope,value.scope.ownerId,value.branch,value.retainedSessionId,this.stateDirectory);
     const [sessions,active,permissions,info]=await Promise.all([this.openCode.listSessions(this.workspace),
       this.openCode.sessionStatus(this.workspace),this.openCode.permissions(this.workspace),this.openCode.info(true)]);
     const present=new Set(sessions.map(row=>row.id));

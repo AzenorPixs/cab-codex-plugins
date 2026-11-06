@@ -169,3 +169,13 @@ leurs statistiques. Conserver le rapport, le registre global et les fichiers
 métier du projet. Ne pas utiliser la purge générale de rétention comme substitut.
 En session directe sans état CAB utilisé pour ce change, indiquer non applicable ;
 le moteur de rapport ne crée pas de runtime ou de stockage privé à nettoyer.
+
+## Plusieurs propriétaires historiques — CAB 2.3.9
+
+Si le même change comprend d’anciens RUN attribués à d’autres propriétaires, ne pas réécrire leurs owners ni supprimer leur historique pour contourner le refus. Le mandat existant doit couvrir explicitement l’intégralité de ce seul change et tous les RUN visés, avec exclusion des pairs.
+
+Avant prepare, appeler `cleanup preview --workspace <racine> --input <JSON privé autorisé>` ; `request` en mémoire fonctionne aussi. Le JSON contient exactement `changeId` et `ownerId`. Le prévol sans effacement renvoie `runBindings` (runId/contextId/version/ownerId), `inventoryDigest`, les états non secrets des jobs et `requiresOwnershipReview`. Il ne crée pas de transaction, ne prouve pas l’éligibilité et n’accorde aucune autorisation.
+
+L’orchestrateur vérifie chaque attribution et le mandat, puis ajoute au JSON prepare `ownershipReview: {runBindings, inventoryDigest, evidence}`. Utiliser directement l’inventaire courant, sans retranscription des empreintes par le LLM ; `evidence` référence le mandat et la revue déjà autorisés. La revue couvre toutes les liaisons exactes du change ; les champs sont revalidés au scellement. Le défaut sans revue continue à refuser tout propriétaire étranger. Aucun wildcard, owner substitué ou RUN pair n’est accepté.
+
+Le dernier contexte du change doit appartenir au propriétaire de clôture, être libéré et désarmé avec le gate VALIDATED de la branche finale. Les jobs historiques inclus doivent être désarmés et attribuables ; un abandon antérieur ne reçoit aucun gate fictif. Les protections des opérations, once, ressources et sessions restent intégralement appliquées. Une divergence de liaison/version, un job armé, une absence de gate final ou une session partagée refuse avant effacement. Conserver toutes les sessions jusqu’à la réussite de prepare, puis effectuer le cycle OC/seal/execute/certificat externe/finalize/PURGED/verify déjà décrit, pour tout l’inventaire et uniquement lui.
