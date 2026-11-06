@@ -1,0 +1,3 @@
+# Compatibilité du reçu, sans mutation des opérations
+
+Le registre privé et les reçus de restitution déjà validés sont les sources. La lecture legacy ne s’applique qu’en absence de propriété nativeResult, jamais à un null/résultat explicite incomplet. Vérifier COMPLETED, once native acquittée, permission/call/target, dates de fin, completionDigest, lien exact run/context/version/accessId/operationIds, RELEASED et releaseDigest. Ne pas étendre aux baux de test : leur ancien format écrivait déjà nativeResult. L’interprétation prouve une terminaison contrôlée historique, pas un succès métier ou exit0 reconstitué. Les données ne sont pas réécrites ; les IDs legacy qualifiés figurent dans le scope signé et le certificat externe.

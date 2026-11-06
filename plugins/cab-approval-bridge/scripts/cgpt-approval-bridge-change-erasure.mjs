@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.3.9';
+export const VERSION = '2.3.10';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
@@ -58,6 +58,19 @@ function reviewedOwnership(registry,changeId,ownerId,review) {
   return inventory;
 }
 
+function legacyTerminalReceipt(operation,access) {
+  const native=operation.native,hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
+  const releasedAt=typeof access?.finishedAt==='number'?access.finishedAt:Date.parse(access?.finishedAt);
+  return operation.state==='COMPLETED'&&!Object.hasOwn(operation,'nativeResult')&&!operation.testReservationId&&
+    native?.onceAcknowledged===true&&identifier(native.permissionId)&&identifier(native.callId)&&hash(native.targetDigest)&&
+    Number.isFinite(native.startedAt)&&Number.isFinite(operation.finishedAt)&&operation.finishedAt>=native.startedAt&&
+    hash(operation.completionDigest)&&access?.accessId===operation.accessId&&access.runId===operation.runId&&
+    access.contextId===operation.contextId&&access.version===operation.version&&Array.isArray(access.operationIds)&&
+    access.operationIds.includes(operation.operationId)&&access.state==='RELEASED'&&
+    ['COMPLETED','NO_EFFECT','RECONCILED'].includes(access.outcome)&&hash(access.releaseDigest)&&
+    Number.isFinite(releasedAt)&&releasedAt>=operation.finishedAt;
+}
+
 export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],ownershipReview}={}) {
   if (!identifier(changeId) || !identifier(ownerId) || !record(registry)||typeof registry.project!=='string'||!registry.project.startsWith('/')) fail('erasure-scope-invalid');
   const current = registry.runs || [];
@@ -73,14 +86,16 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],owne
       current.some(row => runs.includes(row.runId) && (row.changeId !== changeId || row.state === 'RESERVED')))
     fail('erasure-run-not-closed-or-foreign');
   const target = row => runs.includes(row?.runId);
-  const c = registry.coordination || {};
+  const c = registry.coordination || {},legacyTerminalOperationIds=[];
   for (const row of Object.values(c.operations || {}).filter(target)) {
     const terminalResult=['completed','error'].includes(row.nativeResult?.status)&&/^[a-f0-9]{64}$/.test(row.completionDigest||'');
     const reconciledPort=row.state==='CANCELLED'&&/^[a-f0-9]{64}$/.test(row.completionDigest||'')&&terminalProofs.some(proof=>
       proof.state==='DONE'&&proof.httpStatus===200&&proof.action==='reconcile-quarantined-port'&&proof.ownerId===(inventory?inventory.runBindings.find(binding=>binding.runId===row.runId&&binding.contextId===row.contextId)?.ownerId:ownerId)&&
       proof.runId===row.runId&&proof.contextId===row.contextId&&proof.targetId===row.operationId&&proof.effectDigest===row.completionDigest&&
       proof.result?.executionOutcome==='HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT'&&proof.result?.evidenceAuthority==='VERIFIED_NATIVE_PORT_PROBES');
-    if (!terminalOperations.has(row.state) || (row.native||row.onceAcknowledged===true)&&!terminalResult&&!reconciledPort)
+    const legacyTerminal=legacyTerminalReceipt(row,c.accesses?.[row.accessId]);
+    if(legacyTerminal)legacyTerminalOperationIds.push(row.operationId);
+    if (!terminalOperations.has(row.state) || (row.native||row.onceAcknowledged===true)&&!terminalResult&&!reconciledPort&&!legacyTerminal)
       fail('erasure-operation-unreconciled');
   }
   for (const name of ['accesses','testReservations']) for (const row of Object.values(c[name] || {}).filter(target)) {
@@ -103,7 +118,8 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],owne
   for (const [key,row] of Object.entries(registry.requestOwners || {})) if (target(row)) { ids.add(key); visit(row); }
   return { protocol: ERASURE_PROTOCOL, workspace:registry.project,changeId, ownerId, runIds: runs.sort(), ids: [...ids].sort(),
     registrySequence: registry.sequence, coordinationSequence: c.sequence,
-    ...(inventory?{ownershipReview,runBindings:inventory.runBindings}:{}) };
+    ...(inventory?{ownershipReview,runBindings:inventory.runBindings}:{}),
+    ...(legacyTerminalOperationIds.length?{legacyTerminalOperationIds:legacyTerminalOperationIds.sort()}:{}) };
 }
 
 export function extendErasureScope(scope, documents) {
