@@ -16,7 +16,7 @@ import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credentia
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.5';
+export const VERSION = '2.3.6';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -242,6 +242,7 @@ export async function updateComponents(input, options = {}) {
   const lock = await authority(join(c.state, 'update.lock'));
   let receipt;
   let receiptTrusted = false;
+  let receiptLayout = null;
   let recovered = false;
   let forwardRecovery = false;
   let resumeForwardParent = null;
@@ -261,7 +262,7 @@ export async function updateComponents(input, options = {}) {
   const transaction = () => join(c.state, receipt.id);
   const saveDeployment = () => atomic(join(c.state,'last-deployment.json'),JSON.stringify(Object.fromEntries(
     ['home','workspace','serviceWorkspace','brokerDirectory','brokerPolicy','layout','controllerUrl','supervisorUrl','monitorUrl','opencodeUrl']
-      .filter(key=>c[key]!==undefined).map(key=>[key,c[key]])),null,2)+'\n');
+      .filter(key=>c[key]!==undefined&&(key!=='layout'||receiptLayout!=='classic')).map(key=>[key,c[key]])),null,2)+'\n');
   const desiredVersions = () => Object.fromEntries(['controller','supervisor','monitor','broker'].map((name)=>[name,receipt.version]));
   const targetActive = () => receipt.targetActive || receipt.active;
   const restartComponents = () => readonlyBroker || !receipt.restartComponents
@@ -294,8 +295,10 @@ export async function updateComponents(input, options = {}) {
         const [modules,state,workspace]=process.argv.slice(1);
         const {ResourceRunRegistry}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-resource-coordination.mjs')));
         const {createJobContext}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-job-context.mjs')));
+        const {ShellStageStore}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-shell-stage.mjs')));
         const {migrationRegistryDigest}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-runtime-migration.mjs')));
         const registry=new ResourceRunRegistry(workspace,state);
+        new ShellStageStore(join(state,'shell-stages.json'));
         if(registry.migrationRequired)throw Object.assign(new Error(),{code:'registry-schema-migration-required'});
         const snapshot=registry.snapshot(),runs={};
         for(const run of snapshot.runs.filter(run=>run.state==='RESERVED')){
@@ -314,7 +317,7 @@ export async function updateComponents(input, options = {}) {
     catch(cause) {
       let detail;try{detail=JSON.parse(cause.stdout||'').error;}catch{detail=null;}
       const allowed=new Set(['registry-restoration-invalid','registry-schema-migration-required','job-state-invalid',
-        'continuity-file-invalid','continuity-state-invalid','communication-identity-divergent']);
+        'continuity-file-invalid','continuity-state-invalid','communication-identity-divergent','shell-stage-store-invalid','shell-stage-store-unsafe']);
       throw Object.assign(error('update-migration-target-reader-rejected'),{readerFailureCode:allowed.has(detail)?detail:'target-reader-rejected'});
     }
     let value;try{value=JSON.parse(output);}catch{throw error('update-migration-target-reader-rejected');}
@@ -328,7 +331,6 @@ export async function updateComponents(input, options = {}) {
     if(layout){const value=JSON.parse(layout.data);if(value.workspace!==c.serviceWorkspace||value.phase!=='READY')throw error('update-migration-destination-exists');return false;}
     const path=join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json');
     let file;try{file=readRuntimeJson(path,{legacy:true});}catch(cause){if(cause.code==='ENOENT')return false;throw cause;}
-    if(input.layout!=='managed-release')throw error('update-migration-managed-release-required');
     if(await optional(join(destination,'controller-runs.json')))throw error('update-migration-destination-exists');
     const files=legacyRuntimeFiles(c.serviceWorkspace),reader=await validateMigrationReader(files);
     const live=status?.version==='2.2.6'&&status.workspace===c.serviceWorkspace;
@@ -388,7 +390,10 @@ export async function updateComponents(input, options = {}) {
       writeRuntimeJson(join(m.destination,'runtime-migration.json'),proof);
       m.state='COPIED';await save('INSTALLING');
     }
-    if(input.layout!=='managed-release')throw error('update-migration-managed-release-required');
+    for(const file of receipt.files){
+      const actual=await deployed(file),known=receipt.offlineRecovery?.observedBrokerFiles?.find(item=>item.group===file.group&&item.name===file.name);
+      if(![file.beforeHash,file.afterHash,...(known?[known.sha256]:[])].includes(actual?hash(actual.data):null))throw error('update-installed-artifact-changed');
+    }
     await installManagedFiles();
     if(receipt.files.some(f=>f.group==='units'&&f.beforeHash!==f.afterHash))await service(['daemon-reload']);
     await save('RESTARTING');receipt.brokerReconnectedAt=now();await startAll(targetActive());await save('VERIFYING');
@@ -408,7 +413,7 @@ export async function updateComponents(input, options = {}) {
     await save('COMPLETED');await saveDeployment();
     return {status:'completed',version:receipt.version,transactionId:receipt.id,active:targetActive(),brokerConnected:receipt.brokerConnected,
       activeVersions:desiredVersions(),runtimeMigration:m,packageVersion:VERSION,
-      nextUpdateRequired:receipt.version!==VERSION,...brokerResult()};
+      nextUpdateRequired:receipt.version!==VERSION,installationLayout:receiptLayout||input.layout||'classic',...brokerResult()};
   }
   async function planOrdinaryUpdate() {
     const rows = await Promise.all(['controller', 'supervisor', 'monitor'].map(async component => {
@@ -524,7 +529,7 @@ export async function updateComponents(input, options = {}) {
     await directories(name?dirname(path):path);return path;
   }
   async function managedPlan(group) {
-    if(input.layout!=='managed-release'||group==='units'||(group==='broker'&&c.brokerPolicy==='cab-source'))return null;
+    if((receiptLayout||input.layout)!=='managed-release'||group==='units'||(group==='broker'&&c.brokerPolicy==='cab-source'))return null;
     receipt.managed ||= {};
     if(receipt.managed[group])return receipt.managed[group];
     const logical=c.roots[group],stat=await lstat(logical);
@@ -1045,6 +1050,7 @@ export async function updateComponents(input, options = {}) {
             !validRecoverySnapshot(receipt.mcpRecovery.reload.before) || !Number.isFinite(receipt.mcpRecovery.reload.at)))) throw error('update-journal-invalid');
       if (receipt.phase === 'MCP_RECOVERY_REQUIRED' && !receipt.mcpRecovery) throw error('update-journal-invalid');
       receiptTrusted = true;
+      receiptLayout=receipt.managed?'managed-release':'classic';
       if(receipt.runtimeMigration&&['PREPARED','STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
         if(receipt.phase==='PREPARED')await save('STOPPING');
         if(receipt.phase==='STOPPING')await stopAll();
@@ -1056,19 +1062,32 @@ export async function updateComponents(input, options = {}) {
         try{readRuntimeJson(join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json'),{legacy:true});legacy=true;}
         catch(cause){if(cause.code!=='ENOENT')throw cause;}
         if(legacy&&!await optional(join(runtimeStateDirectory(c.serviceWorkspace,{home:c.home}),'runtime-layout.json'))) {
-          if(input.layout!=='managed-release'||!receipt.managed)throw error('update-migration-managed-release-required');
           const initial=receipt.initialActive||receipt.observedActive;
           if(!initial||!['controller','supervisor','monitor'].every(key=>initial[key]===false))throw error('update-migration-initial-services-unverified');
+          const observedBrokerFiles=[];
           for(let index=0;index<receipt.files.length;index++){
             const file=receipt.files[index],actual=await deployed(file),staged=await regular(join(transaction(),'stage',String(index)));
             if(hash(staged.data)!==file.afterHash)throw error('update-stage-changed');
             if(file.beforeHash&&hash((await regular(join(transaction(),'backup',String(index)))).data)!==file.beforeHash)throw error('update-backup-invalid');
-            if(![file.beforeHash,file.afterHash].includes(actual?hash(actual.data):null))throw error('update-installed-artifact-changed');
+            if(![file.beforeHash,file.afterHash].includes(actual?hash(actual.data):null)) {
+              const version=actual&&baseVersion(sourceVersion(actual.data)),packaged=file.group==='broker'&&await regular(join(c.pluginRoot,'broker',file.name));
+              const strip=data=>data.toString('utf8').replace(/^(?:export )?(?:const )?(?:VERSION|SERVER_VERSION|version)\s*=\s*["'][^"']+["']/m,'CAB_VERSION_DECLARATION');
+              if(!version||!newer(version,receipt.version)||newer(version,VERSION)||!packaged||sourceVersion(packaged.data)!==VERSION||strip(actual.data)!==strip(packaged.data))throw error('update-installed-artifact-changed');
+              await atomic(join(transaction(),'observed-broker',String(index)),actual.data);
+              observedBrokerFiles.push({group:file.group,name:file.name,version,sha256:hash(actual.data)});
+            }
           }
           const previousFailureCode=receipt.failureCode;
-          if(!await prepareRuntimeMigration(null))throw error('update-migration-source-unavailable');
+          const source=readRuntimeJson(join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json'),{legacy:true});
+          const reader=await validateMigrationReader(legacyRuntimeFiles(c.serviceWorkspace));
+          if(reader.registryDigest!==migrationRegistryDigest(source.value))throw error('update-migration-target-reader-divergent');
+          const initialRegistryDigest=receipt.offlineRecovery?.initialRegistryDigest||reader.registryDigest;
+          if(reader.registryDigest!==initialRegistryDigest)throw error('update-migration-source-changed');
           receipt.initialActive=structuredClone(initial);receipt.active=structuredClone(initial);
-          receipt.offlineRecovery={packageVersion:VERSION,previousFailureCode,previousPhase:'ROLLBACK_FAILED'};
+          receipt.offlineRecovery={packageVersion:VERSION,previousFailureCode,previousPhase:'ROLLBACK_FAILED',initialRegistryDigest,observedBrokerFiles};
+          receipt.restartComponents=['controller','supervisor','monitor'];await save('ROLLBACK_FAILED');await stopAll();
+          if(!await prepareRuntimeMigration(null))throw error('update-migration-source-unavailable');
+          if(readRuntimeJson(join(transaction(),'runtime-migration.json')).value.registryDigest!==initialRegistryDigest)throw error('update-migration-source-changed');
           receipt.cutoverAtMs ||= now();await save('STOPPING');await stopAll();
           return await finishRuntimeMigration();
         }
@@ -1206,6 +1225,7 @@ export async function updateComponents(input, options = {}) {
       if (!skill.includes('references/component-update.md') || !skill.includes('cgpt-approval-bridge-update.mjs') ||
           !updateReference.includes('/CAB update') || !updateReference.includes('systemctl --user stop') ||
           !updateReference.includes('INDISPONIBLE')) throw error('update-skill-association-invalid');
+      receiptLayout=null;
       receipt = { schema: 1, contextKey, id: 'update-' + randomUUID(), version, phase: 'PREPARING',
         ...(resumeForwardParent ? { recoveryOf: resumeForwardParent } : {}),
         active: { controller: true, supervisor: true, monitor: true },
@@ -1366,7 +1386,6 @@ export async function updateComponents(input, options = {}) {
           active: targetActive(), brokerConnected: receipt.brokerConnected, ...brokerResult() };
       }
       const migrating=receipt.restartComponents.includes('controller')&&await prepareRuntimeMigration(sourceStatus);
-      if(migrating&&input.layout!=='managed-release')throw error('update-migration-managed-release-required');
       if (!migrating && receipt.restartComponents.includes('controller') && sourceStatus?.transportContinuity?.protocol === CONTINUITY_PROTOCOL) {
         receipt.continuity = { protocol: CONTINUITY_PROTOCOL, state: 'INTENT', transactionId: receipt.id };
         await save('PREPARED');

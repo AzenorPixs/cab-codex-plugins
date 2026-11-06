@@ -32,7 +32,7 @@ Le staging vérifie identités, contexte, hash et limites mais n’autorise et n
 
 ## Mandat natif et exécution
 
-Utiliser exactement stage.command comme unique entrée commands du request_validation, avec les requestId/approvalId/operationId du stage, le RUN/SID/réservation courants et les ressources/revisions réellement nécessaires au PAYLOAD. Calculer le digest d’opération sur ce nouveau mandat exact selon le protocole courant ; le digest du payload est déjà incorporé littéralement au lanceur. Ne pas utiliser tool_input_sha256, réservé aux mandats write/edit, sur ce mandat Bash. Vérifier demande/identités/commande avant APPROVED, puis acquérir les accès et transmettre GO. Le modèle appelle shell natif avec cette seule command courte, sans recopier le payload.
+Utiliser exactement stage.command comme unique entrée commands du request_validation, avec les requestId/approvalId/operationId du stage, le RUN/SID/réservation courants et les ressources/revisions réellement nécessaires au PAYLOAD. Calculer le digest d’opération sur ce nouveau mandat exact selon le protocole courant ; le digest du payload est déjà incorporé littéralement au lanceur. Le contrat Bash courant peut lier tool_input_sha256 à l’input natif exact ; lorsqu’il est fourni, aucun champ ou défaut ne doit être ajouté ou reformulé. Vérifier demande/identités/commande avant APPROVED, puis acquérir les accès et transmettre GO. Le modèle appelle shell natif avec cette seule command courte, sans recopier le payload.
 
 Le contrôleur transmet once seulement pour la commande native exacte et les gardes existantes. L’enfant natif demande alors GET /runs/<run>/shell-stage/<stage>/payload : livraison liée à la même opération approuvée, contexte, accès EXECUTING et once acquittée, sans accès restauré/inconnu et avec ressources de test réconciliées. Une courte attente technique bornée à1s ne concerne que l’accusé once déjà en cours d’émission ; aucune décision ou acquisition n’est attendue ou réessayée automatiquement.
 
@@ -44,7 +44,7 @@ Une invocation courte divergente reste sans once. Si le transport/hash/contexte 
 
 La livraison HTTP ne prouve pas à elle seule l’exécution ou le succès du payload : vérifier call/commande native exacte, once corrélée, fin/exit, sorties et effets métier attendus, puis libérer l’accès. Après fin/libération, l’ancienne opération n’autorise plus de livraison. Après rechargement, les stages persistent pour audit mais ne réactivent pas une opération restaurée/inconnue ; réconcilier selon les gardes existantes, sans nouvel effet implicite.
 
-Stockage privé0600 atomique,128 stages maximum,16Mio maximum de registre ; corps64Kio maximum. Le plafond commande existant en UTF-16 s’applique au corps ET au lanceur ; aucun plafond n’est relevé, aucun corps tronqué. Une capacité atteinte est signalée, jamais résolue par purge automatique. Le rangement/effacement de preuves est une opération distinctement autorisée.
+Stockage privé0600 atomique,512 stages maximum,16Mio maximum de registre ; corps64Kio maximum. Le plafond commande existant en UTF-16 s’applique au corps ET au lanceur ; aucun plafond n’est relevé, aucun corps tronqué. Une capacité atteinte est signalée, jamais résolue par purge automatique. Le rangement/effacement de preuves est une opération distinctement autorisée.
 
 Qualification exacte2.2.0 : payload9860octets absent des requêtes du fournisseur de modèle après préparation, invocation courte passée par vrai MCP/APPROVED/HELD/once et résultat exact. Corps de transport volontairement altéré dans le seul banc privé : refus125 avant payload et aucun marqueur de succès. Tests de métadonnées seules, substitution, stockage/restauration, cibles étrangères, allow refusé et livraison avant/après autorisation. SCM/publication/CABU puis information restent distincts de l’adoption réelle par les propriétaires.
 
@@ -63,3 +63,18 @@ la fin et l’absence d’effet, puis le retrait APPROVED/HELD et la libération
 séparée selon [la procédure](approved-attached-shell-retirement.md). Il relit
 ensuite les révisions effectives et prépare un nouveau stage et de nouvelles
 identités. Aucune réinterprétation de l’ancienne approbation ni once rejouée.
+
+## Sondes de port sous quarantaine — CAB2.3.6
+
+Le staging générique ne convertit pas implicitement un permit inline. Utiliser
+le POST spécialisé port-probe-stage décrit dans historical-owner-boundaries.md.
+Il lie le corps du générateur et le lanceur au nonce/opération future et au
+seul portread ; le contrôleur vérifie cette liaison lors des deux captures.
+Ne pas substituer un lanceur fabriqué au commandDigest d’un ancien permit.
+Le champ tool_input_sha256 du contrat Bash courant peut lier le nativeInput
+exact. La conversion reste une nouvelle unité revue,
+sans nouvelle autorité ni réinterprétation d’un ancien mandat.
+
+Capacité2.3.6 : aucun stage historique n’est purgé pour libérer de la place.
+Au-delà128entrées, un lecteur ancien peut refuser ce registre : privilégier la
+reprise en avant qualifiée et ne pas restaurer manuellement un état antérieur.

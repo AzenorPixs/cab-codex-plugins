@@ -297,3 +297,21 @@ Le repli avant copie restaure les seuls services initialement actifs ; il
 ne démarre pas les services arrêtés pour contrôler une version. Le diagnostic
 expose rollbackFailureCode et readerFailureCode filtrés. Une absence de preuve
 n’est jamais remplacée par un reset, une purge ou un rejeu de permission.
+
+## Reçu classique et artefacts avancés — CAB2.3.6
+
+La reprise conserve automatiquement le layout du reçu non terminal : classique
+sans plan managed, ou managed-release avec ses plans. Une option forcée ne
+convertit pas le reçu ; la migration de layout éventuelle suit sa clôture.
+Le prévol cible précède l’arrêt des seules briques gérées restées actives après
+le repli ; le registre métier doit rester identique jusqu’à la capture finale.
+La copie privée conserve les fichiers legacy et les données métier incertaines.
+
+Un broker copié en avance ne vaut pas version active. La reprise n’accepte
+ce cas que si les octets égalent le code du paquet qualifié hors déclaration
+de version, avec version intermédiaire bornée. Les octets observés sont
+conservés dans l’audit du même reçu, puis la cible historique exacte est
+achevée. Toute autre divergence reste refusée. Stage et sauvegardes d’origine
+ne sont ni réinitialisés ni supprimés. nextUpdateRequired=true impose ensuite
+l’alignement normal distinct vers le paquet courant, sans annoncer la cible
+finale avant vérification effective des quatre briques.
