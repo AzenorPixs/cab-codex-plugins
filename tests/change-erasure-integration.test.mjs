@@ -13,7 +13,7 @@ import { TransportHandoff } from '../plugins/cab-approval-bridge/scripts/cgpt-ap
 import { writeRuntimeJson, readRuntimeJson } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
 const source=resolve('src');
-async function fixture(t,branch,{multiOwner=false}={}) {
+async function fixture(t,branch,{multiOwner=false,legacy=false}={}) {
   const root=mkdtempSync(join(tmpdir(),'cab-erasure-integration-'));
   const workspace=join(root,'workspace'),state=join(root,'runtime'),monitor=join(root,'monitor'),brokerRoot=join(root,'broker'),update=join(root,'update');
   for(const path of [workspace,state,monitor,brokerRoot,update])mkdirSync(path,{mode:0o700});
@@ -27,7 +27,17 @@ async function fixture(t,branch,{multiOwner=false}={}) {
     registry.release(historical.runId,historical.version,false);
     writeRuntimeJson(join(state,'runs',historical.runId,String(historical.contextId),'controller-job.json'),{
       runId:historical.runId,changeId:historical.changeId,sessionId:historical.sessionId,jobId:'job-historical',armed:false,terminalGate:null});}
-  const target=reserve('target'),peer=reserve('peer');registry.release(target.runId,target.version,branch==='TERMINÉ');
+  const target=reserve('target'),peer=reserve('peer');
+  if(legacy){
+    const resources=target.resources,expected=registry.revisions(resources),op=registry.prepareOperation(target.runId,{coordination_protocol:'resource-scoped-v1',run_id:target.runId,reservation_version:target.version,session_id:target.sessionId,requestId:'request-legacy',operation_id:'operation-legacy',operation_digest:'a'.repeat(64),expected_revisions:expected,resources});
+    registry.recordDecision(target.runId,op.operationId,{status:'approved',requestId:op.requestId,operationId:op.operationId,runId:target.runId,changeId:target.changeId,version:target.version,sessionId:target.sessionId,operationDigest:op.operationDigest,identityDigest:op.identityDigest,approvalId:'approval-legacy'});
+    const access=registry.acquireAccess(target.runId,{version:target.version,operationId:op.operationId,operationDigest:op.operationDigest,resources,expectedRevisions:expected});
+    registry.nativeStart(target.runId,{operationId:op.operationId,reservationVersion:target.version,sessionId:target.sessionId,operationDigest:op.operationDigest,expectedRevisions:expected,resources,kind:'bash',target:'true'},op.requestId,{id:'permission-legacy',tool:{callID:'call-legacy'}});registry.nativeIssued(op.operationId);
+    registry.completeNative(target.runId,op.operationId,{sessionId:target.sessionId,permissionId:'permission-legacy',callId:'call-legacy',finishedAt:Date.now(),status:'completed',exit:0});
+    registry.releaseAccess(target.runId,{version:target.version,operationId:op.operationId,token:access.token,fencing:access.fencing,outcome:'COMPLETED',evidence:['fixture-native-terminal']});
+    delete registry.resourceState.operations[op.operationId].nativeResult;registry.persist();
+  }
+  registry.release(target.runId,target.version,branch==='TERMINÉ');
   const business=join(workspace,'openspec','changes',target.changeId);mkdirSync(business,{recursive:true,mode:0o775});
   writeFileSync(join(business,'BLOCKERS.md'),'# Dépendance métier manquante\n');writeFileSync(join(business,'STATISTICS.md'),'# Statistiques métier vérifiées\n');
   const digest=name=>createHash('sha256').update(readFileSync(join(business,name))).digest('hex');
@@ -83,13 +93,14 @@ async function fixture(t,branch,{multiOwner=false}={}) {
     clearNative:()=>{sessions=branch==='BLOQUÉ'?[{id:target.sessionId,directory:workspace},{id:peer.sessionId,directory:workspace}]:[{id:peer.sessionId,directory:workspace}]},getRegistry:()=>registry};
 }
 
-for(const branch of ['TERMINÉ','BLOQUÉ'])for(const multiOwner of [false,true])test('OC then all CAB stores, authenticated reanchor and peer preserved: '+branch+(multiOwner?' multi-owner':''),async t=>{
-  const f=await fixture(t,branch,{multiOwner});
+for(const branch of ['TERMINÉ','BLOQUÉ'])for(const multiOwner of [false,true])for(const legacy of (multiOwner?[false,true]:[false]))test('OC then all CAB stores, authenticated reanchor and peer preserved: '+branch+(multiOwner?' multi-owner':'')+(legacy?' legacy':''),async t=>{
+  const f=await fixture(t,branch,{multiOwner,legacy});
   const preview=multiOwner?f.manager.preview({changeId:f.target.changeId,ownerId:'owner'}):null;
   if(multiOwner)assert.equal(f.manager.pending(),null);
   const plan=await f.manager.prepare({changeId:f.target.changeId,ownerId:'owner',branch,
     retainedSessionId:branch==='BLOQUÉ'?f.target.sessionId:null,evidence:['fixture-business-report-reviewed'],dependencyEvidence:f.dependencyEvidence,
     ...(multiOwner?{ownershipReview:{runBindings:preview.runBindings,inventoryDigest:preview.inventoryDigest,evidence:['developer:whole-change-cleanup-reviewed']}}:{})});
+  if(legacy){assert.deepEqual(plan.scope.legacyTerminalOperationIds,['operation-legacy']);assert.equal(Object.hasOwn(f.getRegistry().resourceState.operations['operation-legacy'],'nativeResult'),false);}
   if(branch==='TERMINÉ')await assert.rejects(f.manager.seal({transactionId:plan.transactionId}),/native-cleanup-incomplete/);
   f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
   const beforePeer=f.getRegistry().snapshot().runs.find(row=>row.runId===f.peer.runId);

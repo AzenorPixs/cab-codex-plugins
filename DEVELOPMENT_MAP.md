@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Lecture legacy SCM 2.3.10
+
+[accept-legacy-terminal-erasure-receipts](openspec/changes/archive/2026-11-06-accept-legacy-terminal-erasure-receipts/), code non attribué : ARCHIVÉ, source qualifiée. Compatibilité des terminaisons historiques qualifiées ; activation distincte, priorité au seul cleanup C12 avant2.4. Convergence ACL ultérieure.
+
 ## Effacement multi-owner SCM 2.3.9
 
 [qualify-multi-owner-change-erasure](openspec/changes/archive/2026-11-06-qualify-multi-owner-change-erasure/), code non attribué : ARCHIVÉ, source qualifiée. Inventaire et revue bornés au seul change ; qualification, publication et activation distinctes. Convergence ACL ultérieure.
