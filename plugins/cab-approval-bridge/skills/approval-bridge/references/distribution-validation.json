@@ -1,8 +1,8 @@
 {
   "files": {
-    ".codex/commands/CAB.md": "cfede55f56e0adf69f7a0818b1d99d567cd3f270fbd86d474b56454ad3f4345f",
-    ".codex/commands/SGS.md": "3ac1de856effadfaaeb4028f80cd30e58ce2eb526c46173534f7c2f9785d9a00",
-    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "122907b6d87f7927eca003fab9edbf33ddb82a2d817695308043e730720e8a3e",
+    ".codex/commands/CAB.md": "4a6c47747c3f2bd8d8d78ea1f9f6056a1e56371dde7654db5355354d7bfd21ec",
+    ".codex/commands/SGS.md": "3e3ed11077313c345c6a7eca7c5b9c4dd4ad5118a8f5d16f3f5e92ac0f1fff7a",
+    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "83731a1b11e5e6642d6b09705d83157c1c1e7b873c05c1985d51108fc7aba4cf",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-incidents.md": "c3aec695133f3a6f350fa9b16e207807aaefbefd7b7f04d92369962c115a9164",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-native.md": "51aac025f2e8a70aa90ac814ad75488022580f360622f8d836633c3e26f1c8fd",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-overview.md": "09c1405c8b58f62652fba48fbe2fd0dfdcc5ab8109082f50b16c10adb535fc5c",
@@ -39,5 +39,5 @@
   "historical_manifest_sha256": "5037d6b69e8ee9a964ddc20f778805ff2889c0e301729f3df9b1fc1334884f51",
   "schema_version": 1,
   "scope": "Empreintes du routage et des destinations courantes après revue ; preuve historique de migration conservée sans réécriture.",
-  "version": "2.3.9"
+  "version": "2.3.10"
 }

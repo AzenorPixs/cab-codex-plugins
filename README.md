@@ -1,5 +1,9 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+## Lecture des reçus legacy — CAB 2.3.10
+
+L’effacement reconnaît les anciennes terminaisons COMPLETED sans nativeResult uniquement sous identité, empreintes, dates et accès libéré cohérents. Aucun résultat natif n’est inventé ; les cas incomplets et effets non terminés restent protégés. Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/change-erasure.md).
+
 ## Effacement multi-propriétaire qualifié — CAB 2.3.9
 
 Un prévol sans effacement et une revue exacte lient tous les RUN/propriétaires historiques du seul change. Le gate final, le désarmement, les effets soldés et les pairs restent protégés ; les owners ne sont pas réécrits. Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/change-erasure.md).

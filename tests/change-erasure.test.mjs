@@ -236,3 +236,16 @@ for(const variant of ['missing','duplicate','owner','version','digest','evidence
 });
 
 test('inventaire multi-owner : propriétaire ambigu du même contexte refusé',()=>{const r=multiOwnerFixture();r.history.push({...r.runs[0],ownerId:'other-owner'});assert.throws(()=>erasureInventory(r,run.changeId,'owner'),/owner-ambiguous/);});
+
+function legacyReceiptFixture(){const r=registry(),o=r.coordination.operations['op-target12345'];Object.assign(o,{accessId:'access-legacy',version:2,sessionId:run.sessionId,state:'COMPLETED',finishedAt:1000,completionDigest:'a'.repeat(64),native:{onceAcknowledged:true,permissionId:'permission-legacy',callId:'call-legacy',targetDigest:'b'.repeat(64),startedAt:900}});delete o.nativeResult;
+ r.coordination.accesses={'access-legacy':{accessId:'access-legacy',runId:run.runId,contextId:1,version:2,operationIds:[o.operationId],state:'RELEASED',outcome:'COMPLETED',finishedAt:1100,releaseDigest:'c'.repeat(64)}};return r;}
+test('reçu terminal legacy : éligible sans fabriquer nativeResult',()=>{const r=legacyReceiptFixture(),before=JSON.stringify(r),s=erasureScope(r,run.changeId,'owner');assert.deepEqual(s.legacyTerminalOperationIds,['op-target12345']);assert.equal(JSON.stringify(r),before);});
+for(const variant of ['state','digest','once','permission','call','target','time','access-state','access-digest','access-owner','access-version','access-member','access-time','explicit-result','test-lease'])test('reçu legacy refuse '+variant,()=>{
+ const r=legacyReceiptFixture(),o=r.coordination.operations['op-target12345'],a=r.coordination.accesses['access-legacy'];
+ if(variant==='state')o.state='UNKNOWN';if(variant==='digest')delete o.completionDigest;if(variant==='once')o.native.onceAcknowledged=false;
+ if(variant==='permission')delete o.native.permissionId;if(variant==='call')delete o.native.callId;if(variant==='target')delete o.native.targetDigest;
+ if(variant==='time')o.finishedAt=800;if(variant==='access-state')a.state='HELD';if(variant==='access-digest')delete a.releaseDigest;
+ if(variant==='access-owner')a.runId=peer.runId;if(variant==='access-version')a.version++;if(variant==='access-member')a.operationIds=[];
+ if(variant==='access-time')a.finishedAt=999;if(variant==='explicit-result')o.nativeResult=null;if(variant==='test-lease')o.testReservationId='old-test';
+ assert.throws(()=>erasureScope(r,run.changeId,'owner'),/operation-unreconciled/);
+});
