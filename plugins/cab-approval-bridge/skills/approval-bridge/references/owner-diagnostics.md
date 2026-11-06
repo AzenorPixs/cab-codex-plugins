@@ -73,3 +73,7 @@ dans GET /runs coordination.operations sur la même origine et le même PID
 controller. Une liste tronquée n’est pas preuve d’absence. Si l’entrée exacte
 est PREPARED/approved, reprendre l’acquisition déjà autorisée après contrôles
 d’identité/révisions ; ne pas recréer, redécider ou réconcilier une fausse cible.
+
+## Jetons des accès — CAB 2.3.8
+
+Les consultations publiques du contrôleur (`/runs`, statut RUN, `/locks`, coordination globale) omettent les jetons des accès de travail, comme ceux des baux de test. Elles servent au diagnostic et ne récupèrent aucune capacité. Le propriétaire conserve le jeton reçu par POST d’acquisition ou de réconciliation uniquement dans son processus local autorisé ; ne jamais l’afficher dans un transcript, un rapport ou un journal. Sa valeur, son fencing et les gardes restent inchangés par ces lectures. Un retour POST perdu se traite par la récupération qualifiée applicable, jamais par l’invention d’un jeton ni le rejeu d’un effet incertain. Le masquage n’autorise aucune libération sans preuve.

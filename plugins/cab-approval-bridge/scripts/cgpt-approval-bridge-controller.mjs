@@ -29,7 +29,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.3.7";
+const version = "2.3.8";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -330,7 +330,7 @@ function contextFor(run) {
       },
       assertBoundary: () => {
         const entry = registry.runs.get(run.runId);
-        if (context.pendingEffects() || context.publicJob()?.recovery || registry.accesses(run.runId)
+        if (context.pendingEffects() || context.publicJob()?.recovery || publicAccesses(run.runId)
           .some(access => ['HELD','WAITING','EXECUTING','UNKNOWN','STALE'].includes(access.state))) {
           throw new CoordinationError('model-transition-not-quiescent');
         }
@@ -378,12 +378,16 @@ function validatedChangeScopeForTestRecovery(runId, context, entry) {
 function publicTestReservations(runId) {
   return registry.testReservations(runId).map(({ token, ...reservation }) => reservation);
 }
+function publicAccesses(runId) {
+  return registry.accesses(runId).map(({ token, ...access }) => access);
+}
 function publicRunSnapshot() {
   const snapshot = registry.snapshot();
-  const reservations = snapshot.coordination?.testReservations;
-  if (reservations && typeof reservations === 'object' && !Array.isArray(reservations)) {
-    for (const reservation of Object.values(reservations)) {
-      if (reservation && typeof reservation === 'object') delete reservation.token;
+  for (const collection of [snapshot.coordination?.testReservations, snapshot.coordination?.accesses]) {
+    if (collection && typeof collection === 'object' && !Array.isArray(collection)) {
+      for (const entry of Object.values(collection)) {
+        if (entry && typeof entry === 'object') delete entry.token;
+      }
     }
   }
   return snapshot;
@@ -391,7 +395,7 @@ function publicRunSnapshot() {
 function statusFor(runId, context) {
   const status = context.publicStatus();
   const run = registry.runs.get(runId);
-  const accesses = registry.accesses(runId);
+  const accesses = publicAccesses(runId);
   const testReservations = publicTestReservations(runId);
   const global = registry.resourceState.global;
   const reason = status.recoveryRequired ? status.recoveryRequired : registry.migrationRequired || broker?.coordination_protocol !== COORDINATION_PROTOCOL ? 'coordination-upgrade-required'
@@ -2357,7 +2361,7 @@ async function handleRequest(request, response) {
     if (url.pathname === '/coordination/global' && request.method === 'GET') {
       json(response, 200, { protocol: registry.snapshot().coordinationProtocol,
         global: registry.resourceState.global, blockers: localIntegrationBlockers(),
-        accesses: registry.accesses().filter((a) => ['HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state)) }); return;
+        accesses: publicAccesses().filter((a) => ['HELD', 'EXECUTING', 'UNKNOWN'].includes(a.state)) }); return;
     }
     if (request.method === 'POST' && url.pathname.startsWith('/coordination/')) {
       if (url.pathname === '/coordination/maintenance/adopt') {
@@ -2542,7 +2546,7 @@ async function handleRequest(request, response) {
           const inventoryDigest = registry.sessionHandoffInventory(runId);
           const historicalCalls = Object.values(registry.resourceState.operations).filter(o => o.runId === runId &&
             o.contextId === run.contextId && o.native?.onceAcknowledged === true && !['COMPLETED','CANCELLED'].includes(o.state) &&
-            registry.accesses(runId).some(a => ['HELD','EXECUTING','UNKNOWN'].includes(a.state) && a.operationIds.includes(o.operationId)))
+            publicAccesses(runId).some(a => ['HELD','EXECUTING','UNKNOWN'].includes(a.state) && a.operationIds.includes(o.operationId)))
             .map(o => ({...o.native,sessionId:o.sessionId}));
           const first = await context.inspectSessionHandoff(sessionId,historicalCalls);
           const second = await context.inspectSessionHandoff(sessionId,historicalCalls);
@@ -2551,7 +2555,7 @@ async function handleRequest(request, response) {
           if (request.method === 'GET') {
             json(response,200,{runId,jobId:job.jobId,ownerId:run.ownerId,version:run.version,
               expectedSessionId:run.sessionId,sessionId,...second,inventoryDigest,
-              protectedAccesses:registry.accesses(runId).filter(a => ['HELD','WAITING','EXECUTING','UNKNOWN','STALE'].includes(a.state))
+              protectedAccesses:publicAccesses(runId).filter(a => ['HELD','WAITING','EXECUTING','UNKNOWN','STALE'].includes(a.state))
                 .map(a => ({accessId:a.accessId,state:a.state,resources:a.resources,fencing:a.fencing}))}); return;
           }
           if (payload.checkpointDigest !== second.checkpointDigest || payload.boundaryDigest !== second.boundaryDigest)
@@ -2876,7 +2880,7 @@ async function handleRequest(request, response) {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/locks') {
-        json(response, 200, { runId, protocol: COORDINATION_PROTOCOL, accesses: registry.accesses(runId),
+        json(response, 200, { runId, protocol: COORDINATION_PROTOCOL, accesses: publicAccesses(runId),
           revisions: registry.revisions(run.resources) }); return;
       }
       if (request.method === 'GET' && url.pathname === '/locks/reconcile-preview') {
@@ -3117,7 +3121,7 @@ async function handleRequest(request, response) {
       if (request.method === 'GET' && url.pathname === '/integration-status') {
         json(response, 200, { runId, referenceVersion: registry.referenceVersion,
           protocol: COORDINATION_PROTOCOL, integrationOwner: null, integrationQueue: [],
-          blockers: registry.accesses(runId).flatMap((a) => a.blockers),
+          blockers: publicAccesses(runId).flatMap((a) => a.blockers),
           observedAt: new Date().toISOString() }); return;
       }
       if (request.method === 'POST' && ['/resources', '/closing'].includes(url.pathname)) {

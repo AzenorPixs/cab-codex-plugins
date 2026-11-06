@@ -2,9 +2,8 @@
 
 ## `/CAB status`
 
-Produire dans ce chat un résumé très synthétique français et horodaté. Cette
-consultation est ponctuelle et strictement en lecture seule ; elle se termine
-après le tableau, même si des RUN continuent leur travail.
+Produire ici un résumé français bref et horodaté, en lecture seule. Terminer
+après le tableau, même si des RUN travaillent encore.
 
 ### Arguments et périmètre
 
@@ -99,3 +98,5 @@ Ne jamais appeler POST, PATCH ou DELETE, approuver une permission, écrire un
 checkpoint ou rapport, démarrer, arrêter ou reconnecter un service, créer une
 session, une automation ou un message. La consultation ne modifie ni le projet
 piloté, ni CAB, ni les processus ; elle n'exécute aucun test du projet suivi.
+
+GET sans jetons ; capacités hors transcript : [concurrence](concurrent-runs.md).

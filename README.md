@@ -1,5 +1,9 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+## Consultations sans capacités — CAB 2.3.8
+
+Les GET publics masquent les jetons des accès de travail sans modifier les états ni les réponses POST propriétaires. Les jetons restent uniquement en mémoire du processus local autorisé, hors transcript et rapports. Voir [le protocole](plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md).
+
 ## Adoption privée prouvée — CAB2.3.7
 
 CABU reprend un registre cible privé sans manifeste seulement si ses octets
