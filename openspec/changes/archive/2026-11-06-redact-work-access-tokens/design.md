@@ -1,0 +1,3 @@
+# Projections distinctes des états internes
+
+Créer publicAccesses au contrôleur sur copies, omettant uniquement token. Les appels internes au contrôleur utilisant les identités/états/revisions restent compatibles. Le snapshot public du registre retire également token dans coordination.accesses et testReservations ; le snapshot persistant reste inchangé. Les opérations et prévols utilisent déjà des projections explicites sans token. Les POST autorisés restent inchangés. Tests : HELD, EXECUTING, RELEASED, restauration, vues globales et par RUN, jeton acquis toujours utilisable pour la libération normale et aucune once supplémentaire.
