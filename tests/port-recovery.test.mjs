@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {spawn,execFile} from 'node:child_process';
 import {once} from 'node:events';
 import {promisify} from 'node:util';
-import {createServer} from 'node:net';
+import {createServer,createConnection} from 'node:net';
 import {canonicalContinuityDigest as digest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {observePortBoundary,portProbeCommand,parsePortCapture,validatePortReview} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-port-recovery.mjs';
 const execute=promisify(execFile);
@@ -84,7 +84,7 @@ test('sonde : reboot qualifié recapturé nativement et strictement lié au time
 // End-to-end process metadata: a real terminal, common parent, executable and paired TCP connection.
 async function interactiveFixture(t,{connected=true,terminal=true,sameExecutable=true}={}){
  const root=mkdtempSync(join(tmpdir(),'cab-port-topology-'));const server=join(root,'server.cjs'),peer=join(root,'peer.cjs');
- writeFileSync(server,'process.title="opencode";const net=require("node:net"),fs=require("node:fs");net.createServer(()=>{}).listen(0,"127.0.0.1",function(){fs.writeFileSync("ready.json",JSON.stringify({pid:process.pid,port:this.address().port}));});');
+ writeFileSync(server,'process.title="opencode";const net=require("node:net"),fs=require("node:fs");const server=net.createServer(socket=>socket.once("data",data=>{if(data.toString()==="churn"){let count=0;setInterval(()=>{if(count++<200){const client=net.connect(server.address().port,"127.0.0.1");client.on("error",()=>{});}},1);}}));server.listen(0,"127.0.0.1",function(){fs.writeFileSync("ready.json",JSON.stringify({pid:process.pid,port:this.address().port}));});');
  writeFileSync(peer,connected?'process.title="opencode";require("node:net").connect(+process.argv[2],"127.0.0.1");':'process.title="opencode";setInterval(()=>{},1000);');
  const source=`import os,pty,subprocess,time,json,sys,signal
 os.setsid()
@@ -133,4 +133,11 @@ for(const variant of ['no-connection','different-terminal','different-executable
  const value=await observePortBoundary(h.input);assert.equal(value.complete,true,JSON.stringify(value));assert.equal(value.quiescent,false);
  const candidate=value.matchingProcesses.find(x=>x.pid===h.info.peerPid);assert.ok(candidate);assert.equal(candidate.comm,'opencode');
  assert.equal(candidate.ppid,h.info.parentPid);assert.equal(candidate.cwdRelative,'.');
+});
+
+test('topologie native : les connexions API tierces volatiles ne changent pas la paire stable attestée',async t=>{
+ const h=await interactiveFixture(t),control=createConnection(h.info.port,'127.0.0.1');await once(control,'connect');control.write('churn');
+ t.after(()=>control.destroy());await new Promise(resolve=>setTimeout(resolve,30));
+ const value=await observePortBoundary(h.input);assert.equal(value.complete,true,JSON.stringify(value));assert.equal(value.quiescent,true,JSON.stringify(value));
+ assert.ok(value.infrastructure.some(item=>item.pid===h.info.peerPid&&item.reason==='native-interactive-peer'));
 });

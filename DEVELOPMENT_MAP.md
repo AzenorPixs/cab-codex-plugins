@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Reprises CABU SCM2.3.5
+
+[recover-offline-legacy-cabu-migration](openspec/changes/archive/2026-11-06-recover-offline-legacy-cabu-migration/),
+code non attribué : ARCHIVÉ, source qualifiée. Migration legacy hors ligne, reprise du reçu et
+repli fidèle ; corrige aussi le sceau de sockets tiers de la sonde C12.
+Qualification/livraison/activation distinctes. Convergence ACL ultérieure.
+
 ## Attribution native SCM2.3.4
 
 [attribute-native-port-probe-infrastructure](openspec/changes/archive/2026-11-06-attribute-native-port-probe-infrastructure/),

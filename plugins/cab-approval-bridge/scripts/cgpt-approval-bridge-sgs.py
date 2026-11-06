@@ -2,7 +2,7 @@
 """CAB's portable SGS entry point; see the distributed sgs skill."""
 from cab_sgs import main
 
-VERSION = "2.3.4"
+VERSION = "2.3.5"
 
 if __name__ == '__main__':
     raise SystemExit(main())

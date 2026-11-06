@@ -113,3 +113,13 @@ Après CABU vérifié, préparer deux nouvelles sondes mandatées ; conserver
 nonce, timeout exact, accès read, once et fraîcheur120s. Les captures d’une
 ancienne commande ne sont jamais recyclées. La revue et la réconciliation
 restent décidées par le propriétaire ; le correcteur ne touche pas son RUN.
+
+## Sockets API tiers — CAB2.3.5
+
+La capture2.3.4 peut signaler infrastructure-identity-changed en scellant tous
+les sockets, même tiers.2.3.5 garde PID/startTime/PPID/UID/cgroup/netns, même
+exécutable et terminal ; elle exige au moins une paire TCP réciproque présente
+et possédée aux deux observations, sans sceller les autres connexions. Un
+changement d’identité ou l’absence de paire stable reste refusé. Après CABU,
+préparer deux nouvelles descriptions/mandats ; ne pas recycler une capture
+non qualifiée et ne pas libérer la ressource historique avant revue et preuve.

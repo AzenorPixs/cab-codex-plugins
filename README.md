@@ -1,5 +1,17 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+## Reprises protégées après CABU — CAB2.3.5
+
+CABU valide le lecteur cible sur une copie isolée avant migration, y compris
+si l’ancien contrôleur refuse son registre. Il reprend le reçu historique
+vérifié et respecte l’activité initiale des services au repli. Les originaux
+et effets incertains restent protégés. Une cible historique différente du
+paquet exige un second alignement après clôture vérifiée du premier reçu.
+La sonde native ne scelle plus les sockets API tiers ; une paire pertinente
+stable, les identités, le terminal et les vrais candidats restent contrôlés.
+Voir [la maintenance](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md)
+et [la sonde](plugins/cab-approval-bridge/skills/approval-bridge/references/historical-owner-boundaries.md).
+
 ## Attribution des processus natifs — CAB2.3.4
 
 La sonde de port distingue les ancêtres et le client interactif OpenCode par
