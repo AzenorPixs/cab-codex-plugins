@@ -1,5 +1,14 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+## Adoption privée prouvée — CAB2.3.7
+
+CABU reprend un registre cible privé sans manifeste seulement si ses octets
+et les fichiers runtime connus correspondent à l’inventaire source validé
+du même reçu. Sources et données existantes restent intactes ; un écart
+conserve les deux états. L’adoption est liée au reçu, protégée par autorité,
+idempotente et revérifiée après copie. Aucun droit implicite au démarrage.
+Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
+
 ## Reprise classique et preuves scellées — CAB2.3.6
 
 CABU conserve le layout du reçu classique ou managed, arrête les services

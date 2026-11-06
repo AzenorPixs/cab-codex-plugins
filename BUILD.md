@@ -1,5 +1,14 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+## Adoption privée prouvée — CAB2.3.7
+
+CABU reprend un registre cible privé sans manifeste seulement si ses octets
+et les fichiers runtime connus correspondent à l’inventaire source validé
+du même reçu. Sources et données existantes restent intactes ; un écart
+conserve les deux états. L’adoption est liée au reçu, protégée par autorité,
+idempotente et revérifiée après copie. Aucun droit implicite au démarrage.
+Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md).
+
 Compatibilité carrier2.3.6 :512stages maximum,16Mio inchangés. Après utilisation
 au-delà128entrées, un ancien lecteur peut refuser le registre ; reprise en
 avant qualifiée requise, sans restauration d’un ancien état métier.

@@ -1,5 +1,14 @@
 ## 2.3.3 — 2026-11-06
 
+## 2.3.7 — 2026-11-06
+
+- Reprend une migration interrompue avec registre privé sans manifeste seulement
+  sous empreinte exacte de source validée et capturée dans le même reçu.
+- Vérifie les collisions runtime, conserve les données et preuve d’adoption,
+  protège l’autorité et la reprise ; aucun écrasement sur divergence.
+- Conserve les exclusions locales CAB après synchronisation du .gitignore
+  template et adopte la règle commune /.cab-tests/.
+
 ## 2.3.6 — 2026-11-06
 
 - Reprend les reçus classiques sans forcer managed-release, y compris les
