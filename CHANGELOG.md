@@ -1,5 +1,9 @@
 ## 2.3.3 — 2026-11-06
 
+## 2.3.8
+
+- Masquage des jetons des accès actifs/restaurés dans les GET publics ; stockage, POST propriétaires, fencing, once et libérations préservés. Tests HTTP et consignes de diagnostic distribuées.
+
 ## 2.3.7 — 2026-11-06
 
 - Reprend une migration interrompue avec registre privé sans manifeste seulement

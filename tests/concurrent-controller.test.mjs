@@ -223,7 +223,7 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
     return { approval:value,access:acquired.body };
   }
   async function releaseOperation(run, value, access, outcome='COMPLETED') {
-    const current = access || (await get('/runs/' + run.runId + '/locks')).body.accesses.find((a) => a.accessId === value.operation_id);
+    const current = access || (await post('/runs/' + run.runId + '/locks/acquire', { version:run.version,operationId:value.operation_id,operationDigest:value.operation_digest,resources:value.resources,expectedRevisions:value.expected_revisions })).body;
     return post('/runs/' + run.runId + '/locks/release', { version: run.version, operationId: current.accessId,
       token: current.token, fencing: current.fencing, outcome, evidence: ['native effects reviewed'] });
   }
@@ -327,7 +327,7 @@ test('transfert HTTP certifié : baux et accès sains restent valides, crash sui
   const leases = (await h.get('/runs/' + run.runId + '/test-resources')).body;
   assert.equal(leases.reservations[0].reconciliationRequired, false);
   const current = (await h.get('/runs/' + run.runId + '/locks')).body.accesses.find(item => item.accessId === access.accessId);
-  assert.equal(current.token, access.token); assert.equal(current.fencing, access.fencing);
+  assert.equal(current.token, undefined); assert.equal(current.fencing, access.fencing);
   assert.equal(h.native.replies.length, 0);
   await h.stop(); await h.start();
   assert.equal((await h.get('/transport/status')).body.adopted, false);
@@ -755,7 +755,7 @@ test('réconcilie un accès HELD restauré depuis la décision durable sans rejo
  assert.equal(operation.state,'COMPLETED');assert.equal(operation.onceAcknowledged,true);
  const current=(await h.get('/runs/'+run.runId+'/locks')).body.accesses[0];
  assert.equal(current.accessId,access.accessId);assert.equal(current.state,'HELD');
- assert.deepEqual(current.resources,[resource]);assert.equal(current.token,result.body.token);
+ assert.deepEqual(current.resources,[resource]);assert.equal(current.token,undefined);
  const replay=await h.post(route,payload);
  assert.equal(replay.status,200);assert.equal(replay.body.token,result.body.token);assert.equal(replay.body.fencing,result.body.fencing);
 });
@@ -2148,7 +2148,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.3.7');
+  assert.equal(initialized.result.serverInfo.version, '2.3.8');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3880,7 +3880,7 @@ test('extension HTTP additive : held conservé, génération stable, scope CAS e
  assert.equal(result.body.version,run.version);
  assert.deepEqual((await h.post('/runs/'+run.runId+'/extend-compatible',input)).body,result.body);
  const access=(await h.get('/runs/'+run.runId+'/locks')).body.accesses[0];
- assert.equal(access.token,acquired.body.token);assert.equal(access.fencing,acquired.body.fencing);assert.equal(access.state,'HELD');
+ assert.equal(access.token,undefined);assert.equal(access.fencing,acquired.body.fencing);assert.equal(access.state,'HELD');
  assert.deepEqual(h.native.replies,[]);
 });
 
@@ -3923,7 +3923,7 @@ async function portReconciliationFixture(t,{reboot=false,handoff=false,sealed=fa
   const old=run.sessionId,next='ses_reboot_current',base='/runs/'+run.runId;
   h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};
   h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
-  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.7'})}}]}];
+  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.8'})}}]}];
   const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
   const result=await h.post(base+'/session-handoff',{handoffId:'port-reboot-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:old,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'continue read-only probes after qualified handoff',evidence:['fixture/native handoff']});
   assert.equal(result.status,201,JSON.stringify(result));run.sessionId=next;
@@ -4335,7 +4335,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.3.7'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.3.8'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4913,7 +4913,7 @@ for(const handoff of [false,true])test('port après reboot : réconciliation HTT
 test('retraite historique HTTP : ancien SID révoqué sans réactiver sa permission',async t=>{
  const {h,run,approval,base}=await unissuedWithdrawalFixture(t,'rejected'),next='ses_retirement_current';
  h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
- h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.7'})}}]}];
+ h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.3.8'})}}]}];
  const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
  const handoff=await h.post(base+'/session-handoff',{handoffId:'retirement-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:run.sessionId,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'qualified owner handoff',evidence:['audit/handoff']});assert.equal(handoff.status,201,JSON.stringify(handoff));
  const current=(await h.get('/runs')).body.runs.find(r=>r.runId===run.runId);
@@ -5021,4 +5021,24 @@ for(const field of ['requestId','approval_id'])test('port scellé : une identit�
  assert.equal((await h.post('/validation/request',{approval:child})).status,202);assert.equal((await h.post(base+'/decision/'+child.requestId,{decision:'approved'})).status,201);
  const result=await h.post(base+'/locks/acquire',{version:run.version,operationId:child.operation_id,operationDigest:child.operation_digest,resources:child.resources,expectedRevisions:child.expected_revisions});
  assert.equal(result.body.state,'WAITING',JSON.stringify(result));
+});
+
+for(const restored of [false,true])test('jetons de travail : GET publics sans capacité, POST et stockage intacts'+(restored?' après restauration':''),async t=>{
+ const h=await setup(t),run=await h.reserve('redacted-access'),{approval,access}=await h.approvedAccess(run,'redacted-work');
+ assert.equal(typeof access.token,'string');assert.ok(access.token.length>20);
+ const check=async()=>{
+  for(const route of ['/runs','/runs/'+run.runId+'/status','/runs/'+run.runId+'/locks','/coordination/global']){
+   const r=await h.get(route);assert.equal(r.status,200);
+   assert.equal(JSON.stringify(r.body).includes(access.token),false,route);
+   const entries=route==='/runs'?Object.values(r.body.coordination.accesses):route.endsWith('/status')?r.body.coordination.accesses:r.body.accesses;
+   for(const item of entries)assert.equal(Object.hasOwn(item,'token'),false,route);
+  }
+ };
+ await check();
+ if(restored){await h.stop();await h.start();await check();return;}
+ const replay=await h.post('/runs/'+run.runId+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions});
+ assert.equal(replay.status,200);assert.equal(replay.body.token,access.token);assert.equal(replay.body.fencing,access.fencing);
+ await h.execute(approval);await check();await h.completeTool(approval);
+ const released=await h.releaseOperation(run,approval,access);assert.equal(released.status,200,JSON.stringify(released));
+ await check();assert.equal(h.native.replies.length,1);
 });

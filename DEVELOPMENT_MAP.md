@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Projections publiques SCM 2.3.8
+
+[redact-work-access-tokens](openspec/changes/archive/2026-11-06-redact-work-access-tokens/), code non attribué : ARCHIVÉ, source qualifiée. Masquage GET sans mutation des capacités ; qualification, publication et activation distinctes. Convergence ACL ultérieure.
+
 ## Adoption privée SCM2.3.7
 
 [adopt-identical-private-runtime-registry](openspec/changes/archive/2026-11-06-adopt-identical-private-runtime-registry/),
