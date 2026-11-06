@@ -2,7 +2,7 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.3.3';
+export const VERSION = '2.3.4';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);

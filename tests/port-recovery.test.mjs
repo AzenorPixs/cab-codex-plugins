@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,rmSync,readFileSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,rmSync,readFileSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
@@ -79,4 +79,58 @@ test('sonde : reboot qualifié recapturé nativement et strictement lié au time
  for(const wrong of [{kernelBootMs:boot+1000},{bootIdSha256:'0'.repeat(64)},{historicalEndedAt:boot},{instanceObservedAt:boot-1}]){
   const bad=await observePortBoundary({...input,...wrong});assert.equal(bad.complete,false);assert.equal(bad.quiescent,false);
  }
+});
+
+// End-to-end process metadata: a real terminal, common parent, executable and paired TCP connection.
+async function interactiveFixture(t,{connected=true,terminal=true,sameExecutable=true}={}){
+ const root=mkdtempSync(join(tmpdir(),'cab-port-topology-'));const server=join(root,'server.cjs'),peer=join(root,'peer.cjs');
+ writeFileSync(server,'process.title="opencode";const net=require("node:net"),fs=require("node:fs");net.createServer(()=>{}).listen(0,"127.0.0.1",function(){fs.writeFileSync("ready.json",JSON.stringify({pid:process.pid,port:this.address().port}));});');
+ writeFileSync(peer,connected?'process.title="opencode";require("node:net").connect(+process.argv[2],"127.0.0.1");':'process.title="opencode";setInterval(()=>{},1000);');
+ const source=`import os,pty,subprocess,time,json,sys,signal
+os.setsid()
+master,slave=pty.openpty()
+os.dup2(slave,2)
+children=[]
+def stop(*args):
+ for p in children:
+  p.terminate()
+ for p in children:
+  p.wait(timeout=10)
+ sys.exit(0)
+signal.signal(signal.SIGTERM,stop)
+server=subprocess.Popen([sys.argv[1],"server.cjs"],stdin=slave,stdout=slave,stderr=slave)
+children.append(server)
+while not os.path.exists("ready.json"):time.sleep(.01)
+data=json.load(open("ready.json"))
+# Native startTime must precede peer: tick precision is part of the proof.
+time.sleep(.04)
+peer_args=[sys.argv[1],"peer.cjs",str(data["port"])] if sys.argv[3]=="same" else [sys.executable,"-c",'import ctypes,socket,time;ctypes.CDLL(None).prctl(15,b"opencode",0,0,0);s=socket.create_connection(("127.0.0.1",'+str(data["port"])+'));time.sleep(3600)']
+peer=subprocess.Popen(peer_args,stdin=slave,stdout=slave,stderr=slave if sys.argv[2]=="tty" else subprocess.DEVNULL)
+children.append(peer)
+time.sleep(.1)
+print(json.dumps(dict(data,peerPid=peer.pid,parentPid=os.getpid())),flush=True)
+while True:time.sleep(1)
+`;
+ const parent=spawn('python3',['-u','-c',source,process.execPath,terminal?'tty':'detached',sameExecutable?'same':'other'],{cwd:root,stdio:['ignore','pipe','pipe']});
+ t.after(async()=>{if(parent.exitCode===null){const ended=once(parent,'exit');parent.kill();await ended;}rmSync(root,{recursive:true,force:true});});
+ const [line]=await once(parent.stdout,'data');const info=JSON.parse(line.toString());
+ const stat=readFileSync('/proc/'+info.pid+'/stat','utf8');const start=stat.slice(stat.lastIndexOf(')')+2).trim().split(/\s+/)[19];
+ const free=createServer();await new Promise(resolve=>free.listen(0,'127.0.0.1',resolve));const port=free.address().port;await new Promise(resolve=>free.close(resolve));
+ return {root,info,input:{workspace:root,nativePid:info.pid,nativeApiPort:info.port,instanceObservedAt:Date.now(),instanceStartTime:start,
+  instanceEvidenceKind:'controller-native-instance',port,runtimeDirectories:['.'],nonce:'topology-probe',resourceKey:'port:localhost/'+port}};
+}
+test('topologie native réelle : ancêtre et pair interactif exclus, capture qualifiée et commande bornée',async t=>{
+ const h=await interactiveFixture(t),value=await observePortBoundary(h.input);
+ assert.equal(value.complete,true,JSON.stringify(value));assert.equal(value.quiescent,true,JSON.stringify(value));
+ assert.ok(value.infrastructure.some(x=>x.pid===h.info.parentPid&&x.reason==='native-ancestor'));
+ assert.ok(value.infrastructure.some(x=>x.pid===h.info.peerPid&&x.reason==='native-interactive-peer'));
+ const command=portProbeCommand(h.input);assert.ok(command.length<16384,String(command.length));
+ const result=await execute('/bin/sh',['-c',command]);
+ assert.equal(parsePortCapture({type:'tool',tool:'bash',nativeFormat:'opencode-v2',state:{status:'completed',metadata:{exit:0},input:{command,workdir:h.root},output:result.stdout}},h.input).quiescent,true);
+});
+for(const variant of ['no-connection','different-terminal','different-executable'])test('pair nommé opencode reste candidat : '+variant,async t=>{
+ const h=await interactiveFixture(t,{connected:variant!=='no-connection',terminal:variant!=='different-terminal',sameExecutable:variant!=='different-executable'});
+ const value=await observePortBoundary(h.input);assert.equal(value.complete,true,JSON.stringify(value));assert.equal(value.quiescent,false);
+ const candidate=value.matchingProcesses.find(x=>x.pid===h.info.peerPid);assert.ok(candidate);assert.equal(candidate.comm,'opencode');
+ assert.equal(candidate.ppid,h.info.parentPid);assert.equal(candidate.cwdRelative,'.');
 });

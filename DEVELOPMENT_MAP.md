@@ -1,5 +1,12 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Attribution native SCM2.3.4
+
+[attribute-native-port-probe-infrastructure](openspec/changes/archive/2026-11-06-attribute-native-port-probe-infrastructure/),
+code non attribué : ARCHIVÉ, source qualifiée. Corrige la qualification des ancêtres/client OC
+dans les sondes de port, sous les protections2.3.3 ; livraison et activation
+restent à prouver. Convergence ACL ultérieure.
+
 ## Frontières historiques SCM 2.3.3
 
 [reconcile-historical-owner-boundaries](openspec/changes/archive/2026-11-06-reconcile-historical-owner-boundaries/), code non attribué : ARCHIVÉ, source qualifiée.
