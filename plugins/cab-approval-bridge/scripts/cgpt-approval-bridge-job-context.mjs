@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.3.2";
+export const VERSION = "2.3.3";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -429,7 +429,7 @@ function updateStatus(type, details = {}) {
 function publicStatus() {
   return {
     configuration: { maxCommandLength, commandLengthUnit: 'UTF-16' },
-    version: "2.3.2",
+    version: "2.3.3",
     ...(run ? { runId: run.runId } : {}),
     startedAt: status.startedAt,
     appServer: status.appServer,
@@ -1922,11 +1922,11 @@ function restoreNativeRejectedOperation(approval, proofDigest) {
   return { requestId, operationId: operation.operationId, restored: true };
 }
 
-function verifyNativeCancelledValidation(approval, proofDigest, {allowRejected=false}={}) {
+function verifyNativeCancelledValidation(approval, proofDigest, {allowRejected=false,historicalRetirement=false}={}) {
   if (!run || !approval || !/^[a-f0-9]{64}$/.test(proofDigest || '') ||
       approval.run_id !== run.runId || approval.change_id !== job?.changeId ||
-      approval.directory !== workspace || !ownsSession(approval.session_id) ||
-      job?.revokedSessions?.includes(approval.session_id)) throw decisionError('native-cancellation-identity-divergent');
+      approval.directory !== workspace || (!historicalRetirement && (!ownsSession(approval.session_id) ||
+      job?.revokedSessions?.includes(approval.session_id))) || historicalRetirement && !allowRejected) throw decisionError('native-cancellation-identity-divergent');
   const operation = approvedOperation(approval);
   if (!operation || operation.runId !== run.runId || operation.directory !== workspace ||
       operation.operationId !== approval.operation_id || operation.operationDigest !== approval.operation_digest ||
@@ -2397,7 +2397,7 @@ function startCodex() {
   sendCodex("initialize", {
     clientInfo: {
       name: "cgpt-approval-bridge-controller",
-      version: "2.3.2",
+      version: "2.3.3",
     },
   });
 

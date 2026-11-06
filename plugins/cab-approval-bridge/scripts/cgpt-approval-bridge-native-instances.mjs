@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { ContinuityStore, canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 import { processIdentity } from './cgpt-approval-bridge-process-lifecycle.mjs';
 
-export const VERSION = '2.3.2';
+export const VERSION = '2.3.3';
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 function metadata(path) {
@@ -26,7 +26,9 @@ export class NativeInstances {
       this.store = new ContinuityStore(path, 'native-instances', value => Array.isArray(value) && value.length <= 1000 &&
         value.every(row => row.workspace === workspace && Number.isSafeInteger(row.pid) && row.pid > 0 &&
           typeof row.version === 'string' && /^\d+$/.test(row.startTime || '') && Number.isSafeInteger(row.uid) &&
-          hash(row.cgroupDigest) && Number.isFinite(row.observedAt)));
+          hash(row.cgroupDigest) && Number.isFinite(row.observedAt) &&
+          (row.kernelBootMs === undefined && row.bootIdSha256 === undefined ||
+            Number.isSafeInteger(row.kernelBootMs) && row.kernelBootMs > 0 && hash(row.bootIdSha256) && row.observedAt >= row.kernelBootMs)));
       this.rows = this.store.snapshot() || [];
     } catch (cause) {
       if (!String(cause.code || '').startsWith('continuity-') && !['EACCES','EPERM','EIO'].includes(cause.code)) throw cause;
@@ -48,13 +50,40 @@ export class NativeInstances {
     if (previous && Object.entries(row).every(([key,item]) => item === previous[key])) return previous;
     const next = { ...row, observedAt: Date.now() }; this.store.write([...this.rows, next]); this.rows.push(next); return next;
   }
+  async kernelEpoch(native) {
+    const identity = await this.identity(native);
+    if (!identity) return null;
+    const boot = readFileSync('/proc/stat','utf8').match(/^btime (\d+)$/m);
+    const bootId = readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim();
+    const kernelBootMs = boot ? Number(boot[1])*1000 : NaN;
+    if (!Number.isSafeInteger(kernelBootMs) || kernelBootMs <= 0 || kernelBootMs > Date.now() ||
+        !/^[a-f0-9-]{36}$/.test(bootId)) return null;
+    const bootIdSha256 = createHash('sha256').update(bootId).digest('hex');
+    const previous = this.rows.findLast(row => row.kernelBootMs === kernelBootMs && row.bootIdSha256 === bootIdSha256 &&
+      Object.entries(identity).every(([key,value]) => row[key] === value));
+    if (previous) return previous;
+    if (this.rows.length >= 1000) return null;
+    const observed = { ...identity,kernelBootMs,bootIdSha256,observedAt:Date.now() };
+    this.store.write([...this.rows,observed]);this.rows.push(observed);
+    return observed;
+  }
+  async rebootProof(native, historicalEndedAt) {
+    if (!Number.isFinite(historicalEndedAt) || historicalEndedAt <= 0) return null;
+    const epoch = await this.kernelEpoch(native);
+    if (!epoch || epoch.kernelBootMs <= historicalEndedAt) return null;
+    return { ...epoch,kind:'kernel-reboot-after-call',historicalEndedAt };
+  }
   async proof(native, invocationStartedAt) {
     const identity = await this.identity(native);
     if (!identity || !Number.isFinite(invocationStartedAt)) return null;
+    const boot = readFileSync('/proc/stat','utf8').match(/^btime (\d+)$/m);
+    const kernelBootMs = boot ? Number(boot[1])*1000 : NaN;
+    if (!Number.isSafeInteger(kernelBootMs) || kernelBootMs <= 0 || kernelBootMs > Date.now()) return null;
     const current = this.rows.findLast(row => Object.entries(identity).every(([key,value]) => row[key] === value)) || identity;
     const previous = this.rows.findLast(row => row.pid === current.pid && row.startTime === current.startTime && row.observedAt <= invocationStartedAt);
-    if (previous && (previous.cgroupDigest !== current.cgroupDigest || previous.uid !== current.uid || previous.version !== current.version)) return null;
-    if (Number.isFinite(current.observedAt) && current.observedAt <= invocationStartedAt) return { kind: 'controller-native-instance', ...current };
+    if (previous && (previous.cgroupDigest !== current.cgroupDigest || previous.uid !== current.uid || previous.version !== current.version ||
+        previous.observedAt < kernelBootMs)) return null;
+    if (previous) return { kind:'controller-native-instance',...previous };
     const key = digest([current,invocationStartedAt]);
     if (this.legacy.has(key)) return this.legacy.get(key);
     let context;
@@ -70,7 +99,7 @@ export class NativeInstances {
       const observedAt = Date.parse(row.updatedAt), identity = row.nativeIdentity;
       if (row.phase !== 'COMPLETED' || row.contextKey !== context || identity?.pid !== native.pid ||
           identity.version !== native.version || (identity.sharedDirectory || identity.directory) !== this.workspace ||
-          !Number.isFinite(observedAt) || observedAt > invocationStartedAt) continue;
+          !Number.isFinite(observedAt) || observedAt < kernelBootMs || observedAt > invocationStartedAt) continue;
       if (!selected || observedAt > selected.observedAt) selected = { ...current, observedAt,
         kind: 'legacy-cabu-native-instance', receiptId: name, legacyCgroupUnrecorded: true };
     }

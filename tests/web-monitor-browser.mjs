@@ -176,7 +176,7 @@ try {
       coordination: { phase: ['WORK', 'WORK', 'REPORT'][i], ...(i === 1 ? { reason: recoveryBlocked ? 'resource-effects-unknown' : 'resource-conflict', blockers: [{ runId: 'RUN-WEB' }] }
         : i === 2 ? { reason: stopped ? 'run-stop' : 'resource-effects-unknown' } : {}) } }])) }
       : request.url === '/monitor/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
-        : target.pathname === '/api/info' ? { version: '2.3.2', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
+        : target.pathname === '/api/info' ? { version: '2.3.3', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
           : target.pathname === '/api/location' ? { directory: root }
           : target.pathname === '/api/mcp' ? { location: { directory: root }, data: [{ name: 'cgpt-validation', status: { status: brokerConnection } }] }
           : target.pathname === '/api/session/active' ? { data: managementMode ? {} : { ses_0: { type: 'running' } } }
@@ -208,7 +208,7 @@ try {
     await wait(() => browser.evaluate("document.querySelector('#connection').textContent.includes('connectée') && document.querySelectorAll('#work-content tbody tr').length === 3"), browser.name + ' affichage initial');
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096')"), true);
     const initialStatisticsProbe=monitor.state.statisticsProbe;
-    for(const [state,label,version] of [['UNAVAILABLE','Indisponible','2.3.2'],['VERSION_MISMATCH','Version divergente','2.2.0']]){
+    for(const [state,label,version] of [['UNAVAILABLE','Indisponible','2.3.3'],['VERSION_MISMATCH','Version divergente','2.2.0']]){
       monitor.state.statisticsProbe=async()=>({state,available:false,version,reason:'synthetic-check'});
       monitor.state.statistics.checkedAt=null;await monitor.state.collect();
       await browser.evaluate("document.querySelector('#monitor-refresh').click();true");
@@ -217,7 +217,7 @@ try {
     }
     monitor.state.statisticsProbe=initialStatisticsProbe;monitor.state.statistics.checkedAt=null;await monitor.state.collect();
     await browser.evaluate("document.querySelector('#monitor-refresh').click();true");
-    await wait(()=>browser.evaluate("document.querySelector('[data-component=statistics] .health-status').textContent==='Disponible' && document.querySelector('[data-component=statistics] .health-version').textContent==='v2.3.2'"),browser.name+' moteur statistiques disponible');
+    await wait(()=>browser.evaluate("document.querySelector('[data-component=statistics] .health-status').textContent==='Disponible' && document.querySelector('[data-component=statistics] .health-version').textContent==='v2.3.3'"),browser.name+' moteur statistiques disponible');
 
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('3/14')"), true);
     assert.equal(await browser.evaluate("JSON.stringify([...document.querySelectorAll('#work-content th')].map(x=>x.textContent)) === JSON.stringify(['RUN / CHANGE','codes de lot','ETAT','ÉTAPE','TÂCHES COCHÉES','ACTIONS'])"), true);
@@ -228,7 +228,7 @@ try {
     await browser.screenshot('web-monitor-' + browser.name.toLowerCase() + '-lot-codes-changes.png');
     await browser.evaluate("document.querySelector('#runs-tab').click(); true");
     assert.equal(await browser.evaluate("document.querySelector('#work-content').textContent.includes('Revue · 8/11') && document.querySelector('#work-content').textContent.includes('WAITING')"), true);
-    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.5') && document.querySelector('#health').textContent.includes('v2.3.2')"), true);
+    assert.equal(await browser.evaluate("document.querySelector('#health').textContent.includes('v2.1.5') && document.querySelector('#health').textContent.includes('v2.3.3')"), true);
     assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('WORK')"), true);
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=WAITING]')).backgroundColor"), 'rgb(255, 246, 207)');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('tr[data-state=BLOCKED]')).backgroundColor"), 'rgb(229, 239, 255)');
@@ -444,7 +444,7 @@ try {
     await wait(() => browser.evaluate("!document.querySelector('#monitor-page').hidden && document.querySelector('#stats-page').hidden"), browser.name + ' retour MONITOR');
     assert.equal(await browser.evaluate("getComputedStyle(document.querySelector('#page-title')).fontWeight >= 800 && document.querySelector('#page-title').textContent === 'CENTRE D’OBSERVATION' && !document.querySelector('#monitor-page').textContent.includes('Tout le travail.') && !document.querySelector('#monitor-page').textContent.includes('Une vue commune.')"), true);
     assert.equal(await browser.evaluate("document.querySelectorAll('.health-card').length === 6 && document.querySelectorAll('[data-component=monitor] button').length === 1"), true);
-    assert.equal(await browser.evaluate("document.querySelector('[data-component=statistics] .health-version').textContent==='v2.3.2' && document.querySelector('[data-component=statistics] .health-status').textContent==='Disponible' && document.querySelectorAll('[data-component=statistics] button').length===0"),true);
+    assert.equal(await browser.evaluate("document.querySelector('[data-component=statistics] .health-version').textContent==='v2.3.3' && document.querySelector('[data-component=statistics] .health-status').textContent==='Disponible' && document.querySelectorAll('[data-component=statistics] button').length===0"),true);
     assert.equal(await browser.evaluate("[...document.querySelectorAll('#work-content .row-actions button')].every(button => button.disabled)"), true);
     await browser.evaluate("document.querySelector('[data-component=monitor] button').focus(); true");
     assert.equal(await browser.evaluate("document.activeElement.getAttribute('aria-label') === 'Redémarrer Web'"), true);

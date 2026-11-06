@@ -71,7 +71,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.3.2"
+SERVER_VERSION = "2.3.3"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "

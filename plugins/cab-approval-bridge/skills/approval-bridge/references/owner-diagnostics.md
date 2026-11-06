@@ -48,3 +48,16 @@ sensibles. Une offre de plan reste un instantané, jamais une permission.
 Un signalement n’autorise pas le correcteur à agir sur le RUN métier.
 Le correctif produit/documentaire suit SCM, version, commit, publication et
 CABU ; sa livraison et la reprise effective restent des preuves distinctes.
+
+Ancienne génération/SID rejeté, suffixe de mandats et preuve d’instance après reboot : [voies historiques](historical-owner-boundaries.md).
+
+### Révision enfant : carte et projection
+
+GET /runs/<runId>/locks.revisions est une projection sur les ressources du RUN.
+Une valeur agrégée du parent inclut ses autres enfants et ne permet pas de
+reconstituer la révision exacte de chaque descendant. Pour préparer un mandat
+plus fin, utiliser localement la carte publique GET /runs → coordination.revisions,
+filtrer les seules clés utiles et prendre max(overlaps) avec l’export du plugin
+actif. Ne pas transmettre le reste de ce snapshot à l’agent. Une erreur
+resource-revision-stale reste légitime si une révision enfant diffère ; refaire
+une demande d’IDs et digests neufs après relecture, sans changer la garde.

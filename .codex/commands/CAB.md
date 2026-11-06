@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.3.2
+version: 2.3.3
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
@@ -42,11 +42,11 @@ bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
 par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
 
-Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md`, sans effet implicite.
+Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md` ;
+frontières anciennes : `references/historical-owner-boundaries.md`. Aucun effet implicite.
 
-Pour un changement explicite de SID dans le même RUN avec historique protégé,
-lire `references/session-handoff.md`. Les commandes run/resume ne réalisent
-pas cette transition implicitement.
+Changement de SID : `references/session-handoff.md`, historique protégé.
+run/resume ne réalisent pas cette transition implicitement.
 
 Pour piloter ou reprendre une unité, lire `references/pilot-state-matrix.md`,
 puis la seule voie utile ; `references/validation-submission.md` distingue

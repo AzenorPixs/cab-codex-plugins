@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.2';
+export const VERSION = '2.3.3';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -308,6 +308,114 @@ export function reviewedTerminalProof(parts, approval, review, run, sameIdentity
 }
 
 // This proof retires coordination only; it never authorizes the refused input.
+// A rejected coordination can be retired on its complete native user-turn graph.
+// Later turns are retained in the sealed transcript; they are not declared effect-free.
+export function rejectedUnissuedTurnProof(messages, operation, approval, requestPart, noEnvironment, sameIdentity) {
+  if (!Array.isArray(messages) || operation?.decision?.status !== 'rejected' || operation.native ||
+      operation.nativeResult || operation.onceAcknowledged || operation.requestId !== approval?.requestId ||
+      operation.sessionId !== approval.session_id || typeof sameIdentity !== 'function') return null;
+  const decisionAt = Date.parse(operation.decision.recordedAt);
+  if (!Number.isFinite(decisionAt)) return null;
+  const at = messages.findIndex(message => message.parts?.includes(requestPart)), first = messages[at];
+  const parent = first?.info?.parentID;
+  if (at < 0 || first.info.role !== 'assistant' || !id(parent) || first.info.sessionID !== operation.sessionId) return null;
+  const users = new Map();
+  for (const message of messages.slice(0,at)) if (message.info?.role === 'user') {
+    if (users.has(message.info.id)) return null;users.set(message.info.id,message);
+  }
+  if (!users.has(parent) || users.get(parent).info.sessionID !== operation.sessionId ||
+      !Number.isFinite(users.get(parent).info.time?.created) || users.get(parent).info.time.created > first.info.time?.created) return null;
+  const parents = new Set(), scope = [];let rejected = null, terminal = null, end = -1;
+  for (let index=at; index<messages.length; index++) {
+    const message = messages[index], info = message.info;
+    if (!info || info.sessionID !== operation.sessionId || !id(info.id) || !Array.isArray(message.parts)) return null;
+    scope.push(message);
+    if (['idle','system'].includes(info.role)) { if (message.parts.length) return null;continue; }
+    if (info.role === 'user') { if(users.has(info.id)||!Number.isFinite(info.time?.created))return null;users.set(info.id,message);continue; }
+    if (info.role !== 'assistant' || !users.has(info.parentID) || !['tool-calls','stop'].includes(info.finish) ||
+        !Number.isFinite(info.time?.created) || !Number.isFinite(info.time?.completed) ||
+        info.time.completed < info.time.created || users.get(info.parentID).info.time.created > info.time.created ||
+        message.parts.some(part => part.type === 'tool' && !noEnvironment(part))) return null;
+    parents.add(info.parentID);
+    for (const part of message.parts.filter(part => part.type === 'tool' && part.state?.status === 'completed')) {
+      const direct = ['cgpt-validation_request_validation','cgpt-validation_get_approval','cgpt-validation_poll_approval'].includes(part.tool);
+      const wrapped = part.tool === 'execute' && part.state.metadata?.toolCalls?.some(call =>
+        ['cgpt-validation.request_validation','cgpt-validation.get_approval','cgpt-validation.poll_approval'].includes(call.tool));
+      if (!direct && !wrapped) continue;
+      let value;try{value=JSON.parse(part.state.output);}catch{continue;}
+      if (value?.status === 'REJECTED' && sameIdentity(value) && info.time.completed >= decisionAt)
+        rejected = {messageId:info.id,callId:part.callID || part.callId,partDigest:digest(part)};
+    }
+    if (rejected && info.finish === 'stop' && info.time.completed >= decisionAt) { terminal=message;end=index;break; }
+  }
+  if (!terminal || !rejected) return null;
+  const next = messages.findIndex((message,index) => index > end && message.info?.role === 'user');
+  if (next < 0 || messages[next].info.sessionID !== operation.sessionId ||
+      !Number.isFinite(messages[next].info.time?.created) || messages[next].info.time.created < terminal.info.time.completed ||
+      messages.slice(end+1,next).some(message => !['idle','system'].includes(message.info?.role) || message.parts?.length || message.info.sessionID !== operation.sessionId) ||
+      messages.slice(next).some(message => message.info?.role === 'assistant' && parents.has(message.info.parentID))) return null;
+  return {kind:'REJECTED_UNISSUED_TERMINAL_TURN',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
+    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',terminalTurn:{parentMessageId:parent,
+      requestMessageId:first.info.id,terminalMessageId:terminal.info.id,nextUserMessageId:messages[next].info.id,
+      rejected,decisionAt,scopeDigest:digest(scope),laterMessagesDigest:digest(messages.slice(next)),wholeTranscriptDigest:digest(messages)}};
+}
+
+function rejectedReceiptInstance(receipt, view, endedAt) {
+  if (receipt.nativePid === view.nativePid && receipt.nativeVersion === view.nativeVersion) return true;
+  const epoch = view.nativeKernelEpoch, ack = Date.parse(receipt.acknowledgedAt);
+  return Boolean(epoch && epoch.pid === view.nativePid && epoch.version === view.nativeVersion &&
+    /^\d+$/.test(epoch.startTime || '') && hash(epoch.bootIdSha256) &&
+    Number.isSafeInteger(epoch.kernelBootMs) && epoch.kernelBootMs > endedAt &&
+    Number.isFinite(ack) && ack < epoch.kernelBootMs &&
+    Number.isSafeInteger(receipt.nativePid) && receipt.nativePid > 0 && typeof receipt.nativeVersion === 'string');
+}
+
+// Every excluded environmental call retains a persisted owner and an exact terminal proof.
+export function correlateWithdrawalEffects(parts, target, peers, view, noEnvironment) {
+  const effects = parts.filter(p => p.type === 'tool' && p.tool !== 'cab_codemode_discovery' && !noEnvironment(p));
+  if (!effects.length) return { effects,excluded:[] };
+  const markers = parts.map((part,index) => ({part,index})).filter(({part}) =>
+    part.tool === 'cgpt-validation_request_validation' || part.tool === 'execute' &&
+    part.state?.metadata?.toolCalls?.some(call => call.tool === 'cgpt-validation.request_validation'));
+  const records = [target,...peers], groups = new Map();
+  for (const part of effects) {
+    const index = parts.indexOf(part), marker = markers.findLast(m => m.index <= index);
+    const matches = marker ? records.filter(r => r.requestPart === marker.part) : [];
+    if (matches.length !== 1) fail('withdraw-call-owner-unverified');
+    const record = matches[0], group = groups.get(record) || [];group.push(part);groups.set(record,group);
+  }
+  const excluded = [];
+  for (const [record,calls] of groups) {
+    if (record === target) continue;
+    const op = record.operation;
+    if (!op || op.runId !== target.operation.runId || op.contextId !== target.operation.contextId ||
+        op.sessionId !== target.operation.sessionId || calls.length !== 1) fail('withdraw-peer-boundary-unverified');
+    const part = calls[0], callId = part.callID || part.callId;
+    let proof;
+    if (op.decision?.status === 'rejected' && ['PREPARED','CANCELLED'].includes(op.state) && !op.native && !op.nativeResult) {
+      proof = part.tool === 'bash' ? rejectedShellWithdrawalProof(view,calls,record.approval) :
+        rejectedEditWithdrawalProof(view,calls,record.approval);
+    } else if (op.state === 'COMPLETED' && op.decision?.status === 'approved' && op.native?.onceAcknowledged === true && op.native.callId === callId &&
+        op.nativeResult?.status === 'completed' && op.nativeResult.partDigest === digest(part) &&
+        part.nativeFormat === 'opencode-v2' && part.state?.status === 'completed') {
+      proof = {kind:'PERSISTED_NATIVE_TERMINAL',partDigest:digest(part),operationDigest:digest(op)};
+    } else if (op.state === 'CANCELLED' && op.native?.onceAcknowledged === true && op.native.callId === callId &&
+        op.completionDigest && record.reconciliationReceipt?.action === 'reconcile-quarantined-port' &&
+        record.reconciliationReceipt?.state === 'DONE' && record.reconciliationReceipt.httpStatus === 200 &&
+        record.reconciliationReceipt.effectDigest === op.completionDigest &&
+        record.reconciliationReceipt.targetId === op.operationId && record.reconciliationReceipt.runId === op.runId &&
+        record.reconciliationReceipt.contextId === op.contextId && record.reconciliationReceipt.ownerId === target.ownerId &&
+        record.access?.state === 'RELEASED' && record.access.outcome === 'RECONCILED' &&
+        record.access.releaseDigest === op.completionDigest &&
+        record.reconciliationReceipt.result?.evidenceAuthority === 'VERIFIED_NATIVE_PORT_PROBES' &&
+        record.reconciliationReceipt.result?.executionOutcome === 'HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT') {
+      proof = {kind:'RECONCILED_PORT',partDigest:digest(part),receiptDigest:digest(record.reconciliationReceipt)};
+    } else fail('withdraw-peer-effect-unresolved');
+    excluded.push({operationId:op.operationId,requestId:op.requestId,callId,proof});
+  }
+  return {effects:groups.get(target) || [],excluded};
+}
+
 export function rejectedEditWithdrawalProof(view, candidates, approval) {
   if(!view||view.sessionIdle!==true||view.pendingPermissionCount!==0||view.callsTruncated||
      view.replyReceiptsTruncated||view.replyError||!Array.isArray(candidates)||candidates.length!==1||
@@ -331,12 +439,13 @@ export function rejectedEditWithdrawalProof(view, candidates, approval) {
   const receipt=receipts[0],start=part.state.time?.start,end=part.state.time?.end,created=Date.parse(receipt.createdAt),ack=Date.parse(receipt.acknowledgedAt);
   if(receipt.state!=='ACKNOWLEDGED'||receipt.httpStatus!==204||receipt.replyOrigin!=='CAB_CLIENT_PROGRAMMATIC'||
      receipt.decision!=='reject'||receipt.sessionId!==approval.session_id||receipt.directory!==approval.directory||
-     receipt.nativePid!==view.nativePid||receipt.nativeVersion!==view.nativeVersion||!id(receipt.permissionId)||
+     !rejectedReceiptInstance(receipt,view,end)||!id(receipt.permissionId)||
      receipt.targetDigest!==commandDigest(JSON.stringify(['edit',target]))||
      !Number.isFinite(start)||!Number.isFinite(end)||end<start||!Number.isFinite(created)||created<start||created>end||
      !Number.isFinite(ack)||ack<created)fail('withdraw-rejected-edit-receipt-divergent');
   return {kind:'REJECTED_UNISSUED_EDIT',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
-    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',rejectedEdit:{callId,nativeTool:part.nativeTool,permissionId:receipt.permissionId,
+    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',
+    ...(receipt.nativePid!==view.nativePid||receipt.nativeVersion!==view.nativeVersion?{kernelEpochDigest:digest(view.nativeKernelEpoch)}:{}),rejectedEdit:{callId,nativeTool:part.nativeTool,permissionId:receipt.permissionId,
       nativeInputSha256:inputSha256,approvedInputSha256:approval.tool_input_sha256||null,
       partDigest:digest(part),receiptDigest:digest(receipt)}};
 }
@@ -361,12 +470,13 @@ export function rejectedShellWithdrawalProof(view, candidates, approval) {
     created=Date.parse(receipt.createdAt),ack=Date.parse(receipt.acknowledgedAt);
   if(receipt.state!=='ACKNOWLEDGED' || receipt.httpStatus!==204 || receipt.replyOrigin!=='CAB_CLIENT_PROGRAMMATIC' ||
       receipt.decision!=='reject' || receipt.sessionId!==approval.session_id || receipt.directory!==approval.directory ||
-      receipt.nativePid!==view.nativePid || receipt.nativeVersion!==view.nativeVersion || !id(receipt.permissionId) ||
+      !rejectedReceiptInstance(receipt,view,end) || !id(receipt.permissionId) ||
       receipt.targetDigest!==commandDigest(JSON.stringify(['bash',input.command])) ||
       !Number.isFinite(start) || !Number.isFinite(end) || end<start || !Number.isFinite(created) ||
       created<start || created>end || !Number.isFinite(ack) || ack<created)
     fail('withdraw-rejected-shell-receipt-divergent');
   return {kind:'REJECTED_UNISSUED_SHELL',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
-    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',rejectedShell:{callId,permissionId:receipt.permissionId,
+    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',
+    ...(receipt.nativePid!==view.nativePid||receipt.nativeVersion!==view.nativeVersion?{kernelEpochDigest:digest(view.nativeKernelEpoch)}:{}),rejectedShell:{callId,permissionId:receipt.permissionId,
       nativeInputSha256:inputSha256,partDigest:digest(part),receiptDigest:digest(receipt)}};
 }
