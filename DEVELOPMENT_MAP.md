@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Effacement multi-owner SCM 2.3.9
+
+[qualify-multi-owner-change-erasure](openspec/changes/archive/2026-11-06-qualify-multi-owner-change-erasure/), code non attribué : ARCHIVÉ, source qualifiée. Inventaire et revue bornés au seul change ; qualification, publication et activation distinctes. Convergence ACL ultérieure.
+
 ## Projections publiques SCM 2.3.8
 
 [redact-work-access-tokens](openspec/changes/archive/2026-11-06-redact-work-access-tokens/), code non attribué : ARCHIVÉ, source qualifiée. Masquage GET sans mutation des capacités ; qualification, publication et activation distinctes. Convergence ACL ultérieure.

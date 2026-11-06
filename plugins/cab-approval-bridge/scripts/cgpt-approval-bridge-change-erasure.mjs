@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.3.8';
+export const VERSION = '2.3.9';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
@@ -29,7 +29,36 @@ const excludedStateName=name=>/\.(?:crt|cer|der|key|pem|p12|pfx|env)(?:\..*)?$/.
   /^(?:id_rsa|id_ed25519|credentials\.(?:json|yaml)|secrets\.(?:json|yaml)|opencode\.password)$/.test(name)||
   ['.git','.ssh','.cache','node_modules','config','credentials'].includes(name);
 
-export function erasureScope(registry, changeId, ownerId,{terminalProofs=[]}={}) {
+export function erasureInventory(registry,changeId,ownerId) {
+  if(!identifier(changeId)||!identifier(ownerId)||!record(registry)||typeof registry.project!=='string'||!registry.project.startsWith('/'))fail('erasure-scope-invalid');
+  const rows=[...(registry.runs||[]),...(registry.history||[]).flatMap(row=>[row,row?.run,row?.previous,row?.current])]
+    .filter(row=>record(row)&&row.changeId===changeId&&identifier(row.runId));
+  if(!rows.length)fail('erasure-change-not-found');
+  const bindings=new Map(),owners=new Map();
+  for(const row of rows){
+    if(!identifier(row.ownerId)||!Number.isSafeInteger(row.contextId)||row.contextId<1||!Number.isSafeInteger(row.version)||row.version<1)fail('erasure-owner-unverified');
+    const identity=JSON.stringify([row.runId,row.contextId]);
+    if(owners.has(identity)&&owners.get(identity)!==row.ownerId)fail('erasure-owner-ambiguous');
+    owners.set(identity,row.ownerId);
+    const key=JSON.stringify([row.runId,row.contextId,row.ownerId]),prior=bindings.get(key);
+    if(!prior||prior.version<row.version)bindings.set(key,{runId:row.runId,contextId:row.contextId,version:row.version,ownerId:row.ownerId});
+  }
+  const runBindings=[...bindings.values()].sort((a,b)=>a.runId.localeCompare(b.runId)||a.contextId-b.contextId||a.ownerId.localeCompare(b.ownerId));
+  if(!runBindings.some(row=>row.ownerId===ownerId))fail('erasure-run-not-closed-or-foreign');
+  return {workspace:registry.project,changeId,runBindings,inventoryDigest:canonicalContinuityDigest({workspace:registry.project,changeId,runBindings}),
+    requiresOwnershipReview:runBindings.some(row=>row.ownerId!==ownerId),snapshotOnly:true};
+}
+function reviewedOwnership(registry,changeId,ownerId,review) {
+  const inventory=erasureInventory(registry,changeId,ownerId);
+  if(!record(review)||Object.keys(review).length!==3||!Object.hasOwn(review,'inventoryDigest')||!Object.hasOwn(review,'runBindings')||!Object.hasOwn(review,'evidence')||
+    !Array.isArray(review.runBindings)||review.runBindings.length>64||!Array.isArray(review.evidence)||!review.evidence.length||review.evidence.length>16||
+    review.evidence.some(value=>typeof value!=='string'||!value||value.length>500)||
+    review.inventoryDigest!==inventory.inventoryDigest||canonicalContinuityDigest(review.runBindings)!==canonicalContinuityDigest(inventory.runBindings))fail('erasure-ownership-review-divergent');
+  if(!inventory.requiresOwnershipReview)fail('erasure-ownership-review-unnecessary');
+  return inventory;
+}
+
+export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],ownershipReview}={}) {
   if (!identifier(changeId) || !identifier(ownerId) || !record(registry)||typeof registry.project!=='string'||!registry.project.startsWith('/')) fail('erasure-scope-invalid');
   const current = registry.runs || [];
   const history = registry.history || [];
@@ -39,7 +68,8 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[]}={})
   const runs = [...new Set(candidates.map(row => row.runId))];
   if([...current,...history].some(row=>record(row)&&runs.includes(row.runId)&&row.changeId!==changeId))
     fail('erasure-run-not-closed-or-foreign');
-  if (candidates.some(row => row.ownerId !== ownerId) ||
+  const inventory=ownershipReview===undefined?null:reviewedOwnership(registry,changeId,ownerId,ownershipReview);
+  if (!inventory&&candidates.some(row => row.ownerId !== ownerId) ||
       current.some(row => runs.includes(row.runId) && (row.changeId !== changeId || row.state === 'RESERVED')))
     fail('erasure-run-not-closed-or-foreign');
   const target = row => runs.includes(row?.runId);
@@ -47,7 +77,7 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[]}={})
   for (const row of Object.values(c.operations || {}).filter(target)) {
     const terminalResult=['completed','error'].includes(row.nativeResult?.status)&&/^[a-f0-9]{64}$/.test(row.completionDigest||'');
     const reconciledPort=row.state==='CANCELLED'&&/^[a-f0-9]{64}$/.test(row.completionDigest||'')&&terminalProofs.some(proof=>
-      proof.state==='DONE'&&proof.httpStatus===200&&proof.action==='reconcile-quarantined-port'&&proof.ownerId===ownerId&&
+      proof.state==='DONE'&&proof.httpStatus===200&&proof.action==='reconcile-quarantined-port'&&proof.ownerId===(inventory?inventory.runBindings.find(binding=>binding.runId===row.runId&&binding.contextId===row.contextId)?.ownerId:ownerId)&&
       proof.runId===row.runId&&proof.contextId===row.contextId&&proof.targetId===row.operationId&&proof.effectDigest===row.completionDigest&&
       proof.result?.executionOutcome==='HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT'&&proof.result?.evidenceAuthority==='VERIFIED_NATIVE_PORT_PROBES');
     if (!terminalOperations.has(row.state) || (row.native||row.onceAcknowledged===true)&&!terminalResult&&!reconciledPort)
@@ -72,7 +102,8 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[]}={})
     for (const row of Object.values(c[name] || {}).filter(target)) visit(row);
   for (const [key,row] of Object.entries(registry.requestOwners || {})) if (target(row)) { ids.add(key); visit(row); }
   return { protocol: ERASURE_PROTOCOL, workspace:registry.project,changeId, ownerId, runIds: runs.sort(), ids: [...ids].sort(),
-    registrySequence: registry.sequence, coordinationSequence: c.sequence };
+    registrySequence: registry.sequence, coordinationSequence: c.sequence,
+    ...(inventory?{ownershipReview,runBindings:inventory.runBindings}:{}) };
 }
 
 export function extendErasureScope(scope, documents) {

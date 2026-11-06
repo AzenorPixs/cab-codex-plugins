@@ -1,5 +1,9 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+## Effacement multi-propriétaire qualifié — CAB 2.3.9
+
+Un prévol sans effacement et une revue exacte lient tous les RUN/propriétaires historiques du seul change. Le gate final, le désarmement, les effets soldés et les pairs restent protégés ; les owners ne sont pas réécrits. Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/change-erasure.md).
+
 ## Consultations sans capacités — CAB 2.3.8
 
 Les GET publics masquent les jetons des accès de travail sans modifier les états ni les réponses POST propriétaires. Les jetons restent uniquement en mémoire du processus local autorisé, hors transcript et rapports. Voir [le protocole](plugins/cab-approval-bridge/skills/approval-bridge/references/concurrent-runs.md).

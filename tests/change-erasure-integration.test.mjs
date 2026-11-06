@@ -13,7 +13,7 @@ import { TransportHandoff } from '../plugins/cab-approval-bridge/scripts/cgpt-ap
 import { writeRuntimeJson, readRuntimeJson } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
 const source=resolve('src');
-async function fixture(t,branch) {
+async function fixture(t,branch,{multiOwner=false}={}) {
   const root=mkdtempSync(join(tmpdir(),'cab-erasure-integration-'));
   const workspace=join(root,'workspace'),state=join(root,'runtime'),monitor=join(root,'monitor'),brokerRoot=join(root,'broker'),update=join(root,'update');
   for(const path of [workspace,state,monitor,brokerRoot,update])mkdirSync(path,{mode:0o700});
@@ -21,6 +21,12 @@ async function fixture(t,branch) {
   let registry=new ResourceRunRegistry(workspace,state);await registry.acquireAuthority();
   const reserve=name=>registry.reserve({runId:'run-'+name,ownerId:'owner',sessionId:'ses_'+name,directory:workspace,
     changeId:'change-'+name,selectionKey:'selection-'+name,resources:[{key:'file:'+name+'.txt',mode:'read'}],dependsOn:[]});
+  let historical=null;
+  if(multiOwner){historical=registry.reserve({runId:'run-historical',ownerId:'historical-owner',sessionId:'ses_historical',directory:workspace,
+    changeId:'change-target',selectionKey:'selection-historical',resources:[{key:'file:old.txt',mode:'read'}],dependsOn:[]});
+    registry.release(historical.runId,historical.version,false);
+    writeRuntimeJson(join(state,'runs',historical.runId,String(historical.contextId),'controller-job.json'),{
+      runId:historical.runId,changeId:historical.changeId,sessionId:historical.sessionId,jobId:'job-historical',armed:false,terminalGate:null});}
   const target=reserve('target'),peer=reserve('peer');registry.release(target.runId,target.version,branch==='TERMINÉ');
   const business=join(workspace,'openspec','changes',target.changeId);mkdirSync(business,{recursive:true,mode:0o775});
   writeFileSync(join(business,'BLOCKERS.md'),'# Dépendance métier manquante\n');writeFileSync(join(business,'STATISTICS.md'),'# Statistiques métier vérifiées\n');
@@ -36,12 +42,12 @@ async function fixture(t,branch) {
     CGPT_APPROVAL_JOURNAL:join(brokerRoot,'events.ndjson'),CGPT_JOURNAL_CHECKPOINT_PATH:join(brokerRoot,'checkpoint.json'),
     CGPT_BROKER_INSTANCE_LOCK:join(brokerRoot,'broker.instance.lock'),CGPT_AUTO_REMEDIATION_CB_STATE_PATH:join(brokerRoot,'circuit.json')};
   delete env.CGPT_JOURNAL_HMAC_KEY;delete env.CGPT_JOURNAL_HMAC_PREVIOUS_KEYS;
-  const code=`import sys,json,os\nimport cgpt_approval_bridge_server as b\nitems={}\nfor name in ['target','peer']:\n item={'approval_id':'approval-'+name,'requestId':'request-'+name,'change_id':'change-'+name,'run_id':'run-'+name,'directory':os.environ['FIXTURE_WORKSPACE'],'status':'APPROVED','created_at':'2026-11-05T00:00:00Z','expires_at':'2099-01-01T00:00:00Z'}\n items[item['approval_id']]=item\n b.journal.append_event('FIXTURE_EVENT',approval_id=item['approval_id'],request_id=item['requestId'],change_id=item['change_id'],data={'payload':name})\nb.save_store(b.store_path(),{'approvals':items})\nprint('READY',flush=True)\ncommand=json.loads(sys.stdin.read())\nb.prepare_terminal_erasure(command)\nb.journal.append_event('INSTANCE_STOPPED',data={'fixture':True})\nb.prepare_terminal_erasure_bundle()\n`;
+  const code=`import sys,json,os\nimport cgpt_approval_bridge_server as b\nitems={}\nfor name in (['target','peer','historical'] if ${multiOwner?'True':'False'} else ['target','peer']):\n item={'approval_id':'approval-'+name,'requestId':'request-'+name,'change_id':('change-target' if name=='historical' else 'change-'+name),'run_id':'run-'+name,'directory':os.environ['FIXTURE_WORKSPACE'],'status':'APPROVED','created_at':'2026-11-05T00:00:00Z','expires_at':'2099-01-01T00:00:00Z'}\n items[item['approval_id']]=item\n b.journal.append_event('FIXTURE_EVENT',approval_id=item['approval_id'],request_id=item['requestId'],change_id=item['change_id'],data={'payload':name})\nb.save_store(b.store_path(),{'approvals':items})\nprint('READY',flush=True)\ncommand=json.loads(sys.stdin.read())\nb.prepare_terminal_erasure(command)\nb.journal.append_event('INSTANCE_STOPPED',data={'fixture':True})\nb.prepare_terminal_erasure_bundle()\n`;
   const child=spawn('python3',['-B','-c',code],{env,stdio:['pipe','pipe','pipe']});
   let error='';child.stderr.on('data',data=>{error+=data});
   await new Promise((resolve,reject)=>{child.stdout.once('data',data=>data.toString().trim()==='READY'?resolve():reject(new Error('fixture-not-ready')));child.once('error',reject)});
   let preparedCommand;
-  let sessions=[{id:target.sessionId,directory:workspace},{id:peer.sessionId,directory:workspace}];
+  let sessions=[{id:target.sessionId,directory:workspace},{id:peer.sessionId,directory:workspace},...(historical?[{id:historical.sessionId,directory:workspace}]:[])];
   let mcpState='connected';
   const native={mcp:async()=>({'cgpt-validation':{status:mcpState}}),listSessions:async()=>sessions,sessionStatus:async()=>({}),permissions:async()=>[],
     info:async()=>({pid:54321,version:'2.2.5'}),sharedMcpDirectory:async()=>workspace,
@@ -73,14 +79,17 @@ async function fixture(t,branch) {
       throw new Error('unexpected-fixture-route');
     }};
   t.after(()=>{registry.close();if(child.exitCode===null)child.kill();rmSync(root,{recursive:true,force:true})});
-  return {root,workspace,state,monitor,brokerRoot,approvalStorePath,target,peer,manager,native,dependencies,serviceCalls,dependencyEvidence,business,
+  return {root,workspace,state,monitor,brokerRoot,approvalStorePath,target,peer,historical,manager,native,dependencies,serviceCalls,dependencyEvidence,business,
     clearNative:()=>{sessions=branch==='BLOQUÉ'?[{id:target.sessionId,directory:workspace},{id:peer.sessionId,directory:workspace}]:[{id:peer.sessionId,directory:workspace}]},getRegistry:()=>registry};
 }
 
-for(const branch of ['TERMINÉ','BLOQUÉ'])test('OC then all CAB stores, authenticated reanchor and peer preserved: '+branch,async t=>{
-  const f=await fixture(t,branch);
+for(const branch of ['TERMINÉ','BLOQUÉ'])for(const multiOwner of [false,true])test('OC then all CAB stores, authenticated reanchor and peer preserved: '+branch+(multiOwner?' multi-owner':''),async t=>{
+  const f=await fixture(t,branch,{multiOwner});
+  const preview=multiOwner?f.manager.preview({changeId:f.target.changeId,ownerId:'owner'}):null;
+  if(multiOwner)assert.equal(f.manager.pending(),null);
   const plan=await f.manager.prepare({changeId:f.target.changeId,ownerId:'owner',branch,
-    retainedSessionId:branch==='BLOQUÉ'?f.target.sessionId:null,evidence:['fixture-business-report-reviewed'],dependencyEvidence:f.dependencyEvidence});
+    retainedSessionId:branch==='BLOQUÉ'?f.target.sessionId:null,evidence:['fixture-business-report-reviewed'],dependencyEvidence:f.dependencyEvidence,
+    ...(multiOwner?{ownershipReview:{runBindings:preview.runBindings,inventoryDigest:preview.inventoryDigest,evidence:['developer:whole-change-cleanup-reviewed']}}:{})});
   if(branch==='TERMINÉ')await assert.rejects(f.manager.seal({transactionId:plan.transactionId}),/native-cleanup-incomplete/);
   f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
   const beforePeer=f.getRegistry().snapshot().runs.find(row=>row.runId===f.peer.runId);
@@ -135,4 +144,23 @@ test('préparation vers un autre workspace : refus avant tout POST et sans clé 
  }};
  await assert.rejects(cleanupChange({workspace:f.workspace,action:'prepare',request:{}},dependencies),/component-identity-invalid/);
  assert.equal(posts,0);assert.equal(existsSync(join(f.state,'change-erasure.key')),false);assert.equal(existsSync(join(f.state,'change-erasure.json')),false);
+});
+
+for(const variant of ['historical-armed','final-gate','closing-owner','unbound-job','changed-before-seal','armed-before-seal'])test('multi-owner : garde manager '+variant,async t=>{
+ const f=await fixture(t,'TERMINÉ',{multiOwner:true}),preview=f.manager.preview({changeId:f.target.changeId,ownerId:'owner'});
+ const request={changeId:f.target.changeId,ownerId:'owner',branch:'TERMINÉ',retainedSessionId:null,dependencyEvidence:null,evidence:['change-closed'],
+  ownershipReview:{runBindings:preview.runBindings,inventoryDigest:preview.inventoryDigest,evidence:['developer:whole-change-cleanup-reviewed']}};
+ const historicalPath=join(f.state,'runs',f.historical.runId,String(f.historical.contextId),'controller-job.json');
+ const finalPath=join(f.state,'runs',f.target.runId,String(f.target.contextId),'controller-job.json');
+ if(variant==='historical-armed'){const job=readRuntimeJson(historicalPath).value;job.armed=true;writeRuntimeJson(historicalPath,job);}
+ if(variant==='final-gate'){const job=readRuntimeJson(finalPath).value;job.terminalGate=null;writeRuntimeJson(finalPath,job);}
+ if(variant==='closing-owner')request.ownerId='historical-owner';
+ if(variant==='unbound-job')writeRuntimeJson(join(f.state,'runs','run-foreign','99','controller-job.json'),{runId:'run-foreign',changeId:f.target.changeId,armed:false});
+ if(['changed-before-seal','armed-before-seal'].includes(variant)){
+  const plan=await f.manager.prepare(request);f.clearNative();
+  if(variant==='changed-before-seal')f.getRegistry().runs.get(f.target.runId).version++;
+  else {const job=readRuntimeJson(historicalPath).value;job.armed=true;writeRuntimeJson(historicalPath,job);}
+  await assert.rejects(f.manager.seal({transactionId:plan.transactionId}),/ownership-review-divergent|terminal-gate-unverified/);return;
+ }
+ await assert.rejects(f.manager.prepare(request),/erasure-/);assert.equal(f.manager.pending(),null);
 });

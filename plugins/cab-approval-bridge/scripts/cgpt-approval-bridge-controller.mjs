@@ -29,7 +29,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.3.8";
+const version = "2.3.9";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -2254,7 +2254,8 @@ async function handleRequest(request, response) {
           input.changeId===erasure.pending()?.scope.changeId)throw new CoordinationError('erasure-admission-refused');
         json(response,200,{accepted:true});return;
       }
-      const value=url.pathname==='/cleanup/prepare'?await erasure.prepare(input):
+      const value=url.pathname==='/cleanup/preview'?erasure.preview(input):
+        url.pathname==='/cleanup/prepare'?await erasure.prepare(input):
         url.pathname==='/cleanup/seal'?await erasure.seal(input):
         url.pathname==='/cleanup/status'&&Object.keys(input).length===0?erasure.status():null;
       if(!value)throw new CoordinationError('erasure-route-or-transaction-not-found',404);
