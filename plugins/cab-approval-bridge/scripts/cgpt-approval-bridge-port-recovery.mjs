@@ -1,7 +1,7 @@
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 import { commandDigest } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.3.4';
+export const VERSION = '2.3.5';
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(value);
@@ -167,12 +167,12 @@ export async function observePortBoundary(input) {
             const seal=await sealPeer(value.pid),tty=seal.tty[0];
             if (tty && seal.exe===seal.serverExe && seal.tty.every(item=>item===tty)) {
               const peerSockets=new Set(seal.peerSockets);
-              const pair=tcpRows.find(client=>client.state==='01' && peerSockets.has(client.inode) &&
+              const pairs=tcpRows.filter(client=>client.state==='01' && peerSockets.has(client.inode) &&
                 loopback(client.local) && loopback(client.remote) && parseInt(client.remote.split(':').at(-1),16)===apiPort &&
                 tcpRows.some(server=>server.state==='01' && seal.serverSockets.includes(server.inode) &&
                   server.local===client.remote && server.remote===client.local));
-              peer=Boolean(pair);
-              if(peer){peerSeals.set(value.pid,seal);peerConnections.set(value.pid,pair);}
+              peer=pairs.length>0;
+              if(peer){peerSeals.set(value.pid,seal);peerConnections.set(value.pid,pairs);}
             }
           } catch(cause) { if(!['ENOENT','ESRCH','EACCES','EPERM'].includes(cause.code)) throw cause; }
         }
@@ -191,17 +191,22 @@ export async function observePortBoundary(input) {
     }
     for (const [pid,value] of identities) if (canonical(value)!==canonical(await identity(pid)))
       stop('port-probe-infrastructure-identity-changed');
-    for (const [pid,seal] of peerSeals) if (canonical(seal)!==canonical(await sealPeer(pid)))
-      stop('port-probe-infrastructure-identity-changed');
+    for (const [pid,seal] of peerSeals) {
+      const after=await sealPeer(pid);
+      if(seal.exe!==after.exe||seal.serverExe!==after.serverExe||canonical(seal.tty)!==canonical(after.tty))
+        stop('port-probe-infrastructure-peer-identity-changed');
+    }
     if(peerConnections.size){
       const rows=[];
       for(const name of ['tcp','tcp6'])for(const line of (await fs.readFile(nativePath+'/net/'+name,'utf8')).trim().split('\n').slice(1)){
         const c=line.trim().split(/\s+/);rows.push({local:c[1],remote:c[2],state:c[3],inode:c[9]});
       }
-      for(const [pid,pair] of peerConnections){
-        const seal=peerSeals.get(pid);
-        if(!rows.some(row=>canonical(row)===canonical(pair)) || !rows.some(row=>row.state==='01' &&
-            seal.serverSockets.includes(row.inode) && row.local===pair.remote && row.remote===pair.local))
+      const currentServerSockets=await sockets(input.nativePid);
+      for(const [pid,pairs] of peerConnections){
+        const currentPeerSockets=await sockets(pid),seal=peerSeals.get(pid);
+        if(!pairs.some(pair=>currentPeerSockets.has(pair.inode)&&rows.some(row=>canonical(row)===canonical(pair)) &&
+          rows.some(row=>row.state==='01' && currentServerSockets.has(row.inode)&&seal.serverSockets.includes(row.inode)&&
+            row.local===pair.remote && row.remote===pair.local)))
           stop('port-probe-infrastructure-connection-changed');
       }
     }
