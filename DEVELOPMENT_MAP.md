@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Adoption privée SCM2.3.7
+
+[adopt-identical-private-runtime-registry](openspec/changes/archive/2026-11-06-adopt-identical-private-runtime-registry/),
+code non attribué : ARCHIVÉ, source qualifiée. Registre orphelin identique adopté sous preuve
+du même reçu, sans mutation des états divergents. Qualification/livraison
+et activation distinctes. C12 conserve son runtime236 jusqu’à frontière sûre.
+Convergence ACL ultérieure.
+
 ## Reprises SCM2.3.6
 
 [seal-quarantined-port-probe-transport](openspec/changes/archive/2026-11-06-seal-quarantined-port-probe-transport/),

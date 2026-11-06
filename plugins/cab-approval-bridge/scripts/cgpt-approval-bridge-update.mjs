@@ -1,5 +1,5 @@
 import {migrationPendingValidations,migrationRegistryDigest,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
-import {runtimeStateDirectory,legacyStateDirectory,legacyRuntimeFiles,initializeRuntimeState,readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
+import {runtimeStateDirectory,legacyStateDirectory,legacyRuntimeFiles,initializeRuntimeState,readRuntimeJson,writeRuntimeJson,ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, realpath, readdir, rename, unlink, readlink, symlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -16,7 +16,7 @@ import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credentia
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.6';
+export const VERSION = '2.3.7';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -265,6 +265,21 @@ export async function updateComponents(input, options = {}) {
       .filter(key=>c[key]!==undefined&&(key!=='layout'||receiptLayout!=='classic')).map(key=>[key,c[key]])),null,2)+'\n');
   const desiredVersions = () => Object.fromEntries(['controller','supervisor','monitor','broker'].map((name)=>[name,receipt.version]));
   const targetActive = () => receipt.targetActive || receipt.active;
+  const migrationFilesDigest=files=>{
+    if(!Array.isArray(files)||files.some(file=>!file||typeof file.name!=='string'||!/^[a-f0-9]{64}$/.test(file.sha256||'')))throw error('update-migration-journal-invalid');
+    return proofHash(files.map(({name,sha256})=>({name,sha256})).sort((a,b)=>a.name.localeCompare(b.name)));
+  };
+  function requireSameMigrationProof(candidate,reference){
+    const pendingDigest=items=>{
+      if(!Array.isArray(items))throw error('update-migration-journal-invalid');
+      return proofHash([...items].sort((a,b)=>String(a?.approval?.requestId||'').localeCompare(String(b?.approval?.requestId||''))));
+    };
+    if(candidate.protocol!==RUNTIME_MIGRATION_PROTOCOL||candidate.transactionId!==receipt.id||candidate.workspace!==c.serviceWorkspace||
+        candidate.registryDigest!==reference.registryDigest||proofHash(candidate.nativeIdentity)!==proofHash(reference.nativeIdentity)||
+        pendingDigest(candidate.pending)!==pendingDigest(reference.pending)||
+        candidate.sourceFiles&&migrationFilesDigest(candidate.sourceFiles)!==migrationFilesDigest(reference.sourceFiles))
+      throw error('update-migration-destination-proof-divergent');
+  }
   const restartComponents = () => readonlyBroker || !receipt.restartComponents
     ? ['controller', 'supervisor', 'monitor'] : receipt.restartComponents;
   async function componentStatus(component, compact = false) {
@@ -331,7 +346,18 @@ export async function updateComponents(input, options = {}) {
     if(layout){const value=JSON.parse(layout.data);if(value.workspace!==c.serviceWorkspace||value.phase!=='READY')throw error('update-migration-destination-exists');return false;}
     const path=join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json');
     let file;try{file=readRuntimeJson(path,{legacy:true});}catch(cause){if(cause.code==='ENOENT')return false;throw cause;}
-    if(await optional(join(destination,'controller-runs.json')))throw error('update-migration-destination-exists');
+    let preexistingRegistry;
+    try{preexistingRegistry=readRuntimeJson(join(destination,'controller-runs.json'));}catch(cause){if(cause.code!=='ENOENT')throw cause;}
+    if(preexistingRegistry&&preexistingRegistry.sha256!==file.sha256)throw error('update-migration-destination-divergent');
+    const priorProofFile=await optional(join(transaction(),'runtime-migration.json'));
+    let priorCapturedProof;
+    if(priorProofFile){
+      const prior=JSON.parse(priorProofFile.data),captured=prior.sourceFiles?.find(item=>item.name==='controller-runs.json');
+      if(prior.transactionId!==receipt.id||prior.workspace!==c.serviceWorkspace||captured&&captured.sha256!==file.sha256||
+          prior.sourceFiles&&migrationFilesDigest(prior.sourceFiles)!==migrationFilesDigest(legacyRuntimeFiles(c.serviceWorkspace)))
+        throw error('update-migration-source-changed');
+      priorCapturedProof=prior;
+    }
     const files=legacyRuntimeFiles(c.serviceWorkspace),reader=await validateMigrationReader(files);
     const live=status?.version==='2.2.6'&&status.workspace===c.serviceWorkspace;
     if(!live){const meta=await metadata('controller');if(meta.ActiveState==='active'||Number(meta.MainPID)!==0)throw error('update-migration-source-not-quiescent');}
@@ -355,11 +381,14 @@ export async function updateComponents(input, options = {}) {
       proofHash(Object.entries(contextStatus.runs).map(([id,v])=>[id,v.activeValidations]))!==
       proofHash(Object.entries(latest.runs).map(([id,v])=>[id,v.activeValidations])))throw error('update-migration-source-changed');
     const sourceFiles=files.map(({name,sha256})=>({name,sha256}));
-    if(proofHash(sourceFiles)!==proofHash(legacyRuntimeFiles(c.serviceWorkspace).map(({name,sha256})=>({name,sha256}))))throw error('update-migration-source-changed');
+    if(migrationFilesDigest(sourceFiles)!==migrationFilesDigest(legacyRuntimeFiles(c.serviceWorkspace)))throw error('update-migration-source-changed');
     const proof={protocol:RUNTIME_MIGRATION_PROTOCOL,transactionId:receipt.id,workspace:c.serviceWorkspace,phase:'PREPARED',
       registryDigest:migrationRegistryDigest(before),nativeIdentity:{pid:info.pid,version:info.version,directory},pending,sourceFiles,
       inventory:{runIdentity:runIdentity(before),operationIds:Object.keys(before.coordination.operations),
         onceAcknowledged:Object.values(before.coordination.operations).filter(op=>op.native?.onceAcknowledged===true).map(op=>op.operationId)}};
+    if(priorCapturedProof)requireSameMigrationProof(priorCapturedProof,proof);
+    let targetProof;try{targetProof=readRuntimeJson(join(destination,'runtime-migration.json')).value;}catch(cause){if(cause.code!=='ENOENT')throw cause;}
+    if(targetProof)requireSameMigrationProof(targetProof,proof);
     await atomic(join(transaction(),'runtime-migration.json'),JSON.stringify(proof)+'\n');
     receipt.runtimeMigration={protocol:RUNTIME_MIGRATION_PROTOCOL,destination,state:'CAPTURED',pendingCount:pending.length};
     receipt.continuity={protocol:CONTINUITY_PROTOCOL,state:'LEGACY',reason:'private-runtime-migration',transactionId:receipt.id};
@@ -382,12 +411,28 @@ export async function updateComponents(input, options = {}) {
       if((await metadata('controller')).ActiveState==='active')throw error('update-migration-source-still-active');
       const source=readRuntimeJson(join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json'),{legacy:true}).value;
       if(migrationRegistryDigest(source)!==proof.registryDigest)throw error('update-migration-source-changed');
-      if(proof.sourceFiles&&proofHash(proof.sourceFiles)!==proofHash(legacyRuntimeFiles(c.serviceWorkspace).map(({name,sha256})=>({name,sha256}))))throw error('update-migration-source-changed');
-      initializeRuntimeState(c.serviceWorkspace,m.destination);
+      if(proof.sourceFiles&&migrationFilesDigest(proof.sourceFiles)!==migrationFilesDigest(legacyRuntimeFiles(c.serviceWorkspace)))throw error('update-migration-source-changed');
+      let targetProof;
+      try{targetProof=readRuntimeJson(join(m.destination,'runtime-migration.json')).value;}catch(cause){if(cause.code!=='ENOENT')throw cause;}
+      if(targetProof)requireSameMigrationProof(targetProof,proof);
+      if(!proof.sourceFiles?.some(file=>file.name==='controller-runs.json')){
+        if(!await optional(join(m.destination,'runtime-layout.json'))&&await optional(join(m.destination,'controller-runs.json')))throw error('update-migration-adoption-proof-required');
+      }
+      ensurePrivateStateDirectory(m.destination);
+      const registryAuthority=await authority(join(m.destination,'registry.instance.lock'));
+      let layout;
+      try{layout=initializeRuntimeState(c.serviceWorkspace,m.destination,
+        proof.sourceFiles?{validatedSourceFiles:proof.sourceFiles}:{});}
+      finally{await registryAuthority.close();}
+      if(proof.sourceFiles&&migrationFilesDigest(proof.sourceFiles)!==migrationFilesDigest(legacyRuntimeFiles(c.serviceWorkspace)))throw error('update-migration-source-changed');
       for(const file of proof.sourceFiles||[])if(readRuntimeJson(join(m.destination,file.name)).sha256!==file.sha256)throw error('update-migration-copy-divergent');
       const copied=readRuntimeJson(join(m.destination,'controller-runs.json')).value;
       if(migrationRegistryDigest(copied)!==proof.registryDigest)throw error('update-migration-copy-divergent');
       writeRuntimeJson(join(m.destination,'runtime-migration.json'),proof);
+      if(layout.adoptedRegistrySha256){
+        if(layout.adoptedRegistrySha256!==proof.sourceFiles?.find(file=>file.name==='controller-runs.json')?.sha256)throw error('update-migration-adoption-proof-divergent');
+        m.registryAdoption={state:'VERIFIED',sha256:layout.adoptedRegistrySha256};
+      }
       m.state='COPIED';await save('INSTALLING');
     }
     for(const file of receipt.files){
