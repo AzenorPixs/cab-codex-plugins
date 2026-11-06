@@ -12,7 +12,7 @@ import { ResourceRunRegistry } from './cgpt-approval-bridge-resource-coordinatio
 import { publicLifecycle } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.3.4';
+export const VERSION = '2.3.5';
 const exec = promisify(execFile);
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };

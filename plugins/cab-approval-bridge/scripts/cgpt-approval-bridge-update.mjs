@@ -16,7 +16,7 @@ import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credentia
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.4';
+export const VERSION = '2.3.5';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -274,30 +274,88 @@ export async function updateComponents(input, options = {}) {
     }
     return request(base, compact && component === 'controller' ? '/transport/status' : '/status');
   }
+  async function validateMigrationReader(files) {
+    // Import only the exact, hash-verified target stage. No server or agent is started.
+    const root=join(transaction(),'migration-reader-'+randomUUID()),modules=join(root,'modules'),state=join(root,'state');
+    await directories(modules,true);await directories(state,true);
+    for(let index=0;index<receipt.files.length;index++) {
+      const file=receipt.files[index];
+      if(file.group!=='scripts')continue;
+      const staged=await regular(join(transaction(),'stage',String(index)));
+      if(hash(staged.data)!==file.afterHash)throw error('update-stage-changed');
+      await atomic(join(modules,file.name),staged.data);
+    }
+    for(const file of files){await directories(dirname(join(state,file.name)),true);await atomic(join(state,file.name),file.bytes);}
+    const script=`
+      import {pathToFileURL} from 'node:url';
+      import {join} from 'node:path';
+      import {existsSync,mkdirSync} from 'node:fs';
+      try {
+        const [modules,state,workspace]=process.argv.slice(1);
+        const {ResourceRunRegistry}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-resource-coordination.mjs')));
+        const {createJobContext}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-job-context.mjs')));
+        const {migrationRegistryDigest}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-runtime-migration.mjs')));
+        const registry=new ResourceRunRegistry(workspace,state);
+        if(registry.migrationRequired)throw Object.assign(new Error(),{code:'registry-schema-migration-required'});
+        const snapshot=registry.snapshot(),runs={};
+        for(const run of snapshot.runs.filter(run=>run.state==='RESERVED')){
+          const directory=join(state,'runs',run.runId,String(run.contextId||run.version));
+          mkdirSync(directory,{recursive:true,mode:0o700});
+          const context=createJobContext({workspace,stateDirectory:directory,run,openCodeClient:{}});
+          const status=context.publicStatus();runs[run.runId]={job:context.publicJob(),activeValidations:status.activeValidations};
+        }
+        if(existsSync(join(state,'controller-job.json')))createJobContext({workspace,stateDirectory:state,openCodeClient:{}});
+        process.stdout.write(JSON.stringify({registryDigest:migrationRegistryDigest(snapshot),status:{mode:'concurrent',runs}}));
+      }catch(cause){process.stdout.write(JSON.stringify({error:/^[a-z][a-z0-9-]{0,90}$/.test(cause.code||'')?cause.code:'target-reader-rejected'}));process.exitCode=1;}
+    `;
+    let output;
+    try {output=(await exec(process.execPath,['--input-type=module','--eval',script,modules,state,c.serviceWorkspace],
+      {timeout:30000,maxBuffer:2*1024*1024,env:{...process.env,OC_Codex_OUTSIDE_SANDBOX:'1'}})).stdout;}
+    catch(cause) {
+      let detail;try{detail=JSON.parse(cause.stdout||'').error;}catch{detail=null;}
+      const allowed=new Set(['registry-restoration-invalid','registry-schema-migration-required','job-state-invalid',
+        'continuity-file-invalid','continuity-state-invalid','communication-identity-divergent']);
+      throw Object.assign(error('update-migration-target-reader-rejected'),{readerFailureCode:allowed.has(detail)?detail:'target-reader-rejected'});
+    }
+    let value;try{value=JSON.parse(output);}catch{throw error('update-migration-target-reader-rejected');}
+    if(!/^[a-f0-9]{64}$/.test(value.registryDigest||'')||value.status?.mode!=='concurrent')throw error('update-migration-target-reader-rejected');
+    return value;
+  }
   async function prepareRuntimeMigration(status) {
-    if(status?.version!=='2.2.6'||status.runtimeStateDirectory||status.workspace!==c.serviceWorkspace)return false;
+    if(status?.runtimeStateDirectory)return false;
+    const destination=runtimeStateDirectory(c.serviceWorkspace,{home:c.home});
+    const layout=await optional(join(destination,'runtime-layout.json'));
+    if(layout){const value=JSON.parse(layout.data);if(value.workspace!==c.serviceWorkspace||value.phase!=='READY')throw error('update-migration-destination-exists');return false;}
     const path=join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json');
     let file;try{file=readRuntimeJson(path,{legacy:true});}catch(cause){if(cause.code==='ENOENT')return false;throw cause;}
-    legacyRuntimeFiles(c.serviceWorkspace);
-    const before=await request(c.controllerUrl,'/runs');
+    if(input.layout!=='managed-release')throw error('update-migration-managed-release-required');
+    if(await optional(join(destination,'controller-runs.json')))throw error('update-migration-destination-exists');
+    const files=legacyRuntimeFiles(c.serviceWorkspace),reader=await validateMigrationReader(files);
+    const live=status?.version==='2.2.6'&&status.workspace===c.serviceWorkspace;
+    if(!live){const meta=await metadata('controller');if(meta.ActiveState==='active'||Number(meta.MainPID)!==0)throw error('update-migration-source-not-quiescent');}
+    const before=live?await request(c.controllerUrl,'/runs'):file.value;
     if(migrationRegistryDigest(file.value)!==migrationRegistryDigest(before))throw error('update-migration-source-divergent');
+    if(reader.registryDigest!==migrationRegistryDigest(file.value))throw error('update-migration-target-reader-divergent');
+    const contextStatus=live?status:reader.status;
     const messages=new Map();
-    for(const [id,context] of Object.entries(status.runs||{}))if(context.activeValidations?.length) {
+    for(const [id,context] of Object.entries(contextStatus.runs||{}))if(context.activeValidations?.length) {
       const run=before.runs.find(run=>run.runId===id);if(!run)throw error('update-migration-source-divergent');
       messages.set(run.sessionId,await openCode.messages(run.sessionId,c.serviceWorkspace));
     }
-    const pending=migrationPendingValidations(before,status,messages);
+    const pending=migrationPendingValidations(before,contextStatus,messages);
     const info=await openCode.info(true),directory=await openCode.sharedMcpDirectory();
+    if(receipt.nativeIdentity&&proofHash(receipt.nativeIdentity)!==proofHash({pid:info.pid,version:info.version,sharedDirectory:directory}))throw error('update-migration-native-changed');
     if((await openCode.permissions(directory)).length)throw error('update-migration-native-permission-pending');
-    const after=await request(c.controllerUrl,'/runs'),latest=await request(c.controllerUrl,'/status');
+    const after=live?await request(c.controllerUrl,'/runs'):readRuntimeJson(path,{legacy:true}).value;
+    const latest=live?await request(c.controllerUrl,'/status'):contextStatus;
     if(migrationRegistryDigest(before)!==migrationRegistryDigest(after)||
-      jobsIdentity(status)!==jobsIdentity(latest)||
-      proofHash(Object.entries(status.runs).map(([id,v])=>[id,v.activeValidations]))!==
+      jobsIdentity(contextStatus)!==jobsIdentity(latest)||
+      proofHash(Object.entries(contextStatus.runs).map(([id,v])=>[id,v.activeValidations]))!==
       proofHash(Object.entries(latest.runs).map(([id,v])=>[id,v.activeValidations])))throw error('update-migration-source-changed');
-    const destination=runtimeStateDirectory(c.serviceWorkspace,{home:c.home});
-    if(await optional(join(destination,'controller-runs.json')))throw error('update-migration-destination-exists');
+    const sourceFiles=files.map(({name,sha256})=>({name,sha256}));
+    if(proofHash(sourceFiles)!==proofHash(legacyRuntimeFiles(c.serviceWorkspace).map(({name,sha256})=>({name,sha256}))))throw error('update-migration-source-changed');
     const proof={protocol:RUNTIME_MIGRATION_PROTOCOL,transactionId:receipt.id,workspace:c.serviceWorkspace,phase:'PREPARED',
-      registryDigest:migrationRegistryDigest(before),nativeIdentity:{pid:info.pid,version:info.version,directory},pending,
+      registryDigest:migrationRegistryDigest(before),nativeIdentity:{pid:info.pid,version:info.version,directory},pending,sourceFiles,
       inventory:{runIdentity:runIdentity(before),operationIds:Object.keys(before.coordination.operations),
         onceAcknowledged:Object.values(before.coordination.operations).filter(op=>op.native?.onceAcknowledged===true).map(op=>op.operationId)}};
     await atomic(join(transaction(),'runtime-migration.json'),JSON.stringify(proof)+'\n');
@@ -322,7 +380,9 @@ export async function updateComponents(input, options = {}) {
       if((await metadata('controller')).ActiveState==='active')throw error('update-migration-source-still-active');
       const source=readRuntimeJson(join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json'),{legacy:true}).value;
       if(migrationRegistryDigest(source)!==proof.registryDigest)throw error('update-migration-source-changed');
+      if(proof.sourceFiles&&proofHash(proof.sourceFiles)!==proofHash(legacyRuntimeFiles(c.serviceWorkspace).map(({name,sha256})=>({name,sha256}))))throw error('update-migration-source-changed');
       initializeRuntimeState(c.serviceWorkspace,m.destination);
+      for(const file of proof.sourceFiles||[])if(readRuntimeJson(join(m.destination,file.name)).sha256!==file.sha256)throw error('update-migration-copy-divergent');
       const copied=readRuntimeJson(join(m.destination,'controller-runs.json')).value;
       if(migrationRegistryDigest(copied)!==proof.registryDigest)throw error('update-migration-copy-divergent');
       writeRuntimeJson(join(m.destination,'runtime-migration.json'),proof);
@@ -347,7 +407,8 @@ export async function updateComponents(input, options = {}) {
       measurement:'cutover-to-verified-upper-bound',totalMs:now()-receipt.startedAtMs};
     await save('COMPLETED');await saveDeployment();
     return {status:'completed',version:receipt.version,transactionId:receipt.id,active:targetActive(),brokerConnected:receipt.brokerConnected,
-      activeVersions:desiredVersions(),runtimeMigration:m,...brokerResult()};
+      activeVersions:desiredVersions(),runtimeMigration:m,packageVersion:VERSION,
+      nextUpdateRequired:receipt.version!==VERSION,...brokerResult()};
   }
   async function planOrdinaryUpdate() {
     const rows = await Promise.all(['controller', 'supervisor', 'monitor'].map(async component => {
@@ -360,6 +421,11 @@ export async function updateComponents(input, options = {}) {
       return { component, meta, status };
     }));
     const selected = [];
+    if(!receipt.initialActive) {
+      receipt.initialActive=receipt.servicesObserved&&['controller','supervisor','monitor'].every(key=>typeof receipt.observedActive?.[key]==='boolean')
+        ?structuredClone(receipt.observedActive):Object.fromEntries(rows.map(({component,meta})=>[component,meta.ActiveState==='active']));
+      receipt.active=structuredClone(receipt.initialActive);
+    }
     receipt.observedActive = {};
     for (const { component, meta, status } of rows) {
       const observedWorkspace = component === 'monitor' ? status?.identity?.workspace : status?.workspace;
@@ -581,7 +647,7 @@ export async function updateComponents(input, options = {}) {
   }
   function reported(cause) {
     return Object.assign(cause, { transactionId: receipt?.id, failureCode: receipt?.failureCode,
-      serviceFailures: receipt?.serviceFailures || [], recoveryPhase: receipt?.phase });
+      rollbackFailureCode:receipt?.rollbackFailureCode,serviceFailures: receipt?.serviceFailures || [], recoveryPhase: receipt?.phase });
   }
   async function brokerState() {
     const value = await openCode.mcp();
@@ -798,9 +864,9 @@ export async function updateComponents(input, options = {}) {
   }
   async function startAll(active = receipt.active, expectedVersion = receipt.version) {
     if (!readonlyBroker) {
-      const selected = restartComponents();
+      const selected = restartComponents().filter(component=>active[component]);
       if (selected.length) await service(['start', ...selected.map(unit)]);
-      if (receipt.openCodeAvailable && receipt.brokerChanged !== false) {
+      if (receipt.openCodeAvailable && receipt.brokerChanged !== false && active.controller) {
         try {
           if (!await wait(async () => (await request(c.controllerUrl, '/status')).version === expectedVersion, c.waitMs)) throw error('update-controller-start-unconfirmed');
           await nativeBroker('connect');
@@ -908,8 +974,10 @@ export async function updateComponents(input, options = {}) {
       await restoreManagedFile(file,i);
     }
     for(const plan of Object.values(receipt.managed||{}))if(plan.mode==='directory')await linkSwitch(plan.logical,plan.oldLink);
-    await service(['daemon-reload']); receipt.brokerReconnectedAt = now(); await startAll(receipt.active, receipt.previousVersions.controller);
-    if (!await wait(() => verified(receipt.previousVersions, receipt.active), 30000)) throw error('update-rollback-unconfirmed');
+    const initial=receipt.initialActive||receipt.observedActive||receipt.active;
+    if(!['controller','supervisor','monitor'].every(key=>typeof initial?.[key]==='boolean'))throw error('update-initial-services-unverified');
+    await service(['daemon-reload']); receipt.brokerReconnectedAt = now(); await startAll(initial, receipt.previousVersions.controller);
+    if (!await wait(() => verified(receipt.previousVersions, initial), 30000)) throw error('update-rollback-unconfirmed');
     await save('ROLLBACK_RELEASING'); await release(); await save('ROLLED_BACK');
   }
   try {
@@ -977,9 +1045,33 @@ export async function updateComponents(input, options = {}) {
             !validRecoverySnapshot(receipt.mcpRecovery.reload.before) || !Number.isFinite(receipt.mcpRecovery.reload.at)))) throw error('update-journal-invalid');
       if (receipt.phase === 'MCP_RECOVERY_REQUIRED' && !receipt.mcpRecovery) throw error('update-journal-invalid');
       receiptTrusted = true;
-      if(receipt.runtimeMigration&&['STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
+      if(receipt.runtimeMigration&&['PREPARED','STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
+        if(receipt.phase==='PREPARED')await save('STOPPING');
         if(receipt.phase==='STOPPING')await stopAll();
         return await finishRuntimeMigration();
+      }
+      if(!readonlyBroker&&!options.rollbackOnly&&receipt.phase==='ROLLBACK_FAILED'&&!receipt.runtimeMigration&&!receipt.maintenance&&
+          ['update-active-version-unconfirmed','update-controller-start-unconfirmed'].includes(receipt.failureCode)) {
+        let legacy=false;
+        try{readRuntimeJson(join(legacyStateDirectory(c.serviceWorkspace),'controller-runs.json'),{legacy:true});legacy=true;}
+        catch(cause){if(cause.code!=='ENOENT')throw cause;}
+        if(legacy&&!await optional(join(runtimeStateDirectory(c.serviceWorkspace,{home:c.home}),'runtime-layout.json'))) {
+          if(input.layout!=='managed-release'||!receipt.managed)throw error('update-migration-managed-release-required');
+          const initial=receipt.initialActive||receipt.observedActive;
+          if(!initial||!['controller','supervisor','monitor'].every(key=>initial[key]===false))throw error('update-migration-initial-services-unverified');
+          for(let index=0;index<receipt.files.length;index++){
+            const file=receipt.files[index],actual=await deployed(file),staged=await regular(join(transaction(),'stage',String(index)));
+            if(hash(staged.data)!==file.afterHash)throw error('update-stage-changed');
+            if(file.beforeHash&&hash((await regular(join(transaction(),'backup',String(index)))).data)!==file.beforeHash)throw error('update-backup-invalid');
+            if(![file.beforeHash,file.afterHash].includes(actual?hash(actual.data):null))throw error('update-installed-artifact-changed');
+          }
+          const previousFailureCode=receipt.failureCode;
+          if(!await prepareRuntimeMigration(null))throw error('update-migration-source-unavailable');
+          receipt.initialActive=structuredClone(initial);receipt.active=structuredClone(initial);
+          receipt.offlineRecovery={packageVersion:VERSION,previousFailureCode,previousPhase:'ROLLBACK_FAILED'};
+          receipt.cutoverAtMs ||= now();await save('STOPPING');await stopAll();
+          return await finishRuntimeMigration();
+        }
       }
       if (input.resumeForward !== undefined) {
         const transitionSafe = receipt.mcpTransition?.action === 'disconnect' &&
@@ -1074,7 +1166,9 @@ export async function updateComponents(input, options = {}) {
         else if (readonlyBroker && receipt.externalBroker.disconnectIntentAt !== null) {
           await requireStoredHeld(); forwardRecovery = true;
         } else {
-          try { await rollback(); recovered = true; } catch { await save('ROLLBACK_FAILED'); throw error('update-recovery-required'); }
+          try { await rollback(); recovered = true; } catch (rollbackCause) {
+            receipt.rollbackFailureCode=safeCauseCode(rollbackCause.code);await save('ROLLBACK_FAILED');throw reported(error('update-recovery-required'));
+          }
         }
       }
       }
@@ -1345,7 +1439,7 @@ export async function updateComponents(input, options = {}) {
       activeVersions: Object.fromEntries(Object.keys(desired).map((name) => [name,
         (name === 'broker' ? receipt.brokerConnected : targetActive()[name]) ? desired[name] : null])) };
   } catch (cause) {
-    if(receiptTrusted&&receipt?.runtimeMigration&&['STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
+    if(receiptTrusted&&receipt?.runtimeMigration&&['PREPARED','STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
       receipt.failureCode=safeCauseCode(cause.code);await captureServiceFailures();await save(receipt.phase);
       throw reported(error('update-migration-forward-recovery-required'));
     }
@@ -1380,13 +1474,16 @@ export async function updateComponents(input, options = {}) {
     }
     if (receipt && ['RELEASING', 'ROLLBACK_RELEASING'].includes(receipt.phase)) throw error('update-recovery-required');
     if (receipt && ['STOPPING', 'INSTALLING', 'RESTARTING', 'VERIFYING', 'ROLLING_BACK'].includes(receipt.phase)) {
-      try { await rollback(); } catch { await save('ROLLBACK_FAILED'); throw reported(error('update-recovery-required')); }
+      try { await rollback(); } catch (rollbackCause) {
+        receipt.rollbackFailureCode=safeCauseCode(rollbackCause.code);await save('ROLLBACK_FAILED');throw reported(error('update-recovery-required'));
+      }
       throw reported(error('update-failed-rolled-back'));
     }
     if (receipt && !receipt.maintenance && ['PREPARING', 'PREPARED'].includes(receipt.phase)) {
       try { await restoreInitialServices(); }
       catch { await save('ROLLBACK_FAILED'); throw error('update-controller-restore-required'); }
       receipt.failureCode = safeCauseCode(cause.code);
+      if(cause.readerFailureCode)receipt.readerFailureCode=cause.readerFailureCode;
       await save('PREPARATION_FAILED');
     }
     if (cause.code?.startsWith('update-')) throw reported(cause);
@@ -1720,6 +1817,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
     const errorCode = /^(update|maintenance)-/.test(cause.code || '') ? cause.code : 'update-unavailable';
     process.stderr.write(JSON.stringify({ error: errorCode, ...(cause.causeCode ? { cause: cause.causeCode } : {}),
       ...(cause.transactionId ? { transactionId: cause.transactionId, failureCode: cause.failureCode,
+        rollbackFailureCode:cause.rollbackFailureCode,readerFailureCode:cause.readerFailureCode,
         serviceFailures: cause.serviceFailures, recoveryPhase: cause.recoveryPhase } : {}) }) + '\n');
     process.exitCode = 1;
   }

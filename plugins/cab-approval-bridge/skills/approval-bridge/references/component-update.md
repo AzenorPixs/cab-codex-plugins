@@ -536,3 +536,29 @@ Le groupe monitorScripts inclut permission-policy, dépendance du client. Avant 
 La récupération MCP globale suit [l’accord permanent borné](mcp-pending-recovery.md) :
 contrôles frais, reçu exact et intention unique, sans nouvelle question si toutes
 les conditions sont satisfaites. Ne pas étendre cet accord à un autre profil.
+
+## Migration legacy hors ligne et reprise du reçu — CAB2.3.5
+
+Si l’ancien contrôleur refuse son registre, ne pas purger ni relancer les
+services en boucle. L’updater courant vérifie d’abord le lecteur de la cible
+sur une copie privée : registre et contextes courants, sans démarrer d’agent
+ou de serveur. Les sources, décisions, identifiants et once restent intacts.
+Les inventaires sont revérifiés avant/après copie. Un schéma, une permission
+pendante ou une identité non vérifiables conserve le refus explicite.
+
+Un reçu ROLLBACK_FAILED après échec de version/démarrage, sans maintenance
+incertaine, peut être repris hors ligne si ses stage, sauvegardes et fichiers
+installés sont intègres et l’activité initiale des trois services est prouvée
+arrêtée. L’updater conserve le même reçu et termine sa cible historique.
+Lire version, packageVersion et nextUpdateRequired : si ce dernier est vrai,
+le paquet courant n’est pas encore actif. Après COMPLETED vérifié, poursuivre
+autonomement par une invocation normale distincte vers la version courante,
+puis vérifier toutes les briques ; aucune nouvelle transaction avant cette
+clôture. Ne pas forcer --resume-forward ni supprimer current.json pour ce cas.
+Les gardes cab-source, propriétaire, contexte et empreintes restent applicables.
+
+Après copie, une interruption impose la reprise en avant du même reçu.
+Le repli avant copie restaure les seuls services initialement actifs ; il
+ne démarre pas les services arrêtés pour contrôler une version. Le diagnostic
+expose rollbackFailureCode et readerFailureCode filtrés. Une absence de preuve
+n’est jamais remplacée par un reset, une purge ou un rejeu de permission.

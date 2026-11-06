@@ -1,5 +1,13 @@
 ## 2.3.3 — 2026-11-06
 
+## 2.3.5 — 2026-11-06
+
+- Prévol du lecteur cible sur copie privée avant migration legacy, reprise
+  vérifiée du même reçu ROLLBACK_FAILED et repli fidèle à l’activité initiale.
+- Diagnostics filtrés du lecteur et du repli ; aucun reset ni rejeu de once.
+- Corrige la sonde qui scellait les sockets API tiers, en conservant une paire
+  pertinente stable et les contrôles d’identité, terminal et processus.
+
 ## 2.3.4 — 2026-11-06
 
 - Corrige les faux candidats de la sonde native : ancêtres attestés et client
