@@ -1,5 +1,14 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+## Attribution des processus natifs — CAB2.3.4
+
+La sonde de port distingue les ancêtres et le client interactif OpenCode par
+preuves structurelles stables, sans exclusion par nom. Les candidats exposent
+PID/startTime/PPID/comm/cwd relatif ; aucune lecture de cmdline/environ.
+Deux sondes fraîches et la revue propriétaire restent nécessaires. Les captures
+2.3.3 ne sont pas réutilisées ; inconnues et effets historiques restent protégés.
+Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/historical-owner-boundaries.md).
+
 ## Frontières historiques — CAB 2.3.3
 
 Retraite non exécutable des rejets d’ancienne génération/SID, corrélation des

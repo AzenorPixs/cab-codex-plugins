@@ -1,5 +1,12 @@
 ## 2.3.3 — 2026-11-06
 
+## 2.3.4 — 2026-11-06
+
+- Corrige les faux candidats de la sonde native : ancêtres attestés et client
+  interactif avec preuve de filiation, exécutable, terminal et TCP apparié.
+- Expose des diagnostics bornés et maintient les gardes, les deux sondes et
+  l’incertitude historique. Aucun kill ni accès libéré par le correcteur.
+
 - Retraite propriétaire seule des préparations rejetées d’ancienne génération/SID, sans permission ni identité réécrite.
 - Corrélation des appels de mandats indépendants sous preuves terminales, sans ignorer les frontières ambiguës.
 - Port local en timeout : preuve de reboot postérieur et deux sondes natives du SID courant, résultat historique conservé inconnu.

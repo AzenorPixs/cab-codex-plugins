@@ -100,3 +100,16 @@ Le suivi et les rapports utilisent SGS installé : initialisation dès reprise,
 CHANGE via stdin sous REPORT (rapport+candidat), DELTA séparé par l’orchestrateur.
 Les compteurs absents restent inconnus ; le global incompatible ne déclenche
 ni REBUILD automatique ni blocage artificiel de la clôture individuelle.
+
+## Attribution native des candidats — CAB2.3.4
+
+Une sonde non quiescente ne justifie ni kill ni libération. Examiner les
+candidats PID/startTime/PPID/comm/cwd relatif. Le nom seul ne prouve rien.
+La sonde distingue les ancêtres attestés du serveur et son client interactif
+uniquement par parent commun, exécutable dev/inode, terminal et connexion TCP
+loopback appariée au serveur API courant. Les identités sont relues ; tout
+autre processus reste candidat et toute couverture incertaine reste refusée.
+Après CABU vérifié, préparer deux nouvelles sondes mandatées ; conserver
+nonce, timeout exact, accès read, once et fraîcheur120s. Les captures d’une
+ancienne commande ne sont jamais recyclées. La revue et la réconciliation
+restent décidées par le propriétaire ; le correcteur ne touche pas son RUN.
