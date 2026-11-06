@@ -315,3 +315,28 @@ achevée. Toute autre divergence reste refusée. Stage et sauvegardes d’origin
 ne sont ni réinitialisés ni supprimés. nextUpdateRequired=true impose ensuite
 l’alignement normal distinct vers le paquet courant, sans annoncer la cible
 finale avant vérification effective des quatre briques.
+
+## Registre privé préexistant sans manifeste — CAB2.3.7
+
+Une cible controller-runs.json sans runtime-layout.json n’est ni supprimée ni
+écrasée. La récupération du même reçu peut l’adopter uniquement si le SHA256
+des OCTETS égale la source validée et capturée avant adoption. Une égalité de
+structure ou l’existence du fichier ne suffit pas. Si une capture antérieure
+existe, sa preuve n’est pas remplacée par une nouvelle empreinte choisie pour
+faire correspondre les états. Une preuve privée préexistante doit appartenir
+au même reçu/projet et porter les mêmes identités natives et validations.
+
+Le lecteur cible valide la source ; les fichiers runtime connus préexistants
+en cible doivent tous correspondre au même inventaire source. Propriétaire,
+permissions privées et chemins sûrs sont contrôlés. L’autorité du registre
+privé est prise pendant la copie. Les fichiers identiques gardent leurs octets
+et inode ; seuls les fichiers absents sont copiés. Le manifeste note le SHA
+du registre adopté. La source est revérifiée après copie, puis les gardes de
+version/continuité/activation existantes restent applicables.
+
+Divergence, fichier connu étranger, preuve absente ou source changée : refus
+explicite, deux états conservés, aucun reset ni purge. Une interruption après
+la copie reprend le même reçu et l’adoption déjà vérifiée. Le contrôleur normal
+ne reçoit pas de droit d’adoption implicite ; ne pas forcer une relance ancienne
+ou éditer les JSON pour supprimer la collision. Après COMPLETED de la cible
+historique, traiter nextUpdateRequired et vérifier l’alignement courant distinct.

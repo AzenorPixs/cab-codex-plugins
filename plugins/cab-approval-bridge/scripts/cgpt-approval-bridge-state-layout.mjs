@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {dirname,isAbsolute,join,relative,resolve} from 'node:path';
 import {constants,closeSync,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync,chmodSync} from 'node:fs';
-export const VERSION='2.3.6';
+export const VERSION='2.3.7';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const hash=b=>createHash('sha256').update(b).digest('hex');
 export function legacyStateDirectory(workspace){return join(workspace,'.opencode/state/cgpt-approval-bridge');}
@@ -44,8 +44,8 @@ export function writeRuntimeJson(path,value) {
 const names=new Set(['controller-runs.json','controller-job.json','controller-communication.json','controller-statistics.json',
  'controller-observations.json','protocol-observations.json','protocol-efficiency.json','recovery-policies.json','manifest-extensions.json',
  'native-instances.json','shell-lifecycle.json','shell-stages.json','supervisor-state.json','model-transitions.json']);
-export function legacyRuntimeFiles(workspace) {
- const source=legacyStateDirectory(workspace),files=[];
+function runtimeFiles(source,{legacy=false}={}) {
+ const files=[];
  const visit=(directory,tail='')=>{
   if(!existsSync(directory))return;
   if(realpathSync(directory)!==directory)fail('legacy-state-symlink');
@@ -58,21 +58,37 @@ export function legacyRuntimeFiles(workspace) {
    }
    if(entry.name.includes('sync-conflict')||!names.has(entry.name)&&!(tail==='permission-replies'&&/^[a-f0-9]{64}\.json$/.test(entry.name)))continue;
    if(entry.isSymbolicLink())fail('legacy-state-symlink');
-   const file=readRuntimeJson(path,{legacy:true});files.push({name:part,sha256:file.sha256,bytes:file.bytes});
+   const file=readRuntimeJson(path,{legacy});files.push({name:part,sha256:file.sha256,bytes:file.bytes});
   }
  };
  visit(source);return files;
 }
-export function initializeRuntimeState(workspace,destination=runtimeStateDirectory(workspace)) {
+export function legacyRuntimeFiles(workspace) {return runtimeFiles(legacyStateDirectory(workspace),{legacy:true});}
+const inventory=files=>files.map(({name,sha256})=>({name,sha256})).sort((a,b)=>a.name.localeCompare(b.name));
+export function initializeRuntimeState(workspace,destination=runtimeStateDirectory(workspace),{validatedSourceFiles}={}) {
  ensurePrivateStateDirectory(destination);const marker=join(destination,'runtime-layout.json');
  if(existsSync(marker)) {const m=readRuntimeJson(marker).value;if(m.workspace!==workspace||m.schema!==1)fail('runtime-state-owner-divergent');
   if(m.phase==='READY')return m;if(m.phase!=='COPYING')fail('runtime-state-migration-invalid');}
  const source=legacyStateDirectory(workspace),files=legacyRuntimeFiles(workspace);
  const existing=existsSync(marker)?readRuntimeJson(marker).value:null;
- if(!existing&&existsSync(join(destination,'controller-runs.json')))fail('runtime-state-migration-collision');
+ let adoptedRegistrySha256=existing?.adoptedRegistrySha256;
+ if(adoptedRegistrySha256!==undefined&&(!/^[a-f0-9]{64}$/.test(adoptedRegistrySha256)||
+     files.find(file=>file.name==='controller-runs.json')?.sha256!==adoptedRegistrySha256))fail('runtime-state-source-divergent');
+ if(validatedSourceFiles!==undefined){
+  if(!Array.isArray(validatedSourceFiles)||!validatedSourceFiles.length||validatedSourceFiles.some(file=>!file||
+      Object.keys(file).some(key=>!['name','sha256'].includes(key))||typeof file.name!=='string'||!/^[a-f0-9]{64}$/.test(file.sha256||''))||
+      JSON.stringify(inventory(validatedSourceFiles))!==JSON.stringify(inventory(files)))fail('runtime-state-source-divergent');
+  const captured=files.find(file=>file.name==='controller-runs.json');if(!captured)fail('runtime-state-source-divergent');
+  for(const target of runtimeFiles(destination)){
+   const expected=files.find(file=>file.name===target.name);
+   if(!expected||expected.sha256!==target.sha256)fail('runtime-state-migration-collision');
+   if(!existing&&target.name==='controller-runs.json')adoptedRegistrySha256=target.sha256;
+  }
+ }
+ if(!existing&&existsSync(join(destination,'controller-runs.json'))&&!adoptedRegistrySha256)fail('runtime-state-migration-collision');
  const description={schema:1,workspace,layout:'private-user-state-v1',source,phase:'COPYING',migrationId:existing?.migrationId||'migration-'+randomUUID(),
-  files:files.map(({name,sha256})=>({name,sha256}))};
- if(existing&&JSON.stringify(existing.files)!==JSON.stringify(description.files))fail('legacy-state-changed');
+  files:files.map(({name,sha256})=>({name,sha256})),...(adoptedRegistrySha256?{adoptedRegistrySha256}:{})};
+ if(existing&&JSON.stringify(inventory(existing.files))!==JSON.stringify(inventory(description.files)))fail('legacy-state-changed');
  writeRuntimeJson(marker,description);
  for(const file of files) {
   const path=join(destination,file.name);ensurePrivateStateDirectory(dirname(path));

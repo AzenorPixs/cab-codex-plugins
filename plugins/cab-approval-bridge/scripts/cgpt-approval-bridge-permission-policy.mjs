@@ -1,4 +1,4 @@
-export const VERSION = '2.3.6';
+export const VERSION = '2.3.7';
 
 export function nativeAskState(session, kind) {
   if (!Array.isArray(session?.permission) || session.permission.some(rule =>
