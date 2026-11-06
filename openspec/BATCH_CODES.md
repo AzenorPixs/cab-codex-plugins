@@ -1,5 +1,12 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+## Frontières historiques SCM 2.3.3
+
+[reconcile-historical-owner-boundaries](changes/archive/2026-11-06-reconcile-historical-owner-boundaries/), code non attribué : ARCHIVÉ, source qualifiée.
+Retraite de rejets anciens, corrélation des mandats et port après reboot.
+PA01 réconcilié par voies existantes ; C12 conserve ses protections jusqu’à
+activation et preuves propriétaires. Convergence ACL ultérieure.
+
 ## Contrats SGS et suivi de session — SCM 2.3.2
 
 [fix-sgs-report-isolation-and-compatibility](changes/archive/2026-11-06-fix-sgs-report-isolation-and-compatibility/), code non attribué : ARCHIVÉ — CLOS.
