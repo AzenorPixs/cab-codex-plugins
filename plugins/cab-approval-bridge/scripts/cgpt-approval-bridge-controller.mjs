@@ -26,10 +26,10 @@ import { TransportHandoff, CONTINUITY_PROTOCOL, guardContinuityRequest } from '.
 import { RecoveryCoordinator, unavailableRunContext, projectRecoveryReceipt } from './cgpt-approval-bridge-recovery.mjs';
 import { NativeInstances } from './cgpt-approval-bridge-native-instances.mjs';
 import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.mjs';
-import { nativeEvidenceView, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
+import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.3.2";
+const version = "2.3.3";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -165,15 +165,20 @@ const erasure = new ChangeErasureManager({workspace,stateDirectory,registry,open
 if(erasure.pending()?.phase==='APPLYING')throw new CoordinationError('erasure-forward-recovery-required');
 recovery.validationBoundaryReplay = (receipt,op) => {
   const run=registry.runs.get(receipt.runId), context=contexts.get(receipt.runId);
+  const historicalRetirement = receipt.action==='withdraw-unissued-validation' && op.decision?.status==='rejected' &&
+    receipt.observation?.approval?.reservation_version===op.version && op.contextId===run?.contextId &&
+    receipt.contextId===run.contextId && receipt.observation.approval.operation_id===op.operationId &&
+    receipt.observation.approval.requestId===op.requestId && receipt.observation.approval.session_id===op.sessionId &&
+    receipt.observation.approval.operation_digest===op.operationDigest;
   if(!run || !context || run.ownerId!==receipt.ownerId || !receipt.observation ||
-      receipt.observation.approval?.reservation_version!==run.version) return false;
+      receipt.observation.approval?.reservation_version!==run.version && !historicalRetirement) return false;
   if(receipt.action==='restore-pending-validation')
     return context.pendingRestorationProof?.(op.requestId)===receipt.effectDigest;
   if(receipt.action==='withdraw-unissued-validation') {
     if(op.state!=='CANCELLED'||op.completionDigest!==receipt.effectDigest||op.native||op.nativeResult)return false;
     if(receipt.observation.releasedReferenceDigest&&proofHash(registry.resourceState.accesses[op.accessId])!==receipt.observation.releasedReferenceDigest)return false;
     context.withdrawUnissuedValidation(receipt.observation.approval,receipt.effectDigest,
-      {allowRejected:op.decision?.status==='rejected'});return true;
+      {allowRejected:op.decision?.status==='rejected',historicalRetirement});return true;
   }
   if(op.state!=='COMPLETED' || op.completionDigest!==receipt.effectDigest || op.native || op.nativeResult) return false;
   context.completeReviewedTerminal(receipt.observation.approval,receipt.effectDigest);
@@ -1346,10 +1351,44 @@ async function collectRecoveryEvidence(run, operation) {
   // Availability errors are part of the boundary, never evidence of an absent effect.
   let nativeInstanceEvidence = null;
   if (operation.native) { try { nativeInstanceEvidence = await nativeInstances.proof(native, operation.native.startedAt); } catch { /* An unavailable instance record never proves a boundary. */ } }
-  const publicView = { ...view, journalError, replyError, nativeInstanceEvidence,
+  if (!nativeInstanceEvidence && operation.native) {
+    const calls = parts.filter(part => (part.callID || part.callId) === operation.native.callId);
+    if (calls.length === 1 && nativeTimedOutShellPart(operation,calls[0],operation.sessionId)) {
+      try { nativeInstanceEvidence = await nativeInstances.rebootProof(native,calls[0].state?.time?.end); }
+      catch { /* Une époque noyau illisible ne qualifie aucune récupération. */ }
+    }
+  }
+  let nativeKernelEpoch = null;
+  try { nativeKernelEpoch = await nativeInstances.kernelEpoch(native); } catch { /* Aucune époque fiable n’est déduite d’une lecture échouée. */ }
+  const publicView = { ...view, journalError, replyError, nativeInstanceEvidence, nativeKernelEpoch,
     nativeInstanceEvidenceStatus: operation.native ? nativeInstanceEvidence ? 'AVAILABLE' : 'PRIOR_INSTANCE_EVIDENCE_MISSING' : 'NOT_REQUIRED_FOR_UNISSUED_VALIDATION' };
-  publicView.nativeBoundaryDigest = proofHash(publicView);
+  const {nativeKernelEpoch: epochObservation,...compatibleBoundary} = publicView;
+  publicView.nativeBoundaryDigest = proofHash(compatibleBoundary);
   return { view: publicView, approval, parts, messages, generation };
+}
+
+function withdrawalEffects(evidence,run,operation) {
+  const records = [];
+  for (const peer of Object.values(registry.resourceState.operations)) {
+    if (peer.runId !== run.runId || peer.contextId !== run.contextId || peer.sessionId !== operation.sessionId) continue;
+    const entries = nativeRequestValidationEntries(evidence.parts,peer.requestId).filter(e => e.status === 'completed' ||
+      peer === operation && !peer.decision && e.status === 'error' && e.part.state?.metadata?.cabCodeMode?.nativeMcpError === true);
+    if (entries.length !== 1) continue;
+    const approval = entries[0].input, owner = registry.requestOwners[peer.requestId];
+    if (approval.operation_id !== peer.operationId || approval.operation_digest !== peer.operationDigest ||
+        approval.session_id !== peer.sessionId || approval.run_id !== run.runId || approval.change_id !== run.changeId ||
+        approval.directory !== run.directory || approval.reservation_version !== peer.version || owner?.runId !== run.runId ||
+        owner.digest !== createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex')) continue;
+    const access = registry.resourceState.accesses[peer.accessId];
+    const original = evidence.parts.filter(part => (part.callID || part.callId) === peer.native?.callId);
+    const reconciliationReceipt = original.length === 1 && nativeTimedOutShellPart(peer,original[0],peer.sessionId) ?
+      recovery.receipts.find(receipt => receipt.targetId === peer.operationId && receipt.state === 'DONE' &&
+        receipt.action === 'reconcile-quarantined-port' && receipt.effectDigest === peer.completionDigest) : null;
+    records.push({operation:peer,approval,requestPart:entries[0].part,access,reconciliationReceipt,ownerId:run.ownerId});
+  }
+  const target = records.find(record => record.operation.operationId === operation.operationId);
+  if (!target) throw new CoordinationError('withdraw-call-owner-unverified');
+  return correlateWithdrawalEffects(evidence.parts,target,records.filter(record=>record!==target),evidence.view,nativeNoEnvironmentObservation);
 }
 
 async function reconcileValidationBoundary(run,context,payload,actionId,terminal,withdraw=false) {
@@ -1361,6 +1400,7 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     throw new CoordinationError('validation-boundary-recovery-invalid');
   const linked=Object.values(registry.resourceState.accesses).some(a=>a.accessId===op.accessId||a.operationIds.includes(op.operationId));
   const rejectedWithdrawal=withdraw&&op.decision?.status==='rejected';
+  const historicalRetirement = rejectedWithdrawal && (op.version !== run.version || op.sessionId !== run.sessionId);
   if(rejectedWithdrawal&&linked)throw new CoordinationError('rejected-withdrawal-access-linked');
   let releasedReference=null;
   if(withdraw&&linked){try{releasedReference=registry.releasedReferenceWithdrawal(run.runId,op.operationId)}catch{/* La voie HELD conserve ses propres gardes. */}}
@@ -1369,13 +1409,13 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     linked&&!releasedReference ? registry.attachedWithdrawalAccess(run.runId,op.operationId,{allowReference:true,allowSingleton:true}) : null;
   const parentDigest=parent ? proofHash(parent) : null;
   if(context.publicStatus().recoveryRequired || !context.publicJob()?.armed ||
-      context.publicJob().sessionId!==op.sessionId || context.publicJob().currentCabMandate &&
+      (context.publicJob().sessionId!==op.sessionId && !historicalRetirement) || context.publicJob().currentCabMandate &&
       context.publicJob().currentCabMandate!==op.requestId) throw new CoordinationError('validation-boundary-context-divergent');
   const original=proofHash(op),first=await collectRecoveryEvidence(run,op);
   if(first.view.nativeBoundaryDigest!==payload.nativeBoundaryDigest || !first.view.sessionIdle || first.view.pendingPermissionCount)
     throw new CoordinationError('recovery-native-boundary-changed');
   const same=value=>proofHash(nativeIdentity(value))===proofHash(nativeIdentity(first.approval));
-  registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw});
+  registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw,retirementOnly:historicalRetirement});
   const closedReviews=terminal?recovery.closedValidationReviews(run.runId).filter(old=>old.operationId!==op.operationId):[];
   const requested=new Set(closedReviews.map(old=>old.requestId)),requestIndex=new Map(),cancelIndex=new Map();
   const addEntry=(id,entry)=>{if(requested.has(id)){const entries=requestIndex.get(id)||[];entries.push(entry);requestIndex.set(id,entries);}};
@@ -1431,16 +1471,18 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
       let value;try{value=JSON.parse(part.state.output);}catch{return false;}
       return value?.status==='NOT_ADMITTED' && (value.requestId===op.requestId || value.approval_id===first.approval.approval_id);
     }))throw new CoordinationError('not-admitted-withdrawal-decision-conflict');
-    const effects=first.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
+    const terminalTurn = rejectedWithdrawal ? rejectedUnissuedTurnProof(first.messages,op,first.approval,first.parts[0],nativeNoEnvironmentObservation,same) : null;
+    const isolated = terminalTurn ? {effects:[],excluded:[]} : withdrawalEffects(first,run,op), effects=isolated.effects;
     if(releasedReference&&effects.length)throw new CoordinationError('released-reference-native-effect-observed');
     if(!op.decision && (parent || effects.length))throw new CoordinationError('not-admitted-withdrawal-effect-or-access');
-    observation=!op.decision ? notAdmittedWithdrawalProof(first.view,first.parts,first.approval,same) :
+    observation=terminalTurn || (!op.decision ? notAdmittedWithdrawalProof(first.view,first.parts,first.approval,same) :
       effects.length?(effects[0].tool==='bash' ? rejectedShellWithdrawalProof(first.view,effects,first.approval) :
       rejectedEditWithdrawalProof(first.view,effects,first.approval)):
-      {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'};
+      {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'});
+    observation.excludedIndependentCalls=isolated.excluded;
     if(releasedReference)observation.releasedReferenceDigest=releasedReferenceDigest;
     if(parent && !['REJECTED_UNISSUED_SHELL','REJECTED_UNISSUED_EDIT'].includes(observation.kind))throw new CoordinationError('attached-withdrawal-shell-proof-required');
-    context.verifyNativeCancelledValidation(first.approval,proofHash(payload),{allowRejected:rejectedWithdrawal});
+    context.verifyNativeCancelledValidation(first.approval,proofHash(payload),{allowRejected:rejectedWithdrawal,historicalRetirement});
   } else {
     if(context.hasRequest(op.requestId) && !context.pendingRestorationProof(op.requestId))throw new CoordinationError('pending-restore-already-present');
     observation=pendingValidationProof(first.parts,first.approval,same);
@@ -1456,12 +1498,22 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     reviewedTerminalProof(history.parts,second.approval,payload.review,run,same,id=>!registry.requestOwners[id]);
   }
   else if(withdraw) {
-    const effects=second.parts.filter(p=>p.type==='tool'&&p.tool!=='cab_codemode_discovery'&&!nativeNoEnvironmentObservation(p));
-    if(effects.length){const repeated=effects[0].tool==='bash' ? rejectedShellWithdrawalProof(second.view,effects,second.approval) :
+    const terminalTurn = rejectedWithdrawal ? rejectedUnissuedTurnProof(second.messages,op,second.approval,second.parts[0],nativeNoEnvironmentObservation,same) : null;
+    const isolated = terminalTurn ? {effects:[],excluded:[]} : withdrawalEffects(second,run,op), effects=isolated.effects;
+    if(proofHash(isolated.excluded)!==proofHash(observation.excludedIndependentCalls))throw new CoordinationError('withdraw-peer-boundary-changed');
+    if(observation.kind==='REJECTED_UNISSUED_TERMINAL_TURN'){
+      if(!terminalTurn)throw new CoordinationError('withdraw-terminal-turn-changed');
+      terminalTurn.excludedIndependentCalls=[];
+      if(proofHash(terminalTurn)!==proofHash(observation))throw new CoordinationError('withdraw-terminal-turn-changed');
+    } else if(terminalTurn)throw new CoordinationError('withdraw-terminal-turn-changed');
+    else if(effects.length){const repeated=effects[0].tool==='bash' ? rejectedShellWithdrawalProof(second.view,effects,second.approval) :
         rejectedEditWithdrawalProof(second.view,effects,second.approval);
+      repeated.excludedIndependentCalls=isolated.excluded;
+      if(releasedReference)repeated.releasedReferenceDigest=releasedReferenceDigest;
       if(proofHash(repeated)!==proofHash(observation))throw new CoordinationError('recovery-native-boundary-changed');}
     else if(!op.decision) {
       const repeated=notAdmittedWithdrawalProof(second.view,second.parts,second.approval,same);
+      repeated.excludedIndependentCalls=isolated.excluded;
       if(proofHash(repeated)!==proofHash(observation))throw new CoordinationError('recovery-native-boundary-changed');
     } else if(observation.kind!=='UNISSUED_COORDINATION')throw new CoordinationError('recovery-native-boundary-changed');
   } else pendingValidationProof(second.parts,second.approval,same);
@@ -1470,7 +1522,7 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     if(file.sha256!==source.sha256)throw new CoordinationError('terminal-review-source-divergent');
   }
   if(generationChanged(op.sessionId,first.generation)||proofHash(op)!==original)throw new CoordinationError('recovery-native-boundary-changed');
-  registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw});
+  registry.operationCandidate(run.runId,first.approval,{checkCurrentRevisions:!withdraw,retirementOnly:historicalRetirement});
   if(parent && proofHash(terminal?registry.terminalReviewAccessBoundary(run.runId,op.operationId):
       registry.attachedWithdrawalAccess(run.runId,op.operationId,{allowReference:true,allowSingleton:true}))!==parentDigest)
     throw new CoordinationError('attached-withdrawal-parent-changed');
@@ -1483,7 +1535,7 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     context.completeReviewedTerminal(first.approval,proofDigest);
     registry.completeReviewedReadOnly(run.runId,op.operationId,proofDigest,parentDigest);
   } else if(withdraw) {
-    context.withdrawUnissuedValidation(first.approval,proofDigest,{allowRejected:rejectedWithdrawal});
+    context.withdrawUnissuedValidation(first.approval,proofDigest,{allowRejected:rejectedWithdrawal,historicalRetirement});
     if(parent)registry.withdrawRejectedAttachedShell(run.runId,op.operationId,proofDigest,parentDigest,{allowReference:true,allowSingleton:true});
     else registry.recordNativeCancelledValidation(run.runId,op.operationId,proofDigest,
       {allowRejected:rejectedWithdrawal,allowReleasedReference:Boolean(releasedReference)});
@@ -1557,6 +1609,18 @@ function portRecoveryCandidate(run, operationId) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) throw new CoordinationError('port-recovery-boundary-invalid');
   return { op, access, port, resourceKey: op.resources[0].key };
 }
+const portProbeCommands = new Map();
+registry.quarantineProbeCandidate = (run,approval) => {
+  const permit = portProbeCommands.get(run.runId+'\0'+approval.operation_id);
+  if (!permit || permit.expiresAt < Date.now() || permit.sessionId !== run.sessionId ||
+      approval.session_id !== run.sessionId || approval.reservation_version !== run.version ||
+      approval.files?.length !== 0 || approval.commands?.length !== 1 ||
+      proofHash(approval.commands[0]) !== permit.commandDigest || approval.resources?.length !== 1 ||
+      approval.resources[0].key !== permit.resourceKey || approval.resources[0].mode !== 'read') return null;
+  const op = registry.resourceState.operations[permit.operationId];
+  return op && proofHash(op) === permit.operationDigest ? op.operationId : null;
+};
+
 async function portProbeInfrastructure() {
   if (!broker?.broker_process?.pid) return [];
   const identity = await processIdentity(broker.broker_process.pid);
@@ -1588,18 +1652,25 @@ async function reconcilePortFromProbes(run, payload, actionId) {
   const nativeIdentity = await processIdentity(first.view.nativePid);
   if (!nativeIdentity) throw new CoordinationError('port-recovery-native-identity-unavailable');
   const nativeUid = statSync('/proc/' + first.view.nativePid).uid;
-  const allParts = first.messages.flatMap(message => Array.isArray(message.parts) ? message.parts : []);
+  const probeSessionId = instance.kind === 'kernel-reboot-after-call' ? run.sessionId : op.sessionId;
+  const probeGeneration = nativeSessionGenerations.get(probeSessionId) || 0;
+  const probeMessages = probeSessionId === op.sessionId ? first.messages : await openCode.messages(probeSessionId,run.directory);
+  const [probePermissions,probeActive] = await Promise.all([
+    openCode.permissions(run.directory,{sessionIds:[probeSessionId]}),openCode.sessionStatus(run.directory)]);
+  if (probePermissions.length || Object.hasOwn(probeActive,probeSessionId)) throw new CoordinationError('port-recovery-probe-session-not-quiescent');
+  const allParts = probeMessages.flatMap(message => Array.isArray(message.parts) ? message.parts : []);
   const captures = [];
   for (const id of payload.probeOperationIds) {
     const probe = registry.resourceState.operations[id], probeAccess = probe && registry.resourceState.accesses[probe.accessId];
-    if (!probe || probe.runId !== run.runId || probe.contextId !== run.contextId || probe.sessionId !== op.sessionId ||
+    if (!probe || probe.runId !== run.runId || probe.contextId !== run.contextId || probe.sessionId !== probeSessionId ||
         probe.state !== 'COMPLETED' || probe.native?.onceAcknowledged !== true || probe.decision?.status !== 'approved' ||
         probe.nativeResult?.status !== 'completed' || probe.nativeResult.exit !== 0 ||
         probeAccess?.state !== 'RELEASED' || probe.resources.length !== 1 || probe.resources[0].key !== resourceKey ||
         probe.resources[0].mode !== 'read') throw new CoordinationError('port-recovery-probe-operation-unverified');
     const expected = { workspace: run.directory, nativePid: first.view.nativePid, port,
       runtimeDirectories: payload.review.runtimeDirectories, nonce: probe.operationId, resourceKey, excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: instance.observedAt,
-      instanceStartTime: instance.startTime, instanceEvidenceKind: instance.kind };
+      instanceStartTime: instance.startTime, instanceEvidenceKind: instance.kind,
+      ...(instance.kind==='kernel-reboot-after-call'?{kernelBootMs:instance.kernelBootMs,bootIdSha256:instance.bootIdSha256,historicalEndedAt:instance.historicalEndedAt}:{}) };
     const command = portProbeCommand(expected);
     if (probe.native.targetDigest !== createHash('sha256').update(JSON.stringify(['bash', command])).digest('hex'))
       throw new CoordinationError('port-recovery-probe-command-divergent');
@@ -1615,6 +1686,12 @@ async function reconcilePortFromProbes(run, payload, actionId) {
   if (captures[0].cgroupDigest !== captures[1].cgroupDigest || captures[0].netnsDigest !== captures[1].netnsDigest)
     throw new CoordinationError('port-recovery-namespace-divergent');
   const second = await collectRecoveryEvidence(run, op), identityAfter = await processIdentity(first.view.nativePid);
+  const probeMessagesAfter = probeSessionId === op.sessionId ? second.messages : await openCode.messages(probeSessionId,run.directory);
+  const probePermissionsAfter = await openCode.permissions(run.directory,{sessionIds:[probeSessionId]});
+  const probeActiveAfter = await openCode.sessionStatus(run.directory);
+  if (probePermissionsAfter.length || Object.hasOwn(probeActiveAfter,probeSessionId) ||
+      proofHash(probeMessagesAfter) !== proofHash(probeMessages) || generationChanged(probeSessionId,probeGeneration))
+    throw new CoordinationError('port-recovery-probe-boundary-changed');
   if (first.view.nativeBoundaryDigest !== second.view.nativeBoundaryDigest || proofHash(first.messages) !== proofHash(second.messages) ||
       generationChanged(op.sessionId, first.generation) || proofHash({ op, access }) !== operationSnapshot ||
       identityAfter?.startTime !== nativeIdentity.startTime) throw new CoordinationError('port-recovery-native-boundary-changed');
@@ -2444,11 +2521,19 @@ async function handleRequest(request, response) {
         const input = { workspace: run.directory, nativePid: evidence.view.nativePid, port,
           runtimeDirectories: url.searchParams.getAll('runtimeDirectory'), nonce: url.searchParams.get('nonce'), resourceKey,
           excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: evidence.view.nativeInstanceEvidence.observedAt,
-          instanceStartTime: evidence.view.nativeInstanceEvidence.startTime, instanceEvidenceKind: evidence.view.nativeInstanceEvidence.kind };
+          instanceStartTime: evidence.view.nativeInstanceEvidence.startTime, instanceEvidenceKind: evidence.view.nativeInstanceEvidence.kind,
+          ...(evidence.view.nativeInstanceEvidence.kind==='kernel-reboot-after-call'?{kernelBootMs:evidence.view.nativeInstanceEvidence.kernelBootMs,bootIdSha256:evidence.view.nativeInstanceEvidence.bootIdSha256,historicalEndedAt:evidence.view.nativeInstanceEvidence.historicalEndedAt}:{}) };
         if (!input.runtimeDirectories.includes('.')) throw new CoordinationError('port-recovery-complete-project-scope-required');
         for (const directory of input.runtimeDirectories) if (directory !== '.')
           registry.scope(runId, run.version, [{ key: 'file:' + directory, mode: 'read' }]);
-        json(response, 200, portProbeDescription(input)); return;
+        const description = portProbeDescription(input);
+        if (input.instanceEvidenceKind === 'kernel-reboot-after-call') {
+          for (const [key,permit] of portProbeCommands) if (permit.expiresAt < Date.now()) portProbeCommands.delete(key);
+          if (portProbeCommands.size >= 1000) throw new CoordinationError('port-probe-preparation-capacity');
+          portProbeCommands.set(run.runId+'\0'+input.nonce,{sessionId:run.sessionId,operationId:op.operationId,
+            operationDigest:proofHash(op),commandDigest:proofHash(description.command),resourceKey,expiresAt:Date.now()+120000});
+        }
+        json(response, 200, {...description,executionSessionId:input.instanceEvidenceKind==='kernel-reboot-after-call'?run.sessionId:op.sessionId}); return;
       }
       if (request.method === 'GET' && url.pathname === '/recovery/native-evidence') {
         if ([...url.searchParams.keys()].some(key => key !== 'operationId') || url.searchParams.getAll('operationId').length !== 1)

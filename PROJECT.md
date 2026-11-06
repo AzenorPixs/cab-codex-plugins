@@ -1,5 +1,14 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Frontières historiques — CAB 2.3.3
+
+Retraite non exécutable des rejets d’ancienne génération/SID, corrélation des
+mandats successifs et réconciliation des ports locaux après reboot noyau prouvé.
+Deux sondes natives et revue propriétaire restent requises ; le résultat
+historique n’est pas inventé. Skill/plugin/commande décrivent les étapes dans
+[la référence distribuée](plugins/cab-approval-bridge/skills/approval-bridge/references/historical-owner-boundaries.md).
+DEVOPS.md conserve son environnement local et suit le commit complet SCM.
+
 ## Rapports SGS isolés et compatibles — CAB 2.3.2
 
 CHANGE produit son rapport sans récupération globale, avec preuves sur stdin,

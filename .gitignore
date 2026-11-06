@@ -204,3 +204,6 @@ variables.sh
 
 # Verrou, journal et preuves temporaires SGS (jamais versionnés)
 /.STATISTICS.*
+
+# Environnement généré du checkout de qualification historique
+/.cab-cleanup-worktree/DEVOPS.md

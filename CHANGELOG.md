@@ -1,3 +1,10 @@
+## 2.3.3 — 2026-11-06
+
+- Retraite propriétaire seule des préparations rejetées d’ancienne génération/SID, sans permission ni identité réécrite.
+- Corrélation des appels de mandats indépendants sous preuves terminales, sans ignorer les frontières ambiguës.
+- Port local en timeout : preuve de reboot postérieur et deux sondes natives du SID courant, résultat historique conservé inconnu.
+- Documentation des récupérations et des diagnostics snapshot-only ; SGS distribué conservé.
+
 ## 2.3.2 — 2026-11-06
 
 - Nettoyage statistique intégré à l’effacement terminal CAB après le rapport et les sessions natives, avec préservation des pairs et vérification après restauration.

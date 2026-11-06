@@ -3,7 +3,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.3.2';
+export const VERSION = '2.3.3';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -151,11 +151,12 @@ export class ResourceRunRegistry extends RunRegistry {
       const owner = [...this.runs.values(), ...this.history].find((r) => r.runId === op?.runId && r.contextId === op?.contextId);
       if (!id(key) || !onlyKeys(op, ['operationId','accessId','runId','contextId','version','sessionId','requestId',
           'operationDigest','identityDigest','resources','expectedRevisions','state','preparedAt','native','finishedAt',
-          'completionDigest','maintenancePreflight','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence','decision','nativeRecovery']) || op.operationId !== key || !id(op.runId) ||
+          'completionDigest','maintenancePreflight','quarantineProbeFor','preflightSucceeded','rejectionOnly','nativeResult','testReservationId','finishedSequence','decision','nativeRecovery']) || op.operationId !== key || !id(op.runId) ||
           !owner || !id(op.accessId) || !id(op.requestId) || !hash(op.operationDigest) || !hash(op.identityDigest) ||
           !Number.isSafeInteger(op.contextId) || !Number.isSafeInteger(op.version) ||
           op.version < op.contextId || op.version > owner.version || !Number.isFinite(Date.parse(op.preparedAt)) ||
           (op.maintenancePreflight !== undefined && typeof op.maintenancePreflight !== 'boolean') ||
+          (op.quarantineProbeFor !== undefined && !id(op.quarantineProbeFor)) ||
           (op.preflightSucceeded !== undefined && typeof op.preflightSucceeded !== 'boolean') ||
           (op.rejectionOnly !== undefined && op.rejectionOnly !== true) ||
           typeof op.sessionId !== 'string' || !['PREPARED', 'ISSUING', 'EXECUTING', 'COMPLETED', 'UNKNOWN', 'CANCELLED'].includes(op.state)) fail();
@@ -776,7 +777,7 @@ export class ResourceRunRegistry extends RunRegistry {
     }
   }
   operationCandidate(runId, approval, { candidateSession = null, rejectionOnly = false, checkCurrentRevisions = true,
-    terminalTurnNoEffect = false } = {}) {
+    terminalTurnNoEffect = false, retirementOnly = false } = {}) {
     const preflight = Array.isArray(approval.files) && approval.files.length === 0 &&
       approval.commands?.length === 1 && approval.commands[0] === '/usr/bin/true' &&
       Array.isArray(approval.resources) && approval.resources.every((r) => r.mode === 'read');
@@ -799,7 +800,15 @@ export class ResourceRunRegistry extends RunRegistry {
         throw new CoordinationError('terminal-turn-no-effect-candidate-required');
       }
     } else this.admission(runId, preflight);
-    const { run, resources } = this.scope(runId, approval.reservation_version, approval.resources);
+    const current = this.runs.get(runId), historical = retirementOnly && this.resourceState.operations[approval?.operation_id];
+    if (retirementOnly && (!current || !historical || historical.runId !== runId || historical.contextId !== current.contextId ||
+        historical.state !== 'PREPARED' || historical.decision?.status !== 'rejected' ||
+        historical.version !== approval.reservation_version || historical.version > current.version ||
+        historical.sessionId !== approval.session_id || approval.run_id !== runId || approval.change_id !== current.changeId ||
+        approval.directory !== current.directory || historical.native || historical.nativeResult || historical.onceAcknowledged ||
+        Object.values(this.resourceState.accesses).some(a => a.accessId === historical.accessId || a.operationIds.includes(historical.operationId))))
+      throw new CoordinationError('historical-retirement-boundary-invalid');
+    const { run, resources } = this.scope(runId, retirementOnly ? current.version : approval.reservation_version, approval.resources);
     if (approval.coordination_protocol !== COORDINATION_PROTOCOL || !id(approval.operation_id) ||
         !hash(approval.operation_digest) || !id(approval.requestId) ||
         (approval.access_id !== undefined && !id(approval.access_id)) ||
@@ -807,7 +816,7 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('coordination-upgrade-required');
     }
     this.validateExpected(approval.expected_revisions, resources, checkCurrentRevisions);
-    if (approval.session_id !== run.sessionId && approval.session_id !== candidateSession) throw new CoordinationError('operation-session-divergent');
+    if (!retirementOnly && approval.session_id !== run.sessionId && approval.session_id !== candidateSession) throw new CoordinationError('operation-session-divergent');
     const identityDigest = digest(Object.fromEntries(['run_id', 'reservation_version', 'requestId', 'approval_id',
       'change_id', 'session_id', 'directory', 'title', 'summary', 'files', 'commands', 'resources',
       'operation_id', 'operation_digest', 'expected_revisions', 'access_id', 'coordination_protocol',
@@ -819,11 +828,13 @@ export class ResourceRunRegistry extends RunRegistry {
       if (prior.identityDigest !== identityDigest || prior.runId !== runId) throw new CoordinationError('operation-identity-divergent');
       return copy(prior);
     }
+    const quarantineProbeFor = this.quarantineProbeCandidate?.(run,approval);
     const op = { operationId: approval.operation_id, accessId: approval.access_id || approval.operation_id,
       runId, contextId: run.contextId, version: run.version, sessionId: approval.session_id,
       requestId: approval.requestId, operationDigest: approval.operation_digest, identityDigest,
       resources, expectedRevisions: copy(approval.expected_revisions), state: 'PREPARED', preparedAt: now(),
-      maintenancePreflight: Boolean(run.maintenancePreflightRequired && preflight) };
+      maintenancePreflight: Boolean(run.maintenancePreflightRequired && preflight),
+      ...(quarantineProbeFor ? {quarantineProbeFor} : {}) };
     return copy(op);
   }
   prepareOperation(runId, approval, options) {
@@ -1145,7 +1156,9 @@ export class ResourceRunRegistry extends RunRegistry {
       const timeoutQuarantineRead = candidate.runId === existing.runId &&
         candidate.contextId === existing.contextId && requested.mode === 'read' && held.mode === 'write' &&
         candidate.operationIds.every(id => this.resourceState.operations[id]?.sessionId ===
-          this.resourceState.operations[existing.timeoutQuarantine?.operationId]?.sessionId) &&
+          this.resourceState.operations[existing.timeoutQuarantine?.operationId]?.sessionId ||
+          this.resourceState.operations[id]?.sessionId === this.runs.get(candidate.runId)?.sessionId &&
+          this.resourceState.operations[id]?.quarantineProbeFor === existing.timeoutQuarantine?.operationId) &&
         requested.key === held.key && /^port:[a-z0-9][a-z0-9._-]*\/\d+$/.test(requested.key) &&
         this.validTimeoutQuarantine(existing);
       if (!timeoutQuarantineRead) return true;

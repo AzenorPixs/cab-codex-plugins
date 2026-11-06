@@ -1,7 +1,7 @@
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 import { commandDigest } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.3.2';
+export const VERSION = '2.3.3';
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(value);
@@ -23,6 +23,18 @@ export async function observePortBoundary(input) {
         input.port < 1 || input.port > 65535 || typeof input.workspace !== 'string' || !path.isAbsolute(input.workspace) ||
         !/^[A-Za-z0-9_.-]{1,100}$/.test(input.nonce || '') || !Array.isArray(input.runtimeDirectories) ||
         !input.runtimeDirectories.length || input.runtimeDirectories.length > 10) stop('port-probe-input-invalid');
+    let reboot = {};
+    if (input.instanceEvidenceKind === 'kernel-reboot-after-call') {
+      const boot = (await fs.readFile('/proc/stat','utf8')).match(/^btime (\d+)$/m);
+      const kernelBootMs = boot ? Number(boot[1])*1000 : NaN;
+      const bootIdSha256 = sha((await fs.readFile('/proc/sys/kernel/random/boot_id','utf8')).trim());
+      if (!Number.isSafeInteger(kernelBootMs) || kernelBootMs !== input.kernelBootMs ||
+          bootIdSha256 !== input.bootIdSha256 || !Number.isFinite(input.historicalEndedAt) ||
+          input.historicalEndedAt <= 0 || kernelBootMs <= input.historicalEndedAt || kernelBootMs > Date.now() ||
+          !Number.isFinite(input.instanceObservedAt) || input.instanceObservedAt < kernelBootMs ||
+          input.instanceObservedAt > Date.now()+5000) stop('port-probe-reboot-unverified');
+      reboot = { kernelBootMs,bootIdSha256,historicalEndedAt:input.historicalEndedAt };
+    }
     const workspace = await fs.realpath(input.workspace), nativePath = '/proc/' + input.nativePid;
     const nativeStat = await fs.stat(nativePath), nativeComm = (await fs.readFile(nativePath + '/comm', 'utf8')).trim();
     if (nativeStat.uid !== process.getuid() || nativeComm !== 'opencode') stop('port-probe-native-account-mismatch');
@@ -37,7 +49,7 @@ export async function observePortBoundary(input) {
     const nativeStartedAtMs = Number(boot[1])*1000 + Number(startTime)*1000/Number(ticks);
     const nativeStartedAtUpperBound = nativeStartedAtMs + 1000 + 1000/Number(ticks);
     if (!Number.isFinite(input.instanceObservedAt) || startTime !== input.instanceStartTime ||
-        !['controller-native-instance','legacy-cabu-native-instance'].includes(input.instanceEvidenceKind) ||
+        !['controller-native-instance','legacy-cabu-native-instance','kernel-reboot-after-call'].includes(input.instanceEvidenceKind) ||
         input.instanceEvidenceKind === 'legacy-cabu-native-instance' && nativeStartedAtUpperBound > input.instanceObservedAt)
       stop('port-probe-native-instance-history-unverified');
     const cgroup = await fs.readFile(nativePath + '/cgroup', 'utf8'), netns = await fs.readlink(nativePath + '/ns/net');
@@ -98,7 +110,7 @@ export async function observePortBoundary(input) {
     if (startTime !== statStart(await fs.readFile(nativePath + '/stat', 'utf8')) ||
         cgroup !== await fs.readFile(nativePath + '/cgroup', 'utf8') || netns !== await fs.readlink(nativePath + '/ns/net'))
       stop('port-probe-native-identity-changed');
-    Object.assign(result, { nativeStartedAtMs, nativeStartedAtUpperBound, nativeUid: nativeStat.uid, nativeStartTime: startTime, cgroupDigest: sha(cgroup),
+    Object.assign(result, { ...reboot, nativeStartedAtMs, nativeStartedAtUpperBound, nativeUid: nativeStat.uid, nativeStartTime: startTime, cgroupDigest: sha(cgroup),
       netnsDigest: sha(netns), listening, matchingProcessCount: candidates.length,
       matchingProcessesDigest: sha(candidates.sort((a,b) => a.pid-b.pid)), matchingProcesses: candidates.slice(0,100), complete: true, quiescent: !listening && !candidates.length });
   } catch (cause) {
@@ -148,7 +160,7 @@ export function parsePortCapture(part, expected) {
   const { captureDigest, ...observation } = value;
   if (Object.keys(value).some(key => !['protocol','nonce','nativePid','port','runtimeDirectories','workspace','observedAt','complete',
       'quiescent','nativeUid','nativeStartTime','cgroupDigest','netnsDigest','listening','matchingProcessCount',
-      'matchingProcessesDigest','matchingProcesses','captureDigest','instanceObservedAt','nativeStartedAtMs','nativeStartedAtUpperBound','instanceEvidenceKind'].includes(key)) ||
+      'matchingProcessesDigest','matchingProcesses','captureDigest','instanceObservedAt','nativeStartedAtMs','nativeStartedAtUpperBound','instanceEvidenceKind','kernelBootMs','bootIdSha256','historicalEndedAt'].includes(key)) ||
       !Array.isArray(value.matchingProcesses) || value.matchingProcesses.length || value.matchingProcessesDigest !== digest([]) ||
       captureDigest !== digest(observation) || value.protocol !== 'cab-port-boundary-v1' ||
       value.instanceObservedAt !== expected.instanceObservedAt || value.instanceEvidenceKind !== expected.instanceEvidenceKind ||
@@ -160,6 +172,15 @@ export function parsePortCapture(part, expected) {
       !hash(value.cgroupDigest) || !hash(value.netnsDigest) || !/^\d+$/.test(value.nativeStartTime || '') ||
       !Number.isFinite(value.observedAt) || !Number.isSafeInteger(value.nativeUid) || value.nativeUid < 0)
     fail('port-recovery-current-boundary-unverified');
+  if (expected.instanceEvidenceKind === 'kernel-reboot-after-call' &&
+      (value.kernelBootMs !== expected.kernelBootMs || value.bootIdSha256 !== expected.bootIdSha256 ||
+       value.historicalEndedAt !== expected.historicalEndedAt || !hash(value.bootIdSha256) ||
+       !Number.isSafeInteger(value.kernelBootMs) || value.kernelBootMs <= value.historicalEndedAt ||
+       value.instanceObservedAt < value.kernelBootMs || value.nativeStartedAtMs < value.kernelBootMs))
+    fail('port-recovery-reboot-unverified');
+  if (expected.instanceEvidenceKind !== 'kernel-reboot-after-call' &&
+      ['kernelBootMs','bootIdSha256','historicalEndedAt'].some(key => Object.hasOwn(value,key)))
+    fail('port-recovery-reboot-unexpected');
   return value;
 }
 

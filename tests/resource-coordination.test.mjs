@@ -1327,3 +1327,39 @@ test('report target accepts an identified existing variant and refuses business 
     assert.throws(()=>h.r.reportTarget(run,target),/report-target-invalid/);
   }
 });
+
+for(const variant of ['valid','native','future-version','identity','foreign-directory','foreign-session','context'])test('retraite historique seule : '+variant,async t=>{
+ const h=await fixture(t),run=h.reserve('history',[file('history')]);
+ const approval={coordination_protocol:COORDINATION_PROTOCOL,run_id:run.runId,change_id:run.changeId,directory:run.directory,
+  reservation_version:run.version,session_id:run.sessionId,requestId:'history-request',approval_id:'history-approval',
+  operation_id:'history-op',operation_digest:fingerprint('history'),expected_revisions:h.r.revisions(run.resources),resources:run.resources,files:['history'],commands:[]};
+ h.r.prepareOperation(run.runId,approval);const op=h.r.resourceState.operations[approval.operation_id];
+ h.r.claimRequest(run.runId,approval.requestId,fingerprint('history-owner'),false);
+ h.r.recordDecision(run.runId,op.operationId,{status:'rejected',requestId:op.requestId,approvalId:approval.approval_id,changeId:run.changeId,
+   operationId:op.operationId,operationDigest:op.operationDigest,identityDigest:op.identityDigest,runId:run.runId,version:run.version,sessionId:run.sessionId});
+ h.r.extend(run.runId,{version:run.version,resources:[file('history-extra')]});
+ assert.throws(()=>h.r.operationCandidate(run.runId,approval,{checkCurrentRevisions:false}),/reservation-version-stale/);
+ if(variant==='native')op.native={callId:'unexpected'};
+ if(variant==='future-version')approval.reservation_version=h.r.runs.get(run.runId).version+1;
+ if(variant==='identity')approval.operation_digest=fingerprint('other');
+ if(variant==='foreign-directory')approval.directory='/other';
+ if(variant==='foreign-session')approval.session_id='ses_foreign';
+ if(variant==='context')op.contextId++;
+ const before=JSON.stringify(h.r.resourceState);
+ if(variant!=='valid'){
+  assert.throws(()=>h.r.operationCandidate(run.runId,approval,{checkCurrentRevisions:false,retirementOnly:true}));
+  assert.equal(JSON.stringify(h.r.resourceState),before);return;
+ }
+ assert.deepEqual(h.r.operationCandidate(run.runId,approval,{checkCurrentRevisions:false,retirementOnly:true}),op);
+ assert.equal(JSON.stringify(h.r.resourceState),before);
+ const oldVersion=op.version,decision=structuredClone(op.decision);
+ assert.equal(h.r.recordNativeCancelledValidation(run.runId,op.operationId,fingerprint('history-proof'),{allowRejected:true}).state,'CANCELLED');
+ assert.equal(op.version,oldVersion);assert.deepEqual(op.decision,decision);assert.equal(op.native,undefined);
+});
+
+test('préparation de sonde : capture unique du permis même à sa frontière d’expiration',async t=>{
+ const h=await fixture(t),run=h.reserve('probe-permit',[{key:'port:host/5173',mode:'read'}]);let reads=0;
+ h.r.quarantineProbeCandidate=()=>++reads===1?'quarantined-target':null;
+ const op=h.prepare(run,'single-probe-permit');assert.equal(reads,1);
+ assert.equal(h.r.resourceState.operations[op.operationId].quarantineProbeFor,'quarantined-target');
+});

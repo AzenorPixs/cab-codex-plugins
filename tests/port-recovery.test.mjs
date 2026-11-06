@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,mkdirSync,rmSync,readFileSync} from 'node:fs';
 import {join} from 'node:path';
+import {createHash} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import {spawn,execFile} from 'node:child_process';
 import {once} from 'node:events';
@@ -63,4 +64,19 @@ for(const variant of ['listener','process','incomplete','extra-field','nonce','c
  const part={type:'tool',tool:'bash',nativeFormat:'opencode-v2',state:{status:'completed',metadata:{exit:0},input:{command:portProbeCommand(expected)},
   output:'CAB_PORT_BOUNDARY_V1:'+Buffer.from(JSON.stringify(value)).toString('base64')}};
  if(variant==='command')part.state.input.command+='; extra-effect';assert.throws(()=>parsePortCapture(part,expected));
+});
+
+test('sonde : reboot qualifié recapturé nativement et strictement lié au timeout',async t=>{
+ const h=await fixture(t),boot=Number(readFileSync('/proc/stat','utf8').match(/^btime (\d+)$/m)[1])*1000;
+ const bootIdSha256=createHash('sha256').update(readFileSync('/proc/sys/kernel/random/boot_id','utf8').trim()).digest('hex');
+ const input={...h.input,instanceEvidenceKind:'kernel-reboot-after-call',instanceObservedAt:Date.now(),
+   kernelBootMs:boot,bootIdSha256,historicalEndedAt:boot-2000};
+ const capture=await observePortBoundary(input);assert.equal(capture.complete,true,JSON.stringify(capture));
+ assert.equal(capture.quiescent,true);assert.equal(capture.kernelBootMs,boot);
+ const output=await execute('/bin/sh',['-c',portProbeCommand(input)],{cwd:h.root});
+ const part={type:'tool',tool:'bash',nativeFormat:'opencode-v2',state:{status:'completed',metadata:{exit:0},input:{command:portProbeCommand(input),workdir:h.workspace},output:output.stdout}};
+ assert.equal(parsePortCapture(part,input).bootIdSha256,bootIdSha256);
+ for(const wrong of [{kernelBootMs:boot+1000},{bootIdSha256:'0'.repeat(64)},{historicalEndedAt:boot},{instanceObservedAt:boot-1}]){
+  const bad=await observePortBoundary({...input,...wrong});assert.equal(bad.complete,false);assert.equal(bad.quiescent,false);
+ }
 });
