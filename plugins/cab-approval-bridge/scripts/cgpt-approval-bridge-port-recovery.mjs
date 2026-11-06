@@ -1,7 +1,7 @@
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 import { commandDigest } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.3.3';
+export const VERSION = '2.3.4';
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(value);
@@ -65,6 +65,51 @@ export async function observePortBoundary(input) {
       directories.push(directory);
     }
     const excluded = new Set([process.pid, input.nativePid]);
+    // Only metadata is read. Every identity used to exclude infrastructure is sealed again below.
+    const identities = new Map();
+    const identity = async pid => {
+      const base = '/proc/' + pid, stat = await fs.readFile(base + '/stat','utf8');
+      const fields = stat.slice(stat.lastIndexOf(')')+2).trim().split(/\s+/);
+      return { pid, startTime: fields[19], ppid: Number(fields[1]), uid:(await fs.stat(base)).uid,
+        cgroup:await fs.readFile(base+'/cgroup','utf8'), netns:await fs.readlink(base+'/ns/net') };
+    };
+    const nativeIdentity = await identity(input.nativePid);
+    identities.set(input.nativePid,nativeIdentity);
+    const sameBoundary = value => value.uid === nativeStat.uid && value.cgroup === cgroup && value.netns === netns;
+    const infrastructure = [];
+    let parentPid = nativeIdentity.ppid;
+    const nativeAncestors = new Set();
+    for (let depth=0; parentPid>1 && depth<100; depth++) {
+      if (nativeAncestors.has(parentPid)) stop('port-probe-infrastructure-cycle');
+      if ((await fs.stat('/proc/'+parentPid)).uid!==nativeStat.uid) break;
+      const value = await identity(parentPid);
+      if (!sameBoundary(value)) break;
+      nativeAncestors.add(parentPid); identities.set(parentPid,value); excluded.add(parentPid);
+      infrastructure.push({pid:parentPid,startTime:value.startTime,ppid:value.ppid,reason:'native-ancestor'});
+      parentPid=value.ppid;
+    }
+    if (nativeAncestors.size===100) stop('port-probe-infrastructure-limit');
+    const exe = async pid => { const stat=await fs.stat('/proc/'+pid+'/exe'); return stat.dev+':'+stat.ino; };
+    const terminal = async (pid,fd) => { const stat=await fs.stat('/proc/'+pid+'/fd/'+fd);
+      return stat.isCharacterDevice() ? stat.rdev+':'+stat.ino : null; };
+    const sockets = async pid => {
+      const values=new Set();
+      const descriptors=await fs.readdir('/proc/'+pid+'/fd');
+      if(descriptors.length>4096)stop('port-probe-descriptor-limit');
+      for (const fd of descriptors) {
+        try { const link=await fs.readlink('/proc/'+pid+'/fd/'+fd); const match=/^socket:\[(\d+)\]$/.exec(link);
+          if(match)values.add(match[1]); }
+        catch(cause) { if(!['ENOENT','ESRCH'].includes(cause.code))throw cause; }
+      }
+      return values;
+    };
+    const tcpRows=[];
+    const peerSeals = new Map();
+    const peerConnections = new Map();
+    const sealPeer = async pid => ({exe:await exe(pid),serverExe:await exe(input.nativePid),
+      tty:await Promise.all([terminal(input.nativePid,2),terminal(nativeIdentity.ppid,2),
+        ...[0,1,2].map(fd=>terminal(pid,fd))]),
+      serverSockets:[...await sockets(input.nativePid)].sort(),peerSockets:[...await sockets(pid)].sort()});
     if (!Array.isArray(input.excludedInfrastructure || []) || (input.excludedInfrastructure || []).length > 10)
       stop('port-probe-infrastructure-invalid');
     for (const item of input.excludedInfrastructure || []) {
@@ -86,6 +131,10 @@ export async function observePortBoundary(input) {
     let listening = false;
     for (const name of ['tcp', 'tcp6']) {
       const table = await fs.readFile(nativePath + '/net/' + name, 'utf8');
+      for (const line of table.trim().split('\n').slice(1)) {
+        const columns=line.trim().split(/\s+/);
+        tcpRows.push({local:columns[1],remote:columns[2],state:columns[3],inode:columns[9]});
+      }
       if (table.trim().split('\n').slice(1).some(line => {
         const columns = line.trim().split(/\s+/); return columns[3] === '0A' && parseInt(columns[1]?.split(':').at(-1), 16) === input.port;
       })) listening = true;
@@ -93,6 +142,13 @@ export async function observePortBoundary(input) {
     const names = (await fs.readdir('/proc')).filter(value => /^\d+$/.test(value));
     if (names.length > 20000) stop('port-probe-process-limit');
     const candidates = [];
+    const apiPort = input.nativeApiPort;
+    if (apiPort!==undefined && (!Number.isInteger(apiPort) || apiPort<1 || apiPort>65535)) stop('port-probe-api-port-invalid');
+    const loopback = address => /^(0100007F|00000000000000000000000001000000):[A-Fa-f0-9]{4}$/.test(address || '');
+    const serverSockets = apiPort ? await sockets(input.nativePid) : new Set();
+    const serverListening = tcpRows.some(row => row.state==='0A' && serverSockets.has(row.inode) &&
+      (loopback(row.local) || /^(00000000|00000000000000000000000000000000):/.test(row.local)) &&
+      parseInt(row.local.split(':').at(-1),16)===apiPort);
     for (const name of names) {
       if (excluded.has(Number(name))) continue;
       const entry = '/proc/' + name;
@@ -101,17 +157,59 @@ export async function observePortBoundary(input) {
         const stat = await fs.readFile(entry + '/stat', 'utf8');
         if (stat.slice(stat.lastIndexOf(')') + 2).startsWith('Z ')) continue;
         const cwd = await fs.readlink(entry + '/cwd');
-        if (directories.some(directory => cwd === directory || cwd.startsWith(directory + path.sep)))
-          candidates.push({ pid: Number(name), startTime: statStart(stat) });
+        if (!directories.some(directory => cwd === directory || cwd.startsWith(directory + path.sep))) continue;
+        const value=await identity(Number(name));
+        if (value.startTime!==statStart(stat)) stop('port-probe-process-identity-changed');
+        let peer=false;
+        if (serverListening && sameBoundary(value) && value.ppid===nativeIdentity.ppid &&
+            BigInt(value.startTime)>BigInt(startTime) && nativeAncestors.has(value.ppid)) {
+          try {
+            const seal=await sealPeer(value.pid),tty=seal.tty[0];
+            if (tty && seal.exe===seal.serverExe && seal.tty.every(item=>item===tty)) {
+              const peerSockets=new Set(seal.peerSockets);
+              const pair=tcpRows.find(client=>client.state==='01' && peerSockets.has(client.inode) &&
+                loopback(client.local) && loopback(client.remote) && parseInt(client.remote.split(':').at(-1),16)===apiPort &&
+                tcpRows.some(server=>server.state==='01' && seal.serverSockets.includes(server.inode) &&
+                  server.local===client.remote && server.remote===client.local));
+              peer=Boolean(pair);
+              if(peer){peerSeals.set(value.pid,seal);peerConnections.set(value.pid,pair);}
+            }
+          } catch(cause) { if(!['ENOENT','ESRCH','EACCES','EPERM'].includes(cause.code)) throw cause; }
+        }
+        if (peer) {
+          if(infrastructure.length>=200)stop('port-probe-infrastructure-limit');
+          excluded.add(value.pid);identities.set(value.pid,value);
+          infrastructure.push({pid:value.pid,startTime:value.startTime,ppid:value.ppid,reason:'native-interactive-peer'});
+        } else {
+          const comm=(await fs.readFile(entry+'/comm','utf8')).trim();
+          candidates.push({pid:value.pid,startTime:value.startTime,ppid:value.ppid,
+            comm:/^[A-Za-z0-9_.-]{1,32}$/.test(comm)?comm:'unclassified',cwdRelative:path.relative(workspace,cwd)||'.'});
+        }
       } catch (cause) {
         if (!['ENOENT', 'ESRCH'].includes(cause.code)) stop('port-probe-process-coverage-incomplete');
+      }
+    }
+    for (const [pid,value] of identities) if (canonical(value)!==canonical(await identity(pid)))
+      stop('port-probe-infrastructure-identity-changed');
+    for (const [pid,seal] of peerSeals) if (canonical(seal)!==canonical(await sealPeer(pid)))
+      stop('port-probe-infrastructure-identity-changed');
+    if(peerConnections.size){
+      const rows=[];
+      for(const name of ['tcp','tcp6'])for(const line of (await fs.readFile(nativePath+'/net/'+name,'utf8')).trim().split('\n').slice(1)){
+        const c=line.trim().split(/\s+/);rows.push({local:c[1],remote:c[2],state:c[3],inode:c[9]});
+      }
+      for(const [pid,pair] of peerConnections){
+        const seal=peerSeals.get(pid);
+        if(!rows.some(row=>canonical(row)===canonical(pair)) || !rows.some(row=>row.state==='01' &&
+            seal.serverSockets.includes(row.inode) && row.local===pair.remote && row.remote===pair.local))
+          stop('port-probe-infrastructure-connection-changed');
       }
     }
     if (startTime !== statStart(await fs.readFile(nativePath + '/stat', 'utf8')) ||
         cgroup !== await fs.readFile(nativePath + '/cgroup', 'utf8') || netns !== await fs.readlink(nativePath + '/ns/net'))
       stop('port-probe-native-identity-changed');
     Object.assign(result, { ...reboot, nativeStartedAtMs, nativeStartedAtUpperBound, nativeUid: nativeStat.uid, nativeStartTime: startTime, cgroupDigest: sha(cgroup),
-      netnsDigest: sha(netns), listening, matchingProcessCount: candidates.length,
+      netnsDigest: sha(netns), infrastructure, listening, matchingProcessCount: candidates.length,
       matchingProcessesDigest: sha(candidates.sort((a,b) => a.pid-b.pid)), matchingProcesses: candidates.slice(0,100), complete: true, quiescent: !listening && !candidates.length });
   } catch (cause) {
     result.error = /^port-probe-[a-z-]+$/.test(cause.code || '') ? cause.code : 'port-probe-observation-unavailable';
@@ -126,7 +224,7 @@ export function portProbeCommand(input) {
       !Array.isArray(input.runtimeDirectories) || !input.runtimeDirectories.length || input.runtimeDirectories.length > 10 ||
       input.runtimeDirectories.some(value => !relativeDirectory(value)) || typeof input.workspace !== 'string')
     fail('port-probe-input-invalid');
-  const code = 'const observe=' + observePortBoundary.toString() + ';const result=await observe(' + JSON.stringify(input) +
+  const code = 'const observe=' + observePortBoundary.toString().split('\n').map(line=>line.trim()).join('\n') + ';const result=await observe(' + JSON.stringify(input) +
     ');process.stdout.write("CAB_PORT_BOUNDARY_V1:"+Buffer.from(JSON.stringify(result)).toString("base64")+"\\n");if(!result.complete||!result.quiescent)process.exitCode=2;';
   return '/usr/bin/node --input-type=module --eval ' + shellQuote(code);
 }
@@ -160,7 +258,11 @@ export function parsePortCapture(part, expected) {
   const { captureDigest, ...observation } = value;
   if (Object.keys(value).some(key => !['protocol','nonce','nativePid','port','runtimeDirectories','workspace','observedAt','complete',
       'quiescent','nativeUid','nativeStartTime','cgroupDigest','netnsDigest','listening','matchingProcessCount',
-      'matchingProcessesDigest','matchingProcesses','captureDigest','instanceObservedAt','nativeStartedAtMs','nativeStartedAtUpperBound','instanceEvidenceKind','kernelBootMs','bootIdSha256','historicalEndedAt'].includes(key)) ||
+      'infrastructure','matchingProcessesDigest','matchingProcesses','captureDigest','instanceObservedAt','nativeStartedAtMs','nativeStartedAtUpperBound','instanceEvidenceKind','kernelBootMs','bootIdSha256','historicalEndedAt'].includes(key)) ||
+      value.infrastructure !== undefined && (!Array.isArray(value.infrastructure) || value.infrastructure.length>200 ||
+        value.infrastructure.some(item=>!item || Object.keys(item).some(key=>!['pid','startTime','ppid','reason'].includes(key)) ||
+          !Number.isSafeInteger(item.pid) || item.pid<1 || !Number.isSafeInteger(item.ppid) || item.ppid<1 ||
+          !/^\d+$/.test(item.startTime||'') || !['native-ancestor','native-interactive-peer'].includes(item.reason))) ||
       !Array.isArray(value.matchingProcesses) || value.matchingProcesses.length || value.matchingProcessesDigest !== digest([]) ||
       captureDigest !== digest(observation) || value.protocol !== 'cab-port-boundary-v1' ||
       value.instanceObservedAt !== expected.instanceObservedAt || value.instanceEvidenceKind !== expected.instanceEvidenceKind ||

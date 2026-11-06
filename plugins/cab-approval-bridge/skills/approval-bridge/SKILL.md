@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.3.3. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.3.4. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -22,13 +22,13 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 |---|---|
 | Entrée/reprise | [monitor-service](references/monitor-service.md) d'abord, puis [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md) ; [PLLM](references/protocol-model.md) au seul démarrage initial |
 | Mandat et compte rendu | [session](references/protocol-session.md), [soumission](references/validation-submission.md), [concurrence](references/concurrent-runs.md), [cycle](references/run-lifecycle.md) |
-| Incident/reprise | [autonomie](references/owner-reconciliation.md), [grille](references/pilot-state-matrix.md) [triage](references/owner-diagnostics.md), [historique](references/historical-owner-boundaries.md) |
+| Incident/reprise | [autonomie](references/owner-reconciliation.md), [grille](references/pilot-state-matrix.md) [triage](references/owner-diagnostics.md), [historique/infra](references/historical-owner-boundaries.md) |
 | Retrait | [HELD](references/approved-held-retirement.md), [sans accès](references/approved-shell-retirement.md), [shell/edit/write](references/approved-attached-shell-retirement.md), [NOT_ADMITTED](references/not-admitted-retirement.md) |
 | Changer le SID dans le même RUN | [session-handoff](references/session-handoff.md), après triage ; conserver les effets historiques |
 | Ressource ou incident natif | [récupération](references/protocol-recovery.md), [politique](references/recovery-policy.md), [accord ASK permanent](references/native-permission-grants.md), [incidents](references/coding-incidents.md) selon le diagnostic |
 | Outils natifs, lecture ou arguments | [adaptations natives](references/technical-native.md) et la référence spécialisée indiquée |
 | Transport coupé ou réponse perdue | [continuité](references/transport-continuity.md) et [politique de récupération](references/recovery-policy.md) |
-| Attente, contexte ou statistiques | [cadences](references/protocol-cadences.md), [compaction](references/protocol-compaction.md) seulement si nécessaire, [statistiques](references/protocol-lifecycle.md) à l'archivage/clôture |
+| Attente, contexte ou statistiques | [cadences](references/protocol-cadences.md), [compaction](references/protocol-compaction.md) si nécessaire, [statistiques](references/protocol-lifecycle.md) à l'archivage/clôture |
 | Mise à jour demandée | [component-update](references/component-update.md), [MCP](references/mcp-pending-recovery.md) ; script `scripts/cgpt-approval-bridge-update.mjs` du plugin |
 | Clôture | [gate](references/protocol-closure.md), [OC](references/protocol-lifecycle.md), [purge CAB](references/change-erasure.md) |
 

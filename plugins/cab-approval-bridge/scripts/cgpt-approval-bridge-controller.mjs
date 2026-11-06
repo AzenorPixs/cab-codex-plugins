@@ -29,7 +29,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.3.3";
+const version = "2.3.4";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -1667,7 +1667,7 @@ async function reconcilePortFromProbes(run, payload, actionId) {
         probe.nativeResult?.status !== 'completed' || probe.nativeResult.exit !== 0 ||
         probeAccess?.state !== 'RELEASED' || probe.resources.length !== 1 || probe.resources[0].key !== resourceKey ||
         probe.resources[0].mode !== 'read') throw new CoordinationError('port-recovery-probe-operation-unverified');
-    const expected = { workspace: run.directory, nativePid: first.view.nativePid, port,
+    const expected = { workspace: run.directory, nativePid: first.view.nativePid, nativeApiPort: Number(new URL(envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096').port || 80), port,
       runtimeDirectories: payload.review.runtimeDirectories, nonce: probe.operationId, resourceKey, excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: instance.observedAt,
       instanceStartTime: instance.startTime, instanceEvidenceKind: instance.kind,
       ...(instance.kind==='kernel-reboot-after-call'?{kernelBootMs:instance.kernelBootMs,bootIdSha256:instance.bootIdSha256,historicalEndedAt:instance.historicalEndedAt}:{}) };
@@ -2518,7 +2518,7 @@ async function handleRequest(request, response) {
         const { op, port, resourceKey } = portRecoveryCandidate(run, url.searchParams.get('operationId'));
         const evidence = await collectRecoveryEvidence(run, op);
         if (!evidence.view.nativeInstanceEvidence) throw new CoordinationError('port-recovery-native-instance-unverified');
-        const input = { workspace: run.directory, nativePid: evidence.view.nativePid, port,
+        const input = { workspace: run.directory, nativePid: evidence.view.nativePid, nativeApiPort: Number(new URL(envValue('OC_Codex_OPENCODE_URL') || 'http://127.0.0.1:4096').port || 80), port,
           runtimeDirectories: url.searchParams.getAll('runtimeDirectory'), nonce: url.searchParams.get('nonce'), resourceKey,
           excludedInfrastructure: await portProbeInfrastructure(), instanceObservedAt: evidence.view.nativeInstanceEvidence.observedAt,
           instanceStartTime: evidence.view.nativeInstanceEvidence.startTime, instanceEvidenceKind: evidence.view.nativeInstanceEvidence.kind,
