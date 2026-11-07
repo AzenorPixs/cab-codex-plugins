@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.2
+version: 2.4.3
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas

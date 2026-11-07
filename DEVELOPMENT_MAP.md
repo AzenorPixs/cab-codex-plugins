@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Enveloppe d’effacement SCM2.4.3
+
+[separate-erasure-authority-and-candidates](openspec/changes/archive/2026-11-07-separate-erasure-authority-and-candidates/), code non attribué : source qualifiée,84tests. Autorisation immuable/portée effective attestée, candidats privés référencés et compaction avant redémarrage. Prévol C12 réel47candidats/166Mo, reçu estimé15,6Mo ; publication, CABU et PURGED distincts.
+
+
 ## Codecs historiques SCM2.4.2
 
 [cover-legacy-erasure-identity-lists](openspec/changes/archive/2026-11-07-cover-legacy-erasure-identity-lists/), code non attribué : source qualifiée,81tests ciblés et inventaire réel47candidats. Listes typées et récupération STOPPING avant projection ; publication, CABU et PURGED distincts.

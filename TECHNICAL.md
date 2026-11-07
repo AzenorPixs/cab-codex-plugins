@@ -1,5 +1,11 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Complément2.4.3 : candidats après projection sous le répertoire privé de mise
+à jour, fichiers600/dossiers700, SHA-256/tailles référencés dans le reçu HMAC.
+Les anciennes écritures échouent sur l’empreinte avant incompatible. Après
+application/absence, le reçu est compacté avant redémarrage et les candidats
+sont retirés. Scope effectif et scope d’autorisation restent distincts.
+
 Complément2.4.2 : onceAcknowledged/restoredAccesses sont des listes typées
 lorsqu’elles sont des tableaux ; les booléens et identifiants des pairs sont
 conservés. recover-preparation exige STOPPING sans entries/expectedPeers,
