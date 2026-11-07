@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 import stat
 
-VERSION = "2.4.10"
+VERSION = "2.4.11"
 
 
 def main():

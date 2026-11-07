@@ -1269,3 +1269,7 @@ vérifié, la clôture sûre et le nettoyage des sessions natives. Les données 
 change sont supprimées, celles des pairs et les preuves métier sont conservées ;
 la session métier de reprise prévue reste protégée en cas de dépendance.
 Sans état CAB utilisé, le nettoyage est déclaré non applicable.
+
+## Documentation de présentation
+
+Le README décrit le projet et son utilisation courante, sans journal de versions ni accumulation de correctifs. L’historique des versions relève exclusivement du CHANGELOG ; les procédures détaillées sont distribuées dans les références du protocole.
