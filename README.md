@@ -1,5 +1,9 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+Complément2.4.2 : nettoyage des listes historiques de migration/transfert et
+reprise d’une préparation interrompue avec les mêmes scope et transaction,
+sans écraser les progrès des autres sessions.
+
 Correctif2.4.1 : reprise des reçus propriétaires volumineux sans nouvelle
 transaction ni rejeu des fichiers appliqués, avec vérification d’absence
 accélérée et forme JSON littérale des appels d’atelier explicitée. Le lanceur
