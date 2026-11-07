@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.4.4"
+SERVER_VERSION = "2.4.5"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -8651,6 +8651,12 @@ def owner_erasure_worker(command, action, bundle=None, owner_receipt=None):
     return json.loads(result.stdout)
 
 
+def erasure_owns_item(item,scope):
+    return (item.get('run_id') in scope['runIds'] or item.get('change_id')==scope['changeId'] or
+            scope.get('closureAuthority')=='authoritative-retired-run-batch-v1' and
+            item.get('change_id') in scope.get('changeIds',[]) and item.get('change_id') not in scope.get('sharedIdentityIds',[]))
+
+
 def owner_terminal_erasure(command):
     global ERASURE_PREPARED
     if command.get("brokerPid") != os.getpid() or command.get("transport") != "owner-local-v1":
@@ -8665,7 +8671,7 @@ def owner_terminal_erasure(command):
         with locked_store(store_path()):
             items=list(load_store(store_path())["approvals"].values())
             if any(item.get("directory") not in (None,"",command["scope"]["workspace"]) for item in items
-                   if item.get("change_id")==command["scope"]["changeId"] or item.get("run_id") in command["scope"]["runIds"]):
+                   if erasure_owns_item(item,command["scope"])):
                 raise ValidationError("erasure-broker-ownership-ambiguous")
         with journal.locked_journal(journal.journal_path()):
             erasure_journal_snapshot_unlocked(journal.journal_path())
@@ -8685,6 +8691,8 @@ def owner_terminal_erasure(command):
         raise ValidationError("erasure-owner-action-invalid")
     result["instanceId"]=INSTANCE_ID
     owner_erasure_exchange(command,result)
+    if action=='finalize':
+        with ERASURE_LOCK:ERASURE_PREPARED=None
     return result
 
 
@@ -8721,11 +8729,10 @@ def prepare_terminal_erasure(signed):
     with locked_store(store_path()):
         items = list(load_store(store_path())["approvals"].values())
         if any(item.get("directory") != scope.get("workspace") for item in items
-               if item.get("change_id") == scope.get("changeId") or item.get("run_id") in scope["runIds"]):
+               if erasure_owns_item(item,scope)):
             raise ValidationError("erasure-broker-ownership-ambiguous")
         if any(item.get("status") not in TERMINAL_STATES for item in items
-               if item.get("change_id") == scope.get("changeId")
-               or item.get("run_id") in scope["runIds"]):
+               if erasure_owns_item(item,scope)):
             raise ValidationError("erasure-broker-pending")
     with ERASURE_LOCK:
         if ERASURE_PREPARED and ERASURE_PREPARED != signed:
@@ -8806,9 +8813,10 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
     with locked_store(store_path()):
         data = load_store(store_path())
         for item in data["approvals"].values():
-            if item.get("change_id") == scope["changeId"] or item.get("run_id") in scope["runIds"]:
+            if erasure_owns_item(item,scope):
                 ids.update(v for k, v in item.items() if k in identity_keys and isinstance(v, str) and v)
                 ids.update(item_request_ids(item))
+    ids.difference_update(scope.get('sharedIdentityIds',[]))
     scope["ids"] = sorted(ids)
     path = journal.journal_path()
     with journal.locked_journal(path):
@@ -8837,7 +8845,7 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
 
         for event in events:
             if owns_event(event):
-                if event.get("change_id") and event["change_id"] != scope["changeId"]:
+                if event.get("change_id") and event["change_id"] not in scope.get('changeIds',[scope["changeId"]]):
                     raise ValidationError("erasure-journal-foreign-reference")
                 if foreign_reference(event):
                     raise ValidationError("erasure-journal-foreign-reference")

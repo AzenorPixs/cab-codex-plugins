@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { join, resolve,dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {randomUUID} from 'node:crypto';
-import { ErasureTransaction, erasureFilePlan, projectErasure, erasureReferences, removeErasureDirectories,readErasureBytes,erasureScope } from './cgpt-approval-bridge-change-erasure.mjs';
+import { ErasureTransaction, erasureFilePlan, projectErasure, erasureReferences, removeErasureDirectories,readErasureBytes,erasureScope,retiredRunScope,retiredJobDigest } from './cgpt-approval-bridge-change-erasure.mjs';
 import { runtimeStateDirectory,legacyStateDirectory, readRuntimeJson, ensurePrivateStateDirectory } from './cgpt-approval-bridge-state-layout.mjs';
 import { authority } from './cgpt-approval-bridge-update.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
@@ -14,7 +14,7 @@ import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bri
 import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 
-export const VERSION='2.4.4';
+export const VERSION='2.4.5';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const exec=promisify(execFile);
 const unit=name=>'cgpt-approval-bridge-'+name+'.service';
@@ -33,7 +33,7 @@ export async function cleanupChange(input, dependencies={}) {
 async function executeCleanup(input,dependencies) {
   if(!['preview','prepare','seal','status','execute','finalize','verify','recover-preparation'].includes(input.action))fail('erasure-action-invalid');
   const runtimeVersion=input.runtimeVersion??VERSION;
-  if(runtimeVersion!==VERSION&&(!['2.4.1','2.4.2','2.4.3','2.4.4'].includes(VERSION)||runtimeVersion!=='2.4.0'||!['execute','finalize','verify','recover-preparation'].includes(input.action)))fail('erasure-runtime-compatibility-refused');
+  if(runtimeVersion!==VERSION&&(!['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5'].includes(VERSION)||runtimeVersion!=='2.4.0'||!['execute','finalize','verify','recover-preparation'].includes(input.action)))fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
   const statisticalCleanup=dependencies.statisticsCleanup||{purge:purgeStatistics,verify:verifyStatisticsAbsence};
@@ -164,7 +164,9 @@ async function executeCleanup(input,dependencies) {
     if(value.phase!=='STOPPING'||value.entries?.length||value.expectedPeers)fail('erasure-preparation-recovery-refused');
     await checkNative();
     const snapshot=readRuntimeJson(join(root,'controller-runs.json')).value;
-    const current=erasureScope(snapshot,value.scope.changeId,value.scope.ownerId,{closedAuthority:true,...(value.scope.ownershipReview?{ownershipReview:value.scope.ownershipReview}:{})});
+    const current=value.scope.closureAuthority==='authoritative-retired-run-batch-v1'?retiredRunScope(snapshot,{...value.scope,evidence:value.evidence}):
+      erasureScope(snapshot,value.scope.changeId,value.scope.ownerId,{closedAuthority:true,...(value.scope.ownershipReview?{ownershipReview:value.scope.ownershipReview}:{})});
+    if(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'&&retiredJobDigest(root,value.scope.runIds)!==value.scope.jobContextDigest)fail('erasure-retired-jobs-changed');
     if(canonicalContinuityDigest(current.runIds)!==canonicalContinuityDigest(value.scope.runIds)||
       value.scope.runBindings&&canonicalContinuityDigest(current.runBindings)!==canonicalContinuityDigest(value.scope.runBindings))fail('erasure-preparation-bindings-changed');
     await start();await checkNative();
@@ -198,8 +200,24 @@ async function executeCleanup(input,dependencies) {
   if(value.phase==='FREEZING') {
     if(!value.retainedArchive) {
       const archive=new ArchiveContent(archiveDirectory(workspace,{stateRoot:dirname(value.roots[1])}),workspace);
-      const retained=archive.retain(value.scope,{reportPaths:changeReports(workspace,value.scope.changeId,value.branch),closed:true,branch:value.branch});
-      value={...value,retainedArchive:{archiveId:retained.archiveId,fingerprint:retained.fingerprint}};tx.save(value);
+      if(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'){
+        const retained=[];
+        for(const changeId of value.scope.changeIds){
+          if(value.scope.sharedIdentityIds.includes(changeId))continue;
+          let paths,branch='TERMINÉ';
+          try{paths=changeReports(workspace,changeId,branch)}catch(error){
+            if(error.code!=='archive-statistics-required'&&error.code!=='ENOENT')throw error;
+            branch='BLOQUÉ';try{paths=changeReports(workspace,changeId,branch)}catch(error){if(error.code!=='archive-statistics-required'&&error.code!=='ENOENT')throw error;continue}
+          }
+          const runIds=[...new Set(value.scope.runBindings.filter(row=>row.changeId===changeId).map(row=>row.runId))].sort();
+          const record=archive.retain({...value.scope,changeId,runIds},{reportPaths:paths,closed:true,branch});
+          retained.push({changeId,archiveId:record.archiveId,fingerprint:record.fingerprint});
+        }
+        value={...value,retainedArchive:{mode:'retired-runs-v1',reports:retained}};tx.save(value);
+      }else{
+        const retained=archive.retain(value.scope,{reportPaths:changeReports(workspace,value.scope.changeId,value.branch),closed:true,branch:value.branch});
+        value={...value,retainedArchive:{archiveId:retained.archiveId,fingerprint:retained.fingerprint}};tx.save(value);
+      }
     }
     if(!value.cutoverStartedAt){value={...value,cutoverStartedAt:Date.now()};tx.save(value)}
     await http(controller,'/transport/prepare',{transactionId:value.transportTransactionId});
@@ -260,7 +278,9 @@ async function executeCleanup(input,dependencies) {
     if(!dependencies.offlineLocks.length)await takeOfflineLocks();
     if(dependencies.beforeApply)await dependencies.beforeApply(value);
     await checkNative();tx.applyFiles(value);removeErasureDirectories(value.roots,value.scope);
-    for(const runId of value.scope.runIds)cleanTestArea(workspace,value.scope.changeId,runId,{closed:true,reportsDurable:true});
+    if(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'){
+      const seen=new Set();for(const row of value.scope.runBindings){const key=row.runId+'\0'+row.changeId;if(seen.has(key))continue;seen.add(key);cleanTestArea(workspace,row.changeId,row.runId,{closed:true,reportsDurable:true});}
+    }else for(const runId of value.scope.runIds)cleanTestArea(workspace,value.scope.changeId,runId,{closed:true,reportsDurable:true});
     if(!value.sgsReceipt) {
       const sgsReceipt=await statisticalCleanup.purge(workScope(value),value.branch,value.transactionId);
       value={...value,sgsReceipt};tx.save(value);

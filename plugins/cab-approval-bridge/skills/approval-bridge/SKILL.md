@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.4.4. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.4.5. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
@@ -32,7 +32,7 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 | Incident/reprise | [autonomie](references/owner-reconciliation.md), [grille](references/pilot-state-matrix.md) [triage](references/owner-diagnostics.md), [historique/infra](references/historical-owner-boundaries.md) |
 | Ressource ou incident natif | [récupération](references/protocol-recovery.md), [politique](references/recovery-policy.md), [accord ASK permanent](references/native-permission-grants.md), [incidents](references/coding-incidents.md) selon le diagnostic |
 | Mise à jour demandée | [component-update](references/component-update.md), [MCP](references/mcp-pending-recovery.md) ; script `scripts/cgpt-approval-bridge-update.mjs` du plugin |
-| Clôture | [gate](references/protocol-closure.md), [OC](references/protocol-lifecycle.md), [purge CAB](references/change-erasure.md) |
+| Clôture | [gate](references/protocol-closure.md), [OC](references/protocol-lifecycle.md), [purge CAB](references/change-erasure.md), [lots](references/retired-run-cleanup.md) |
 
 Les consultations `/CAB status`, `source` et `stats` suivent directement leur
 référence de commande sans charger ce skill ni initialiser de session. Les

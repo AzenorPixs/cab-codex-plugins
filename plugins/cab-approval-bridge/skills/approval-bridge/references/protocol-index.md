@@ -81,3 +81,5 @@ Remédiation COMPLETED avec livraisonfalse : [distinguer exécution et résultat
 Frontières anciennes, corrélation des mandats et port après reboot : [historical-owner-boundaries](historical-owner-boundaries.md).
 
 Ressources des ateliers : [devops-resources](devops-resources.md).
+
+Entretien de RUN fermés : [retired-run-cleanup](retired-run-cleanup.md).
