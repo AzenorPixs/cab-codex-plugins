@@ -1,9 +1,9 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.3
+version: 2.4.4
 ---
 
-Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
+Réponds en français. Commande canonique : `/CAB` ; `/cab` n'est pas
 pris en charge. Argument reçu : `$ARGUMENTS`. `/CABU` sans argument charge ce
 fichier frère de même version et lui délègue exactement `update` dans le même
 tour ; aucune logique de maintenance parallèle.
@@ -12,19 +12,10 @@ Pour les essais d’atelier, appliquer la référence autonomie : objet JSON
 littéral rendu localement, mêmes identités après refus prouvé sans lancement.
 Un helper d’atelier ne rend pas tout le processus OpenCode en lecture seule.
 
-La cible2.4.0 ajoute le mode direct explicite, SGS permanent, CCAB et les
-ateliers isolés. Charger autonomy-and-ateliers.md du skill CAB pour le contrat
-applicable après activation. Tout incident est qualifié avant nouvelle action ;
-un NOT_ADMITTED sans préparation locale ne requiert pas de retrait inventé.
-CCAB se consulte via son plugin/skill/commande ; aucune correction hors mandat
-n’est déduite d’une simple consultation.
-
-Cette commande globale ne modifie pas les sources métier, spécifications ou
-configuration du projet suivi. Le développeur accorde l'autorisation permanente
-des vérifications et du cycle de vie CAB demandés ; les permissions techniques
-de l'environnement et les mandats métier restent distincts. Un mandat SCM ou
-un changement de version ne vaut pas activation. Le profil spécial
-frozen-recovery-controller exige son accord de maintenance spécifique.
+Cette commande ne modifie pas les sources, spécifications ou configuration
+métier. Les vérifications et le cycle de vie CAB demandés sont autorisés ;
+mandats métier et permissions techniques restent distincts. SCM/version ne
+prouve pas activation. frozen-recovery-controller exige son accord spécifique.
 
 Résoudre le skill CAB installé et ses références de même version.
 Lire seulement la procédure de l'argument reçu ci-dessous. Une consultation ne
@@ -53,17 +44,13 @@ bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
 par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
 
-Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md` ;
-frontières anciennes : `references/historical-owner-boundaries.md`. Aucun effet implicite.
-
-Changement de SID : `references/session-handoff.md`, historique protégé.
-run/resume ne réalisent pas cette transition implicitement.
-
-Pour piloter ou reprendre une unité, lire `references/pilot-state-matrix.md`,
-puis la seule voie utile ; `references/validation-submission.md` distingue
-soumission, décision, acquisition et once. L’orchestrateur demande l’accès au
-contrôleur ; APPROVED ne signifie pas HELD. Aucun retrait, nouvel argument,
-rejeu ou élargissement de mandat n’est implicite.
-Voies ciblées : `references/native-permission-grants.md` (accord ASK permanent),
-`references/approved-attached-shell-retirement.md` (retrait shell/edit/write),
-`references/mcp-pending-recovery.md` (accord MCP permanent).
+Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md`.
+Frontières historiques : `references/historical-owner-boundaries.md`.
+Pour piloter/reprendre : `references/pilot-state-matrix.md` puis la seule voie
+utile ; `references/validation-submission.md` distingue décision, accès et once.
+APPROVED ne vaut pas HELD. Retrait, rejeu ou élargissement ne sont pas implicites.
+Changement de SID : `references/session-handoff.md`, sans effet implicite de run/resume.
+Accords permanents ASK/MCP : `references/native-permission-grants.md` et
+`references/mcp-pending-recovery.md`. Retraits : l’index du contrat.
+Atelier : `references/devops-resources.md`, outils DEVOPS.md RO et catalogue ;
+accès externes par CAB, sans secrets ni socket hôte.

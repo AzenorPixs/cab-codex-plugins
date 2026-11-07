@@ -14,10 +14,10 @@ import threading
 import time
 from datetime import datetime, timezone
 
-VERSION = "2.4.3"
+VERSION = "2.4.4"
 LOCK = threading.RLock()
 ACTIVE_PROCESSES={}
-SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$)")
+SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$|^(?:\.npmrc|\.pypirc|opencode\.password|\.netrc)$)")
 
 
 class AtelierError(ValueError):
@@ -38,6 +38,126 @@ def ensure_project(workspace):
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+
+
+def devops_resources(workspace):
+    """Inventaire déclaratif seulement : aucun shell, variable ou secret hôte."""
+    document=Path(workspace)/'DEVOPS.md'
+    result={'source':'DEVOPS.md','sha256':None,'state':'absent','resources':[],'mounts':[],'binPaths':[]}
+    try:
+        fd=os.open(document,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    except FileNotFoundError:return result
+    except OSError:
+        result['state']='unavailable';return result
+    try:
+        before=os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_size>1024*1024:raise AtelierError('atelier-devops-document-invalid')
+        data=os.read(fd,1024*1024+1);after=os.fstat(fd)
+        if len(data)!=before.st_size or (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise AtelierError('atelier-devops-document-changed')
+    finally:os.close(fd)
+    try:text=data.decode('utf-8')
+    except UnicodeDecodeError:raise AtelierError('atelier-devops-document-invalid') from None
+    result.update(state='observed',sha256=hashlib.sha256(data).hexdigest())
+    seen=set();mounts=set();bins=[];section=''
+    private={'.ssh','.gnupg','.codex','.config','.git','.cab-tests','secrets','credentials'}
+    def protected(path):
+        if any(part in private or SECRET.search(part) for part in path.parts):return True
+        if '.opencode' in path.parts:
+            at=path.parts.index('.opencode')
+            return len(path.parts)<=at+1 or path.parts[at+1]!='bin'
+        return False
+    broad={Path('/'),Path('/home'),Path('/root'),Path('/tmp'),Path('/var'),Path('/etc'),Path('/run'),Path('/proc'),Path('/sys'),Path('/dev')}
+    def add_mount(source,destination):
+        if source in broad or destination in broad or protected(source) or protected(destination):return False
+        if source.is_dir() and source.parent==Path('/home'):return False
+        if source==Path(workspace) or Path(workspace).is_relative_to(source):return False
+        if destination.is_relative_to(Path('/usr')) or destination in (Path('/bin'),Path('/lib'),Path('/lib64')):return True
+        pair=(str(source),str(destination))
+        if pair not in mounts:
+            mounts.add(pair);result['mounts'].append({'source':pair[0],'destination':pair[1]})
+        return True
+    for line in text.splitlines():
+        heading=re.match(r'^#{1,6}\s+(.+)$',line)
+        if heading:
+            section=heading[1].strip()
+            external=next((kind for pattern,kind in ((r'\bDocker\b','docker'),(r'\bLXC\b','lxc'),(r'PostgreSQL Serveur','database'),(r'\bTPM\b','device')) if re.search(pattern,section,re.I)),None)
+            if external and ('external',external) not in seen:
+                seen.add(('external',external));result['resources'].append({'kind':external,'state':'cab-access-required','route':'existing-cab-reservation-and-validation'})
+            continue
+        match=re.fullmatch(r'\s*[*-]\s+(?:(Interpréteur|Installation|Chemin)\s*:\s*)?(`?)(/[^`\r\n]+)\2\s*',line)
+        if not match:continue
+        literal=match[3].strip().replace('\\_','_')
+        if len(literal)>4096 or '\x00' in literal or literal in seen:continue
+        seen.add(literal)
+        if len(seen)>256:raise AtelierError('atelier-devops-resource-limit')
+        path=Path(literal)
+        # Les titres/paragraphes ne sont pas des commandes ; les chemins privés
+        # et les espaces qui permettraient de remonter à l'hôte restent exclus.
+        if path in broad or protected(path) or re.search(r'Prompts|Configuration locale',section,re.I):
+            result['resources'].append({'kind':'protected','state':'not-mounted'});continue
+        try:
+            target=path.resolve(strict=True);info=target.stat()
+            if stat.S_ISSOCK(info.st_mode) or stat.S_ISCHR(info.st_mode) or stat.S_ISBLK(info.st_mode):
+                result['resources'].append({'path':literal,'kind':'external','state':'cab-access-required','route':'existing-cab-reservation-and-validation'});continue
+            if not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)) or not os.access(target,os.R_OK):raise OSError()
+        except (OSError,RuntimeError):
+            result['resources'].append({'path':literal,'kind':'local','state':'unavailable'});continue
+        if protected(target):
+            result['resources'].append({'kind':'protected','state':'not-mounted'});continue
+        if target.is_file() and not os.access(target,os.X_OK) and target.suffix not in {'.so','.a','.dll','.dylib'}:
+            result['resources'].append({'path':literal,'kind':'data','state':'cab-access-required','route':'existing-cab-reservation-and-validation'});continue
+        if target.is_dir() and not ((target/'bin').is_dir() or any(part in {'lib','lib64','include','site-packages','node_modules'} for part in target.parts)):
+            result['resources'].append({'path':literal,'kind':'data','state':'cab-access-required','route':'existing-cab-reservation-and-validation'});continue
+        roots=[]
+        # bin et lib restent ensemble : CPython/Go/npm utilisent leurs voisins.
+        for item in (path,target):
+            if 'node_modules' in item.parts:
+                prefix=Path(*item.parts[:item.parts.index('node_modules')+1])
+            elif 'bin' in item.parts:
+                at=item.parts.index('bin');prefix=Path(*item.parts[:at])
+                if prefix.name in {'.opencode','.local'}:prefix=item.parent
+            else:prefix=item
+            roots.append((prefix.resolve(),prefix))
+        previous_mounts=list(result['mounts']);previous_seen=set(mounts)
+        accepted=all(add_mount(source,destination) for source,destination in roots)
+        if not accepted:result['mounts']=previous_mounts;mounts=previous_seen
+        if accepted and stat.S_ISREG(info.st_mode) and os.access(target,os.X_OK) and str(path.parent) not in bins:bins.append(str(path.parent))
+        result['resources'].append({'path':literal,'kind':'local','state':'read-only' if accepted else 'not-mounted'})
+    result['binPaths']=sorted(bins,key=lambda value:not Path(value).is_relative_to(Path(workspace)))
+    return result
+
+
+def mask_runtime(command,root):
+    """Inspecte les noms et types seulement, jamais le contenu des secrets."""
+    root=Path(root)
+    if root.is_file():return
+    for directory,dirs,files in os.walk(root,followlinks=False):
+        for name in list(dirs):
+            if name in {'.ssh','.gnupg','.config','.git','.codex','state','share','credentials','secrets'}:
+                dirs.remove(name);path=str(Path(directory)/name)
+                command += ['--tmpfs',path,'--remount-ro',path]
+        for name in files:
+            path=Path(directory)/name
+            try:info=path.lstat()
+            except FileNotFoundError:continue
+            if SECRET.search(name) or stat.S_ISSOCK(info.st_mode):command += ['--ro-bind','/dev/null',str(path)]
+
+
+def sandbox_identity(command,home):
+    """Identité minimale synthétique, sans exposer les comptes/configs hôte."""
+    files={'passwd':f'cab:x:{os.getuid()}:{os.getgid()}:atelier:{home}:/bin/sh\n',
+           'group':f'cab:x:{os.getgid()}:\n','nsswitch.conf':'passwd: files\ngroup: files\nhosts: files\n',
+           'hosts':'127.0.0.1 localhost\n::1 localhost\n','chromium-empty':''}
+    for name,content in files.items():
+        destination=home/('.cab-'+name)
+        fd,candidate=tempfile.mkstemp(prefix='.cab-identity-',dir=home)
+        try:
+            with os.fdopen(fd,'w') as stream:stream.write(content);stream.flush();os.fchmod(stream.fileno(),0o775)
+            os.replace(candidate,destination)
+        finally:
+            if os.path.exists(candidate):os.unlink(candidate)
+        target='/etc/'+name if name!='chromium-empty' else '/etc/chromium.d/00-cab'
+        command += ['--ro-bind',str(destination),target]
 
 
 def validate_args(args):
@@ -72,12 +192,17 @@ def sandbox_command(args,grant):
         if Path(source).exists():command += ["--ro-bind",source,source]
     command += ["--proc","/proc","--dev","/dev","--dir","/etc"]
     if Path('/etc/ld.so.cache').is_file():command += ["--ro-bind","/etc/ld.so.cache","/etc/ld.so.cache"]
+    if Path('/etc/alternatives').is_dir():command += ['--ro-bind','/etc/alternatives','/etc/alternatives']
     runtime_roots=grant["runtimeRoots"]
     if not isinstance(runtime_roots,list) or any(not isinstance(v,str) or not Path(v).is_absolute() or Path(v).resolve()!=Path(v) for v in runtime_roots):raise AtelierError("atelier-runtime-root-invalid")
     for source in runtime_roots:
         if not os.access(source,os.R_OK|os.X_OK):raise AtelierError("atelier-runtime-root-unavailable")
         command += ["--ro-bind",source,source]
     command += ["--ro-bind",str(workspace),str(workspace)]
+    resources=devops_resources(workspace)
+    for mount in resources['mounts']:
+        command += ['--ro-bind',mount['source'],mount['destination']]
+    for mount in resources['mounts']:mask_runtime(command,mount['destination'])
     # Masquage par noms uniquement ; aucun secret n'est lu ou copié.
     for directory,dirs,files in os.walk(workspace,followlinks=False):
         base=Path(directory)
@@ -111,11 +236,18 @@ def sandbox_command(args,grant):
         path.mkdir(mode=0o775,exist_ok=True)
         if path.resolve()!=path or not path.is_dir():raise AtelierError("atelier-scratch-unsafe")
         path.chmod(0o775)
-    search=":".join(str(Path(root).parent if Path(root).is_file() else Path(root)/"bin") for root in runtime_roots)
+    sandbox_identity(command,expected/'.home')
+    # Les sockets Unix des navigateurs ont une limite de chemin courte. Cette
+    # vue privée pointe uniquement vers le temporaire du RUN, jamais l'hôte.
+    command += ['--bind',str(expected/'.tmp'),'/cab-tmp']
+    fonts=Path('/etc/fonts')
+    if fonts.is_dir() and fonts.stat().st_uid==0 and not fonts.stat().st_mode&0o022:
+        command += ['--ro-bind',str(fonts),str(fonts)]
+    search=":".join(dict.fromkeys([*resources['binPaths'],*(str(Path(root).parent if Path(root).is_file() else Path(root)/"bin") for root in runtime_roots)]))
     command += ["--setenv","PATH",(search+":" if search else "")+"/usr/bin:/bin",
-                "--setenv","HOME",str(expected/".home"),"--setenv","TMPDIR",str(expected/".tmp"),
-                "--setenv","LANG","C.UTF-8","--setenv","USER","cab","--chdir",str(expected),"--",*args["argv"]]
-    return {'argv':command,'masked_shared_links':masked}
+                "--setenv","HOME",str(expected/".home"),"--setenv","TMPDIR","/cab-tmp",
+                "--setenv","PYTHONDONTWRITEBYTECODE","1","--setenv","LANG","C.UTF-8","--setenv","USER","cab","--chdir",str(expected),"--",*args["argv"]]
+    return {'argv':command,'masked_shared_links':masked,'devops_resources':resources}
 
 
 def private_jobs(directory,home=None):
@@ -139,7 +271,6 @@ def save(path,value):
 def execute(args,authorize,*,job_home=None):
     validate_args(args)
     grant=authorize(args)
-    plan=sandbox_command(args,grant);command=plan['argv']
     root=private_jobs(args["directory"],job_home)
     path=root/(hashlib.sha256((args["run_id"]+"\0"+args["request_id"]).encode()).hexdigest()+".json")
     fingerprint=hashlib.sha256(canonical(args).encode()).hexdigest()
@@ -148,16 +279,17 @@ def execute(args,authorize,*,job_home=None):
             previous=json.loads(path.read_text())
             if previous["input_sha256"]!=fingerprint:raise AtelierError("atelier-request-conflict")
             return previous
+        plan=sandbox_command(args,grant);command=plan['argv']
         value={"requestId":args["request_id"],"runId":args["run_id"],"changeId":args["change_id"],"sessionId":args["session_id"],
                "input_sha256":fingerprint,"status":"INTENT","startedAt":datetime.now(timezone.utc).isoformat(),"requires_orchestrator_validation":True,
-               'masked_shared_links':plan['masked_shared_links']}
+               'masked_shared_links':plan['masked_shared_links'],'devops_resources':plan['devops_resources']}
         save(path,value)
     output=Path(grant["atelier"])/(".cab-result-"+fingerprint+".log")
     if output.is_symlink():raise AtelierError("atelier-output-symlink")
     with output.open("x+b") as stream:
         os.fchmod(stream.fileno(),0o775)
         try:
-            process=subprocess.Popen(command,stdout=stream,stderr=subprocess.STDOUT,env={"PATH":"/usr/bin:/bin"},start_new_session=True)
+            process=subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=stream,stderr=subprocess.STDOUT,env={"PATH":"/usr/bin:/bin"},start_new_session=True)
             with LOCK:ACTIVE_PROCESSES[str(path)]={"process":process,"runId":args["run_id"],"workspace":args["directory"]}
             value.update(status="RUNNING",pid=process.pid);save(path,value)
             try:
@@ -182,7 +314,7 @@ def status(args,authorize):
     authorize(args)
     root=private_jobs(args["directory"])
     path=root/(hashlib.sha256((args["run_id"]+"\0"+args["request_id"]).encode()).hexdigest()+".json")
-    if not path.exists():return {"found":False,"requestId":args["request_id"],"snapshot_only":True}
+    if not path.exists():return {"found":False,"requestId":args["request_id"],"snapshot_only":True,'devops_resources':devops_resources(args['directory'])}
     value=json.loads(path.read_text())
     if value.get("runId")!=args["run_id"] or value.get("changeId")!=args["change_id"]:raise AtelierError("atelier-status-owner-divergent")
     return {"found":True,"snapshot_only":True,**value}

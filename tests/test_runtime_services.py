@@ -113,7 +113,7 @@ class RuntimeServicesTest(unittest.TestCase):
 
     def incident(self, identity):
         return self.store.incident({"incident_id": identity, "project": str(self.root), "change": "fixture-change", "run": "fixture-run",
-                                    "reporter": "reporter-" + identity, "version": "2.4.3", "category": "protocol", "summary": "Incident synthétique", "evidence": []})
+                                    "reporter": "reporter-" + identity, "version": "2.4.4", "category": "protocol", "summary": "Incident synthétique", "evidence": []})
 
     def test_ccab_fifo_batch_resume_individual_resolution(self):
         self.incident("first")

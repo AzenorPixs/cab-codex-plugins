@@ -1,5 +1,11 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Complément2.4.4 : l’atelier reprend les outils/interpréteurs/bibliothèques
+locaux déclarés dans DEVOPS.md, avec préfixes et liens RO, catalogue/empreinte
+actualisés et reçus sans rejeu. Les accès Docker/LXC/PostgreSQL/périphériques
+gardent leurs voies CAB et réservations ; aucun secret ou socket de contrôle
+n’est exposé. Voir [les ressources DevOps](plugins/cab-approval-bridge/skills/approval-bridge/references/devops-resources.md).
+
 Complément2.4.3 : candidats après projection sous le répertoire privé de mise
 à jour, fichiers600/dossiers700, SHA-256/tailles référencés dans le reçu HMAC.
 Les anciennes écritures échouent sur l’empreinte avant incompatible. Après

@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Ressources atelier SCM2.4.4
+
+[expose-devops-resources-in-atelier](openspec/changes/archive/2026-11-07-expose-devops-resources-in-atelier/), code non attribué : inventaire DEVOPS, runtimes RO, catalogue et reprise idempotente. Qualification locale réelle Python/Cython/Nuitka et ressources locales ; preuves externes distinctes. Livraison et activation suivent leurs reçus.
+
+
 ## Enveloppe d’effacement SCM2.4.3
 
 [separate-erasure-authority-and-candidates](openspec/changes/archive/2026-11-07-separate-erasure-authority-and-candidates/), code non attribué : source qualifiée,84tests. Autorisation immuable/portée effective attestée, candidats privés référencés et compaction avant redémarrage. Prévol C12 réel47candidats/166Mo, reçu estimé15,6Mo ; publication, CABU et PURGED distincts.

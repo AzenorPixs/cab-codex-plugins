@@ -1,5 +1,11 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+Complément2.4.4 : l’atelier reprend les outils/interpréteurs/bibliothèques
+locaux déclarés dans DEVOPS.md, avec préfixes et liens RO, catalogue/empreinte
+actualisés et reçus sans rejeu. Les accès Docker/LXC/PostgreSQL/périphériques
+gardent leurs voies CAB et réservations ; aucun secret ou socket de contrôle
+n’est exposé. Voir [les ressources DevOps](plugins/cab-approval-bridge/skills/approval-bridge/references/devops-resources.md).
+
 Complément2.4.3 : reprise des gros plans d’effacement avec candidats privés
 vérifiés par empreinte, reçu compact et autorisation d’origine conservée.
 
