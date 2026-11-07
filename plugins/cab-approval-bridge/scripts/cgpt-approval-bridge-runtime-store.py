@@ -14,7 +14,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.4"
+VERSION = "2.4.5"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -333,7 +333,7 @@ class RuntimeStore:
         targets=[]
         for row in self.db.execute('SELECT * FROM bindings'):
             value=json.loads(row['body'])
-            if value['project']==scope['workspace'] and value['change']==scope['changeId']:
+            if value['project']==scope['workspace'] and (value['run'] in scope['runIds'] if scope.get('closureAuthority')=='authoritative-retired-run-batch-v1' else value['change']==scope['changeId']):
                 if row['uid']!=uid:raise RuntimeErrorCode('sgs-purge-owner-mismatch')
                 targets.append(value['binding'])
         components=[{'component':row['component'],'fingerprint':row['fingerprint'],'sequence':row['sequence']} for row in self.db.execute('SELECT * FROM component_checkpoints WHERE project=?',(scope['workspace'],))]
@@ -350,10 +350,12 @@ class RuntimeStore:
                 if preview['bindings']:raise RuntimeErrorCode('sgs-purge-reintroduced-data')
                 return json.loads(old['body'])
             reports=[json.loads(row[0]) for row in self.db.execute('SELECT body FROM archive_reports WHERE project=?',(scope['workspace'],))]
-            reports=[report for report in reports if report.get('change')==scope['changeId']]
-            if not reports:raise RuntimeErrorCode('sgs-durable-report-required')
+            batch=scope.get('closureAuthority')=='authoritative-retired-run-batch-v1'
+            if batch and (not scope.get('protectedRunIds') or set(scope['runIds'])&set(scope['protectedRunIds'])):raise RuntimeErrorCode('sgs-purge-scope-invalid')
+            reports=[report for report in reports if report.get('change') in (scope.get('changeIds',[]) if batch else [scope['changeId']])]
+            current=[session for session in self.statistics(scope['workspace'])['sessions'] if session['binding'] in preview['bindings']]
+            if not reports and (not batch or current):raise RuntimeErrorCode('sgs-durable-report-required')
             snapshots={session['binding']:session for report in reports for native in report.get('native_telemetry',[]) for session in native['snapshot']['sessions']}
-            current=self.statistics(scope['workspace'],scope['changeId'])['sessions']
             for session in current:
                 recorded=snapshots.get(session['binding'])
                 if not session.get('ended_at'):raise RuntimeErrorCode('sgs-statistical-window-open')
@@ -483,7 +485,7 @@ class RuntimeStore:
         with self.transaction():
             for row in self.db.execute("SELECT * FROM incidents WHERE state='RESOLVED'").fetchall():
                 body=json.loads(row['body'])
-                if body['project']==scope['workspace'] and body.get('change')==scope['changeId'] and body.get('run') in scope['runIds']:
+                if body['project']==scope['workspace'] and body.get('change') in scope.get('changeIds',[scope['changeId']]) and body.get('run') in scope['runIds']:
                     removed.append(row['incident_id']);self.db.execute('DELETE FROM incidents WHERE incident_id=?',(row['incident_id'],))
             for row in self.db.execute('SELECT * FROM receipts').fetchall():
                 body=json.loads(row['body']);references=set(body.get('incident_ids',[]))|({body['incident_id']} if 'incident_id' in body else set())

@@ -113,7 +113,7 @@ class RuntimeServicesTest(unittest.TestCase):
 
     def incident(self, identity):
         return self.store.incident({"incident_id": identity, "project": str(self.root), "change": "fixture-change", "run": "fixture-run",
-                                    "reporter": "reporter-" + identity, "version": "2.4.4", "category": "protocol", "summary": "Incident synthétique", "evidence": []})
+                                    "reporter": "reporter-" + identity, "version": "2.4.5", "category": "protocol", "summary": "Incident synthétique", "evidence": []})
 
     def test_ccab_fifo_batch_resume_individual_resolution(self):
         self.incident("first")
@@ -196,6 +196,19 @@ class RuntimeServicesTest(unittest.TestCase):
         self.assertEqual(stats['models'][1]['model']['reasoning'],'low')
         rows=[row[0] for row in self.store.db.execute('SELECT body FROM telemetry')]
         self.assertNotIn('NOT_STORED',''.join(rows))
+
+    def test_retired_batch_without_native_window_preserves_live_peer(self):
+        scope={'workspace':str(self.root),'changeId':'retired-batch','runIds':['old-run'],
+               'ids':['old-run'],'changeIds':['old-change'],'protectedRunIds':['fixture-run'],
+               'closureAuthority':'authoritative-retired-run-batch-v1'}
+        result=self.store.purge(scope,'retired-no-native-window',[],os.getuid())
+        self.assertEqual(result['bindingsRemoved'],0)
+        self.assertEqual(self.stats()['binding'],'fixture-binding')
+        selected={**scope,'runIds':['fixture-run'],'protectedRunIds':['other-run']}
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-durable-report-required'):
+            self.store.purge(selected,'retired-native-needs-report',[],os.getuid())
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-purge-scope-invalid'):
+            self.store.purge({**scope,'protectedRunIds':['old-run']},'retired-overlap-refused',[],os.getuid())
 
 
 if __name__ == "__main__":

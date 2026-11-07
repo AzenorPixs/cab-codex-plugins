@@ -2,11 +2,11 @@ import { existsSync,constants,openSync,closeSync,fstatSync,readFileSync,realpath
 import {createHash,randomUUID} from 'node:crypto';
 import {dirname} from 'node:path';
 import { join,relative } from 'node:path';
-import { ErasureTransaction, erasureScope, erasureFiles, extendErasureScope, erasureInventory } from './cgpt-approval-bridge-change-erasure.mjs';
+import { ErasureTransaction, erasureScope, erasureFiles, extendErasureScope, erasureInventory,retiredRunScope,retiredJobDigest } from './cgpt-approval-bridge-change-erasure.mjs';
 import { readRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { canonicalContinuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION='2.4.4';
+export const VERSION='2.4.5';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409})};
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
 export function erasureMonitorEndpoint(host='127.0.0.1',port='8790') {
@@ -14,6 +14,17 @@ export function erasureMonitorEndpoint(host='127.0.0.1',port='8790') {
   return `http://${host==='::1'?'[::1]':host}:${Number(port)}/api/maintenance-identity`;
 }
 function validateTerminalJobs(jobs,scope,ownerId,branch,retainedSessionId,stateDirectory) {
+    if(scope.closureAuthority==='authoritative-retired-run-batch-v1'){
+      const seen=new Set();
+      for(const {job,path} of jobs){
+        const parts=relative(stateDirectory,path).match(/^runs\/([^/]+)\/(\d+)\/controller-job\.json$/);
+        if(!parts||!scope.runIds.includes(parts[1])||!scope.changeIds.includes(job.changeId)||job.armed!==false||
+          job.terminalGate?.status!=='VALIDATED'||!['TERMINÉ','BLOQUÉ'].includes(job.terminalGate.declaredState))fail('erasure-terminal-gate-unverified');
+        seen.add(parts[1]+':'+parts[2]);
+      }
+      if(scope.runBindings.some(row=>!seen.has(row.runId+':'+row.contextId)))fail('erasure-terminal-gate-unverified');
+      return;
+    }
     if(!jobs.length||jobs.some(({job})=>job.armed!==false))fail('erasure-terminal-gate-unverified');
     if(scope.ownershipReview){
       const latest=Math.max(...scope.runBindings.map(row=>row.contextId));
@@ -67,6 +78,7 @@ export class ChangeErasureManager {
     return {...inventory,jobs};
   }
   async prepare(input) {
+    if(input?.mode==='retired-runs-v1')return this.prepareRetired(input);
     if(!(exact(input,['changeId','ownerId','branch','retainedSessionId','evidence','dependencyEvidence'])||
       exact(input,['changeId','ownerId','branch','retainedSessionId','evidence','dependencyEvidence','ownershipReview']))||
       !['TERMINÉ','BLOQUÉ'].includes(input.branch)||!Array.isArray(input.evidence)||!input.evidence.length||
@@ -114,15 +126,46 @@ export class ChangeErasureManager {
       roots:[this.stateDirectory,identity.stateDirectory],coverage:['controller','broker','supervisor','monitor'],entries:[]});
     return this.public(value);
   }
+  async prepareRetired(input){
+    if(!exact(input,['mode','runIds','protectedRunIds','ownerId','evidence']))fail('erasure-input-invalid');
+    if(this.pending())fail('erasure-transaction-in-progress');
+    const snapshot=this.registry.snapshot();if(snapshot.project!==this.workspace)fail('erasure-workspace-divergent');
+    let scope=retiredRunScope(snapshot,input);const documents=[],jobs=[];
+    for(const path of erasureFiles(this.stateDirectory)){
+      if(!path.endsWith('.json')||path.endsWith('/change-erasure.json')||path.endsWith('/broker-erasure.json'))continue;
+      const {value}=readRuntimeJson(path);documents.push(value);
+      if(path.endsWith('/controller-job.json')&&scope.runBindings.some(row=>value.changeId===row.changeId)){
+        const parts=relative(this.stateDirectory,path).match(/^runs\/([^/]+)\/(\d+)\/controller-job\.json$/);
+        if(parts&&scope.runIds.includes(parts[1]))jobs.push({job:value,path});
+      }
+    }
+    validateTerminalJobs(jobs,scope,input.ownerId,'TERMINÉ',null,this.stateDirectory);
+    scope={...scope,jobContextDigest:retiredJobDigest(this.stateDirectory,scope.runIds)};
+    scope=extendErasureScope(scope,documents);
+    const native=await this.openCode.listSessions(this.workspace),sessions=new Set(scope.ids.filter(id=>id.startsWith('ses_')));
+    let changed;do{changed=false;for(const row of native)if(sessions.has(row.parentID||row.parentId)&&!sessions.has(row.id)){
+      if(row.directory!==this.workspace||scope.sharedIdentityIds.includes(row.id))fail('erasure-session-shared');sessions.add(row.id);changed=true;
+    }}while(changed);
+    if(snapshot.runs.some(row=>!scope.runIds.includes(row.runId)&&sessions.has(row.sessionId)))fail('erasure-session-shared');
+    scope={...scope,ids:[...new Set([...scope.ids,...sessions])].sort()};
+    const identity=await this.monitorIdentity();if(identity.identity?.workspace!==this.workspace||identity.version!==VERSION||typeof identity.stateDirectory!=='string')fail('erasure-monitor-identity-unverified');
+    return this.public(this.transaction().prepare({scope,branch:'TERMINÉ',evidence:input.evidence,sessionIds:[...sessions].sort(),retainedSessionId:null,
+      roots:[this.stateDirectory,identity.stateDirectory],coverage:['controller','broker','supervisor','monitor'],entries:[]}));
+  }
   async seal(input) {
     const value=this.pending();
     if(!exact(input,['transactionId'])||!value||input.transactionId!==value.transactionId)fail('erasure-transaction-divergent');
     if(value.phase!=='PREPARED'&&value.phase!=='SEALED')fail('erasure-phase-invalid');
-    erasureScope(this.registry.snapshot(),value.scope.changeId,value.scope.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:value.scope.ownershipReview,
+    if(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'){
+      const fresh=retiredRunScope(this.registry.snapshot(),{...value.scope,evidence:value.evidence});
+      if(fresh.inventoryDigest!==value.scope.inventoryDigest)fail('erasure-retired-inventory-changed');
+      if(retiredJobDigest(this.stateDirectory,value.scope.runIds)!==value.scope.jobContextDigest)fail('erasure-retired-jobs-changed');
+    }else erasureScope(this.registry.snapshot(),value.scope.changeId,value.scope.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:value.scope.ownershipReview,
       closedAuthority:value.scope.closureAuthority==='authoritative-run-state-v1'});
     const jobs=[];
     for(const path of erasureFiles(this.stateDirectory))if(path.endsWith('/controller-job.json')){
-      const {value:job}=readRuntimeJson(path);if(job.changeId===value.scope.changeId)jobs.push({job,path});
+      const {value:job}=readRuntimeJson(path);const parts=relative(this.stateDirectory,path).match(/^runs\/([^/]+)\/(\d+)\/controller-job\.json$/);
+      if(job.changeId===value.scope.changeId||value.scope.closureAuthority==='authoritative-retired-run-batch-v1'&&parts&&value.scope.runIds.includes(parts[1]))jobs.push({job,path});
     }
     validateTerminalJobs(jobs,value.scope,value.scope.ownerId,value.branch,value.retainedSessionId,this.stateDirectory);
     const [sessions,active,permissions,info]=await Promise.all([this.openCode.listSessions(this.workspace),

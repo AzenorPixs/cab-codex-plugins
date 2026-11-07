@@ -2,7 +2,7 @@ import {spawn} from 'node:child_process';
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {once} from 'node:events';
-export const VERSION='2.4.4';
+export const VERSION='2.4.5';
 export async function startOwnerProxy(controllerUrl,{spawnImpl=spawn}={}){
  const token=randomBytes(32).toString('hex');
  const child=spawnImpl('python3',['-B',fileURLToPath(new URL('./cgpt-approval-bridge-owner-proxy.py',import.meta.url))],{stdio:['pipe','pipe','pipe']});

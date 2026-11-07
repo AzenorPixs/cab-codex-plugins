@@ -1,13 +1,13 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, openSync,
   readFileSync, readdirSync, realpathSync, unlinkSync, renameSync, rmdirSync, writeFileSync,fchmodSync,rmSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, resolve,relative } from 'node:path';
 import {homedir} from 'node:os';
 import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge-observation-statistics.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.4';
+export const VERSION = '2.4.5';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -129,8 +129,50 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],owne
     ...(legacyTerminalOperationIds.length?{legacyTerminalOperationIds:legacyTerminalOperationIds.sort()}:{}) };
 }
 
+export function retiredRunScope(registry,{runIds,protectedRunIds,ownerId,evidence}) {
+  if(!record(registry)||!identifier(ownerId)||!Array.isArray(runIds)||!runIds.length||runIds.length>512||
+    !Array.isArray(protectedRunIds)||!protectedRunIds.length||[...runIds,...protectedRunIds].some(v=>!identifier(v))||
+    new Set(runIds).size!==runIds.length||new Set(protectedRunIds).size!==protectedRunIds.length||
+    !Array.isArray(evidence)||!evidence.length||evidence.some(v=>typeof v!=='string'||!v||v.length>500))fail('erasure-retired-inventory-invalid');
+  const selected=new Set(runIds),protectedIds=new Set(protectedRunIds);
+  if(runIds.some(id=>protectedIds.has(id)))fail('erasure-retired-protected-run');
+  const current=registry.runs||[],rows=[...current,...(registry.history||[]).flatMap(r=>[r,r?.run,r?.previous,r?.current])].filter(r=>record(r)&&identifier(r.runId));
+  for(const id of runIds)if(!current.some(r=>r.runId===id&&['DELIVERED','ABANDONED','RELEASED'].includes(r.state)))fail('erasure-run-in-progress');
+  if(current.some(r=>r.state==='RESERVED'&&selected.has(r.runId)))fail('erasure-run-in-progress');
+  const targets=rows.filter(r=>selected.has(r.runId)),others=rows.filter(r=>!selected.has(r.runId));
+  if(targets.some(row=>row.directory&&row.directory!==registry.project))fail('erasure-foreign-reference');
+  const bindings=[...new Map(targets.map(r=>{
+    if(!identifier(r.changeId)||!identifier(r.ownerId)||!Number.isSafeInteger(r.contextId)||r.contextId<1||!Number.isSafeInteger(r.version)||r.version<1)fail('erasure-retired-binding-invalid');
+    const v={runId:r.runId,contextId:r.contextId,ownerId:r.ownerId,version:r.version,changeId:r.changeId};return [canonicalContinuityDigest(v),v];
+  })).values()].sort((a,b)=>canonicalContinuityDigest(a).localeCompare(canonicalContinuityDigest(b)));
+  const shared=new Set();
+  for(const row of others)for(const key of ['runId','changeId','sessionId'])if(identifier(row[key]))shared.add(row[key]);
+  const ids=new Set(runIds),collect=value=>{
+    if(!value||typeof value!=='object')return;
+    for(const [key,item] of Object.entries(value))if(identityKeys.has(key)&&identifier(item)&&!shared.has(item))ids.add(item);else if(item&&typeof item==='object')collect(item);
+  };
+  targets.forEach(collect);
+  for(const name of ['operations','accesses','testReservations','publications'])for(const row of Object.values(registry.coordination?.[name]||{}))if(selected.has(row.runId)) {
+    if(['accesses','testReservations'].includes(name)&&!['RELEASED','CANCELLED'].includes(row.state))fail('erasure-resource-unreleased');
+    collect(row);
+  }
+  for(const [key,row] of Object.entries(registry.requestOwners||{}))if(selected.has(row.runId)){ids.add(key);collect(row)}
+  const changeIds=[...new Set(targets.map(r=>r.changeId))].sort();
+  return {protocol:ERASURE_PROTOCOL,workspace:registry.project,changeId:'retired-runs-'+canonicalContinuityDigest([...selected].sort()).slice(0,32),
+    ownerId,runIds:[...selected].sort(),ids:[...ids].sort(),changeIds,runBindings:bindings,protectedRunIds:[...protectedIds].sort(),
+    sharedIdentityIds:[...shared].sort(),closureAuthority:'authoritative-retired-run-batch-v1',inventoryDigest:canonicalContinuityDigest(bindings),
+    registrySequence:registry.sequence,coordinationSequence:registry.coordination?.sequence};
+}
+
+export function retiredJobDigest(root,runIds){
+  return canonicalContinuityDigest(erasureFiles(root).filter(path=>{
+    const parts=relative(root,path).match(/^runs\/([^/]+)\/(\d+)\/controller-job\.json$/);return parts&&runIds.includes(parts[1]);
+  }).sort().map(path=>({path:relative(root,path),job:readRuntimeJson(path).value})));
+}
+
 export function extendErasureScope(scope, documents) {
   const ids = new Set(scope.ids);
+  const shared=new Set(scope.sharedIdentityIds||[]);
   const owned = value => record(value) && (Object.entries(value).some(([key,item]) => identityKeys.has(key) && ids.has(item))||
     typeof value.id==='string'&&value.id.startsWith('ses_')&&ids.has(value.id)&&value.directory===scope.workspace);
   let changed;
@@ -139,12 +181,12 @@ export function extendErasureScope(scope, documents) {
     const collect = value => {
       if (!value || typeof value !== 'object') return;
       if(owned(value)&&typeof value.directory==='string'&&value.directory!==scope.workspace)fail('erasure-foreign-reference');
-      if (owned(value)) for (const [key,item] of Object.entries(value)) if (identityKeys.has(key) && identifier(item) && !ids.has(item)) {
+      if (owned(value)) for (const [key,item] of Object.entries(value)) if (identityKeys.has(key) && identifier(item) && !ids.has(item)&&!shared.has(item)) {
         if (ownerKeys.has(key)) fail('erasure-foreign-reference');
         ids.add(item); changed = true;
       }
       if(owned(value))for(const key of ['sourceSessions','revokedSessions','sessionIds','session_ids'])
-        for(const item of Array.isArray(value[key])?value[key]:[])if(typeof item==='string'&&item.startsWith('ses_')&&identifier(item)&&!ids.has(item)){
+        for(const item of Array.isArray(value[key])?value[key]:[])if(typeof item==='string'&&item.startsWith('ses_')&&identifier(item)&&!ids.has(item)&&!shared.has(item)){
           ids.add(item);changed=true;
         }
       for (const item of Object.values(value)) collect(item);
@@ -160,7 +202,8 @@ export function projectErasure(value, scope) {
   const ids = new Set(scope.ids);
   const own = node => record(node) && (Object.entries(node).some(([key,item]) => identityKeys.has(key) && ids.has(item))||
     typeof node.id==='string'&&node.id.startsWith('ses_')&&ids.has(node.id)&&node.directory===scope.workspace);
-  const foreign = node => record(node) && Object.entries(node).some(([key,item]) => ownerKeys.has(key) && typeof item === 'string' && !ids.has(item));
+  const foreign = node => record(node) && Object.entries(node).some(([key,item]) => ownerKeys.has(key) && typeof item === 'string' && !ids.has(item)&&
+    !(['changeId','change_id'].includes(key)&&scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.changeIds.includes(item)));
   const contains=(node,predicate)=>predicate(node)||node&&typeof node==='object'&&Object.values(node).some(item=>contains(item,predicate));
   const related=node=>own(node)||typeof node==='string'&&unambiguousId(node)&&ids.has(node);
   const visit = (node,parentKey='') => {
