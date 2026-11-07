@@ -1,6 +1,6 @@
 ---
 description: Consulter, déclarer ou traiter les incidents CAB
-version: 2.4.12
+version: 2.4.13
 ---
 
 Charger le skill CCAB du plugin CCAB de même version que CAB.

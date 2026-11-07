@@ -1341,3 +1341,6 @@ flowchart LR
 
 ## Filtrage des validations en attente
 [scope-pending-approval-list](openspec/changes/archive/2026-11-07-scope-pending-approval-list/) : filtre RUN/SID, pagination et conservation des contrôles d’expiration ; activation distincte de la qualification source.
+
+## Permissions shell multi-ressources
+[correlate-multiresource-native-shell](openspec/changes/archive/2026-11-07-correlate-multiresource-native-shell/) : identité native, couverture complète ordonnée et observation convergente, sans réponse implicite à une permission.

@@ -1097,3 +1097,16 @@ test('CodeMode path assertion : même discovery et même MCP, sans exécution de
  const wrongMetadata=await codeModeFixture(t,wrapped(prefix+check+call,[{tool:'search',status:'completed',input:query},{tool:'cgpt-validation.request_validation',status:'completed',input:{...input,requestId:'different'}}]));
  assert.equal(wrongMetadata.tool,'execute');
 });
+
+test('shell multi-ressources : couverture exacte, source et refus', async t => {
+  const f=fixture();t.after(f.close);
+  const input={command:'printf a && printf b; printf c',workdir:'/workspace'};
+  let resources=['printf a','printf b','printf c'],sourceId='call_native';
+  const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
+    fetchImpl:async u=>new URL(u).pathname==='/api/info'?json(info):new URL(u).pathname==='/api/permission/request'
+      ?json({location,data:[{id:'per_native',sessionID:'ses_code',action:'shell',resources,source:{type:'tool',messageID:'msg_native',id:'call_native'}}]})
+      :json({data:{id:'msg_native',type:'assistant',content:[{type:'tool',id:sourceId,name:'shell',executed:false,time:{created:1,ran:2},state:{status:'running',input,metadata:{}}}]}})});
+  let result=(await client.permissions('/workspace',{sessionIds:['ses_code']}))[0];assert.equal(result.metadata.command,input.command);assert.equal(result.metadata.nativeToolInputSha256,nativeToolInputDigest(input));
+  for(const bad of [['printf a','printf c'],['printf a','printf b','printf changed'],['printf c','printf b','printf a'],['printf a','printf b','printf c','extra'],['printf a','','printf c']]){resources=bad;await assert.rejects(client.permissions(),{code:'opencode-permission-target-invalid'});}
+  resources=['printf a','printf b','printf c'];sourceId='other';await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
+});

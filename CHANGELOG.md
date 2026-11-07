@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.13 - 2026-11-07
+
+- Corréler les permissions shell à ressources multiples et stabiliser leur observation.
+
 ## 2.4.12 - 2026-11-07
 
 - Filtrer et paginer les demandes de validation par RUN et SID.

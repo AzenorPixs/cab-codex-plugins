@@ -1,6 +1,6 @@
 {
   "name": "CCAB",
-  "version": "2.4.12+codex.20261107154206",
+  "version": "2.4.13+codex.20261107154725",
   "description": "Déclarer et traiter les incidents CAB par FIFO ou lots justifiés.",
   "author": {
     "name": "CAB"
