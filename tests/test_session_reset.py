@@ -284,7 +284,7 @@ class SessionResetTest(unittest.TestCase):
                 process.communicate()
                 raise
         self.assertEqual(process.returncode, 0, errors)
-        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "2.4.3")
+        self.assertEqual(replies[1]["result"]["serverInfo"]["version"], "2.4.4")
         self.assertIn("OpenCode Code Mode", replies[1]["result"]["instructions"])
         self.assertIn("tools[\"cgpt-validation\"].request_validation", replies[1]["result"]["instructions"])
         readiness = json.loads(replies[2]["result"]["content"][0]["text"])

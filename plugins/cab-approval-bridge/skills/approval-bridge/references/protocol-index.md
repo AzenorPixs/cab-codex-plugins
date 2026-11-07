@@ -79,3 +79,5 @@ Write V2 refusé (permission edit), call/ACK masqués dans un ancien diagnostic 
 Remédiation COMPLETED avec livraisonfalse : [distinguer exécution et résultat vérifié](technical-recovery.md#résultat-vérifié-dune-réconciliation-de-notification), sans consommer un nouveau budget à l’aveugle.
 
 Frontières anciennes, corrélation des mandats et port après reboot : [historical-owner-boundaries](historical-owner-boundaries.md).
+
+Ressources des ateliers : [devops-resources](devops-resources.md).

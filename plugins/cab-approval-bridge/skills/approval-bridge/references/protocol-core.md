@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.4.3
+# Noyau du contrat — CAB 2.4.4
 
 Dans le change validé, le codeur lit, explore et utilise ses outils de façon
 autonome. Son atelier propre `.cab-tests/<change>/<RUN>/` autorise aussi les
@@ -159,3 +159,8 @@ d'intégration, d'archivage ou de fin globale du projet.
 
 Un appel technique terminé ne prouve pas sa récupération réussie : lire le
 résultat structuré et l’état autoritaire ; un échec de livraison reste un échec.
+
+Ressources déclarées dans DEVOPS.md : appliquer la référence
+[devops-resources](devops-resources.md) du skill CAB installé
+(`devops-resources.md` depuis les références). Outils locaux RO et catalogue
+actualisé ; accès externes par voies CAB, sans secrets ni socket de contrôle.

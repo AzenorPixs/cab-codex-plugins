@@ -129,3 +129,8 @@ Ne pas déduire son état d’un compteur global ancien. Préparer SHA/digest ho
 wrapper, puis soumettre un retour MCP littéral exact. Une révision effective
 de dossier déjà agrégée ne s’applique pas une deuxième fois à un nouvel enfant :
 demander les révisions des clés exactes, ou calculer revision(key) sur la map brute.
+
+Ressources déclarées dans DEVOPS.md : appliquer la référence
+[devops-resources](devops-resources.md) du skill CAB installé
+(`devops-resources.md` depuis les références). Outils locaux RO et catalogue
+actualisé ; accès externes par voies CAB, sans secrets ni socket de contrôle.

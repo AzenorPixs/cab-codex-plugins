@@ -33,7 +33,7 @@ import cgpt_approval_bridge_atelier as a
 workspace=${JSON.stringify(fixture.project)};own=${JSON.stringify(own)};peer=${JSON.stringify(peer)}
 pathlib.Path(peer,'peer.txt').write_text('peer')
 os.link(pathlib.Path(workspace,'source.py'),pathlib.Path(own,'shared-alias.py'))
-script=${JSON.stringify("from pathlib import Path\nimport shutil\np=Path("+JSON.stringify(fixture.project)+")\na=Path.cwd()\nshutil.copyfile(p/'source.py',a/'copy.py')\n(a/'copy.py').write_text('test-copy')\ntry:\n (p/'source.py').write_text('forbidden')\n raise RuntimeError('project unexpectedly writable')\nexcept OSError: pass\nassert not Path("+JSON.stringify(join(peer,'peer.txt'))+").exists()\nassert not Path("+JSON.stringify(join(fixture.root,'outside.txt'))+").exists()\nprint('ATELIER_BOUNDARIES_OK')")}
+script=${JSON.stringify("from pathlib import Path\nimport shutil,pwd,os\nassert pwd.getpwuid(os.getuid()).pw_name=='cab'\nassert os.environ['TMPDIR']=='/cab-tmp'\np=Path("+JSON.stringify(fixture.project)+")\na=Path.cwd()\nshutil.copyfile(p/'source.py',a/'copy.py')\n(a/'copy.py').write_text('test-copy')\ntry:\n (p/'source.py').write_text('forbidden')\n raise RuntimeError('project unexpectedly writable')\nexcept OSError: pass\nassert not Path("+JSON.stringify(join(peer,'peer.txt'))+").exists()\nassert not Path("+JSON.stringify(join(fixture.root,'outside.txt'))+").exists()\nprint('ATELIER_BOUNDARIES_OK')")}
 args={'request_id':'fixture-attempt','run_id':'run-own','reservation_version':1,'session_id':'ses_fixture','change_id':'change','directory':workspace,'argv':['/usr/bin/python3','-c',script]}
 grant={'status':'AUTHORIZED_ATELIER','directory':workspace,'atelier':own,'runtimeRoots':[]}
 result=a.execute(args,lambda _:grant,job_home=${JSON.stringify(join(fixture.root,'fixture-home'))})
@@ -58,4 +58,44 @@ print(json.dumps({'status':result['status'],'exit':result.get('exitCode'),'outpu
  const result=JSON.parse(asNative(nativeCode));
  assert.equal(result.status,'COMPLETED');assert.equal(result.exit,0,result.output);assert.equal(result.validationRequired,true);
  assert.match(result.output,/ATELIER_BOUNDARIES_OK/);
+});
+
+
+test('Atelier DEVOPS : runtime externe, alias et bibliothèque RO, catalogue actualisé sans rejeu',
+ {skip:!process.env.CAB_TEST_FOREIGN_UID?'CAB_TEST_FOREIGN_UID nécessaire à la qualification réelle':false},()=>{
+ const uid=Number(process.env.CAB_TEST_FOREIGN_UID);
+ const code=`import os,sys,json,tempfile,pathlib,shutil,socket
+assert os.getuid()==${uid}
+sys.path.insert(0,${JSON.stringify(resolve('plugins/cab-approval-bridge/broker'))})
+import cgpt_approval_bridge_atelier as a
+root=pathlib.Path(tempfile.mkdtemp(prefix='cab-devops-runtime-'))
+try:
+ p=root/'project';p.mkdir();own=p/'.cab-tests/change/run';own.mkdir(parents=True)
+ runtime=root/'toolchain-1';(runtime/'bin').mkdir(parents=True);(runtime/'lib').mkdir()
+ (runtime/'lib/library.py').write_text('VALUE=42\\n')
+ tool=runtime/'bin/devops-python';tool.write_text('#!/usr/bin/python3\\nimport sys,pathlib\\nsys.path.insert(0,str(pathlib.Path(__file__).resolve().parents[1]/"lib"))\\nimport library\\nprint(library.VALUE)\\n');tool.chmod(0o755)
+ alias=root/'current';alias.symlink_to(runtime,target_is_directory=True)
+ (runtime/'.env').write_text('SHOULD_NOT_BE_VISIBLE')
+ sock=socket.socket(socket.AF_UNIX);sock.bind(str(runtime/'control.sock'))
+ doc=p/'DEVOPS.md';doc.write_text('# Python\\n  * '+str(alias/'bin/devops-python')+'\\n# Conteneur Docker\\n  * '+str(runtime/'control.sock')+'\\n# Conteneur LXC\\n  * /does/not/exist\\n')
+ resources=a.devops_resources(p);assert resources['state']=='observed'
+ assert any(x['kind']=='lxc' and x['state']=='cab-access-required' for x in resources['resources'])
+ assert any(x.get('path')==str(runtime/'control.sock') and x['state']=='cab-access-required' for x in resources['resources'])
+ grant={'status':'AUTHORIZED_ATELIER','directory':str(p),'atelier':str(own),'runtimeRoots':[]}
+ script='import subprocess,pathlib\\nprint(subprocess.check_output(["devops-python"],text=True).strip())\\ntry: assert pathlib.Path('+repr(str(runtime/'.env'))+').read_bytes()==b""\\nexcept PermissionError: pass\\ntry: assert not pathlib.Path('+repr(str(runtime/'control.sock'))+').is_socket()\\nexcept PermissionError: pass'
+ args={'request_id':'devops-one','run_id':'run','reservation_version':1,'session_id':'ses_fixture','change_id':'change','directory':str(p),'argv':['/usr/bin/python3','-c',script]}
+ result=a.execute(args,lambda _:grant,job_home=root/'private');assert result['exitCode']==0,result['output'];assert result['output'].strip()=='42'
+ assert result['devops_resources']['sha256']==resources['sha256']
+ doc.write_text('# Go\\n  * /missing/runtime\\n');assert a.execute(args,lambda _:grant,job_home=root/'private')==result
+ newer=a.devops_resources(p);assert newer['sha256']!=resources['sha256'];assert newer['resources'][0]['state']=='unavailable'
+ doc.write_text('# Tool\\n  * /home\\n  * /etc\\n  * '+str(root/'.ssh/id_ed25519')+'\\n');blocked=a.devops_resources(p);assert not blocked['mounts']
+ doc.unlink();assert a.devops_resources(p)['state']=='absent'
+ doc.symlink_to(runtime/'.env')
+ assert a.devops_resources(p)['state']=='unavailable'
+ print(json.dumps({'runtime':'42','regenerated':True,'idempotent':True,'protected':True}))
+finally:
+ sock.close();shutil.rmtree(root)
+`;
+ const result=JSON.parse(execFileSync('sudo',['-n','-u','#'+uid,'/usr/bin/python3','-B','-c',code],{encoding:'utf8',timeout:20000}));
+ assert.equal(result.runtime,'42');assert.equal(result.idempotent,true);assert.equal(result.protected,true);
 });
