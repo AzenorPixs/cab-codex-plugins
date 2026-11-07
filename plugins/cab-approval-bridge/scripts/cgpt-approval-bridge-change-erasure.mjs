@@ -6,6 +6,7 @@ import {homedir} from 'node:os';
 import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge-observation-statistics.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
+import { PermissionReplyJournal, validPermissionReply } from './cgpt-approval-bridge-permission-replies.mjs';
 
 export const VERSION = '2.4.15';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
@@ -373,6 +374,15 @@ export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sour
     if(retainedPeer(row.value,extended))continue;
     const ownedPath=extended.runIds.some(id=>row.path.includes('/runs/'+id+'/'))||extended.ids.some(id=>row.path.endsWith('/'+id+'.json'));
     if (!erasureReferences(row.value,extended,pattern).length&&!ownedPath) continue;
+    if (dirname(row.path).endsWith('/permission-replies')) {
+      const envelope = row.value, value = envelope?.value;
+      if (!validPermissionReply(value) || envelope.digest !== canonicalContinuityDigest(value) ||
+          !effectiveIds(scope).includes(value.sessionId) || value.directory !== scope.workspace ||
+          new PermissionReplyJournal(dirname(row.path)).path(value) !== row.path)
+        fail('erasure-permission-receipt-invalid');
+      entries.push({ path: row.path, before: row.sha256, next: null, remove: true, legacy: row.legacy });
+      continue;
+    }
     if(row.value?.protocol==='cab-continuity-v1'&&(row.value.digest!==continuityDigest(row.value.value)||
       !Number.isSafeInteger(row.value.sequence)||row.value.sequence<1))fail('erasure-continuity-integrity-invalid');
     const next = projectErasure(row.value,extended);

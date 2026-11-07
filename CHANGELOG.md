@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.16 - 2026-11-07
+
+- Préserver l'intégrité des reçus natifs lors du nettoyage ciblé ; les anciens reçus sans identité restent conservés.
+
 ## 2.4.15 - 2026-11-07
 
 - Projeter le marqueur statistique du seul effacement courant sans toucher aux pairs.

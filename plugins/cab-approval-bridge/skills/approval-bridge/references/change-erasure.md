@@ -68,6 +68,12 @@ résultat réconcilié, une permission en attente ou une ressource non libérée
 empêche l’effacement. L’archivage métier ne lève aucune de ces protections.
 Ne pas utiliser une purge pour faire disparaître un effet incertain.
 
+Les reçus natifs de rejet ne sont retirés entiers que si leur format, leur
+empreinte, leur chemin et la session cible initialement inventoriée sont
+vérifiés dans le workspace. Un reçu invalide comportant une référence cible
+refuse l'effacement. Une enveloppe incomplète sans identité est conservée :
+elle ne démontre ni propriété ni décision et n'autorise aucun rejeu.
+
 Avant le gate, retirer les validations sans émission par les voies qualifiées
 [de récupération](autonomous-recovery.md). PREPARED/REJECTED sans accès possède
 la voie `withdraw-unissued-validation`, sous propriétaire/policy couvrante,

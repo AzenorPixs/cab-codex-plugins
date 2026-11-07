@@ -2,15 +2,16 @@ import { test } from 'node:test';
 import {digest as observationDigest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-observation-statistics.mjs';
 import { SessionStatistics } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync,chmodSync,statSync,existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync,chmodSync,statSync,existsSync,unlinkSync } from 'node:fs';
 import {erasureMonitorEndpoint} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { erasureScope, extendErasureScope, projectErasure, erasureFilePlan, ErasureTransaction, erasureInventory,
   erasureReferences, removeErasureDirectories } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
-import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
+import { ContinuityStore, canonicalContinuityDigest } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {createObservationJournal} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
 import { writeRuntimeJson, readRuntimeJson } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
+import { PermissionReplyJournal } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-permission-replies.mjs';
 
 const run = {runId:'run-target-12345',changeId:'target-change-12345',ownerId:'owner',contextId:1,version:2,state:'DELIVERED',sessionId:'ses_target12345'};
 const peer = {runId:'run-peer-12345',changeId:'peer-change-12345',ownerId:'peer-owner',contextId:3,version:3,state:'RESERVED',sessionId:'ses_peer12345'};
@@ -19,6 +20,27 @@ const registry = () => ({project:'/fixture',sequence:5,runs:[structuredClone(run
     'op-peer12345':{runId:peer.runId,operationId:'op-peer12345',state:'EXECUTING',native:{onceAcknowledged:true}}},accesses:{},testReservations:{}}});
 const scope = () => erasureScope(registry(),run.changeId,'owner');
 const fixture = fn => { const root=mkdtempSync(join(tmpdir(),'cab-erasure-'));try{return fn(root)}finally{rmSync(root,{recursive:true,force:true})} };
+
+test('permission receipts erase only verified target envelopes and preserve unknown or peer receipts',()=>fixture(root=>{
+  const dir=join(root,'permission-replies');mkdirSync(dir,{mode:0o700});
+  const value=sessionId=>({protocol:'cab-native-permission-reply-v1',replyOrigin:'CAB_CLIENT_PROGRAMMATIC',sessionId,
+    permissionId:'per_'+sessionId,directory:'/fixture',decision:'reject',nativePid:42,nativeVersion:'fixture',callId:null,
+    targetDigest:null,state:'INTENT',createdAt:'2026-01-01T00:00:00Z'});
+  const target=value(run.sessionId),other=value(peer.sessionId);
+  const journal=new PermissionReplyJournal(dir),targetPath=journal.path(target),peerPath=journal.path(other),unknownPath=join(dir,'unknown.json');
+  writeRuntimeJson(targetPath,{value:target,digest:canonicalContinuityDigest(target)});
+  writeRuntimeJson(peerPath,{value:other,digest:canonicalContinuityDigest(other)});
+  writeRuntimeJson(unknownPath,{digest:'a'.repeat(64)});
+  const plan=erasureFilePlan([dir],scope());
+  assert.deepEqual(plan.entries.map(x=>[x.path,x.remove]),[[targetPath,true]]);
+  const shared={...other,permissionId:target.permissionId};
+  writeRuntimeJson(journal.path(shared),{value:shared,digest:canonicalContinuityDigest(shared)});
+  assert.throws(()=>erasureFilePlan([dir],scope()),/erasure-permission-receipt-invalid/);
+  unlinkSync(journal.path(shared));
+  writeRuntimeJson(targetPath,{value:target,digest:'b'.repeat(64)});
+  assert.throws(()=>erasureFilePlan([dir],scope()),/erasure-permission-receipt-invalid/);
+  assert.equal(readRuntimeJson(unknownPath).value.digest,'a'.repeat(64));
+}));
 
 test('closed target selection preserves active peers and global sequences',()=>{
   const r=registry(),s=erasureScope(r,run.changeId,'owner'),next=projectErasure(r,s);
