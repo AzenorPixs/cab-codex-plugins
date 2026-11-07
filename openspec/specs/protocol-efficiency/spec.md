@@ -103,3 +103,10 @@ Le contrat distribué SHALL relier état observé, preuve requise, action propri
 - **WHEN** l’orchestrateur diagnostique le cas
 - **THEN** il conserve les effets incertains et traite les unités indépendantes autorisées
 - **AND** il distingue défaut technique à qualifier et décision métier hors périmètre réservée au développeur
+
+### Requirement: Efficacité mesurée et corrélation exacte
+CAB SHALL utiliser préfixes stables, états ciblés, calculs locaux et attentes mécaniques bornées hors LLM. Le compactage SHALL conserver un checkpoint structuré et ne provoquer aucun rejeu. Les révisions effectives SHALL être fournies pour les clés exactes et distinguées des révisions brutes, sans réagrégation des agrégats.
+
+#### Scenario: Parent agrégé et fichier enfant
+- **WHEN** une révision du parent provient d’un autre enfant
+- **THEN** le client conserve la révision effective exacte du fichier demandé et ne traite pas celle du parent comme une écriture brute

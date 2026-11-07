@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.2.40
+# Index du protocole CAB 2.4.0
 
 Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 
@@ -13,6 +13,9 @@ Après le nettoyage OC : [effacement ciblé des briques](change-erasure.md).
 | Besoin | Contrat et détails |
 |---|---|
 | Autorité, permissions, durée, finalité | [protocol-core](protocol-core.md) |
+| Autonomie, ateliers, lectures et validation des résultats | [autonomie du change](autonomy-and-ateliers.md) |
+| Collecte permanente SGS et session Codex directe | [collecte SGS](../../sgs/references/runtime-collection.md) |
+| Déclaration et traitement des incidents | Skill/commande CCAB du même paquet ; FIFO et lots justifiés |
 | Démarrage et cadrages | [protocol-bootstrap](protocol-bootstrap.md), [technical-startup](technical-startup.md), [monitor-service](monitor-service.md) |
 | Identités et propriétaires | [protocol-coordination](protocol-coordination.md), [concurrent-runs](concurrent-runs.md) |
 | Modèle et raccord | [protocol-model](protocol-model.md), [model-policy](model-policy.md) |

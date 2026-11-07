@@ -5,6 +5,11 @@ description: Produire, amender et interroger les statistiques SGS d’un projet 
 
 # SGS
 
+Pour le suivi natif continu de CAB2.4.0, lire
+[la collecte runtime](references/runtime-collection.md). Une consultation de
+compteurs ou un raccordement explicite n’est pas une invocation de REBUILD.
+La présence des nouvelles sources ne prouve pas leur installation/activation.
+
 La commande canonique est `/SGS` en MAJUSCULES. Une demande manuelle de SGS
 signifie toujours REBUILD pour le projet réel ciblé. Les sessions de codage
 utilisent CHANGE puis DELTA ; l’absence du global ne déclenche aucune création.

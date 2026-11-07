@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-VERSION = "2.3.10"
+VERSION = "2.4.0"
 FORMAT = "cab-sgs-1"
 # Bounded inputs below make this precision sufficient for all exact additive states.
 getcontext().prec = 100
@@ -1414,6 +1414,48 @@ def verify(root, contract, *, sources=False):
             'report_sha256':sha(report),'transaction_pending':False}
 
 
+def validate_native_telemetry(value):
+    """Annexe native durable ; aucun corps de conversation ni champ libre."""
+    if not isinstance(value,dict) or set(value)!={'format','sessions'} or value['format']!='cab-native-sgs-1' or not isinstance(value['sessions'],list) or len(value['sessions'])>1000:
+        raise SGSError('Annexe native SGS invalide')
+    identity_keys={'binding','host','instance','project','change','run','session','role','agent','mode','started_at'}
+    for session in value['sessions']:
+        if not isinstance(session,dict) or set(session)-{'ended_at','cab_direct'}!=identity_keys|{'metrics','coverage','models','events','collector'}:
+            raise SGSError('Session native SGS invalide')
+        if session['role'] not in {'coder','orchestrator','component'} or session['mode'] not in {'direct','piloted','service'}:
+            raise SGSError('Rôle natif SGS invalide')
+        for key in identity_keys-{'started_at','project'}:
+            if not isinstance(session[key],str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:/+@-]{0,255}',session[key]):
+                raise SGSError('Identité native SGS invalide')
+        if not isinstance(session['project'],str) or not session['project'].startswith('/') or '\n' in session['project'] or timestamp(session['started_at']) is None:
+            raise SGSError('Source native SGS invalide')
+        if session.get('ended_at') is not None and timestamp(session['ended_at']) is None:raise SGSError('Fin native SGS invalide')
+        if 'cab_direct' in session and type(session['cab_direct']) is not bool:raise SGSError('Opt-in CAB direct invalide')
+        metric_keys=set(METRICS)|{'cost_usd','duration_seconds','wait_seconds','preparation_seconds','ttft_seconds','generation_seconds','update_preparation_seconds','update_cutover_seconds',
+            'messages_llm','tools_llm','commands_api','command_wall_seconds','tool_wall_seconds','message_span_seconds','reasoning_span_seconds',
+            'ccab_open','ccab_claimed','ccab_resolved_retained','ccab_total_retained'}
+        if not isinstance(session['metrics'],dict) or not set(session['metrics'])<=metric_keys or not isinstance(session['coverage'],dict) or not set(session['coverage'])<=metric_keys:
+            raise SGSError('Mesures natives SGS invalides')
+        for measure in session['metrics'].values():
+            number=decimal(measure)
+            if number<0:raise SGSError('Mesure native SGS négative')
+        if any(state not in {'native','partial','unavailable','supplement'} for state in session['coverage'].values()):
+            raise SGSError('Couverture native SGS invalide')
+        if type(session['events']) is not int or session['events']<0 or not isinstance(session['collector'],dict) or not set(session['collector'])<={'source','status','reason'}:
+            raise SGSError('Collecteur natif SGS invalide')
+        if any(not isinstance(v,str) or len(v)>100 or '\n' in v for v in session['collector'].values()):
+            raise SGSError('Collecteur natif SGS invalide')
+        if not isinstance(session['models'],list) or len(session['models'])>10000:raise SGSError('Chronologie native SGS invalide')
+        for period in session['models']:
+            if not isinstance(period,dict) or set(period)!={'from','until','model','source'} or period['source'] not in {'codex-native','opencode-native','cab-component','llm-supplement','archive'}:
+                raise SGSError('Période native SGS invalide')
+            if timestamp(period['from']) is None or period['until'] is not None and timestamp(period['until']) is None:
+                raise SGSError('Horodatage de modèle invalide')
+            if not isinstance(period['model'],dict) or set(period['model'])!={'name','provider','reasoning'} or any(v is not None and (not isinstance(v,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:/+@-]{0,255}',v)) for v in period['model'].values()):
+                raise SGSError('Modèle natif SGS invalide')
+    return value
+
+
 def ledger_contribution(ledger):
     if set(ledger) != {'format','sessions'} or ledger['format'] != FORMAT or not ledger['sessions']:
         raise SGSError('Registre de sessions incompatible')
@@ -1424,9 +1466,10 @@ def ledger_contribution(ledger):
     last = max((i for i,s in enumerate(records) if s['scope'] == 'cumulative'), default=-1)
     active = records[last:] if last >= 0 else records
     for item in records:
-        if set(item) - {'id','scope','state','input_sha256','contribution','details','tables','notes','agent_details'} or not {'id','scope','state','input_sha256','contribution'} <= set(item) or item['scope'] not in {'cumulative','increment'} or item['state'] not in {'blocked','archived','legacy'}:
+        if set(item) - {'id','scope','state','input_sha256','contribution','details','tables','notes','agent_details','native_telemetry'} or not {'id','scope','state','input_sha256','contribution'} <= set(item) or item['scope'] not in {'cumulative','increment'} or item['state'] not in {'blocked','archived','legacy'}:
             raise SGSError('Session invalide')
         validate_contribution(item['contribution'])
+        if 'native_telemetry' in item:validate_native_telemetry(item['native_telemetry'])
     c = blank()
     for key in METRICS:
         values = [s['contribution']['metrics'][key] for s in active]
@@ -1515,7 +1558,7 @@ def _change_report(root, relative, evidence_path, state, cab_export, file_mode, 
     evidence_data = evidence_path if isinstance(evidence_path,bytes) else read_file(evidence_path)
     if len(evidence_data)>MAX_BYTES:raise SGSError('Preuves trop volumineuses')
     evidence = load_json(evidence_data)
-    if set(evidence) - {'schema_version','session_id','scope','contribution','details','tables','notes','agent_details'} or not {'schema_version','session_id','scope','contribution'} <= set(evidence) or evidence['schema_version'] != 1:
+    if set(evidence) - {'schema_version','session_id','scope','contribution','details','tables','notes','agent_details','native_telemetry'} or not {'schema_version','session_id','scope','contribution'} <= set(evidence) or evidence['schema_version'] != 1:
         raise SGSError('Schéma de preuves de session invalide')
     if not re.fullmatch(r'[\w.:-]{1,180}',evidence['session_id']):
         raise SGSError('Identifiant de session invalide')
@@ -1535,6 +1578,11 @@ def _change_report(root, relative, evidence_path, state, cab_export, file_mode, 
         import_cab(root,changes,cab_export)
     record = {'id':evidence['session_id'],'scope':evidence['scope'],'state':state,
               'input_sha256':input_hash,'contribution':c}
+    if 'native_telemetry' in evidence:
+        record['native_telemetry']=validate_native_telemetry(evidence['native_telemetry'])
+        expected_change=re.sub(r'^\d{4}-\d{2}-\d{2}-','',relative.rsplit('/',1)[1])
+        if any(s['project']!=str(root) or s['change']!=expected_change for s in record['native_telemetry']['sessions']):
+            raise SGSError('Télémétrie native hors projet/change')
     if 'details' in evidence:
         if not isinstance(evidence['details'],dict) or set(evidence['details'])-set('123456'):
             raise SGSError('Détails de session hors des six sections')
@@ -1639,7 +1687,14 @@ def _change_report(root, relative, evidence_path, state, cab_export, file_mode, 
         agents+=('### ' if standard else '#### ')+title+' — relevé '+record['id']+'\n\n'+'\n'.join(table(
             ['Modèle de LLM','Version','Fournisseur','Niveau de raisonnement','TTMT moyen','Tokens/seconde moyens','Temps de service (% total)'],
             data_rows or [['N/A']*7]))+'\n'
-    result = prefix + agents + ''.join(blocks) + '\n<!-- CAB_SGS_SESSIONS_V1\n'+dumps(ledger).decode().rstrip()+'\n-->\n'
+    native_block=''
+    if 'native_telemetry' in record:
+        native_block='\n### Télémétrie native et chronologie des modèles\n\n'
+        for session in record['native_telemetry']['sessions']:
+            native_block+='\n'.join(table(['Rôle','Agent','Session','Mode'],[[session['role'],session['agent'],session['session'],session['mode']]]))+'\n'
+            native_block+='\n'.join(table(['Mesure','Valeur','Couverture'],[[key,value,session['coverage'].get(key,'unavailable')] for key,value in session['metrics'].items()]))+'\n'
+            native_block+='\n'.join(table(['Début','Fin','Modèle','Fournisseur','Raisonnement'],[[p['from'],p['until'] or 'N/A',p['model']['name'] or 'N/A',p['model']['provider'] or 'N/A',p['model']['reasoning'] or 'N/A'] for p in session['models']]))+'\n'
+    result = prefix + agents + ''.join(blocks) + native_block + '\n<!-- CAB_SGS_SESSIONS_V1\n'+dumps(ledger).decode().rstrip()+'\n-->\n'
     if '-->' in dumps(ledger).decode():
         raise SGSError('Délimiteur interdit dans les preuves')
     temporary = path.with_name(path.name+'.sgs-candidate')

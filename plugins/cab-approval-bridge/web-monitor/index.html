@@ -18,6 +18,7 @@
       <a id="monitor-nav" class="rail-link active" href="#monitor" aria-current="page"><span aria-hidden="true">▦</span>MONITOR</a>
       <a id="stats-nav" class="rail-link" href="#stats"><span aria-hidden="true">▥</span>STATS</a>
       <a id="archives-nav" class="rail-link" href="#archives"><span aria-hidden="true">▣</span>ARCHIVES</a>
+      <a id="ccab-nav" class="rail-link" href="#ccab"><span aria-hidden="true">◇</span>CCAB</a>
     </nav>
     <div class="rail-bottom">LOCAL<br><span id="version">2.1.2</span></div>
   </aside>
@@ -65,11 +66,12 @@
       <div class="hero"><div><div class="eyebrow">HISTORIQUE DU MONITEUR</div><h1 id="archives-title">Archives</h1><p>RUN et changes rangés dans le moniteur. Les sources du projet et les exécutions restent conservées.</p></div></div>
       <section class="panel"><div class="panel-top"><h2>RUN archivés</h2></div><div id="archives-runs" class="work-content"></div></section>
       <section class="panel archives-changes"><div class="panel-top"><h2>Changes archivés</h2></div><div id="archives-changes" class="work-content"></div></section>
+      <section class="panel"><div class="panel-top"><h2>Données réellement conservées par CAB</h2></div><p>Rapports copiés avant nettoyage. Consulter leur origine et leur contenu ; supprimer une copie CAB conserve le fichier source du projet.</p><div id="archives-retained"></div></section>
     </section>
     <section id="stats-page" hidden aria-labelledby="stats-title">
       <div class="hero"><div><div class="eyebrow">HISTORIQUE CAB</div><h1 id="stats-title">Le travail.<br><span>En chiffres.</span></h1><p>Décisions, activité observée et attentes. Chaque source garde sa provenance et sa couverture.</p></div></div>
       <div class="panel stats-toolbar">
-        <label>Période<select id="stats-selection"><option value="current">Contextes courants</option><option value="last">Dernière livraison</option><option value="24h">Dernières 24 heures</option><option value="7d">7 derniers jours</option><option value="30d">30 derniers jours</option></select></label>
+        <label>Périmètre<select id="stats-selection"><option value="current">Historique SGS du projet</option></select></label>
         <label>RUN<select id="stats-run"><option value="">Tous les RUN</option></select></label>
         <button id="stats-refresh" type="button">Actualiser</button>
         <p id="stats-status" role="status" aria-live="polite">En attente des statistiques.</p>
@@ -85,6 +87,7 @@
     </section>
     <dialog id="retention-dialog" aria-labelledby="retention-dialog-title"><h2 id="retention-dialog-title">Confirmer la purge</h2><p id="retention-cutoff"></p><div id="retention-counts"></div><p id="retention-protected"></p><p class="warning">Cette suppression est irréversible sans sauvegarde préalable. Les magasins statistiques restent en place.</p><div class="retention-actions"><button id="retention-cancel" type="button" autofocus>Annuler</button><button id="retention-confirm" class="danger-button" type="button">Confirmer la suppression</button></div></dialog>
     <dialog id="management-dialog" aria-labelledby="management-dialog-title"><h2 id="management-dialog-title">Supprimer du moniteur</h2><p id="management-confirm-text"></p><p>Cette action masque la ligne dans le moniteur. Les sources, le RUN réel et ses preuves restent conservés.</p><div class="retention-actions"><button id="management-cancel" type="button" autofocus>Annuler</button><button id="management-confirm" class="danger-button" type="button">Supprimer</button></div></dialog>
+    <section id="ccab-page" hidden aria-labelledby="ccab-title"><div class="hero"><div><div class="eyebrow">CORRECTIF CAB</div><h1 id="ccab-title">Incidents CCAB</h1><p>FIFO par défaut, lots justifiés et résolution vérifiée avec les déclarants.</p></div></div><div id="ccab-content"></div></section>
     <footer><span><b>CAB</b> Monitor <span id="footer-version">2.1.2</span></span><span>Observation locale · Aucun appel LLM · Horaires Europe/Paris</span></footer>
   </main>
 </body>

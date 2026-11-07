@@ -1,7 +1,7 @@
 import { pathToFileURL } from 'node:url';
 import { realpath } from 'node:fs/promises';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 
 function loopback(value) {
@@ -13,7 +13,7 @@ function loopback(value) {
 }
 
 function parseArguments(argv) {
-  const values = {}, accepted = new Set(['--controller-url','--run-id','--operation','--path','--query','--type','--limit']);
+  const values = {}, accepted = new Set(['--controller-url','--run-id','--operation','--path','--query','--type','--limit','--max-bytes']);
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index];
     if (!accepted.has(key) || Object.hasOwn(values,key) || !argv[index + 1] || argv[index + 1].startsWith('--')) {
@@ -30,13 +30,15 @@ function parseArguments(argv) {
       (operation === 'find' && (typeof values['--query'] !== 'string' || values['--path'] !== undefined ||
         (values['--type'] !== undefined && !['file','directory'].includes(values['--type']))))) fail('source-read-arguments-invalid');
   const limit = values['--limit'] === undefined ? undefined : Number(values['--limit']);
+  const maxBytes=values['--max-bytes']===undefined ? undefined : Number(values['--max-bytes']);
+  if(maxBytes!==undefined && (operation!=='read' || !Number.isSafeInteger(maxBytes) || maxBytes<1 || maxBytes>2*1024*1024))fail('source-read-arguments-invalid');
   if (limit !== undefined && (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) ||
       operation !== 'find' && limit !== undefined) fail('source-read-arguments-invalid');
   return { controllerUrl: loopback(values['--controller-url'] || process.env.OC_Codex_CONTROLLER_URL || 'http://127.0.0.1:8788'),
-    runId, operation, path: values['--path'], query: values['--query'], type: values['--type'], limit };
+    runId, operation, path: values['--path'], query: values['--query'], type: values['--type'], limit, maxBytes };
 }
 
-async function readBounded(response, limit = 2 * 1024 * 1024) {
+async function readBounded(response, limit = 16 * 1024 * 1024) {
   if (!response.body) fail('source-read-response-empty');
   const reader = response.body.getReader(), chunks = []; let size = 0;
   try {
@@ -63,6 +65,10 @@ export async function readSource(input, fetchImpl = fetch) {
   if (input.query !== undefined) url.searchParams.set('query',input.query);
   if (input.type !== undefined) url.searchParams.set('type',input.type);
   if (input.limit !== undefined) url.searchParams.set('limit',String(input.limit));
+  if(input.maxBytes!==undefined) {
+    if(input.operation!=='read' || !Number.isSafeInteger(input.maxBytes) || input.maxBytes<1 || input.maxBytes>2*1024*1024)fail('source-read-arguments-invalid');
+    url.searchParams.set('maxBytes',String(input.maxBytes));
+  }
   let response;
   try { response = await fetchImpl(url,{headers:{accept:'application/json'},redirect:'error',signal:AbortSignal.timeout(10000)}); }
   catch (cause) {

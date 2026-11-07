@@ -1,5 +1,54 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+## Contrat CAB 2.4.0 — huit catégories validées
+
+Contrat2.4.0 validé sous SCM avec CI/CD. Les preuves de qualification sont
+conservées avec le change OpenSpec correspondant ; la publication et l’activation
+sont vérifiées séparément par les reçus de livraison et CABU. Le numéro présent
+dans ce document ne prouve pas la version chargée par un processus. Les
+références héritées ci-dessous décrivent les versions antérieures ; le contrat
+OpenSpec et le contrat distribué de la version effectivement active font autorité.
+
+| Catégorie | Contrat adopté |
+|---|---|
+| 1. Autorité et autonomie | Dans le change validé, l’orchestrateur décide, orchestre, contrôle et valide ; le codeur réalise librement lectures, exploration et essais. Toute écriture projet hors atelier et tout accès web requièrent sa validation préalable. Toute action hors change et toute allocation de ressources supplémentaires nécessitent l’accord du développeur. Les ressources déjà allouées restent utilisables. Tous les résultats de tests sont soumis à validation de l’orchestrateur avant d’être retenus comme preuves. |
+| 2. SGS | Service permanent, collecte native autonome Codex/OpenCode des deux rôles, sources des briques transmises directement, complément LLM limité aux faits absents. Modèle, fournisseur, niveau de raisonnement et changements horodatés ; chronologie, attentes, durées et tokens entrée/sortie/raisonnement/cache séparés, totaux natifs préservés. N/A motivé pour les mesures non exposées. Tous les rapports statistiques archivés sont importables avec provenance et déduplication. |
+| 3. CCAB | File persistante et plugin/skill/commande. FIFO par défaut, lots de cause commune justifiés et réservés, coordination avec les déclarants et résolution individuelle. Correctif code ou documentaire sous SCM/version/CI-CD/CABU ; faux positif accompagné d’une méthode vérifiée. Aucun nouveau chat imposé. |
+| 4. CABU | Préparation à chaud, bascule minimale, reprise du même reçu, versions chargées vérifiées et retour des communications. Aucun rejeu d’effet ni de permission once. Une coupure brève se traite comme une interruption réseau avec reprise sur reçus. Chaque UID modifie uniquement ses données privées. |
+| 5. Nettoyage et Web Monitor | RUN en cours refusé au nettoyage. À l’archivage ou à l’arrêt explicite pour dépendance insatisfaite : rapports durables, nettoyage OC puis données du change dans toutes les briques, avec préservation des pairs. Une pause ou un incident technique ne vaut pas clôture. Archives montre les données réellement conservées et permet leur suppression explicite par le développeur sans approbation CAB supplémentaire. Stats lit seulement SGS ; incidents encore nécessaires visibles dans CCAB. |
+| 6. Distribution et connaissance | Chaque acteur connaît le contrat applicable avant son travail et après reprise/update ; rôle et version sont tracés. Skills, plugins et commandes restent cohérents et agnostiques des projets et machines. Le noyau compact renvoie aux références utiles sans relire tout l’historique. |
+| 7. Temps, tokens et cache LLM | Préfixes stables, états différentiels, attente mécanique hors tours LLM, calcul local des identités/empreintes et compactage fondé sur le budget avec checkpoint durable. Gains de cache et latences mesurés par SGS, jamais supposés ; temps mural et temps agent concurrents restent distincts. |
+| 8. Réalisation et livraison | Une version consolidée2.4.0 sous SCM, tests vitaux ciblés, cohérence OpenSpec et cadrages, commit/publication via CI/CD DIU puis CABU. Qualification source, publication et activation sont prouvées séparément. |
+
+L’atelier commun est `.cab-tests/<change>/<RUN>/` à la racine de **chaque
+projet**. Toutes les briques vérifient/créent `.cab-tests/` au démarrage pour
+ce projet. Le codeur peut y créer, modifier et copier des fichiers du change
+sans autorisation supplémentaire ; il ne touche pas aux ateliers des pairs.
+Le sous-espace propre est vidé à la clôture, la racine reste présente. Les
+liens symboliques ne doivent pas permettre de sortir de cet espace.
+
+CAB direct est un opt-in explicite (« utiliser CAB en mode direct ») : une
+session Codex réelle alimente SGS et apparaît dans le Web Monitor, sans
+inventer de session OpenCode ni d’orchestrateur. Sa présence dans un dépôt
+ne déclenche aucun RUN ni pilotage implicite.
+
+## Utilisation de la cible
+
+- Pilotage : CAB pour les mandats, décisions, validations et reprises du change.
+- Direct : demander explicitement CAB en mode direct pour raccorder la session
+  Codex et SGS, sans lancer OpenCode pour la représenter.
+- Statistiques : SGS pour les rapports et mesures avec leurs sources et limites.
+- Incidents : CCAB pour déclarer un incident ou confier sa file à une session
+  orchestrateur désignée. Le service ne produit aucun correctif de lui-même.
+- Maintenance : CABU pour préparer, basculer, reprendre et vérifier les briques.
+- Web Monitor : vues des RUN, Stats depuis SGS, CCAB et Archives réelles.
+
+Le détail de la réalisation figure dans
+[le change2.4.0](openspec/changes/evolve-cab-autonomous-runtime-and-telemetry/tasks.md).
+Une tâche cochée sur preuve source ne vaut pas activation de la version.
+
+## Références héritées et compatibilité antérieure
+
 ## Lecture des reçus legacy — CAB 2.3.10
 
 L’effacement reconnaît les anciennes terminaisons COMPLETED sans nativeResult uniquement sous identité, empreintes, dates et accès libéré cohérents. Aucun résultat natif n’est inventé ; les cas incomplets et effets non terminés restent protégés. Voir [la procédure](plugins/cab-approval-bridge/skills/approval-bridge/references/change-erasure.md).

@@ -24,6 +24,44 @@ const selectionKey = () => $('#stats-selection').value + ':' + $('#stats-run').v
 function render() {
   if (!data) return;
   const holder = $('#stats-content'); holder.replaceChildren();
+  if(data.backend==='sgs') {
+    $('.retention-panel').hidden=true;
+    for(const session of data.sessions) {
+      const panel=node('section',null,'panel stats-source');
+      panel.append(node('h2',session.change+' · '+session.run),
+        node('p',session.agent+' / '+session.role+' · '+session.mode+' · '+session.session,'detail-note'),
+        table(['Mesure','Valeur','Couverture'],Object.entries(session.coverage).sort().map(([name,coverage])=>[name,session.metrics[name]??'N/A',coverage])),
+        table(['Début','Fin','Modèle','Fournisseur','Raisonnement'],session.models.map(item=>[date(item.from),date(item.until),item.model.name??'N/A',item.model.provider??'N/A',item.model.reasoning??'N/A'])),
+        node('p','Collecteur : '+session.collector.status+' · '+session.events+' événements.','detail-note'));
+      let cursor=0;const history=node('button','Consulter les mesures reçues');history.type='button';
+      history.addEventListener('click',async()=>{
+        history.disabled=true;
+        try{const result=await request('/api/statistics/events?'+new URLSearchParams({binding:session.binding,after:String(cursor),limit:'100'}));
+          const pre=node('pre',JSON.stringify(result.events,null,2));pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';panel.append(pre);
+          if(result.next){cursor=result.next;history.textContent='Mesures suivantes';history.disabled=false;}
+        }catch{panel.append(node('p','Historique indisponible.'));history.disabled=false;}
+      });panel.append(history);
+      holder.append(panel);
+    }
+    for(const archive of data.archives) {
+      const panel=node('section',null,'panel stats-source');
+      panel.append(node('h2',archive.change),node('p',archive.path+' · SHA256 '+archive.sha256,'detail-note'),
+        table(['Mesure','Valeur','État'],Object.entries(archive.contribution.metrics||{}).map(([name,value])=>[name,value.value??'N/A',value.state])));
+      holder.append(panel);
+    }
+    for(const component of data.components||[]) {
+      const panel=node('section',null,'panel stats-source');
+      panel.append(node('h2',component.component),node('p',date(component.at)+' · '+component.bytes+' octets · SHA256 '+component.fingerprint,'detail-note'));
+      const button=node('button','Consulter les statistiques détenues par SGS');button.type='button';
+      button.addEventListener('click',async()=>{
+        button.disabled=true;
+        try{const value=await request('/api/statistics/component?'+new URLSearchParams({component:component.component}));const pre=node('pre',JSON.stringify(value.data,null,2));pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';panel.append(pre);}
+        catch{panel.append(node('p','Lecture indisponible.'));button.disabled=false;}
+      });panel.append(button);holder.append(panel);
+    }
+    if(!data.sessions.length&&!data.archives.length)holder.append(node('p','Aucune mesure SGS collectée ; une source absente ne vaut pas zéro.','detail-note'));
+    holder.append(node('p',data.totals_policy,'detail-note'));return;
+  }
   for (const source of data.sources) {
     const panel = node('section', null, 'panel stats-source');
     panel.append(node('div', source.historical ? 'HISTORIQUE IMPORTÉ' : 'SOURCE NATIVE', 'eyebrow'),
@@ -114,14 +152,66 @@ async function refresh() {
   }
 }
 function navigate() {
-  page = ['#stats', '#archives'].includes(location.hash) ? location.hash.slice(1) : 'monitor'; generation++; clearTimeout(timer);
-  for (const name of ['monitor', 'stats', 'archives']) $('#' + name + '-page').hidden = page !== name;
-  $('#page-label').textContent = ({ stats: 'Statistiques', archives: 'Archives', monitor: 'Supervision' })[page];
-  for (const name of ['stats', 'monitor', 'archives']) {
+  page = ['#stats', '#archives','#ccab'].includes(location.hash) ? location.hash.slice(1) : 'monitor'; generation++; clearTimeout(timer);
+  for (const name of ['monitor', 'stats', 'archives','ccab']) $('#' + name + '-page').hidden = page !== name;
+  $('#page-label').textContent = ({ stats: 'Statistiques', archives: 'Archives', monitor: 'Supervision',ccab:'Incidents CCAB' })[page];
+  for (const name of ['stats', 'monitor', 'archives','ccab']) {
     const link = $('#' + name + '-nav'); link.classList.toggle('active', name === page);
     if (name === page) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
   }
   if (page === 'stats') void refresh();
+  if(page==='ccab')void refreshCCAB();
+  if(page==='archives')void refreshArchiveData();
+}
+async function refreshArchiveData() {
+  const holder=$('#archives-retained');holder.replaceChildren(node('p','Chargement…'));
+  try {
+    const result=await request('/api/archives');holder.replaceChildren();
+    for(const archive of result.archives) {
+      const panel=node('section',null,'stats-source');
+      panel.append(node('h3',archive.changeId),node('p',archive.branch+' · '+archive.runIds.join(', '),'detail-note'));
+      for(const file of archive.files) {
+        const row=node('div',null,'retention-actions');
+        row.append(node('span',file.origin+' · '+file.bytes+' octets'));
+        const view=node('button','Consulter');view.type='button';
+        view.addEventListener('click',async()=>{
+          view.disabled=true;
+          try {
+            const value=await request('/api/archives/content?'+new URLSearchParams({archiveId:archive.archiveId,sha256:file.sha256}));
+            const dialog=node('dialog'),pre=node('pre',value.content),close=node('button','Fermer');
+            pre.style.whiteSpace='pre-wrap';pre.style.overflowWrap='anywhere';close.type='button';close.addEventListener('click',()=>dialog.close());
+            dialog.append(node('h2',value.origin),node('p','SHA256 '+value.sha256),pre,close);document.body.append(dialog);
+            dialog.addEventListener('close',()=>dialog.remove(),{once:true});dialog.showModal();
+          }catch{row.append(node('p','Lecture non confirmée.'));}finally{view.disabled=false;}
+        });row.append(view);panel.append(row);
+      }
+      const remove=node('button','Supprimer cette copie CAB','danger-button');remove.type='button';
+      remove.addEventListener('click',async()=>{
+        remove.disabled=true;
+        try {
+          const response=await fetch('/api/archives/delete',{method:'POST',headers:{'content-type':'application/json','x-cab-monitor':'1'},
+            body:JSON.stringify({archiveId:archive.archiveId,fingerprint:archive.fingerprint}),signal:AbortSignal.timeout(15000)});
+          const value=await response.json();if(!response.ok)throw new Error(value.error);await refreshArchiveData();
+        }catch{panel.append(node('p','Suppression non confirmée : vérifier la disponibilité et l’état du RUN.'));remove.disabled=false;}
+      });panel.append(remove);holder.append(panel);
+    }
+    if(!result.archives.length)holder.append(node('p','Aucun rapport conservé dans les archives CAB de ce projet.'));
+  }catch{holder.replaceChildren(node('p','Inventaire indisponible ; aucune absence de données n’est déduite.'));}
+}
+async function refreshCCAB() {
+  const holder=$('#ccab-content');holder.replaceChildren(node('p','Chargement…'));
+  try {
+    const result=await request('/api/ccab');holder.replaceChildren();
+    for(const incident of result.incidents) {
+      const panel=node('section',null,'panel stats-source');
+      panel.append(node('h2','#'+incident.sequence+' · '+incident.incident_id),node('p',date(incident.created)+' · '+incident.state+' · '+incident.reporter,'detail-note'),
+        node('p',incident.summary),node('p',incident.change+' / '+incident.run+' · CAB '+incident.version,'detail-note'));
+      if(incident.resolution)panel.append(node('p',incident.resolution.classification+' : '+incident.resolution.method));holder.append(panel);
+    }
+    for(const pending of result.pendingBroker||[])holder.append(node('p','En attente de livraison : '+pending.incident_id+' · '+pending.summary,'detail-note'));
+    if(result.unavailable)holder.append(node('p','Service CCAB indisponible ; les entrées locales en attente sont conservées.'));
+    if(!result.incidents.length&&!result.pendingBroker?.length&&!result.unavailable)holder.append(node('p','Aucun incident pour ce projet.'));
+  }catch{holder.replaceChildren(node('p','CCAB indisponible ; aucun incident n’est supposé résolu.'));}
 }
 for (const name of ['#stats-selection', '#stats-run']) $(name).addEventListener('change', () => {
   generation++; data = null; lastSuccess = null; $('#stats-content').replaceChildren();

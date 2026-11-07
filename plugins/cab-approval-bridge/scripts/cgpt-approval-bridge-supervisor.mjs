@@ -1,11 +1,13 @@
 import {runtimeStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
+import {ensureProjectTestRoot} from './cgpt-approval-bridge-autonomy.mjs';
 import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-const version = "2.3.10";
+const version = "2.4.0";
 if ([CONTEXT_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB supervisor component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -13,6 +15,7 @@ process.umask(process.umask() | 0o077);
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspace = envValue('OC_Codex_WORKSPACE');
 if (!workspace || !isAbsolute(workspace)) throw new Error('OC_Codex_WORKSPACE doit désigner une racine de projet absolue.');
+ensureProjectTestRoot(workspace);
 const host = envValue('OC_Codex_SUPERVISOR_STATUS_HOST') || '127.0.0.1';
 if (!['127.0.0.1', '::1'].includes(host)) throw new Error('Loopback requis.');
 const port = Number(envValue('OC_Codex_SUPERVISOR_STATUS_PORT') || 8789);
@@ -32,9 +35,13 @@ let pollTimer;
 let concurrent = false;
 let reconcileInFlight = false;
 let publicError = null;
+const statistics=new StatisticsBackend(workspace,'supervisor-statistics');
+let reconciliations=0,reconciliationFailures=0;
 async function reconcileAll() {
   if (closing || reconcileInFlight) return;
   reconcileInFlight = true;
+  const started=performance.now();
+  reconciliations++;
   try {
     const response = await fetch(controllerUrl + '/status', { signal: AbortSignal.any([transportAbort.signal, AbortSignal.timeout(10000)]) });
     if (!response.ok) throw new Error('controller-unavailable');
@@ -54,9 +61,17 @@ async function reconcileAll() {
     publicError = null;
   } catch {
     if (closing) return;
+    reconciliationFailures++;
     publicError = 'controller-reconciliation-failed';
     if (!concurrent) await legacy.reconcile();
-  } finally { reconcileInFlight = false; }
+  } finally {
+    reconcileInFlight = false;
+    const snapshots=concurrent?[...contexts.values()].map(context=>context.snapshot()):[legacy.snapshot()];
+    try { await statistics.write({pid:process.pid,reconciliations,reconciliationFailures,
+      lastReconciliationMs:performance.now()-started,contexts:snapshots.map(value=>({runId:value.runId||null,
+        resumeAttemptCount:value.resumeAttemptCount||0,resumeInFlight:!!value.resumeInFlight}))}); }
+    catch { process.stderr.write('CAB superviseur : collecte SGS non acquittée.\n'); }
+  }
 }
 async function consumeEvents() {
   if (closing) return;
@@ -105,7 +120,7 @@ async function shutdown() {
   lifetime.stop(); transportAbort.abort();
   clearTimeout(reconnectTimer); clearInterval(pollTimer);
   try {
-    await boundedCleanup(() => Promise.all([closeHttpServer(server), legacy.close(),
+    await boundedCleanup(() => Promise.all([closeHttpServer(server), legacy.close(),statistics.flush(),
       ...[...contexts.values()].map((context) => context.close())]));
     process.exit(0);
   } catch {

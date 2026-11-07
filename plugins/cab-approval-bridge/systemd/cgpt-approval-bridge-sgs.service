@@ -1,0 +1,13 @@
+[Unit]
+Description=CAB 2.4.0 — Collecte et statistiques SGS permanentes
+
+[Service]
+Type=simple
+Environment=PYTHONDONTWRITEBYTECODE=1
+EnvironmentFile=-%h/.config/cab-approval-bridge/controller.env
+ExecStart=/usr/bin/python3 %h/.local/share/cab-approval-bridge/cgpt-approval-bridge-runtime-service.py sgs
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true

@@ -15,22 +15,30 @@ L'interface MUST afficher STATS sous MONITOR, identifier la page sélectionnée 
 - **THEN** chaque page est affichée et la supervision SSE reste fonctionnelle
 
 ### Requirement: Statistiques filtrées et explicites
-STATS MUST proposer current, last, 24h, 7d et 30d ainsi qu'un filtre RUN. Les agrégats MUST provenir des JSON statistiques gérés par le contrôleur via une projection HTTP bornée, sans lecture privée par le moniteur. Provenance, dates, couverture, troncature et limites MUST être visibles. Les sources recouvrantes MUST NOT être additionnées. Les métriques cumulatives MUST rester distinctes des fenêtres ; les métriques absentes MUST rester N/A.
+STATS MUST lire exclusivement SGS par IPC local et permettre une sélection du projet et du RUN. Les mesures natives, périodes de modèles, couvertures, événements paginés, sources de briques et contributions archivées MUST rester distincts et consultables. Aucune source contrôleur ne MUST remplacer SGS indisponible. Les champs absents MUST rester N/A et les métriques recouvrantes MUST NOT être additionnées. Les cumuls SGS MUST NOT être présentés comme des fenêtres temporelles non calculées.
+
+#### Scenario: SGS indisponible
+- **WHEN** le service statistique est inaccessible
+- **THEN** STATS conserve son état d’indisponibilité sans substituer les anciens magasins du contrôleur
 
 #### Scenario: Import et natif recouvrants
-- **WHEN** une fenêtre contient des données natives et un jeu importé
-- **THEN** la page présente les sources séparément et signale les lacunes sans inventer de total commun
+- **WHEN** SGS conserve des mesures natives et un rapport archivé du même change
+- **THEN** STATS présente leurs provenances séparément sans les additionner
 
 #### Scenario: Contrôleur indisponible
-- **WHEN** la source statistique devient inaccessible
-- **THEN** la page reste accessible et marque les dernières données comme anciennes avec date du dernier succès
+- **WHEN** le contrôleur est inaccessible mais SGS reste disponible
+- **THEN** STATS présente les données de SGS sans substituer la panne du contrôleur à son état
 
 ### Requirement: Purge manuelle à borne explicite
-La purge MUST accepter seulement 1, 3, 7, 30 et 365 jours, avec une borne UTC stricte attribuée côté serveur. Elle MUST exiger une prévisualisation puis une confirmation explicite d'un jeton opaque valide pendant cinq minutes. Une dérive des candidats ou protections MUST refuser la confirmation. Une répétition du jeton confirmé MUST retourner le reçu existant sans nouvel effet tant qu'il est retenu.
+La page STATS2.4 MUST NOT proposer la purge des anciens magasins statistiques du contrôleur. Les anciennes routes de rétention du moniteur MUST refuser une mutation sans effet. L’effacement terminal des buffers MUST passer par les reçus de clôture après rapport durable ; la suppression des copies archivées CAB MUST rester dans ARCHIVES et ne MUST NOT supprimer l’historique SGS validé.
+
+#### Scenario: Ancienne route de purge
+- **WHEN** un client appelle une ancienne route de rétention statistique depuis le moniteur
+- **THEN** la requête est refusée sans purge SGS, RUN ou archive
 
 #### Scenario: Borne exacte et annulation
-- **WHEN** une donnée est exactement à la borne ou la prévisualisation est annulée
-- **THEN** cette donnée n'est pas supprimée et l'annulation ne modifie aucun magasin
+- **WHEN** une ancienne prévisualisation est annulée ou un client transmet son ancienne borne de purge
+- **THEN** aucune donnée n’est supprimée par les routes de rétention désactivées du moniteur2.4
 
 ### Requirement: Protection du fonctionnement CAB
 La purge MUST retirer uniquement les historiques statistiques admissibles. Elle MUST préserver les contextes RESERVED ou courants du registre, les segments mixtes et les jeux importés protégés. Elle MUST NOT supprimer les fichiers opérationnels ni les preuves métier. Les agrégats globaux non décomposables MUST être conservés avec une limite explicite. Le choix 365 jours MUST NOT prolonger la rétention native.

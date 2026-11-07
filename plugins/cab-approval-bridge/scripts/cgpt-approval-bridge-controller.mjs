@@ -1,14 +1,20 @@
+import {startOwnerProxy} from './cgpt-approval-bridge-owner-proxy.mjs';
+import {ensureProjectTestRoot,authorizeAtelierCall} from './cgpt-approval-bridge-autonomy.mjs';
 import {migrationRegistryDigest,validateRuntimeMigration,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
 import { ChangeErasureManager,erasureMonitorEndpoint } from './cgpt-approval-bridge-erasure-manager.mjs';
 import {ErasureTransaction} from './cgpt-approval-bridge-change-erasure.mjs';
 import {runtimeStateDirectory,legacyStateDirectory,projectAuthorityPath,initializeRuntimeState,readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
 import { EfficiencyLedger } from './cgpt-approval-bridge-efficiency.mjs';
+import { NativeTelemetryPublisher } from './cgpt-approval-bridge-native-telemetry.mjs';
+import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
+import {prepareValidationData} from './cgpt-approval-bridge-validation-preparation.mjs';
+import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 import { ShellLifecycle } from './cgpt-approval-bridge-shell-lifecycle.mjs';
-import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, processIdentity, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
+import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, processIdentity, processOwnerIdentity, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { isAbsolute, join, relative, resolve,dirname } from 'node:path';
 import { createJobContext, commandLengthLimit, checkCommandLength, VERSION as JOB_CONTEXT_VERSION } from './cgpt-approval-bridge-job-context.mjs';
 import { CoordinationError, VERSION } from './cgpt-approval-bridge-runs.mjs';
 import { ResourceRunRegistry, COORDINATION_PROTOCOL, TEST_RESOURCE_PROTOCOL, VERSION as RESOURCE_VERSION } from './cgpt-approval-bridge-resource-coordination.mjs';
@@ -29,7 +35,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.3.10";
+const version = "2.4.0";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -47,8 +53,10 @@ const maxCommandLength = commandLengthLimit();
 const controllerEntry = fileURLToPath(import.meta.url);
 const loadedBuildDigest = proofHash(await moduleManifest(controllerEntry));
 const workspace = realpathSync(workspaceInput);
+ensureProjectTestRoot(workspace);
 const transportAbort = new AbortController();
 const openCode = createOpenCodeV2ClientFromEnv({ directory: workspace, signal: transportAbort.signal });
+const nativeTelemetry = new NativeTelemetryPublisher(null);
 const stateDirectory = runtimeStateDirectory(workspace);
 const migrationPath=join(stateDirectory,'runtime-migration.json');
 let runtimeMigration=null;
@@ -101,7 +109,8 @@ await registry.acquireAuthority({additionalLockPath:projectAuthorityPath(workspa
     if(proof.phase==='PREPARED'&&migrationRegistryDigest(readRuntimeJson(legacyRegistry,{legacy:true}).value)!==proof.registryDigest)
       throw new Error('runtime-migration-source-divergent');
   }
-  runtimeLayout=initializeRuntimeState(workspace,stateDirectory);observations=createObservationJournal({path:join(stateDirectory,'protocol-observations.json')});statistics=new SessionStatistics(stateDirectory,{project:workspace});}});
+  runtimeLayout=initializeRuntimeState(workspace,stateDirectory);observations=createObservationJournal({path:join(stateDirectory,'protocol-observations.json')});statistics=new SessionStatistics(stateDirectory,{project:workspace,
+    backend:new StatisticsBackend(workspace,'controller-statistics',{legacyPath:join(stateDirectory,'controller-statistics.json')})});}});
 let broker = null;
 let handoffJournal;
 let transportAdoption = { adopted: false, reason: 'handoff-not-sealed' };
@@ -147,7 +156,8 @@ function transportStatus() {
 const shellLifecycle = new ShellLifecycle(join(stateDirectory,'shell-lifecycle.json'));
 const backgroundReconciliations = new Set();
 const shellStages=new ShellStageStore(join(stateDirectory,'shell-stages.json'));
-const efficiency = new EfficiencyLedger(join(stateDirectory,'protocol-efficiency.json'));
+const efficiency = new EfficiencyLedger(join(stateDirectory,'protocol-efficiency.json'),{
+  backend:new StatisticsBackend(workspace,'protocol-efficiency',{legacyPath:join(stateDirectory,'protocol-efficiency.json')})});
 const usageRefreshes = new Set();
 const recovery = new RecoveryCoordinator(registry, join(stateDirectory, 'recovery-policies.json'));
 const manifestExtensions = new ManifestExtensions(registry, join(stateDirectory, 'manifest-extensions.json'));
@@ -155,7 +165,7 @@ const nativeInstances = new NativeInstances(workspace, join(stateDirectory, 'nat
 statistics.registry(registry.snapshot());
 const statisticsMaintenance = new StatisticsMaintenance(statistics, { referenced: () => registry.snapshot().runs });
 const contexts = new Map();
-const erasure = new ChangeErasureManager({workspace,stateDirectory,registry,openCode,broker:()=>broker,terminalProofs:()=>recovery.receipts,
+const erasure = new ChangeErasureManager({workspace,stateDirectory,registry,openCode,broker:()=>broker,terminalProofs:()=>recovery.receipts,brokerIdentity:processOwnerIdentity,
   monitorIdentity:async()=>{
     const response=await fetch(erasureMonitorEndpoint(envValue('OC_Codex_MONITOR_HOST'),envValue('OC_Codex_MONITOR_PORT')),
       {signal:AbortSignal.timeout(3000),redirect:'error',headers:{'x-cab-continuity':'cab-continuity-v1'}});
@@ -1798,7 +1808,9 @@ async function refreshNativeUsage(runId,sessionId) {
   const key=runId+'\0'+sessionId,run=registry.runs.get(runId),context=contexts.get(runId);
   if (closing || !run || !context?.sessions().includes(sessionId) || usageRefreshes.has(key)) return;
   usageRefreshes.add(key);
-  try {efficiency.observe(run,sessionId,await openCode.messages(sessionId,run.directory));}
+  try {
+    await nativeTelemetry.observe(run,sessionId,[]);
+  }
   catch { /* Optional usage collection does not change business authority. */ }
   finally {usageRefreshes.delete(key);}
 }
@@ -2149,6 +2161,7 @@ if(broker){
 }
 
 const requests = new Set();
+let ownerProxy=null,ownerProxyError=null;
 const server = createServer((request, response) => {
   const pending = handleRequest(request, response);
   requests.add(pending);
@@ -2246,7 +2259,12 @@ async function handleRequest(request, response) {
     if (url.pathname.startsWith('/cleanup/')) {
       guardContinuityRequest(request,url,server.address().port);
       if(request.method!=='POST')throw new CoordinationError('erasure-method-invalid',405);
-      const input=await readJson(request,8192);
+      const input=await readJson(request,url.pathname.startsWith('/cleanup/owner/')?4*1024*1024:8192);
+      if(['/cleanup/owner/poll','/cleanup/owner/exchange'].includes(url.pathname)){
+        if(!ownerProxy)throw new CoordinationError('erasure-owner-proxy-unavailable');
+        const peer=ownerProxy.peer(request),sender=url.pathname.endsWith('/poll')?input:input.sender;
+        if(sender?.pid!==peer.pid||sender?.uid!==peer.uid)throw new CoordinationError('erasure-owner-peer-divergent');
+      }
       if(url.pathname==='/cleanup/admission') {
         const candidate=registry.runs.get(input.runId);
         if(handoffIntent||!candidate||candidate.state!=='RESERVED'||candidate.version!==input.version||
@@ -2254,7 +2272,11 @@ async function handleRequest(request, response) {
           input.changeId===erasure.pending()?.scope.changeId)throw new CoordinationError('erasure-admission-refused');
         json(response,200,{accepted:true});return;
       }
-      const value=url.pathname==='/cleanup/preview'?erasure.preview(input):
+      const value=url.pathname==='/cleanup/owner/poll'?await erasure.ownerPoll(input):
+        url.pathname==='/cleanup/owner/check'?await erasure.ownerCheck(input):
+        url.pathname==='/cleanup/owner/exchange'?await erasure.ownerExchange(input):
+        url.pathname==='/cleanup/owner/action'?erasure.ownerAction(input):
+        url.pathname==='/cleanup/preview'?erasure.preview(input):
         url.pathname==='/cleanup/prepare'?await erasure.prepare(input):
         url.pathname==='/cleanup/seal'?await erasure.seal(input):
         url.pathname==='/cleanup/status'&&Object.keys(input).length===0?erasure.status():null;
@@ -2331,6 +2353,24 @@ async function handleRequest(request, response) {
     }
     if (request.method === 'POST' && /^(?:\/runs\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99})?\/validation\/(request|reminder)$/.test(url.pathname)) {
       checkCommandLength(payload?.approval, maxCommandLength);
+    }
+    if(request.method==='POST'&&['/ccab/owner/report','/statistics/owner/checkpoint'].includes(url.pathname)) {
+      const peer=ownerProxy?.peer(request),sender=payload?.sender,identity=sender&&await processOwnerIdentity(sender.pid);
+      if(!peer||peer.pid!==sender?.pid||peer.uid!==sender?.uid||sender.pid!==broker?.broker_process?.pid||
+        sender.instanceId!==broker?.instance_id||identity?.uid!==peer.uid)throw new CoordinationError('broker-owner-identity-invalid',403);
+      if(url.pathname==='/statistics/owner/checkpoint') {
+        const packet=payload.packet;
+        if(packet?.project!==workspace)throw new CoordinationError('broker-statistics-project-invalid',400);
+        const result=await runtimeRequest('sgs','/component/checkpoint',{project:workspace,component:'broker-statistics',sequence:packet.sequence,
+          at:packet.data.checked_at,data:{origin_uid:peer.uid,scope:'shared-broker',...packet.data}},{timeout:1000});
+        json(response,200,{accepted:true,result});return;
+      }
+      const packet=payload.packet,args=packet?.args;
+      if(!args||typeof args.directory!=='string'||!isAbsolute(args.directory))throw new CoordinationError('ccab-project-invalid',400);
+      const result=await runtimeRequest('ccab','/incidents',{incident_id:args.incident_id,project:args.directory,change:args.change_id??null,
+        run:args.run_id??null,reporter:args.session_id,version:VERSION,category:args.category,summary:args.summary,evidence:args.evidence,
+        reported_at:packet.reportedAt,origin:{transport:'broker-owner-bridge',uid:peer.uid,instance:sender.instanceId}},{timeout:1000});
+      json(response,200,{accepted:true,...result});return;
     }
     registry.assertHealthy();
     if (request.method === 'POST' && url.pathname === '/model-policy/resolve') {
@@ -2466,8 +2506,11 @@ async function handleRequest(request, response) {
         await publishTo(context, scopedReadiness(runId, payload));
         void restoreApprovedOperations(registry.runs.get(runId), context);
       }
-      json(response, 202, { accepted: true, status: payload.status,
-        ...(erasure.brokerCommand()?{erasure_prepare:erasure.brokerCommand()}:{}) }); return;
+      const erasureCommand=erasure.brokerCommand();
+      json(response,202,{accepted:true,status:payload.status,workspace,
+        ...(ownerProxy?{broker_owner_socket:{...ownerProxy.identity,controllerPid:process.pid}}:{}),
+        ...(erasureCommand?.transport==='owner-local-v1'?ownerProxy?{erasure_owner_socket:{...ownerProxy.identity,controllerPid:process.pid}}:{erasure_owner_error:ownerProxyError||'erasure-owner-proxy-starting'}:
+          erasureCommand?{erasure_prepare:erasureCommand}:{})});return;
     }
     const match = url.pathname.match(/^\/runs\/([A-Za-z0-9][A-Za-z0-9_.-]{0,99})(\/.*)?$/);
     let runId = match?.[1] || payload?.approval?.run_id || url.searchParams.get('runId');
@@ -2635,6 +2678,19 @@ async function handleRequest(request, response) {
         transitionRun = runId;
       }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      if(request.method==='POST'&&['/atelier/authorize','/atelier/status-authorize'].includes(url.pathname)) {
+        registry.admission(runId);
+        const messages=await openCode.messages(run.sessionId,run.directory);
+        const roots=[realpathSync(process.execPath)];
+        json(response,200,authorizeAtelierCall(run,context.publicJob(),payload,messages,nativeToolInputDigest,roots,
+          url.pathname==='/atelier/authorize'?'atelier_execute':'atelier_status'));return;
+      }
+      if(request.method==='POST'&&url.pathname==='/validation/prepare') {
+        registry.admission(runId);const scoped=registry.scope(runId,run.version,payload.resources);
+        if(payload.request_id&&registry.requestOwners[payload.request_id])throw new CoordinationError('validation-request-already-known');
+        const prepared=prepareValidationData(run,payload,scoped.resources,registry.revisions(scoped.resources));
+        checkCommandLength(prepared.validation,maxCommandLength);json(response,200,prepared);return;
+      }
       const sourceReadRoute = request.method === 'GET' && /^\/source\/(read|list|find)$/.exec(url.pathname);
       if (sourceReadRoute) {
         if (transitions.has(runId)) throw new CoordinationError('run-transition-in-flight');
@@ -2655,10 +2711,14 @@ async function handleRequest(request, response) {
         let result;
         try {
           if (operation === 'read') {
-            if (url.searchParams.getAll('path').length !== 1 || [...url.searchParams.keys()].some(key => key !== 'path')) {
+            const limits=url.searchParams.getAll('maxBytes');
+            if (url.searchParams.getAll('path').length !== 1 || limits.length>1 ||
+                [...url.searchParams.keys()].some(key => !['path','maxBytes'].includes(key)) ||
+                (limits.length && (!/^[1-9][0-9]*$/.test(limits[0]) || Number(limits[0])>2*1024*1024))) {
               throw new CoordinationError('source-read-request-invalid', 400);
             }
-            result = await openCode.sourceRead(run.sessionId, url.searchParams.get('path'), { directory: run.directory });
+            result = await openCode.sourceRead(run.sessionId, url.searchParams.get('path'), {
+              directory: run.directory, ...(limits.length ? {maxBytes:Number(limits[0])} : {}) });
           } else if (operation === 'list') {
             if (url.searchParams.getAll('path').length > 1 || [...url.searchParams.keys()].some(key => key !== 'path')) {
               throw new CoordinationError('source-read-request-invalid', 400);
@@ -2881,8 +2941,13 @@ async function handleRequest(request, response) {
         return;
       }
       if (request.method === 'GET' && url.pathname === '/locks') {
+        const keys=url.searchParams.getAll('key');
+        if(keys.length>64||new Set(keys).size!==keys.length||[...url.searchParams.keys()].some(key=>key!=='key'))throw new CoordinationError('resource-revision-query-invalid',400);
+        const requested=keys.length?keys.map(key=>({key,mode:'read'})):run.resources;
+        if(keys.length)registry.scope(runId,run.version,requested);
         json(response, 200, { runId, protocol: COORDINATION_PROTOCOL, accesses: publicAccesses(runId),
-          revisions: registry.revisions(run.resources) }); return;
+          revisions: registry.revisions(requested), revisionMapKind:'effective-per-exact-key',
+          requestedKeys:requested.map(resource=>resource.key) }); return;
       }
       if (request.method === 'GET' && url.pathname === '/locks/reconcile-preview') {
         if (url.searchParams.getAll('operationId').length !== 1 || [...url.searchParams.keys()].some((key) => key !== 'operationId')) {
@@ -3298,13 +3363,16 @@ async function handleRequest(request, response) {
     if (lifecycleMutation) lifecycleMutations--;
   }
 }
-server.listen(port, host, () => { void consumeEvents(); });
+server.listen(port,host,()=>{void consumeEvents();void startOwnerProxy(`http://${host.includes(':')?'['+host+']':host}:${server.address().port}`).then(proxy=>{ownerProxy=proxy}).catch(()=>{ownerProxyError='erasure-owner-proxy-unavailable'});});
 
 async function consumeEvents() {
   if (closing) return;
   try {
     const response = await openCode.events();
-    try { await nativeInstances.observe(await openCode.info()); } catch { observations.record('native-instance-observation-unavailable', {}); }
+    try {
+      const instance=await nativeInstances.observe(await openCode.info());
+      if(instance)nativeTelemetry.instance='opencode-'+proofHash({workspace:instance.workspace,pid:instance.pid,startTime:instance.startTime,uid:instance.uid,cgroupDigest:instance.cgroupDigest});
+    } catch { observations.record('native-instance-observation-unavailable', {}); }
     sseState = 'connected';
     nativeGeneration++;
     const generation = ++sseGeneration;
@@ -3339,6 +3407,11 @@ async function consumeEvents() {
         const props = event.payload?.properties || event.properties || {};
         const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID || props.info?.id;
         const type = event.payload?.type || event.type;
+        if(type==='message.updated' && props.info?.usageSource==='opencode-v2') {
+          for(const [runId,context] of activeContexts()) if(context.sessions().includes(session)) {
+            void nativeTelemetry.observe(registry.runs.get(runId),session,[props.info]);
+          }
+        }
         if (session && activeContexts().some(([, context]) => (context.observedSessions?.() || context.sessions()).includes(session))) {
           nativeSessionGenerations.set(session, (nativeSessionGenerations.get(session) || 0) + 1);
         }
@@ -3388,6 +3461,7 @@ async function shutdown() {
   try {
     const closedContexts = [legacy.close(), ...[...contexts.values()].map((context) => context.close())];
     await boundedCleanup(async () => {
+      if(ownerProxy)await ownerProxy.stop();
       await closeHttpServer(server);
       await Promise.all([...requests, ...closedContexts]);
       await statistics.close();

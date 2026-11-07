@@ -6,7 +6,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
-import { createMonitorServer } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
+import { createMonitorServer,VERSION as monitorVersion } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor.mjs';
+import {ArchiveContent} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-archives.mjs';
 import { monitorConfiguration } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-data.mjs';
 import { createObservationJournal } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
 import { nextLifecycle } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs';
@@ -30,7 +31,7 @@ let upstream;
 let browserClose;
 const results = [];
 const unit = process.env.CAB_MONITOR_BROWSER_UNIT;
-if (unit && !['header', 'manual', 'order', 'catalog'].includes(unit)) throw new Error('Unité navigateur inconnue');
+if (unit && !['header', 'manual', 'order', 'catalog','240'].includes(unit)) throw new Error('Unité navigateur inconnue');
 async function finishUnit(browser, passed) {
   results.push({ browser: browser.name, version: browser.version, passed });
   await browser.close(); browserClose = null;
@@ -176,7 +177,7 @@ try {
       coordination: { phase: ['WORK', 'WORK', 'REPORT'][i], ...(i === 1 ? { reason: recoveryBlocked ? 'resource-effects-unknown' : 'resource-conflict', blockers: [{ runId: 'RUN-WEB' }] }
         : i === 2 ? { reason: stopped ? 'run-stop' : 'resource-effects-unknown' } : {}) } }])) }
       : request.url === '/monitor/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
-        : target.pathname === '/api/info' ? { version: '2.3.10', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
+        : target.pathname === '/api/info' ? { version: '2.4.0', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
           : target.pathname === '/api/location' ? { directory: root }
           : target.pathname === '/api/mcp' ? { location: { directory: root }, data: [{ name: 'cgpt-validation', status: { status: brokerConnection } }] }
           : target.pathname === '/api/session/active' ? { data: managementMode ? {} : { ses_0: { type: 'running' } } }
@@ -188,7 +189,18 @@ try {
   const upstreamUrl = 'http://127.0.0.1:' + upstream.address().port;
   const monitorConfig = { ...monitorConfiguration({ OC_Codex_WORKSPACE: root, OC_Codex_MONITOR_STATE_DIR: join(root, 'catalogs') }), port: 0, pollMs: 300,
     controllerUrl: upstreamUrl, supervisorUrl: upstreamUrl, opencodeUrl: upstreamUrl };
-  const options = { serviceCommand: async (args) => {
+  const options = {statisticsProbe:async()=>({state:'AVAILABLE',available:true,version:monitorVersion,reason:null}),
+    runtimeRequest:async(component,path)=>{
+      if(component==='ccab')return {incidents:[{incident_id:'fixture-incident',sequence:1,created:'2026-11-06T10:00:00Z',state:'OPEN',
+        reporter:'fixture-reporter',project:root,change:'fixture-change',run:'fixture-run',version:monitorVersion,summary:'Incident synthétique CCAB'}]};
+      if(path.startsWith('/component/'))return {data:{commands:1},sequence:1};
+      if(path.startsWith('/events'))return {events:[{source:'codex-native',metrics:{tokens_input:'100'}}],next:null};
+      return {version:monitorVersion,sessions:[{binding:'fixture-binding',project:root,change:'fixture-change',run:'DIRECT-FIXTURE',session:'fixture-session',
+        role:'coder',agent:'codex',mode:'direct',cab_direct:true,metrics:{tokens_input:'100',tokens_cache_read:'80',tokens_output:'20'},
+        coverage:{tokens_input:'native',tokens_cache_read:'native',tokens_output:'native'},models:[{from:'2026-11-06T10:00:00Z',until:null,
+          model:{name:'fixture-model',provider:'fixture-provider',reasoning:'high'},source:'codex-native'}],events:1,collector:{status:'collecting'}}],
+        archives:[],components:[{component:'controller-statistics',sequence:1,at:'2026-11-06T10:00:00Z',bytes:20,fingerprint:'a'.repeat(64)}],totals_policy:'Native totals retain their source semantics.'};
+    },serviceCommand: async (args) => {
     serviceCalls.push(args);
     if (args[0] === 'show') return 'LoadState=loaded\nActiveState=' + (serviceStates.get(args[1]) || 'active') + '\nMainPID=' + process.pid + '\n';
     if (args[0] === '--no-block') {
@@ -206,9 +218,31 @@ try {
     const browser = await factory(); browserClose = browser.close;
     await browser.viewport(1440, 1100); await browser.navigate(url);
     await wait(() => browser.evaluate("document.querySelector('#connection').textContent.includes('connectée') && document.querySelectorAll('#work-content tbody tr').length === 3"), browser.name + ' affichage initial');
+    if(unit==='240') {
+      await browser.evaluate("document.querySelector('#stats-nav').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#stats-content').textContent.includes('fixture-model')"),browser.name+' StatsSGS');
+      assert.equal(await browser.evaluate("document.querySelector('.retention-panel').hidden"),true);
+      assert.equal(await browser.evaluate("document.querySelector('#stats-content').textContent.includes('tokens_cache_read')"),true);
+      await browser.screenshot('web-monitor-240-'+browser.name.toLowerCase()+'-stats.png');
+      await browser.evaluate("document.querySelector('#ccab-nav').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#ccab-content').textContent.includes('Incident synthétique CCAB')"),browser.name+' CCAB');
+      const change='fixture-retained-'+browser.name.toLowerCase(),directory=join(root,'openspec/changes/archive/2026-11-06-'+change);
+      await mkdir(directory,{recursive:true});await writeFile(join(directory,'STATISTICS.md'),'# Rapport synthétique consultable\n');
+      const repository=new ArchiveContent(monitorConfig.archiveDirectory,root);
+      repository.retain({workspace:root,changeId:change,runIds:['ARCHIVED-FIXTURE']},{reportPaths:[join(directory,'STATISTICS.md')],closed:true,branch:'TERMINÉ'});
+      await browser.evaluate("document.querySelector('#archives-nav').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#archives-retained').textContent.includes('fixture-retained')"),browser.name+' archives réelles');
+      await browser.evaluate("document.querySelector('#archives-retained button').click();true");
+      await wait(()=>browser.evaluate("[...document.querySelectorAll('dialog[open]')].some(x=>x.textContent.includes('Rapport synthétique consultable'))"),browser.name+' contenu archive');
+      await browser.evaluate("[...document.querySelectorAll('dialog[open] button')].find(x=>x.textContent==='Fermer').click();true");
+      await browser.evaluate("document.querySelector('#archives-retained .danger-button').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#archives-retained').textContent.includes('Aucun rapport conservé')"),browser.name+' suppression copie CAB');
+      assert.equal(await readFile(join(directory,'STATISTICS.md'),'utf8'),'# Rapport synthétique consultable\n');
+      await finishUnit(browser,['SGS_ONLY','CCAB','ARCHIVE_CONTENT','DEVELOPER_DELETE_SOURCE_PRESERVED']);continue;
+    }
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096')"), true);
     const initialStatisticsProbe=monitor.state.statisticsProbe;
-    for(const [state,label,version] of [['UNAVAILABLE','Indisponible','2.3.10'],['VERSION_MISMATCH','Version divergente','2.2.0']]){
+    for(const [state,label,version] of [['UNAVAILABLE','Indisponible','2.4.0'],['VERSION_MISMATCH','Version divergente','2.2.0']]){
       monitor.state.statisticsProbe=async()=>({state,available:false,version,reason:'synthetic-check'});
       monitor.state.statistics.checkedAt=null;await monitor.state.collect();
       await browser.evaluate("document.querySelector('#monitor-refresh').click();true");

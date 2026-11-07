@@ -38,7 +38,7 @@ async function fixture(t,branch,{multiOwner=false,legacy=false}={}) {
     delete registry.resourceState.operations[op.operationId].nativeResult;registry.persist();
   }
   registry.release(target.runId,target.version,branch==='TERMINÉ');
-  const business=join(workspace,'openspec','changes',target.changeId);mkdirSync(business,{recursive:true,mode:0o775});
+  const business=branch==='TERMINÉ'?join(workspace,'openspec','changes','archive','2026-11-06-'+target.changeId):join(workspace,'openspec','changes',target.changeId);mkdirSync(business,{recursive:true,mode:0o775});
   writeFileSync(join(business,'BLOCKERS.md'),'# Dépendance métier manquante\n');writeFileSync(join(business,'STATISTICS.md'),'# Statistiques métier vérifiées\n');
   const digest=name=>createHash('sha256').update(readFileSync(join(business,name))).digest('hex');
   const dependencyEvidence=branch==='BLOQUÉ'?{reason:'UNSATISFIED_DEPENDENCY',blockersSha256:digest('BLOCKERS.md'),statisticsSha256:digest('STATISTICS.md')}:null;
@@ -71,7 +71,8 @@ async function fixture(t,branch,{multiOwner=false,legacy=false}={}) {
   let handoff;let adoption;
   const pids={controller:10001,supervisor:10002,monitor:10003};
   const serviceCalls=[];
-  const dependencies={stateDirectory:state,updateDirectory:update,openCode:native,servicePid:async name=>pids[name],
+  const dependencies={stateDirectory:state,updateDirectory:update,openCode:native,
+    statisticsCleanup:{purge:async()=>({status:'PURGED',fixture:true}),verify:async()=>({status:'VERIFIED',fixture:true})},servicePid:async name=>pids[name],
     service:async(name,action)=>{serviceCalls.push([name,action]);pids[name]=action==='stop'?0:20001+['controller','supervisor','monitor'].indexOf(name);if(name==='controller'&&action==='stop'){
       handoff.seal(registry);registry.close();
     }if(name==='controller'&&action==='start'){

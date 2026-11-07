@@ -16,7 +16,11 @@ CAB Monitor MUST fonctionner sans LLM dans un processus indépendant. Il MUST se
 - **THEN** la page reste disponible et affiche la panne, les dernières observations et leur fraîcheur
 
 ### Requirement: Observation bornée sans effet métier
-Le moniteur MUST collecter seulement les vues GET admises des composants loopback et les documents OpenSpec de son workspace. Il MUST NOT créer de décision, permission, relance, session ou mutation métier de RUN. Requêtes et mémoire MUST être bornées ; les collectes MUST NOT se chevaucher. Les seules exceptions de gestion MUST être la purge statistique définie par web-statistics-retention et les commandes de briques et rangement privé définis par monitor-management.
+Le moniteur MUST collecter les vues admises des composants locaux et les documents OpenSpec de son workspace, avec requêtes et mémoire bornées et sans collecte concurrente. Il MUST NOT créer de décision, permission, effet ou session métier. SGS et CCAB MUST être lus par leur IPC local. Les seules mutations autorisées MUST être la gestion de briques/catalogue et la suppression explicite d’une archive CAB close par le développeur, avec gardes de chemins, origine et RUN actifs.
+
+#### Scenario: Suppression d’une copie archivée
+- **WHEN** le développeur supprime une archive close identifiée
+- **THEN** le moniteur supprime cette copie CAB sans toucher au rapport source, aux statistiques SGS ou aux RUN pairs
 
 #### Scenario: Plusieurs navigateurs
 - **WHEN** plusieurs navigateurs consultent le tableau de bord
@@ -27,8 +31,8 @@ Le moniteur MUST collecter seulement les vues GET admises des composants loopbac
 - **THEN** seul le catalogue privé du moniteur change
 
 #### Scenario: Purge confirmée
-- **WHEN** une purge historique est confirmée depuis STATS
-- **THEN** le moniteur relaie uniquement l'opération statistique prévue sans accès au runtime privé ni mutation métier
+- **WHEN** une ancienne confirmation de purge statistique est envoyée au moniteur2.4
+- **THEN** elle est refusée sans mutation ; la suppression développeur de copies CAB reste dans ARCHIVES
 
 ### Requirement: Configuration du moniteur explicite
 Le moniteur MUST utiliser OC_Codex_WORKSPACE absolu et accepter OC_Codex_MONITOR_HOST, OC_Codex_MONITOR_PORT, OC_Codex_MONITOR_POLL_INTERVAL_MS, OC_Codex_MONITOR_STALE_MS et OC_Codex_MONITOR_TIMEOUT_MS. Les défauts MUST être 127.0.0.1, 8790, 1000 ms, 10000 ms et 2000 ms. Les ports MUST être compris entre 1024 et 65535.
@@ -268,15 +272,19 @@ Le code MUST provenir du début du premier titre Markdown de niveau 1 hors blocs
 - **THEN** aucun code n’est exposé depuis cette mention et les règles du premier titre admissible restent applicables
 
 ### Requirement: Fin du serveur OpenCode suivi
-Le moniteur MUST appliquer cab-process-lifecycle à son serveur OpenCode local identifié. Il MUST rester indépendant d’une panne isolée du contrôleur ou du superviseur ; leur indisponibilité MUST NOT constituer une preuve de fermeture d’OpenCode.
+En mode piloté, le moniteur MUST appliquer cab-process-lifecycle à l’instance OpenCode identifiée, sans confondre panne du contrôleur/superviseur et fermeture native. En mode direct explicite, il MUST rester indépendant d’OpenCode et MUST NOT en créer ni le sonder pour décider de sa durée de vie.
+
+#### Scenario: Moniteur direct sans OpenCode
+- **WHEN** le projet utilise CAB direct et OpenCode est absent
+- **THEN** le moniteur conserve ses vues SGS, CCAB et archives sans session native fictive
 
 #### Scenario: Contrôleur seul arrêté
 - **WHEN** le contrôleur tombe mais le serveur OpenCode identifié vit encore
 - **THEN** le moniteur reste disponible et expose la panne
 
 #### Scenario: Serveur OpenCode terminé
-- **WHEN** la disparition de l’instance OpenCode suivie est prouvée localement
-- **THEN** le moniteur ferme ses flux et son serveur sans modifier les RUN
+- **WHEN** la disparition de l’instance OpenCode suivie en mode piloté est prouvée localement
+- **THEN** le moniteur piloté ferme ses flux et son serveur sans modifier les RUN
 
 ### Requirement: Projection bornée du registre pour le moniteur
 CAB MUST exposer GET /monitor/runs avec au plus 200 identités de réservation, actives d’abord, total et indicateur de troncature. Cette lecture MUST NOT sérialiser historique, demandes, ressources ou corps de commandes. Le moniteur MUST utiliser cette projection sans repli vers le registre complet et conserver son plafond de 2 Mio.
@@ -327,3 +335,10 @@ Le moniteur MUST interpréter la sentinelle `NONE` comme l'absence de cause et M
 
 - **WHEN** un RUN possède la cause réelle `resource-effects-unknown`
 - **THEN** le moniteur le maintient `BLOCKED`
+
+### Requirement: Vues fidèles des données conservées
+Le WebMonitor SHALL afficher RUN directs/pilotés, Archives réelles consultables, Stats issues exclusivement de SGS et file CCAB. Les reliquats stockés SHALL être inventoriables. Le développeur MAY supprimer une archive CAB identifiée depuis l’interface sans approbation CAB supplémentaire ; les RUN en cours et chemins étrangers SHALL rester protégés.
+
+#### Scenario: Suppression développeur
+- **WHEN** le développeur supprime une archive CAB close explicitement identifiée
+- **THEN** l’objet exact est supprimé et la vue reflète l’état réel sans toucher aux pairs

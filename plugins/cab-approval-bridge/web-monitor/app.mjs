@@ -96,6 +96,7 @@ function isStale(name, at = Date.parse(model.generatedAt)) {
   return !source?.available || !source.lastSuccessAt || at - Date.parse(source.lastSuccessAt) > model.configuration.staleMs;
 }
 function runState(run) {
+  if(run.mode==='direct')return [run.state==='RELEASED'?'CLOS':'DIRECT','neutral'];
   const state = isStale('controller') || (run.runId !== 'legacy' && run.state && isStale('registry')) ? 'UNKNOWN' : run.operationalState || 'UNKNOWN';
   return [state, ({ RUNNING: 'good', WAITING: 'warn', PAUSED: 'warn', STOPPED: 'neutral', BLOCKED: 'bad',
     DONE: 'good', DEGRADED: 'warn', RELEASED: 'neutral', IDLE: 'neutral', UNKNOWN: 'neutral' })[state] || 'neutral'];
@@ -118,8 +119,9 @@ function renderHealth() {
   const entries = [['controller', 'Contrôleur', 'Pilotage et décisions', '⌘'], ['supervisor', 'Superviseur', 'Suivi et reprises', '◎'],
     ['broker', 'Broker MCP', 'Connexion MCP native', '⇄'], ['opencode', 'OpenCode', 'Santé HTTP native', '◇'],
     ['monitor', 'Web', 'Interface et archives locales', '▦'],
-    ['statistics', 'Statistiques', 'Moteur SGS à la demande', '∑']];
+    ['statistics', 'Statistiques', 'Service SGS permanent', '∑']];
   for (const [key, label, subtitle, icon] of entries) {
+    if(model.identity?.mode==='direct'&&!['monitor','statistics'].includes(key))continue;
     const stale = key==='statistics' ? model.sources.statistics?.stale!==false : key === 'monitor' ? lastWebSuccessAt === null || Date.now() - lastWebSuccessAt >= webFreshMs : key === 'broker' ? isStale('mcp') : isStale(key);
     const source = model.sources[key];
     const healthy = key === 'statistics' ? model.statisticsEngine?.state==='AVAILABLE' : key === 'broker' ? model.brokerConnection === 'connected' : key === 'opencode' ? model.nativeHealth === true : true;
@@ -132,7 +134,7 @@ function renderHealth() {
     const pill = node('span', 'health-status ' + (stale ? 'warn' : healthy ? 'good' : 'bad')); pill.append(node('i', 'dot'), document.createTextNode(status));
     card.append(node('span', 'health-icon', icon), name, pill);
     card.dataset.component = key;
-    if (key !== 'opencode' && key !== 'statistics') {
+    if (key !== 'opencode' && key !== 'statistics'&&model.identity?.mode!=='direct') {
       const actions = node('div', 'component-actions');
       const occupied = model.runs.some((run) => run.state === 'RESERVED' || run.armed || run.hasMandate || run.pending > 0);
       const currentStale = isStale('controller', Date.now()) || isStale('registry', Date.now());

@@ -1,12 +1,19 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.3.10
+version: 2.4.0
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
 pris en charge. Argument reçu : `$ARGUMENTS`. `/CABU` sans argument charge ce
 fichier frère de même version et lui délègue exactement `update` dans le même
 tour ; aucune logique de maintenance parallèle.
+
+La cible2.4.0 ajoute le mode direct explicite, SGS permanent, CCAB et les
+ateliers isolés. Charger autonomy-and-ateliers.md du skill CAB pour le contrat
+applicable après activation. Tout incident est qualifié avant nouvelle action ;
+un NOT_ADMITTED sans préparation locale ne requiert pas de retrait inventé.
+CCAB se consulte via son plugin/skill/commande ; aucune correction hors mandat
+n’est déduite d’une simple consultation.
 
 Cette commande globale ne modifie pas les sources métier, spécifications ou
 configuration du projet suivi. Le développeur accorde l'autorisation permanente

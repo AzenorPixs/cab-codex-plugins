@@ -1,0 +1,12 @@
+[Unit]
+Description=CAB 2.4.0 — Web Monitor direct indépendant
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cab-approval-bridge/direct/%i/monitor.env
+ExecStart=/usr/bin/env node %h/.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-monitor.mjs
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true

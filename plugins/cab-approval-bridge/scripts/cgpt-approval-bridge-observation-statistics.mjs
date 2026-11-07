@@ -3,7 +3,7 @@ import { mkdir, open, rename, unlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 
-export const VERSION = "2.3.10";
+export const VERSION = "2.4.0";
 export const CATEGORIES = ['reservation', 'changes', 'native', 'nativeChanges'];
 const DAY = 86400000;
 const LIMIT = 64 * 1024 * 1024;
@@ -108,8 +108,9 @@ function appendSegment(list, segment) {
 }
 export { appendSegment };
 export class ObservationStatistics {
-  constructor(directory, { now = Date.now, persist = true, project = null } = {}) {
+  constructor(directory, { now = Date.now, persist = true, project = null,backend=null } = {}) {
     this.now = now; this.persist = persist; this.project = project;
+    this.backend=backend;
     this.path = join(directory, 'controller-observations.json');
     this.error = null; this.dirty = false; this.saving = null;
     this.importing = Promise.resolve();
@@ -117,7 +118,7 @@ export class ObservationStatistics {
     if (persist) {
       try {
         parentSafe(directory);
-        const data = JSON.parse(safeRead(this.path));
+        const data = backend?.readSync()||JSON.parse(safeRead(this.path));
         if (!keys(data, ['schemaVersion', 'project', 'native', 'datasets']) || data.schemaVersion !== 2 ||
             typeof data.project !== 'string' || !data.project.startsWith('/') || data.project !== resolve(data.project) ||
             (project !== null && data.project !== project) ||
@@ -307,6 +308,10 @@ export class ObservationStatistics {
     if (!this.persist || !this.project || !this.dirty || this.error) return;
     if (this.saving) { await this.saving; if (this.dirty && !this.error) await this.flush(); return; }
     this.dirty = false;
+    if(this.backend) {
+      this.saving=this.backend.write(this.data).then(()=>{this.error=null;}).catch(()=>{this.error='observation-persistence-unavailable';this.dirty=true;});
+      await this.saving;this.saving=null;return;
+    }
     this.saving = (async () => {
       let candidate;
       try {

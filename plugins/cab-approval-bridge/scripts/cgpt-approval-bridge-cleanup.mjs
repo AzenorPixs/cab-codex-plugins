@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve,dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {randomUUID} from 'node:crypto';
 import { ErasureTransaction, erasureFilePlan, projectErasure, erasureReferences, removeErasureDirectories,readErasureBytes } from './cgpt-approval-bridge-change-erasure.mjs';
@@ -10,8 +10,11 @@ import { runtimeStateDirectory,legacyStateDirectory, readRuntimeJson, ensurePriv
 import { authority } from './cgpt-approval-bridge-update.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bridge-archives.mjs';
+import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
+import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 
-export const VERSION='2.3.10';
+export const VERSION='2.4.0';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const exec=promisify(execFile);
 const unit=name=>'cgpt-approval-bridge-'+name+'.service';
@@ -28,6 +31,8 @@ export async function cleanupChange(input, dependencies={}) {
 }
 async function executeCleanup(input,dependencies) {
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
+  if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
+  const statisticalCleanup=dependencies.statisticsCleanup||{purge:purgeStatistics,verify:verifyStatisticsAbsence};
   if(!existsSync(join(root,'controller-runs.json')))fail('erasure-runtime-not-found');
   const controller=base(input.controllerUrl||'http://127.0.0.1:8788');
   const supervisor=base(input.supervisorUrl||'http://127.0.0.1:8789');
@@ -37,7 +42,7 @@ async function executeCleanup(input,dependencies) {
     const result=await exec('/usr/bin/systemctl',['--user','show','--property=MainPID','--value',unit(name)],{timeout:5000,maxBuffer:1024});
     if(!/^\d+\s*$/.test(result.stdout))fail('erasure-service-identity-unavailable');return Number(result.stdout.trim());});
   const http=dependencies.http||(async(url,path,body)=>{
-    const response=await fetch(url+path,{method:body===undefined?'GET':'POST',redirect:'error',signal:AbortSignal.timeout(10000),
+    const response=await fetch(url+path,{method:body===undefined?'GET':'POST',redirect:'error',signal:AbortSignal.timeout(path==='/cleanup/owner/check'?95000:10000),
       headers:{'content-type':'application/json','x-cab-continuity':'cab-continuity-v1'},...(body===undefined?{}:{body:JSON.stringify(body)})});
     const chunks=[];let length=0;for await(const part of response.body){length+=part.length;if(length>64*1024*1024)fail('erasure-response-too-large');chunks.push(part)}
     const result=JSON.parse(Buffer.concat(chunks).toString('utf8'));if(!response.ok)fail(result.error||'erasure-source-refused');return result;
@@ -52,9 +57,10 @@ async function executeCleanup(input,dependencies) {
   const tx=new ErasureTransaction(root,{createKey:false});
   const releaseOfflineLocks=async()=>{while(dependencies.offlineLocks.length)await dependencies.offlineLocks.pop().close()};
   const takeOfflineLocks=async()=>{
-    const bundle=tx.verify(readRuntimeJson(join(root,'broker-erasure.json')).value);
-    if(bundle.transactionId!==input.transactionId||!bundle.locks||Object.keys(bundle.locks).length!==3||
-      !['instance','store','journal'].every(key=>typeof bundle.locks[key]==='string'&&bundle.locks[key].startsWith('/')))
+    const owned=tx.load()?.brokerTransport==='owner-local-v1';
+    const bundle=owned?{transactionId:input.transactionId,locks:{}}:tx.verify(readRuntimeJson(join(root,'broker-erasure.json')).value);
+    if(bundle.transactionId!==input.transactionId||!bundle.locks||!owned&&(Object.keys(bundle.locks).length!==3||
+      !['instance','store','journal'].every(key=>typeof bundle.locks[key]==='string'&&bundle.locks[key].startsWith('/'))))
       fail('erasure-lock-inventory-invalid');
     const legacyLock=join(legacyStateDirectory(workspace),'registry.instance.lock');
     const paths=[join(root,'registry.instance.lock'),...Object.values(bundle.locks),...(existsSync(legacyLock)?[legacyLock]:[])];
@@ -67,6 +73,8 @@ async function executeCleanup(input,dependencies) {
     const certificate=tx.verify(certificateInput());
     if(certificate.scope?.workspace!==workspace||!certificate.roots?.includes(root))fail('erasure-workspace-divergent');
     const [c,s,m]=await Promise.all([http(controller,'/status'),http(supervisor,'/status'),http(monitor,'/api/snapshot')]);
+    if(certificate.ownerReceipts?.commit){const owner=await http(controller,'/cleanup/owner/check',{certificate:certificateInput()});if(owner.state!=='VERIFIED')fail('erasure-owner-absence-unverified');}
+    if(certificate.sgsReceipt)await statisticalCleanup.verify(certificate.scope);
     if(!absent(certificate)||[c,s,m].some(value=>erasureReferences(value,certificate.scope).length))fail('erasure-absence-unverified');
     return tx.seal({...certificate,status:'PURGED',verifiedAt:Date.now()});
   }
@@ -74,6 +82,16 @@ async function executeCleanup(input,dependencies) {
   let value=tx.load();
   if(!value||value.transactionId!==input.transactionId)fail('erasure-transaction-divergent');
   if(value.scope?.workspace!==workspace||!value.roots?.includes(root))fail('erasure-workspace-divergent');
+  const ownerCall=async action=>{
+    await http(controller,'/cleanup/owner/action',{transactionId:value.transactionId,action});
+    const expected={commit:'APPLIED',verify:'VERIFIED',finalize:'PURGED'}[action],end=Date.now()+90000;
+    while(true){
+      const status=await http(controller,'/cleanup/status',{});
+      if(status.ownerStates?.[action]===expected&&status.ownerInstances?.[action]===status.brokerInstanceId){value=tx.load();return;}
+      if(status.brokerPreparationError)fail(status.brokerPreparationError);
+      if(Date.now()>=end)fail('erasure-owner-action-timeout');await delay(200);
+    }
+  };
   if(input.action==='finalize') {
     const signed=certificateInput();tx.verify(signed);
     if(value.phase!=='CERTIFIED'||canonicalContinuityDigest(signed)!==canonicalContinuityDigest(value.certificate))fail('erasure-certificate-not-acknowledged');
@@ -85,6 +103,7 @@ async function executeCleanup(input,dependencies) {
       permissions.some(row=>value.sessionIds.includes(row.sessionID))||info.pid!==value.nativeIdentity.pid||info.version!==value.nativeIdentity.version)
       fail('erasure-final-boundary-changed');
     if(!absent(value,[tx.path,join(root,'broker-erasure.json')]))fail('erasure-absence-unverified');
+    if(value.brokerTransport==='owner-local-v1')await ownerCall('finalize');
     if(existsSync(join(root,'broker-erasure.json')))unlinkSync(join(root,'broker-erasure.json'));
     return tx.finish(value,()=>absent(value,[tx.path]));
   }
@@ -148,8 +167,14 @@ async function executeCleanup(input,dependencies) {
       sharedDirectory:await native.sharedMcpDirectory(),brokerPid:status.brokerPid,phase:'FREEZING'};tx.save(value);
   }
   if(value.phase==='FREEZING') {
+    if(!value.retainedArchive) {
+      const archive=new ArchiveContent(archiveDirectory(workspace,{stateRoot:dirname(value.roots[1])}),workspace);
+      const retained=archive.retain(value.scope,{reportPaths:changeReports(workspace,value.scope.changeId,value.branch),closed:true,branch:value.branch});
+      value={...value,retainedArchive:{archiveId:retained.archiveId,fingerprint:retained.fingerprint}};tx.save(value);
+    }
     if(!value.cutoverStartedAt){value={...value,cutoverStartedAt:Date.now()};tx.save(value)}
     await http(controller,'/transport/prepare',{transactionId:value.transportTransactionId});
+    if(value.brokerTransport==='owner-local-v1')await ownerCall('commit');
     value={...value,phase:'STOPPING'};tx.save(value);
   }
   if(value.phase==='STOPPING') {
@@ -159,10 +184,10 @@ async function executeCleanup(input,dependencies) {
       if(pid!==0)await service(name,'stop');
     }
     await transition('disconnect');
-    await wait(()=>{try{process.kill(value.brokerPid,0);return false}catch(cause){if(cause.code!=='ESRCH')throw cause;return existsSync(bundlePath)}});
+    await wait(()=>{try{process.kill(value.brokerPid,0);return false}catch(cause){if(cause.code!=='ESRCH')throw cause;return value.brokerTransport==='owner-local-v1'||existsSync(bundlePath)}});
     await takeOfflineLocks();
     await checkNative();
-    const bundle=tx.verify(readRuntimeJson(bundlePath).value);
+    const bundle=value.brokerTransport==='owner-local-v1'?{transactionId:value.transactionId,brokerPid:value.brokerPid,scope:value.scope,roots:[],entries:[],journalPaths:[]}:tx.verify(readRuntimeJson(bundlePath).value);
     if(bundle.transactionId!==value.transactionId||bundle.brokerPid!==value.brokerPid||
       bundle.scope.changeId!==value.scope.changeId||canonicalContinuityDigest(bundle.scope.runIds)!==canonicalContinuityDigest(value.scope.runIds))fail('erasure-broker-bundle-divergent');
     const legacyRoots=[legacyStateDirectory(workspace)];
@@ -185,7 +210,7 @@ async function executeCleanup(input,dependencies) {
       {path:handoffPath,before:handoff.sha256,next:nextHandoff,remove:false}];
     value={...value,scope:plan.scope,roots,legacyRoots,sourceArtifactRoots,entries,journalPaths:bundle.journalPaths,expectedPeers,phase:'APPLYING'};tx.save(value);
     }catch(cause){
-      if(value.phase==='STOPPING'&&value.mcpTransition?.state!=='INTENT'&&cause.code!=='erasure-service-identity-changed'){
+      if(value.phase==='STOPPING'&&!value.ownerReceipts?.commit&&value.mcpTransition?.state!=='INTENT'&&cause.code!=='erasure-service-identity-changed'){
         value={...value,phase:'RESTORING_PRESERVED',failureCode:typeof cause.code==='string'?cause.code:'erasure-preparation-failed'};tx.save(value);
         await start();value={...value,phase:'SEALED'};tx.save(value);
       }
@@ -200,6 +225,11 @@ async function executeCleanup(input,dependencies) {
     if(!dependencies.offlineLocks.length)await takeOfflineLocks();
     if(dependencies.beforeApply)await dependencies.beforeApply(value);
     await checkNative();tx.applyFiles(value);removeErasureDirectories(value.roots,value.scope);
+    for(const runId of value.scope.runIds)cleanTestArea(workspace,value.scope.changeId,runId,{closed:true,reportsDurable:true});
+    if(!value.sgsReceipt) {
+      const sgsReceipt=await statisticalCleanup.purge(value.scope,value.branch,value.transactionId);
+      value={...value,sgsReceipt};tx.save(value);
+    }
     const observed=readRuntimeJson(join(root,'controller-runs.json')).value;
     if(canonicalContinuityDigest(observed)!==canonicalContinuityDigest(value.expectedPeers))fail('erasure-peer-preservation-failed');
     if(!absent(value,excluded))
@@ -218,6 +248,8 @@ async function executeCleanup(input,dependencies) {
         c.brokerReadiness?.ready!==true||erasureReferences(c,value.scope).length||erasureReferences(s,value.scope).length||erasureReferences(m,value.scope).length)return false;
       return true;
     });
+    if(value.brokerTransport==='owner-local-v1')await ownerCall('verify');
+    await statisticalCleanup.verify(value.scope);
     if(!absent(value,excluded))
       fail('erasure-final-absence-unverified');
     // Journal candidates were authenticated in the broker and survive only until

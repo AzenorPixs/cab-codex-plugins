@@ -8,6 +8,16 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { readSource } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-source-read.mjs';
 
+test('source-read transmet le plafond explicite borné sans changer le périmètre',async()=>{
+ let called;
+ await assert.rejects(readSource({controllerUrl:'http://127.0.0.1:8788',runId:'fixture',operation:'read',path:'TECHNICAL.md',maxBytes:2097153}),/arguments-invalid/);
+ await assert.rejects(readSource({controllerUrl:'http://127.0.0.1:8788',runId:'fixture',operation:'read',path:'TECHNICAL.md',maxBytes:2097152},async url=>{
+  called=new URL(url);throw new Error('fixture-network-error');
+ }),/controller-unavailable/);
+ assert.equal(called.searchParams.get('maxBytes'),'2097152');
+ assert.equal(called.pathname,'/runs/fixture/source/read');
+});
+
 test('source-read CLI requests only the scoped RUN route and returns a snapshot',async()=>{
  let requested;
  const response={status:200,ok:true,headers:new Headers({'content-type':'application/json'}),body:new ReadableStream({

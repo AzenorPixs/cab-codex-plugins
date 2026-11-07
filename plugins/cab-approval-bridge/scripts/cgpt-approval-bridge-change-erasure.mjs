@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
@@ -27,7 +27,8 @@ function privateAncestor(directory) {
 }
 const excludedStateName=name=>/\.(?:crt|cer|der|key|pem|p12|pfx|env)(?:\..*)?$/.test(name)||
   /^(?:id_rsa|id_ed25519|credentials\.(?:json|yaml)|secrets\.(?:json|yaml)|opencode\.password)$/.test(name)||
-  ['.git','.ssh','.cache','node_modules','config','credentials'].includes(name);
+  // Une déclaration CCAB non acquittée reste nécessaire même après clôture du change.
+  ['.git','.ssh','.cache','node_modules','config','credentials','ccab-pending'].includes(name);
 
 export function erasureInventory(registry,changeId,ownerId) {
   if(!identifier(changeId)||!identifier(ownerId)||!record(registry)||typeof registry.project!=='string'||!registry.project.startsWith('/'))fail('erasure-scope-invalid');
@@ -71,7 +72,7 @@ function legacyTerminalReceipt(operation,access) {
     Number.isFinite(releasedAt)&&releasedAt>=operation.finishedAt;
 }
 
-export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],ownershipReview}={}) {
+export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],ownershipReview,closedAuthority=false}={}) {
   if (!identifier(changeId) || !identifier(ownerId) || !record(registry)||typeof registry.project!=='string'||!registry.project.startsWith('/')) fail('erasure-scope-invalid');
   const current = registry.runs || [];
   const history = registry.history || [];
@@ -85,6 +86,10 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],owne
   if (!inventory&&candidates.some(row => row.ownerId !== ownerId) ||
       current.some(row => runs.includes(row.runId) && (row.changeId !== changeId || row.state === 'RESERVED')))
     fail('erasure-run-not-closed-or-foreign');
+  if(closedAuthority)for(const runId of runs) {
+    const latest=current.find(row=>row.runId===runId)||candidates.filter(row=>row.runId===runId).sort((a,b)=>(a.version||0)-(b.version||0)).at(-1);
+    if(!latest||!['DELIVERED','ABANDONED','RELEASED'].includes(latest.state))fail('erasure-run-in-progress');
+  }
   const target = row => runs.includes(row?.runId);
   const c = registry.coordination || {},legacyTerminalOperationIds=[];
   for (const row of Object.values(c.operations || {}).filter(target)) {
@@ -95,14 +100,14 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],owne
       proof.result?.executionOutcome==='HISTORICAL_OUTCOME_UNOBSERVED_RESOURCE_QUIESCENT'&&proof.result?.evidenceAuthority==='VERIFIED_NATIVE_PORT_PROBES');
     const legacyTerminal=legacyTerminalReceipt(row,c.accesses?.[row.accessId]);
     if(legacyTerminal)legacyTerminalOperationIds.push(row.operationId);
-    if (!terminalOperations.has(row.state) || (row.native||row.onceAcknowledged===true)&&!terminalResult&&!reconciledPort&&!legacyTerminal)
+    if (!closedAuthority&&(!terminalOperations.has(row.state) || (row.native||row.onceAcknowledged===true)&&!terminalResult&&!reconciledPort&&!legacyTerminal))
       fail('erasure-operation-unreconciled');
   }
   for (const name of ['accesses','testReservations']) for (const row of Object.values(c[name] || {}).filter(target)) {
-    if (!['RELEASED','CANCELLED'].includes(row.state)) fail('erasure-resource-unreleased');
+    if (!closedAuthority&&!['RELEASED','CANCELLED'].includes(row.state)) fail('erasure-resource-unreleased');
   }
-  if (registry.integrationOwner && runs.includes(registry.integrationOwner) ||
-      (registry.integrationQueue || []).some(target)) fail('erasure-integration-active');
+  if (!closedAuthority&&(registry.integrationOwner && runs.includes(registry.integrationOwner) ||
+      (registry.integrationQueue || []).some(target))) fail('erasure-integration-active');
   const ids = new Set([changeId, ...runs]);
   const visit = value => {
     if (!value || typeof value !== 'object') return;
@@ -118,6 +123,7 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],owne
   for (const [key,row] of Object.entries(registry.requestOwners || {})) if (target(row)) { ids.add(key); visit(row); }
   return { protocol: ERASURE_PROTOCOL, workspace:registry.project,changeId, ownerId, runIds: runs.sort(), ids: [...ids].sort(),
     registrySequence: registry.sequence, coordinationSequence: c.sequence,
+    ...(closedAuthority?{closureAuthority:'authoritative-run-state-v1'}:{}),
     ...(inventory?{ownershipReview,runBindings:inventory.runBindings}:{}),
     ...(legacyTerminalOperationIds.length?{legacyTerminalOperationIds:legacyTerminalOperationIds.sort()}:{}) };
 }
@@ -238,7 +244,7 @@ export function erasureFiles(root,{legacy=false,sourceArtifacts=false}={}) {
 
 export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sourceArtifactRoots=[] } = {}) {
   const excluded = new Set(exclude);
-  const files = [...new Set(roots.flatMap(root=>erasureFiles(root,{legacy:legacyRoots.includes(root),sourceArtifacts:sourceArtifactRoots.includes(root)})))].filter(path => !excluded.has(path));
+  const files = [...new Set(roots.flatMap(root=>erasureFiles(root,{legacy:legacyRoots.some(legacy=>root===legacy||root.startsWith(legacy+'/')),sourceArtifacts:sourceArtifactRoots.includes(root)})))].filter(path => !excluded.has(path));
   const documents = [];
   for (const path of files) {
     const explicitFile=roots.includes(path)&&lstatSync(path).isFile();
@@ -250,9 +256,9 @@ export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sour
     let document;
     try { document = readRuntimeJson(path,{legacy:true}); }
     catch (cause) {
-      if(cause instanceof SyntaxError&&!erasureReferences(readErasureBytes(path,{legacy:legacyRoots.some(root=>path.startsWith(root+'/'))}).toString('utf8'),scope).length)continue;
+      if(cause instanceof SyntaxError&&!erasureReferences(readErasureBytes(path,{legacy:legacyRoots.some(root=>path===root||path.startsWith(root+'/'))}).toString('utf8'),scope).length)continue;
       throw Object.assign(new Error('erasure-format-uncovered'), { code: 'erasure-format-uncovered', path, cause }); }
-    documents.push({ path, legacy:legacyRoots.some(root=>path.startsWith(root+'/')), ...document });
+    documents.push({ path, legacy:legacyRoots.some(root=>path===root||path.startsWith(root+'/')), ...document });
   }
   const extended = extendErasureScope(scope, documents.map(row => row.value));
   const pattern=erasurePattern(extended);
@@ -283,11 +289,12 @@ export function readErasureBytes(path,{legacy=false}={}) {
   const fd=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
   try{const stat=fstatSync(fd),parent=lstatSync(dirname(path));if(!stat.isFile()||stat.nlink!==1||!legacy&&(stat.uid!==process.getuid()||parent.uid!==process.getuid()||!privateAncestor(dirname(path)))||stat.size>128*1024*1024)fail('erasure-file-unsafe');return readFileSync(fd)}finally{closeSync(fd)}
 }
-function writeErasureBytes(path,data,{legacy=false}={}) {
+function writeErasureBytes(path,data,{legacy=false,fileMode}={}) {
   if(!existsSync(dirname(path)))ensurePrivateStateDirectory(dirname(path));
   if(realpathSync(dirname(path))!==dirname(path))fail('erasure-symlink-refused');
   if(!legacy&&!privateAncestor(dirname(path)))fail('erasure-file-unsafe');
-  const temporary=path+'.candidate-'+randomUUID(),mode=legacy?0o775:0o600;
+  const temporary=path+'.candidate-'+randomUUID(),mode=fileMode??(legacy?0o775:0o600);
+  if(![0o600,0o775].includes(mode))fail('erasure-file-mode-invalid');
   const fd=openSync(temporary,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,mode);
   try{writeFileSync(fd,data);fchmodSync(fd,mode);fsyncSync(fd)}finally{closeSync(fd)}
   renameSync(temporary,path);syncDirectory(dirname(path));
@@ -345,7 +352,7 @@ export class ErasureTransaction {
       if (current !== entry.before) fail('erasure-source-divergent');
       beforeWrite(entry);
       if (entry.remove) { unlinkSync(entry.path); syncDirectory(dirname(entry.path)); }
-      else writeErasureBytes(entry.path,bytes,{legacy:entry.legacy===true});
+      else writeErasureBytes(entry.path,bytes,{legacy:entry.legacy===true,fileMode:entry.fileMode});
     }
   }
   certify(value, verifyAbsence) {
@@ -353,6 +360,9 @@ export class ErasureTransaction {
     const certificate = this.seal({ protocol:ERASURE_PROTOCOL, transactionId:value.transactionId,
       scope:value.scope, roots:value.roots,legacyRoots:value.legacyRoots||[],sourceArtifactRoots:value.sourceArtifactRoots||[],journalPaths:value.journalPaths||[],epoch:Date.now(),
       status:'CERTIFIED_PENDING_FINALIZE', coverage:value.coverage, at:Date.now(),
+      ...(value.ownerReceipts?{ownerReceipts:value.ownerReceipts}:{}),
+      ...(value.sgsReceipt?{sgsReceipt:value.sgsReceipt}:{}),
+      ...(value.retainedArchive?{retainedArchive:value.retainedArchive}:{}),
       timings:{preparationMs:value.cutoverStartedAt>=value.startedAt?value.cutoverStartedAt-value.startedAt:null,
         cutoverToVerifiedUpperBoundMs:value.runtimeVerifiedAt>=value.cutoverStartedAt?value.runtimeVerifiedAt-value.cutoverStartedAt:null,
         measurement:'cutover-to-runtime-verified-upper-bound'} });

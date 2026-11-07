@@ -1,5 +1,16 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Évolution consolidée SCM 2.4.0
+
+[evolve-cab-autonomous-runtime-and-telemetry](openspec/changes/archive/2026-11-07-evolve-cab-autonomous-runtime-and-telemetry/),
+code non attribué : ARCHIVÉ, huit catégories réalisées et qualifiées sur les
+contrôles ciblés ; STATISTICS.md généré par SGS2.4.0 avec télémétrie Codex.
+SGS/CCAB permanents, autonomie/ateliers, CAB direct, effacement
+multi-compte, Web Monitor et distribution cohérente. Les reçus de publication
+et CABU prouvent séparément livraison et activation ; C12 conserve son reçu
+SEALED jusqu’à l’activation vérifiée du worker propriétaire. Aucun RUN pair
+en cours ne peut être purgé. Convergence des codes ultérieure par ACL.
+
 ## Lecture legacy SCM 2.3.10
 
 [accept-legacy-terminal-erasure-receipts](openspec/changes/archive/2026-11-06-accept-legacy-terminal-erasure-receipts/), code non attribué : ARCHIVÉ, source qualifiée. Compatibilité des terminaisons historiques qualifiées ; activation distincte, priorité au seul cleanup C12 avant2.4. Convergence ACL ultérieure.

@@ -5,6 +5,12 @@
   },
   "plugins": [
     {
+      "name": "CCAB",
+      "source": {"source": "local", "path": "./plugins/ccab"},
+      "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+      "category": "Productivity"
+    },
+    {
       "name": "CAB",
       "source": {
         "source": "local",
