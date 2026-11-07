@@ -6,8 +6,13 @@ import {join} from 'node:path';
 import {runtimeRequest,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
 import {projectErasure,erasureReferences} from './cgpt-approval-bridge-change-erasure.mjs';
 import {readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.4.14';
+export const VERSION='2.4.15';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
+function removeCurrentErasureMarker(data,component,receiptId) {
+  if(component!=='broker-statistics'||!data||typeof data!=='object'||Array.isArray(data)||data.erasure_prepared!==receiptId)return data;
+  const {erasure_prepared,...rest}=data;return rest;
+}
+
 export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),request=runtimeRequest}={}) {
   const preview=await request('sgs','/purge/preview',{scope,branch},{home});
   const bindingIds=new Set(preview.bindings),files=[],floors=new Map();
@@ -22,7 +27,7 @@ export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),req
   }
   for(const {path,value} of files) {
     if(value.project===scope.workspace&&typeof value.component==='string') {
-      const next=projectErasure(value.data,scope);
+      const next=projectErasure(removeCurrentErasureMarker(value.data,value.component,receiptId),scope);
       if(erasureReferences(next,scope).length)fail('sgs-outbox-projection-incomplete');
       floors.set(value.component,Math.max(floors.get(value.component)||0,value.sequence+1));
       if(next===undefined)await unlink(path);else writeRuntimeJson(path,{...value,data:next});
@@ -31,7 +36,7 @@ export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),req
   const components=[];
   for(const source of preview.components) {
     const result=await request('sgs','/component/checkpoint?'+new URLSearchParams({project:scope.workspace,component:source.component}),undefined,{home,maxResponseBytes:64*1024*1024});
-    const data=projectErasure(result.data,scope);
+    const data=projectErasure(removeCurrentErasureMarker(result.data,source.component,receiptId),scope);
     if(erasureReferences(data,scope).length)fail('sgs-component-projection-incomplete');
     components.push({component:source.component,expectedFingerprint:source.fingerprint,data:data??null,sequenceFloor:floors.get(source.component)||0});
   }
