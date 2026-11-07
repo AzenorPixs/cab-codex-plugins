@@ -1344,3 +1344,6 @@ flowchart LR
 
 ## Permissions shell multi-ressources
 [correlate-multiresource-native-shell](openspec/changes/archive/2026-11-07-correlate-multiresource-native-shell/) : identité native, couverture complète ordonnée et observation convergente, sans réponse implicite à une permission.
+
+## Garde once des permissions décomposées
+[guard-multiresource-native-once](openspec/changes/archive/2026-11-07-guard-multiresource-native-once/) : observation conservée, once interdite et rejet propriétaire préservé.
