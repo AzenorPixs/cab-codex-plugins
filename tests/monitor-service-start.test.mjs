@@ -74,10 +74,10 @@ test('le jeu installé documenté démarre depuis son arborescence isolée sans 
     catch { return false; }
   });
   const snapshot = await (await fetch(base + '/api/snapshot')).json();
-  assert.equal(snapshot.version, '2.4.1');
+  assert.equal(snapshot.version, '2.4.2');
   assert.equal(snapshot.identity.workspace, await realpath(h.workspace));
   const identity = await (await fetch(base + '/api/identity')).json();
-  assert.deepEqual(identity, { version: '2.4.1', identity: { workspace: await realpath(h.workspace) } });
+  assert.deepEqual(identity, { version: '2.4.2', identity: { workspace: await realpath(h.workspace) } });
   assert.equal((await fetch(base+'/api/maintenance-identity')).status,403);
   const maintenance=await (await fetch(base+'/api/maintenance-identity',{headers:{'x-cab-continuity':'cab-continuity-v1'}})).json();
   assert.equal(maintenance.pid,process.child.pid);

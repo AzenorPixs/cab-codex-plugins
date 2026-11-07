@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 2.4.2 — 2026-11-07
+
+- Projette les listes historiques d’identifiants onceAcknowledged/restoredAccesses en préservant les booléens, l’ordre et les éléments des pairs, avec le réancrage de continuité existant.
+- Récupère un STOPPING antérieur à la projection : vérifie la clôture/les liaisons, NativePID et services, recapture leurs PID sur le même reçu sans rollback ni nouvel effacement.
+
 ## 2.4.1 — 2026-11-07
 
 - Reprend les reçus d’effacement propriétaires signés jusqu’à128Mio avec la même borne en écriture et lecture ; garde signatures, UID, liens et scope, sans réécrire les candidats déjà appliqués.

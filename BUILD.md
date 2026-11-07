@@ -1,5 +1,9 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Complément2.4.2 : après restauration des services avant projection, utiliser
+recover-preparation sur le même reçu avec la version runtime explicite. Cette
+étape recapture les PID vérifiés ; elle ne déclare ni purge ni CABU global.
+
 Reprise2.4.1 : préserver le reçu d’effacement et les fichiers déjà appliqués.
 Qualifier le helper propriétaire compatible avec le protocole existant, puis
 terminer la phase critique avec le client correspondant aux processus chargés.

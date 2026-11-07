@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Codecs historiques SCM2.4.2
+
+[cover-legacy-erasure-identity-lists](openspec/changes/archive/2026-11-07-cover-legacy-erasure-identity-lists/), code non attribué : source qualifiée,81tests ciblés et inventaire réel47candidats. Listes typées et récupération STOPPING avant projection ; publication, CABU et PURGED distincts.
+
+
 ## Reprise propriétaire SCM2.4.1
 
 [resume-large-owner-erasure-receipt](openspec/changes/archive/2026-11-07-resume-large-owner-erasure-receipt/), code non attribué : source qualifiée ; reçu128Mio, marqueur signé, absence exhaustive accélérée et compatibilité du helper avec runtime2.4.0. Incidents C12/PA01 suivis dans CCAB. Publication, CABU et PURGED restent prouvés séparément.

@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.1';
+export const VERSION = '2.4.2';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -18,7 +18,7 @@ const identityKeys = new Set(['runId','run_id','changeId','change_id','sessionId
   'jobId','job_id','operationId','operation_id','requestId','request_id','approvalId','approval_id',
   'accessId','access_id','transactionId','stageId','actionId','policyId','extensionId','permissionId','callID']);
 const ownerKeys = new Set(['runId','run_id','changeId','change_id']);
-const identityLists=new Set(['runIds','run_ids','scopeRunIds','sessionIds','session_ids','operationIds','requestIds','approvalIds','revokedSessions','sourceSessions']);
+const identityLists=new Set(['runIds','run_ids','scopeRunIds','sessionIds','session_ids','operationIds','requestIds','approvalIds','revokedSessions','sourceSessions','onceAcknowledged','restoredAccesses']);
 const unambiguousId=value=>typeof value==='string'&&(value.length>=16||/^(?:ses_|op-|req-|request-|approval-|apr-|call_|job-|policy-|access-|erasure-|run-)/.test(value));
 const terminalOperations = new Set(['COMPLETED','NO_EFFECT','RECONCILED','CANCELLED']);
 function privateAncestor(directory) {

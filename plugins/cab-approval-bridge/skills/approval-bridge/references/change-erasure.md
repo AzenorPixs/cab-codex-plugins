@@ -1,4 +1,18 @@
-# Effacement terminal ciblé — CAB 2.4.1
+# Effacement terminal ciblé — CAB 2.4.2
+
+## Préparation interrompue avant projection
+
+Avec le helper2.4.2, `recover-preparation --transaction-id <même reçu>
+--workspace <projet> --runtime-version 2.4.0` vérifie une transaction v1 STOPPING
+sans entries ni expectedPeers. NativePID/SID/permissions et clôture/liaisons
+sont contrôlés ; les services sont vérifiés puis leurs PID recapturés. La phase
+reste STOPPING. Reprendre ensuite execute, certificat, finalize et verify avec
+les mêmes identités et version runtime. Une projection déjà engagée ou des
+liaisons divergentes refusent cette action ; aucune donnée n’est restaurée.
+
+Les tableaux inventory.onceAcknowledged et restoredAccesses des anciens reçus
+sont des listes d’identifiants : seuls les éléments exactement ciblés sont
+retirés. Les booléens onceAcknowledged, les pairs et leur ordre restent intacts.
 
 ## Reçu propriétaire volumineux et reprise
 

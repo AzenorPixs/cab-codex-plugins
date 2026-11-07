@@ -1,5 +1,9 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+Complément2.4.2 : les listes d’identifiants de migration/transfert héritées
+sont nettoyées dans le scope exact. Une préparation interrompue avant projection
+peut recapturer les services restaurés sans nouvelle transaction ni rollback.
+
 Correctif2.4.1 : les reçus d’effacement propriétaires volumineux sont repris
 dans la même transaction, avec signature et scope inchangés, vérification
 exhaustive des références et conservation des pairs. Les dossiers et processus

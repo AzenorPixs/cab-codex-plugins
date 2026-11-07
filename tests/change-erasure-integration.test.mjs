@@ -108,6 +108,22 @@ test('Reprise2.4.1 : runtime2.4.0 explicite, même reçu, certificat distinct et
  assert.equal((await cleanupChange({...input,action:'verify',certificate},f.dependencies)).status,'PURGED');
 });
 
+test('Récupération de préparation : nouveaux PID vérifiés sans projection ni rollback',async t=>{
+ const f=await fixture(t,'TERMINÉ',{runtimeVersion:'2.4.0'});
+ const plan=await f.manager.prepare({changeId:f.target.changeId,ownerId:'owner',branch:'TERMINÉ',retainedSessionId:null,evidence:['fixture-business-report-reviewed'],dependencyEvidence:f.dependencyEvidence});
+ f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
+ const tx=new ErasureTransaction(f.state),sealed=tx.load();
+ tx.save({...sealed,phase:'STOPPING',componentPids:{controller:11,supervisor:12,monitor:13}});
+ const before=readFileSync(join(f.state,'controller-runs.json'));
+ const result=await cleanupChange({workspace:f.workspace,action:'recover-preparation',transactionId:plan.transactionId,runtimeVersion:'2.4.0'},f.dependencies);
+ assert.equal(result.status,'PRESERVED_PREPARATION_REBOUND');assert.equal(tx.load().phase,'STOPPING');
+ assert.notEqual(result.pids.controller,11);assert.deepEqual(tx.load().scope,sealed.scope);
+ assert.deepEqual(readFileSync(join(f.state,'controller-runs.json')),before);
+ tx.save({...tx.load(),expectedPeers:{},phase:'APPLYING'});const signed=readFileSync(tx.path);
+ await assert.rejects(cleanupChange({workspace:f.workspace,action:'recover-preparation',transactionId:plan.transactionId,runtimeVersion:'2.4.0'},f.dependencies),/preparation-recovery-refused/);
+ assert.deepEqual(readFileSync(tx.path),signed);
+});
+
 for(const branch of ['TERMINÉ','BLOQUÉ'])for(const multiOwner of [false,true])for(const legacy of (multiOwner?[false,true]:[false]))test('OC then all CAB stores, authenticated reanchor and peer preserved: '+branch+(multiOwner?' multi-owner':'')+(legacy?' legacy':''),async t=>{
   const f=await fixture(t,branch,{multiOwner,legacy});
   const preview=multiOwner?f.manager.preview({changeId:f.target.changeId,ownerId:'owner'}):null;
