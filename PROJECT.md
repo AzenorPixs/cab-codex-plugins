@@ -1,5 +1,7 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+Complément2.4.8 : l’appartenance primaire aux RUN protégés prévaut sur les collisions secondaires historiques dans le nettoyage par lot. Les gardes de RUN contradictoire et de répertoire étranger restent exigées.
+
 Complément2.4.7 : les approbations appartenant aux RUN protégés gardent leurs citations historiques opaques, sans mutation de décision ni empreinte. Les objets ambigus et données cibles restent contrôlés.
 
 Complément2.4.6 : rétention des identités secondaires partagées sur le même

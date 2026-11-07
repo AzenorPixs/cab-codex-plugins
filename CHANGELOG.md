@@ -1,5 +1,8 @@
 # Historique des versions
 
+## 2.4.8
+- Conservation primaire des pairs en cas de collision historique de SID/opération ; sentinelles textuelles non identifiantes exclues du lot.
+
 ## 2.4.7
 - Conservation des références textuelles historiques des RUN protégés, sans altérer leurs approbations.
 - Qualification propriétaire des anciennes sauvegardes retirées ; reprise du même reçu43/8.

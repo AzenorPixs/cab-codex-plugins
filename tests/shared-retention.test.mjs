@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';import {join} from 'node:path';import {tmpdir} from 'node:os';
-import {reconcileRetiredRetention,retentionOnlyRebind,projectErasure,erasureReferences,ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
+import {extendErasureScope,reconcileRetiredRetention,retentionOnlyRebind,projectErasure,erasureReferences,ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
 import {canonicalContinuityDigest,renewErasureHandoff} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {ownerCleanup} from '../plugins/cab-approval-bridge/broker/cgpt_approval_bridge_owner_cleanup.mjs';
 const scope=()=>({workspace:'/fixture',changeId:'batch-maintenance',ownerId:'operator',runIds:['run-retired'],protectedRunIds:['run-protected'],changeIds:['old-change'],ids:['run-retired','old-change','source-shared'],sharedIdentityIds:['run-protected','live-change'],closureAuthority:'authoritative-retired-run-batch-v1'});
@@ -50,8 +50,27 @@ test('Pairs : citations opaques conservées sans mutation, objets externes toujo
  const projected=projectErasure(value,s);assert.deepEqual(projected.approvals.live,peer);assert.equal(projected.approvals.old,undefined);assert.deepEqual(erasureReferences(projected,s),[]);
  assert.ok(erasureReferences({unclassified:'run-retired'},s).includes('run-retired'));
 });
-test('Pairs : aucune exemption pour identités cibles typées ou propriétaire contradictoire',()=>{
- const s=scope();for(const peer of [{run_id:'run-protected',operation_id:'source-shared',text:'run-retired'}, {run_id:'run-protected',runId:'run-retired'}, {run_id:'run-protected',directory:'/foreign',text:'run-retired'}]) {
+test('Pairs : aucune exemption pour RUN contradictoire ou répertoire étranger',()=>{
+ const s=scope();for(const peer of [{run_id:'run-protected',runId:'run-retired'}, {run_id:'run-protected',directory:'/foreign',text:'run-retired'}]) {
   assert.ok(erasureReferences(peer,s).length>0);
  }
+});
+
+test('Pairs : appartenance primaire prioritaire malgré collision secondaire historique',()=>{
+ const s=scope(),peer={run_id:'run-protected',sessionId:'shared-legacy-session',operation_id:'source-shared',summary:'run-retired'};s.ids.push('shared-legacy-session','null');
+ const payload={contexts:[peer,{run_id:'run-retired',operation_id:'source-shared'}],metadata:{access_id:'null'}};
+ const projected=projectErasure(payload,s);assert.deepEqual(projected.contexts,[peer]);assert.deepEqual(projected.metadata,{access_id:'null'});assert.deepEqual(erasureReferences(projected,s),[]);
+ assert.deepEqual(extendErasureScope(s,[payload]).ids,s.ids.slice().filter(x=>x!=='null').sort());
+});
+
+test('Pairs : agrégat partagé conservé et sous-contextes cibles seuls projetés',()=>{
+ const s=scope(),peer={run_id:'run-protected',sessionId:'source-shared'},old={run_id:'run-retired',sessionId:'source-shared'};
+ s.sharedIdentityIds.push('old-change');const data=[{changeId:'old-change',contexts:[peer,old]}];assert.deepEqual(projectErasure(data,s),[{changeId:'old-change',contexts:[peer]}]);assert.deepEqual(erasureReferences(projectErasure(data,s),s),[]);
+});
+
+import {mkdirSync,writeFileSync} from 'node:fs';import {erasureFilePlan} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
+test('Pairs : fichier de job sans RUN interne conservé par son chemin propriétaire',t=>{
+ const root=mkdtempSync(join(tmpdir(),'cab-protected-path-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ for(const id of ['run-protected','run-retired']){mkdirSync(join(root,'runs',id,'1'),{recursive:true});writeFileSync(join(root,'runs',id,'1','controller-job.json'),JSON.stringify({changeId:id==='run-protected'?'live-change':'old-change',sessionId:'source-shared'}));}
+ const plan=erasureFilePlan([root],scope());assert.equal(plan.entries.length,1);assert.ok(plan.entries[0].path.includes('/run-retired/'));
 });
