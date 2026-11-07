@@ -13,7 +13,7 @@ import tempfile
 import threading
 import urllib.request
 
-VERSION = '2.4.17'
+VERSION = '2.4.18'
 
 
 def serve(config):

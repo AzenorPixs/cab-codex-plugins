@@ -1,0 +1,41 @@
+## ADDED Requirements
+
+### Requirement: Nettoyage après réponse et clôture
+CCAB SHALL permettre le nettoyage ciblé d'une entrée après résolution et réponse vérifiée au déclarant. Une entrée non résolue SHALL NOT être supprimée. Les reçus nécessaires aux autres entrées SHALL être conservés. Le nettoyage SHALL NOT modifier les RUN, permissions ou accès. La file SHALL NOT servir d'archive.
+
+#### Scenario: Entrée traitée avec une autre encore ouverte
+- **WHEN** une entrée est résolue après réponse au déclarant alors qu'une autre reste ouverte
+- **THEN** le nettoyage de l'entrée résolue est permis et l'entrée ouverte reste intacte
+
+#### Scenario: Entrée non résolue
+- **WHEN** un nettoyage individuel cible une entrée non résolue
+- **THEN** il est refusé sans suppression
+
+### Requirement: Traitement et nettoyage par lot
+Le correcteur MAY traiter ensemble des entrées dont les causes ou dépendances le justifient, puis les nettoyer séparément ou ensemble. Un lot de nettoyage SHALL être atomique et refuser toute suppression si une entrée ciblée n'est pas résolue.
+
+#### Scenario: Nettoyage par lot
+- **WHEN** plusieurs entrées traitées ensemble sont résolues et leurs réponses vérifiées
+- **THEN** elles peuvent être nettoyées ensemble sans attendre les entrées extérieures au lot
+
+### Requirement: Clôture après traitement sans correctif
+CCAB SHALL permettre de solder une entrée examinée sans correctif au moyen de la classification `no-fix`, distincte de `false-positive`. La résolution SHALL expliquer la méthode, les raisons de l'absence de correctif et les limites résiduelles ; le déclarant SHALL être identifié dans les retours vérifiés. La publication SHALL être absente pour cette classification. Cette clôture SHALL NOT prouver la réparation des données, autoriser un effet ni lever une protection.
+
+#### Scenario: Traitement sans correctif
+- **WHEN** une entrée a été examinée et ne conduit pas à un correctif
+- **THEN** le correcteur peut la solder avec `no-fix`, sa justification et ses limites, sans renseignement de livraison fictif
+
+#### Scenario: Preuve de livraison fictive
+- **WHEN** une résolution `no-fix` inclut une livraison
+- **THEN** CCAB refuse la résolution
+
+### Requirement: Purge globale conditionnelle des entrées traitées
+Sur demande explicite du développeur, CCAB SHALL vérifier et purger atomiquement l'ensemble des entrées et reçus de file uniquement lorsque toutes les entrées sont `RESOLVED`. Une entrée non traitée SHALL empêcher toute suppression. Cette opération SHALL NOT modifier les RUN, leurs accès, permissions ou autres données CAB.
+
+#### Scenario: Une entrée non traitée
+- **WHEN** la purge est demandée alors qu'une entrée est ouverte ou réservée
+- **THEN** aucune entrée ni aucun reçu de file n'est supprimé
+
+#### Scenario: Toutes les entrées traitées
+- **WHEN** la purge est demandée et toutes les entrées sont résolues
+- **THEN** les entrées et reçus CCAB sont supprimés dans la même transaction sans modifier les RUN
