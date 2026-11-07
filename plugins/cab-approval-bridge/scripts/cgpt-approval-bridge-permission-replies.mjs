@@ -16,6 +16,7 @@ const valid = value => value && Object.keys(value).every(key => ['protocol','ses
   (value.callId === null || id(value.callId)) && (value.targetDigest === null || hash(value.targetDigest)) &&
   ['INTENT', 'ACKNOWLEDGED'].includes(value.state) && Number.isFinite(Date.parse(value.createdAt)) &&
   (value.state !== 'ACKNOWLEDGED' || value.httpStatus === 204 && Number.isFinite(Date.parse(value.acknowledgedAt)));
+export const validPermissionReply = valid;
 
 // Separate immutable identities prevent concurrent clients from overwriting another reply.
 export class PermissionReplyJournal {
