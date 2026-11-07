@@ -132,6 +132,63 @@ class RuntimeServicesTest(unittest.TestCase):
         with self.assertRaisesRegex(runtime.RuntimeErrorCode, "claim-unavailable"):
             self.store.claim("claim-stolen", "another", ["third"], "Concurrence")
 
+    def test_ccab_treated_without_fix_preserves_limitation_and_refuses_release(self):
+        self.incident("no-fix-case")
+        self.store.claim("claim-no-fix", "orchestrator")
+        resolution = {"classification": "no-fix", "method": "Examiné ; source absente, protection conservée", "reporters_verified": ["reporter-no-fix-case"], "release": None}
+        invalid = dict(resolution, release={"version": "fixture"})
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode, "ccab-no-fix-release-invalid"):
+            self.store.resolve("resolve-invalid", "no-fix-case", "claim-no-fix", "orchestrator", invalid)
+        result = self.store.resolve("resolve-no-fix", "no-fix-case", "claim-no-fix", "orchestrator", resolution)
+        self.assertEqual(result["state"], "RESOLVED")
+        self.assertEqual(result["resolution"], resolution)
+
+    def test_ccab_target_purge_preserves_open_incident_and_shared_claim(self):
+        self.incident("first-purge")
+        self.incident("second-purge")
+        self.store.claim("claim-shared", "orchestrator", ["first-purge", "second-purge"], "Lot commun")
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode, "ccab-purge-untreated"):
+            self.store.purge_treated("first-purge")
+        resolution = {"classification": "no-fix", "method": "Examiné, limite conservée", "reporters_verified": ["reporter-first-purge"], "release": None}
+        self.store.resolve("resolve-first", "first-purge", "claim-shared", "orchestrator", resolution)
+        self.assertEqual(self.store.purge_treated("first-purge")["status"], "PURGED_TREATED")
+        self.assertEqual(self.store.purge_treated("first-purge")["status"], "ALREADY_ABSENT")
+        self.assertEqual([item["incident_id"] for item in self.store.incidents()], ["second-purge"])
+        self.assertIsNotNone(self.store.db.execute("SELECT 1 FROM receipts WHERE action_id='claim-shared'").fetchone())
+        resolution["reporters_verified"] = ["reporter-second-purge"]
+        self.store.resolve("resolve-second", "second-purge", "claim-shared", "orchestrator", resolution)
+        self.store.purge_treated("second-purge")
+        self.assertIsNone(self.store.db.execute("SELECT 1 FROM receipts WHERE action_id='claim-shared'").fetchone())
+
+    def test_ccab_batch_purge_refuses_mixed_and_keeps_outside_incident(self):
+        for identity in ("batch-first", "batch-second", "outside"):
+            self.incident(identity)
+        self.store.claim("claim-batch-purge", "orchestrator", ["batch-first", "batch-second"], "Même cause")
+        resolution = {"classification": "no-fix", "method": "Traitement effectué ; limite conservée", "reporters_verified": ["reporter-batch-first"], "release": None}
+        self.store.resolve("resolve-batch-first", "batch-first", "claim-batch-purge", "orchestrator", resolution)
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode, "ccab-purge-untreated"):
+            self.store.purge_treated_batch(["batch-first", "batch-second"])
+        self.assertEqual(len(self.store.incidents()), 3)
+        resolution["reporters_verified"] = ["reporter-batch-second"]
+        self.store.resolve("resolve-batch-second", "batch-second", "claim-batch-purge", "orchestrator", resolution)
+        self.assertEqual(self.store.purge_treated_batch(["batch-first", "batch-second"])["removed"], 2)
+        self.assertEqual([item["incident_id"] for item in self.store.incidents()], ["outside"])
+
+    def test_ccab_global_purge_is_atomic_and_requires_all_treated(self):
+        self.incident("treated")
+        self.incident("open")
+        self.store.claim("claim-treated", "orchestrator")
+        resolution = {"classification": "no-fix", "method": "Examiné, limite conservée", "reporters_verified": ["reporter-treated"], "release": None}
+        self.store.resolve("resolve-treated", "treated", "claim-treated", "orchestrator", resolution)
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode, "ccab-purge-untreated"):
+            self.store.purge_all_treated()
+        self.assertEqual(len(self.store.incidents()), 2)
+        self.store.claim("claim-open", "orchestrator")
+        resolution["reporters_verified"] = ["reporter-open"]
+        self.store.resolve("resolve-open", "open", "claim-open", "orchestrator", resolution)
+        self.assertEqual(self.store.purge_all_treated()["removed"], 2)
+        self.assertEqual(self.store.incidents(), [])
+
     def test_all_archived_reports_import_without_rewrite(self):
         directory = self.root / "openspec/changes/archive/2026-11-06-fixture"
         directory.mkdir(parents=True)

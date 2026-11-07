@@ -2,11 +2,11 @@
 /** Commande locale commune ; les mutations lisent un objet JSON sur stdin. */
 import { runtimeRequest } from './cgpt-approval-bridge-runtime-client.mjs';
 import { pathToFileURL } from 'node:url';
-export const VERSION='2.4.17';
+export const VERSION='2.4.18';
 export async function runtimeCommand(argv, input=process.stdin) {
   const [component,action,...rest]=argv;
   const routes={sgs:{status:['GET','/status'],bind:['POST','/bindings'],close:['POST','/bindings/close'],source:['POST','/sources'],event:['POST','/events'],stats:['GET','/stats']},
-    ccab:{status:['GET','/status'],list:['GET','/incidents'],report:['POST','/incidents'],claim:['POST','/claim'],renew:['POST','/renew'],resolve:['POST','/resolve']}};
+    ccab:{status:['GET','/status'],list:['GET','/incidents'],report:['POST','/incidents'],claim:['POST','/claim'],renew:['POST','/renew'],resolve:['POST','/resolve'],purge:['POST','/purge-incident'],'purge-batch':['POST','/purge-batch'],'purge-all':['POST','/purge-treated']}};
   const route=routes[component]?.[action];
   if(!route)throw new Error('runtime-command-invalid');
   let path=route[1],body;

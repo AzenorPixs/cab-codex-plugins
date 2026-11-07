@@ -29,7 +29,7 @@ l’exécution des sessions ; il ne remplace pas ce référentiel.
 | Superviseur | Observe les sessions et leur progression |
 | Web Monitor | Présente les RUN, les statistiques, les incidents et les archives conservées |
 | SGS | Collecte et conserve les statistiques avec leur provenance |
-| CCAB | Conserve les incidents et leur traitement coordonné |
+| CCAB | Coordonne le traitement des incidents puis nettoie les entrées traitées |
 | CABU | Prépare, applique et vérifie les mises à jour par transaction |
 
 Les services conservent uniquement les données utiles à leur rôle.
@@ -76,8 +76,9 @@ signalées comme telles. La vue Stats du Web Monitor lit SGS.
 
 CCAB propose une file FIFO par défaut, avec regroupement justifié des
 incidents de cause commune. Le correcteur se coordonne avec les déclarants,
-livre les correctifs nécessaires ou décrit une méthode vérifiée lorsqu’il
-s’agit d’un faux positif.
+livre les correctifs nécessaires ou répond sans correctif avec les limites
+constatées. Après réponse et clôture, les entrées traitées sont nettoyées,
+individuellement ou par lot, sans attendre les autres.
 
 La clôture autorisée d’un change nettoie ses sessions puis ses données
 opérationnelles, en conservant les pairs et les rapports métier requis.

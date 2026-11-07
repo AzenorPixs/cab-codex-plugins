@@ -25,6 +25,16 @@ et le même payload. Une expiration permet une reprise contrôlée, pas un
 deuxième correctif concurrent. Vérifier le bail avant chaque résolution.
 
 Qualifier sur preuves : défaut de code, défaut documentaire ou faux positif.
+Une entrée examinée peut aussi être soldée sans correctif (`no-fix`) : décrire
+la méthode, les raisons et les limites restantes, puis informer le déclarant.
+La clôture ne prouve pas la réparation et ne lève aucune protection.
+Après réponse vérifiée au déclarant et résolution, nettoyer chaque entrée
+traitée avec `purge` ; ne pas conserver la file comme archive. Les reçus
+partagés encore nécessaires aux autres entrées restent protégés.
+Sur demande explicite du développeur, `POST /purge-treated` avec
+`{"confirmed":true}` supprime toutes les entrées et reçus CCAB dans une seule
+transaction si toutes les entrées sont résolues ; sinon il ne supprime rien.
+Cette purge ne modifie ni les RUN, ni leurs accès, ni les autres briques.
 Un correctif, même uniquement skill/plugin/commande/documentation, suit SCM,
 incrément de version, tests applicables, commit/publication par CI/CD puis
 CABU et vérification des versions actives. Le faux positif comporte une
@@ -37,7 +47,7 @@ ou une allocation supplémentaire non autorisée revient au développeur.
 
 Depuis les scripts du plugin CAB installé, exécuter
 `node cgpt-approval-bridge-runtime-command.mjs ccab <action>`.
-Actions : `status`, `list`, `report`, `claim`, `renew`, `resolve`. Les mutations lisent
+Actions : `status`, `list`, `report`, `claim`, `renew`, `resolve`, `purge`, `purge-batch`, `purge-all`. Les mutations lisent
 le JSON sur stdin, sans interpolation shell. Le service est
 `cgpt-approval-bridge-ccab.service` ; aucune modification directe de sa base.
 
@@ -53,8 +63,14 @@ Le renouvellement mécanique peut être assuré par un client local autorisé
 pendant le travail, sans tour LLM de surveillance ; il ne prouve pas un progrès.
 
 `resolve` : action_id, incident_id, claim, claimant, resolution avec
-classification (code-fix/documentation-fix/false-positive), method,
+classification (code-fix/documentation-fix/false-positive/no-fix), method,
 reporters_verified et release. Pour un correctif, release comporte version,
-commit, publication et cabu_receipt. Pour un faux positif, release vaut null.
+commit, publication et cabu_receipt. Pour un faux positif ou `no-fix`, release vaut null.
 Les preuves réelles restent à examiner ; la saisie de références ne vaut pas
 une validation automatique de leur contenu.
+
+`purge` : `{ "incident_id": "..." }` retire la seule entrée résolue ; une
+entrée ouverte ou réservée est refusée. `purge-all` : `{ "confirmed": true }`
+retire tout seulement lorsque toutes les entrées sont résolues.
+`purge-batch` : `{ "incident_ids": ["..."] }` nettoie atomiquement les
+entrées traitées ensemble ; toute entrée ciblée non résolue refuse le lot.
