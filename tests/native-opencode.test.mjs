@@ -82,7 +82,7 @@ test('OpenCode natif : trois sessions et un seul broker source 2.3.10 dans un co
         OC_Codex_OPENCODE_PASSWORD_FILE: passwordFile,
         CODEX_COMMAND: 'cab-test-unused-app-server' }, stdio: 'ignore' });
     await waitFor(async () => { try { return Boolean(await request(controllerBase + '/status')); } catch { return false; } });
-    await waitFor(async () => (await request(controllerBase + '/status')).brokerReadiness?.server_version === '2.4.0');
+    await waitFor(async () => (await request(controllerBase + '/status')).brokerReadiness?.server_version === '2.4.1');
     const sessions = await Promise.all(['a', 'b', 'c'].map((id) => native('/api/session', 'POST', {
       location: { directory: workspace }, title: 'CAB isolated fixture ' + id })));
     const mcp = await native('/api/mcp');
@@ -101,7 +101,7 @@ test('OpenCode natif : trois sessions et un seul broker source 2.3.10 dans un co
     assert.equal((await request(controllerBase + '/status')).activeRunCount, 3);
     assert.equal(new Set(sessions.map((s) => s.data.id)).size, 3);
     const brokers = readFileSync(starts, 'utf8').trim().split('\n').map(JSON.parse);
-    assert.equal(brokers.length, 1); assert.equal(brokers[0].version, '2.4.0');
+    assert.equal(brokers.length, 1); assert.equal(brokers[0].version, '2.4.1');
     for (const run of reservations) {
       await request(controllerBase + '/runs/' + run.runId + '/job/terminal-gate', 'POST', { state: 'BLOQUÉ' });
       await request(controllerBase + '/runs/' + run.runId + '/job/disarm', 'POST', { jobId: 'job-' + run.runId.split('-')[1] });

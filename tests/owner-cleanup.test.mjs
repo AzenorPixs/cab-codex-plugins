@@ -45,7 +45,14 @@ test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible 
  for(const path of [workspace,master,code])mkdirSync(path,{mode:path===master?0o700:0o755});
  assert.equal(spawnSync('sudo',['-n','install','-d','-m','0755','-o',uid,'-g',gid,foreign]).status,0);
  t.after(()=>{spawnSync('sudo',['-n','rm','-rf','--',root]);});
- for(const name of ['cgpt_approval_bridge_server.py','cgpt_approval_bridge_router.py','cgpt_approval_bridge_journal.py','cgpt_approval_bridge_owner_cleanup.mjs','cgpt-approval-bridge-change-erasure.mjs','cgpt-approval-bridge-continuity.mjs','cgpt-approval-bridge-state-layout.mjs','cgpt-approval-bridge-observation-statistics.mjs']){copyFileSync(join(source,name),join(code,name));chmodSync(join(code,name),0o644);}
+ for(const name of ['cgpt_approval_bridge_server.py','cgpt_approval_bridge_router.py','cgpt_approval_bridge_journal.py','cgpt_approval_bridge_owner_cleanup.mjs','cgpt-approval-bridge-change-erasure.mjs','cgpt-approval-bridge-continuity.mjs','cgpt-approval-bridge-state-layout.mjs','cgpt-approval-bridge-observation-statistics.mjs']){
+  if(process.env.CAB_TEST_LEGACY_BROKER_REF&&/^(?:cgpt_approval_bridge_server|cgpt_approval_bridge_router|cgpt_approval_bridge_journal)\.py$/.test(name)){
+   assert.match(process.env.CAB_TEST_LEGACY_BROKER_REF,/^[a-f0-9]{40}$/);
+   const legacy=spawnSync('git',['-c','safe.directory='+process.cwd(),'show',process.env.CAB_TEST_LEGACY_BROKER_REF+':plugins/cab-approval-bridge/broker/'+name],{maxBuffer:4*1024*1024});
+   assert.equal(legacy.status,0);writeFileSync(join(code,name),legacy.stdout);
+  }else copyFileSync(join(source,name),join(code,name));
+  chmodSync(join(code,name),0o644);
+ }
  const scope={protocol:'cab-change-erasure-v1',workspace,changeId:'change-target-owner-123',ownerId:'owner-target',runIds:['run-target-owner-123'],ids:['change-target-owner-123','run-target-owner-123','ses_target_owner123'],registrySequence:1,coordinationSequence:1};
  const tx=new ErasureTransaction(master),value=tx.prepare({scope,phase:'SEALED',sessionIds:[],roots:[master],coverage:['controller','broker']});
  let broker={coordination_capabilities:['owner-local-erasure-v1']};

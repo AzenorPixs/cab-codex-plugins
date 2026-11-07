@@ -17,7 +17,7 @@ const monitorServicePath = new URL('../plugins/cab-approval-bridge/systemd/cgpt-
 test("les briques distribuées publient la même version de base 2.3.10", () => {
   const version = readFileSync(new URL("../pyproject.toml", import.meta.url), "utf8")
     .match(/^version = "([^"]+)"$/m)[1];
-  assert.equal(version, "2.4.0");
+  assert.equal(version, "2.4.1");
   const plugin = JSON.parse(readFileSync(
     new URL("../plugins/cab-approval-bridge/.codex-plugin/plugin.json", import.meta.url), "utf8"));
   assert.match(plugin.version, /^2\.3\.10\+codex\.\d{14}$/);
@@ -99,7 +99,7 @@ test('le moniteur web distribue ses ressources locales et reste indépendant des
 
 test('le catalogue des étapes et son producteur sont distribués en 2.3.10', async () => {
   const { RUN_STEPS, VERSION } = await import('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-run-steps.mjs');
-  assert.equal(VERSION, '2.4.0');
+  assert.equal(VERSION, '2.4.1');
   const reference = readFileSync(new URL('../plugins/cab-approval-bridge/skills/approval-bridge/references/run-lifecycle.md', import.meta.url), 'utf8');
   for (const step of RUN_STEPS) {
     assert.ok(reference.includes(step.id), step.id); assert.ok(reference.includes(step.name), step.name);

@@ -77,6 +77,21 @@ Préserver les champs, les droits et l’atomicité, sans exposer de token. Ne p
 sans Content-Type reste un diagnostic distinct ; ne pas assouplir le garde pour
 le masquer ni étendre cette exception aux livrables métier du codeur.
 
+## Forme littérale de l’appel d’atelier
+
+Rendre localement l’objet d’arguments par `JSON.stringify`, puis insérer ce
+résultat comme objet littéral dans `return await tools["cgpt-validation"].atelier_execute(...)`.
+Les clés nues sont reconnues, mais les valeurs chaîne doivent être des chaînes
+JSON à guillemets doubles ou des backticks statiques qualifiés. Une chaîne
+JavaScript à apostrophes simples dans argv n’est pas reconnue par ce parseur.
+Ne pas calculer le payload, ses empreintes ou une commande dans Code Mode.
+
+Après `atelier-native-call-unobserved`, vérifier `atelier_status` avec les mêmes
+identités. Si `found:false` est prouvé et aucun autre lancement n’existe, une
+correction de rendu conservant exactement les valeurs, argv et request_id peut
+être qualifiée sans créer un nouvel essai. Une réponse perdue ou un état
+INTENT/RUNNING/terminal impose de consulter le reçu, sans relancer le processus.
+
 Le codeur peut obtenir le contrat complet applicable par `cab_contract` dans
 le broker, puis une référence exacte (`CCAB-SKILL.md`, `SGS-runtime.md`, etc.).
 Le noyau/index et le digest de version sont stables ; demander les références

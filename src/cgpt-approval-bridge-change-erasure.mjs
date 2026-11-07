@@ -7,8 +7,9 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.0';
+export const VERSION = '2.4.1';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
+export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
@@ -199,8 +200,34 @@ export function projectErasure(value, scope) {
 }
 
 function erasurePattern(scope) {
-  const values=scope.ids.filter(unambiguousId).map(id=>id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
-  return values.length?new RegExp(values.join('|'),'g'):null;
+  const values=scope.ids.filter(unambiguousId);
+  if(!values.length)return null;
+  const nodes=[{next:new Map(),failure:0,output:[]}];
+  for(const value of values){
+    let state=0;
+    for(const character of value){
+      if(!nodes[state].next.has(character)){
+        nodes[state].next.set(character,nodes.length);nodes.push({next:new Map(),failure:0,output:[]});
+      }
+      state=nodes[state].next.get(character);
+    }
+    nodes[state].output.push(value);
+  }
+  const queue=[...nodes[0].next.values()];
+  for(let index=0;index<queue.length;index++)for(const [character,child] of nodes[queue[index]].next){
+    let state=nodes[queue[index]].failure;
+    while(state&&!nodes[state].next.has(character))state=nodes[state].failure;
+    nodes[child].failure=nodes[state].next.get(character)||0;
+    nodes[child].output.push(...nodes[nodes[child].failure].output);queue.push(child);
+  }
+  return {scan(text,found){
+    let state=0;
+    for(const character of text){
+      while(state&&!nodes[state].next.has(character))state=nodes[state].failure;
+      state=nodes[state].next.get(character)||0;
+      for(const value of nodes[state].output)found.add(value);
+    }
+  }};
 }
 export function erasureReferences(value, scope, pattern=erasurePattern(scope)) {
   const ids=new Set(scope.ids),found=new Set();
@@ -211,7 +238,10 @@ export function erasureReferences(value, scope, pattern=erasurePattern(scope)) {
       if(identityKeys.has(key)&&ids.has(item))found.add(item);
       if(key==='name'&&typeof item==='string'&&item.startsWith('runs/')&&scope.runIds.includes(item.split('/')[1]))found.add(item.split('/')[1]);
       visit(item,key);}return;}
-    if(typeof node==='string'&&pattern){pattern.lastIndex=0;for(const match of node.matchAll(pattern))found.add(match[0]);}
+    if(typeof node==='string'&&pattern){
+      if(typeof pattern.scan==='function')pattern.scan(node,found);
+      else{pattern.lastIndex=0;for(const match of node.matchAll(pattern))found.add(match[0]);}
+    }
   };
   if(typeof value==='string'){
     try{visit(JSON.parse(value))}catch{for(const line of value.split('\n'))try{visit(JSON.parse(line))}catch{visit(line)}}
@@ -333,8 +363,12 @@ export class ErasureTransaction {
     if (!timingSafeEqual(Buffer.from(signature,'hex'),Buffer.from(this.sign(value),'hex'))) fail('erasure-signature-invalid');
     return value;
   }
-  load() { return existsSync(this.path) ? this.verify(readRuntimeJson(this.path).value) : null; }
-  save(value) { writeRuntimeJson(this.path,this.seal(value)); }
+  load() { return existsSync(this.path) ? this.verify(readRuntimeJson(this.path,{maxBytes:ERASURE_RECEIPT_MAX_BYTES}).value) : null; }
+  save(value) {
+    const signed=this.seal(value);
+    if(Buffer.byteLength(JSON.stringify(signed)+'\n')>ERASURE_RECEIPT_MAX_BYTES)fail('erasure-receipt-too-large');
+    writeRuntimeJson(this.path,signed);
+  }
   prepare(plan) {
     if (this.load()) fail('erasure-transaction-in-progress');
     const transactionId='erasure-'+randomUUID();
@@ -363,6 +397,7 @@ export class ErasureTransaction {
       ...(value.ownerReceipts?{ownerReceipts:value.ownerReceipts}:{}),
       ...(value.sgsReceipt?{sgsReceipt:value.sgsReceipt}:{}),
       ...(value.retainedArchive?{retainedArchive:value.retainedArchive}:{}),
+      ...(value.recoveryCompatibility?{recoveryCompatibility:value.recoveryCompatibility}:{}),
       timings:{preparationMs:value.cutoverStartedAt>=value.startedAt?value.cutoverStartedAt-value.startedAt:null,
         cutoverToVerifiedUpperBoundMs:value.runtimeVerifiedAt>=value.cutoverStartedAt?value.runtimeVerifiedAt-value.cutoverStartedAt:null,
         measurement:'cutover-to-runtime-verified-upper-bound'} });

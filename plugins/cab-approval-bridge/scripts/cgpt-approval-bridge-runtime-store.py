@@ -14,7 +14,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.0"
+VERSION = "2.4.1"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",

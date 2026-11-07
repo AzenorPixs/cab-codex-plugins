@@ -1,5 +1,10 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+Correctif2.4.1 : les reçus d’effacement propriétaires volumineux sont repris
+dans la même transaction, avec signature et scope inchangés, vérification
+exhaustive des références et conservation des pairs. Les dossiers et processus
+OpenCode ne deviennent pas globalement en lecture seule par cette correction.
+
 ## Contrat CAB 2.4.0 — huit catégories validées
 
 Contrat2.4.0 validé sous SCM avec CI/CD. Les preuves de qualification sont

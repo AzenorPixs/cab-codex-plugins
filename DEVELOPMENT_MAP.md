@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Reprise propriétaire SCM2.4.1
+
+[resume-large-owner-erasure-receipt](openspec/changes/archive/2026-11-07-resume-large-owner-erasure-receipt/), code non attribué : source qualifiée ; reçu128Mio, marqueur signé, absence exhaustive accélérée et compatibilité du helper avec runtime2.4.0. Incidents C12/PA01 suivis dans CCAB. Publication, CABU et PURGED restent prouvés séparément.
+
+
 ## Évolution consolidée SCM 2.4.0
 
 [evolve-cab-autonomous-runtime-and-telemetry](openspec/changes/archive/2026-11-07-evolve-cab-autonomous-runtime-and-telemetry/),

@@ -13,7 +13,7 @@ import { TransportHandoff } from '../plugins/cab-approval-bridge/scripts/cgpt-ap
 import { writeRuntimeJson, readRuntimeJson } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
 const source=resolve('src');
-async function fixture(t,branch,{multiOwner=false,legacy=false}={}) {
+async function fixture(t,branch,{multiOwner=false,legacy=false,runtimeVersion=VERSION}={}) {
   const root=mkdtempSync(join(tmpdir(),'cab-erasure-integration-'));
   const workspace=join(root,'workspace'),state=join(root,'runtime'),monitor=join(root,'monitor'),brokerRoot=join(root,'broker'),update=join(root,'update');
   for(const path of [workspace,state,monitor,brokerRoot,update])mkdirSync(path,{mode:0o700});
@@ -82,17 +82,31 @@ async function fixture(t,branch,{multiOwner=false,legacy=false}={}) {
     http:async(base,path,body)=>{
       if(path==='/cleanup/status'){preparedCommand=manager.brokerCommand();return manager.public()}
       if(path==='/cleanup/seal')return manager.seal(body);
-      if(path==='/transport/status')return {workspace,version:VERSION,pid:pids.controller};
+      if(path==='/transport/status')return {workspace,version:runtimeVersion,pid:pids.controller};
       if(path==='/transport/prepare') {handoff=new TransportHandoff(join(state,'transport-handoff.json'),workspace);handoff.prepare(body.transactionId,{pid:54321,version:'2.2.5',directory:workspace});return {ready:true}}
-      if(path==='/api/maintenance-identity')return {version:VERSION,pid:pids.monitor,identity:{workspace},stateDirectory:monitor};
-      if(path==='/api/snapshot')return {version:VERSION,runs:[peer],changes:{changes:[]}};
-      if(path==='/status')return {workspace,version:VERSION,pid:base.endsWith(':8789')?pids.supervisor:pids.controller,runs:{[peer.runId]:peer},brokerReadiness:{ready:true,server_version:VERSION}};
+      if(path==='/api/maintenance-identity')return {version:runtimeVersion,pid:pids.monitor,identity:{workspace},stateDirectory:monitor};
+      if(path==='/api/snapshot')return {version:runtimeVersion,runs:[peer],changes:{changes:[]}};
+      if(path==='/status')return {workspace,version:runtimeVersion,pid:base.endsWith(':8789')?pids.supervisor:pids.controller,runs:{[peer.runId]:peer},brokerReadiness:{ready:true,server_version:runtimeVersion}};
       throw new Error('unexpected-fixture-route');
     }};
   t.after(()=>{registry.close();if(child.exitCode===null)child.kill();rmSync(root,{recursive:true,force:true})});
   return {root,workspace,state,monitor,brokerRoot,approvalStorePath,target,peer,historical,manager,native,dependencies,serviceCalls,dependencyEvidence,business,
     clearNative:()=>{sessions=branch==='BLOQUÉ'?[{id:target.sessionId,directory:workspace},{id:peer.sessionId,directory:workspace}]:[{id:peer.sessionId,directory:workspace}]},getRegistry:()=>registry};
 }
+
+test('Reprise2.4.1 : runtime2.4.0 explicite, même reçu, certificat distinct et garde de version inconnue',async t=>{
+ const f=await fixture(t,'TERMINÉ',{runtimeVersion:'2.4.0'});
+ const plan=await f.manager.prepare({changeId:f.target.changeId,ownerId:'owner',branch:'TERMINÉ',retainedSessionId:null,evidence:['fixture-business-report-reviewed'],dependencyEvidence:f.dependencyEvidence});
+ f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
+ await assert.rejects(cleanupChange({workspace:f.workspace,action:'execute',transactionId:plan.transactionId,runtimeVersion:'2.3.10'},f.dependencies),/runtime-compatibility-refused/);
+ assert.equal(f.serviceCalls.length,0);
+ const input={workspace:f.workspace,transactionId:plan.transactionId,runtimeVersion:'2.4.0'};
+ const certificate=await cleanupChange({...input,action:'execute'},f.dependencies);
+ assert.deepEqual(certificate.recoveryCompatibility,{helperVersion:VERSION,runtimeVersion:'2.4.0'});
+ const final=await cleanupChange({...input,action:'finalize',certificate},f.dependencies);
+ assert.equal(final.status,'PURGED');assert.equal(final.transactionId,plan.transactionId);
+ assert.equal((await cleanupChange({...input,action:'verify',certificate},f.dependencies)).status,'PURGED');
+});
 
 for(const branch of ['TERMINÉ','BLOQUÉ'])for(const multiOwner of [false,true])for(const legacy of (multiOwner?[false,true]:[false]))test('OC then all CAB stores, authenticated reanchor and peer preserved: '+branch+(multiOwner?' multi-owner':'')+(legacy?' legacy':''),async t=>{
   const f=await fixture(t,branch,{multiOwner,legacy});

@@ -12,7 +12,7 @@ import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approv
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 
-export const VERSION = '2.4.0';
+export const VERSION = '2.4.1';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;

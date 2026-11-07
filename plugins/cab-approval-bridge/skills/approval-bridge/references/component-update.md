@@ -1,5 +1,12 @@
 # Mise à jour autonome des briques CAB — CAB 2.4.0
 
+Pour une reprise d’effacement propriétaire volumineux en phase critique,
+appliquer [la reprise du même reçu](change-erasure.md). La fin du nettoyage et
+le bilan CABU global restent distincts ; un helper corrigé ne prouve pas que
+tous les processus sont à la nouvelle version. La barrière de transport doit
+être attribuée à sa transaction courante et à son horodatage, sans l’assimiler
+à un ancien CABU déjà adopté.
+
 ## Services permanents et mode direct 2.4.0
 
 Le paquet inclut les services SGS et CCAB, leurs collecteurs et le modèle
