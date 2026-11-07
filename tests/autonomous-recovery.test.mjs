@@ -24,6 +24,16 @@ test('refus natif : intention indéterminée, ACK relisible et identité immuabl
  assert.equal(j.snapshot('ses_other',identity.directory).receipts.length,0);
 });
 
+test('reçu exact : une enveloppe étrangère invalide ne masque pas le reçu ciblé',t=>{
+ const root=directory(t),j=new PermissionReplyJournal(join(root,'receipts'));
+ const intent=j.begin(identity);j.acknowledge(intent.value);
+ writeFileSync(join(j.directory,'a'.repeat(64)+'.json'),JSON.stringify({digest:'b'.repeat(64)}),{mode:0o600});
+ assert.throws(()=>j.snapshot(identity.sessionId,identity.directory),/receipt-invalid/);
+ assert.equal(j.exact(identity.sessionId,identity.directory,identity.permissionId).receipts[0].state,'ACKNOWLEDGED');
+ assert.throws(()=>j.exact(identity.sessionId,identity.directory,'per_missing'),/receipt-invalid/);
+ assert.throws(()=>j.exact('ses_other',identity.directory,identity.permissionId),/receipt-invalid/);
+});
+
 function nativeFixture(t,{loseResponse=false}={}){
  const root=directory(t),passwordFile=join(root,'password');writeFileSync(passwordFile,'synthetic-password\n',{mode:0o600});let posts=0;
  const journal=join(root,'permission-replies'),command='echo PRIVATE_COMMAND_NOT_TO_PERSIST';
