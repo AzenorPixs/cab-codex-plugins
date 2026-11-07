@@ -1,5 +1,11 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Complément2.4.3 : un gros plan utilise des références candidates privées ;
+ne pas ouvrir, supprimer ou éditer ces fichiers pendant APPLYING. Le helper
+vérifie leurs empreintes, reprend les cibles déjà appliquées et les retire
+après preuve avant de remettre les services en ligne. Aucun backup métier
+antérieur n’est créé par ce mécanisme.
+
 Complément2.4.2 : après restauration des services avant projection, utiliser
 recover-preparation sur le même reçu avec la version runtime explicite. Cette
 étape recapture les PID vérifiés ; elle ne déclare ni purge ni CABU global.

@@ -137,6 +137,9 @@ for(const branch of ['TERMINÉ','BLOQUÉ'])for(const multiOwner of [false,true])
   const beforePeer=f.getRegistry().snapshot().runs.find(row=>row.runId===f.peer.runId);
   const pendingCertificate=await cleanupChange({workspace:f.workspace,action:'execute',transactionId:plan.transactionId},f.dependencies);
   assert.equal(pendingCertificate.status,'CERTIFIED_PENDING_FINALIZE');
+  assert.deepEqual(pendingCertificate.scope,plan.scope);
+  assert.ok(pendingCertificate.effectiveScope.ids.includes('approval-target'));
+  assert.equal(existsSync(join(f.update||f.dependencies.updateDirectory,'erasure-candidates',plan.transactionId)),false);
   const certificate=await cleanupChange({workspace:f.workspace,action:'finalize',transactionId:plan.transactionId,certificate:pendingCertificate},f.dependencies);
   assert.equal(certificate.status,'PURGED');assert.equal(new ErasureTransaction(f.state).verify(certificate).status,'PURGED');
   assert.ok(certificate.scope.ids.includes(certificate.transactionId));
