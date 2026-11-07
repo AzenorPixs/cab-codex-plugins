@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.14 - 2026-11-07
+
+- Interdire once pour une permission shell décomposée tout en conservant son observation et son rejet.
+
 ## 2.4.13 - 2026-11-07
 
 - Corréler les permissions shell à ressources multiples et stabiliser leur observation.
