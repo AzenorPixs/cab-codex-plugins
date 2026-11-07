@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.4.3";
+export const VERSION = "2.4.4";
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {

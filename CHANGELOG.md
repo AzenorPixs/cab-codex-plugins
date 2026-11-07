@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 2.4.4 — 2026-11-07
+
+- Expose les outils, interpréteurs et bibliothèques déclarés dans DEVOPS.md dans l’atelier RO, avec préfixes de runtime et liens nécessaires.
+- Publie le catalogue et l’empreinte de l’inventaire, signale les ressources indisponibles/protégées et actualise les nouveaux essais sans rejouer les reçus existants.
+- Conserve réseau isolé, projet RO, atelier propre RW, secrets et pairs protégés ; Docker/LXC/PostgreSQL et périphériques passent par leurs voies CAB existantes.
+
+
 ## 2.4.3 — 2026-11-07
 
 - Sépare le scope d’autorisation immuable et la portée effective attestée par le broker, avec vérification/certificat des deux sans élargir les RUN.

@@ -177,7 +177,7 @@ try {
       coordination: { phase: ['WORK', 'WORK', 'REPORT'][i], ...(i === 1 ? { reason: recoveryBlocked ? 'resource-effects-unknown' : 'resource-conflict', blockers: [{ runId: 'RUN-WEB' }] }
         : i === 2 ? { reason: stopped ? 'run-stop' : 'resource-effects-unknown' } : {}) } }])) }
       : request.url === '/monitor/runs' ? { runs: runIds.map((runId, i) => ({ runId, changeId: changeIds[i], state: managementMode ? 'DELIVERED' : 'RESERVED', version: managementGeneration + i })) }
-        : target.pathname === '/api/info' ? { version: '2.4.3', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
+        : target.pathname === '/api/info' ? { version: '2.4.4', pid: process.pid, hostname: '127.0.0.1', urls: [], paths: { tmp: '/tmp' } }
           : target.pathname === '/api/location' ? { directory: root }
           : target.pathname === '/api/mcp' ? { location: { directory: root }, data: [{ name: 'cgpt-validation', status: { status: brokerConnection } }] }
           : target.pathname === '/api/session/active' ? { data: managementMode ? {} : { ses_0: { type: 'running' } } }
@@ -242,7 +242,7 @@ try {
     }
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096')"), true);
     const initialStatisticsProbe=monitor.state.statisticsProbe;
-    for(const [state,label,version] of [['UNAVAILABLE','Indisponible','2.4.3'],['VERSION_MISMATCH','Version divergente','2.2.0']]){
+    for(const [state,label,version] of [['UNAVAILABLE','Indisponible','2.4.4'],['VERSION_MISMATCH','Version divergente','2.2.0']]){
       monitor.state.statisticsProbe=async()=>({state,available:false,version,reason:'synthetic-check'});
       monitor.state.statistics.checkedAt=null;await monitor.state.collect();
       await browser.evaluate("document.querySelector('#monitor-refresh').click();true");
