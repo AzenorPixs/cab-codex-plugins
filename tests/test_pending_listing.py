@@ -92,6 +92,21 @@ class PendingListingTest(unittest.TestCase):
         self.assertEqual([item["approval_id"] for item in all_items["approvals"]],
                          ["approval-0", "approval-1", "approval-2"])
 
+    def test_scoped_pages_exclude_other_runs_and_sessions(self):
+        items = [self.item(i, "PENDING") for i in range(6)]
+        for i, item in enumerate(items):
+            item["run_id"] = "run-a" if i < 4 else "run-b"
+            item["session_id"] = "ses-a" if i != 3 else "ses-b"
+        self.seed(items)
+        first = bridge.do_list({"run_id": "run-a", "session_id": "ses-a", "status": "PENDING", "limit": 2})
+        self.assertEqual(first["count"], 3)
+        self.assertEqual(first["next_offset"], 2)
+        second = bridge.do_list({"run_id": "run-a", "session_id": "ses-a", "status": "PENDING", "limit": 2, "offset": 2})
+        self.assertEqual([x["approval_id"] for x in second["approvals"]], ["approval-2"])
+        self.assertIsNone(second["next_offset"])
+        for args in ({"run_id": "../foreign"}, {"session_id": ""}, {"offset": -1}, {"offset": True}):
+            with self.assertRaises(bridge.ValidationError): bridge.do_list(args)
+
     def test_missing_events_repaired_once_and_index_is_local_to_each_call(self):
         item = self.item()
         self.seed([item], missing=(

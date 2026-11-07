@@ -1338,3 +1338,6 @@ flowchart LR
 
 ## Présentation et maintenance documentaire
 [simplify-cab-readme-and-maintenance-guidance](openspec/changes/archive/2026-11-07-simplify-cab-readme-and-maintenance-guidance/) : README courant sans historique et sérialisation des annotations documentée ; aucune modification fonctionnelle.
+
+## Filtrage des validations en attente
+[scope-pending-approval-list](openspec/changes/archive/2026-11-07-scope-pending-approval-list/) : filtre RUN/SID, pagination et conservation des contrôles d’expiration ; activation distincte de la qualification source.

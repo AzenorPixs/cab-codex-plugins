@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.4.11"
+SERVER_VERSION = "2.4.12"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -4498,6 +4498,15 @@ def do_list(args):
             "entier entre 1 et 200"
         )
 
+    run_id = args.get("run_id")
+    session_id = args.get("session_id")
+    for name, value in (("run_id", run_id), ("session_id", session_id)):
+        if value is not None and (not isinstance(value, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,199}", value)):
+            raise ValidationError("parametre %s invalide" % name)
+    offset = args.get("offset", 0)
+    if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0 or offset > 1000000:
+        raise ValidationError("parametre offset invalide")
+
     path = store_path()
 
     with locked_store(
@@ -4549,7 +4558,7 @@ def do_list(args):
                     "status"
                 )
                 == status
-            ):
+            ) and (run_id is None or item.get("run_id") == run_id) and (session_id is None or item.get("session_id") == session_id):
                 items.append(
                     dict(
                         item
@@ -4563,12 +4572,10 @@ def do_list(args):
         )
     )
 
-    return {
-        "approvals": items[:limit],
-        "count": len(
-            items
-        ),
-    }
+    result = {"approvals": items[offset:offset + limit], "count": len(items)}
+    if any(key in args for key in ("run_id", "session_id", "offset")):
+        result["next_offset"] = offset + limit if offset + limit < len(items) else None
+    return result
 
 
 def do_decide(
@@ -9370,9 +9377,10 @@ TOOLS = [
                 "status": {
                     "type": "string",
                 },
-                "limit": {
-                    "type": "integer",
-                },
+                "limit": {"type": "integer"},
+                "run_id": {"type": "string"},
+                "session_id": {"type": "string"},
+                "offset": {"type": "integer"},
             },
         },
     },

@@ -43,3 +43,8 @@ avant GO pour éviter cette dette. Une nouvelle unité conserve son propre cycle
 validation/décision/acquisition/once/résultat/libération ; aucun ancien ID ou
 accord consommé n’est transféré. Le [retour propriétaire](owner-diagnostics.md)
 ne remplace pas les gardes de l’action choisie.
+
+La liste accepte `run_id`, `session_id`, `status`, `limit` et `offset` ; le
+compteur et `next_offset` portent sur les seuls résultats filtrés. Les pages
+reflètent l’état courant : si la file change entre appels, réobserver la
+frontière avant toute décision. Ne pas transmettre les réponses d’autres RUN.
