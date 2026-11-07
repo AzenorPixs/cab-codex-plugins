@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {ResourceRunRegistry} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 import {canonicalContinuityDigest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
-import {nativeEvidenceView,rejectedEditWithdrawalProof} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-recovery-evidence.mjs';
+import {nativeEvidenceView,rejectedEditWithdrawalProof,correlateWithdrawalEffects} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-recovery-evidence.mjs';
 import {nativeToolInputDigest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 const hash=s=>createHash('sha256').update(s).digest('hex');
 function fixture(){
@@ -19,6 +19,31 @@ function fixture(){
 test('write rejeté : projection call/ACK visible sans journal et contenu filtré, digests distincts conservés',()=>{
  const f=fixture();assert.equal(f.view.calls.length,1);assert.equal(f.view.calls[0].nativeTool,'write');assert.equal(f.view.replyReceipts.length,1);assert.equal(f.view.journal.coverage,'MISSING_RELEVANT_CALLS');assert.equal(JSON.stringify(f.view).includes('PRIVATE_WRITE_CONTENT'),false);
  const proof=rejectedEditWithdrawalProof(f.view,[f.part],f.approval);assert.equal(proof.kind,'REJECTED_UNISSUED_EDIT');assert.equal(proof.rejectedEdit.nativeTool,'write');assert.equal(proof.rejectedEdit.nativeInputSha256,nativeToolInputDigest(f.part.state.input));assert.notEqual(proof.rejectedEdit.nativeInputSha256,proof.rejectedEdit.approvedInputSha256);assert.equal(proof.executionOutcome,'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE');assert.equal(proof.nativeResult,undefined);
+});
+test('write rejeté : ancien PID absent et reçu exact qualifient la nouvelle instance',()=>{
+ const f=fixture();f.receipt.nativePid=41;
+ f.view.nativeRestartEvidence={kind:'previous-process-absent',previousPid:41,previousVersion:f.receipt.nativeVersion,
+  currentPid:f.view.nativePid,currentVersion:f.view.nativeVersion,currentStartTime:'101',currentUid:1000,receiptDigest:canonicalContinuityDigest(f.receipt)};
+ assert.equal(rejectedEditWithdrawalProof(f.view,[f.part],f.approval).kind,'REJECTED_UNISSUED_EDIT');
+ f.view.nativeRestartEvidence.receiptDigest='0'.repeat(64);
+ assert.throws(()=>rejectedEditWithdrawalProof(f.view,[f.part],f.approval),/receipt-divergent/);
+});
+test('retrait : essais atelier terminaux distincts, sans ignorer une preuve divergente',()=>{
+ const f=fixture(),marker={type:'tool',tool:'cgpt-validation_request_validation'},target={requestPart:marker,
+  operation:{runId:'run_a',sessionId:'ses_write',version:3},approval:{...f.approval,run_id:'run_a',change_id:'change_a'}};
+ const input={directory:'/workspace',session_id:'ses_write',run_id:'run_a',change_id:'change_a',reservation_version:3,request_id:'atelier_a',argv:['true']};
+ const result={requestId:'atelier_a',runId:'run_a',sessionId:'ses_write',changeId:'change_a',input_sha256:canonicalContinuityDigest(input),status:'COMPLETED',exitCode:0,requires_orchestrator_validation:true};
+ result.outputPath='/workspace/.cab-tests/change_a/run_a/.cab-result-'+result.input_sha256+'.log';
+ const make=(tool,callId,i,o)=>({type:'tool',tool,executed:false,callID:callId,state:{status:'completed',input:i,output:JSON.stringify(o),metadata:{truncated:false,cabCodeMode:{wrapperId:callId,envelopeHash:'a'.repeat(64)},toolCalls:[{tool:tool.replace('cgpt-validation_','cgpt-validation.'),status:'completed',input:i}]}}});
+ const execute=make('cgpt-validation_atelier_execute','call_atelier',input,result);
+ const statusInput={directory:'/workspace',session_id:'ses_write',run_id:'run_a',change_id:'change_a',reservation_version:3,request_id:'atelier_a'};
+ const status=make('cgpt-validation_atelier_status','call_status',statusInput,{...result,found:true});
+ const parts=[marker,f.part,execute,status],noEnvironment=p=>p===marker;
+ const actual=correlateWithdrawalEffects(parts,target,[],f.view,noEnvironment);
+ assert.deepEqual(actual.effects,[f.part]);assert.equal(actual.excluded.length,2);
+ const invalid=structuredClone(execute);invalid.state.output=JSON.stringify({...result,outputPath:'/workspace/src/unsafe'});
+ const refused=correlateWithdrawalEffects([marker,f.part,invalid],target,[],f.view,noEnvironment);
+ assert.equal(refused.effects.length,2);assert.equal(refused.excluded.length,0);
 });
 for(const variant of ['no-receipt','intent','http200','foreign-call','foreign-permission','foreign-session','foreign-pid','foreign-version','target','content-change','input-extra','input-alias','missing-content','tool-spoof','executed','bad-error','busy','pending','extra-call','second-file','command','receipt-truncated','wrong-permission-category','late-intent'])test('write rejeté : refus '+variant,()=>{
  const f=fixture();let parts=[f.part];

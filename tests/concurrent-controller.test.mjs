@@ -1,4 +1,5 @@
 import {migrationPendingValidations,migrationRegistryDigest,RUNTIME_MIGRATION_PROTOCOL} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-migration.mjs';
+import {canonicalContinuityDigest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {legacyStateDirectory,initializeRuntimeState,writeRuntimeJson,runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 import { fixtureEnvironment } from './helpers/cab-environment.mjs';
 import { openCodeV2TestHandler, v2ProviderResponseBytes, v2NormalizedToolPart } from './helpers/opencode-v2-test-server.mjs';
@@ -82,7 +83,9 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       native.permissions = native.permissions.filter((p) => !url.pathname.endsWith('/' + p.id)); payload = true;
     } else if (url.pathname.endsWith('/message')) payload = native.messages[url.pathname.split('/')[2]] || [];
     else if (url.pathname.startsWith('/session/')) payload = { id: url.pathname.split('/')[2], directory,
-      permission: native.rules[url.pathname.split('/')[2]] || [{ permission: '*', pattern: '*', action: 'ask' }],
+      permission: native.rules[url.pathname.split('/')[2]] || [{ permission: '*', pattern: '*', action: 'ask' },
+        {permission:'cgpt-validation_broker_readiness',pattern:'*',action:'allow'},
+        {permission:'cgpt-validation_request_validation',pattern:'*',action:'allow'}],
       ...native.sessions[url.pathname.split('/')[2]] };
     else { response.writeHead(404).end(); return; }
     response.writeHead(200, { 'content-type': 'application/json', connection: 'close' }); response.end(JSON.stringify(payload));
@@ -1356,6 +1359,17 @@ test('sélection simultanée : un seul propriétaire du change et aucun écrasem
   assert.equal((await h.get('/runs')).body.runs.length, 1);
 });
 
+test('prévol refuse request_validation ASK imposé par la session avant armement',async t=>{
+ const h=await setup(t),candidate=h.candidate('mcp-ask');
+ h.native.rules[candidate.sessionId]=[{permission:'*',pattern:'*',action:'ask'},
+  {permission:'cgpt-validation_broker_readiness',pattern:'*',action:'allow'},
+  {permission:'cgpt-validation_request_validation',pattern:'*',action:'ask'}];
+ assert.equal((await h.post('/runs/reserve',candidate)).status,201);
+ const arm=await h.post('/runs/mcp-ask/job/arm',{jobId:'job-mcp-ask',sessionId:candidate.sessionId,
+  directory:h.directory,changeId:candidate.changeId,strictCommands:true,criteria:['fixture']});
+ assert.equal(arm.status,409);assert.equal(arm.body.error,'native-mcp-request-validation-policy-blocked');
+ assert.equal(h.native.replies.length,0);
+});
 test('trois sessions, permissions once exactes et décisions isolées', async (t) => {
   const h = await setup(t);
   const runs = [];
@@ -4399,15 +4413,54 @@ async function rejectedEditFixture(t,{attached=false,referenceOnly=false,lineEnd
  const payload={actionId:'withdraw-refused-edit',ownerId:run.ownerId,policyId:'refused-edit-policy',boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/rejected-edit']}};
  return{h,run,base,approval,payload,evidence,parent,access};
 }
+test('retrait write : atelier non vérifié refuse le retrait et conserve accès',async t=>{
+ const {h,run,base,approval,payload,access}=await rejectedEditFixture(t,{nativeWrite:true,dedicated:true});
+ const input={directory:h.directory,session_id:run.sessionId,run_id:run.runId,change_id:run.changeId,reservation_version:run.version,request_id:'atelier_invalid',argv:['true']};
+ const result={requestId:input.request_id,runId:run.runId,sessionId:run.sessionId,changeId:run.changeId,input_sha256:canonicalContinuityDigest(input),status:'COMPLETED',exitCode:0,requires_orchestrator_validation:true,outputPath:join(h.directory,'outside.log')};
+ h.native.messages[run.sessionId].push({parts:[{type:'tool',id:'atelier-invalid',name:'execute',tool:'execute',executed:false,time:{created:Date.now()},state:{status:'completed',input:{code:'return await tools["cgpt-validation"].atelier_execute('+JSON.stringify(input)+');'},output:JSON.stringify(result),time:{start:Date.now(),end:Date.now()+1},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.atelier_execute',status:'completed',input}]}}}]});
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id+'&permissionId=per_refused_edit')).body;
+ payload.input.permissionId='per_refused_edit';payload.input.nativeBoundaryDigest=evidence.nativeBoundaryDigest;
+ const before=(await h.get('/runs')).body.coordination.accesses[access.accessId];
+ assert.equal((await h.post(base+'/recovery/action',payload)).status,409);
+ assert.deepEqual((await h.get('/runs')).body.coordination.accesses[access.accessId],before);
+});
+test('retrait ciblé : ancien PID encore vivant interdit la preuve de redémarrage',async t=>{
+ const {h,base,approval,payload}=await rejectedEditFixture(t,{nativeWrite:true,dedicated:true});
+ const old=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});t.after(()=>old.kill('SIGKILL'));
+ await new Promise((resolve,reject)=>{old.once('spawn',resolve);old.once('error',reject)});
+ const dir=join(runtimeStateDirectory(h.directory),'permission-replies');
+ for(const file of readdirSync(dir)){const path=join(dir,file),envelope=JSON.parse(readFileSync(path,'utf8'));
+  if(envelope.value?.permissionId==='per_refused_edit'){envelope.value.nativePid=old.pid;envelope.digest=canonicalContinuityDigest(envelope.value);writeFileSync(path,JSON.stringify(envelope)+'\n',{mode:0o600});}}
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id+'&permissionId=per_refused_edit')).body;
+ assert.equal(evidence.nativeRestartEvidence,undefined);payload.input.permissionId='per_refused_edit';payload.input.nativeBoundaryDigest=evidence.nativeBoundaryDigest;
+ assert.equal((await h.post(base+'/recovery/action',payload)).status,409);
+ assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].state,'PREPARED');
+});
 test('retrait write ciblé : reçu exact valide malgré enveloppe étrangère invalide',async t=>{
- const {h,base,approval,payload,access}=await rejectedEditFixture(t,{nativeWrite:true,dedicated:true});
+ const {h,run,base,approval,payload,access}=await rejectedEditFixture(t,{nativeWrite:true,dedicated:true});
  const dir=join(runtimeStateDirectory(h.directory),'permission-replies'),unknown=join(dir,'a'.repeat(64)+'.json');
+ for (const file of readdirSync(dir)) {
+  const path=join(dir,file),envelope=JSON.parse(readFileSync(path,'utf8'));
+  if(envelope.value?.permissionId==='per_refused_edit') { envelope.value.nativePid=2147483647;
+   envelope.digest=canonicalContinuityDigest(envelope.value);writeFileSync(path,JSON.stringify(envelope)+'\n',{mode:0o600}); }
+ }
  writeFileSync(unknown,JSON.stringify({digest:'b'.repeat(64)}),{mode:0o600});
+ const atelierInput={directory:h.directory,session_id:run.sessionId,run_id:run.runId,change_id:run.changeId,reservation_version:run.version,request_id:'atelier_after_write',argv:['true']};
+ const atelierResult={requestId:atelierInput.request_id,runId:run.runId,sessionId:run.sessionId,changeId:run.changeId,input_sha256:canonicalContinuityDigest(atelierInput),status:'COMPLETED',exitCode:0,requires_orchestrator_validation:true};
+ atelierResult.outputPath=join(h.directory,'.cab-tests',run.changeId,run.runId,'.cab-result-'+atelierResult.input_sha256+'.log');
+ const statusInput={directory:h.directory,session_id:run.sessionId,run_id:run.runId,change_id:run.changeId,reservation_version:run.version,request_id:atelierInput.request_id};
+ const wrapper=(id,method,input,output)=>({type:'tool',id,name:'execute',tool:'execute',executed:false,time:{created:Date.now()},state:{status:'completed',input:{code:'return await tools["cgpt-validation"].'+method+'('+JSON.stringify(input)+');'},output:JSON.stringify(output),time:{start:Date.now(),end:Date.now()+1},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.'+method,status:'completed',input}]}}});
+ h.native.messages[run.sessionId].push({parts:[wrapper('atelier-execute','atelier_execute',atelierInput,atelierResult)]},
+  {parts:[wrapper('atelier-status','atelier_status',statusInput,{...atelierResult,found:true})]});
+ h.native.messages[run.sessionId].push({nativeV2:{id:'msg-truncated-read',type:'assistant',time:{created:Date.now()},content:[{
+  type:'tool',id:'call-truncated-read',name:'read',executed:false,time:{created:Date.now(),ran:Date.now(),completed:Date.now()+1},
+  state:{status:'completed',input:{path:join(h.directory,'src/refused.md'),limit:10},output:'partial',metadata:{truncated:true}}}]}});
  const global=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body;
  assert.equal(global.replyError,'permission-reply-journal-unavailable');
  const targeted=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id+'&permissionId=per_refused_edit')).body;
  assert.equal(targeted.replyError,null);assert.equal(targeted.replyScopePermissionId,'per_refused_edit');
  assert.equal(targeted.replyReceipts[0].state,'ACKNOWLEDGED');
+ assert.equal(targeted.nativeRestartEvidence?.kind,'previous-process-absent');
  const wrong=structuredClone(payload);wrong.actionId='withdraw-wrong-permission';wrong.input.permissionId='per_other';wrong.input.nativeBoundaryDigest=targeted.nativeBoundaryDigest;
  assert.equal((await h.post(base+'/recovery/action',wrong)).status,409);
  assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].state,'PREPARED');

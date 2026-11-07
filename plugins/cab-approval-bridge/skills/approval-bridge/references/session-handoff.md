@@ -24,6 +24,11 @@ reste sous ask/deny pour ces effets. Ne confier aucun travail métier à la
 candidate. Lui faire appeler uniquement la readiness native scellée CodeMode :
 `return await tools["cgpt-validation"].broker_readiness({"run_id":"<run>"});`
 Une découverte exacte de la signature request_validation est également admise.
+Une politique générale `* ask` ou `* deny` peut elle-même bloquer les outils
+Code Mode ou le sous-outil MCP de readiness : vérifier les règles effectives
+et autoriser uniquement les appels nécessaires au prévol. Conserver shell/edit
+ASK, les accès web soumis à validation et les outils de décision hors du
+périmètre du codeur. Cette préparation ne change pas la configuration globale.
 La dernière readiness doit être READY, pending_count0, liée au RUN et à la
 version courante. Les anciennes observations readonly de ce RUN restent
 historiques ; une mise à jour permet leur actualisation dans la même candidate. Les autres outils, y compris une commande de prévol, sont refusés.

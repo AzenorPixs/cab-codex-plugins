@@ -79,6 +79,8 @@ incidents de cause commune. Le correcteur se coordonne avec les déclarants,
 livre les correctifs nécessaires ou répond sans correctif avec les limites
 constatées. Après réponse et clôture, les entrées traitées sont nettoyées,
 individuellement ou par lot, sans attendre les autres.
+La coordination ciblée avec le correcteur désigné est autorisée même entre
+projets ; elle ne transmet que les preuves nécessaires et ne modifie pas les mandats.
 
 La clôture autorisée d’un change nettoie ses sessions puis ses données
 opérationnelles, en conservant les pairs et les rapports métier requis.

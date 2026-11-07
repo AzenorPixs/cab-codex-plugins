@@ -1,4 +1,4 @@
-export const VERSION = '2.4.19';
+export const VERSION = '2.4.20';
 
 export function nativeAskState(session, kind) {
   if (!Array.isArray(session?.permission) || session.permission.some(rule =>
@@ -19,6 +19,10 @@ export function nativeAskState(session, kind) {
 export function hasNativeAsk(session,kind,actions=['ask']) {
   const state=nativeAskState(session,kind);
   return state.valid && state.universal && actions.includes(state.action);
+}
+
+export function nativeMcpPreflight(session) {
+  return ['cgpt-validation_broker_readiness','cgpt-validation_request_validation'].map(tool => ({tool,...nativeAskState(session,tool)}));
 }
 
 export function scopedNativeReadRules(session,directory,{tools=['read'],paths=[]}={}) {

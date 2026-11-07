@@ -10,7 +10,8 @@ import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 import {prepareValidationData} from './cgpt-approval-bridge-validation-preparation.mjs';
 import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 import { ShellLifecycle } from './cgpt-approval-bridge-shell-lifecycle.mjs';
-import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, processIdentity, processOwnerIdentity, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
+import { nativeMcpPreflight } from './cgpt-approval-bridge-permission-policy.mjs';
+import { followOpenCodeRestart, verifiedNativeChild, boundedCleanup, closeHttpServer, processIdentity, processOwnerIdentity, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { existsSync, realpathSync, statSync } from 'node:fs';
 import { createServer } from 'node:http';
@@ -35,7 +36,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.4.19";
+const version = "2.4.20";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -115,6 +116,15 @@ let broker = null;
 let handoffJournal;
 let transportAdoption = { adopted: false, reason: 'handoff-not-sealed' };
 let handoffIntent = null;
+let nativeRestartPending = true;
+let nativeRestartUnsafeRuns = new Set();
+let nativeRestartUnsafeLegacy = false;
+let nativeRestartRecheckError = null;
+let nativeRestartIdentityError = false;
+let nativeRestartGeneration = 0;
+let nativeRestartLocation = null;
+let nativeRestartCandidate = new Set();
+let nativeRestartCandidateLegacy = false;
 async function transportNativeIdentity() {
   const info = await openCode.info(true);
   return { pid: info.pid, version: info.version, directory: await openCode.sharedMcpDirectory() };
@@ -206,6 +216,7 @@ function inspectLegacyAdmission(operation) {
   return true;
 }
 const legacy = createJobContext({ workspace, stateDirectory, maxCommandLength,
+  verifyNativeInstance: () => verifyFollowedNativeInstance(),
   observe: (type, details) => observations.record(type, details),
   inspectOperationAdmission: inspectLegacyAdmission,
   admitOperation: (...args) => { try { return inspectLegacyAdmission(...args); } catch { return false; } },
@@ -242,6 +253,7 @@ function contextFor(run) {
   try {
   context = createJobContext({
     workspace, stateDirectory: join(stateDirectory, 'runs', run.runId, String(run.contextId || run.version)), run, maxCommandLength,
+    verifyNativeInstance: () => verifyFollowedNativeInstance(run.runId),
     reviewOperation:(operation,requestId)=>{shellLifecycle.available(operation);return shellStages.review(operation,requestId);},
     currentRun: () => registry.runs.get(run.runId),
     restoreCommunication: (validation, decision) => {
@@ -408,7 +420,7 @@ function statusFor(runId, context) {
   const accesses = publicAccesses(runId);
   const testReservations = publicTestReservations(runId);
   const global = registry.resourceState.global;
-  const reason = status.recoveryRequired ? status.recoveryRequired : registry.migrationRequired || broker?.coordination_protocol !== COORDINATION_PROTOCOL ? 'coordination-upgrade-required'
+  const reason = nativeRestartPending || nativeRestartIdentityError || nativeRestartUnsafeRuns.has(runId) ? 'opencode-restart-reconciliation-required' : status.recoveryRequired ? status.recoveryRequired : registry.migrationRequired || broker?.coordination_protocol !== COORDINATION_PROTOCOL ? 'coordination-upgrade-required'
     : global && global.state !== 'RELEASED' ? 'global-coordination-suspended'
       : run.suspension ? 'run-' + run.suspension.action.toLowerCase()
         : run.maintenancePreflightRequired ? 'maintenance-preflight-required'
@@ -421,7 +433,8 @@ function statusFor(runId, context) {
               : accesses.some((a) => a.state === 'STALE' && a.version === run.version) ? 'resource-revision-stale' : null;
   const unresolvedOperations = Object.values(registry.resourceState.operations).filter(op =>
     op.runId === runId && op.contextId === run.contextId && !['COMPLETED','CANCELLED'].includes(op.state));
-  return { ...status, runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), admission:admissionSnapshot(runId), frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
+  return { ...status, runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), admission:admissionSnapshot(runId),
+    nativeRestart:{state:nativeRestartPending?'WAITING':nativeRestartIdentityError?'IDENTITY_UNVERIFIED':nativeRestartUnsafeRuns.has(runId)?'SESSION_UNVERIFIED':'VERIFIED',pid:lifetime.snapshot().identity?.pid ?? null,diagnostic:nativeRestartRecheckError || lifetime.snapshot().diagnostic}, frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
     notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation() || unresolvedOperations.length > 0,
     hasUnresolvedValidation: context.hasUnresolvedValidation(), unresolvedOperationCount: unresolvedOperations.length, coordination: { reason, integrationReady: run.integrationReady,
     referenceVersion: registry.referenceVersion, reviewedReferenceVersion: run.referenceVersion,
@@ -558,6 +571,7 @@ async function checkNative(sessionId, idle = false) {
         permissions.some((p) => p.sessionID === sessionId)) throw new CoordinationError('native-session-not-quiescent');
     observeStatistics(() => statistics.nativeSnapshot(busy));
   }
+  return session;
 }
 function singleContext() {
   const active = activeContexts();
@@ -1018,8 +1032,7 @@ function nativeNoEnvironmentObservation(part) {
       Object.keys(input).every(key=>['path','offset','limit'].includes(key)) &&
       typeof input.path==='string' && input.path.length>0 && !input.path.includes('\0') &&
       (input.offset===undefined || Number.isSafeInteger(input.offset) && input.offset>=0) &&
-      (input.limit===undefined || Number.isSafeInteger(input.limit) && input.limit>0) &&
-      part.state.metadata?.truncated!==true;
+      (input.limit===undefined || Number.isSafeInteger(input.limit) && input.limit>0);
   }
   if (['cgpt-validation_request_validation', 'cgpt-validation_poll_approval', 'cgpt-validation_get_approval',
     'cgpt-validation_lookup_validation', 'cgpt-validation_reject', 'cgpt-validation_list_pending', 'cgpt-validation_cancel_approval',
@@ -1377,6 +1390,19 @@ async function collectRecoveryEvidence(run, operation, permissionId = undefined)
   const publicView = { ...view, journalError, replyError, nativeInstanceEvidence, nativeKernelEpoch,
     nativeInstanceEvidenceStatus: operation.native ? nativeInstanceEvidence ? 'AVAILABLE' : 'PRIOR_INSTANCE_EVIDENCE_MISSING' : 'NOT_REQUIRED_FOR_UNISSUED_VALIDATION' };
   if (permissionId !== undefined) publicView.replyScopePermissionId = permissionId;
+  const receipt = permissionId !== undefined && !replyError && replies.receipts.length === 1 ? replies.receipts[0] : null;
+  if (receipt && receipt.nativePid !== native.pid) {
+    try {
+      const oldFirst = await processIdentity(receipt.nativePid), currentFirst = await processOwnerIdentity(native.pid);
+      const infoAgain = await openCode.info(true), oldSecond = await processIdentity(receipt.nativePid), currentSecond = await processOwnerIdentity(native.pid);
+      if (!oldFirst && !oldSecond && currentFirst && currentSecond && infoAgain.pid === native.pid && infoAgain.version === native.version &&
+          currentFirst.startTime === currentSecond.startTime && currentFirst.uid === currentSecond.uid &&
+          !['Z','X','x'].includes(currentSecond.state))
+        publicView.nativeRestartEvidence = { kind:'previous-process-absent', previousPid:receipt.nativePid,
+          previousVersion:receipt.nativeVersion, currentPid:native.pid, currentVersion:native.version,
+          currentStartTime:currentSecond.startTime, currentUid:currentSecond.uid, receiptDigest:proofHash(receipt) };
+    } catch { /* Une identité historique non vérifiable reste protégée. */ }
+  }
   const {nativeKernelEpoch: epochObservation,...compatibleBoundary} = publicView;
   publicView.nativeBoundaryDigest = proofHash(compatibleBoundary);
   return { view: publicView, approval, parts, messages, generation };
@@ -2186,6 +2212,15 @@ async function handleRequest(request, response) {
   };
   try {
     const url = new URL(request.url, 'http://localhost');
+    const restartRun = /^\/runs\/([^/]+)(?:\/|$)/.exec(url.pathname)?.[1];
+    const restartSafeRoute = ['/broker/readiness','/transport/cancel'].includes(url.pathname);
+    if (request.method !== 'GET' && !restartSafeRoute &&
+        (nativeRestartPending || restartRun && nativeRestartUnsafeRuns.has(restartRun) ||
+          !restartRun && (nativeRestartUnsafeRuns.size || nativeRestartUnsafeLegacy) && url.pathname !== '/runs'))
+      throw new CoordinationError('opencode-restart-reconciliation-required',503);
+    if (request.method !== 'GET' && !restartSafeRoute &&
+        !await verifyFollowedNativeInstance(restartRun ?? null))
+      throw new CoordinationError('opencode-restart-reconciliation-required',503);
     const transportContexts = () => [legacy, ...contexts.values()];
     if (handoffIntent && Date.now() >= handoffIntent.expiresAt) {
       handoffJournal.cancel(handoffIntent.transactionId);
@@ -2498,6 +2533,15 @@ async function handleRequest(request, response) {
       if (!payload || !['READY', 'DEGRADED', 'BLOCKED', 'HUMAN_REQUIRED'].includes(payload.status)) {
         throw new CoordinationError('readiness-invalid', 400);
       }
+      if (nativeRestartGeneration && (nativeRestartPending || nativeRestartIdentityError)) {
+        json(response,202,{accepted:false,status:'WAITING',reason:'opencode-restart-reconciliation-required'});return;
+      }
+      if (nativeRestartGeneration) {
+        const generation = nativeRestartGeneration, followed = lifetime.snapshot().identity;
+        if (!followed || !await verifiedNativeChild(followed,payload.broker_process?.pid) || nativeRestartPending ||
+            nativeRestartIdentityError || generation !== nativeRestartGeneration || lifetime.snapshot().identity?.startTime !== followed.startTime)
+          throw new CoordinationError('opencode-restart-broker-identity-unverified',503);
+      }
       broker = payload;
       if (!registry.migrationRequired && ['STORE_UNHEALTHY', 'JOURNAL_UNHEALTHY', 'JOURNAL_INTEGRITY_FAILURE', 'STORE_JOURNAL_DIVERGENCE']
         .includes(payload.root_cause) && (!registry.resourceState.global || registry.resourceState.global.state === 'RELEASED')) {
@@ -2508,7 +2552,8 @@ async function handleRequest(request, response) {
       await publishTo(legacy, payload);
       for (const [runId, context] of activeContexts()) {
         await publishTo(context, scopedReadiness(runId, payload));
-        void restoreApprovedOperations(registry.runs.get(runId), context);
+        if (!nativeRestartPending && !nativeRestartIdentityError && !nativeRestartUnsafeRuns.has(runId))
+          void restoreApprovedOperations(registry.runs.get(runId), context);
       }
       const erasureCommand=erasure.brokerCommand();
       json(response,202,{accepted:true,status:payload.status,workspace,
@@ -3249,7 +3294,12 @@ async function handleRequest(request, response) {
         if (payload.sessionId !== run.sessionId || payload.directory !== run.directory || payload.changeId !== run.changeId) {
           throw new CoordinationError('job-reservation-divergent');
         }
-        await checkNative(payload.sessionId);
+        const session = await checkNative(payload.sessionId);
+        const mcpPolicy = nativeMcpPreflight(session);
+        if (mcpPolicy.some(rule => !rule.valid)) throw new CoordinationError('native-mcp-policy-unverifiable');
+        const blocked = mcpPolicy.find(rule => rule.universal && ['ask','deny'].includes(rule.action));
+        if (blocked) throw new CoordinationError(blocked.tool === 'cgpt-validation_broker_readiness' ?
+          'native-mcp-readiness-policy-blocked' : 'native-mcp-request-validation-policy-blocked');
       }
       if (request.method === 'POST' && url.pathname === '/validation/reconcile') {
         if (!match || !payload || Object.keys(payload).length !== 5 ||
@@ -3378,6 +3428,11 @@ async function consumeEvents() {
   if (closing) return;
   try {
     const response = await openCode.events();
+    const followed = lifetime.snapshot().identity;
+    if (nativeRestartPending || !followed || (await openCode.info(true)).pid !== followed.pid) {
+      if (!nativeRestartPending) nativeRestartIdentityError = true;
+      await response.body?.cancel(); void lifetime.check(); throw new Error('opencode-restart-pending');
+    }
     try {
       const instance=await nativeInstances.observe(await openCode.info());
       if(instance)nativeTelemetry.instance='opencode-'+proofHash({workspace:instance.workspace,pid:instance.pid,startTime:instance.startTime,uid:instance.uid,cgroupDigest:instance.cgroupDigest});
@@ -3395,7 +3450,7 @@ async function consumeEvents() {
     for (const [runId, context] of activeContexts()) {
       context.onConnect();
       const run = registry.runs.get(runId);
-      if(runtimeMigration?.phase!=='PREPARED')void restoreApprovedOperations(run, context);
+      if(!nativeRestartPending && !nativeRestartUnsafeRuns.has(runId) && runtimeMigration?.phase!=='PREPARED')void restoreApprovedOperations(run, context);
       for (const session of (context.observedSessions?.() || context.sessions())) {void refreshBackgroundShells(runId,session);void refreshNativeUsage(runId,session);}
     }
     const decoder = new TextDecoder();
@@ -3411,8 +3466,9 @@ async function consumeEvents() {
         let event;
         try { event = normalizeOpenCodeEvent(JSON.parse(data)); } catch { continue; }
         if (!event) continue;
+        if (nativeRestartPending) continue;
         observeStatistics(() => statistics.nativeEvent(event));
-        legacy.onEvent(event);
+        if (!nativeRestartUnsafeLegacy && !nativeRestartUnsafeRuns.size) legacy.onEvent(event);
         const props = event.payload?.properties || event.properties || {};
         const session = props.sessionID || props.sessionId || props.part?.sessionID || props.info?.sessionID || props.info?.id;
         const type = event.payload?.type || event.type;
@@ -3427,20 +3483,24 @@ async function consumeEvents() {
         if (['session.status', 'session.idle', 'session.updated', 'session.deleted', 'session.inbox.enqueued', 'session.execution.started', 'session.execution.succeeded', 'session.execution.failed', 'session.execution.interrupted', 'permission.asked', 'permission.replied'].includes(type) &&
             (legacy.sessions().includes(session) || registry.resourceState.legacySources.some((source) => source.sessionId === session) ||
               activeContexts().some(([, context]) => (context.observedSessions?.() || context.sessions()).includes(session)))) nativeGeneration++;
-        for (const [, context] of activeContexts()) {
+        for (const [runId, context] of activeContexts()) {
+          if (nativeRestartUnsafeRuns.has(runId)) continue;
           if (context.sessions().includes(session)) context.onEvent(event);
         }
         if (props.part) for (const [runId, context] of activeContexts()) {
+          if (nativeRestartUnsafeRuns.has(runId)) continue;
           if ((context.observedSessions?.() || context.sessions()).includes(session)) observeNativeCompletion(runId, props.part, session);
         }
         if (['shell.exited','session.shell.ended'].includes(type)) {
           for (const [runId,context] of activeContexts()) {
+            if (nativeRestartUnsafeRuns.has(runId)) continue;
             for (const ownedSession of (context.observedSessions?.() || context.sessions())) void refreshBackgroundShells(runId,ownedSession);
           }
         }
         if (['session.idle', 'session.execution.succeeded', 'session.execution.failed',
           'session.execution.interrupted'].includes(type)) {
           for (const [runId, context] of activeContexts()) {
+            if (nativeRestartUnsafeRuns.has(runId)) continue;
             if ((context.observedSessions?.() || context.sessions()).includes(session)) {
               void restoreApprovedOperations(registry.runs.get(runId), context);
               void reconcileNativeCompletionsFromTranscript(runId, session);
@@ -3465,6 +3525,7 @@ async function shutdown() {
   if (closing) return;
   closing = true;
   lifetime.stop();
+  clearInterval(nativeRestartRecheckTimer);
   clearTimeout(reconnectTimer);
   transportAbort.abort();
   try {
@@ -3490,8 +3551,119 @@ async function shutdown() {
     process.exit(SHUTDOWN_INCOMPLETE);
   }
 }
-const lifetime = followOpenCodeLifetime(openCode, { onExit: shutdown,
+async function verifyFollowedNativeInstance(runId = null) {
+  if (nativeRestartPending || (runId ? nativeRestartUnsafeRuns.has(runId) : nativeRestartUnsafeLegacy)) return false;
+  try {
+    const followed = lifetime.snapshot().identity;
+    if (!followed || (await openCode.info(true)).pid !== followed.pid) { nativeRestartIdentityError = true; void lifetime.check(); return false; }
+    const observed = await processOwnerIdentity(followed.pid);
+    if (!observed || ['Z','X','x'].includes(observed.state) || observed.startTime !== followed.startTime || observed.uid !== followed.uid) { nativeRestartIdentityError = true; void lifetime.check(); return false; }
+    nativeRestartIdentityError = false;
+    return !nativeRestartPending && !(runId ? nativeRestartUnsafeRuns.has(runId) : nativeRestartUnsafeLegacy);
+  } catch { nativeRestartIdentityError = true; void lifetime.check(); return false; }
+}
+async function verifyRestartSessions(context, directory) {
+  const sessions = context.sessions();
+  for (let pass = 0; pass < 2; pass++) {
+    for (const sessionId of sessions) {
+      const session = await openCode.session(sessionId, directory);
+      if (session.id !== sessionId || session.directory !== directory) throw new Error('session-divergent');
+    }
+    if (JSON.stringify(context.sessions()) !== JSON.stringify(sessions)) throw new Error('session-boundary-changed');
+  }
+}
+const lifetime = followOpenCodeRestart(openCode, {
+  onLost: async () => {
+    nativeRestartPending = true; nativeRestartIdentityError = false; nativeRestartGeneration++; broker = null;
+    legacy.freezeTransport(); legacy.onDisconnect();
+    for (const [runId, context] of activeContexts()) {
+      for (const sessionId of context.sessions()) nativeSessionGenerations.set(sessionId, (nativeSessionGenerations.get(sessionId) || 0) + 1);
+      context.freezeTransport(); context.onDisconnect();
+    }
+  },
+  onAttach: async () => {
+    const location = await openCode.sharedMcpDirectory();
+    if (nativeRestartLocation !== null && location !== nativeRestartLocation)
+      throw Object.assign(new Error('opencode-restart-location-divergent'), {code:'opencode-restart-location-divergent'});
+    const mcp = await openCode.mcp();
+    if (mcp?.['cgpt-validation']?.status !== 'connected')
+      throw Object.assign(new Error('opencode-restart-broker-not-connected'), {code:'opencode-restart-broker-not-connected'});
+    const unsafe = new Set();
+    let legacyUnsafe = false;
+    try {
+      await verifyRestartSessions(legacy, workspace);
+    } catch { legacyUnsafe = true; }
+    for (const [runId, context] of activeContexts()) {
+      const run = registry.runs.get(runId);
+      try {
+        await verifyRestartSessions(context, run.directory);
+      } catch { unsafe.add(runId); }
+    }
+    if ((await openCode.mcp())?.['cgpt-validation']?.status !== 'connected')
+      throw Object.assign(new Error('opencode-restart-broker-not-connected'), {code:'opencode-restart-broker-not-connected'});
+    nativeRestartLocation = location; nativeRestartCandidate = unsafe; nativeRestartCandidateLegacy = legacyUnsafe; return true;
+  },
+  onReady: () => {
+    nativeRestartUnsafeRuns = nativeRestartCandidate; nativeRestartUnsafeLegacy = nativeRestartCandidateLegacy; nativeRestartPending = false; nativeRestartIdentityError = false;
+    if (!handoffIntent && runtimeMigration?.phase !== 'PREPARED') {
+      if (!nativeRestartUnsafeLegacy) legacy.resumeTransport();
+      for (const [runId, context] of activeContexts()) if (!nativeRestartUnsafeRuns.has(runId) &&
+          !registry.sessionHandoffs(runId).some(h => !['DONE','ABORTED'].includes(h.state))) context.resumeTransport();
+    }
+    for (const [runId, context] of activeContexts()) if (!nativeRestartUnsafeRuns.has(runId)) {
+      void restoreApprovedOperations(registry.runs.get(runId), context);
+      for (const sessionId of context.sessions()) {
+        void reconcileNativeCompletionsFromTranscript(runId, sessionId);
+        void refreshBackgroundShells(runId, sessionId); void refreshNativeUsage(runId, sessionId);
+      }
+    }
+  },
   onDiagnostic: (code) => process.stderr.write(code + '\n') });
 lifetime.start();
+let restartRecheckInFlight = false;
+const nativeRestartRecheckTimer = setInterval(() => {
+  if (closing || nativeRestartPending || restartRecheckInFlight || (!nativeRestartUnsafeRuns.size && !nativeRestartUnsafeLegacy && !nativeRestartIdentityError)) return;
+  restartRecheckInFlight = true;
+  void (async () => {
+    const identity = lifetime.snapshot().identity;
+    if (!identity || (await openCode.info(true)).pid !== identity.pid ||
+        await openCode.sharedMcpDirectory() !== nativeRestartLocation) return;
+    const initialProcess = await processOwnerIdentity(identity.pid);
+    if (!initialProcess || initialProcess.startTime !== identity.startTime || initialProcess.uid !== identity.uid) return;
+    nativeRestartIdentityError = false;
+    if (nativeRestartUnsafeLegacy) {
+      try {
+        await verifyRestartSessions(legacy, workspace);
+        const currentProcess = await processOwnerIdentity(identity.pid);
+        if (nativeRestartPending || (await openCode.info(true)).pid !== identity.pid || !currentProcess ||
+            currentProcess.startTime !== identity.startTime || currentProcess.uid !== identity.uid) return;
+        nativeRestartUnsafeLegacy = false;
+        if (!handoffIntent && runtimeMigration?.phase !== 'PREPARED') { legacy.resumeTransport(); if (sseState === 'connected') legacy.onConnect(); }
+      } catch { /* La session historique non vérifiable reste protégée. */ }
+    }
+    nativeRestartRecheckError = null;
+    for (const runId of [...nativeRestartUnsafeRuns]) {
+      const run = registry.runs.get(runId), context = contexts.get(runId);
+      if (!run || run.state !== 'RESERVED' || !context) { nativeRestartUnsafeRuns.delete(runId); continue; }
+      try {
+        await verifyRestartSessions(context, run.directory);
+        const current = lifetime.snapshot().identity;
+        const currentProcess = await processOwnerIdentity(identity.pid);
+        if (nativeRestartPending || !current || current.pid !== identity.pid || current.startTime !== identity.startTime ||
+            (await openCode.info(true)).pid !== identity.pid || !currentProcess || currentProcess.startTime !== identity.startTime ||
+            currentProcess.uid !== identity.uid) return;
+        nativeRestartUnsafeRuns.delete(runId);
+        if (!handoffIntent && runtimeMigration?.phase !== 'PREPARED' &&
+            !registry.sessionHandoffs(runId).some(h => !['DONE','ABORTED'].includes(h.state))) {
+          context.resumeTransport(); if (sseState === 'connected') context.onConnect();
+          void restoreApprovedOperations(run, context);
+          for (const sessionId of context.sessions()) { void reconcileNativeCompletionsFromTranscript(runId, sessionId);
+            void refreshBackgroundShells(runId, sessionId); void refreshNativeUsage(runId, sessionId); }
+        }
+      } catch { /* Une session non vérifiable reste protégée. */ }
+    }
+  })().catch(() => { nativeRestartRecheckError = 'opencode-restart-recheck-failed'; }).finally(() => { restartRecheckInFlight = false; });
+}, 2000);
+nativeRestartRecheckTimer.unref();
 process.on('SIGTERM', () => { void shutdown(); });
 process.on('SIGINT', () => { void shutdown(); });

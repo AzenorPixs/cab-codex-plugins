@@ -1,6 +1,6 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 
-export const VERSION = '2.4.19';
+export const VERSION = '2.4.20';
 export const SHUTDOWN_INCOMPLETE = 78;
 
 // /proc/stat is public process metadata; never inspect cmdline or environ.
@@ -26,6 +26,73 @@ export async function processOwnerIdentity(pid) {
   const after=await processIdentity(pid);
   if(!ids||!after||before.startTime!==after.startTime||new Set(ids.slice(1)).size!==1)return null;
   return {...after,uid:Number(ids[1])};
+}
+
+export async function verifiedNativeChild(parent, childPid) {
+  if (!parent || !Number.isSafeInteger(childPid) || childPid <= 0) return false;
+  const before = await processOwnerIdentity(parent.pid), child = await processOwnerIdentity(childPid);
+  if (!before || !child || before.startTime !== parent.startTime || before.uid !== parent.uid || child.uid !== parent.uid) return false;
+  let tids; try { tids = await readdir('/proc/' + parent.pid + '/task'); } catch { return false; }
+  let found = false;
+  for (const tid of tids.filter(value => /^\d+$/.test(value))) {
+    try {
+      const text = await readFile('/proc/' + parent.pid + '/task/' + tid + '/children', 'utf8');
+      if (text.trim().split(/\s+/).includes(String(childPid))) found = true;
+    } catch (cause) { if (!['ENOENT','ESRCH'].includes(cause.code)) return false; }
+  }
+  const after = await processOwnerIdentity(parent.pid), childAfter = await processOwnerIdentity(childPid);
+  return Boolean(found && after && childAfter && after.startTime === before.startTime && after.uid === before.uid &&
+    childAfter.startTime === child.startTime && childAfter.uid === child.uid && !['Z','X','x'].includes(childAfter.state));
+}
+
+// Une reconnexion n'accorde aucune permission ; le propriétaire valide la
+// nouvelle instance et les sessions avant de lever ses propres protections.
+export function followOpenCodeRestart(openCode, { onLost, onAttach, onReady = () => {}, onDiagnostic = () => {},
+  readIdentity = processOwnerIdentity, intervalMs = 500 } = {}) {
+  if (typeof onLost !== 'function' || typeof onAttach !== 'function' || typeof onReady !== 'function' || !Number.isFinite(intervalMs) || intervalMs < 1)
+    throw new Error('lifecycle-invalid-options');
+  let identity = null, previous = null, protectedBoundary = true, stopped = false, checking = false, timer, diagnostic = null;
+  const warn = code => { if (diagnostic !== code) { diagnostic = code; onDiagnostic(code); } };
+  const same = (a,b) => a?.pid === b?.pid && a?.startTime === b?.startTime;
+  const alive = value => value && !['Z','X','x'].includes(value.state);
+  function stop() { stopped = true; clearTimeout(timer); }
+  async function check() {
+    if (stopped || checking) return;
+    clearTimeout(timer); checking = true;
+    try {
+      if (identity) {
+        const current = await readIdentity(identity.pid);
+        if (stopped) return;
+        if (alive(current) && same(current,identity) && current.uid === identity.uid) { diagnostic = null; return; }
+        previous = identity; identity = null; protectedBoundary = false;
+      }
+      if (previous && !protectedBoundary) { await onLost(previous); protectedBoundary = true; if (stopped) return; }
+      const info = await openCode.info(true), candidate = await readIdentity(info.pid);
+      if (stopped) return;
+      if (!alive(candidate) || !Number.isSafeInteger(candidate.uid) || previous && (same(candidate,previous) || candidate.uid !== previous.uid)) { warn('opencode-restart-identity-unverifiable'); return; }
+      const confirmation = await openCode.info(true), again = await readIdentity(info.pid);
+      if (stopped) return;
+      if (confirmation.pid !== info.pid || !alive(again) || !same(candidate,again) || candidate.uid !== again.uid) { warn('opencode-restart-identity-unverifiable'); return; }
+      if (previous) {
+        const old = await readIdentity(previous.pid);
+        if (alive(old) && same(old,previous)) { warn('opencode-restart-previous-alive'); return; }
+      }
+      if (await onAttach(candidate, previous) !== true || stopped) { warn('opencode-restart-boundary-unverified'); return; }
+      const finalInfo = await openCode.info(true), finalIdentity = await readIdentity(info.pid);
+      if (stopped) return;
+      if (finalInfo.pid !== info.pid || !alive(finalIdentity) || !same(candidate, finalIdentity) || candidate.uid !== finalIdentity.uid) { warn('opencode-restart-identity-unverifiable'); return; }
+      if (previous) {
+        const old = await readIdentity(previous.pid);
+        if (alive(old) && same(old,previous)) { warn('opencode-restart-previous-alive'); return; }
+      }
+      onReady(candidate, previous);
+      identity = candidate; previous = null; diagnostic = null;
+    } catch (cause) { if (!stopped) warn(/^opencode-restart-[a-z-]+$/.test(cause?.code || '') ? cause.code : 'opencode-restart-identity-unverifiable'); }
+    finally { checking = false; if (!stopped) { timer = setTimeout(() => { void check(); }, intervalMs); timer.unref(); } }
+  }
+  return { start() { void check(); }, stop, check,
+    snapshot: () => ({ state: stopped ? 'stopped' : identity ? 'attached' : previous ? 'reconnecting' : 'waiting',
+      identity: identity && { ...identity }, diagnostic }) };
 }
 
 export function followOpenCodeLifetime(openCode, { onExit, onDiagnostic = () => {},

@@ -16,7 +16,7 @@ import time
 
 import cgpt_approval_bridge_server as server
 
-VERSION = "2.4.19"
+VERSION = "2.4.20"
 
 
 def parse_files(value):
