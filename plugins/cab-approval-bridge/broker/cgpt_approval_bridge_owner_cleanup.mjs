@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes} from './cgpt-approval-bridge-change-erasure.mjs';
 import {ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
-export const VERSION='2.4.0';
+export const VERSION='2.4.1';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function ownerCleanup(input,{home=homedir()}={}) {
  const {action,scope,transactionId}=input;
@@ -19,6 +19,16 @@ export function ownerCleanup(input,{home=homedir()}={}) {
  if(value&&(value.transactionId!==transactionId||canonicalContinuityDigest(value.scope)!==scopeDigest))fail('erasure-owner-transaction-divergent');
  const receipt=state=>({protocol:'cab-owner-erasure-v1',transactionId,scopeDigest,state,uid:process.getuid(),pid:process.ppid});
  const isLegacy=(v,path)=>(v.legacyRoots||[]).some(root=>path===root||path.startsWith(root+'/'));
+ const committedEpoch=v=>{
+  const entry=v.entries?.at(-1),journal=v.journalPaths?.[0];
+  if(typeof journal!=='string'||entry?.path!==journal+'.erasure-epoch.json'||entry.remove!==false||typeof entry.text!=='string'||!existsSync(entry.path))return false;
+  let epoch;try{epoch=JSON.parse(entry.text);}catch{return false;}
+  if(Object.keys(epoch).sort().join(',')!=='epoch,generation'||!/^\d+$/.test(epoch.epoch)||!Number.isSafeInteger(epoch.generation)||epoch.generation<0)return false;
+  // Le dernier écrit fsync du plan signé prouve l'application ordonnée des
+  // candidats précédents. Les pairs peuvent ensuite avancer ; ne pas les rejouer.
+  return createHash('sha256').update(readErasureBytes(entry.path,{legacy:isLegacy(v,entry.path)})).digest('hex')===
+    createHash('sha256').update(entry.text).digest('hex');
+ };
  const absent=v=>!erasureFilePlan(v.roots,v.effectiveScope||v.scope,{exclude:v.journalPaths||[],legacyRoots:v.legacyRoots||[]}).entries.length&&
   (v.journalPaths||[]).every(path=>!erasureReferences(readErasureBytes(path,{legacy:isLegacy(v,path)}).toString('utf8'),v.effectiveScope||v.scope).length);
  if(action==='prepare'){
@@ -42,12 +52,15 @@ export function ownerCleanup(input,{home=homedir()}={}) {
    value={...value,phase:'APPLYING',roots,effectiveScope:plan.scope,entries,journalPaths:bundle.journalPaths,legacyRoots};tx.save(value);
   }
   if(value.phase==='APPLYING'){
-   tx.applyFiles(value);removeErasureDirectories(value.roots,value.scope);
+   const epochCommitted=committedEpoch(value),planDigest=canonicalContinuityDigest(value);
+   if(!epochCommitted)tx.applyFiles(value);
+   removeErasureDirectories(value.roots,value.scope);
    if(!absent(value))fail('erasure-owner-absence-unverified');
-   value={...value,phase:'APPLIED',entries:[]};tx.save(value);
+   value={...value,phase:'APPLIED',entries:[],completionProof:{kind:epochCommitted?'signed-final-epoch-and-current-absence':'file-hashes-and-current-absence',planDigest}};tx.save(value);
   }
   if(value.phase!=='APPLIED')fail('erasure-owner-phase-invalid');
-  return {...receipt('APPLIED'),roots:value.roots,effectiveScope:value.effectiveScope||value.scope,journalPaths:value.journalPaths};
+  return {...receipt('APPLIED'),roots:value.roots,effectiveScope:value.effectiveScope||value.scope,journalPaths:value.journalPaths,
+   ...(value.completionProof?{completionProof:value.completionProof}:{})};
  }
  if(value&&value.phase!=='APPLIED')fail('erasure-owner-phase-invalid');
  if(!value){

@@ -1,12 +1,16 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.0
+version: 2.4.1
 ---
 
 Réponds en français. Commande canonique et unique : `/CAB` ; `/cab` n'est pas
 pris en charge. Argument reçu : `$ARGUMENTS`. `/CABU` sans argument charge ce
 fichier frère de même version et lui délègue exactement `update` dans le même
 tour ; aucune logique de maintenance parallèle.
+
+Pour les essais d’atelier, appliquer la référence autonomie : objet JSON
+littéral rendu localement, mêmes identités après refus prouvé sans lancement.
+Un helper d’atelier ne rend pas tout le processus OpenCode en lecture seule.
 
 La cible2.4.0 ajoute le mode direct explicite, SGS permanent, CCAB et les
 ateliers isolés. Charger autonomy-and-ateliers.md du skill CAB pour le contrat

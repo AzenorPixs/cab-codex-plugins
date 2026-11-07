@@ -1,5 +1,10 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Reprise2.4.1 : préserver le reçu d’effacement et les fichiers déjà appliqués.
+Qualifier le helper propriétaire compatible avec le protocole existant, puis
+terminer la phase critique avec le client correspondant aux processus chargés.
+Le bilan CABU global reste distinct et vérifie ensuite toutes les versions.
+
 ## Contrat CAB 2.4.0 — huit catégories validées
 
 Contrat2.4.0 validé sous SCM avec CI/CD. Les preuves de qualification sont

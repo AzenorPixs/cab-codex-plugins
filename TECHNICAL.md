@@ -1,5 +1,10 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Correctif2.4.1 : le reçu propriétaire signé accepte au plus128Mio en lecture
+et écriture. La recherche des identifiants littéraux utilise un automate à
+transitions de repli, y compris pour les motifs imbriqués. Les fichiers déjà
+aux empreintes après ne sont pas réécrits ; APPLIED exige toujours l’absence.
+
 ## Contrat CAB 2.4.0 — huit catégories validées
 
 Contrat2.4.0 validé sous SCM avec CI/CD. Les preuves de qualification sont
