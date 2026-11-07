@@ -1,9 +1,10 @@
+import {verifyDependencies} from './cgpt-approval-bridge-dependency-authority.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.4.8';
+export const VERSION = '2.4.9';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -690,8 +691,7 @@ export class ResourceRunRegistry extends RunRegistry {
         throw new CoordinationError('change-already-reserved');
       }
     }
-    for (const dependency of candidate.dependsOn) if (![...this.history, ...this.runs.values()].some((run) =>
-      run.changeId === dependency && run.state === 'DELIVERED')) throw new CoordinationError('dependency-not-delivered');
+    try{verifyDependencies(this.directory,candidate.dependsOn);}catch(error){throw new CoordinationError(error.code||'dependency-openspec-unavailable');}
   }
   reserve(payload) {
     if (Object.values(this.resourceState.sessionHandoffs || {}).some(h => h.state !== 'ABORTED' &&
