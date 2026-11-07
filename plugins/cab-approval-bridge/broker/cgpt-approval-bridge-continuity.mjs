@@ -3,7 +3,7 @@ import { constants, closeSync, existsSync, fstatSync, fsyncSync, mkdirSync, open
   readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-export const VERSION = '2.4.5';
+export const VERSION = '2.4.6';
 export const CONTINUITY_PROTOCOL = 'cab-continuity-v1';
 export const continuityDigest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const canonicalContinuityDigest = value => createHash('sha256').update(JSON.stringify(value, (_, item) =>
@@ -131,6 +131,15 @@ const handoffValid = value => record(value) && identifier(value.transactionId) &
 function registryDigest(registry) {
   const { version, ...state } = registry.snapshot();
   return canonicalContinuityDigest(state);
+}
+
+export function renewErasureHandoff(envelope,{workspace,transactionId,nativeIdentity,registrySnapshot,at=Date.now()}){
+  const value=envelope?.value,{version,...registry}=registrySnapshot||{};
+  if(value?.state!=='SEALED'||value.transactionId!==transactionId||value.workspace!==workspace||
+    !nativeIdentityValid(nativeIdentity)||canonicalContinuityDigest(value.nativeIdentity)!==canonicalContinuityDigest(nativeIdentity)||
+    value.registryDigest!==canonicalContinuityDigest(registry)||!Number.isSafeInteger(at)||at<value.preparedAt)fail('handoff-renewal-boundary-divergent');
+  const next={...value,preparedAt:at,expiresAt:at+30000};
+  return {...envelope,sequence:envelope.sequence+1,value:next,digest:continuityDigest(next)};
 }
 
 export class TransportHandoff {

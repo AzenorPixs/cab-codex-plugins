@@ -134,3 +134,15 @@ Ressources déclarées dans DEVOPS.md : appliquer la référence
 [devops-resources](devops-resources.md) du skill CAB installé
 (`devops-resources.md` depuis les références). Outils locaux RO et catalogue
 actualisé ; accès externes par voies CAB, sans secrets ni socket de contrôle.
+
+## Priorité des tests : codeur justifie, orchestrateur tranche
+
+Le codeur utilise l’atelier en priorité pour tout test. Pour recourir à LXC ou
+Docker, il présente à l’orchestrateur le critère précis non réalisable dans
+l’atelier et la preuve de la capacité manquante. Une préférence, une habitude
+ou un échec à diagnostiquer ne suffisent pas. L’orchestrateur examine cette
+justification, tranche et trace sa décision dans le mandat/checkpoint existant.
+Le codeur ne décide pas seul de la bascule. Les ressources déjà allouées sont
+utilisées ; une allocation supplémentaire reste du ressort du développeur.
+Les écritures projet hors atelier, accès web et résultats gardent leurs
+validations. Aucun réglage global OpenCode n’est modifié implicitement.

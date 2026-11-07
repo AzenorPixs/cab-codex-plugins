@@ -75,3 +75,14 @@ statistique ouverte ou un autre RUN/session du même change, vérifie le rapport
 via SGS, conserve les copies consultables puis nettoie le seul atelier propre.
 Une reprise conserve les mêmes identités et le même reçu. L’archive source et
 les ateliers des autres sessions restent présents.
+
+## Copie historique explicitement supprimée
+
+La demande du développeur peut viser les copies CAB d’un rapport avant archivage
+d’un chat. POST local SGS /archives/forget reçoit project et paths exacts ;
+il supprime la copie et conserve seulement l’empreinte opaque nécessaire au
+non-réimport. Il ne supprime pas le fichier métier. /storage/compact termine
+le retrait des pages SQLite/WAL ; même opération pour CCAB après purge des
+incidents résolus. Une donnée encore nécessaire aux RUN conservés est protégée.
+Un conflit natif de dernière révision est partiel/N/A, pas un total choisi
+arbitrairement ; une révision supérieure lève ce diagnostic.

@@ -14,7 +14,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.5"
+VERSION = "2.4.6"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -100,6 +100,7 @@ class RuntimeStore:
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute('PRAGMA secure_delete=ON')
         self.db.executescript("""
         CREATE TABLE IF NOT EXISTS bindings(
           binding TEXT PRIMARY KEY, uid INTEGER NOT NULL, body TEXT NOT NULL, fingerprint TEXT NOT NULL);
@@ -118,6 +119,8 @@ class RuntimeStore:
         CREATE TABLE IF NOT EXISTS archive_reports(
           project TEXT NOT NULL, path TEXT NOT NULL, fingerprint TEXT NOT NULL,
           body TEXT NOT NULL, PRIMARY KEY(project,path));
+        CREATE TABLE IF NOT EXISTS archive_suppressions(
+          project TEXT NOT NULL, path_digest TEXT NOT NULL, PRIMARY KEY(project,path_digest));
         CREATE TABLE IF NOT EXISTS incidents(
           sequence INTEGER PRIMARY KEY AUTOINCREMENT, incident_id TEXT UNIQUE NOT NULL,
           created TEXT NOT NULL, updated TEXT NOT NULL, state TEXT NOT NULL,
@@ -214,22 +217,25 @@ class RuntimeStore:
                 timestamp(body["at"]), datetime.now(timezone.utc).isoformat(), encoded(body), digest(body)))
         return {"event_id": body["event_id"], "status": "duplicate" if old else "stored"}
 
-    def statistics(self, project, change=None):
+    def statistics(self, project, change=None, bindings=None):
         result = []
         for row in self.db.execute("SELECT * FROM bindings ORDER BY binding"):
             binding = json.loads(row["body"])
             if binding["project"] != project or (change and binding["change"] != change):
                 continue
+            if bindings is not None and row['binding'] not in bindings:continue
             rows = self.db.execute("SELECT * FROM telemetry WHERE binding=? ORDER BY at,sequence,event_id", (row["binding"],)).fetchall()
-            latest, by_source, models, coverage = {}, {}, [], {}
+            latest, by_source, models, coverage, conflicts = {}, {}, [], {}, {}
             for event in rows:
                 data = json.loads(event["body"])
                 stream = (data["source"], data["stream"])
                 if data["semantics"] == "cumulative":
                     if stream not in latest or latest[stream]["sequence"] < data["sequence"]:
                         latest[stream] = data
+                        conflicts.pop(stream,None)
                     elif latest[stream]["sequence"] == data["sequence"] and latest[stream]["metrics"] != data["metrics"]:
-                        raise RuntimeErrorCode("sgs-cumulative-sequence-conflict")
+                        keys=set(latest[stream]['metrics'])|set(data['metrics'])
+                        conflicts.setdefault(stream,set()).update(k for k in keys if latest[stream]['metrics'].get(k)!=data['metrics'].get(k))
                 else:
                     deltas = by_source.setdefault(data["source"], {})
                     for key, value in data["metrics"].items():
@@ -252,18 +258,22 @@ class RuntimeStore:
             for source in ("llm-supplement", "archive", "cab-component", "codex-native", "opencode-native"):
                 deltas.update(by_source.get(source, {}))
                 selected_sources.update({key:source for key in by_source.get(source,{})})
+            if any(source not in ('codex-native','opencode-native') for source,_ in conflicts):raise RuntimeErrorCode('sgs-cumulative-sequence-conflict')
+            uncertain=set().union(*conflicts.values()) if conflicts else set()
+            for key in uncertain:deltas.pop(key,None)
             native_source = self.db.execute("SELECT source,status FROM native_sources WHERE binding=?", (row["binding"],)).fetchone()
             diagnostic=self.cursor('diagnostic-'+digest(row['binding']))
             diagnostic={key:value for key,value in (diagnostic or {}).items() if value is not None}
+            if uncertain:diagnostic.update(status='partial',reason='native-cumulative-revision-conflict')
             closure=self.db.execute("SELECT ended_at FROM binding_closures WHERE binding=?",(row["binding"],)).fetchone()
             ended_at=closure[0] if closure else None
             if models and ended_at:models[-1]['until']=ended_at
             result.append({**binding, "metrics": {key: str(value) for key, value in deltas.items()},
-                           "coverage": {key: coverage.get(selected_sources.get(key),{}).get(key,
+                           "coverage": {key: 'partial' if key in uncertain else coverage.get(selected_sources.get(key),{}).get(key,
                                "supplement" if selected_sources.get(key)=='llm-supplement' else
                                "native" if key in deltas else "unavailable") for key in METRICS},
                            "models": models, "events": len(rows),"ended_at":ended_at,
-                           "collector": {**dict(native_source),**(diagnostic or {})} if native_source else {"status": "unavailable", "reason": "native-source-not-registered"}})
+                           "collector": {**dict(native_source),**(diagnostic or {})} if native_source else {"status": "unavailable", "reason": "native-source-not-registered",**diagnostic}})
         archives = [json.loads(row[0]) for row in self.db.execute("SELECT body FROM archive_reports WHERE project=? ORDER BY path", (project,))]
         if change:
             archives = [item for item in archives if item.get("change") == change]
@@ -353,7 +363,7 @@ class RuntimeStore:
             batch=scope.get('closureAuthority')=='authoritative-retired-run-batch-v1'
             if batch and (not scope.get('protectedRunIds') or set(scope['runIds'])&set(scope['protectedRunIds'])):raise RuntimeErrorCode('sgs-purge-scope-invalid')
             reports=[report for report in reports if report.get('change') in (scope.get('changeIds',[]) if batch else [scope['changeId']])]
-            current=[session for session in self.statistics(scope['workspace'])['sessions'] if session['binding'] in preview['bindings']]
+            current=self.statistics(scope['workspace'],bindings=set(preview['bindings']))['sessions']
             if not reports and (not batch or current):raise RuntimeErrorCode('sgs-durable-report-required')
             snapshots={session['binding']:session for report in reports for native in report.get('native_telemetry',[]) for session in native['snapshot']['sessions']}
             for session in current:
@@ -387,12 +397,37 @@ class RuntimeStore:
         path = Path(relative)
         if path.is_absolute() or ".." in path.parts or path.parts[:3] != ("openspec", "changes", "archive") or path.name not in ("STATISTICS.md", "STATISTIQUES.md"):
             raise RuntimeErrorCode("sgs-archive-path-invalid")
+        if self.archive_suppressed(project,relative):return {'status':'developer-deleted'}
         value = {"project": project, "path": str(path), **contribution}
         fingerprint = digest(value)
         with self.transaction():
             old = self.db.execute("SELECT fingerprint FROM archive_reports WHERE project=? AND path=?", (project, str(path))).fetchone()
             self.db.execute("INSERT INTO archive_reports VALUES(?,?,?,?) ON CONFLICT(project,path) DO UPDATE SET fingerprint=excluded.fingerprint,body=excluded.body", (project, str(path), fingerprint, encoded(value)))
         return {"path": str(path), "status": "unchanged" if old and old[0] == fingerprint else "imported"}
+
+    def archive_suppressed(self,project,relative):
+        return self.db.execute('SELECT 1 FROM archive_suppressions WHERE project=? AND path_digest=?',(project,digest(relative))).fetchone() is not None
+
+    def forget_archives(self,project,paths):
+        if not isinstance(project,str) or not Path(project).is_absolute() or not isinstance(paths,list) or not paths or len(paths)>128:raise RuntimeErrorCode('sgs-archive-deletion-invalid')
+        for name in paths:
+            if not isinstance(name,str):raise RuntimeErrorCode('sgs-archive-deletion-invalid')
+            path=Path(name)
+            if path.is_absolute() or '..' in path.parts or len(path.parts)!=5 or path.parts[:3]!=('openspec','changes','archive') or path.name not in ('STATISTICS.md','STATISTIQUES.md'):raise RuntimeErrorCode('sgs-archive-deletion-invalid')
+            change=re.sub(r'^\d{4}-\d{2}-\d{2}-','',path.parts[3])
+            if any(json.loads(row[0])['project']==project and json.loads(row[0])['change']==change for row in self.db.execute('SELECT body FROM bindings')):raise RuntimeErrorCode('sgs-archive-native-window-retained')
+        with self.transaction():
+            for name in paths:
+                self.db.execute('INSERT OR IGNORE INTO archive_suppressions VALUES(?,?)',(project,digest(name)))
+                self.db.execute('DELETE FROM archive_reports WHERE project=? AND path=?',(project,name))
+        return {'status':'DEVELOPER_DELETED','count':len(paths),'reimportSuppressed':True}
+
+    def compact(self):
+        if self.db.in_transaction:raise RuntimeErrorCode('runtime-compaction-transaction-active')
+        if self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0]:raise RuntimeErrorCode('runtime-compaction-busy')
+        self.db.execute('VACUUM')
+        if self.db.execute('PRAGMA wal_checkpoint(TRUNCATE)').fetchone()[0]:raise RuntimeErrorCode('runtime-compaction-busy')
+        return {'status':'COMPACTED'}
 
     def incident(self, body):
         expected = {"incident_id", "project", "change", "run", "reporter", "version", "category", "summary", "evidence"}
@@ -490,7 +525,11 @@ class RuntimeStore:
             for row in self.db.execute('SELECT * FROM receipts').fetchall():
                 body=json.loads(row['body']);references=set(body.get('incident_ids',[]))|({body['incident_id']} if 'incident_id' in body else set())
                 if references and references<=set(removed):self.db.execute('DELETE FROM receipts WHERE action_id=?',(row['action_id'],))
-                elif references&set(removed):retained_receipts+=1
+                elif references&set(removed):
+                    remaining=references-set(removed)
+                    states=[self.db.execute('SELECT state FROM incidents WHERE incident_id=?',(key,)).fetchone() for key in remaining]
+                    if states and all(item and item[0]=='RESOLVED' for item in states):self.db.execute('DELETE FROM receipts WHERE action_id=?',(row['action_id'],))
+                    else:retained_receipts+=1
         return {'status':'PURGED_RESOLVED','removed':len(removed),'sharedReceiptsNecessary':retained_receipts}
 
     def resolve(self, action_id, incident_id, claim, claimant, resolution):

@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Rétention partagée et essais SCM2.4.6
+
+[protect-shared-retired-identities-and-test-routing](openspec/changes/archive/2026-11-07-protect-shared-retired-identities-and-test-routing/), code non attribué : conservation des références de lectures partagées, reprise avant application, priorité atelier et retrait propriétaire non émis. Même transaction43/8 ; archivage du chat C12 conditionné à l’absence CAB.
+
+
 ## Entretien des RUN fermés SCM2.4.5
 
 [clean-retired-run-batches](openspec/changes/archive/2026-11-07-clean-retired-run-batches/), code non attribué : portée explicite de RUN fermés, aliases historiques, protections des chats/RUN conservés ; effacement authentifié et preuve de préservation. Prévol réel43RUN/88changes à retirer,8RUN protégés. Les opérations réelles restent distinctes de la qualification source.
