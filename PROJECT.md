@@ -1,5 +1,10 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+Complément2.4.3 : le nettoyage sépare autorisation immuable, portée effective
+attestée et fichiers candidats privés, afin de conserver reprise et preuve
+d’absence sur les historiques volumineux sans embarquer leurs payloads dans
+le reçu de contrôle.
+
 Complément2.4.2 : les listes d’identifiants de migration/transfert héritées
 sont nettoyées dans le scope exact. Une préparation interrompue avant projection
 peut recapturer les services restaurés sans nouvelle transaction ni rollback.

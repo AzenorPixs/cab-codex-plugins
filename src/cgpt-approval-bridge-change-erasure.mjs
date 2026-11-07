@@ -1,13 +1,13 @@
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, openSync,
-  readFileSync, readdirSync, realpathSync, unlinkSync, renameSync, rmdirSync, writeFileSync,fchmodSync } from 'node:fs';
+  readFileSync, readdirSync, realpathSync, unlinkSync, renameSync, rmdirSync, writeFileSync,fchmodSync,rmSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import {homedir} from 'node:os';
 import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge-observation-statistics.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.2';
+export const VERSION = '2.4.3';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -376,14 +376,56 @@ export class ErasureTransaction {
       ...plan,scope:{...plan.scope,ids:[...new Set([...plan.scope.ids,transactionId])].sort()},acknowledgements:[], startedAt:Date.now() };
     this.save(value); return value;
   }
+  candidateDirectory(value) {
+    const directory=value.candidateDirectory;
+    if(typeof directory!=='string'||resolve(directory)!==directory||!/^erasure-[a-f0-9-]{36}$/.test(value.transactionId)||
+      !directory.endsWith('/erasure-candidates/'+value.transactionId)||!value.roots.some(root=>directory.startsWith(root+'/')))fail('erasure-candidate-directory-unsafe');
+    if(existsSync(directory))ensurePrivateStateDirectory(directory);
+    return directory;
+  }
+  stageCandidates(value,directory) {
+    const current=this.load();
+    if(!current||current.transactionId!==value.transactionId||current.phase!=='STOPPING'||current.entries?.length||current.expectedPeers||
+      canonicalContinuityDigest(current.scope)!==canonicalContinuityDigest(value.scope))fail('erasure-candidate-stage-refused');
+    this.candidateDirectory({...value,candidateDirectory:directory});
+    if(existsSync(directory))rmSync(directory,{recursive:true});
+    ensurePrivateStateDirectory(directory);
+    const entries=value.entries.map((entry,index)=>{
+      if(entry.before!==null&&!/^[a-f0-9]{64}$/.test(entry.before||''))fail('erasure-candidate-before-invalid');
+      const {next,text,...metadata}=entry;
+      if(entry.remove)return {...metadata,before:'candidate-ref-v2:'+(entry.before||'ABSENT'),sourceBefore:entry.before,candidate:{remove:true}};
+      const bytes=Buffer.from(text??JSON.stringify(next)+'\n');
+      if(bytes.length>ERASURE_RECEIPT_MAX_BYTES)fail('erasure-candidate-too-large');
+      const path=join(directory,String(index));writeErasureBytes(path,bytes);
+      return {...metadata,before:'candidate-ref-v2:'+(entry.before||'ABSENT'),sourceBefore:entry.before,
+        candidate:{path,sha256:sha(bytes),bytes:bytes.length}};
+    });
+    return {...value,candidateDirectory:directory,entries};
+  }
+  clearCandidates(value) {
+    if(!value.candidateDirectory)return;
+    if(!['RESTARTING','VERIFYING','CERTIFIED'].includes(value.phase)||value.entries?.length)fail('erasure-candidate-clear-refused');
+    const directory=this.candidateDirectory(value);
+    if(existsSync(directory)){rmSync(directory,{recursive:true});syncDirectory(dirname(directory));}
+  }
   applyFiles(value, { beforeWrite = () => {} } = {}) {
     for (const entry of value.entries) {
       if (!entry.path.startsWith('/') || !value.roots.some(root => entry.path===root||entry.path.startsWith(root+'/'))) fail('erasure-path-outside-inventory');
       const current = existsSync(entry.path) ? sha(readErasureBytes(entry.path,{legacy:entry.legacy===true})) : null;
-      const bytes=Buffer.from(entry.text??JSON.stringify(entry.next)+'\n');
-      const expected = entry.remove ? null : sha(bytes);
+      let bytes;
+      const external=record(entry.candidate);
+      if(external&&entry.before!=='candidate-ref-v2:'+(entry.sourceBefore||'ABSENT'))fail('erasure-candidate-before-invalid');
+      const expected = entry.remove ? null : external?entry.candidate.sha256:sha(Buffer.from(entry.text??JSON.stringify(entry.next)+'\n'));
       if (current === expected) continue;
-      if (current !== entry.before) fail('erasure-source-divergent');
+      if (current !== (external?entry.sourceBefore:entry.before)) fail('erasure-source-divergent');
+      if(external&&!entry.remove){
+        const directory=this.candidateDirectory(value);
+        if(typeof entry.candidate.path!=='string'||!/^\d+$/.test(entry.candidate.path.slice(directory.length+1))||
+          !entry.candidate.path.startsWith(directory+'/')||!Number.isSafeInteger(entry.candidate.bytes)||entry.candidate.bytes<0||
+          entry.candidate.bytes>ERASURE_RECEIPT_MAX_BYTES||!/^[a-f0-9]{64}$/.test(expected||''))fail('erasure-candidate-reference-invalid');
+        bytes=readErasureBytes(entry.candidate.path);
+        if(bytes.length!==entry.candidate.bytes||sha(bytes)!==expected)fail('erasure-candidate-divergent');
+      }else if(!entry.remove)bytes=Buffer.from(entry.text??JSON.stringify(entry.next)+'\n');
       beforeWrite(entry);
       if (entry.remove) { unlinkSync(entry.path); syncDirectory(dirname(entry.path)); }
       else writeErasureBytes(entry.path,bytes,{legacy:entry.legacy===true,fileMode:entry.fileMode});
@@ -398,6 +440,8 @@ export class ErasureTransaction {
       ...(value.sgsReceipt?{sgsReceipt:value.sgsReceipt}:{}),
       ...(value.retainedArchive?{retainedArchive:value.retainedArchive}:{}),
       ...(value.recoveryCompatibility?{recoveryCompatibility:value.recoveryCompatibility}:{}),
+      ...(value.effectiveScope?{effectiveScope:value.effectiveScope}:{}),
+      ...(value.expectedPeersDigest?{peerStateDigest:value.expectedPeersDigest}:{}),
       timings:{preparationMs:value.cutoverStartedAt>=value.startedAt?value.cutoverStartedAt-value.startedAt:null,
         cutoverToVerifiedUpperBoundMs:value.runtimeVerifiedAt>=value.cutoverStartedAt?value.runtimeVerifiedAt-value.cutoverStartedAt:null,
         measurement:'cutover-to-runtime-verified-upper-bound'} });

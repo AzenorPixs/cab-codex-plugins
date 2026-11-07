@@ -1,4 +1,18 @@
-# Effacement terminal ciblé — CAB 2.4.2
+# Effacement terminal ciblé — CAB 2.4.3
+
+## Gros plans et portée effective
+
+La portée d’autorisation du canal propriétaire reste immuable. Les identifiants
+supplémentaires attestés par le broker, pour les mêmes projet/change/RUN,
+forment une portée effective distincte utilisée pour projection et absence ;
+le certificat conserve les deux.
+
+Les payloads après projection sont stockés dans des candidats privés hachés,
+référencés dans le reçu. Ne pas les modifier ou supprimer en APPLYING. Un ancien
+lecteur refuse ces références avant écriture ; un candidat altéré ou hors racine
+est refusé. Après application/absence, le reçu est compacté et les candidats
+retirés avant redémarrage. Une reprise RESTARTING termine ce retrait de façon
+idempotente. Aucun état antérieur du change n’est restauré.
 
 ## Préparation interrompue avant projection
 

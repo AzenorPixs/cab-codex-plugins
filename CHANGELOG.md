@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 2.4.3 — 2026-11-07
+
+- Sépare le scope d’autorisation immuable et la portée effective attestée par le broker, avec vérification/certificat des deux sans élargir les RUN.
+- Stocke les candidats après projection dans des fichiers privés hachés ; le reçu reste compact, les anciens lecteurs refusent avant écriture et les candidats altérés sont rejetés.
+- Compacte le reçu et retire les candidats temporaires avant redémarrage, en conservant reprise et preuve de préservation des pairs.
+
 ## 2.4.2 — 2026-11-07
 
 - Projette les listes historiques d’identifiants onceAcknowledged/restoredAccesses en préservant les booléens, l’ordre et les éléments des pairs, avec le réancrage de continuité existant.
