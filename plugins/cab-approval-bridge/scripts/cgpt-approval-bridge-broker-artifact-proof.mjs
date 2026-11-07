@@ -4,11 +4,11 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { processIdentity, proofHash } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-export const VERSION = '2.4.15';
+export const VERSION = '2.4.17';
 export const BROKER_ARTIFACT_FILES = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
 export const BROKER_PAYLOAD_FILES=[...BROKER_ARTIFACT_FILES,'cgpt_approval_bridge_owner_cleanup.mjs',
   'cgpt_approval_bridge_atelier.py','cgpt_approval_bridge_reporting.py','cgpt-approval-bridge-contract.json',
-  ...['change-erasure','continuity','state-layout','observation-statistics'].map(name=>'cgpt-approval-bridge-'+name+'.mjs')];
+  ...['change-erasure','continuity','state-layout','observation-statistics','permission-replies'].map(name=>'cgpt-approval-bridge-'+name+'.mjs')];
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const identity = (value) => object(value) && Object.keys(value).sort().join(',') === 'pid,startTime,uid' &&
