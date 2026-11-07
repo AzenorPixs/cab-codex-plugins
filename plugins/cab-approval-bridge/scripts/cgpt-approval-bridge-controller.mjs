@@ -35,7 +35,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.4.18";
+const version = "2.4.19";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -1332,7 +1332,7 @@ function terminalTurnNoEffectCandidate(operation){
     operation.nativeRecovery.permissionId===null&&operation.nativeRecovery.callId===null&&
     operation.onceAcknowledged!==true&&!operation.testReservationId;
 }
-async function collectRecoveryEvidence(run, operation) {
+async function collectRecoveryEvidence(run, operation, permissionId = undefined) {
   if (!operation || operation.runId !== run.runId || operation.contextId !== run.contextId)
     throw new CoordinationError('recovery-target-divergent');
   const generation = nativeSessionGenerations.get(operation.sessionId) || 0;
@@ -1359,7 +1359,7 @@ async function collectRecoveryEvidence(run, operation) {
   let journal = null, journalError = null, replies = { receipts: [], truncated: false }, replyError = null;
   try { journal = await openCode.sessionEventLog(operation.sessionId, run.directory); }
   catch (cause) { journalError = /^[a-z][a-z0-9-]{1,99}$/.test(cause.code || '') ? cause.code : 'native-journal-unavailable'; }
-  try { replies = openCode.permissionReplies(operation.sessionId, run.directory); }
+  try { replies = openCode.permissionReplies(operation.sessionId, run.directory, permissionId); }
   catch { replyError = 'permission-reply-journal-unavailable'; }
   const view = nativeEvidenceView({ run, operation, approval, parts, native, activeSessions, permissions, journal, replies });
   // Availability errors are part of the boundary, never evidence of an absent effect.
@@ -1376,6 +1376,7 @@ async function collectRecoveryEvidence(run, operation) {
   try { nativeKernelEpoch = await nativeInstances.kernelEpoch(native); } catch { /* Aucune époque fiable n’est déduite d’une lecture échouée. */ }
   const publicView = { ...view, journalError, replyError, nativeInstanceEvidence, nativeKernelEpoch,
     nativeInstanceEvidenceStatus: operation.native ? nativeInstanceEvidence ? 'AVAILABLE' : 'PRIOR_INSTANCE_EVIDENCE_MISSING' : 'NOT_REQUIRED_FOR_UNISSUED_VALIDATION' };
+  if (permissionId !== undefined) publicView.replyScopePermissionId = permissionId;
   const {nativeKernelEpoch: epochObservation,...compatibleBoundary} = publicView;
   publicView.nativeBoundaryDigest = proofHash(compatibleBoundary);
   return { view: publicView, approval, parts, messages, generation };
@@ -1425,7 +1426,10 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   if(context.publicStatus().recoveryRequired || !context.publicJob()?.armed ||
       (context.publicJob().sessionId!==op.sessionId && !historicalRetirement) || context.publicJob().currentCabMandate &&
       context.publicJob().currentCabMandate!==op.requestId) throw new CoordinationError('validation-boundary-context-divergent');
-  const original=proofHash(op),first=await collectRecoveryEvidence(run,op);
+  const original=proofHash(op),first=await collectRecoveryEvidence(run,op,withdraw ? payload.permissionId : undefined);
+  if (withdraw && payload.permissionId !== undefined && (first.view.replyError || first.view.replyReceipts.length !== 1 ||
+      first.view.replyReceipts[0].permissionId !== payload.permissionId))
+    throw new CoordinationError('recovery-permission-receipt-unverified');
   if(first.view.nativeBoundaryDigest!==payload.nativeBoundaryDigest || !first.view.sessionIdle || first.view.pendingPermissionCount)
     throw new CoordinationError('recovery-native-boundary-changed');
   const same=value=>proofHash(nativeIdentity(value))===proofHash(nativeIdentity(first.approval));
@@ -1502,7 +1506,7 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     observation=pendingValidationProof(first.parts,first.approval,same);
     if(first.view.calls.some(call=>call.commandSha256===first.view.commandSha256))throw new CoordinationError('pending-restore-native-effect-observed');
   }
-  const second=await collectRecoveryEvidence(run,op);
+  const second=await collectRecoveryEvidence(run,op,withdraw ? payload.permissionId : undefined);
   if(first.view.nativeBoundaryDigest!==second.view.nativeBoundaryDigest || proofHash(first.messages)!==proofHash(second.messages) ||
       generationChanged(op.sessionId,first.generation) || proofHash(op)!==original)
     throw new CoordinationError('recovery-native-boundary-changed');
@@ -2621,10 +2625,10 @@ async function handleRequest(request, response) {
         json(response,200,portProbeResponse(run,prepared));return;
       }
       if (request.method === 'GET' && url.pathname === '/recovery/native-evidence') {
-        if ([...url.searchParams.keys()].some(key => key !== 'operationId') || url.searchParams.getAll('operationId').length !== 1)
+        if ([...url.searchParams.keys()].some(key => !['operationId','permissionId'].includes(key)) || url.searchParams.getAll('operationId').length !== 1 || url.searchParams.getAll('permissionId').length > 1)
           throw new CoordinationError('recovery-request-invalid', 400);
         const operation = registry.resourceState.operations[url.searchParams.get('operationId')];
-        const evidence = await collectRecoveryEvidence(run, operation);
+        const evidence = await collectRecoveryEvidence(run, operation, url.searchParams.get('permissionId') ?? undefined);
         json(response, 200, evidence.view); return;
       }
       if (request.method === 'POST' && url.pathname === '/extend-compatible') {
