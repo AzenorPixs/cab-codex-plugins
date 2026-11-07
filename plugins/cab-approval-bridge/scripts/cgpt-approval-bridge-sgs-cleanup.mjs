@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {runtimeRequest,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
 import {projectErasure,erasureReferences} from './cgpt-approval-bridge-change-erasure.mjs';
 import {readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.4.4';
+export const VERSION='2.4.5';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),request=runtimeRequest}={}) {
   const preview=await request('sgs','/purge/preview',{scope,branch},{home});
@@ -17,7 +17,7 @@ export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),req
     const path=join(directory,name),info=await lstat(path);
     if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o077)fail('sgs-outbox-owner-divergent');
     const value=readRuntimeJson(path).value;
-    if(value.project===scope.workspace&&value.change===scope.changeId&&value.binding)bindingIds.add(value.binding);
+    if(value.project===scope.workspace&&(scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.runIds.includes(value.run):value.change===scope.changeId)&&value.binding)bindingIds.add(value.binding);
     files.push({path,value});
   }
   for(const {path,value} of files) {

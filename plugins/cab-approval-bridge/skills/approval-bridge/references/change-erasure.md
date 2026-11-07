@@ -1,5 +1,9 @@
 # Effacement terminal ciblé — CAB 2.4.3
 
+Pour un entretien demandé de plusieurs RUN fermés et aliases historiques,
+utiliser [le lot explicite](retired-run-cleanup.md). Le nettoyage unitaire
+conserve ses gardes et son format.
+
 ## Gros plans et portée effective
 
 La portée d’autorisation du canal propriétaire reste immuable. Les identifiants

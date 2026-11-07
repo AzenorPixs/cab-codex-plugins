@@ -1,5 +1,13 @@
 # Historique des versions
 
+## 2.4.5 — 2026-11-07
+
+- Nettoyage par lot de RUN fermés explicitement sélectionnés, avec exclusions protégées et inventaire de tous leurs contextes/aliases, sans réouvrir les RUN ni modifier leurs résultats métier.
+- Réutilise transaction, propriétaires, candidats hachés/réancrage et certificat ; préserve sessions partagées, rapports, statistiques historiques et RUN actifs.
+- Permet l’entretien SGS sans rapport fictif lorsqu’aucune liaison native n’existe ; conserve la preuve durable pour toute télémétrie native supprimée.
+- Ajoute au rapport SCM2.4.4 la trace cumulative de sa fenêtre native exclue, sans en compter les mesures dans ses agrégats, pour réconciliation officielle.
+
+
 ## 2.4.4 — 2026-11-07
 
 - Expose les outils, interpréteurs et bibliothèques déclarés dans DEVOPS.md dans l’atelier RO, avec préfixes de runtime et liens nécessaires.

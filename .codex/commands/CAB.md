@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.4
+version: 2.4.5
 ---
 
 Réponds en français. Commande canonique : `/CAB` ; `/cab` n'est pas
@@ -34,7 +34,7 @@ mutation. Jamais de sous-commande implicite.
 | `pause`, `resume`, `stop` avec `--run <run_id>` ou `--all` | `references/command-pause.md` ; respecter la portée exacte |
 | `stop` sans portée | `references/command-stop.md` ; ne jamais déduire `--all` |
 | `update ...` | `references/command-update.md` et `references/component-update.md` |
-| `cleanup ...` | `references/change-erasure.md` ; nettoyage terminal ciblé |
+| `cleanup ...` | `references/change-erasure.md`, `references/retired-run-cleanup.md` ; portée explicite |
 
 Pour start, run ou resume, résoudre le workspace canonique puis appliquer
 `references/monitor-service.md` avant PLLM et les prévols, sans purge, reset ou

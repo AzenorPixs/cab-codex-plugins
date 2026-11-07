@@ -12,7 +12,7 @@ import { cleanupChange } from '../plugins/cab-approval-bridge/scripts/cgpt-appro
 import { TransportHandoff } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import { writeRuntimeJson, readRuntimeJson } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
-const source=resolve('src');
+const source=resolve('plugins/cab-approval-bridge/broker');
 async function fixture(t,branch,{multiOwner=false,legacy=false,runtimeVersion=VERSION}={}) {
   const root=mkdtempSync(join(tmpdir(),'cab-erasure-integration-'));
   const workspace=join(root,'workspace'),state=join(root,'runtime'),monitor=join(root,'monitor'),brokerRoot=join(root,'broker'),update=join(root,'update');
@@ -208,4 +208,22 @@ for(const variant of ['historical-armed','final-gate','closing-owner','unbound-j
   await assert.rejects(f.manager.seal({transactionId:plan.transactionId}),/ownership-review-divergent|terminal-gate-unverified/);return;
  }
  await assert.rejects(f.manager.prepare(request),/erasure-/);assert.equal(f.manager.pending(),null);
+});
+
+test('Lot historique : aliases fermés, gates mixtes validés, une bascule et certificat sans pair effacé',async t=>{
+ const f=await fixture(t,'TERMINÉ'),registry=f.getRegistry();
+ const alias={...registry.snapshot().runs.find(row=>row.runId===f.target.runId),changeId:'legacy-closed-alias',contextId:10001,version:20001,state:'ABANDONED'};
+ registry.history.push(alias);registry.persist();
+ const jobPath=join(f.state,'runs',f.target.runId,'10001','controller-job.json');mkdirSync(join(jobPath,'..'),{recursive:true,mode:0o700});
+ writeRuntimeJson(jobPath,{changeId:alias.changeId,sessionId:alias.sessionId,armed:false,terminalGate:{status:'VALIDATED',declaredState:'BLOQUÉ'}});
+ const orphanPath=join(f.state,'runs',f.target.runId,'10002','controller-job.json');mkdirSync(join(orphanPath,'..'),{recursive:true,mode:0o700});
+ const orphan={changeId:alias.changeId,sessionId:'ses_closed_orphan',armed:false,terminalGate:{status:'VALIDATED',declaredState:'BLOQUÉ'}};writeRuntimeJson(orphanPath,orphan);
+ const plan=await f.manager.prepare({mode:'retired-runs-v1',runIds:[f.target.runId],protectedRunIds:[f.peer.runId],ownerId:'operator',evidence:['developer-cleanup-reviewed']});
+ assert.deepEqual(plan.scope.changeIds,['change-target','legacy-closed-alias']);
+ writeRuntimeJson(orphanPath,{...orphan,armed:true});await assert.rejects(f.manager.seal({transactionId:plan.transactionId}),/retired-jobs-changed/);writeRuntimeJson(orphanPath,orphan);f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
+ const certificate=await cleanupChange({workspace:f.workspace,action:'execute',transactionId:plan.transactionId},f.dependencies);
+ assert.equal(certificate.status,'CERTIFIED_PENDING_FINALIZE');assert.equal(f.serviceCalls.filter(row=>row[1]==='stop').length,3);
+ assert.equal((await cleanupChange({workspace:f.workspace,action:'finalize',transactionId:plan.transactionId,certificate},f.dependencies)).status,'PURGED');
+ assert.equal((await cleanupChange({workspace:f.workspace,action:'verify',certificate},f.dependencies)).status,'PURGED');
+ assert.deepEqual(f.getRegistry().snapshot().runs.map(row=>row.runId),[f.peer.runId]);
 });

@@ -1,5 +1,11 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Complément2.4.5 : entretien explicite des anciens RUN fermés par lot, avec
+liste de RUN protégés et inventaire authentifié de leurs contextes/aliases.
+Le cycle conserve les gates, sessions partagées, rapports et statistiques
+historiques ; une seule bascule, puis certificat/finalize/verify. Voir
+[le nettoyage des RUN fermés](plugins/cab-approval-bridge/skills/approval-bridge/references/retired-run-cleanup.md).
+
 Complément2.4.4 : l’atelier reprend les outils/interpréteurs/bibliothèques
 locaux déclarés dans DEVOPS.md, avec préfixes et liens RO, catalogue/empreinte
 actualisés et reçus sans rejeu. Les accès Docker/LXC/PostgreSQL/périphériques

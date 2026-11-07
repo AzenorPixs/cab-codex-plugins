@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Entretien des RUN fermés SCM2.4.5
+
+[clean-retired-run-batches](openspec/changes/archive/2026-11-07-clean-retired-run-batches/), code non attribué : portée explicite de RUN fermés, aliases historiques, protections des chats/RUN conservés ; effacement authentifié et preuve de préservation. Prévol réel43RUN/88changes à retirer,8RUN protégés. Les opérations réelles restent distinctes de la qualification source.
+
+
 ## Ressources atelier SCM2.4.4
 
 [expose-devops-resources-in-atelier](openspec/changes/archive/2026-11-07-expose-devops-resources-in-atelier/), code non attribué : inventaire DEVOPS, runtimes RO, catalogue et reprise idempotente. Qualification locale réelle Python/Cython/Nuitka et ressources locales ; preuves externes distinctes. Livraison et activation suivent leurs reçus.
