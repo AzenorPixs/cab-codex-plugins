@@ -2,7 +2,7 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.4.18';
+export const VERSION = '2.4.19';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -254,10 +254,11 @@ export class RecoveryCoordinator {
     if (portAction) validatePortReview(body.review, run.ownerId);
     if (reviewAction) validateReviewStructure(body.review, run.ownerId);
     if ((reviewAction || portAction || boundaryAction) && !/^[a-f0-9]{64}$/.test(body.nativeBoundaryDigest || '')) fail('recovery-input-divergent');
+    if (body.permissionId !== undefined && (input.action !== 'withdraw-unissued-validation' || !id(body.permissionId))) fail('recovery-input-divergent');
     if (portAction && (!Array.isArray(body.probeOperationIds) || body.probeOperationIds.length !== 2 ||
         body.probeOperationIds[0] === body.probeOperationIds[1] || body.probeOperationIds.some(value => !id(value)))) fail('recovery-input-divergent');
     if (Object.keys(body).some(key => !['version', 'fencing', 'transactionId', 'operationId', 'evidence',
-      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest', ...(input.action === 'release-access' ? ['outcome'] : []), ...(reviewAction || portAction || boundaryAction ? ['review','nativeBoundaryDigest'] : []), ...(portAction ? ['probeOperationIds'] : [])].includes(key))) fail('recovery-input-divergent');
+      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest', ...(input.action === 'release-access' ? ['outcome'] : []), ...(input.action === 'withdraw-unissued-validation' ? ['permissionId'] : []), ...(reviewAction || portAction || boundaryAction ? ['review','nativeBoundaryDigest'] : []), ...(portAction ? ['probeOperationIds'] : [])].includes(key))) fail('recovery-input-divergent');
     if (Object.hasOwn(body, 'token') || body.version !== undefined && body.version !== run.version) fail('recovery-input-divergent');
     if (input.action === 'release-access' && !['COMPLETED','RECONCILED'].includes(body.outcome)) fail('recovery-input-divergent');
     body.version = run.version;

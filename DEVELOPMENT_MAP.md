@@ -1354,3 +1354,5 @@ flowchart LR
 [guard-permission-receipt-erasure](openspec/changes/archive/2026-11-07-guard-permission-receipt-erasure/), code non attribué : protection de l'intégrité des reçus natifs pendant le nettoyage ; source et tests qualifiés, activation à vérifier séparément.
 
 [close-treated-incidents-without-fix](openspec/changes/archive/2026-11-07-close-treated-incidents-without-fix/), code non attribué : réponse puis clôture et nettoyage individuel ou par lot de la file CCAB ; activation à vérifier séparément.
+
+[scope-recovery-permission-receipt](openspec/changes/archive/2026-11-07-scope-recovery-permission-receipt/), code non attribué : preuve de rejet ciblée malgré des reçus étrangers illisibles ; activation et reprise du déclarant à vérifier séparément.

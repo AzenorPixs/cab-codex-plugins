@@ -57,6 +57,8 @@ flowchart LR
 [guard-permission-receipt-erasure](changes/archive/2026-11-07-guard-permission-receipt-erasure/), code non attribué : reçu natif valide retiré entier uniquement pour la session cible ; livraison et activation à vérifier séparément.
 
 [close-treated-incidents-without-fix](changes/archive/2026-11-07-close-treated-incidents-without-fix/), code non attribué : clôture et nettoyage des entrées CCAB traitées, individuellement ou par lot ; activation à vérifier séparément.
+
+[scope-recovery-permission-receipt](changes/archive/2026-11-07-scope-recovery-permission-receipt/), code non attribué : observation ciblée d'un reçu de rejet ; activation et reprise à vérifier séparément.
 1068 tests produit réussis ; purge ciblée après nettoyage OC, réancrage authentifié,
 pairs et protections conservés. Publication, CABU et reprise métier distincts ;
 voir QUALIFICATION.md et DELIVERY.md. Convergence ACL ultérieure.

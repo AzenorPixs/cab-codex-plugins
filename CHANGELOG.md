@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.19 - 2026-11-07
+
+- Permettre la vérification ciblée d'un reçu de rejet pour une réconciliation propriétaire, même si d'autres enveloppes sont illisibles.
+
 ## 2.4.18 - 2026-11-07
 
 - Permettre la clôture CCAB sans correctif et le nettoyage des entrées traitées, individuellement, par lot ou globalement sous contrôle.

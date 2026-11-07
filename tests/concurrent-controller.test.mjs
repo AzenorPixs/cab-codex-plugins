@@ -4172,6 +4172,16 @@ async function unissuedWithdrawalFixture(t,decision='approved') {
  const payload={actionId:'withdraw-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/future-server-withdrawal']}};
  return{h,run,approval,base,payload};
 }
+test('retrait ciblé : reçu absent refuse le retrait sans modifier opération ou accès',async t=>{
+ const {h,approval,base,payload}=await unissuedWithdrawalFixture(t,'approved');
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id+'&permissionId=per_missing')).body;
+ assert.equal(evidence.replyError,'permission-reply-journal-unavailable');
+ payload.input.nativeBoundaryDigest=evidence.nativeBoundaryDigest;payload.input.permissionId='per_missing';
+ const result=await h.post(base+'/recovery/action',payload);
+ assert.equal(result.status,409,JSON.stringify(result));
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'PREPARED');
+ assert.equal(h.native.replies.length,0);
+});
 test('retrait terminal rejeté sans émission : décision historique conservée, reprise sans once',async t=>{
  const{h,approval,base,payload}=await unissuedWithdrawalFixture(t,'rejected');
  const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
@@ -4389,6 +4399,25 @@ async function rejectedEditFixture(t,{attached=false,referenceOnly=false,lineEnd
  const payload={actionId:'withdraw-refused-edit',ownerId:run.ownerId,policyId:'refused-edit-policy',boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/rejected-edit']}};
  return{h,run,base,approval,payload,evidence,parent,access};
 }
+test('retrait write ciblé : reçu exact valide malgré enveloppe étrangère invalide',async t=>{
+ const {h,base,approval,payload,access}=await rejectedEditFixture(t,{nativeWrite:true,dedicated:true});
+ const dir=join(runtimeStateDirectory(h.directory),'permission-replies'),unknown=join(dir,'a'.repeat(64)+'.json');
+ writeFileSync(unknown,JSON.stringify({digest:'b'.repeat(64)}),{mode:0o600});
+ const global=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body;
+ assert.equal(global.replyError,'permission-reply-journal-unavailable');
+ const targeted=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id+'&permissionId=per_refused_edit')).body;
+ assert.equal(targeted.replyError,null);assert.equal(targeted.replyScopePermissionId,'per_refused_edit');
+ assert.equal(targeted.replyReceipts[0].state,'ACKNOWLEDGED');
+ const wrong=structuredClone(payload);wrong.actionId='withdraw-wrong-permission';wrong.input.permissionId='per_other';wrong.input.nativeBoundaryDigest=targeted.nativeBoundaryDigest;
+ assert.equal((await h.post(base+'/recovery/action',wrong)).status,409);
+ assert.equal((await h.get('/runs')).body.coordination.operations[approval.operation_id].state,'PREPARED');
+ payload.input.permissionId='per_refused_edit';payload.input.nativeBoundaryDigest=targeted.nativeBoundaryDigest;
+ const before=(await h.get('/runs')).body.coordination.accesses[access.accessId];
+ const result=await h.post(base+'/recovery/action',payload);
+ assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');
+ assert.deepEqual((await h.get('/runs')).body.coordination.accesses[access.accessId],before);
+ assert.equal(h.native.replies.length,1);assert.equal(existsSync(unknown),true);
+});
 test('retrait edit refusé : CANCELLED coordonnée, APPROVED conservé, reprise idempotente après redémarrage',async t=>{
  const{h,run,base,approval,payload,evidence}=await rejectedEditFixture(t);assert.equal(evidence.calls[0].tool,'edit');assert.equal(evidence.replyReceipts[0].state,'ACKNOWLEDGED');
  const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'CANCELLED');

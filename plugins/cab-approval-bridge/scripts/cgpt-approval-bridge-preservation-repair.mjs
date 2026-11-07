@@ -1,7 +1,7 @@
 /** Réparation additive sous preuves d’origine ; aucun effet métier émis. */
 import {createHash} from 'node:crypto';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
-export const VERSION='2.4.18';
+export const VERSION='2.4.19';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const ordered=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v);
 export const originalRecordDigest=value=>createHash('sha256').update(ordered(value).replace(/[^\x00-\x7f]/g,c=>'\\u'+c.charCodeAt(0).toString(16).padStart(4,'0'))).digest('hex');

@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.4.18';
+export const VERSION = '2.4.19';
 const protocol = 'cab-native-permission-reply-v1';
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code }); };
@@ -95,5 +95,15 @@ export class PermissionReplyJournal {
     const receipts = paths.slice(0, 5000).map(name => this.read(join(this.directory, name)))
       .filter(value => value?.sessionId === sessionId && value.directory === directory);
     return { receipts, truncated: paths.length > 5000 };
+  }
+  exact(sessionId, directory, permissionId) {
+    if (!id(sessionId) || !id(permissionId) || typeof directory !== 'string' || resolve(directory) !== directory)
+      fail('permission-reply-identity-invalid');
+    const identity = { sessionId, directory, permissionId, decision: 'reject' };
+    const value = this.read(this.path(identity));
+    if (!value || value.sessionId !== sessionId || value.directory !== directory ||
+        value.permissionId !== permissionId || value.decision !== 'reject')
+      fail('permission-reply-receipt-invalid');
+    return { receipts: [value], truncated: false };
   }
 }

@@ -128,6 +128,17 @@ restent soumises à leur revue, demande, accès et permission propres.
 
 ## Conserver les prochains refus natifs
 
+Si la projection globale des reçus est illisible mais que le propriétaire a
+identifié précisément la permission de rejet, lire
+`/recovery/native-evidence?operationId=<operation>&permissionId=<permission>`.
+Vérifier le reçu exact, le même appel natif, la cible, la session et les deux
+observations stables. Pour `withdraw-unissued-validation`, transmettre cette
+même `permissionId` dans `input` avec le `nativeBoundaryDigest` ciblé. Cette
+voie ne modifie pas les reçus inconnus et conserve tous les contrôles de
+rejet, d'accès et d'absence d'effet ; une identité erronée reste refusée.
+Un ancien actionId terminé en 409 ne devient pas un nouveau retrait : suivre
+le reçu et les règles de reprise avant toute nouvelle action qualifiée.
+
 Le client journalise reject par permission dans le sous-répertoire privé
 `permission-replies` du runtime CAB du workspace. L’option API
 permissionReceiptDirectory permet un stockage privé explicite (notamment en
