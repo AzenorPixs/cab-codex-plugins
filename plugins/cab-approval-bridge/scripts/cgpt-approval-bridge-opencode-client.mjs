@@ -8,7 +8,7 @@ import { hasNativeAsk, nativeAskState, scopedNativeReadRules, VERSION as PERMISS
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 import { ContinuityStore } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.4.13';
+export const VERSION = '2.4.14';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -189,6 +189,7 @@ function normalizePermission(permission) {
   const metadata = record(permission.metadata) ? { ...permission.metadata } : {};
   delete metadata.nativeToolInputSha256;
   delete metadata.nativeSourceVerified;
+  delete metadata.nativeShellResourceCount;
   if (permission.action === 'edit' && typeof metadata.filepath !== 'string' && permission.resources.length === 1) {
     metadata.filepath = permission.resources[0];
   }
@@ -1041,6 +1042,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
           fail('opencode-permission-target-invalid');
         }
         permission.metadata.command = input.command;
+        permission.metadata.nativeShellResourceCount = raw.resources.length;
         permission.metadata.shellBackground = input.background === true;
         permission.metadata.shellTimeout = input.timeout;
         permission.metadata.nativeToolInputSha256 = nativeToolInputDigest(input);

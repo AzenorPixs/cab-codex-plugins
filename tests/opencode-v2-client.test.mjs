@@ -1,3 +1,4 @@
+import {shellPermissionMayReceiveOnce} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs';
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, chmodSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -1104,9 +1105,9 @@ test('shell multi-ressources : couverture exacte, source et refus', async t => {
   let resources=['printf a','printf b','printf c'],sourceId='call_native';
   const client=createOpenCodeV2Client({baseUrl:'http://127.0.0.1:4096',directory:'/workspace',passwordFile:f.passwordFile,
     fetchImpl:async u=>new URL(u).pathname==='/api/info'?json(info):new URL(u).pathname==='/api/permission/request'
-      ?json({location,data:[{id:'per_native',sessionID:'ses_code',action:'shell',resources,source:{type:'tool',messageID:'msg_native',id:'call_native'}}]})
+      ?json({location,data:[{id:'per_native',sessionID:'ses_code',action:'shell',resources,metadata:{nativeShellResourceCount:1},source:{type:'tool',messageID:'msg_native',id:'call_native'}}]})
       :json({data:{id:'msg_native',type:'assistant',content:[{type:'tool',id:sourceId,name:'shell',executed:false,time:{created:1,ran:2},state:{status:'running',input,metadata:{}}}]}})});
-  let result=(await client.permissions('/workspace',{sessionIds:['ses_code']}))[0];assert.equal(result.metadata.command,input.command);assert.equal(result.metadata.nativeToolInputSha256,nativeToolInputDigest(input));
+  let result=(await client.permissions('/workspace',{sessionIds:['ses_code']}))[0];assert.equal(result.metadata.nativeShellResourceCount,3);assert.equal(shellPermissionMayReceiveOnce(result),false);assert.equal(result.metadata.command,input.command);assert.equal(result.metadata.nativeToolInputSha256,nativeToolInputDigest(input));
   for(const bad of [['printf a','printf c'],['printf a','printf b','printf changed'],['printf c','printf b','printf a'],['printf a','printf b','printf c','extra'],['printf a','','printf c']]){resources=bad;await assert.rejects(client.permissions(),{code:'opencode-permission-target-invalid'});}
   resources=['printf a','printf b','printf c'];sourceId='other';await assert.rejects(client.permissions(),{code:'opencode-permission-source-invalid'});
 });

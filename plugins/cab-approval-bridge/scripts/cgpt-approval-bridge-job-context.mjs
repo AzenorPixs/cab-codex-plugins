@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.4.13";
+export const VERSION = "2.4.14";
 export function pendingReconciliationEffects({currentMandate,reconcilingCount,unmatchedCount,validations,decisionFor,ignoredRequestIds}){
   const ignored=new Set(ignoredRequestIds);
   return Boolean(currentMandate||reconcilingCount||unmatchedCount||validations.some(v=>{
@@ -95,6 +95,10 @@ export function nativeSnapshotLookup(part) {
   let value;try{value=JSON.parse(state.output);}catch{return false;}
   return value?.snapshot_only===true && typeof value.found==='boolean' &&
     (!value.found || keys.every(key=>value[key]===state.input[key]));
+}
+
+export function shellPermissionMayReceiveOnce(permission) {
+  return !(permission?.permission === 'bash' && permission?.metadata?.nativeShellResourceCount > 1);
 }
 
 export function createJobContext({ workspace, stateDirectory, run = null,
@@ -1677,7 +1681,7 @@ async function recoverJob(payload) {
 }
 
 function matchesApprovedOperation(permission, operation) {
-  if (!operation || job?.revokedSessions?.includes(operation.sessionId) ||
+  if (!shellPermissionMayReceiveOnce(permission) || !operation || job?.revokedSessions?.includes(operation.sessionId) ||
       permission.sessionID !== operation.sessionId) {
     return false;
   }

@@ -84,9 +84,10 @@ Un erasure-operation-unreconciled peut signaler l’ancien format COMPLETED sans
 
 Différentiel de préservation ou impasse après intégrité réparée : [réparation bornée](preservation-repair.md). Les protections locales restent inchangées ; aucune ancienne once n’est rejouée.
 
-Une permission shell peut présenter plusieurs ressources. Le client accepte
+Une permission shell peut présenter plusieurs ressources. Le client observe
 uniquement leur couverture littérale complète et ordonnée de la commande native,
-sous identité SID/message/call et empreinte d’entrée vérifiées. En cas d’écart,
+sous identité SID/message/call et empreinte d’entrée vérifiées. Une permission shell à plusieurs ressources ne reçoit jamais once ;
+la voie propriétaire de rejet reste disponible. En cas d’écart,
 conserver la permission et diagnostiquer ; ne jamais émettre once pour forcer la
 convergence. Les observations simultanées et diagnostics identiques répétés sont
 évités ; une erreur conserve les protections et une observation réussie rétablit

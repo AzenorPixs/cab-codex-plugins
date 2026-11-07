@@ -1,4 +1,4 @@
-# Préservation et réparation — CAB2.4.13
+# Préservation et réparation — CAB2.4.14
 
 Avant un effacement, vérifier la préservation des valeurs appartenant aux RUN protégés même si leur clé est une identité secondaire cible. Un contrôle d’absence n’autorise pas la disparition d’un pair. Après un échec du différentiel, suspendre les nouvelles purges et la restitution de succès ; conserver les progrès des pairs.
 
