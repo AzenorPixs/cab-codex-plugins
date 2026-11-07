@@ -1,5 +1,8 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Admission conservée SCM2.4.9
+[preserve-admitted-dependencies-after-erasure](openspec/changes/archive/2026-11-07-preserve-admitted-dependencies-after-erasure/) : restauration PA01 après purge43/8, aucune dépendance effacée ou inventée, récupération bornée puis CABU.
+
 ## Propriété primaire SCM2.4.8
 [retain-primary-ownership-in-retired-erasure](openspec/changes/archive/2026-11-07-retain-primary-ownership-in-retired-erasure/) : conservation des8RUN, collisions historiques et sentinelles ; reprise du même reçu43/8.
 

@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.9
+- Résoudre les dépendances depuis OpenSpec, sans conférer d’autorité à l’historique CAB ; conserver les contrôles sémantiques et techniques.
+- Profil de récupération5 sous empreinte et reçu signés, avant CABU9.
+
 ## 2.4.8
 - Conservation primaire des pairs en cas de collision historique de SID/opération ; sentinelles textuelles non identifiantes exclues du lot.
 

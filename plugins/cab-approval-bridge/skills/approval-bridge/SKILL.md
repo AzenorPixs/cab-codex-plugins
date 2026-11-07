@@ -5,12 +5,11 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.4.8. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.4.9. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
-ORCHESTRATED_CODING.md n'est nécessaire. Une session directe SCM n'active pas
-ce skill par la seule présence du projet CAB.
+ORCHESTRATED_CODING.md n'est nécessaire. 
 
 Charger [autonomie et ateliers](references/autonomy-and-ateliers.md) au
 démarrage/reprise/update. Vérifier les versions actives, dont SGS/CCAB.
@@ -48,3 +47,5 @@ externe transformé rétroactivement en reçu CAB.
 Atelier : [ressources DEVOPS](references/devops-resources.md), outils RO et
 catalogue actualisé ; accès externes par CAB, sans secrets ni socket hôte.
 Les voies spécialisées de retrait, SID, transport et attente sont dans l’index.
+
+Dépendances : [OpenSpec](references/dependency-authority.md).
