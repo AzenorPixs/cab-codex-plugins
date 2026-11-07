@@ -1,5 +1,8 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Propriété primaire SCM2.4.8
+[retain-primary-ownership-in-retired-erasure](openspec/changes/archive/2026-11-07-retain-primary-ownership-in-retired-erasure/) : conservation des8RUN, collisions historiques et sentinelles ; reprise du même reçu43/8.
+
 ## Conservation des pairs SCM2.4.7
 [retain-protected-peer-audit-references](openspec/changes/archive/2026-11-07-retain-protected-peer-audit-references/) : correctif minimal du codec, sans effacement des références nécessaires aux8RUN protégés.
 

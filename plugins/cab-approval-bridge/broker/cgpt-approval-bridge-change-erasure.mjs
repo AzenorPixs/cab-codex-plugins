@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.7';
+export const VERSION = '2.4.8';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -21,7 +21,7 @@ const ownerKeys = new Set(['runId','run_id','changeId','change_id']);
 const identityLists=new Set(['runIds','run_ids','scopeRunIds','sessionIds','session_ids','operationIds','requestIds','approvalIds','revokedSessions','sourceSessions','onceAcknowledged','restoredAccesses']);
 const unambiguousId=value=>typeof value==='string'&&(value.length>=16||/^(?:ses_|op-|req-|request-|approval-|apr-|call_|job-|policy-|access-|erasure-|run-)/.test(value));
 const terminalOperations = new Set(['COMPLETED','NO_EFFECT','RECONCILED','CANCELLED']);
-const effectiveIds=scope=>scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.ids.filter(id=>!(scope.sharedIdentityIds||[]).includes(id)):scope.ids;
+const effectiveIds=scope=>scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.ids.filter(id=>!['null','undefined'].includes(id)&&!(scope.sharedIdentityIds||[]).includes(id)):scope.ids;
 const secondaryRetentionId=id=>identifier(id)&&!id.startsWith('ses_');
 export function reconcileRetiredRetention(value,{sharedIdentityIds,evidence,ownerStatus}){
   if(value?.scope?.closureAuthority!=='authoritative-retired-run-batch-v1'||value.brokerTransport!=='owner-local-v1'||!['SEALED','FREEZING'].includes(value.phase)||
@@ -199,7 +199,7 @@ export function extendErasureScope(scope, documents) {
   do {
     changed = false;
     const collect = value => {
-      if (!value || typeof value !== 'object') return;
+      if (!value || typeof value !== 'object'||retainedPeer(value,scope)) return;
       if(owned(value)&&typeof value.directory==='string'&&value.directory!==scope.workspace)fail('erasure-foreign-reference');
       if (owned(value)) for (const [key,item] of Object.entries(value)) if (identityKeys.has(key) && identifier(item) && !ids.has(item)&&!shared.has(item)) {
         if (ownerKeys.has(key)) fail('erasure-foreign-reference');
@@ -223,8 +223,7 @@ function retainedPeer(node,scope) {
   const runs=['runId','run_id'].filter(key=>typeof node[key]==='string').map(key=>node[key]);
   if(!runs.length||!runs.every(id=>id===runs[0]&&scope.protectedRunIds.includes(id)))return false;
   if(typeof node.directory==='string'&&node.directory!==scope.workspace)return false;
-  const ids=new Set(effectiveIds(scope));
-  return !Object.entries(node).some(([key,value])=>identityKeys.has(key)&&ids.has(value));
+  return true;
 }
 
 // Only typed identity ownership selects records. Unclassified textual references
@@ -235,7 +234,7 @@ export function projectErasure(value, scope) {
     typeof node.id==='string'&&node.id.startsWith('ses_')&&ids.has(node.id)&&node.directory===scope.workspace);
   const foreign = node => record(node) && Object.entries(node).some(([key,item]) => ownerKeys.has(key) && typeof item === 'string' && !ids.has(item)&&
     !(['changeId','change_id'].includes(key)&&scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.changeIds.includes(item)));
-  const contains=(node,predicate)=>predicate(node)||node&&typeof node==='object'&&Object.values(node).some(item=>contains(item,predicate));
+  const contains=(node,predicate)=>retainedPeer(node,scope)?predicate===foreign:predicate(node)||node&&typeof node==='object'&&Object.values(node).some(item=>contains(item,predicate));
   const related=node=>own(node)||typeof node==='string'&&unambiguousId(node)&&ids.has(node);
   const visit = (node,parentKey='') => {
     if(retainedPeer(node,scope))return node;
@@ -353,6 +352,7 @@ export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sour
   const files = [...new Set(roots.flatMap(root=>erasureFiles(root,{legacy:legacyRoots.some(legacy=>root===legacy||root.startsWith(legacy+'/')),sourceArtifacts:sourceArtifactRoots.includes(root)})))].filter(path => !excluded.has(path));
   const documents = [];
   for (const path of files) {
+    if(scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.protectedRunIds.some(id=>path.includes('/runs/'+id+'/')))continue;
     const explicitFile=roots.includes(path)&&lstatSync(path).isFile();
     // Locks and global keys contain no business state; they are never rewritten.
     if (/\.(?:lock|sock)$/.test(path)) continue;
