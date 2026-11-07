@@ -26,8 +26,11 @@ présentée au développeur avec le point précis et les alternatives autorisée
 
 ## Coordination lorsqu'elle est demandée
 
-Un problème CAB ne crée pas automatiquement un chat de correction et ne
-transmet aucun message à une autre session. Lorsqu'une telle coordination
+Un problème CAB ne crée pas automatiquement un chat de correction. Pour un
+incident CCAB déclaré, la coordination nécessaire avec le correcteur désigné
+est autorisée par le développeur même entre projets, selon
+[coordination CCAB](protocol-coordination.md#coordination-ciblée-avec-le-correcteur-ccab).
+Hors de cette exception, lorsqu'une telle coordination
 est explicitement demandée, rechercher la cible désignée, y compris les
 résultats archivés accessibles, vérifier son contexte et éviter tout doublon.
 Une création de chat exige la demande explicite correspondante. Une clôture

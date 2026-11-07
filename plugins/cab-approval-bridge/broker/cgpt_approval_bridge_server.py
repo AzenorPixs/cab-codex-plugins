@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.4.19"
+SERVER_VERSION = "2.4.20"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "

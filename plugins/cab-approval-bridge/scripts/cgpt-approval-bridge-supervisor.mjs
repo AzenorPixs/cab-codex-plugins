@@ -1,13 +1,13 @@
 import {runtimeStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import {ensureProjectTestRoot} from './cgpt-approval-bridge-autonomy.mjs';
-import { followOpenCodeLifetime, boundedCleanup, closeHttpServer, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
+import { followOpenCodeRestart, boundedCleanup, closeHttpServer, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import { createServer } from 'node:http';
 import { isAbsolute, join } from 'node:path';
 import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-approval-bridge-supervisor-context.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-const version = "2.4.19";
+const version = "2.4.20";
 if ([CONTEXT_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB supervisor component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -35,10 +35,11 @@ let pollTimer;
 let concurrent = false;
 let reconcileInFlight = false;
 let publicError = null;
+let nativeRestartPending = true, nativeRestartLocation = null;
 const statistics=new StatisticsBackend(workspace,'supervisor-statistics');
 let reconciliations=0,reconciliationFailures=0;
 async function reconcileAll() {
-  if (closing || reconcileInFlight) return;
+  if (closing || reconcileInFlight || nativeRestartPending) return;
   reconcileInFlight = true;
   const started=performance.now();
   reconciliations++;
@@ -46,7 +47,7 @@ async function reconcileAll() {
     const response = await fetch(controllerUrl + '/status', { signal: AbortSignal.any([transportAbort.signal, AbortSignal.timeout(10000)]) });
     if (!response.ok) throw new Error('controller-unavailable');
     const status = await response.json();
-    if (closing) return;
+    if (closing || nativeRestartPending) return;
     concurrent = status.mode === 'concurrent';
     if (!concurrent) { await legacy.reconcile(); return; }
     const active = new Set(Object.keys(status.runs || {}));
@@ -60,7 +61,7 @@ async function reconcileAll() {
     await Promise.all([...contexts.values()].map((context) => context.reconcile()));
     publicError = null;
   } catch {
-    if (closing) return;
+    if (closing || nativeRestartPending) return;
     reconciliationFailures++;
     publicError = 'controller-reconciliation-failed';
     if (!concurrent) await legacy.reconcile();
@@ -77,6 +78,10 @@ async function consumeEvents() {
   if (closing) return;
   try {
     const response = await openCode.events();
+    const followed = lifetime.snapshot().identity;
+    if (nativeRestartPending || !followed || (await openCode.info(true)).pid !== followed.pid) {
+      await response.body?.cancel(); void lifetime.check(); throw new Error('opencode-restart-pending');
+    }
     const decoder = new TextDecoder();
     let buffer = '';
     for await (const chunk of response.body) {
@@ -85,6 +90,7 @@ async function consumeEvents() {
       buffer = frames.pop() || '';
       if (buffer.length > 1024 * 1024) throw new Error('SSE frame too large');
       for (const frame of frames) {
+        if (nativeRestartPending) continue;
         if (concurrent) await Promise.all([...contexts.values()].map((c) => c.observe(frame)));
         else await legacy.observe(frame);
       }
@@ -128,7 +134,17 @@ async function shutdown() {
     process.exit(SHUTDOWN_INCOMPLETE);
   }
 }
-const lifetime = followOpenCodeLifetime(openCode, { onExit: shutdown,
+const lifetime = followOpenCodeRestart(openCode, {
+  onLost: async () => {
+    nativeRestartPending = true;
+    await Promise.all((concurrent ? [...contexts.values()] : [legacy]).map(context => context.disconnected()));
+  },
+  onAttach: async () => {
+    const location = await openCode.sharedMcpDirectory();
+    if (nativeRestartLocation !== null && nativeRestartLocation !== location) return false;
+    nativeRestartLocation = location; return true;
+  },
+  onReady: () => { nativeRestartPending = false; void reconcileAll(); },
   onDiagnostic: (code) => process.stderr.write(code + '\n') });
 lifetime.start();
 process.on('SIGTERM', () => { void shutdown(); });

@@ -108,6 +108,16 @@ est terminé.
 
 ## Outils natifs et catalogue MCP
 
+Une règle de session globale `* ask` peut demander une permission pour un
+sous-outil MCP CAB avant même son admission ; `* deny` peut empêcher Code Mode.
+Une erreur ou une permission native refusée ne prouve donc pas l'absence
+d'`execute`. Vérifier le wrapper et la politique réelle de la session. Pour une
+candidate de transfert qualifiée, prévoir des autorisations ciblées pour les
+seuls outils Code Mode et méthodes CAB nécessaires ; conserver `shell` et
+`edit` en ASK, les accès web sous validation et les méthodes de décision hors
+des autorisations du codeur. Ne modifier ni configuration globale ni décision
+historique ; suivre [le transfert propriétaire](session-handoff.md) si requis.
+
 Le client installé exporte nativeCodingMandate(instruction). Utiliser explicitement ce helper pour préparer le texte d’un nouveau mandat avant client.prompt ; le texte fourni reste conservé intégralement après le préambule. Les prompts historiques ne sont pas modifiés implicitement. Le préambule rappelle que write/edit/shell sont des outils natifs distincts de search/execute MCP ; une recherche MCP vide n’établit pas leur absence. Vérifier le catalogue natif transmis au modèle si l’outil est réellement absent. Ne pas substituer shell à write, changer de cible ou chercher indéfiniment. Garder les schémas natifs observés : write {path,content}, edit {path,oldString,newString}, shell {command}. Ce rappel n’autorise aucune opération.
 
 Le codeur produit un contenu complet, l’orchestrateur le revoit. Si les longs arguments sont instables, préparer un NOUVEAU payload explicitement Bash par la procédure exact-shell-carrier.md : octets scellés revus et invocation courte, décision sur les effets réels, ressources, accès et once. Cette conversion nécessite son propre mandat ; ne pas réinterpréter une ancienne autorisation write en Bash. Le modèle ne complète jamais le fragment d’un fichier refusé pour le faire passer.

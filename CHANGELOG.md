@@ -1,5 +1,17 @@
 # Historique des versions
 
+## 2.4.20 - 2026-11-08
+
+- Maintenir les briques CAB lors du redémarrage d'OpenCode et vérifier la nouvelle identité, le broker et les sessions avant reprise sans rejeu.
+- Détecter les règles de session qui bloquent les appels MCP nécessaires et autoriser la coordination ciblée CCAB entre projets sans sollicitation répétée.
+- Qualifier la récupération d'un rejet antérieur au redémarrage et distinguer les essais d'atelier confinés et lectures tronquées des écritures projet.
+
+## 2.4.20 - 2026-11-07
+
+- Maintenir les services CAB pendant un redémarrage OpenCode et vérifier l'instance, le broker et chaque session avant reprise.
+- Détecter au prévol les règles de session qui bloquent les appels MCP CAB et autoriser la coordination ciblée entre déclarant et correcteur CCAB, même entre projets.
+- Distinguer les essais d'atelier confinés et les lectures tronquées d'un write refusé ; qualifier son reçu exact après disparition vérifiée de l'ancien PID.
+
 ## 2.4.19 - 2026-11-07
 
 - Permettre la vérification ciblée d'un reçu de rejet pour une réconciliation propriétaire, même si d'autres enveloppes sont illisibles.

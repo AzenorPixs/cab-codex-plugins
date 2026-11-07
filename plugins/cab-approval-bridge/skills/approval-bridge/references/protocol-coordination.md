@@ -64,9 +64,24 @@ périmètre de travail du destinataire. Chaque session vérifie ses propres
 autorisations avant d'exécuter une correction ou une maintenance. Les
 mandats unitaires, permissions natives, validations OpenSpec, opérations Git
 et règles de quiescence restent applicables. Cet accord ne couvre pas les
-échanges avec un autre projet, un autre orchestrateur ou un tiers ; il ne
+échanges avec un autre projet, un autre orchestrateur ou un tiers, sauf
+l'exception CCAB ci-dessous ; il ne
 crée aucun nouveau chat ou RUN, ne lance aucun prompt et n'autorise aucun
 arrêt ou redémarrage d'une autre session ou d'un service partagé.
+
+### Coordination ciblée avec le correcteur CCAB
+
+Le développeur autorise durablement les échanges nécessaires entre le
+déclarant d'un incident CCAB et le correcteur CCAB qu'il a désigné, même si
+leurs chats relèvent de projets différents ou d'orchestrateurs distincts.
+Ne pas redemander cet accord pour chaque incident ou réponse. Vérifier le
+destinataire et son rôle à partir de la déclaration et des informations
+accessibles ; transmettre seulement identifiants, diagnostics et preuves
+nécessaires, sans secret ni contenu métier superflu. La déclaration n'autorise
+ni la création d'un chat, ni une modification hors mandat, ni un envoi à un
+tiers non désigné. Les contrôles et permissions techniques de la plateforme
+restent applicables ; ne pas prétendre qu'un message a été transmis en cas
+d'échec ou de permission technique refusée.
 
 ### Conservation et vérification des accords
 
@@ -86,7 +101,7 @@ métier et ses barrières propres, sans redéfinir ces procédures techniques.
 Vérifier les accords applicables avant les échanges, sans les réinventer ni
 les étendre. Transmettre seulement les éléments nécessaires dans les limites
 d'AGENTS.md, sans secret ni source exclue. Un accord ne s'étend pas implicitement
-à un autre projet, prompt ou destinataire. En cas d'accord manquant, demander
+à un autre projet, prompt ou destinataire, hors exception CCAB ci-dessus. En cas d'accord manquant, demander
 uniquement la décision nécessaire avant l'échange concerné.
 
 ### Barrières propres au prompt

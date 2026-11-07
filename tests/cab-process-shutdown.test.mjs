@@ -58,15 +58,75 @@ async function setup(t, { initialOutage = false, codingServer = false } = {}) {
   }
   // Each service must have time to latch the real native fixture PID.
   await until(() => infoRequests >= 3); await delay(600);
-  return { directory, services, native, bases, stop, errors };
+  const restartNative = async (missingSession = '') => {
+    await stop(native, 'SIGKILL');
+    const replacement = fork(join(root, 'tests/helpers/lifecycle-opencode-server.mjs'), [directory,String(nativePort),missingSession],
+      { stdio: ['ignore', 'ignore', 'pipe', 'ipc'], env: fixtureEnvironment });
+    children.push(replacement);
+    await new Promise((resolve,reject)=>{replacement.once('message',resolve);replacement.once('error',reject)});
+    return replacement;
+  };
+  return { directory, services, native, bases, stop, errors, restartNative };
 }
 
+test('redémarrage OpenCode : services et RUN conservés sans rejeu', { timeout: 15000 }, async t=>{
+ const f=await setup(t), pids=Object.fromEntries(Object.entries(f.services).map(([k,v])=>[k,v.pid]));
+ const response=await fetch(f.bases.controller+'/runs/reserve',{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify({runId:'restart-run',ownerId:'owner',sessionId:'ses_restart',directory:f.directory,changeId:'change-restart',
+   selectionKey:'restart',dependsOn:[],resources:[{key:'file:src/a',mode:'write'},{key:'browser:host-a/chromium',mode:'write'}],exclusiveResources:['file:src/a']})});
+ assert.equal(response.status,201,await response.clone().text());const run=await response.json();
+ const leaseResponse=await fetch(f.bases.controller+'/runs/restart-run/test-resources/acquire',{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify({version:run.version,transactionId:'restart-browser',resources:[{key:'browser:host-a/chromium',mode:'write'}],evidence:['fixture']})});
+ assert.equal(leaseResponse.status,200,await leaseResponse.clone().text());const lease=await leaseResponse.json();
+ await f.stop(f.native,'SIGKILL');
+ await until(async()=>{const d=await (await fetch(f.bases.controller+'/runs/restart-run/status')).json();return d.nativeRestart?.state==='WAITING';});
+ const blocked=await fetch(f.bases.controller+'/runs/reserve',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+ assert.equal(blocked.status,503);
+ const replacement=await f.restartNative();
+ await until(async()=>{const d=await (await fetch(f.bases.controller+'/runs/restart-run/status')).json();return d.nativeRestart?.state==='VERIFIED'&&d.nativeRestart.pid===replacement.pid;},10000);
+ for(const [name,child] of Object.entries(f.services)){assert.equal(child.pid,pids[name]);assert.equal(child.exitCode,null)}
+ const staleBroker=await fetch(f.bases.controller+'/broker/readiness',{method:'POST',headers:{'content-type':'application/json'},
+  body:JSON.stringify({status:'READY',broker_process:{pid:process.pid}})});
+ assert.equal(staleBroker.status,503);assert.equal((await staleBroker.json()).error,'opencode-restart-broker-identity-unverified');
+ const runs=await (await fetch(f.bases.controller+'/runs')).json();assert.ok(runs.runs.some(x=>x.runId==='restart-run'&&x.sessionId==='ses_restart'));
+ assert.equal(Object.keys(runs.coordination.operations).length,0);
+ const leaseAfter=runs.coordination.testReservations['restart-browser'];assert.equal(leaseAfter.state,'HELD');assert.equal(leaseAfter.fencing,lease.fencing);
+ const status=await (await fetch(f.bases.controller+'/runs/restart-run/status')).json();
+ assert.notEqual(status.coordination.reason,'test-reconciliation-required');
+});
+
+test('redémarrage : session manquante isolée puis reprise après vérification', { timeout: 15000 }, async t=>{
+ const f=await setup(t);
+ for(const id of ['a','b']){
+  const response=await fetch(f.bases.controller+'/runs/reserve',{method:'POST',headers:{'content-type':'application/json'},
+   body:JSON.stringify({runId:id,ownerId:'owner-'+id,sessionId:'ses_'+id,directory:f.directory,changeId:'change-'+id,
+    selectionKey:id,dependsOn:[],resources:[{key:'file:src/'+id,mode:'write'}],exclusiveResources:['file:src/'+id]})});
+  assert.equal(response.status,201,await response.text());
+ }
+ await f.stop(f.native,'SIGKILL');
+ await until(async()=>{const d=await (await fetch(f.bases.controller+'/runs/a/status')).json();return d.nativeRestart?.state==='WAITING';});
+ const replacement=await f.restartNative('ses_b');
+ await until(async()=>{const d=await (await fetch(f.bases.controller+'/runs/b/status')).json();return d.nativeRestart?.state==='SESSION_UNVERIFIED';},10000);
+ const a=await (await fetch(f.bases.controller+'/runs/a/status')).json();assert.equal(a.nativeRestart.state,'VERIFIED');
+ const blocked=await fetch(f.bases.controller+'/runs/b/locks/acquire',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});assert.equal(blocked.status,503);
+ const independent=await fetch(f.bases.controller+'/runs/a/locks/acquire',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});assert.notEqual(independent.status,503);
+ replacement.send('restore-session');
+ await until(async()=>{const d=await (await fetch(f.bases.controller+'/runs/b/status')).json();return d.nativeRestart?.state==='VERIFIED';},8000);
+});
+
+test('identité HTTP divergente : mutation refusée même si ancien processus vivant', {timeout:15000}, async t=>{
+ const f=await setup(t);
+ await new Promise(resolve=>{const listener=value=>{if(value.pidDiverged){f.native.off('message',listener);resolve();}};f.native.on('message',listener);f.native.send('diverge-pid')});
+ const response=await fetch(f.bases.controller+'/runs/reserve',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});
+ assert.equal(response.status,503);assert.equal((await response.json()).error,'opencode-restart-reconciliation-required');
+});
+
 for (const signal of ['normal', 'SIGKILL']) {
-  test(`fin serveur ${signal} : services et helper terminent, deux RUN conservés`, { timeout: 15000 }, async (t) => {
+  test(`fin serveur ${signal} : services en attente, deux RUN conservés puis arrêt explicite`, { timeout: 15000 }, async (t) => {
     const f = await setup(t);
     const state = join(runtimeStateDirectory(f.directory));
     const helperPids = (await readFile(`/proc/${f.services.controller.pid}/task/${f.services.controller.pid}/children`, 'utf8')).trim().split(/\s+/).filter(Boolean);
-    assert.equal(helperPids.length, 1);
+    assert.ok(helperPids.length >= 1);
     for (const id of ['a', 'b']) {
       const response = await fetch(f.bases.controller + '/runs/reserve', { method: 'POST',
         headers: { 'content-type': 'application/json' }, body: JSON.stringify({ runId: id, ownerId: 'codex-' + id,
@@ -94,10 +154,13 @@ for (const signal of ['normal', 'SIGKILL']) {
     }
     const registryPath = join(state, 'controller-runs.json');
     const before = JSON.parse(await readFile(registryPath, 'utf8'));
-    const started = performance.now();
-    const exits = Object.values(f.services).map((child) => once(child, 'exit'));
     if (signal === 'normal') { const done = once(f.native, 'exit'); f.native.send('exit'); await done; }
     else await f.stop(f.native, signal);
+    await until(async()=>{const d=await (await fetch(f.bases.controller+'/runs/a/status')).json();return d.nativeRestart?.state==='WAITING';});
+    for(const child of Object.values(f.services))assert.equal(child.exitCode,null);
+    const started = performance.now();
+    const exits = Object.values(f.services).map((child) => once(child, 'exit'));
+    for(const child of Object.values(f.services))child.kill('SIGTERM');
     const results = await Promise.all(exits);
     assert.ok(performance.now() - started < 5000);
     assert.deepEqual(results, [[0, null], [0, null], [0, null]], f.errors.join(''));
@@ -146,9 +209,12 @@ test('les unités empêchent la relance du statut de nettoyage incomplet', async
 test('le contrôleur attend également la sortie de son app server dédié', { timeout: 15000 }, async (t) => {
   const f = await setup(t, { codingServer: true });
   const children = (await readFile(`/proc/${f.services.controller.pid}/task/${f.services.controller.pid}/children`, 'utf8')).trim().split(/\s+/).filter(Boolean);
-  assert.equal(children.length, 2);
-  const exits = Object.values(f.services).map((child) => once(child, 'exit'));
+  assert.ok(children.length >= 2);
   await f.stop(f.native, 'SIGKILL');
+  await delay(700);
+  for(const child of Object.values(f.services))assert.equal(child.exitCode,null);
+  const exits = Object.values(f.services).map((child) => once(child, 'exit'));
+  for(const child of Object.values(f.services))child.kill('SIGTERM');
   assert.deepEqual(await Promise.all(exits), [[0, null], [0, null], [0, null]], f.errors.join(''));
   for (const pid of children) await until(async () => {
     try { await readFile(`/proc/${pid}/stat`, 'utf8'); return false; }

@@ -231,9 +231,9 @@ DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dan
 
 Le provisionnement d’un credential absent exige en revanche un répertoire détenu par l’utilisateur et non modifiable par le groupe ou les autres. Si DIU a remis `0770` et que le fichier manque, rétablir les permissions sûres du seul répertoire CAB, par exemple `0700`, avant le raccord explicitement autorisé à OPENCODE_PASSWORD. Préserver le credential et son mode lors des mises à jour DIU ; ne jamais afficher sa valeur. La variable reste facultative pour les projets qui n’utilisent pas OpenCode.
 
-### Fermeture liée au serveur OpenCode — 2.1.32
+### Reprise après redémarrage du serveur OpenCode
 
-Les trois services se ferment après disparition locale prouvée du serveur OpenCode auquel ils se sont rattachés. Une panne HTTP/SSE, la fermeture d’un simple client ou une identité non vérifiable ne suffisent pas. Le démarrage sans OpenCode attend le premier rattachement. Cet arrêt technique conserve RUN, jobs, réservations et gels ; il ne constitue ni gate terminal ni purge. La remise en service est explicite et la reprise suit la réconciliation normale. Le statut 78 signale un nettoyage incomplet sans relance automatique. Aucune installation ni activation n’est déduite du seul changement de version source.
+Si l'instance OpenCode suivie disparaît, les trois services restent actifs en attente et protègent les effets. Ils vérifient la disparition de l'ancienne identité, le propriétaire, la nouvelle instance et la location MCP ; le contrôleur vérifie aussi chaque session avant sa reprise. Un RUN dont la session reste introuvable demeure protégé et est réexaminé sans bloquer les pairs vérifiés. Aucun effet, permission ou `once` n'est rejoué par le changement d'instance. Une instance ou un broker non vérifiable laisse la reprise en attente. Un signal d'arrêt explicite ferme toujours les services ; le statut 78 signale un nettoyage incomplet. La préparation source ne prouve pas l'activation.
 
 ## Réconciliation humaine du rejet après redémarrage — 2.1.32
 

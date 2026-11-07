@@ -1,8 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {hasNativeAsk,nativeAskState} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-permission-policy.mjs';
+import {hasNativeAsk,nativeAskState,nativeMcpPreflight} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-permission-policy.mjs';
 const rule=(permission,action,pattern='*')=>({permission,pattern,action});
 const session=(...permission)=>({permission});
+test('prévol MCP : règle cgpt autorisée puis surcharge de session ASK détectée',()=>{
+ const allowed=nativeMcpPreflight(session(rule('*','ask'),rule('cgpt*','allow')));
+ assert.ok(allowed.every(x=>x.action==='allow'&&x.universal));
+ const shadowed=nativeMcpPreflight(session(rule('*','ask'),rule('cgpt*','allow'),rule('cgpt-validation_request_validation','ask')));
+ assert.equal(shadowed[0].action,'allow');assert.equal(shadowed[1].action,'ask');
+ assert.equal(nativeMcpPreflight(session())[0].action,null);
+});
 test('politique partagée : dernier match, ressources spécifiques et deny/allow restent bloquants',()=>{
  for(const action of ['deny','allow'])assert.equal(hasNativeAsk(session(rule('shell',action)),'shell'),false);
  assert.equal(hasNativeAsk(session(rule('shell','ask')),'shell'),true);

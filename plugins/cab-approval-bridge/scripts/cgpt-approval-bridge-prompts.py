@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 import tempfile
 
-VERSION = "2.4.19"
+VERSION = "2.4.20"
 PILOTED = ("ACSP", "ACSMP", "CISMP", "DOPP", "ISMP", "PPSCP", "RSMP", "SCMP", "SPCMP")
 MARKER = "## CAB 1.10.4 — réservations et accès par ressource"
 LEGACY_MARKER = "## CAB 1.0.0 — réservations et RUN concurrents"

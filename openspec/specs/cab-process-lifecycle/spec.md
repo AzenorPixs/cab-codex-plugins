@@ -6,43 +6,43 @@ Garantir une fermeture technique bornée des composants CAB après la disparitio
 ## Requirements
 
 ### Requirement: Identité locale du serveur suivi
-CAB MUST suivre le PID obtenu par /api/info authentifié et son starttime local, sans lire commande, environnement ou secrets. Avant rattachement, une identité absente ou non vérifiable MUST laisser CAB en attente avec diagnostic. Après rattachement, absence, zombie ou starttime différent MUST établir la fin de l’instance. CAB MUST NOT adopter un autre serveur ni conclure à une fermeture sur une seule panne HTTP/SSE.
+CAB MUST suivre l'identité du serveur OpenCode via son API authentifiée et son starttime local. Si l'instance disparaît, CAB MUST suspendre les effets concernés et rechercher une nouvelle instance sans fermer les services. CAB MUST NOT adopter une instance tant que l'ancienne existe ou que l'identité, le workspace ou les sessions ne sont pas vérifiables. Une panne HTTP ou SSE seule MUST NOT prouver une disparition.
 
 #### Scenario: Serveur disparu
-- **WHEN** l’instance serveur préalablement identifiée disparaît
-- **THEN** les trois services commencent leur arrêt technique
+- **WHEN** l'instance suivie disparaît et qu'une nouvelle instance est vérifiée avec le même workspace et les sessions attendues
+- **THEN** CAB rétablit la communication et réconcilie les protections sans rejouer d'effet
 
 #### Scenario: Réutilisation du PID
-- **WHEN** le PID existe avec un autre starttime
-- **THEN** CAB termine son rattachement ancien sans suivre le nouveau processus
+- **WHEN** le même PID existe avec un autre starttime
+- **THEN** CAB considère l'ancienne instance disparue et vérifie la nouvelle avant adoption
 
 #### Scenario: Panne de transport ou fermeture du client
-- **WHEN** HTTP ou SSE tombe ou le client terminal ferme mais le serveur identifié vit encore
-- **THEN** CAB reste disponible sans conclure à la fermeture du serveur
+- **WHEN** HTTP ou SSE tombe alors que le serveur identifié vit encore
+- **THEN** CAB ne conclut pas à un redémarrage
 
 #### Scenario: Démarrage avant OpenCode
-- **WHEN** aucun serveur vérifiable n’a encore été observé
-- **THEN** CAB attend et peut se rattacher à sa première instance vérifiable
+- **WHEN** aucun serveur vérifiable n'a encore été observé
+- **THEN** CAB attend sa première instance vérifiable
 
 #### Scenario: Identité illisible
-- **WHEN** la lecture locale échoue hors absence prouvée
-- **THEN** CAB publie un diagnostic filtré sans fermer sur cette seule erreur
+- **WHEN** l'identité de l'ancien ou du nouveau processus ne peut pas être établie
+- **THEN** CAB maintient les protections et un diagnostic sans adopter la nouvelle instance
 
 ### Requirement: Arrêt technique idempotent et borné
-Après disparition prouvée du serveur, CAB MUST arrêter admissions, minuteries, reconnexions, SSE et HTTP, terminer ses écritures techniques et libérer le helper en moins de cinq secondes dans le banc contrôlé. L’arrêt MUST être idempotent, sans cible étrangère. Un succès MUST sortir normalement ; un nettoyage incomplet MUST signaler l’échec sans relance systemd. Le broker MUST rester géré par OpenCode.
+Sur demande explicite d'arrêt ou signal système, CAB MUST arrêter admissions, minuteries, reconnexions, SSE et HTTP, terminer ses écritures et libérer le helper dans le délai prévu. L'arrêt MUST être idempotent. Un nettoyage incomplet MUST signaler l'échec ; le broker MUST rester géré par OpenCode.
 
 #### Scenario: Fermeture simultanée et signal
-- **WHEN** la disparition du serveur et un signal d’arrêt arrivent ensemble
-- **THEN** un seul nettoyage s’exécute et aucun nouveau travail n’est lancé
+- **WHEN** un signal d'arrêt est reçu pendant une attente de reconnexion
+- **THEN** un seul nettoyage technique s'exécute et aucun nouveau travail n'est lancé
 
 #### Scenario: Nettoyage incomplet
 - **WHEN** une ressource ne se ferme pas dans le délai de nettoyage
-- **THEN** un diagnostic et un statut d’échec sans redémarrage automatique sont produits
+- **THEN** un diagnostic et un statut d'échec sont produits
 
 #### Scenario: Persistance technique impossible
-- **WHEN** les statistiques ne peuvent pas être sauvegardées à la fermeture
-- **THEN** le contrôleur libère son helper et signale un nettoyage incomplet sans sortie de succès ni relance automatique
+- **WHEN** les statistiques ne peuvent pas être sauvegardées à l'arrêt
+- **THEN** CAB libère son helper et signale un échec
 
 #### Scenario: App Server enfant
 - **WHEN** le contrôleur ferme un contexte possédant son App Server
-- **THEN** il attend aussi la sortie de cet enfant avant de terminer avec succès
+- **THEN** il attend aussi la sortie de cet enfant avant de terminer

@@ -149,6 +149,18 @@ Avant de modifier le modèle d’un agent OC :
 
 Avant un nouveau job piloté, appliquer intégralement references/model-policy.md après le bootstrap du monitoring. Un modèle concret explicite reste prioritaire. Sinon, utiliser la PLLM automatique actuelle ; sans raisonnement explicite, demander medium. Si medium est indisponible, demander high sur le même modèle ; examiner la politique PLLM suivante seulement si les deux niveaux sont indisponibles. Un modèle explicite incompatible bloque. Résoudre OC_Codex_PLLM_CATALOG depuis le skill actif et négocier pllm-auto-v1 ; armer avec modelSelection et la preuve native modelPreflight du prévol exact. Vérifier codingModel dans le job. Une reprise conserve le contexte et réexamine la priorité medium puis high selon la section de convergence ; aucun changement actif implicite n’est autorisé. Les anciens jobs non négociés restent historiques. Le broker et le moniteur ne choisissent pas de LLM.
 
+Avant armement, examiner les règles explicites de session pour
+`cgpt-validation_broker_readiness` et `cgpt-validation_request_validation`.
+Une règle universelle ASK ou DENY sur ces méthodes masque leur utilisation :
+choisir de manière autonome une politique de session compatible ou suivre le
+transfert propriétaire dans le même RUN, sans modifier la configuration globale.
+Autoriser uniquement les méthodes nécessaires, conserver shell/edit ASK et les
+accès web sous validation ; ne pas autoriser les décisions au codeur. Une
+règle héritée ou partielle reste à vérifier par le prévol natif, sans supposer
+que la règle globale est ou n'est pas appliquée. Les refus déjà reçus ne sont
+pas rejoués. Diagnostics : `native-mcp-readiness-policy-blocked` et
+`native-mcp-request-validation-policy-blocked`.
+
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
 Pour le raccord courant, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.

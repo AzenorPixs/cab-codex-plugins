@@ -16,7 +16,9 @@ async function fixture(t) {
   const native={busy:{},permissions:[],oldParts:[],parts:[{type:'tool',tool:'cgpt-validation_broker_readiness',callID:'call_ready',
     state:{status:'completed',input:{run_id:run.runId},metadata:{cabCodeMode:{wrapperId:'native_ready'}},
       output:JSON.stringify({status:'READY',pending_count:0,run_id:run.runId,server_version:VERSION}),time:{start:1,end:2}}}],
-    permission:[{permission:'*',pattern:'*',action:'ask'}],pid:12345};
+    permission:[{permission:'*',pattern:'*',action:'ask'},
+      {permission:'cgpt-validation_broker_readiness',pattern:'*',action:'allow'},
+      {permission:'cgpt-validation_request_validation',pattern:'*',action:'allow'}],pid:12345};
   let forbidden=0;
   const openCode={
     info:async()=>({pid:native.pid,version:'2.2.5'}),location:async()=>({directory}),mcp:async()=>({'cgpt-validation':{status:'connected'}}),
@@ -32,6 +34,11 @@ async function fixture(t) {
   t.after(async()=>{await context.close();rmSync(directory,{recursive:true,force:true});assert.equal(forbidden,0);});
   return {native,run,job,context,jobPath,async restart(){await context.close();context=createJobContext({workspace:directory,stateDirectory:state,run,openCodeClient:openCode});await readiness();return context;}};
 }
+test('handoff refuse une candidate qui remet request_validation en ASK',async t=>{
+ const f=await fixture(t);f.native.permission.push({permission:'cgpt-validation_request_validation',pattern:'*',action:'ask'});
+ await assert.rejects(f.context.inspectSessionHandoff('ses_new'),{code:'native-mcp-request-validation-policy-blocked'});
+ assert.equal(f.context.publicJob().sessionId,'ses_old');
+});
 
 test('handoff checkpoint repair is atomic, preserves business fields and observes old SID without admitting it',async t=>{
   const h=await fixture(t), first=await h.context.inspectSessionHandoff('ses_new');

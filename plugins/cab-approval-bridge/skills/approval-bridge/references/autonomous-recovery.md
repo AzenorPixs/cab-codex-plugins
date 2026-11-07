@@ -138,6 +138,14 @@ voie ne modifie pas les reçus inconnus et conserve tous les contrôles de
 rejet, d'accès et d'absence d'effet ; une identité erronée reste refusée.
 Un ancien actionId terminé en 409 ne devient pas un nouveau retrait : suivre
 le reçu et les règles de reprise avant toute nouvelle action qualifiée.
+Après redémarrage d'OpenCode, le reçu exact d'une ancienne instance peut être
+revu si l'ancien PID est absent aux deux lectures, la nouvelle identité et la
+même session sont vérifiées et les autres gardes de rejet restent satisfaites.
+Les appels d'atelier postérieurs sont des effets confinés distincts, jamais des
+preuves produit : seuls leurs appels et reçus terminaux, identités, empreintes
+et chemins d'atelier exacts permettent de les distinguer du write refusé.
+Une lecture native terminée reste non mutante si sa sortie est tronquée ; sa
+sortie ne constitue alors pas une preuve complète du contenu lu.
 
 Le client journalise reject par permission dans le sous-répertoire privé
 `permission-replies` du runtime CAB du workspace. L’option API
