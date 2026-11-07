@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.5
+version: 2.4.6
 ---
 
 Réponds en français. Commande canonique : `/CAB` ; `/cab` n'est pas
@@ -8,9 +8,8 @@ pris en charge. Argument reçu : `$ARGUMENTS`. `/CABU` sans argument charge ce
 fichier frère de même version et lui délègue exactement `update` dans le même
 tour ; aucune logique de maintenance parallèle.
 
-Pour les essais d’atelier, appliquer la référence autonomie : objet JSON
-littéral rendu localement, mêmes identités après refus prouvé sans lancement.
-Un helper d’atelier ne rend pas tout le processus OpenCode en lecture seule.
+Essais : objet JSON littéral, directory racine projet, atelier propre au RUN.
+Le profil isole l’atelier, pas tout OpenCode.
 
 Cette commande ne modifie pas les sources, spécifications ou configuration
 métier. Les vérifications et le cycle de vie CAB demandés sont autorisés ;
@@ -52,5 +51,6 @@ APPROVED ne vaut pas HELD. Retrait, rejeu ou élargissement ne sont pas implicit
 Changement de SID : `references/session-handoff.md`, sans effet implicite de run/resume.
 Accords permanents ASK/MCP : `references/native-permission-grants.md` et
 `references/mcp-pending-recovery.md`. Retraits : l’index du contrat.
-Atelier : `references/devops-resources.md`, outils DEVOPS.md RO et catalogue ;
+Atelier prioritaire ; codeur justifie LXC/Docker, orchestrateur tranche.
+`references/devops-resources.md` : outils DEVOPS.md RO et catalogue ;
 accès externes par CAB, sans secrets ni socket hôte.

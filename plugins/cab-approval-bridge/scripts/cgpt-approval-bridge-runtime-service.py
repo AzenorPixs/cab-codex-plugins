@@ -33,7 +33,7 @@ native_module = importlib.util.module_from_spec(NATIVE_SPEC)
 NATIVE_SPEC.loader.exec_module(native_module)
 EMITTER_SPEC=importlib.util.spec_from_file_location('cab_sgs_emitter',SCRIPT_DIRECTORY/'cgpt-approval-bridge-sgs-emitter.py')
 emitter_module=importlib.util.module_from_spec(EMITTER_SPEC);EMITTER_SPEC.loader.exec_module(emitter_module)
-VERSION = "2.4.5"
+VERSION = "2.4.6"
 if store_module.VERSION != VERSION or native_module.VERSION != VERSION:
     raise RuntimeError("runtime-component-version-mismatch")
 MAX_BODY = 64 * 1024 * 1024
@@ -243,6 +243,9 @@ class RuntimeHandler(BaseHTTPRequestHandler):
             route = (method, split.path)
             if route == ("GET", "/status"):
                 result = {"component": self.server.component, "version": VERSION, "pid": os.getpid(), "status": "READY"}
+            elif route==('POST','/storage/compact'):
+                if body:raise store_module.RuntimeErrorCode('runtime-compaction-input-invalid')
+                result=self.server.store.compact()
             elif self.server.component == "sgs":
                 if route == ("POST", "/bindings"):
                     ensure_project_test_root(body['project'])
@@ -285,6 +288,9 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                     if not set(query) <= {"project", "change"} or "project" not in query:
                         raise store_module.RuntimeErrorCode("runtime-query-invalid")
                     result = self.server.store.statistics(query["project"][0], query.get("change", [None])[0])
+                elif route==('POST','/archives/forget'):
+                    if set(body)!={'project','paths'}:raise store_module.RuntimeErrorCode('sgs-archive-deletion-invalid')
+                    result=self.server.store.forget_archives(body['project'],body['paths'])
                 elif route==('GET','/events'):
                     if not {'project','binding'}<=set(query) or not set(query)<={'project','binding','after','limit'}:raise store_module.RuntimeErrorCode('sgs-event-query-invalid')
                     binding=self.server.store.db.execute('SELECT uid,body FROM bindings WHERE binding=?',(query['binding'][0],)).fetchone()
