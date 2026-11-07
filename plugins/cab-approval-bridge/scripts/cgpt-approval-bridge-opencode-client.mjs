@@ -8,7 +8,7 @@ import { hasNativeAsk, nativeAskState, scopedNativeReadRules, VERSION as PERMISS
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 import { ContinuityStore } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.4.12';
+export const VERSION = '2.4.13';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -995,6 +995,19 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     fail('opencode-messages-pagination-limit');
   }
 
+  function shellResourcesCoverCommand(resources, command) {
+    if (!Array.isArray(resources) || !resources.length || typeof command !== 'string') return false;
+    if (resources.length === 1) return resources[0] === command;
+    let position = 0;
+    for (const resource of resources) {
+      if (typeof resource !== 'string' || !resource.length) return false;
+      const index = command.indexOf(resource, position);
+      if (index < 0 || !/^[\s;&|()]*$/.test(command.slice(position, index))) return false;
+      position = index + resource.length;
+    }
+    return /^[\s;&|()]*$/.test(command.slice(position));
+  }
+
   async function permissions(directoryValue = directory, { sessionIds, verifyInputs = false } = {}) {
     if (typeof verifyInputs !== 'boolean') fail('opencode-permission-scope-invalid');
     if (sessionIds !== undefined && (!Array.isArray(sessionIds) || !sessionIds.length ||
@@ -1022,7 +1035,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       const part = matches[0], input = part.state.input;
       if (!record(input) || !['running', 'completed'].includes(part.state.status)) fail('opencode-permission-source-invalid');
       if (raw.action === 'shell') {
-        if (part.nativeTool !== 'shell' || raw.resources.length !== 1 || raw.resources[0] !== input.command ||
+        if (part.nativeTool !== 'shell' || !shellResourcesCoverCommand(raw.resources, input.command) ||
             (input.workdir !== undefined &&
               (typeof input.workdir !== 'string' || resolve(directoryValue, input.workdir) !== directoryValue))) {
           fail('opencode-permission-target-invalid');
