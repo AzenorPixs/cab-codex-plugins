@@ -1,6 +1,29 @@
-# Effacement terminal ciblé — CAB 2.3.2
+# Effacement terminal ciblé — CAB 2.4.1
+
+## Reçu propriétaire volumineux et reprise
+
+Le reçu signé accepte jusqu’à128Mio en lecture et écriture. Les gardes de
+propriétaire, signature, fichier ordinaire, liens et scope restent inchangées.
+En APPLYING, les candidats déjà aux empreintes après sont reconnus sans
+réécriture ; APPLIED attend toujours la vérification d’absence. Un répertoire
+runtime privé hors projet doit rester privé sous son UID, contrairement aux
+fichiers projet0775. Rétablir cet invariant ne change ni propriétaire ni clés.
+
+Pendant une reprise d’un nettoyage déjà engagé, conserver le même reçu et le
+client de cleanup compatible avec les processus encore chargés. Distinguer
+le helper propriétaire corrigé des versions des processus principaux ; la mise
+à jour globale CABU ne se déclare réussie qu’après la fin de la phase critique
+et la vérification de toutes les versions réellement actives. Ne pas fabriquer
+APPLIED depuis une simple empreinte ou purger un reçu pour réduire sa taille.
 
 ## Autorité et conditions
+
+Si le dernier marqueur d’époque du plan signé correspond exactement au disque,
+l’application ordonnée du plan est déjà persistée. Les pairs peuvent ensuite
+avoir progressé : la reprise préserve ces fichiers et exige une vérification
+d’absence actuelle avant de compacter le reçu APPLIED. Le reçu contient le type
+de preuve et l’empreinte du plan. Un marqueur divergent ou une référence encore
+présente ne permet pas cette récupération ; aucun candidat divergent n’est écrasé.
 
 L’orchestrateur réalise ce cycle dans le change déjà autorisé, sans nouvelle
 approbation du développeur. Il vérifie d’abord les rapports, le gate validé,
@@ -183,3 +206,17 @@ Le dernier contexte du change doit appartenir au propriétaire de clôture, êtr
 ## Reçus terminaux historiques — CAB 2.3.10
 
 Les anciennes versions n’écrivaient nativeResult que pour les baux de test. Un reçu COMPLETED sans cette propriété peut être qualifié pour l’effacement si la once acquittée, permission/call/target, dates et completionDigest sont présents, et si son accès exact (RUN/contexte/version/membre) est RELEASED avec outcome reconnu, date cohérente et releaseDigest. Le scope signé identifie ces unités dans legacyTerminalOperationIds. Aucun champ natif, statut de succès ou exit n’est fabriqué ; les données historiques restent inchangées jusqu’à la purge. Un résultat explicite null/invalide, un bail de test sans résultat, une identité ou empreinte absente, une mauvaise liaison, un effet non terminé ou un accès non libéré reste refusé. Le cas du port réconcilié conserve son reçu dédié et ses propres gardes. Le reste du cycle, des gates et de l’inventaire reste identique.
+
+## Client2.4.1 sur un nettoyage2.4.0 déjà engagé
+
+Le helper2.4.1 accepte `--runtime-version 2.4.0` uniquement pour execute,
+finalize et verify sur la transaction v1 existante. Les versions et PID des
+processus sont contrôlés contre2.4.0, sans autoriser une version arbitraire.
+Le certificat distingue helper2.4.1 et runtime2.4.0. Cette compatibilité ne
+crée aucun effacement et ne remplace pas le CABU global après la phase critique.
+
+Lors de cette récupération, conserver les points d’entrée Python et le contrat
+broker de la version effectivement chargée, à partir du paquet publié vérifié.
+Les seuls helpers propriétaires corrigés sont préparés avant reprise. Le cycle
+normal CABU actualise ensuite le jeu complet ; son bilan exige toutes les
+versions réellement actives et ne se déduit pas de la seule reprise du worker.

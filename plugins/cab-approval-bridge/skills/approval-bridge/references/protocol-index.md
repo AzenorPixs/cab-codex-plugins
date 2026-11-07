@@ -1,4 +1,4 @@
-# Index du protocole CAB 2.4.0
+# Index du protocole CAB 2.4.1
 
 Avant une remontée, appliquer le [triage propriétaire autonome](owner-diagnostics.md) et sa seule référence de cas.
 

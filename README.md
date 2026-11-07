@@ -1,5 +1,10 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+Correctif2.4.1 : reprise des reçus propriétaires volumineux sans nouvelle
+transaction ni rejeu des fichiers appliqués, avec vérification d’absence
+accélérée et forme JSON littérale des appels d’atelier explicitée. Le lanceur
+isole ses commandes ; le processus OpenCode complet conserve ses droits Unix.
+
 ## Contrat CAB 2.4.0 — huit catégories validées
 
 Contrat2.4.0 validé sous SCM avec CI/CD. Les preuves de qualification sont

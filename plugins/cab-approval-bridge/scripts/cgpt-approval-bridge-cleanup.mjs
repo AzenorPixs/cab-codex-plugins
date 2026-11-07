@@ -14,7 +14,7 @@ import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bri
 import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 
-export const VERSION='2.4.0';
+export const VERSION='2.4.1';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const exec=promisify(execFile);
 const unit=name=>'cgpt-approval-bridge-'+name+'.service';
@@ -30,6 +30,8 @@ export async function cleanupChange(input, dependencies={}) {
   finally{while(offlineLocks.length)await offlineLocks.pop().close();await lock.close()}
 }
 async function executeCleanup(input,dependencies) {
+  const runtimeVersion=input.runtimeVersion??VERSION;
+  if(runtimeVersion!==VERSION&&(VERSION!=='2.4.1'||runtimeVersion!=='2.4.0'||!['execute','finalize','verify'].includes(input.action)))fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
   const statisticalCleanup=dependencies.statisticsCleanup||{purge:purgeStatistics,verify:verifyStatisticsAbsence};
@@ -49,7 +51,7 @@ async function executeCleanup(input,dependencies) {
   });
   if(['preview','prepare','seal','status'].includes(input.action)) {
     const identity=await http(controller,'/transport/status');
-    if(identity.workspace!==workspace||identity.version!==VERSION)fail('erasure-component-identity-invalid');
+    if(identity.workspace!==workspace||identity.version!==runtimeVersion)fail('erasure-component-identity-invalid');
     if(['preview','prepare'].includes(input.action))return http(controller,'/cleanup/'+input.action,input.request||readRuntimeJson(input.input).value);
     if(input.action==='seal')return http(controller,'/cleanup/seal',{transactionId:input.transactionId});
     return http(controller,'/cleanup/status',{});
@@ -73,15 +75,20 @@ async function executeCleanup(input,dependencies) {
     const certificate=tx.verify(certificateInput());
     if(certificate.scope?.workspace!==workspace||!certificate.roots?.includes(root))fail('erasure-workspace-divergent');
     const [c,s,m]=await Promise.all([http(controller,'/status'),http(supervisor,'/status'),http(monitor,'/api/snapshot')]);
+    if([c,s,m].some(row=>row.version!==runtimeVersion)||c.brokerReadiness?.server_version!==runtimeVersion)fail('erasure-component-identity-invalid');
     if(certificate.ownerReceipts?.commit){const owner=await http(controller,'/cleanup/owner/check',{certificate:certificateInput()});if(owner.state!=='VERIFIED')fail('erasure-owner-absence-unverified');}
     if(certificate.sgsReceipt)await statisticalCleanup.verify(certificate.scope);
     if(!absent(certificate)||[c,s,m].some(value=>erasureReferences(value,certificate.scope).length))fail('erasure-absence-unverified');
-    return tx.seal({...certificate,status:'PURGED',verifiedAt:Date.now()});
+    return tx.seal({...certificate,status:'PURGED',verifiedAt:Date.now(),verifiedRuntimeVersion:runtimeVersion});
   }
   const native=dependencies.openCode||createOpenCodeV2ClientFromEnv({directory:workspace,baseUrl:input.opencodeUrl||'http://127.0.0.1:4096'});
   let value=tx.load();
   if(!value||value.transactionId!==input.transactionId)fail('erasure-transaction-divergent');
   if(value.scope?.workspace!==workspace||!value.roots?.includes(root))fail('erasure-workspace-divergent');
+  if(runtimeVersion!==VERSION){
+    if(value.protocol!=='cab-change-erasure-v1'||!['SEALED','FREEZING','STOPPING','APPLYING','RESTARTING','VERIFYING','CERTIFIED'].includes(value.phase))fail('erasure-runtime-compatibility-refused');
+    value={...value,recoveryCompatibility:{helperVersion:VERSION,runtimeVersion}};tx.save(value);
+  }
   const ownerCall=async action=>{
     await http(controller,'/cleanup/owner/action',{transactionId:value.transactionId,action});
     const expected={commit:'APPLIED',verify:'VERIFIED',finalize:'PURGED'}[action],end=Date.now()+90000;
@@ -144,7 +151,7 @@ async function executeCleanup(input,dependencies) {
       const path=name==='controller'?'/transport/status':name==='supervisor'?'/status':'/api/maintenance-identity';
       if(await servicePid(name)===0)await service(name,'start');
       await wait(async()=>{const identity=await http(address,path),pid=await servicePid(name);
-        if(identity.version!==VERSION||(identity.workspace||identity.identity?.workspace)!==workspace||identity.pid!==pid)
+        if(identity.version!==runtimeVersion||(identity.workspace||identity.identity?.workspace)!==workspace||identity.pid!==pid)
           fail('erasure-service-identity-changed');return true;});
     }
     await transition('connect');
@@ -158,7 +165,7 @@ async function executeCleanup(input,dependencies) {
     await checkNative();
     const identities=await Promise.all([http(controller,'/transport/status'),http(supervisor,'/status'),http(monitor,'/api/maintenance-identity')]);
     if(identities[0].workspace!==workspace||identities[1].workspace!==workspace||identities[2].identity?.workspace!==workspace||
-      identities.some(row=>row.version!==VERSION))fail('erasure-component-identity-invalid');
+      identities.some(row=>row.version!==runtimeVersion))fail('erasure-component-identity-invalid');
     const componentPids={};
     for(const [index,name] of ['controller','supervisor','monitor'].entries()){
       const pid=await servicePid(name);if(!pid||pid!==identities[index].pid)fail('erasure-service-identity-changed');componentPids[name]=pid;}
@@ -244,7 +251,7 @@ async function executeCleanup(input,dependencies) {
     await checkNative();
     await wait(async()=>{
       const [c,s,m]=await Promise.all([http(controller,'/status'),http(supervisor,'/status'),http(monitor,'/api/snapshot')]);
-      if(c.version!==VERSION||s.version!==VERSION||m.version!==VERSION||c.brokerReadiness?.server_version!==VERSION||
+      if(c.version!==runtimeVersion||s.version!==runtimeVersion||m.version!==runtimeVersion||c.brokerReadiness?.server_version!==runtimeVersion||
         c.brokerReadiness?.ready!==true||erasureReferences(c,value.scope).length||erasureReferences(s,value.scope).length||erasureReferences(m,value.scope).length)return false;
       return true;
     });
@@ -264,7 +271,7 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
   const [action,...args]=process.argv.slice(2);const input={action};
   try {
     for(let i=0;i<args.length;i+=2){const key={'--workspace':'workspace','--input':'input','--transaction-id':'transactionId',
-      '--controller-url':'controllerUrl','--supervisor-url':'supervisorUrl','--monitor-url':'monitorUrl','--opencode-url':'opencodeUrl'}[args[i]];
+      '--controller-url':'controllerUrl','--supervisor-url':'supervisorUrl','--monitor-url':'monitorUrl','--opencode-url':'opencodeUrl','--runtime-version':'runtimeVersion'}[args[i]];
       if(!key||!args[i+1]||input[key]!==undefined)fail('erasure-cli-invalid');input[key]=args[i+1]}
     if(!input.workspace)fail('erasure-workspace-required');
     console.log(JSON.stringify(await cleanupChange(input)));

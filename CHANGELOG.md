@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 2.4.1 — 2026-11-07
+
+- Reprend les reçus d’effacement propriétaires signés jusqu’à128Mio avec la même borne en écriture et lecture ; garde signatures, UID, liens et scope, sans réécrire les candidats déjà appliqués.
+- Recherche les identifiants littéraux en un passage avec détection des recouvrements, pour réduire la durée de vérification du journal partagé sans relâcher la preuve d’absence.
+- Précise la forme JSON littérale des appels d’atelier et l’attribution d’une barrière de transport à sa transaction courante ; suit les incidents C12/PA01 dans CCAB avec résolutions individuelles.
+
 ## 2.4.0 — 2026-11-07
 
 - Autonomie du codeur dans le change et son atelier isolé `.cab-tests/<change>/<RUN>/` ; validation préalable des écritures projet hors atelier et du web, validation des résultats par l’orchestrateur.
