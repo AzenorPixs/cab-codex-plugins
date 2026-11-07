@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.15 - 2026-11-07
+
+- Projeter le marqueur statistique du seul effacement courant sans toucher aux pairs.
+
 ## 2.4.14 - 2026-11-07
 
 - Interdire once pour une permission shell décomposée tout en conservant son observation et son rejet.

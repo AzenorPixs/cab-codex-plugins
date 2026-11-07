@@ -7,7 +7,7 @@ import { createSupervisorContext, VERSION as CONTEXT_VERSION } from './cgpt-appr
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-const version = "2.4.14";
+const version = "2.4.15";
 if ([CONTEXT_VERSION, LIFECYCLE_VERSION].some((value) => value !== version)) throw new Error('CAB supervisor component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.

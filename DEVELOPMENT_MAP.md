@@ -1347,3 +1347,6 @@ flowchart LR
 
 ## Garde once des permissions décomposées
 [guard-multiresource-native-once](openspec/changes/archive/2026-11-07-guard-multiresource-native-once/) : observation conservée, once interdite et rejet propriétaire préservé.
+
+## Marqueur SGS du reçu courant
+[clear-current-erasure-statistics-marker](openspec/changes/archive/2026-11-07-clear-current-erasure-statistics-marker/) : projection du marqueur éphémère de la transaction exacte, avec conservation des pairs et refus des références étrangères.

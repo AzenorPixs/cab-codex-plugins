@@ -86,3 +86,8 @@ le retrait des pages SQLite/WAL ; même opération pour CCAB après purge des
 incidents résolus. Une donnée encore nécessaire aux RUN conservés est protégée.
 Un conflit natif de dernière révision est partiel/N/A, pas un total choisi
 arbitrairement ; une révision supérieure lève ce diagnostic.
+
+Lors d’un effacement, le champ transitoire `erasure_prepared` du seul
+checkpoint `broker-statistics` est retiré s’il correspond exactement au reçu
+courant, y compris dans l’outbox. Un marqueur d’une autre transaction et les
+statistiques des pairs conservent les contrôles ordinaires.
