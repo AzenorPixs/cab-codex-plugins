@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.4.12";
+export const VERSION = "2.4.13";
 export function pendingReconciliationEffects({currentMandate,reconcilingCount,unmatchedCount,validations,decisionFor,ignoredRequestIds}){
   const ignored=new Set(ignoredRequestIds);
   return Boolean(currentMandate||reconcilingCount||unmatchedCount||validations.some(v=>{
@@ -178,6 +178,8 @@ let jobPersistence = Promise.resolve();
 let recoveryTransitionInFlight = false;
 let lifecycleTransitionInFlight = false;
 let permissionTimer;
+let permissionObservationInFlight = false;
+let lastPermissionObservationError = null;
 let closed = false;
 let closePromise;
 let communicationFailed = false;
@@ -2143,11 +2145,16 @@ function reconcileApprovedOperations() {
 function startPermissionReconciliation() {
   permissionTimer = setInterval(() => {
     reconcileApprovedOperations();
-    void reconcileNativePermissions().catch((cause) => {
-      updateStatus("opencode-permission-observation-failed", {
-        error: cause.message,
-      });
-    });
+    if (permissionObservationInFlight) return;
+    permissionObservationInFlight = true;
+    void reconcileNativePermissions().then(() => {
+      lastPermissionObservationError = null;
+    }, (cause) => {
+      if (lastPermissionObservationError !== cause.message) {
+        lastPermissionObservationError = cause.message;
+        updateStatus("opencode-permission-observation-failed", { error: cause.message });
+      }
+    }).finally(() => { permissionObservationInFlight = false; });
   }, reconnectMs);
 }
 

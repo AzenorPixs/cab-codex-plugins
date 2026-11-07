@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {readFileSync,existsSync,unlinkSync,lstatSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {runtimeRequest,queueComponentCheckpoint,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
-export const VERSION='2.4.12';
+export const VERSION='2.4.13';
 export class StatisticsBackend {
   constructor(project,component,{home=homedir(),legacyPath}={}) {this.project=project;this.component=component;this.home=home;this.legacyPath=legacyPath;this.sequence=0;this.pending=Promise.resolve();}
   child(component,legacyPath){return new StatisticsBackend(this.project,component,{home:this.home,legacyPath});}
