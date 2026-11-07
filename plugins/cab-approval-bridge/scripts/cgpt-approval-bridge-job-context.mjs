@@ -8,12 +8,12 @@ import readline from "node:readline";
 import { nextLifecycle, publicLifecycle, validLifecycle, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
-import { hasNativeAsk, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
+import { hasNativeAsk, nativeMcpPreflight, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge-continuity.mjs';
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.4.19";
+export const VERSION = "2.4.20";
 export function pendingReconciliationEffects({currentMandate,reconcilingCount,unmatchedCount,validations,decisionFor,ignoredRequestIds}){
   const ignored=new Set(ignoredRequestIds);
   return Boolean(currentMandate||reconcilingCount||unmatchedCount||validations.some(v=>{
@@ -108,7 +108,7 @@ export function createJobContext({ workspace, stateDirectory, run = null,
   restoreCommunication = null,
   openCodeClient = null, modelPolicy = {}, reviewOperation = () => null,
   maxCommandLength = commandLengthLimit(),
-  verifyRestoredPreflight = () => true }) {
+  verifyRestoredPreflight = () => true, verifyNativeInstance = async () => true }) {
   const transportAbort = new AbortController();
   const openCode = openCodeClient || createOpenCodeV2ClientFromEnv({ directory: workspace, signal: transportAbort.signal });
 function envValue(name) {
@@ -600,6 +600,11 @@ async function inspectSessionHandoff(sessionId, historicalCalls = []) {
   ]);
   if (!hasNativeAsk(oldSession,'bash',['ask','deny']) || !hasNativeAsk(oldSession,'edit',['ask','deny']))
     recoveryFailure('session-handoff-source-native-ask-required');
+  const mcpPolicy = nativeMcpPreflight(candidate);
+  if (mcpPolicy.some(rule => !rule.valid)) recoveryFailure('native-mcp-policy-unverifiable');
+  const blockedMcp = mcpPolicy.find(rule => rule.universal && ['ask','deny'].includes(rule.action));
+  if (blockedMcp) recoveryFailure(blockedMcp.tool === 'cgpt-validation_broker_readiness' ?
+    'native-mcp-readiness-policy-blocked' : 'native-mcp-request-validation-policy-blocked');
   if (!Number.isSafeInteger(health.pid) || health.pid <= 0) recoveryFailure('session-handoff-native-identity-missing');
   const oldParts = recoveryTools(oldMessages), parts = recoveryTools(messages);
   if (oldParts.some(p => !['completed','error'].includes(p.state?.status) && !historicalCalls.some(h =>
@@ -2108,6 +2113,7 @@ async function transmitApprovedOperation(validation) {
         throw Object.assign(new Error('native-shell-background-mismatch'), {code:'NATIVE_TOOL_INPUT_GUARD'});
       }
       await checkNativeAsk(validation.operation, permission.nativeAction || validation.operation.kind);
+      if (!await verifyNativeInstance(validation.operation)) return false;
       if (validation.restoredOperation) ensureOperationAccess(validation.operation);
       if (!operationAllowed(validation.operation, validation.requestId, 'permission') ||
           validation.operationInvalidated || validation.operationConsumed) return false;

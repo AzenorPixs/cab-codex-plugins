@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.4.19';
+export const VERSION = '2.4.20';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -360,8 +360,16 @@ export function rejectedUnissuedTurnProof(messages, operation, approval, request
       rejected,decisionAt,scopeDigest:digest(scope),laterMessagesDigest:digest(messages.slice(next)),wholeTranscriptDigest:digest(messages)}};
 }
 
+function rejectedRestartEvidenceValid(receipt, view) {
+  const restart = view.nativeRestartEvidence;
+  return Boolean(restart?.kind === 'previous-process-absent' && restart.previousPid === receipt.nativePid &&
+      restart.previousVersion === receipt.nativeVersion && restart.currentPid === view.nativePid &&
+      restart.currentVersion === view.nativeVersion && /^\d+$/.test(restart.currentStartTime || '') &&
+      Number.isSafeInteger(restart.currentUid) && restart.currentUid >= 0 && restart.receiptDigest === digest(receipt));
+}
 function rejectedReceiptInstance(receipt, view, endedAt) {
   if (receipt.nativePid === view.nativePid && receipt.nativeVersion === view.nativeVersion) return true;
+  if (rejectedRestartEvidenceValid(receipt, view)) return true;
   const epoch = view.nativeKernelEpoch, ack = Date.parse(receipt.acknowledgedAt);
   return Boolean(epoch && epoch.pid === view.nativePid && epoch.version === view.nativeVersion &&
     /^\d+$/.test(epoch.startTime || '') && hash(epoch.bootIdSha256) &&
@@ -370,10 +378,48 @@ function rejectedReceiptInstance(receipt, view, endedAt) {
     Number.isSafeInteger(receipt.nativePid) && receipt.nativePid > 0 && typeof receipt.nativeVersion === 'string');
 }
 
+// Atelier calls are independent, confined effects, never proof of project work.
+function isolatedAtelierProof(part, target, parts) {
+  if (!['cgpt-validation_atelier_execute','cgpt-validation_atelier_status'].includes(part?.tool) ||
+      part.type !== 'tool' || part.executed !== false || part.state?.status !== 'completed' ||
+      part.state.metadata?.truncated !== false || part.state.metadata?.error === true) return null;
+  const callId = part.callID || part.callId, meta = part.state.metadata.cabCodeMode, calls = part.state.metadata.toolCalls;
+  const input = part.state.input, approval = target.approval, operation = target.operation;
+  if (!id(callId) || meta?.wrapperId !== callId || !hash(meta.envelopeHash) || !Array.isArray(calls) ||
+      calls.length !== 1 || calls[0]?.status !== 'completed' || !calls[0].input || typeof calls[0].input !== 'object' ||
+      calls[0].tool !== part.tool.replace('cgpt-validation_', 'cgpt-validation.') ||
+      !input || typeof input !== 'object' || digest(calls[0].input) !== digest(input) ||
+      input.directory !== approval.directory || input.session_id !== operation.sessionId ||
+      input.run_id !== operation.runId || input.change_id !== approval.change_id ||
+      input.reservation_version !== operation.version || !id(input.request_id)) return null;
+  let result; try { result = JSON.parse(part.state.output); } catch { return null; }
+  if (!result || result.requestId !== input.request_id || result.runId !== input.run_id ||
+      result.changeId !== input.change_id || result.sessionId !== input.session_id ||
+      result.status !== 'COMPLETED' || !Number.isInteger(result.exitCode) ||
+      result.requires_orchestrator_validation !== true || !hash(result.input_sha256) ||
+      typeof result.outputPath !== 'string') return null;
+  const root = resolve(approval.directory, '.cab-tests', input.change_id, input.run_id);
+  if (!root.startsWith(resolve(approval.directory, '.cab-tests') + '/') ||
+      result.outputPath !== resolve(root, '.cab-result-' + result.input_sha256 + '.log')) return null;
+  if (part.tool === 'cgpt-validation_atelier_execute') {
+    if (result.input_sha256 !== digest(input)) return null;
+  } else {
+    if (result.found !== true) return null;
+    const index = parts.indexOf(part);
+    const prior = parts.slice(0,index).filter(candidate => candidate.tool === 'cgpt-validation_atelier_execute' &&
+      candidate.state?.input?.request_id === input.request_id && isolatedAtelierProof(candidate,target,parts));
+    if (prior.length !== 1 || digest(prior[0].state.input) !== result.input_sha256) return null;
+  }
+  return {kind:'CONFINED_ATELIER_TERMINAL',callId,requestId:input.request_id,partDigest:digest(part),inputDigest:result.input_sha256};
+}
+
 // Every excluded environmental call retains a persisted owner and an exact terminal proof.
 export function correlateWithdrawalEffects(parts, target, peers, view, noEnvironment) {
-  const effects = parts.filter(p => p.type === 'tool' && p.tool !== 'cab_codemode_discovery' && !noEnvironment(p));
-  if (!effects.length) return { effects,excluded:[] };
+  const atelier = new Map();
+  for (const part of parts) { const proof = isolatedAtelierProof(part,target,parts); if (proof) atelier.set(part,proof); }
+  const effects = parts.filter(p => p.type === 'tool' && p.tool !== 'cab_codemode_discovery' && !noEnvironment(p) && !atelier.has(p));
+  const atelierExcluded = [...atelier.values()];
+  if (!effects.length) return { effects,excluded:atelierExcluded };
   const markers = parts.map((part,index) => ({part,index})).filter(({part}) =>
     part.tool === 'cgpt-validation_request_validation' || part.tool === 'execute' &&
     part.state?.metadata?.toolCalls?.some(call => call.tool === 'cgpt-validation.request_validation'));
@@ -384,7 +430,7 @@ export function correlateWithdrawalEffects(parts, target, peers, view, noEnviron
     if (matches.length !== 1) fail('withdraw-call-owner-unverified');
     const record = matches[0], group = groups.get(record) || [];group.push(part);groups.set(record,group);
   }
-  const excluded = [];
+  const excluded = [...atelierExcluded];
   for (const [record,calls] of groups) {
     if (record === target) continue;
     const op = record.operation;
@@ -445,7 +491,8 @@ export function rejectedEditWithdrawalProof(view, candidates, approval) {
      !Number.isFinite(ack)||ack<created)fail('withdraw-rejected-edit-receipt-divergent');
   return {kind:'REJECTED_UNISSUED_EDIT',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
     evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',
-    ...(receipt.nativePid!==view.nativePid||receipt.nativeVersion!==view.nativeVersion?{kernelEpochDigest:digest(view.nativeKernelEpoch)}:{}),rejectedEdit:{callId,nativeTool:part.nativeTool,permissionId:receipt.permissionId,
+    ...(receipt.nativePid!==view.nativePid||receipt.nativeVersion!==view.nativeVersion?
+      (rejectedRestartEvidenceValid(receipt,view) ? {nativeRestartDigest:digest(view.nativeRestartEvidence)} : {kernelEpochDigest:digest(view.nativeKernelEpoch)}) : {}),rejectedEdit:{callId,nativeTool:part.nativeTool,permissionId:receipt.permissionId,
       nativeInputSha256:inputSha256,approvedInputSha256:approval.tool_input_sha256||null,
       partDigest:digest(part),receiptDigest:digest(receipt)}};
 }
@@ -477,6 +524,7 @@ export function rejectedShellWithdrawalProof(view, candidates, approval) {
     fail('withdraw-rejected-shell-receipt-divergent');
   return {kind:'REJECTED_UNISSUED_SHELL',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
     evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',
-    ...(receipt.nativePid!==view.nativePid||receipt.nativeVersion!==view.nativeVersion?{kernelEpochDigest:digest(view.nativeKernelEpoch)}:{}),rejectedShell:{callId,permissionId:receipt.permissionId,
+    ...(receipt.nativePid!==view.nativePid||receipt.nativeVersion!==view.nativeVersion?
+      (rejectedRestartEvidenceValid(receipt,view) ? {nativeRestartDigest:digest(view.nativeRestartEvidence)} : {kernelEpochDigest:digest(view.nativeKernelEpoch)}) : {}),rejectedShell:{callId,permissionId:receipt.permissionId,
       nativeInputSha256:inputSha256,partDigest:digest(part),receiptDigest:digest(receipt)}};
 }

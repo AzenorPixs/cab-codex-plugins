@@ -427,7 +427,7 @@ Le provisionnement d’un credential absent exige en revanche un répertoire dé
 
 ### Arrêt technique 2.1.32
 
-Le paquet inclut process-lifecycle dans les scripts communs et ceux du moniteur. La disparition prouvée de l’instance serveur OpenCode suivie ferme les trois services ; une simple déconnexion MCP pendant update ne ferme pas le serveur et ne déclenche pas cet arrêt. Les unités empêchent la relance du statut de nettoyage incomplet 78. Une installation en absence initiale d’OpenCode reste possible : les services attendent leur premier rattachement. Les données métier et les contrôles de reprise restent conservés.
+Le paquet inclut process-lifecycle dans les scripts communs et ceux du moniteur. Après disparition de l'instance OpenCode suivie, les services restent actifs et protègent les effets pendant la vérification de la nouvelle instance et des sessions. Une déconnexion MCP seule ne prouve pas un changement de processus. Les unités empêchent la relance du statut de nettoyage incomplet 78 lors d'un arrêt explicite. En absence d'OpenCode ou de broker vérifiable, les services attendent sans inventer de reprise.
 
 ## Réconciliation humaine du rejet après redémarrage — 2.1.32
 

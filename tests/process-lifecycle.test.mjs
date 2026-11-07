@@ -2,9 +2,55 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { followOpenCodeLifetime, processIdentity, boundedCleanup } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
+import { followOpenCodeLifetime, followOpenCodeRestart, processIdentity, processOwnerIdentity, verifiedNativeChild, boundedCleanup } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
 
 const live = { pid: 123, startTime: '45', state: 'S' };
+test('redémarrage : protection puis rattachement seulement après vérification',async t=>{
+ const old={pid:123,startTime:'45',state:'S',uid:1000},next={pid:456,startTime:'90',state:'S',uid:1000};
+ let api=old.pid, identities=new Map([[old.pid,old]]), verified=false;const events=[];
+ const watcher=followOpenCodeRestart({info:async()=>({pid:api})},{intervalMs:60000,
+  readIdentity:async pid=>identities.get(pid)||null,onLost:async()=>events.push('protected'),
+  onAttach:async(candidate,previous)=>{events.push(previous?'review-restart':'first');return !previous||verified}});
+ t.after(()=>watcher.stop());await watcher.check();assert.equal(watcher.snapshot().state,'attached');
+ identities.delete(old.pid);api=next.pid;identities.set(next.pid,next);await watcher.check();
+ assert.equal(watcher.snapshot().state,'reconnecting');assert.deepEqual(events,['first','protected','review-restart']);
+ verified=true;await watcher.check();assert.equal(watcher.snapshot().state,'attached');assert.equal(watcher.snapshot().identity.pid,next.pid);
+});
+test('redémarrage : identité instable ou validation refusée conserve la protection',async t=>{
+ const old={pid:123,startTime:'45',state:'S',uid:1000},next={pid:456,startTime:'90',state:'S',uid:1000};
+ let api=old.pid,reads=0, oldAlive=true,allow=false,lost=0;
+ const watcher=followOpenCodeRestart({info:async()=>({pid:api})},{intervalMs:60000,
+  readIdentity:async pid=>pid===old.pid?(oldAlive?old:null):(reads++%2?{...next,startTime:'91'}:next),
+  onLost:async()=>{lost++},onAttach:async(_candidate,previous)=>!previous||allow});
+ t.after(()=>watcher.stop());await watcher.check();oldAlive=false;api=next.pid;
+ await watcher.check();assert.equal(watcher.snapshot().state,'reconnecting');assert.equal(lost,1);
+ await watcher.check();assert.equal(watcher.snapshot().state,'reconnecting');assert.equal(lost,1);
+});
+test('redémarrage : un autre propriétaire ne peut pas être adopté',async t=>{
+ const old={pid:123,startTime:'45',state:'S',uid:1000},foreign={pid:456,startTime:'90',state:'S',uid:1001};
+ let api=old.pid, active=old;let approvals=0;
+ const watcher=followOpenCodeRestart({info:async()=>({pid:api})},{intervalMs:60000,
+  readIdentity:async pid=>pid===active?.pid?active:null,onLost:async()=>{},onAttach:async()=>{approvals++;return true}});
+ t.after(()=>watcher.stop());await watcher.check();active=foreign;api=foreign.pid;await watcher.check();
+ assert.equal(watcher.snapshot().state,'reconnecting');assert.equal(approvals,1);
+});
+test('redémarrage : changement pendant la revue empêche la reprise',async t=>{
+ const old={pid:123,startTime:'45',state:'S',uid:1000},next={pid:456,startTime:'90',state:'S',uid:1000};
+ let api=old.pid,current=old,ready=0;
+ const watcher=followOpenCodeRestart({info:async()=>({pid:api})},{intervalMs:60000,
+  readIdentity:async pid=>pid===current?.pid?current:null,onLost:async()=>{},
+  onAttach:async(_candidate,previous)=>{if(previous)current={...next,startTime:'91'};return true},onReady:()=>ready++});
+ t.after(()=>watcher.stop());await watcher.check();assert.equal(ready,1);
+ current=next;api=next.pid;await watcher.check();assert.equal(watcher.snapshot().state,'reconnecting');assert.equal(ready,1);
+});
+test('broker : seul un enfant vivant du processus suivi et du même propriétaire est admis',async t=>{
+ const child=spawn(process.execPath,['-e','setInterval(()=>{},1000)'],{stdio:'ignore'});
+ t.after(()=>{if(child.exitCode===null&&child.signalCode===null)child.kill('SIGKILL')});
+ await once(child,'spawn');const parent=await processOwnerIdentity(process.pid);
+ assert.equal(await verifiedNativeChild(parent,child.pid),true);
+ assert.equal(await verifiedNativeChild(parent,process.pid),false);
+ assert.equal(await verifiedNativeChild({...parent,uid:parent.uid+1},child.pid),false);
+});
 function fixture(t, options = {}) {
   let identity = live;
   let apiDown = false;

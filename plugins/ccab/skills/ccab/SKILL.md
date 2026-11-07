@@ -24,6 +24,12 @@ et son bail persistent ; après réponse perdue, reprendre le même action_id
 et le même payload. Une expiration permet une reprise contrôlée, pas un
 deuxième correctif concurrent. Vérifier le bail avant chaque résolution.
 
+Le développeur autorise les échanges nécessaires entre un déclarant CCAB et
+le correcteur désigné, y compris entre chats de projets différents. Vérifier
+le destinataire et son rôle ; partager seulement les preuves utiles, sans
+secret. Ne pas redemander cet accord à chaque échange. Cette autorisation
+n'étend pas les mandats et ne contourne pas les permissions de la plateforme.
+
 Qualifier sur preuves : défaut de code, défaut documentaire ou faux positif.
 Une entrée examinée peut aussi être soldée sans correctif (`no-fix`) : décrire
 la méthode, les raisons et les limites restantes, puis informer le déclarant.

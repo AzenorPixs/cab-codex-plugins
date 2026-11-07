@@ -1,6 +1,6 @@
 import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 import {ArchiveContent,archiveDirectory} from './cgpt-approval-bridge-archives.mjs';
-import { followOpenCodeLifetime, boundedCleanup, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
+import { followOpenCodeRestart, boundedCleanup, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
 import {ensureProjectTestRoot} from './cgpt-approval-bridge-autonomy.mjs';
 import { readFile, realpath } from 'node:fs/promises';
 import { createServer } from 'node:http';
@@ -9,7 +9,7 @@ import { MonitorState, monitorConfiguration, VERSION as DATA_VERSION } from './c
 import { guardStatisticsPost, statisticsSelection, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
 import { MonitorCatalog, MonitorServices, guardManagementPost, managementBody, VERSION as MANAGEMENT_VERSION } from './cgpt-approval-bridge-monitor-management.mjs';
 
-export const VERSION = '2.4.19';
+export const VERSION = '2.4.20';
 if ([DATA_VERSION, MAINTENANCE_VERSION, MANAGEMENT_VERSION, LIFECYCLE_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/stats.mjs', ['stats.mjs', 'text/javascript; charset=utf-8']],
@@ -258,7 +258,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
       try { await boundedCleanup(() => monitor.close()); process.exit(0); }
       catch { process.stderr.write('Arrêt de CAB Monitor incomplet.\n'); process.exit(SHUTDOWN_INCOMPLETE); }
     };
-    const lifetime = configuration.mode==='direct'?{start(){},stop(){}}:followOpenCodeLifetime(monitor.state.openCode, { onExit: close,
+    let nativeRestartLocation = null;
+    const lifetime = configuration.mode==='direct'?{start(){},stop(){}}:followOpenCodeRestart(monitor.state.openCode, {
+      onLost: async () => {}, onAttach: async () => {
+        const location = await monitor.state.openCode.sharedMcpDirectory();
+        if (nativeRestartLocation !== null && location !== nativeRestartLocation) return false;
+        nativeRestartLocation = location; return true;
+      },
       onDiagnostic: (code) => process.stderr.write(code + '\n') });
     lifetime.start();
     process.on('SIGTERM', () => { void close(); }); process.on('SIGINT', () => { void close(); });

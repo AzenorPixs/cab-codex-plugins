@@ -1356,3 +1356,5 @@ flowchart LR
 [close-treated-incidents-without-fix](openspec/changes/archive/2026-11-07-close-treated-incidents-without-fix/), code non attribué : réponse puis clôture et nettoyage individuel ou par lot de la file CCAB ; activation à vérifier séparément.
 
 [scope-recovery-permission-receipt](openspec/changes/archive/2026-11-07-scope-recovery-permission-receipt/), code non attribué : preuve de rejet ciblée malgré des reçus étrangers illisibles ; activation et reprise du déclarant à vérifier séparément.
+
+[resume-after-opencode-restart](openspec/changes/archive/2026-11-08-resume-after-opencode-restart/), code non attribué : continuité après redémarrage, prévol MCP, coordination CCAB et récupération qualifiée ; activation et reprise des déclarants à vérifier séparément.
