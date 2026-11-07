@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';import {mkdtempSync,mkdirSync,writeFileSync,rmSync,symlinkSync} from 'node:fs';import {join} from 'node:path';import {tmpdir} from 'node:os';
-import {dependencyAuthority,verifyDependencies} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-dependency-authority.mjs';
+import {dependencyAuthority,verifyDependencies,VERSION as DEPENDENCY_VERSION} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-dependency-authority.mjs';
 import {RunRegistry} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runs.mjs';import {ResourceRunRegistry} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 function fixture(t){const root=mkdtempSync(join(tmpdir(),'cab-openspec-dependency-'));t.after(()=>rmSync(root,{recursive:true,force:true}));mkdirSync(join(root,'openspec/changes/archive'),{recursive:true});writeFileSync(join(root,'openspec/config.yaml'),'schema: spec-driven\n');return root;}
 function archive(root,name='dependency'){const d=join(root,'openspec/changes/archive/2026-11-07-'+name);mkdirSync(d);writeFileSync(join(d,'proposal.md'),'Mandat achevé dans son périmètre.\n');writeFileSync(join(d,'tasks.md'),'- [x] Critère du change vérifié\n');return d;}
@@ -17,6 +17,6 @@ test('Récupération5 : reçu signé et empreinte exacte exigés, ancien contrô
  writeFileSync(join(code,'cgpt-approval-bridge-resource-coordination.mjs'),`import {RunRegistry} from './cgpt-approval-bridge-runs.mjs';export const VERSION='2.4.5';export class ResourceRunRegistry extends RunRegistry{}`);
  const entry=join(code,'entry.mjs');writeFileSync(entry,`import {ResourceRunRegistry} from './cgpt-approval-bridge-resource-coordination.mjs';const r=new ResourceRunRegistry(${JSON.stringify(root)});console.log(r.checkConflicts({dependsOn:['dependency']}));`);
  const preload=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-restore-preload.mjs',import.meta.url)),env={...process.env,CAB_ERASURE_RESTORE_RECEIPT:tx.path,CAB_ERASURE_RESTORE_TRANSACTION:value.transactionId};
- let result=spawnSync(process.execPath,['--import',preload,entry],{encoding:'utf8',env});assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/accepted/);assert.match(result.stderr,/helperVersion.*2.4.9/);
+ let result=spawnSync(process.execPath,['--import',preload,entry],{encoding:'utf8',env});assert.equal(result.status,0,result.stderr);assert.match(result.stdout,/accepted/);assert.equal(JSON.parse(result.stderr.trim()).helperVersion,DEPENDENCY_VERSION);
  tx.save({...value,expectedPeersDigest:'0'.repeat(64)});result=spawnSync(process.execPath,['--import',preload,entry],{encoding:'utf8',env});assert.notEqual(result.status,0);assert.match(result.stderr,/erasure-restore-registry-divergent/);
 });
