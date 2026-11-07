@@ -1,6 +1,6 @@
 import { ContinuityStore, canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 const dimensions=['input','output','reasoning','cacheRead','cacheWrite','nativeTotal','costUsd'];
 const identifier=value=>typeof value==='string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 const count=value=>Number.isSafeInteger(value) && value>=0;
@@ -14,10 +14,16 @@ const valid=value=>Array.isArray(value?.messages) && value.messages.length<=5000
 
 // Cumulative session.usage.updated events are deliberately not added to per-message usage.
 export class EfficiencyLedger {
-  constructor(path) {
+  constructor(path,{backend=null}={}) {
     this.error=null;this.rows=new Map();
     try {
       this.store=new ContinuityStore(path,'native-efficiency',valid);
+      if(backend) {
+        const stored=backend.readSync()||this.store.snapshot()||{messages:[]};
+        if(!valid(stored))throw new Error('native-efficiency-checkpoint-invalid');
+        this.migration=backend.write(stored).catch(()=>{this.error='native-efficiency-sgs-unavailable';});
+        this.store={snapshot:()=>stored,write:value=>{void backend.write(value).catch(()=>{this.error='native-efficiency-sgs-unavailable';});}};
+      }
       this.rows=new Map((this.store.snapshot()?.messages || []).map(row=>[rowKey(row),row]));
     } catch {this.error='native-efficiency-checkpoint-unavailable';}
   }

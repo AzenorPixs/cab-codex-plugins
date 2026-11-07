@@ -5,12 +5,17 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat distribué 2.3.10. Pour un pilotage, lire [le noyau](references/protocol-core.md)
+Contrat distribué 2.4.0. Pour un pilotage, lire [le noyau](references/protocol-core.md)
 et [l'index](references/protocol-index.md), puis uniquement les références de
 l'action en cours. Transmettre à l'agent de codage les obligations applicables
 avant son mandat. AGENTS.md résout ce contrat ; aucun fichier local
 ORCHESTRATED_CODING.md n'est nécessaire. Une session directe SCM n'active pas
 ce skill par la seule présence du projet CAB.
+
+Le contrat2.4.0 inclut [autonomie et ateliers](references/autonomy-and-ateliers.md),
+SGS permanent et CCAB. Vérifier séparément la version chargée de chaque service.
+Charger cette référence pour tout démarrage/reprise/update ;
+pour un incident, identifier le reçu avant toute action de récupération.
 
 Le développeur autorise le travail métier ; l'orchestrateur examine chaque
 mandat et ses preuves. Le broker transporte, le contrôleur applique les
@@ -20,6 +25,9 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 
 | Action | Références à lire |
 |---|---|
+| Liberté du codeur et atelier | [autonomie et ateliers](references/autonomy-and-ateliers.md) ; écritures projet hors atelier, web et résultats soumis à l’orchestrateur |
+| Statistiques natives ou CAB direct | Skill SGS du même paquet, référence `runtime-collection.md` ; direct uniquement sur demande explicite |
+| Incident CAB | Skill/commande CCAB du même paquet ; déclaration autonome, traitement par l’orchestrateur désigné |
 | Entrée/reprise | [monitor-service](references/monitor-service.md) d'abord, puis [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md) ; [PLLM](references/protocol-model.md) au seul démarrage initial |
 | Mandat et compte rendu | [session](references/protocol-session.md), [soumission](references/validation-submission.md), [concurrence](references/concurrent-runs.md), [cycle](references/run-lifecycle.md) |
 | Incident/reprise | [autonomie](references/owner-reconciliation.md), [grille](references/pilot-state-matrix.md) [triage](references/owner-diagnostics.md), [historique/infra](references/historical-owner-boundaries.md) |

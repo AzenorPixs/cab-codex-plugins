@@ -1,5 +1,67 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+## Contrat CAB 2.4.0 — huit catégories validées
+
+Contrat2.4.0 validé sous SCM avec CI/CD. Les preuves de qualification sont
+conservées avec le change OpenSpec correspondant ; la publication et l’activation
+sont vérifiées séparément par les reçus de livraison et CABU. Le numéro présent
+dans ce document ne prouve pas la version chargée par un processus. Les
+références héritées ci-dessous décrivent les versions antérieures ; le contrat
+OpenSpec et le contrat distribué de la version effectivement active font autorité.
+
+| Catégorie | Contrat adopté |
+|---|---|
+| 1. Autorité et autonomie | Dans le change validé, l’orchestrateur décide, orchestre, contrôle et valide ; le codeur réalise librement lectures, exploration et essais. Toute écriture projet hors atelier et tout accès web requièrent sa validation préalable. Toute action hors change et toute allocation de ressources supplémentaires nécessitent l’accord du développeur. Les ressources déjà allouées restent utilisables. Tous les résultats de tests sont soumis à validation de l’orchestrateur avant d’être retenus comme preuves. |
+| 2. SGS | Service permanent, collecte native autonome Codex/OpenCode des deux rôles, sources des briques transmises directement, complément LLM limité aux faits absents. Modèle, fournisseur, niveau de raisonnement et changements horodatés ; chronologie, attentes, durées et tokens entrée/sortie/raisonnement/cache séparés, totaux natifs préservés. N/A motivé pour les mesures non exposées. Tous les rapports statistiques archivés sont importables avec provenance et déduplication. |
+| 3. CCAB | File persistante et plugin/skill/commande. FIFO par défaut, lots de cause commune justifiés et réservés, coordination avec les déclarants et résolution individuelle. Correctif code ou documentaire sous SCM/version/CI-CD/CABU ; faux positif accompagné d’une méthode vérifiée. Aucun nouveau chat imposé. |
+| 4. CABU | Préparation à chaud, bascule minimale, reprise du même reçu, versions chargées vérifiées et retour des communications. Aucun rejeu d’effet ni de permission once. Une coupure brève se traite comme une interruption réseau avec reprise sur reçus. Chaque UID modifie uniquement ses données privées. |
+| 5. Nettoyage et Web Monitor | RUN en cours refusé au nettoyage. À l’archivage ou à l’arrêt explicite pour dépendance insatisfaite : rapports durables, nettoyage OC puis données du change dans toutes les briques, avec préservation des pairs. Une pause ou un incident technique ne vaut pas clôture. Archives montre les données réellement conservées et permet leur suppression explicite par le développeur sans approbation CAB supplémentaire. Stats lit seulement SGS ; incidents encore nécessaires visibles dans CCAB. |
+| 6. Distribution et connaissance | Chaque acteur connaît le contrat applicable avant son travail et après reprise/update ; rôle et version sont tracés. Skills, plugins et commandes restent cohérents et agnostiques des projets et machines. Le noyau compact renvoie aux références utiles sans relire tout l’historique. |
+| 7. Temps, tokens et cache LLM | Préfixes stables, états différentiels, attente mécanique hors tours LLM, calcul local des identités/empreintes et compactage fondé sur le budget avec checkpoint durable. Gains de cache et latences mesurés par SGS, jamais supposés ; temps mural et temps agent concurrents restent distincts. |
+| 8. Réalisation et livraison | Une version consolidée2.4.0 sous SCM, tests vitaux ciblés, cohérence OpenSpec et cadrages, commit/publication via CI/CD DIU puis CABU. Qualification source, publication et activation sont prouvées séparément. |
+
+L’atelier commun est `.cab-tests/<change>/<RUN>/` à la racine de **chaque
+projet**. Toutes les briques vérifient/créent `.cab-tests/` au démarrage pour
+ce projet. Le codeur peut y créer, modifier et copier des fichiers du change
+sans autorisation supplémentaire ; il ne touche pas aux ateliers des pairs.
+Le sous-espace propre est vidé à la clôture, la racine reste présente. Les
+liens symboliques ne doivent pas permettre de sortir de cet espace.
+
+CAB direct est un opt-in explicite (« utiliser CAB en mode direct ») : une
+session Codex réelle alimente SGS et apparaît dans le Web Monitor, sans
+inventer de session OpenCode ni d’orchestrateur. Sa présence dans un dépôt
+ne déclenche aucun RUN ni pilotage implicite.
+
+## Déploiement et qualification cible
+
+Installer les services `cgpt-approval-bridge-sgs.service` et
+`cgpt-approval-bridge-ccab.service` avec leurs scripts, les collecteurs autorisés,
+le plugin CCAB et sa commande, ainsi que le jeu CAB/CABU/SGS cohérent. Les
+services sont démarrés explicitement ; leur permanence n’impose pas une
+activation automatique au login. Le mode direct doit fonctionner sans OpenCode.
+Chaque compte reçoit uniquement les sources et emplacements qu’il est autorisé
+à lire ; aucun secret n’est copié dans une commande ou un rapport.
+
+Le point d’entrée broker reste `src/cgpt_approval_bridge_server.py`. Le paquet
+complet2.4.0 inclut aussi router/journal, reporting CCAB/SGS, lanceur d’atelier,
+worker d’effacement propriétaire, ses modules MJS communs et le contrat JSON.
+CABU vérifie tous ces fichiers avant de confirmer une activation ; les trois
+modules historiques seuls ne suffisent plus à qualifier une nouvelle livraison.
+
+La qualification minimale couvre les deux UID et les pairs lors du nettoyage,
+la reprise sur reçu, SGS et sa déduplication/chronologie/import, FIFO/lots CCAB,
+les ateliers isolés, les validations, le mode direct, les vues du Web Monitor et
+la suppression d’archives par le développeur. Une campagne générale répétée
+n’est pas imposée lorsque les contrôles ciblés suffisent.
+
+La livraison SCM se termine par la commande DIU de CI/CD définie par le prompt
+résolu depuis DEVOPS.md ; elle réalise commit, version et publications. CABU
+est ensuite exécuté et ses versions actives sont revérifiées. Aucun lancement
+sur la seule présence des fichiers, aucune migration aveugle ou nouvelle
+transaction destinée à masquer l’échec d’un reçu existant.
+
+## Références héritées et compatibilité antérieure
+
 ## Adoption privée prouvée — CAB2.3.7
 
 CABU reprend un registre cible privé sans manifeste seulement si ses octets

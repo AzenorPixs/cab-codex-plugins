@@ -22,6 +22,12 @@ monitoring. Restitue le résultat de `/CAB update`, avec versions des fichiers,
 processus réellement observés, mesures de bascule et état du même reçu en cas
 d'attente. Une préparation ou une copie de fichiers ne prouve pas l'activation.
 
+À partir de 2.4.0, la commande de mise à jour vérifie aussi les services
+permanents SGS et CCAB après la bascule principale. Un échec de cette étape
+conserve le reçu principal et son sous-reçu `runtime-services.json` ; reprendre
+la même transaction sans refaire une bascule déjà vérifiée. Un service dont
+la version et le PID systemd concordent est conservé sans redémarrage inutile.
+
 Pour MCP_RECOVERY_REQUIRED, lire `references/mcp-pending-recovery.md` dans le
 skill CAB : l’accord permanent du développeur couvre la récupération bornée
 au reçu exact, avec contrôles frais et intention unique. Ne pas redemander cet

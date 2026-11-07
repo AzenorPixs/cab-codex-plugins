@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { ObservationStatistics, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = "2.3.10";
+export const VERSION = "2.4.0";
 if (OBSERVATION_VERSION !== VERSION) throw new Error('CAB statistics component version mismatch');
 const categories = ['reservation', 'changes', 'native', 'nativeChanges'];
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });
@@ -81,8 +81,9 @@ function validSnapshot(value) {
 
 // Cet observateur n'admet aucune opération et ne lit ni historique ni contenu brut.
 export class SessionStatistics {
-  constructor(stateDirectory, { now = Date.now, persist = true, intervalMs = 5000, project = null } = {}) {
+  constructor(stateDirectory, { now = Date.now, persist = true, intervalMs = 5000, project = null,backend=null } = {}) {
     this.now = now; this.persistEnabled = persist;
+    this.backend=backend;
     this.path = join(stateDirectory, 'controller-statistics.json');
     this.runs = []; this.queue = []; this.integrationOwner = null; this.referenceVersion = 0;
     this.resourceProfile = false; this.accessStates = []; this.globalState = null;
@@ -96,10 +97,13 @@ export class SessionStatistics {
       let fd;
       try {
         safeParent(stateDirectory);
-        fd = openSync(this.path, constants.O_RDONLY | constants.O_NOFOLLOW);
-        const stat = fstatSync(fd);
-        if (!stat.isFile() || stat.nlink !== 1 || stat.size > 64 * 1024 * 1024) throw new Error('invalid snapshot');
-        const restored = JSON.parse(readFileSync(fd, 'utf8'));
+        let restored=backend?.readSync();
+        if(!restored) {
+          fd = openSync(this.path, constants.O_RDONLY | constants.O_NOFOLLOW);
+          const stat = fstatSync(fd);
+          if (!stat.isFile() || stat.nlink !== 1 || stat.size > 64 * 1024 * 1024) throw new Error('invalid snapshot');
+          restored = JSON.parse(readFileSync(fd, 'utf8'));
+        }
         if (!validSnapshot(restored)) throw new Error('invalid snapshot');
         this.data = restored;
         this.data.schemaVersion = 2;
@@ -114,7 +118,8 @@ export class SessionStatistics {
       } finally { if (fd !== undefined) closeSync(fd); }
     }
     this.dirty = true;
-    this.observations = new ObservationStatistics(stateDirectory, { now, persist, project });
+    this.observations = new ObservationStatistics(stateDirectory, { now, persist, project,
+      backend:backend?.child('controller-observations',join(stateDirectory,'controller-observations.json')) });
     if (intervalMs) {
       this.timer = setInterval(() => { this.advance(); void this.flush(); }, intervalMs);
       this.timer.unref();
@@ -410,6 +415,10 @@ export class SessionStatistics {
     if (!this.persistEnabled || !this.dirty || this.error === 'statistics-restoration-invalid') return;
     if (this.saving) { await this.saving; return; }
     this.dirty = false;
+    if(this.backend) {
+      this.saving=this.backend.write(this.data).then(()=>{this.error=null;this.writeCount++;}).catch(()=>{this.error='statistics-persistence-unavailable';this.dirty=true;});
+      await this.saving;this.saving=null;await this.observations.flush();return;
+    }
     const text = JSON.stringify(this.data) + '\n';
     this.saving = (async () => {
       let candidate;

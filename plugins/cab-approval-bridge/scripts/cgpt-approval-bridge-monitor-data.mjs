@@ -10,8 +10,9 @@ import { fileURLToPath } from 'node:url';
 import { publicEvent, VERSION as EVENT_VERSION } from './cgpt-approval-bridge-monitor-events.mjs';
 import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
+import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -70,12 +71,15 @@ export function monitorConfiguration(environment = process.env) {
     return value.href.replace(/\/$/, '');
   };
   const workspace = get('WORKSPACE');
+  const mode=get('MODE')||'piloted';
+  if(!['direct','piloted'].includes(mode))throw new Error('OC_Codex_MODE invalide.');
   if (!workspace || !isAbsolute(workspace)) throw new Error('OC_Codex_WORKSPACE doit être absolu.');
   const host = get('MONITOR_HOST') ?? '127.0.0.1';
   if (!['127.0.0.1', '::1'].includes(host)) throw new Error('OC_Codex_MONITOR_HOST doit être loopback.');
   const stateRoot = get('MONITOR_STATE_DIR') ?? join(homedir(), '.local', 'state', 'cab-approval-bridge-monitor');
   if (!isAbsolute(stateRoot)) throw new Error('OC_Codex_MONITOR_STATE_DIR doit être absolu.');
-  return { workspace, host, port: number('MONITOR_PORT', 8790, 1024, 65535),
+  return { workspace, mode, host, port: number('MONITOR_PORT', 8790, 1024, 65535),
+    archiveDirectory:join(stateRoot,'archives',createHash('sha256').update(workspace).digest('hex')),
     stateDirectory: join(stateRoot, createHash('sha256').update(workspace).digest('hex')),
     pollMs: number('MONITOR_POLL_INTERVAL_MS', 1000, 250, 60000),
     staleMs: number('MONITOR_STALE_MS', 10000, 1000, 300000),
@@ -256,7 +260,10 @@ export function operationalState(run, { controllerFresh = true, registryFresh = 
 }
 
 export class MonitorState {
-  constructor(configuration, { now = () => Date.now(), fetcher = fetch, statisticsProbe = statisticsComponent } = {}) {
+  constructor(configuration, { now = () => Date.now(), fetcher = fetch, statisticsProbe = async()=>{
+    try{const value=await runtimeRequest('sgs','/status');return {state:value.version===VERSION?'AVAILABLE':'VERSION_MISMATCH',available:value.version===VERSION&&value.status==='READY',version:value.version,reason:value.version===VERSION?null:'sgs-version-mismatch'};}
+    catch{return {state:'UNAVAILABLE',available:false,version:null,reason:'sgs-service-unavailable'};}
+  } } = {}) {
     this.configuration = configuration; this.now = now; this.fetcher = fetcher;
     this.openCode = createOpenCodeV2ClientFromEnv({ directory: configuration.workspace,
       baseUrl: configuration.opencodeUrl, fetchImpl: fetcher });
@@ -324,6 +331,20 @@ export class MonitorState {
     this.running = true;
     const c = this.configuration;
     try {
+      if(c.mode==='direct') {
+        const at=new Date(this.now()).toISOString();
+        try {
+          const result=await runtimeRequest('sgs','/stats?project='+encodeURIComponent(c.workspace));
+          this.directSessions=result.sessions.filter(session=>session.mode==='direct'&&session.cab_direct===true);
+          this.sources.sgs={available:true,attemptedAt:at,lastSuccessAt:at,value:result};
+          this.statistics={state:'AVAILABLE',available:true,version:result.version,reason:null,checkedAt:at};
+        }catch{
+          this.sources.sgs={available:false,attemptedAt:at,lastSuccessAt:null,error:'sgs-unavailable'};
+          this.statistics={state:'UNAVAILABLE',available:false,version:null,reason:'sgs-unavailable',checkedAt:at};
+        }
+        this.changes=await readChanges(c.workspace,[]);
+        this.publish();return;
+      }
       await Promise.all([this.source('controller', c.controllerUrl + '/status'),
         this.source('registry', c.controllerUrl + '/monitor/runs'), this.source('supervisor', c.supervisorUrl + '/status'),
         this.source('opencode', () => this.openCode.info()),
@@ -336,7 +357,11 @@ export class MonitorState {
       this.publish();
     } finally { this.running = false; }
   }
-  runs() { return normalizeRuns(this.sources.controller?.value, this.sources.registry?.value,
+  runs() {
+    if(this.configuration.mode==='direct')return (this.directSessions||[]).map(session=>({runId:session.run,changeId:session.change,
+      sessionId:session.session,mode:'direct',state:session.ended_at?'RELEASED':'DIRECT',operationalState:session.ended_at?'RELEASED':'DIRECT',agent:session.agent,ownerId:session.agent,
+      contextId:session.binding,resources:[],armed:null}));
+    return normalizeRuns(this.sources.controller?.value, this.sources.registry?.value,
     this.sources.supervisor?.value, this.sources.sessions?.value); }
   snapshot() {
     const now = this.now();
@@ -351,7 +376,7 @@ export class MonitorState {
       lastSuccessAt:this.statistics.available?this.statistics.checkedAt:null,ageMs:statsAge,
       stale:statsAge===null||statsAge>this.configuration.staleMs,error:this.statistics.reason};
     const limit = controller.configuration?.maxCommandLength;
-    return { version: VERSION, identity: { workspace: this.configuration.workspace },
+    return { version: VERSION, identity: { workspace: this.configuration.workspace,mode:this.configuration.mode||'piloted' },
       startedAt: this.startedAt, generatedAt: new Date(now).toISOString(), sources,
       stepCatalog: RUN_STEPS,
       componentVersions: { controller: componentVersion(controller.version),

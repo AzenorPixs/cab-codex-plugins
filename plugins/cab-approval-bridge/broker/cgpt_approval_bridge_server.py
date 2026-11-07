@@ -56,7 +56,10 @@ import json
 import os
 import re
 import socket
+import subprocess
+import struct
 import sys
+from pathlib import Path
 import threading
 import time
 import uuid
@@ -64,16 +67,24 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from http.client import HTTPException
+from http.client import HTTPException, HTTPConnection
 from urllib import error, parse, request
 
 import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.3.10"
+SERVER_VERSION = "2.4.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
+    "En session de codage (hors sonde technique), au demarrage, a la reprise "
+    "et apres CABU, consultez cab_contract pour le "
+    "noyau/index et les references applicables, dont autonomie, SGS et CCAB. "
+    "Confirmez version/digest au pilote avant de poursuivre le nouveau contrat. "
+    "atelier_execute permet les essais libres dans l'atelier propre : projet RO, "
+    "atelier RW, reseau isole ; atelier_status relit sans rejeu. Tout resultat "
+    "reste a valider par l'orchestrateur ; ecritures projet hors atelier et web "
+    "restent soumis a validation prealable. "
     "Dans OpenCode Code Mode, utilisez l'outil hote execute pour appeler les "
     "methodes de ce serveur. Faites d'abord une discovery search complete, puis "
     "appelez uniquement le nom exact decouvert, par exemple "
@@ -399,6 +410,7 @@ MAX_BLOCKING_CAPACITY = (
 BLOCKING_TOOLS = (
     "request_validation",
     "poll_approval",
+    "atelier_execute",
 )
 
 CONTROL_TOOLS = (
@@ -504,6 +516,7 @@ READINESS_PUBLISH_INTERVAL_SECONDS = 30
 ERASURE_PREPARED = None
 ERASURE_PREPARATION_ERROR = None
 ERASURE_LOCK = threading.Lock()
+OWNER_ERASURE_SOCKET = None
 SESSION_WATCHDOG_STATE = {}
 SESSION_WATCHDOG_LAST_RUN_AT = ""
 SESSION_WATCHDOG_LAST_ERROR = ""
@@ -1638,6 +1651,8 @@ def save_store(
                 "\n"
             )
 
+            mode=(os.stat(path,follow_symlinks=False).st_mode & 0o777) if os.path.exists(path) else 0o600
+            os.fchmod(handle.fileno(),mode)
             handle.flush()
 
             os.fsync(
@@ -4088,6 +4103,86 @@ def do_propose(args):
                 )
 
     return result
+
+
+CONTRACT_BUNDLE=None
+REPORTING_WORKSPACE=None
+REPORTING_STATUS={'statistics':'unobserved'}
+
+
+def reporting_module():
+    import cgpt_approval_bridge_reporting as reporting
+    reporting.configure(Path(store_path()).parent/'reporting')
+    return reporting
+
+
+def reporting_relay(path,packet):
+    try:return owner_erasure_http(path,{'sender':{'pid':os.getpid(),'uid':os.getuid(),'instanceId':INSTANCE_ID},'packet':packet})
+    except (ValidationError,HTTPException) as exc:raise ValueError('broker-reporting-relay-unavailable') from exc
+
+
+def do_ccab_report(args):
+    try:return reporting_module().enqueue_incident(args,reporting_relay)
+    except ValueError as exc:raise ValidationError(str(exc)) from exc
+
+
+def do_contract(args):
+    global CONTRACT_BUNDLE
+    if set(args)-{'reference'}:raise ValidationError('contract-input-invalid')
+    if CONTRACT_BUNDLE is None:
+        from pathlib import Path
+        path=Path(__file__).resolve().with_name('cgpt-approval-bridge-contract.json')
+        if not path.is_file() or path.is_symlink() or path.stat().st_size>8*1024*1024:raise ValidationError('contract-bundle-unavailable')
+        value=json.loads(path.read_text(encoding='utf-8'))
+        if value.get('schema_version')!=1 or value.get('version')!=SERVER_VERSION:raise ValidationError('contract-version-mismatch')
+        manifest={name:hashlib.sha256(document['content'].encode()).hexdigest() for name,document in value['documents'].items()}
+        if any(value['documents'][name]['sha256']!=sha for name,sha in manifest.items()):raise ValidationError('contract-content-divergent')
+        material=json.dumps({'version':value['version'],'documents':manifest},sort_keys=True,separators=(',',':')).encode()
+        if hashlib.sha256(material).hexdigest()!=value['digest']:raise ValidationError('contract-digest-divergent')
+        CONTRACT_BUNDLE=value
+    selected=args.get('reference')
+    names=[selected] if selected else ['CAB-SKILL.md','protocol-core.md','protocol-index.md','autonomy-and-ateliers.md']
+    if any(not isinstance(name,str) or name not in CONTRACT_BUNDLE['documents'] for name in names):raise ValidationError('contract-reference-unknown')
+    return {'version':SERVER_VERSION,'contract_digest':CONTRACT_BUNDLE['digest'],'snapshot_only':True,
+            **({'available_references':sorted(CONTRACT_BUNDLE['documents'])} if selected is None else {}),
+            'documents':{name:CONTRACT_BUNDLE['documents'][name] for name in names}}
+
+
+def do_prepare_validation(args):
+    run_id=require_str(args,'run_id',100)
+    if args.get('request_id'):
+        with locked_store(store_path()):
+            data,_=migrate_store(raw_load_store(store_path()))
+            if find_by_request_id(data['approvals'],args['request_id']) is not None:raise ValidationError('validation-request-already-known')
+    endpoint=controller_url()+'/runs/'+parse.quote(run_id,safe='')+'/validation/prepare'
+    http_request=request.Request(endpoint,data=json.dumps(args,ensure_ascii=False).encode(),headers={'content-type':'application/json'},method='POST')
+    try:
+        with request.urlopen(http_request,timeout=10) as response:return json.loads(response.read(4*1024*1024))
+    except error.HTTPError as exc:
+        try:code=json.loads(exc.read(16384)).get('error','')
+        except (ValueError,AttributeError):code=''
+        raise ValidationError(code if re.fullmatch(r'[a-z][a-z0-9-]{1,100}',code) else 'validation-preparation-refused') from exc
+    except (OSError,ValueError) as exc:raise ValidationError('validation-preparation-unavailable') from exc
+
+
+def do_atelier(args,*,snapshot=False):
+    import cgpt_approval_bridge_atelier as atelier
+    if atelier.VERSION!=SERVER_VERSION:raise ValidationError("atelier-component-version-mismatch")
+    def authorize(value):
+        endpoint=controller_url()+"/runs/"+parse.quote(value["run_id"],safe="")+("/atelier/status-authorize" if snapshot else "/atelier/authorize")
+        payload=json.dumps(value,ensure_ascii=False).encode("utf-8")
+        http_request=request.Request(endpoint,data=payload,headers={"Content-Type":"application/json"},method="POST")
+        try:
+            with request.urlopen(http_request,timeout=10) as response:
+                return json.loads(response.read(1024*1024))
+        except error.HTTPError as exc:
+            try:code=json.loads(exc.read(16384)).get('error','')
+            except (ValueError,AttributeError):code=''
+            raise ValidationError(code if re.fullmatch(r'(?:atelier|run|coordination)-[a-z0-9-]{1,100}',code) else "atelier-controller-authorization-refused") from exc
+        except (OSError,ValueError) as exc:
+            raise ValidationError("atelier-controller-unavailable") from exc
+    try:return atelier.status(args,authorize) if snapshot else atelier.execute(args,authorize)
+    except atelier.AtelierError as exc:raise ValidationError(str(exc)) from exc
 
 
 def do_lookup_validation(args):
@@ -8308,7 +8403,7 @@ def do_readiness(args=None):
         "instance_id": INSTANCE_ID,
         "root_cause": diagnosis.get("root_cause", "NONE"),
         "coordination_protocol": "resource-scoped-v1",
-        "coordination_capabilities": ["atomic-resource-sets", "resource-revisions", "exceptional-global-freeze"],
+        "coordination_capabilities": ["atomic-resource-sets", "resource-revisions", "exceptional-global-freeze", "owner-local-erasure-v1"],
         "recommended_action": {
             "code": action.get("code", "NONE"),
             "class": action.get("class", action.get("mode", "NONE")),
@@ -8331,6 +8426,20 @@ def do_readiness(args=None):
         ),
         "checked_at": utc_now(),
     }
+    try:
+        contract=do_contract({'reference':'protocol-index.md'})
+        snapshot['protocol_contract_digest']=contract['contract_digest']
+        snapshot['protocol_contract_ready']=True
+    except (ValidationError,OSError,ValueError,KeyError,TypeError):
+        snapshot['protocol_contract_digest']=None;snapshot['protocol_contract_ready']=False
+    atelier=sys.modules.get('cgpt_approval_bridge_atelier')
+    if atelier is not None:
+        with atelier.LOCK:snapshot['active_atelier_count']=len(atelier.ACTIVE_PROCESSES)
+    else:snapshot['active_atelier_count']=0
+    if REPORTING_WORKSPACE:
+        try:snapshot['ccab_outbox']=reporting_module().pending(REPORTING_WORKSPACE)
+        except (ImportError,OSError,ValueError):snapshot['ccab_outbox']={'count':None,'entries':[],'unavailable':True}
+    snapshot['reporting']=dict(REPORTING_STATUS)
 
     common = {"STORE_UNHEALTHY", "JOURNAL_UNHEALTHY", "JOURNAL_INTEGRITY_FAILURE",
               "STORE_JOURNAL_DIVERGENCE", "WORKER_POOL_SATURATED", "CONTROLLER_UNREACHABLE"}
@@ -8386,7 +8495,7 @@ def do_readiness(args=None):
 
 def publish_readiness_to_controller():
     """Publie le snapshot readiness au controleur local."""
-    global ERASURE_PREPARATION_ERROR
+    global ERASURE_PREPARATION_ERROR, OWNER_ERASURE_SOCKET,REPORTING_WORKSPACE,REPORTING_STATUS
     snapshot = do_readiness()
     with ERASURE_LOCK:
         if ERASURE_PREPARED:
@@ -8405,9 +8514,31 @@ def publish_readiness_to_controller():
             value = json.loads(body) if body else {}
             if not isinstance(value, dict):
                 return False
+            if value.get('broker_owner_socket') is not None:OWNER_ERASURE_SOCKET=value['broker_owner_socket']
+            if value.get('workspace'):
+                try:import cgpt_approval_bridge_atelier as atelier
+                except ImportError:return False
+                atelier.ensure_project(value['workspace'])
+                REPORTING_WORKSPACE=value['workspace']
+                try:REPORTING_STATUS=reporting_module().publish(REPORTING_WORKSPACE,snapshot,reporting_relay)
+                except (ImportError,OSError,ValueError):REPORTING_STATUS={'statistics':'unavailable','reason':'broker-reporting-unavailable'}
+            if value.get("erasure_owner_socket") is not None:
+                OWNER_ERASURE_SOCKET=value["erasure_owner_socket"]
+                try:
+                    polled=owner_erasure_http("/cleanup/owner/poll",{"pid":os.getpid(),"uid":os.getuid(),"instanceId":INSTANCE_ID})
+                    if polled.get("command"):
+                        owner_terminal_erasure(polled["command"])
+                    ERASURE_PREPARATION_ERROR=None
+                except (ValidationError, StoreError, OSError, journal.JournalError, HTTPException, ValueError) as exc:
+                    code=str(exc)
+                    ERASURE_PREPARATION_ERROR={"transactionId":polled.get("command",{}).get("transactionId") if 'polled' in locals() else None,
+                        "code":code if re.fullmatch(r"erasure-[a-z0-9-]+",code) else "erasure-owner-transport-failed"}
             if value.get("erasure_prepare") is not None:
                 try:
-                    prepare_terminal_erasure(value["erasure_prepare"])
+                    if value["erasure_prepare"].get("transport") == "owner-local-v1":
+                        owner_terminal_erasure(value["erasure_prepare"])
+                    else:
+                        prepare_terminal_erasure(value["erasure_prepare"])
                     ERASURE_PREPARATION_ERROR = None
                 except (ValidationError, StoreError, OSError, journal.JournalError) as exc:
                     code = str(exc)
@@ -8467,6 +8598,96 @@ def erasure_journal_snapshot_unlocked(path):
     return events, checkpoint
 
 
+def owner_erasure_http(path, body):
+    endpoint=OWNER_ERASURE_SOCKET
+    if not isinstance(endpoint,dict) or not isinstance(endpoint.get("path"),str):
+        raise ValidationError("erasure-owner-socket-unavailable")
+    connection=HTTPConnection("localhost",timeout=15)
+    connection.sock=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM)
+    connection.sock.settimeout(15)
+    connection.sock.connect(endpoint["path"])
+    pid,uid,_gid=struct.unpack('3i',connection.sock.getsockopt(socket.SOL_SOCKET,socket.SO_PEERCRED,12))
+    if pid!=endpoint.get("pid") or uid!=endpoint.get("uid"):
+        connection.close()
+        raise ValidationError("erasure-owner-proxy-identity-divergent")
+    try:
+        connection.request("POST",path,body=json.dumps(body,ensure_ascii=False).encode("utf-8"),headers={"content-type":"application/json"})
+        response=connection.getresponse()
+        value=json.loads(response.read(4*1024*1024))
+        if response.status not in (200,202):
+            raise ValidationError(value.get("error","erasure-owner-controller-refused"))
+        return value
+    finally:
+        connection.close()
+
+
+def owner_erasure_exchange(command, receipt=None):
+    value=owner_erasure_http("/cleanup/owner/exchange",{"command":command,
+        "sender":{"pid":os.getpid(),"uid":os.getuid(),"instanceId":INSTANCE_ID},"receipt":receipt})
+    if not value.get("authorized") and not value.get("accepted"):
+        raise ValidationError("erasure-owner-controller-refused")
+    return value
+
+
+def owner_erasure_worker(command, action, bundle=None, owner_receipt=None):
+    binary = command.get("nodeExecutable")
+    if not isinstance(binary, str) or not os.path.isabs(binary) or not os.access(binary, os.X_OK):
+        raise ValidationError("erasure-owner-node-unavailable")
+    from pathlib import Path
+    worker = str(Path(__file__).with_name("cgpt_approval_bridge_owner_cleanup.mjs"))
+    payload = {"action":action, "scope":command["scope"], "transactionId":command["transactionId"]}
+    if bundle is not None:
+        payload["bundle"] = bundle
+    if owner_receipt is not None:
+        payload["ownerReceipt"] = owner_receipt
+    result = subprocess.run([binary, worker], input=json.dumps(payload, ensure_ascii=False),
+                            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60, check=False)
+    if result.returncode:
+        try:
+            code=json.loads(result.stderr).get("error", "")
+        except (ValueError, TypeError):
+            code=""
+        raise ValidationError(code if re.fullmatch(r"erasure-[a-z0-9-]+",code) else "erasure-owner-worker-failed")
+    return json.loads(result.stdout)
+
+
+def owner_terminal_erasure(command):
+    global ERASURE_PREPARED
+    if command.get("brokerPid") != os.getpid() or command.get("transport") != "owner-local-v1":
+        raise ValidationError("erasure-owner-broker-divergent")
+    owner_erasure_exchange(command)
+    action = command.get("action")
+    if action == "prepare":
+        atelier=sys.modules.get('cgpt_approval_bridge_atelier')
+        if atelier is not None:
+            try:atelier.stop_scope(command['scope'])
+            except atelier.AtelierError as exc:raise ValidationError('erasure-atelier-stop-unconfirmed') from exc
+        with locked_store(store_path()):
+            items=list(load_store(store_path())["approvals"].values())
+            if any(item.get("directory") not in (None,"",command["scope"]["workspace"]) for item in items
+                   if item.get("change_id")==command["scope"]["changeId"] or item.get("run_id") in command["scope"]["runIds"]):
+                raise ValidationError("erasure-broker-ownership-ambiguous")
+        with journal.locked_journal(journal.journal_path()):
+            erasure_journal_snapshot_unlocked(journal.journal_path())
+        result=owner_erasure_worker(command,"prepare")
+        with ERASURE_LOCK:
+            ERASURE_PREPARED=command
+    elif action == "commit":
+        # All in-process store and journal producers use these reentrant locks.
+        # The child applies only this owner's files; it never opens controller keys.
+        with THREAD_STORE_LOCK, journal.THREAD_JOURNAL_LOCK:
+            state=owner_erasure_worker(command,"status")
+            bundle=prepare_terminal_erasure_bundle(command) if state["state"]=="PREPARED" else None
+            result=owner_erasure_worker(command,"commit",bundle=bundle)
+    elif action in ("verify","finalize"):
+        result=owner_erasure_worker(command,action,owner_receipt=command.get("ownerReceipt"))
+    else:
+        raise ValidationError("erasure-owner-action-invalid")
+    result["instanceId"]=INSTANCE_ID
+    owner_erasure_exchange(command,result)
+    return result
+
+
 def prepare_terminal_erasure(signed):
     """Accepte seulement l'intention locale scellee, sans encore effacer."""
     global ERASURE_PREPARED
@@ -8515,7 +8736,7 @@ def prepare_terminal_erasure(signed):
         ERASURE_PREPARED = signed
 
 
-def prepare_terminal_erasure_bundle():
+def prepare_terminal_erasure_bundle(_owner_command=None):
     """Apres arret des producteurs, prepare le journal rescellable hors ligne.
 
     Le pilote applique les candidats uniquement apres disparition de ce PID.
@@ -8533,40 +8754,52 @@ def prepare_terminal_erasure_bundle():
             if parent == directory:
                 return False
             directory = parent
-    with ERASURE_LOCK:
-        signed = ERASURE_PREPARED
-    if signed is None:
-        return
-    prepare_terminal_erasure(signed)
-    value = dict(signed)
-    value.pop("signature")
-    # Un simple redemarrage CABU ne doit pas preparer un ancien effacement.
-    control_path = os.path.join(value["controlRoot"], "change-erasure.json")
-    fd = os.open(control_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
-    try:
-        info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size > 128 * 1024 * 1024:
-            raise ValidationError("erasure-control-intent-unsafe")
-        with os.fdopen(os.dup(fd), "r", encoding="utf-8") as handle:
-            intent = json.load(handle)
-    finally:
-        os.close(fd)
-    intent_signature = intent.pop("signature", "")
-    fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
-    try:
-        info = os.fstat(fd)
-        if info.st_size != 32 or info.st_mode & 0o077 or info.st_uid != os.getuid():
-            raise ValidationError("erasure-control-key-unsafe")
-        control_key = os.read(fd, 32)
-    finally:
-        os.close(fd)
-    if not hmac.compare_digest(intent_signature, erasure_control_signature(intent, control_key)):
-        raise ValidationError("erasure-control-signature-invalid")
-    if intent.get("phase") != "STOPPING":
-        return
-    if intent.get("transactionId") != value["transactionId"] or intent.get("scope") != value["scope"]:
-        raise ValidationError("erasure-control-intent-divergent")
+    if _owner_command is not None:
+        value = dict(_owner_command)
+        value.pop("signature", None)
+    else:
+        with ERASURE_LOCK:
+            signed = ERASURE_PREPARED
+        if signed is None:
+            return
+        if signed.get("transport") == "owner-local-v1":
+            return
+        prepare_terminal_erasure(signed)
+        value = dict(signed)
+        value.pop("signature")
+        # Un simple redemarrage CABU ne doit pas preparer un ancien effacement.
+        control_path = os.path.join(value["controlRoot"], "change-erasure.json")
+        fd = os.open(control_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        try:
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size > 128 * 1024 * 1024:
+                raise ValidationError("erasure-control-intent-unsafe")
+            with os.fdopen(os.dup(fd), "r", encoding="utf-8") as handle:
+                intent = json.load(handle)
+        finally:
+            os.close(fd)
+        intent_signature = intent.pop("signature", "")
+        fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
+        try:
+            info = os.fstat(fd)
+            if info.st_size != 32 or info.st_mode & 0o077 or info.st_uid != os.getuid():
+                raise ValidationError("erasure-control-key-unsafe")
+            control_key = os.read(fd, 32)
+        finally:
+            os.close(fd)
+        if not hmac.compare_digest(intent_signature, erasure_control_signature(intent, control_key)):
+            raise ValidationError("erasure-control-signature-invalid")
+        if intent.get("phase") != "STOPPING":
+            return
+        if intent.get("transactionId") != value["transactionId"] or intent.get("scope") != value["scope"]:
+            raise ValidationError("erasure-control-intent-divergent")
     scope = dict(value["scope"])
+    def owner_legacy_parent(parent):
+        if _owner_command is None or os.path.realpath(parent)!=parent:
+            return False
+        info=os.stat(parent,follow_symlinks=False)
+        legacy=os.path.join(scope["workspace"],".opencode","state","cgpt-approval-bridge")
+        return info.st_uid==os.getuid() and (not info.st_mode & 0o022 or parent==legacy or parent.startswith(legacy+os.sep))
     ids = set(scope["ids"])
     identity_keys = {"runId", "run_id", "changeId", "change_id", "sessionId", "session_id",
                      "requestId", "approval_id", "operation_id", "access_id"}
@@ -8639,7 +8872,7 @@ def prepare_terminal_erasure_bundle():
                     info = os.fstat(fd)
                     parent = os.stat(os.path.dirname(target), follow_symlinks=False)
                     if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid()
-                            or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or not private_parent(os.path.dirname(target))):
+                            or not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid() or not (private_parent(os.path.dirname(target)) or owner_legacy_parent(os.path.dirname(target)))):
                         raise ValidationError("erasure-broker-file-unsafe")
                     with os.fdopen(os.dup(fd), "rb") as handle:
                         before = hashlib.sha256(handle.read()).hexdigest()
@@ -8669,7 +8902,10 @@ def prepare_terminal_erasure_bundle():
     epoch = {"epoch":str(max(time.time_ns(), previous_epoch + 1)),
              "generation":max(scope["registrySequence"], previous_generation)}
     entries.append({"path":epoch_path,"before":epoch_before,"text":json.dumps(epoch,separators=(",", ":"))+"\n","remove":False})
-    roots = {store_path(), path, journal.checkpoint_path(), AUTO_REMEDIATION_CIRCUIT_STATE_PATH}
+    roots = {store_path(), path, journal.checkpoint_path(), epoch_path, AUTO_REMEDIATION_CIRCUIT_STATE_PATH}
+    from pathlib import Path
+    atelier_root=Path.home()/".local/state/cab-ateliers"/hashlib.sha256(scope["workspace"].encode()).hexdigest()
+    if atelier_root.exists():roots.add(str(atelier_root))
     for state_file in (store_path(), path, journal.checkpoint_path()):
         parent = os.path.dirname(state_file)
         if any(part.startswith(("cab-approval-bridge", "cgpt-approval-bridge")) or part == "broker"
@@ -8679,6 +8915,9 @@ def prepare_terminal_erasure_bundle():
               "roots":sorted(roots),
               "journalPaths":[path,journal.checkpoint_path()],"entries":entries,"brokerPid":os.getpid()}
     bundle["locks"] = {"instance":instance_lock_path(),"store":store_path()+".lock","journal":journal.journal_lock_path(path)}
+    if _owner_command is not None:
+        bundle["legacyRoots"] = sorted({os.path.dirname(p) for p in (store_path(),path,journal.checkpoint_path()) if not private_parent(os.path.dirname(p)) and owner_legacy_parent(os.path.dirname(p))})
+        return bundle
     fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
     try:
         info = os.fstat(fd)
@@ -8992,6 +9231,29 @@ APPROVAL_REQUEST_PROPERTIES = {
 
 
 TOOLS = [
+    {'name':'ccab_report','description':'Dépose un incident CAB en file CCAB, avec outbox locale si la liaison est indisponible. Ne décide pas d’un correctif et ne relance aucune opération.',
+     'inputSchema':{'type':'object','properties':{**{key:{'type':'string'} for key in ('incident_id','session_id','directory','run_id','change_id','category','summary')},
+         'evidence':{'type':'array','items':{'type':'object','properties':{'reference':{'type':'string'},'sha256':{'type':'string'}},'required':['reference','sha256'],'additionalProperties':False}}},
+       'required':['incident_id','session_id','directory','category','summary','evidence'],'additionalProperties':False}},
+    {'name':'prepare_validation','description':'Calcule les IDs, révisions effectives et SHA de l’input natif exact pour une unité neuve, sans créer de demande ni accorder de permission. Soumettre ensuite validation par un appel littéral séparé à request_validation.',
+     'inputSchema':{'type':'object','properties':{
+         **{key:{'type':'string'} for key in ('run_id','session_id','change_id','directory','title','summary','request_id')},
+         'reservation_version':{'type':'integer','minimum':1},'native_tool':{'type':'string','enum':['shell','write','edit']},'native_input':{'type':'object'},
+         'resources':{'type':'array','minItems':1,'items':{'type':'object','properties':{'key':{'type':'string'},'mode':{'enum':['read','write']}},'required':['key','mode'],'additionalProperties':False}}},
+         'required':['run_id','session_id','change_id','directory','title','summary','reservation_version','native_tool','native_input','resources'],'additionalProperties':False}},
+    {"name":"cab_contract","description":"Consulte le noyau/index CAB distribué et ses références, y compris autonomie, SGS et CCAB, sans lire le profil Codex ni changer les permissions du projet.",
+     "inputSchema":{"type":"object","properties":{"reference":{"type":"string"}},"additionalProperties":False}},
+    {"name":"atelier_execute","description":"Exécute librement un essai dans l'atelier propre du RUN : projet lecture seule, écritures dans son espace, réseau isolé. Tous les résultats doivent être validés par l'orchestrateur. Aucun effet projet hors atelier autorisé.",
+     "inputSchema":{"type":"object","properties":{
+         **{key:{"type":"string"} for key in ("request_id","run_id","session_id","change_id","directory")},
+         "reservation_version":{"type":"integer","minimum":1},"argv":{"type":"array","minItems":1,"items":{"type":"string"}},
+         "timeout_ms":{"type":"integer","minimum":1,"maximum":2147483647}},
+         "required":["request_id","run_id","session_id","change_id","directory","reservation_version","argv"],"additionalProperties":False}},
+    {"name":"atelier_status","description":"Relit le reçu du même essai sans le rejouer, y compris après perte de réponse.",
+     "inputSchema":{"type":"object","properties":{
+         **{key:{"type":"string"} for key in ("request_id","run_id","session_id","change_id","directory")},
+         "reservation_version":{"type":"integer","minimum":1}},
+         "required":["request_id","run_id","session_id","change_id","directory","reservation_version"],"additionalProperties":False}},
     {
         "name": "lookup_validation",
         "description": "Retrouve le recu existant apres perte de reponse, sans creation ni notification.",
@@ -9774,6 +10036,18 @@ def handle_request(
                 args,
                 cancel_event,
             )
+
+        elif name in ("atelier_execute","atelier_status"):
+            payload=do_atelier(args,snapshot=name=="atelier_status")
+
+        elif name=="cab_contract":
+            payload=do_contract(args)
+
+        elif name=='prepare_validation':
+            payload=do_prepare_validation(args)
+
+        elif name=='ccab_report':
+            payload=do_ccab_report(args)
 
         elif name == "poll_approval":
             payload = do_poll(

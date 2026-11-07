@@ -1,12 +1,12 @@
 import { existsSync,constants,openSync,closeSync,fstatSync,readFileSync,realpathSync } from 'node:fs';
-import {createHash} from 'node:crypto';
+import {createHash,randomUUID} from 'node:crypto';
 import {dirname} from 'node:path';
 import { join,relative } from 'node:path';
 import { ErasureTransaction, erasureScope, erasureFiles, extendErasureScope, erasureInventory } from './cgpt-approval-bridge-change-erasure.mjs';
 import { readRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { canonicalContinuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION='2.3.10';
+export const VERSION='2.4.0';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409})};
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
 export function erasureMonitorEndpoint(host='127.0.0.1',port='8790') {
@@ -35,18 +35,19 @@ function validateTerminalJobs(jobs,scope,ownerId,branch,retainedSessionId,stateD
       fail('erasure-retained-business-session-required');
 }
 export class ChangeErasureManager {
-  constructor({workspace,stateDirectory,registry,openCode,monitorIdentity,broker=()=>null,terminalProofs=()=>[]}) {
-    Object.assign(this,{workspace,stateDirectory,registry,openCode,monitorIdentity,broker,terminalProofs});
-    this.tx=null;
+  constructor({workspace,stateDirectory,registry,openCode,monitorIdentity,broker=()=>null,terminalProofs=()=>[],brokerIdentity=async()=>null}) {
+    Object.assign(this,{workspace,stateDirectory,registry,openCode,monitorIdentity,broker,terminalProofs,brokerIdentity});
+    this.tx=null;this.ownerChecks=new Map();
   }
   transaction(){return this.tx||=new ErasureTransaction(this.stateDirectory,{createKey:!existsSync(join(this.stateDirectory,'change-erasure.json'))})}
   pending(){return existsSync(join(this.stateDirectory,'change-erasure.json'))?this.transaction().load():null}
   public(value=this.pending()) {
     return value?{protocol:value.protocol,transactionId:value.transactionId,phase:value.phase,scope:value.scope,
       sessionIds:value.sessionIds,retainedSessionId:value.retainedSessionId,roots:value.roots,
-      brokerPrepared:this.broker()?.erasure_prepared===value.transactionId,brokerPid:this.broker()?.broker_process?.pid||null,
+      brokerTransport:value.brokerTransport||null,brokerInstanceId:this.broker()?.instance_id||null,ownerInstances:Object.fromEntries(Object.entries(value.ownerReceipts||{}).map(([key,receipt])=>[key,receipt.instanceId])),ownerAction:value.ownerAction||'prepare',ownerStates:Object.fromEntries(Object.entries(value.ownerReceipts||{}).map(([key,receipt])=>[key,receipt.state])),
+      brokerPrepared:Boolean(value.ownerReceipts?.prepare)||this.broker()?.erasure_prepared===value.transactionId,brokerPid:this.broker()?.broker_process?.pid||null,
       brokerPreparationError:this.broker()?.erasure_prepare_error?.transactionId===value.transactionId?this.broker().erasure_prepare_error.code:
-        value.phase==='SEALED'&&Date.now()-value.sealedAt>90000?'erasure-broker-preparation-timeout':null}:null;
+        value.phase==='SEALED'&&!value.ownerReceipts?.prepare&&Date.now()-value.sealedAt>90000?'erasure-broker-preparation-timeout':null}:null;
   }
   status() {
     const value=this.public();if(!value)return null;
@@ -75,7 +76,7 @@ export class ChangeErasureManager {
     if(this.pending())fail('erasure-transaction-in-progress');
     const snapshot=this.registry.snapshot();
     if(snapshot.project!==this.workspace)fail('erasure-workspace-divergent');
-    let scope=erasureScope(snapshot,input.changeId,input.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:input.ownershipReview});
+    let scope=erasureScope(snapshot,input.changeId,input.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:input.ownershipReview,closedAuthority:true});
     if(input.branch==='TERMINÉ'&&input.dependencyEvidence!==null)fail('erasure-input-invalid');
     if(input.branch==='BLOQUÉ') {
       const proof=input.dependencyEvidence;
@@ -117,7 +118,8 @@ export class ChangeErasureManager {
     const value=this.pending();
     if(!exact(input,['transactionId'])||!value||input.transactionId!==value.transactionId)fail('erasure-transaction-divergent');
     if(value.phase!=='PREPARED'&&value.phase!=='SEALED')fail('erasure-phase-invalid');
-    erasureScope(this.registry.snapshot(),value.scope.changeId,value.scope.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:value.scope.ownershipReview});
+    erasureScope(this.registry.snapshot(),value.scope.changeId,value.scope.ownerId,{terminalProofs:this.terminalProofs(),ownershipReview:value.scope.ownershipReview,
+      closedAuthority:value.scope.closureAuthority==='authoritative-run-state-v1'});
     const jobs=[];
     for(const path of erasureFiles(this.stateDirectory))if(path.endsWith('/controller-job.json')){
       const {value:job}=readRuntimeJson(path);if(job.changeId===value.scope.changeId)jobs.push({job,path});
@@ -133,9 +135,67 @@ export class ChangeErasureManager {
       sessionIdsDigest:canonicalContinuityDigest([...present].sort())}};
     this.transaction().save(next);return this.public(next);
   }
+  async ownerPoll(sender) {
+    const broker=this.broker(),identity=await this.brokerIdentity(sender?.pid);
+    if(sender?.pid!==broker?.broker_process?.pid||sender?.instanceId!==broker?.instance_id||identity?.uid!==sender?.uid||
+      ['Z','X'].includes(identity?.state))fail('erasure-owner-identity-divergent');
+    return {command:this.brokerCommand()};
+  }
+  async ownerExchange(input) {
+    if(!exact(input,['command','sender','receipt'])||!input.sender||!Number.isSafeInteger(input.sender.pid)||!Number.isSafeInteger(input.sender.uid))fail('erasure-owner-exchange-invalid');
+    const command=this.transaction().verify(input.command),value=this.pending(),broker=this.broker();
+    const check=command.checkId?this.ownerChecks.get(command.checkId):null;
+    const target=value||check?.certificate;
+    if(!target||command.transactionId!==target.transactionId||command.transport!=='owner-local-v1'||
+      canonicalContinuityDigest(command.scope)!==canonicalContinuityDigest(target.scope)||command.action!==(check?'verify':value.ownerAction||'prepare')||
+      command.brokerPid!==broker?.broker_process?.pid||input.sender.pid!==command.brokerPid||command.brokerInstanceId!==broker?.instance_id||input.sender.instanceId!==broker?.instance_id)fail('erasure-owner-exchange-divergent');
+    const identity=await this.brokerIdentity(input.sender.pid);
+    if(!identity||identity.uid!==input.sender.uid||['Z','X'].includes(identity.state))fail('erasure-owner-identity-divergent');
+    if(input.receipt===null)return {authorized:true,phase:value?.phase||'VERIFY_ONLY'};
+    const receipt=input.receipt;
+    const expected={prepare:'PREPARED',commit:'APPLIED',verify:'VERIFIED',finalize:'PURGED'}[command.action];
+    if(receipt.transactionId!==target.transactionId||receipt.scopeDigest!==canonicalContinuityDigest(target.scope)||
+      receipt.uid!==identity.uid||receipt.pid!==input.sender.pid||receipt.instanceId!==broker.instance_id||receipt.state!==expected)fail('erasure-owner-receipt-divergent');
+    if(check){this.ownerChecks.delete(command.checkId);check.resolve(receipt);return {accepted:true,transactionId:target.transactionId};}
+    const next={...value,brokerTransport:'owner-local-v1',ownerReceipts:{...(value.ownerReceipts||{}),[command.action]:receipt}};
+    this.transaction().save(next);return {accepted:true,transactionId:value.transactionId};
+  }
+  async ownerCheck(input){
+    if(!exact(input,['certificate'])||!existsSync(join(this.stateDirectory,'change-erasure.key')))fail('erasure-owner-check-invalid');
+    const certificate=this.transaction().verify(input.certificate);
+    if(certificate.scope?.workspace!==this.workspace||!certificate.ownerReceipts?.commit)fail('erasure-owner-check-invalid');
+    if(this.pending())fail('erasure-transaction-in-progress');
+    const checkId='check-'+randomUUID();
+    let timer;
+    try{return await new Promise((resolve,reject)=>{
+      timer=setTimeout(()=>reject(Object.assign(new Error('erasure-owner-check-timeout'),{code:'erasure-owner-check-timeout',status:409})),90000);
+      this.ownerChecks.set(checkId,{certificate,resolve});
+    });}finally{clearTimeout(timer);this.ownerChecks.delete(checkId)}
+  }
+  ownerAction(input){
+    const value=this.pending();
+    if(!exact(input,['transactionId','action'])||!value||input.transactionId!==value.transactionId||
+      !['commit','verify','finalize'].includes(input.action)||value.brokerTransport!=='owner-local-v1')fail('erasure-owner-action-invalid');
+    if(input.action==='commit'&&value.phase!=='FREEZING')fail('erasure-owner-action-phase-invalid');
+    if(input.action==='verify'&&!['VERIFYING','CERTIFIED'].includes(value.phase)||input.action==='finalize'&&value.phase!=='CERTIFIED')fail('erasure-owner-action-phase-invalid');
+    this.transaction().save({...value,ownerAction:input.action});return this.status();
+  }
   brokerCommand() {
     const value=this.pending();
-    if(value?.phase!=='SEALED')return null;
+    if(!value){
+      const entry=this.ownerChecks.entries().next().value;if(!entry)return null;
+      const [checkId,check]=entry;
+      return this.transaction().seal({protocol:check.certificate.protocol,transport:'owner-local-v1',transactionId:check.certificate.transactionId,
+        action:'verify',checkId,nodeExecutable:process.execPath,brokerPid:this.broker()?.broker_process?.pid,
+        brokerInstanceId:this.broker()?.instance_id,scope:check.certificate.scope,ownerReceipt:check.certificate.ownerReceipts.commit});
+    }
+    if(this.broker()?.coordination_capabilities?.includes('owner-local-erasure-v1')){
+      if(!['SEALED','FREEZING','STOPPING','APPLYING','RESTARTING','VERIFYING','CERTIFIED'].includes(value.phase))return null;
+      return this.transaction().seal({protocol:value.protocol,transport:'owner-local-v1',transactionId:value.transactionId,
+        action:value.ownerAction||'prepare',nodeExecutable:process.execPath,brokerPid:this.broker().broker_process.pid,brokerInstanceId:this.broker().instance_id,scope:value.scope,
+        ...(value.ownerReceipts?.commit?{ownerReceipt:value.ownerReceipts.commit}:{})});
+    }
+    if(value.phase!=='SEALED')return null;
     return this.transaction().seal({protocol:value.protocol,transactionId:value.transactionId,
       controlRoot:this.stateDirectory,scope:value.scope});
   }

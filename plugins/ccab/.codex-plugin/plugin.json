@@ -1,0 +1,18 @@
+{
+  "name": "CCAB",
+  "version": "2.4.0+codex.20261107013510",
+  "description": "Déclarer et traiter les incidents CAB par FIFO ou lots justifiés.",
+  "author": {
+    "name": "CAB"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CCAB",
+    "shortDescription": "Coordonner les correctifs CAB.",
+    "longDescription": "File persistante des incidents CAB, réservations de traitement et résolutions vérifiées. Nécessite le runtime CAB de même version.",
+    "developerName": "CAB",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Consulte CCAB et traite les incidents dans le périmètre autorisé."
+  }
+}

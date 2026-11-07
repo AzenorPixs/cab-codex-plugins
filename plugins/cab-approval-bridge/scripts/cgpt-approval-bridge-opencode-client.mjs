@@ -4,11 +4,11 @@ import { createHash } from 'node:crypto';
 import { open } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, relative, resolve } from 'node:path';
-import { hasNativeAsk, nativeAskState, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
+import { hasNativeAsk, nativeAskState, scopedNativeReadRules, VERSION as PERMISSION_VERSION } from './cgpt-approval-bridge-permission-policy.mjs';
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 import { ContinuityStore } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -220,6 +220,11 @@ export function nativeCodingMandate(instruction) {
     'Pour les méthodes MCP CAB broker_readiness, request_validation, lookup_validation, poll_approval, get_approval, cancel_approval et reject, ' +
     'utiliser uniquement Code Mode execute avec le nom exact découvert par search, sous la forme ' +
     'tools["cgpt-validation"].request_validation(...). Ne pas appeler directement une entrée MCP native. ' +
+    'Dans le change validé, les lectures et explorations sont autonomes. Pour les essais libres dans votre atelier .cab-tests/<change>/<RUN>/, ' +
+    'utiliser atelier_execute via Code Mode après discovery exacte, avec données littérales, sans demande de validation supplémentaire ; ' +
+    'atelier_status consulte le même essai sans rejeu. Projet RO, atelier propre RW et réseau isolé ; ne pas remplacer ce profil par un shell hôte libre. ' +
+    'Toute écriture projet hors atelier et tout accès web exigent la validation préalable du pilote ; tous les résultats de tests lui sont soumis. ' +
+    'Toute action hors change ou allocation supplémentaire non autorisée relève du développeur. ' +
     'Pour request_validation, retourner directement await avec le payload littéral complet ; ne pas utiliser runtimeInput ou transformer le retour. ' +
     'Si execute ou la méthode découverte est indisponible, signaler le blocage sans appel direct ou repli. ' +
     'Une recherche MCP vide ne prouve pas leur absence. Utiliser directement l’outil natif disponible prescrit, ' +
@@ -545,7 +550,7 @@ function codeModePart(content, part) {
   const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
   let call, requestIdBound = false;
   if (match) {
-    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject'].includes(match[2])) return null;
+    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject','atelier_execute','atelier_status','cab_contract','prepare_validation','ccab_report'].includes(match[2])) return null;
     const literal = literalObject(code.slice(match[0].length), commandBinding,
       match[2] === 'request_validation' ? nativeRequestId : null);
     if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
@@ -554,7 +559,7 @@ function codeModePart(content, part) {
   } else if (code || !discovery) return null;
   if (assertedDiscoveryPath !== null && (!call || assertedDiscoveryPath !== 'tools["cgpt-validation"].' + match[2])) return null;
   const expected = [discovery, call].filter(Boolean);
-  const failureTool = call?.tool === 'cgpt-validation.request_validation' ||
+  const failureTool = ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status'].includes(call?.tool) ||
     (!discovery && call?.tool === 'cgpt-validation.get_approval');
   const nativeFailure = part.state.status === 'completed' && part.state.metadata?.error === true && failureTool &&
     (!discovery || discovery.tool === 'search') && Array.isArray(observed) && observed.length === expected.length &&
@@ -572,9 +577,9 @@ function codeModePart(content, part) {
         !record(entry) || entry.tool !== expected[i].tool ||
         (canonical(entry.input) !== canonical(expected[i].input) && !omittedEmptyReadinessInput(entry)) ||
         !(['completed', 'error'].includes(entry.status) || part.state.status === 'running' &&
-          entry.tool === 'cgpt-validation.request_validation' && i === expected.length - 1 && entry.status === 'running')) ||
+          ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status'].includes(entry.tool) && i === expected.length - 1 && entry.status === 'running')) ||
         (part.state.status === 'completed' && observed.some(entry => entry.status !== 'completed') && !nativeFailure)) return null;
-  } else if (!call || call.tool !== 'cgpt-validation.request_validation') return null;
+  } else if (!call || !['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status'].includes(call.tool)) return null;
   return { ...part, tool: call ? call.tool.replace('cgpt-validation.', 'cgpt-validation_') : 'cab_codemode_discovery',
     state: { ...part.state, input: call?.input || discovery.input,
       ...(nativeFailure ? { status: 'error', error: part.state.output } : {}),
@@ -1243,6 +1248,24 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
       policyReady:true,receiptPath:journal.path};journal.write(receipt);return receipt.result;
   }
 
+  async function configureNativeReads(sessionId,{directory:directoryValue=directory,tools=['read'],paths=[]}={}) {
+    const observed=await session(sessionId,directoryValue),native=await info(true);
+    const expected=scopedNativeReadRules(observed,directoryValue,{tools,paths});
+    const [states,pending]=await Promise.all([sessionStatus(directoryValue),permissions(directoryValue,{sessionIds:[sessionId]})]);
+    if(observed.id!==sessionId||observed.directory!==directoryValue||states[sessionId]?.type!==undefined||pending.some(value=>value.sessionID===sessionId))fail('opencode-read-policy-session-busy');
+    const before=permissionDigest(observed.permission),snapshot=await session(sessionId,directoryValue);
+    if(permissionDigest(snapshot.permission)!==before||(await info(true)).pid!==native.pid)fail('opencode-read-policy-boundary-changed');
+    if(permissionDigest(expected)===before)return {sessionId,changed:false,policySha256:before};
+    let responseLost=false;
+    try {await request('/api/session/'+encodeURIComponent(sessionId),{method:'PATCH',locationDirectory:directoryValue,
+      body:{permissions:expected.map(rule=>({action:rule.permission,resource:rule.pattern,effect:rule.action}))}});}
+    catch {responseLost=true;}
+    const after=await session(sessionId,directoryValue);
+    if(permissionDigest(after.permission)!==permissionDigest(expected)||(await info(true)).pid!==native.pid)fail('opencode-read-policy-outcome-unverified');
+    return {sessionId,changed:true,responseLost,tools,policySha256:permissionDigest(expected),beforePolicySha256:before,
+      scope:directoryValue,nonReadingRulesPreserved:true};
+  }
+
   async function prompt(sessionId, text, { directory: directoryValue = directory, model, resume = true, requiredNativeAsk } = {}) {
     if (typeof text !== 'string' || !text || typeof resume !== 'boolean') fail('opencode-prompt-invalid');
     if(requiredNativeAsk===undefined&&text.startsWith('CAB — outils natifs :'))requiredNativeAsk=['shell','edit'];
@@ -1588,7 +1611,7 @@ export function createOpenCodeV2Client({ baseUrl, directory, username, passwordF
     providerList, modelList, createSession, createProbeSession, sharedMcpDirectory: mcpLocation, prompt, switchModel,
     providerKeyContract, integrationConnection, connectProviderKey,
     replyPermission, permissionReplies, connectMcp, disconnectMcp, mcpRecoverySnapshot, nativePermissionPolicy,
-    nativePermissionRepairPlan, revokeSavedNativePermissions, events, request: json });
+    nativePermissionRepairPlan, revokeSavedNativePermissions,configureNativeReads, events, request: json });
 }
 
 export function createOpenCodeV2ClientFromEnv({ directory, baseUrl, fetchImpl = fetch, signal } = {}) {

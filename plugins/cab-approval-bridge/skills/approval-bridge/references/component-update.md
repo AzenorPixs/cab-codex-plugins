@@ -1,4 +1,21 @@
-# Mise à jour autonome des briques CAB — CAB 2.2.40
+# Mise à jour autonome des briques CAB — CAB 2.4.0
+
+## Services permanents et mode direct 2.4.0
+
+Le paquet inclut les services SGS et CCAB, leurs collecteurs et le modèle
+`cgpt-approval-bridge-monitor-direct@.service`. Après le reçu principal COMPLETED,
+la CLI vérifie SGS/CCAB par version chargée et PID systemd ; elle ne produit
+son bilan terminal réussi qu’après ce contrôle. Une interruption reprend le
+sous-reçu `runtime-services.json` de la même transaction. Un service conforme
+reste actif sans redémarrage ; une erreur de service garde RECOVERY_REQUIRED.
+Les moniteurs directs déjà actifs sont alignés et vérifiés séparément ; les
+instances arrêtées ne sont pas démarrées implicitement. Aucun OpenCode fictif
+n’est requis pour les collectes directes.
+
+Le contrôle du broker externe couvre également tous les modules auxiliaires
+et le contrat public du paquet cible, avec propriétaire/groupe, absence de lien
+et empreintes contrôlés. Le manifeste historique à trois fichiers reste lisible,
+mais ne dispense pas du contrôle complet avant une nouvelle activation.
 
 ## États privés CAB2.2.40 et fichiers projet0775
 

@@ -11,18 +11,21 @@ import { promisify } from 'node:util';
 import { FROZEN_PROFILE, FROZEN_CAPABILITY, collectFrozenProof, proofHash, moduleManifest,
   processIdentity, originalGone, maintenanceHttp, readBootstrapJournal, validateFrozenTarget,
   inspectControllerInstallation, checkInstallationJournal } from './cgpt-approval-bridge-maintenance-proof.mjs';
-import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
+import { validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess,BROKER_PAYLOAD_FILES } from './cgpt-approval-bridge-broker-artifact-proof.mjs';
 import { prepareUpdateCredential } from './cgpt-approval-bridge-update-credential.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
+import { activateRuntimeServices } from './cgpt-approval-bridge-runtime-install.mjs';
+import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
 const error = (code) => Object.assign(new Error(code), { code });
 const safeCauseCode = (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(value) ? value : 'unexpected-error';
 const brokerFiles = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
+const brokerPayloadFiles=BROKER_PAYLOAD_FILES;
 const unit = (name) => 'cgpt-approval-bridge-' + name + '.service';
 const complete = new Set(['COMPLETED', 'ROLLED_BACK', 'PREPARATION_FAILED', 'SUPERSEDED']);
 const recoveryPhases = ['PREPARED', 'STOPPING', 'RESTARTING', 'VERIFYING', 'ROLLING_BACK'];
@@ -251,11 +254,11 @@ export async function updateComponents(input, options = {}) {
   const currentFile = join(c.state, 'current.json');
   const target = (file) => {
     if (!file || typeof file !== 'object' || !Object.hasOwn(c.roots, file.group) ||
-        typeof file.name !== 'string' || !/^[a-zA-Z0-9_.-]+$/.test(file.name) || file.name.startsWith('.')) throw error('update-journal-invalid');
-    const allowed = file.group === 'broker' ? brokerFiles.includes(file.name) : file.group === 'units' ?
-      ['controller', 'supervisor', 'monitor'].some((component) => file.name === unit(component)) : file.group === 'web' ?
+        typeof file.name !== 'string' || !/^[a-zA-Z0-9_.@-]+$/.test(file.name) || file.name.startsWith('.')) throw error('update-journal-invalid');
+    const allowed = file.group === 'broker' ? brokerPayloadFiles.includes(file.name) : file.group === 'units' ?
+      ['controller', 'supervisor', 'monitor','sgs','ccab','monitor-direct@'].some((component) => file.name === unit(component)) : file.group === 'web' ?
         ['index.html', 'app.mjs', 'stats.mjs', 'style.css'].includes(file.name) :
-          (['scripts','monitorScripts'].includes(file.group) && file.name === 'cab_sgs.py') || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(file.name);
+          (['scripts','monitorScripts'].includes(file.group) && ['cab_sgs.py','cgpt-approval-bridge-contract.json'].includes(file.name)) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(file.name);
     if (!allowed) throw error('update-journal-invalid');
     return join(c.roots[file.group], file.name);
   };
@@ -1293,21 +1296,21 @@ export async function updateComponents(input, options = {}) {
         receipt.jobIdentity=jobsIdentity(status);
         for (const name of brokerFiles) await validate(join(c.pluginRoot,'broker',name),transaction());
       }
-      const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => name === 'cab_sgs.py' || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
+      const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => ['cab_sgs.py','cgpt-approval-bridge-contract.json'].includes(name) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
       const required = ['runtime-migration.mjs', 'state-layout.mjs', 'controller.mjs', 'job-context.mjs', 'continuity.mjs', 'recovery.mjs', 'recovery-evidence.mjs', 'port-recovery.mjs', 'native-instances.mjs', 'permission-replies.mjs', 'manifest-extensions.mjs', 'model-policy.mjs', 'model-transition.mjs', 'provider-connect.mjs', 'context-portability.mjs', 'shell-stage.mjs', 'permission-policy.mjs', 'runs.mjs', 'resource-coordination.mjs',
         'statistics.mjs', 'observation-statistics.mjs', 'statistics-maintenance.mjs', 'import-observations.mjs',
         'registry-lock.py', 'supervisor.mjs', 'supervisor-context.mjs', 'opencode-sse-client.mjs', 'healthcheck.mjs',
         'reset.py', 'prompts.py', 'sgs.py', 'monitor.mjs', 'monitor-data.mjs', 'monitor-events.mjs', 'monitor-management.mjs',
         'run-steps.mjs', 'process-lifecycle.mjs', 'source-read.mjs', 'update.mjs'];
-      if (scripts.length > 64 || !scripts.includes('cab_sgs.py') || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
+      if (scripts.length > 96 || !scripts.includes('cab_sgs.py') || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
       const artifacts = [
         ...scripts.map((name) => ({ group: 'scripts', name, source: join(c.pluginRoot, 'scripts', name) })),
-        ...['state-layout', 'monitor', 'monitor-data', 'monitor-events', 'continuity', 'permission-replies', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'permission-policy', 'process-lifecycle']
+        ...['state-layout', 'monitor', 'monitor-data', 'monitor-events', 'continuity', 'permission-replies', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'permission-policy', 'process-lifecycle','autonomy','runtime-client','archives']
           .map((name) => ({ group: 'monitorScripts', name: 'cgpt-approval-bridge-' + name + '.mjs', source: join(c.pluginRoot, 'scripts/cgpt-approval-bridge-' + name + '.mjs') })),
         ...['cgpt-approval-bridge-sgs.py','cab_sgs.py'].map(name=>({group:'monitorScripts',name,source:join(c.pluginRoot,'scripts',name)})),
-        ...(readonlyBroker ? [] : brokerFiles.map((name) => ({ group: 'broker', name, source: join(c.pluginRoot, 'broker', name) }))),
+        ...(readonlyBroker ? [] : brokerPayloadFiles.map((name) => ({ group: 'broker', name, source: join(c.pluginRoot, 'broker', name) }))),
         ...['index.html', 'app.mjs', 'stats.mjs', 'style.css'].map((name) => ({ group: 'web', name, source: join(c.pluginRoot, 'web-monitor', name) })),
-        ...['controller', 'supervisor', 'monitor'].map((name) => ({ group: 'units', name: unit(name), source: join(c.pluginRoot, 'systemd', unit(name)) })),
+        ...['controller', 'supervisor', 'monitor','sgs','ccab','monitor-direct@'].map((name) => ({ group: 'units', name: unit(name), source: join(c.pluginRoot, 'systemd', unit(name)) })),
       ];
       const byDestination = new Map(artifacts.map(artifact => [target(artifact),artifact.source]));
       if (new Set(artifacts.map(target)).size !== artifacts.length) throw error('update-overlapping-destinations');
@@ -1326,11 +1329,13 @@ export async function updateComponents(input, options = {}) {
         }
         if (artifact.group === 'units') {
           const component = artifact.name.replace('cgpt-approval-bridge-', '').replace('.service', '');
-          const entry = component === 'monitor' ? '%h/.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-monitor.mjs' :
+          const entry = ['monitor','monitor-direct@'].includes(component) ? '%h/.local/share/cab-approval-bridge-monitor/scripts/cgpt-approval-bridge-monitor.mjs' :
             '%h/.local/share/cab-approval-bridge/cgpt-approval-bridge-' + component + '.mjs';
           const source = content.data.toString('utf8');
+          const start=['sgs','ccab'].includes(component)?'ExecStart=/usr/bin/python3 %h/.local/share/cab-approval-bridge/cgpt-approval-bridge-runtime-service.py '+component:
+            'ExecStart=/usr/bin/env node '+entry;
           if (!source.includes('Description=CAB ' + version + ' ') ||
-              !source.split('\n').includes('ExecStart=/usr/bin/env node ' + entry) || /^\[Install\]/m.test(source)) throw error('update-unit-invalid');
+              !source.split('\n').includes(start) || /^\[Install\]/m.test(source)) throw error('update-unit-invalid');
         }
         const file = { ...entry, afterHash: hash(content.data),
           beforeHash: before ? hash(before.data) : null, mode: artifact.group==='broker'&&input.brokerPolicy==='cab-source'?0o775:before?.mode ?? content.mode };
@@ -1368,7 +1373,7 @@ export async function updateComponents(input, options = {}) {
         const desired = Object.fromEntries(['controller', 'supervisor', 'monitor', 'broker'].map((name) => [name, version]));
         if (receipt.files.every((file) => file.beforeHash === file.afterHash) &&
             Object.values(receipt.active).every(Boolean) && await verified(desired, targetActive())) {
-          await save('COMPLETED'); return { status: 'up-to-date', version, active: targetActive(), ...brokerResult() };
+          await save('COMPLETED'); return { status: 'up-to-date', version, transactionId:receipt.id, active: targetActive(), ...brokerResult() };
         }
         if ((await metadata('controller')).ActiveState === 'active') {
           const global = (await request(c.controllerUrl, '/coordination/global')).global;
@@ -1875,6 +1880,24 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
     }
     const result = await updateComponents(input, { rollbackOnly,
       onPhase: async (phase, receipt) => { process.stdout.write(JSON.stringify({ phase, transactionId: receipt.id }) + '\n'); } });
+    if (!rollbackOnly && !input.profile && ['completed','up-to-date'].includes(result.status) && result.version === VERSION) {
+      try {
+        result.runtimeServices = await activateRuntimeServices({transactionId:result.transactionId,
+          home:input.home || homedir(),pluginRoot:input.pluginRoot});
+      } catch (cause) {
+        throw Object.assign(error('update-runtime-activation-unconfirmed'), {transactionId:result.transactionId,
+          causeCode:safeCauseCode(cause.code || cause.message),recoveryPhase:'RUNTIME_SERVICES'});
+      }
+      const statistics=new StatisticsBackend(input.workspace,'update-statistics',{home:input.home||homedir()});
+      try {
+        const previous=statistics.readSync()||{transactions:{}};
+        previous.transactions ||= {};
+        previous.transactions[result.transactionId]={transactionId:result.transactionId,version:VERSION,
+          timings:result.timings||{},runtimeStartedAt:result.runtimeServices.startedAt,
+          runtimeCompletedAt:result.runtimeServices.completedAt};
+        result.statistics=await statistics.write(previous);
+      } catch { result.statistics={status:'unavailable',reason:'update-statistics-not-acknowledged'}; }
+    }
     process.stdout.write(JSON.stringify(result) + '\n');
     if (result.status === 'waiting') process.exitCode = 2;
   } catch (cause) {
