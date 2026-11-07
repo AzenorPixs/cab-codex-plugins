@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.7
+- Conservation des références textuelles historiques des RUN protégés, sans altérer leurs approbations.
+- Qualification propriétaire des anciennes sauvegardes retirées ; reprise du même reçu43/8.
+
 ## 2.4.6 — 2026-11-07
 
 - Conserve les identités secondaires partagées et réconcilie la rétention avant application sur le même reçu, sans élargir les RUN ciblés.

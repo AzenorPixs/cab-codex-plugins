@@ -1,5 +1,8 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Conservation des pairs SCM2.4.7
+[retain-protected-peer-audit-references](openspec/changes/archive/2026-11-07-retain-protected-peer-audit-references/) : correctif minimal du codec, sans effacement des références nécessaires aux8RUN protégés.
+
 ## Rétention partagée et essais SCM2.4.6
 
 [protect-shared-retired-identities-and-test-routing](openspec/changes/archive/2026-11-07-protect-shared-retired-identities-and-test-routing/), code non attribué : conservation des références de lectures partagées, reprise avant application, priorité atelier et retrait propriétaire non émis. Même transaction43/8 ; archivage du chat C12 conditionné à l’absence CAB.
