@@ -81,3 +81,5 @@ Les consultations publiques du contrôleur (`/runs`, statut RUN, `/locks`, coord
 Un cleanup de change multi-RUN refusé `erasure-run-not-closed-or-foreign` exige de qualifier les attributions historiques, pas de supprimer ou renommer un RUN. La [revue multi-propriétaire](change-erasure.md)2.3.9 utilise preview puis ownershipReview exacte ; elle ne remplace ni le gate ni la réconciliation des effets.
 
 Un erasure-operation-unreconciled peut signaler l’ancien format COMPLETED sans nativeResult : vérifier le [reçu terminal historique](change-erasure.md), sans compléter manuellement le registre. Les empreintes et l’accès libéré sont obligatoires ; ne jamais assimiler un effet en cours/inconnu à ce format.
+
+Différentiel de préservation ou impasse après intégrité réparée : [réparation bornée](preservation-repair.md). Les protections locales restent inchangées ; aucune ancienne once n’est rejouée.

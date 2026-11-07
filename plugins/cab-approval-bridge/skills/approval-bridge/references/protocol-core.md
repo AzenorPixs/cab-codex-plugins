@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.4.9
+# Noyau du contrat — CAB 2.4.10
 
 Dans le change validé, le codeur lit, explore et utilise ses outils de façon
 autonome. Son atelier propre `.cab-tests/<change>/<RUN>/` autorise aussi les
@@ -170,3 +170,5 @@ non réalisable qui nécessite LXC/Docker. L’orchestrateur tranche ; le codeur
 ne bascule pas seul. Voir autonomie et ateliers.
 
 Les dépendances relèvent du [référentiel OpenSpec](dependency-authority.md), pas de l’historique d’exécution CAB. Le nettoyage ne recrée pas d’anciens RUN pour justifier un change achevé.
+
+Le différentiel de préservation inclut les clés des objets protégés ; [réparer sur copies exactes](preservation-repair.md) avant toute restitution de succès.

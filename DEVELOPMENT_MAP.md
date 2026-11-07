@@ -1,5 +1,8 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Clés protégées SCM2.4.10
+[preserve-protected-identity-map-entries](openspec/changes/archive/2026-11-07-preserve-protected-identity-map-entries/) : correction des clés secondaires et réparation exacte42opérations/38accès clos, conservant les progrès et les once.
+
 ## Admission conservée SCM2.4.9
 [preserve-admitted-dependencies-after-erasure](openspec/changes/archive/2026-11-07-preserve-admitted-dependencies-after-erasure/) : restauration PA01 après purge43/8, aucune dépendance effacée ou inventée, récupération bornée puis CABU.
 

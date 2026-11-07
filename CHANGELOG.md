@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.10
+- Conserver les entrées de dictionnaire des RUN protégés malgré les collisions de clés.
+- Réparation additive vérifiée sur les empreintes antérieures, sans reprise d’effet.
+
 ## 2.4.9
 - Résoudre les dépendances depuis OpenSpec, sans conférer d’autorité à l’historique CAB ; conserver les contrôles sémantiques et techniques.
 - Profil de récupération5 sous empreinte et reçu signés, avant CABU9.
