@@ -1358,3 +1358,5 @@ flowchart LR
 [scope-recovery-permission-receipt](openspec/changes/archive/2026-11-07-scope-recovery-permission-receipt/), code non attribué : preuve de rejet ciblée malgré des reçus étrangers illisibles ; activation et reprise du déclarant à vérifier séparément.
 
 [resume-after-opencode-restart](openspec/changes/archive/2026-11-08-resume-after-opencode-restart/), code non attribué : continuité après redémarrage, prévol MCP, coordination CCAB et récupération qualifiée ; activation et reprise des déclarants à vérifier séparément.
+
+[distinguish-absent-permission-receipt](openspec/changes/archive/2026-11-08-distinguish-absent-permission-receipt/), code non attribué : diagnostic distinct pour un reçu exact absent ; activation à vérifier séparément.

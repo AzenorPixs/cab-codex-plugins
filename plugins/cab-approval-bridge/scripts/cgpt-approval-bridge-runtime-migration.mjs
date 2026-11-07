@@ -1,5 +1,5 @@
 import {createHash} from 'node:crypto';
-export const VERSION='2.4.20';
+export const VERSION='2.4.21';
 export const RUNTIME_MIGRATION_PROTOCOL='cab-private-state-migration-v1';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const digest=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');

@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.21 - 2026-11-08
+
+- Distinguer un reçu de rejet absent d'un reçu invalide, sans présumer de l'absence d'effet.
+
 ## 2.4.20 - 2026-11-08
 
 - Maintenir les briques CAB lors du redémarrage d'OpenCode et vérifier la nouvelle identité, le broker et les sessions avant reprise sans rejeu.

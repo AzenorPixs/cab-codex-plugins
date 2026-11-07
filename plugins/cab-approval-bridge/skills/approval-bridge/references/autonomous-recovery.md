@@ -136,6 +136,10 @@ observations stables. Pour `withdraw-unissued-validation`, transmettre cette
 même `permissionId` dans `input` avec le `nativeBoundaryDigest` ciblé. Cette
 voie ne modifie pas les reçus inconnus et conserve tous les contrôles de
 rejet, d'accès et d'absence d'effet ; une identité erronée reste refusée.
+La lecture exacte renvoie `permission-reply-receipt-absent` si le reçu n'existe
+pas et `permission-reply-receipt-invalid` s'il est corrompu ou divergent.
+L'absence seule ne prouve aucun résultat et n'autorise ni rejet ni rejeu :
+vérifier aussi la permission native, son identité et les actions antérieures.
 Un ancien actionId terminé en 409 ne devient pas un nouveau retrait : suivre
 le reçu et les règles de reprise avant toute nouvelle action qualifiée.
 Après redémarrage d'OpenCode, le reçu exact d'une ancienne instance peut être

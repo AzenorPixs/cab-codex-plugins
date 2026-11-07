@@ -1,6 +1,6 @@
 import { ContinuityStore, canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.4.20';
+export const VERSION = '2.4.21';
 const dimensions=['input','output','reasoning','cacheRead','cacheWrite','nativeTotal','costUsd'];
 const identifier=value=>typeof value==='string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 const count=value=>Number.isSafeInteger(value) && value>=0;

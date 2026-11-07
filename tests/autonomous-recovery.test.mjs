@@ -30,8 +30,11 @@ test('reçu exact : une enveloppe étrangère invalide ne masque pas le reçu ci
  writeFileSync(join(j.directory,'a'.repeat(64)+'.json'),JSON.stringify({digest:'b'.repeat(64)}),{mode:0o600});
  assert.throws(()=>j.snapshot(identity.sessionId,identity.directory),/receipt-invalid/);
  assert.equal(j.exact(identity.sessionId,identity.directory,identity.permissionId).receipts[0].state,'ACKNOWLEDGED');
- assert.throws(()=>j.exact(identity.sessionId,identity.directory,'per_missing'),/receipt-invalid/);
- assert.throws(()=>j.exact('ses_other',identity.directory,identity.permissionId),/receipt-invalid/);
+ assert.throws(()=>j.exact(identity.sessionId,identity.directory,'per_missing'),/receipt-absent/);
+ assert.throws(()=>j.exact('ses_other',identity.directory,identity.permissionId),/receipt-absent/);
+ const exactPath=j.path(identity);writeFileSync(exactPath,JSON.stringify({digest:'b'.repeat(64)}));const invalid=readFileSync(exactPath);
+ assert.throws(()=>j.exact(identity.sessionId,identity.directory,identity.permissionId),/receipt-invalid/);
+ assert.deepEqual(readFileSync(exactPath),invalid);
 });
 
 function nativeFixture(t,{loseResponse=false}={}){
