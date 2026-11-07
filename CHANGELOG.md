@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.17 - 2026-11-07
+
+- Aligner toutes les versions internes et les composants distribués sur la livraison corrective ; le tag 2.4.16 conserve des métadonnées 2.4.15 et ne doit pas être activé.
+
 ## 2.4.16 - 2026-11-07
 
 - Préserver l'intégrité des reçus natifs lors du nettoyage ciblé ; les anciens reçus sans identité restent conservés.
