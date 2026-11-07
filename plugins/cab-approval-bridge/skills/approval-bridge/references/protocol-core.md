@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.4.8
+# Noyau du contrat — CAB 2.4.9
 
 Dans le change validé, le codeur lit, explore et utilise ses outils de façon
 autonome. Son atelier propre `.cab-tests/<change>/<RUN>/` autorise aussi les
@@ -168,3 +168,5 @@ actualisé ; accès externes par voies CAB, sans secrets ni socket de contrôle.
 Tests : atelier prioritaire ; le codeur justifie à l’orchestrateur tout critère
 non réalisable qui nécessite LXC/Docker. L’orchestrateur tranche ; le codeur
 ne bascule pas seul. Voir autonomie et ateliers.
+
+Les dépendances relèvent du [référentiel OpenSpec](dependency-authority.md), pas de l’historique d’exécution CAB. Le nettoyage ne recrée pas d’anciens RUN pour justifier un change achevé.

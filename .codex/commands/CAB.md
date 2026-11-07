@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.8
+version: 2.4.9
 ---
 
 Réponds en français. Commande canonique : `/CAB` ; `/cab` n'est pas
@@ -54,3 +54,5 @@ Accords permanents ASK/MCP : `references/native-permission-grants.md` et
 Atelier prioritaire ; codeur justifie LXC/Docker, orchestrateur tranche.
 `references/devops-resources.md` : outils DEVOPS.md RO et catalogue ;
 accès externes par CAB, sans secrets ni socket hôte.
+
+Dépendances : OpenSpec fait autorité ; `references/dependency-authority.md`.
