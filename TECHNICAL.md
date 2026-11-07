@@ -1,5 +1,10 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Complément2.4.2 : onceAcknowledged/restoredAccesses sont des listes typées
+lorsqu’elles sont des tableaux ; les booléens et identifiants des pairs sont
+conservés. recover-preparation exige STOPPING sans entries/expectedPeers,
+liaisons/clôture vérifiées et NativePID inchangé avant recapture des PID.
+
 Correctif2.4.1 : le reçu propriétaire signé accepte au plus128Mio en lecture
 et écriture. La recherche des identifiants littéraux utilise un automate à
 transitions de repli, y compris pour les motifs imbriqués. Les fichiers déjà

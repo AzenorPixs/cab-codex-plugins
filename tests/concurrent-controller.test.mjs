@@ -2148,7 +2148,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.4.1');
+  assert.equal(initialized.result.serverInfo.version, '2.4.2');
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -3923,7 +3923,7 @@ async function portReconciliationFixture(t,{reboot=false,handoff=false,sealed=fa
   const old=run.sessionId,next='ses_reboot_current',base='/runs/'+run.runId;
   h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};
   h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
-  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.4.1'})}}]}];
+  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.4.2'})}}]}];
   const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
   const result=await h.post(base+'/session-handoff',{handoffId:'port-reboot-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:old,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'continue read-only probes after qualified handoff',evidence:['fixture/native handoff']});
   assert.equal(result.status,201,JSON.stringify(result));run.sessionId=next;
@@ -4335,7 +4335,7 @@ test('migration privée : PENDING absent du checkpoint restauré avant activatio
  assert.equal((await h.post('/runs/'+run.runId+'/decision/'+approval.requestId,{decision:'approved'})).status,503);
  assert.equal(h.native.replies.length,0);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId:'update-wrong'})).status,409);
- await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.4.1'});
+ await h.post('/broker/readiness',{status:'READY',pending_count:1,infrastructure_status:'READY',server_version:'2.4.2'});
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/runtime/migration/activate',{transactionId})).status,200);
  assert.equal((await h.post('/validation/request',{approval})).status,202);
@@ -4913,7 +4913,7 @@ for(const handoff of [false,true])test('port après reboot : réconciliation HTT
 test('retraite historique HTTP : ancien SID révoqué sans réactiver sa permission',async t=>{
  const {h,run,approval,base}=await unissuedWithdrawalFixture(t,'rejected'),next='ses_retirement_current';
  h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
- h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.4.1'})}}]}];
+ h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.4.2'})}}]}];
  const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
  const handoff=await h.post(base+'/session-handoff',{handoffId:'retirement-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:run.sessionId,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'qualified owner handoff',evidence:['audit/handoff']});assert.equal(handoff.status,201,JSON.stringify(handoff));
  const current=(await h.get('/runs')).body.runs.find(r=>r.runId===run.runId);

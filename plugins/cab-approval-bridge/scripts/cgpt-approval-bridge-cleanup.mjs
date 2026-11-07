@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { join, resolve,dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {randomUUID} from 'node:crypto';
-import { ErasureTransaction, erasureFilePlan, projectErasure, erasureReferences, removeErasureDirectories,readErasureBytes } from './cgpt-approval-bridge-change-erasure.mjs';
+import { ErasureTransaction, erasureFilePlan, projectErasure, erasureReferences, removeErasureDirectories,readErasureBytes,erasureScope } from './cgpt-approval-bridge-change-erasure.mjs';
 import { runtimeStateDirectory,legacyStateDirectory, readRuntimeJson, ensurePrivateStateDirectory } from './cgpt-approval-bridge-state-layout.mjs';
 import { authority } from './cgpt-approval-bridge-update.mjs';
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
@@ -14,7 +14,7 @@ import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bri
 import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 
-export const VERSION='2.4.1';
+export const VERSION='2.4.2';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const exec=promisify(execFile);
 const unit=name=>'cgpt-approval-bridge-'+name+'.service';
@@ -30,8 +30,9 @@ export async function cleanupChange(input, dependencies={}) {
   finally{while(offlineLocks.length)await offlineLocks.pop().close();await lock.close()}
 }
 async function executeCleanup(input,dependencies) {
+  if(!['preview','prepare','seal','status','execute','finalize','verify','recover-preparation'].includes(input.action))fail('erasure-action-invalid');
   const runtimeVersion=input.runtimeVersion??VERSION;
-  if(runtimeVersion!==VERSION&&(VERSION!=='2.4.1'||runtimeVersion!=='2.4.0'||!['execute','finalize','verify'].includes(input.action)))fail('erasure-runtime-compatibility-refused');
+  if(runtimeVersion!==VERSION&&(!['2.4.1','2.4.2'].includes(VERSION)||runtimeVersion!=='2.4.0'||!['execute','finalize','verify','recover-preparation'].includes(input.action)))fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
   const statisticalCleanup=dependencies.statisticsCleanup||{purge:purgeStatistics,verify:verifyStatisticsAbsence};
@@ -87,7 +88,8 @@ async function executeCleanup(input,dependencies) {
   if(value.scope?.workspace!==workspace||!value.roots?.includes(root))fail('erasure-workspace-divergent');
   if(runtimeVersion!==VERSION){
     if(value.protocol!=='cab-change-erasure-v1'||!['SEALED','FREEZING','STOPPING','APPLYING','RESTARTING','VERIFYING','CERTIFIED'].includes(value.phase))fail('erasure-runtime-compatibility-refused');
-    value={...value,recoveryCompatibility:{helperVersion:VERSION,runtimeVersion}};tx.save(value);
+    value={...value,recoveryCompatibility:{helperVersion:VERSION,runtimeVersion}};
+    if(input.action!=='recover-preparation')tx.save(value);
   }
   const ownerCall=async action=>{
     await http(controller,'/cleanup/owner/action',{transactionId:value.transactionId,action});
@@ -114,7 +116,7 @@ async function executeCleanup(input,dependencies) {
     if(existsSync(join(root,'broker-erasure.json')))unlinkSync(join(root,'broker-erasure.json'));
     return tx.finish(value,()=>absent(value,[tx.path]));
   }
-  if(input.action!=='execute')fail('erasure-action-invalid');
+  if(!['execute','recover-preparation'].includes(input.action))fail('erasure-action-invalid');
   if(value.phase==='CERTIFIED')return value.certificate;
   const bundlePath=join(root,'broker-erasure.json');
   const excluded=[tx.path,bundlePath];
@@ -157,6 +159,25 @@ async function executeCleanup(input,dependencies) {
     await transition('connect');
   };
   const wait=async(check,ms=20000)=>{const end=Date.now()+ms;do{try{if(await check())return}catch(cause){if(['erasure-native-identity-changed','erasure-service-identity-changed'].includes(cause.code))throw cause}if(Date.now()>=end)fail('erasure-component-verification-timeout');await delay(200)}while(true)};
+  if(input.action==='recover-preparation'){
+    if(value.phase!=='STOPPING'||value.entries?.length||value.expectedPeers)fail('erasure-preparation-recovery-refused');
+    await checkNative();
+    const snapshot=readRuntimeJson(join(root,'controller-runs.json')).value;
+    const current=erasureScope(snapshot,value.scope.changeId,value.scope.ownerId,{closedAuthority:true,...(value.scope.ownershipReview?{ownershipReview:value.scope.ownershipReview}:{})});
+    if(canonicalContinuityDigest(current.runIds)!==canonicalContinuityDigest(value.scope.runIds)||
+      value.scope.runBindings&&canonicalContinuityDigest(current.runBindings)!==canonicalContinuityDigest(value.scope.runBindings))fail('erasure-preparation-bindings-changed');
+    await start();await checkNative();
+    const [c,s,m,status,live]=await Promise.all([http(controller,'/transport/status'),http(supervisor,'/status'),http(monitor,'/api/maintenance-identity'),http(controller,'/cleanup/status',{}),http(controller,'/status')]);
+    const pids={};
+    for(const [i,name] of ['controller','supervisor','monitor'].entries()){
+      const row=[c,s,m][i],pid=await servicePid(name);
+      if(!pid||row.pid!==pid||row.version!==runtimeVersion||(row.workspace||row.identity?.workspace)!==workspace)fail('erasure-service-identity-changed');pids[name]=pid;
+    }
+    if(!Number.isSafeInteger(status.brokerPid)||status.brokerPid<=0||live.brokerReadiness?.server_version!==runtimeVersion||live.brokerReadiness?.ready!==true)fail('erasure-broker-identity-unverified');
+    const recovery={at:Date.now(),previousPids:value.componentPids||{},verifiedPids:pids};
+    value={...value,componentPids:pids,brokerPid:status.brokerPid,preparationRecovery:recovery};tx.save(value);
+    return {status:'PRESERVED_PREPARATION_REBOUND',transactionId:value.transactionId,phase:value.phase,helperVersion:VERSION,runtimeVersion,pids};
+  }
   if(value.phase==='SEALED') {
     const status=await http(controller,'/cleanup/status',{});
     if(status.brokerPreparationError)fail(status.brokerPreparationError);
