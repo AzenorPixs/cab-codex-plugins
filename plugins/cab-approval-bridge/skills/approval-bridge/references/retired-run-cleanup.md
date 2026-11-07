@@ -53,14 +53,14 @@ CCAB, sans contourner les gardes ni effacer le contexte pour cacher le refus.
 ## Rétention partagée et reprise étroite
 
 Une identité secondaire réutilisée par un RUN conservé reste conservée. Avant
-application seulement, le helper2.4.6 peut réconcilier sa rétention sur le même
+application seulement, le helper2.4.7 peut réconcilier sa rétention sur le même
 reçu, après preuve propriétaire PREPARED. Les RUN/ids primaires ne changent pas ;
 la liste sharedIdentityIds ne peut que croître. L’ajout d’un SID ou d’un RUN
 primaire est interdit. Le propriétaire ne réancre sa préparation que dans ce
 cas, sans réappliquer de données. Projection et preuve d’absence ignorent les
 identités partagées ; le certificat conserve la portée et sa rétention.
 
-Le profil qualifié helper2.4.6/runtime2.4.5 termine une transaction déjà scellée
+Le profil qualifié helper2.4.7/runtime2.4.5 termine une transaction déjà scellée
 avant CABU final : seuls les modules MJS propriétaires compatibles sont chargés
 par le broker5, sans changement de ses modules Python ni du contrôleur. Pour
 reconcile-retention, fournir sharedIdentityIds, evidence et ownerStatus issu
@@ -79,3 +79,5 @@ rétention est fondée sur la preuve des références du propriétaire, pas sur
 leur nom. Le périmètre RUN et les SID primaires restent inchangés. Une reprise
 après redémarrage explicitement confirmé conserve l’historique de l’identité
 native précédente ; elle ne recrée pas les anciennes sessions.
+
+Les approbations des RUN protégés peuvent citer textuellement les anciens RUN : leur contenu immuable est conservé. Seule une appartenance primaire protégée sans identité cible typée permet cette rétention ; les données hors de ces objets restent examinées. Le profil helper2.4.7/runtime2.4.5 conserve les mêmes gardes de reprise.

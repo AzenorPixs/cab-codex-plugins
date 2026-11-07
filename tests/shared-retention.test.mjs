@@ -43,3 +43,15 @@ test('Réconciliation : l’approbation connue non émise ne se bloque pas elle-
  for(const patch of [{currentMandate:'active'},{reconcilingCount:1},{unmatchedCount:1},{decisionFor:()=>null},{ignoredRequestIds:[]}])assert.equal(pendingReconciliationEffects({...base,...patch}),true);
  assert.equal(pendingReconciliationEffects({...base,validations:[...base.validations,{requestId:'unknown-pending'}]}),true);
 });
+
+test('Pairs : citations opaques conservées sans mutation, objets externes toujours examinés',()=>{
+ const s=scope(),peer={run_id:'run-protected',directory:s.workspace,approval_id:'approval-live',summary:'audit run-retired/old-change',resources:[{key:'file:output/run-retired/log'}]};
+ const value={approvals:{live:peer,old:{run_id:'run-retired',approval_id:'approval-old'}}};
+ const projected=projectErasure(value,s);assert.deepEqual(projected.approvals.live,peer);assert.equal(projected.approvals.old,undefined);assert.deepEqual(erasureReferences(projected,s),[]);
+ assert.ok(erasureReferences({unclassified:'run-retired'},s).includes('run-retired'));
+});
+test('Pairs : aucune exemption pour identités cibles typées ou propriétaire contradictoire',()=>{
+ const s=scope();for(const peer of [{run_id:'run-protected',operation_id:'source-shared',text:'run-retired'}, {run_id:'run-protected',runId:'run-retired'}, {run_id:'run-protected',directory:'/foreign',text:'run-retired'}]) {
+  assert.ok(erasureReferences(peer,s).length>0);
+ }
+});
