@@ -1,5 +1,15 @@
 # Historique des versions
 
+## 2.4.6 — 2026-11-07
+
+- Conserve les identités secondaires partagées et réconcilie la rétention avant application sur le même reçu, sans élargir les RUN ciblés.
+- Qualifie helper6/runtime5 et le redémarrage natif autorisé, puis renouvelle le transfert à une frontière de registre vérifiée.
+- Offre le retrait RECONCILED des accès non émis par le propriétaire, sans sortie de token et avec les gardes ordinaires.
+- Impose l’atelier en priorité : justification LXC/Docker par le codeur, décision de l’orchestrateur.
+- Isole les statistiques des pairs lors d’une purge et marque les dernières révisions natives contradictoires N/A/partielles au lieu de bloquer toute consultation ; une révision ultérieure lève ce diagnostic.
+- Permet la suppression explicite d’une copie statistique historique, sans réimport automatique ni effacement du rapport métier.
+
+
 ## 2.4.5 — 2026-11-07
 
 - Nettoyage par lot de RUN fermés explicitement sélectionnés, avec exclusions protégées et inventaire de tous leurs contextes/aliases, sans réouvrir les RUN ni modifier leurs résultats métier.

@@ -77,15 +77,17 @@ test('reçu public : aucun token, commande ou contenu libre ne traverse la proje
   assert.deepEqual(value, { state: 'HELD', accessId: 'access-1', fencing: 12, proofDigest: 'a'.repeat(64) });
 });
 
-for(const variant of ['lost-response','no-effect-yet','restored','quarantine','unresolved'])test('libération déléguée : '+variant,async t=>{
+for(const variant of ['lost-response','no-effect-yet','restored','quarantine','unresolved','unissued','issued'])test('libération déléguée : '+variant,async t=>{
  const h=await setup(t),resource={key:'file:release.txt',mode:'write'},run=h.reserve('release-scope',[resource]);
  const approval={coordination_protocol:'resource-scoped-v1',run_id:run.runId,reservation_version:run.version,session_id:run.sessionId,requestId:'release-request',operation_id:'release-op',operation_digest:'a'.repeat(64),resources:[resource],expected_revisions:{[resource.key]:0}};
  const op=h.registry.prepareOperation(run.runId,approval),access=h.registry.acquireAccess(run.runId,{operationId:op.operationId,version:run.version,resources:op.resources,expectedRevisions:op.expectedRevisions,operationDigest:op.operationDigest});
- h.registry.resourceState.operations[op.operationId].state='CANCELLED';h.registry.persist();
+ if(variant!=='unissued'&&variant!=='issued')h.registry.resourceState.operations[op.operationId].state='CANCELLED';
+ if(variant==='issued')h.registry.resourceState.operations[op.operationId].native={onceAcknowledged:true};h.registry.persist();
  if(variant==='restored')h.registry.restoredAccesses.add(access.accessId);if(variant==='quarantine')h.registry.resourceState.accesses[access.accessId].timeoutQuarantine={operationId:op.operationId};if(variant==='unresolved')h.registry.resourceState.operations[op.operationId].state='UNKNOWN';
  h.recovery.grant(run.runId,{policyId:'release-owner-policy',ownerId:run.ownerId,version:run.version,actions:['release-access'],resources:[resource],authorization:'same change; release known boundary'});
  const plan=h.recovery.plan(run.runId),request={actionId:'release-intent',ownerId:run.ownerId,policyId:'release-owner-policy',boundaryDigest:plan.boundaryDigest,action:'release-access',targetId:access.accessId,input:{outcome:'RECONCILED',evidence:['reviewed boundary']}};
- if(['restored','quarantine','unresolved'].includes(variant)){assert.equal(plan.actions.some(a=>a.action==='release-access'),false);assert.throws(()=>h.recovery.authorize(run.runId,request),/recovery-action-not-authorized/);return;}
+ if(['restored','quarantine','unresolved','issued'].includes(variant)){assert.equal(plan.actions.some(a=>a.action==='release-access'),false);assert.throws(()=>h.recovery.authorize(run.runId,request),/recovery-action-not-authorized/);return;}
+ if(variant==='unissued')assert.throws(()=>h.recovery.authorize(run.runId,{...request,actionId:'invalid-unissued-completed',input:{...request.input,outcome:'COMPLETED'}}),/recovery-input-divergent/);
  const action=h.recovery.authorize(run.runId,request);assert.equal(action.payload.token,access.token);
  assert.equal(h.coordinator().authorize(run.runId,request).result.error,'recovery-action-outcome-unverified');
  if(variant==='no-effect-yet')return;

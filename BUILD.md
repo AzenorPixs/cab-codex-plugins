@@ -1,5 +1,11 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Complément2.4.6 : rétention des identités secondaires partagées sur le même
+reçu avant application, récupération qualifiée helper6/runtime5 et transfert
+réancré après projection vérifiée. Atelier prioritaire : le codeur justifie
+LXC/Docker et l’orchestrateur tranche. Les suppressions statistiques explicites
+ne réimportent pas leurs copies ; les sources métier restent intactes.
+
 Complément2.4.5 : entretien explicite des anciens RUN fermés par lot, avec
 liste de RUN protégés et inventaire authentifié de leurs contextes/aliases.
 Le cycle conserve les gates, sessions partagées, rapports et statistiques

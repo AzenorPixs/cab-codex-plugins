@@ -6,7 +6,7 @@ import {createOpenCodeV2ClientFromEnv,normalizeOpenCodeEvent} from './cgpt-appro
 import {openCodeTelemetry} from './cgpt-approval-bridge-native-telemetry.mjs';
 import {processOwnerIdentity} from './cgpt-approval-bridge-process-lifecycle.mjs';
 import {proofHash} from './cgpt-approval-bridge-maintenance-proof.mjs';
-export const VERSION='2.4.5';
+export const VERSION='2.4.6';
 const socketPath=process.argv[2];
 if(!socketPath?.startsWith('/'))throw new Error('sgs-collector-socket-required');
 let closing=false;
@@ -64,7 +64,8 @@ while(!closing) {
         const messages=await client.messages(binding.session,binding.project);
         for(const message of messages) {
           const info=message.info;
-          const sequence=info?.time?.completed??info?.time?.created;
+          const times=[info?.time?.completed??info?.time?.created,...(message.parts||[]).flatMap(p=>[p.time?.created,p.time?.updated,p.time?.start,p.time?.end,p.state?.time?.start,p.state?.time?.end])].filter(Number.isSafeInteger);
+          const sequence=times.length?Math.max(...times):null;
           if(!Number.isSafeInteger(sequence)||sequence<Date.parse(binding.started_at))continue;
           const event=openCodeTelemetry(info,{binding:binding.binding,sequence,at:new Date(sequence).toISOString(),parts:message.parts});
           if(!event)continue;

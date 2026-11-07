@@ -113,7 +113,7 @@ class RuntimeServicesTest(unittest.TestCase):
 
     def incident(self, identity):
         return self.store.incident({"incident_id": identity, "project": str(self.root), "change": "fixture-change", "run": "fixture-run",
-                                    "reporter": "reporter-" + identity, "version": "2.4.5", "category": "protocol", "summary": "Incident synthétique", "evidence": []})
+                                    "reporter": "reporter-" + identity, "version": "2.4.6", "category": "protocol", "summary": "Incident synthétique", "evidence": []})
 
     def test_ccab_fifo_batch_resume_individual_resolution(self):
         self.incident("first")
@@ -209,6 +209,38 @@ class RuntimeServicesTest(unittest.TestCase):
             self.store.purge(selected,'retired-native-needs-report',[],os.getuid())
         with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-purge-scope-invalid'):
             self.store.purge({**scope,'protectedRunIds':['old-run']},'retired-overlap-refused',[],os.getuid())
+
+    def test_native_conflicting_latest_is_partial_and_later_snapshot_recovers(self):
+        self.event('native-one',1,{'tools':1,'messages':1})
+        self.event('native-two',1,{'tools':2,'messages':1})
+        snapshot=self.stats()
+        self.assertNotIn('tools',snapshot['metrics'])
+        self.assertEqual(snapshot['coverage']['tools'],'partial')
+        self.assertEqual(snapshot['metrics']['messages'],'1')
+        self.assertEqual(snapshot['collector']['reason'],'native-cumulative-revision-conflict')
+        self.event('native-final',2,{'tools':3,'messages':1})
+        self.assertEqual(self.stats()['metrics']['tools'],'3')
+
+    def test_retired_purge_does_not_fold_unselected_conflicting_peer(self):
+        self.event('supplement-one',1,{'tools':1},source='llm-supplement')
+        self.event('supplement-two',1,{'tools':2},source='llm-supplement')
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-cumulative-sequence-conflict'):self.stats()
+        scope={'workspace':str(self.root),'changeId':'retired-batch','runIds':['old-run'],'ids':['old-run'],
+               'changeIds':['old-change'],'protectedRunIds':['fixture-run'],'closureAuthority':'authoritative-retired-run-batch-v1'}
+        self.assertEqual(self.store.purge(scope,'retired-preserve-conflicting-peer',[],os.getuid())['bindingsRemoved'],0)
+        self.assertEqual(self.store.db.execute('SELECT COUNT(*) FROM telemetry').fetchone()[0],2)
+
+    def test_explicit_archive_forget_suppresses_reimport_and_compacts(self):
+        path='openspec/changes/archive/2026-11-07-retired-change/STATISTICS.md'
+        sentinel='NATIVE_SESSION_RETIRED_SENTINEL_5f5822'
+        self.store.import_archive(str(self.root),path,{'change':'retired-change','sha256':'a'*64,'contribution':{'audit':sentinel}})
+        self.assertEqual(len(self.store.statistics(str(self.root))['archives']),1)
+        self.store.forget_archives(str(self.root),[path])
+        self.assertTrue(self.store.archive_suppressed(str(self.root),path))
+        self.assertEqual(self.store.import_archive(str(self.root),path,{'change':'retired-change'})['status'],'developer-deleted')
+        self.assertEqual(self.store.compact()['status'],'COMPACTED')
+        self.assertNotIn(sentinel.encode(),(self.root/'private/runtime.sqlite3').read_bytes())
+        self.assertEqual(self.stats()['binding'],'fixture-binding')
 
 
 if __name__ == "__main__":

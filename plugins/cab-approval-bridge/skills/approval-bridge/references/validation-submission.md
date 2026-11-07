@@ -173,3 +173,12 @@ lecture du même objet ; cela ne rejoue pas l’action métier. Si l’action a 
 été envoyée ou sa réponse est perdue, relire d’abord son reçu : ne pas modifier
 un payload lié à un actionId immuable ou créer une nouvelle action pour cacher
 une issue incertaine. Les gardes et fenêtres existantes restent inchangées.
+
+### Carte brute et projection effective
+
+`GET /runs` fournit coordination.revisions, carte brute utilisée pour le calcul
+par clé exacte. `/locks` expose revisionMapKind=effective-per-exact-key : son
+parent peut agréger la révision d’un fichier frère. Cette valeur parent déjà
+calculée ne se propage pas une seconde fois aux enfants. Une préparation de
+validation exacte ou `/locks?key=<clé-exacte>` est la référence pour la demande ;
+ne pas remplacer ses expected_revisions par le maximum d’un parent projeté.

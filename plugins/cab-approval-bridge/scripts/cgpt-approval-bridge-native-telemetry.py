@@ -13,7 +13,7 @@ CODEX_TOKENS = {"input_tokens": "tokens_input", "output_tokens": "tokens_output"
                 "cache_write_input_tokens": "tokens_cache_write",
                 "total_tokens": "tokens_total"}
 MAX_LINE = 8 * 1024 * 1024
-VERSION = "2.4.5"
+VERSION = "2.4.6"
 
 
 def codex_source(path, home=None):
@@ -214,6 +214,7 @@ def import_archives(store, project):
             continue
         for name in ("STATISTICS.md", "STATISTIQUES.md"):
             path = directory / name
+            if store.archive_suppressed(str(root),str(path.relative_to(root))):continue
             if not path.exists():
                 continue
             if path.is_symlink() or path.stat().st_size > cab_sgs.MAX_BYTES:

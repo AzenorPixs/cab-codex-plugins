@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.5';
+export const VERSION = '2.4.6';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -21,6 +21,26 @@ const ownerKeys = new Set(['runId','run_id','changeId','change_id']);
 const identityLists=new Set(['runIds','run_ids','scopeRunIds','sessionIds','session_ids','operationIds','requestIds','approvalIds','revokedSessions','sourceSessions','onceAcknowledged','restoredAccesses']);
 const unambiguousId=value=>typeof value==='string'&&(value.length>=16||/^(?:ses_|op-|req-|request-|approval-|apr-|call_|job-|policy-|access-|erasure-|run-)/.test(value));
 const terminalOperations = new Set(['COMPLETED','NO_EFFECT','RECONCILED','CANCELLED']);
+const effectiveIds=scope=>scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.ids.filter(id=>!(scope.sharedIdentityIds||[]).includes(id)):scope.ids;
+const secondaryRetentionId=id=>identifier(id)&&!id.startsWith('ses_');
+export function reconcileRetiredRetention(value,{sharedIdentityIds,evidence,ownerStatus}){
+  if(value?.scope?.closureAuthority!=='authoritative-retired-run-batch-v1'||value.brokerTransport!=='owner-local-v1'||!['SEALED','FREEZING'].includes(value.phase)||
+    value.entries?.length||value.expectedPeers||value.ownerReceipts?.commit||!Array.isArray(sharedIdentityIds)||!sharedIdentityIds.length||
+    sharedIdentityIds.some(id=>!secondaryRetentionId(id)||value.scope.runIds.includes(id)||id.startsWith('ses_'))||
+    !Array.isArray(evidence)||!evidence.length||evidence.some(v=>typeof v!=='string'||!v||v.length>500)||
+    ownerStatus?.protocol!=='cab-owner-erasure-v1'||ownerStatus.transactionId!==value.transactionId||ownerStatus.state!=='PREPARED'||ownerStatus.uid!==value.ownerReceipts?.prepare?.uid||
+    ownerStatus.scopeDigest!==canonicalContinuityDigest(value.scope))fail('erasure-retention-reconciliation-refused');
+  const shared=[...new Set([...value.scope.sharedIdentityIds,...sharedIdentityIds])].sort();
+  return {...value,scope:{...value.scope,sharedIdentityIds:shared},ownerReceipts:{},ownerAction:'prepare',phase:'SEALED',
+    retentionReconciliations:[...(value.retentionReconciliations||[]),{at:Date.now(),previousScopeDigest:ownerStatus.scopeDigest,
+      added:sharedIdentityIds,evidence,ownerStatusDigest:canonicalContinuityDigest(ownerStatus)}]};
+}
+export function retentionOnlyRebind(before,after){
+  if(before?.closureAuthority!=='authoritative-retired-run-batch-v1'||after?.closureAuthority!==before.closureAuthority)return false;
+  const {sharedIdentityIds:a,...left}=before,{sharedIdentityIds:b,...right}=after;
+  return Array.isArray(a)&&Array.isArray(b)&&a.every(id=>b.includes(id))&&b.every(id=>a.includes(id)||secondaryRetentionId(id)&&!before.runIds.includes(id)&&!id.startsWith('ses_'))&&
+    canonicalContinuityDigest(left)===canonicalContinuityDigest(right);
+}
 function privateAncestor(directory) {
   let current=directory;
   while(true){const stat=lstatSync(current);if(stat.isDirectory()&&stat.uid===process.getuid()&&!(stat.mode&0o077))return true;
@@ -171,7 +191,7 @@ export function retiredJobDigest(root,runIds){
 }
 
 export function extendErasureScope(scope, documents) {
-  const ids = new Set(scope.ids);
+  const ids = new Set(effectiveIds(scope));
   const shared=new Set(scope.sharedIdentityIds||[]);
   const owned = value => record(value) && (Object.entries(value).some(([key,item]) => identityKeys.has(key) && ids.has(item))||
     typeof value.id==='string'&&value.id.startsWith('ses_')&&ids.has(value.id)&&value.directory===scope.workspace);
@@ -199,7 +219,7 @@ export function extendErasureScope(scope, documents) {
 // Only typed identity ownership selects records. Unclassified textual references
 // are rejected by the final scan rather than deleting an unrelated payload.
 export function projectErasure(value, scope) {
-  const ids = new Set(scope.ids);
+  const ids = new Set(effectiveIds(scope));
   const own = node => record(node) && (Object.entries(node).some(([key,item]) => identityKeys.has(key) && ids.has(item))||
     typeof node.id==='string'&&node.id.startsWith('ses_')&&ids.has(node.id)&&node.directory===scope.workspace);
   const foreign = node => record(node) && Object.entries(node).some(([key,item]) => ownerKeys.has(key) && typeof item === 'string' && !ids.has(item)&&
@@ -243,7 +263,7 @@ export function projectErasure(value, scope) {
 }
 
 function erasurePattern(scope) {
-  const values=scope.ids.filter(unambiguousId);
+  const values=effectiveIds(scope).filter(unambiguousId);
   if(!values.length)return null;
   const nodes=[{next:new Map(),failure:0,output:[]}];
   for(const value of values){
@@ -273,7 +293,7 @@ function erasurePattern(scope) {
   }};
 }
 export function erasureReferences(value, scope, pattern=erasurePattern(scope)) {
-  const ids=new Set(scope.ids),found=new Set();
+  const ids=new Set(effectiveIds(scope)),found=new Set();
   const visit=(node,parentKey='')=>{
     if(Array.isArray(node)){for(const item of node){if(identityLists.has(parentKey)&&ids.has(item))found.add(item);visit(item,parentKey)}return}
     if(record(node)){for(const [key,item] of Object.entries(node)){

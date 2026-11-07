@@ -35,7 +35,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.4.5";
+const version = "2.4.6";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -3008,8 +3008,11 @@ async function handleRequest(request, response) {
         if(priorAccess?.reconciliationReceipts?.[payload?.reconciliationId]){
           json(response,200,registry.reconcileRestoredAccess(runId,payload,null));return;
         }
+        const unissuedRequests=Object.values(registry.resourceState.operations).filter(op=>op.runId===runId&&op.contextId===run.contextId&&
+          op.state==='PREPARED'&&!op.native&&!op.nativeResult&&op.onceAcknowledged!==true).map(op=>op.requestId);
+        const pending=context.pendingEffectsExceptUnissued?context.pendingEffectsExceptUnissued(unissuedRequests):context.pendingEffects();
         if (context.publicJob()?.currentCabMandate || context.publicJob()?.recovery || context.publicJob()?.modelTransition ||
-            context.pendingEffects() || context.publicStatus().undecidedValidationCount) {
+            pending || context.publicStatus().undecidedValidationCount) {
           throw new CoordinationError('run-not-quiescent');
         }
         const before = registry.restoredAccessReconciliationSnapshot(runId, payload?.operationId);
@@ -3157,8 +3160,10 @@ async function handleRequest(request, response) {
           if (url.pathname !== '/locks/release' || !/^[a-f0-9]{64}$/.test(payload.accessReleaseBoundary) ||
               proofHash(access) !== payload.accessReleaseBoundary || access.state !== 'HELD' ||
               access.timeoutQuarantine || registry.restoredAccesses.has(access.accessId) ||
-              !access.operationIds.length || access.operationIds.some(id =>
-                !['COMPLETED','CANCELLED'].includes(registry.resourceState.operations[id]?.state)))
+              !access.operationIds.length || access.operationIds.some(id =>{
+                const op=registry.resourceState.operations[id];return !op||!(['COMPLETED','CANCELLED'].includes(op.state)||
+                  payload.outcome==='RECONCILED'&&op.state==='PREPARED'&&!op.native&&!op.nativeResult&&op.onceAcknowledged!==true);
+              }))
             throw new CoordinationError('recovery-access-boundary-changed');
         };
         checkDelegatedRelease();

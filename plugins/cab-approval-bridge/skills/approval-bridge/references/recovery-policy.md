@@ -102,3 +102,18 @@ Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 [retrait puis libération propriétaire](approved-attached-shell-retirement.md#accès-dédié-à-un-seul-membre-refusé-avant-once), deux reçus et gardes conservées.
 
 Remédiation COMPLETED avec livraisonfalse : [distinguer exécution et résultat vérifié](technical-recovery.md#résultat-vérifié-dune-réconciliation-de-notification), sans consommer un nouveau budget à l’aveugle.
+
+Depuis2.4.6, release-access peut aussi être offert pour un parent HELD non
+restauré/non quarantiné dont les membres sont terminaux ou PREPARED sans
+aucune entrée native/nativeResult. Pour ces membres non émis, seul RECONCILED
+est admis. Les gardes ordinaires restent exécutées : mandat clos, SID idle,
+zéro permission, même owner/contexte/génération et aucune once/intention. Le
+contrôleur prend le token en interne ; ne jamais le restituer dans une sortie
+de commande. Un accès restauré passe d’abord par sa réconciliation qualifiée.
+
+La réconciliation d’un accès restauré ne doit pas s’auto-bloquer sur ses
+propres validations APPROVED non émises. Le contrôleur exclut de ce seul test
+les demandes PREPARED enregistrées du même RUN/contexte, sans native, résultat
+ou once. Il garde les validations non décidées, reconciling/unmatched, mandats
+et effets inconnus comme blocages ; les deux frontières natives et empreintes
+d’accès restent vérifiées. Cela ne retire ni ne consomme les approbations.

@@ -3,10 +3,10 @@ import {homedir} from 'node:os';
 import {join,resolve,relative,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes} from './cgpt-approval-bridge-change-erasure.mjs';
+import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes,retentionOnlyRebind} from './cgpt-approval-bridge-change-erasure.mjs';
 import {ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
-export const VERSION='2.4.5';
+export const VERSION='2.4.6';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function ownerCleanup(input,{home=homedir()}={}) {
  const {action,scope,transactionId}=input;
@@ -16,7 +16,11 @@ export function ownerCleanup(input,{home=homedir()}={}) {
  ensurePrivateStateDirectory(root);
  const tx=new ErasureTransaction(root),scopeDigest=canonicalContinuityDigest(scope);
  let value=tx.load();
- if(value&&(value.transactionId!==transactionId||canonicalContinuityDigest(value.scope)!==scopeDigest))fail('erasure-owner-transaction-divergent');
+ if(value&&(value.transactionId!==transactionId||canonicalContinuityDigest(value.scope)!==scopeDigest)){
+  if(value.transactionId===transactionId&&action==='prepare'&&value.phase==='PREPARED'&&!value.entries?.length&&retentionOnlyRebind(value.scope,scope)){
+   value={...value,scope,retentionReboundAt:Date.now()};tx.save(value);
+  }else fail('erasure-owner-transaction-divergent');
+ }
  const receipt=state=>({protocol:'cab-owner-erasure-v1',transactionId,scopeDigest,state,uid:process.getuid(),pid:process.ppid});
  const isLegacy=(v,path)=>(v.legacyRoots||[]).some(root=>path===root||path.startsWith(root+'/'));
  const committedEpoch=v=>{
@@ -40,7 +44,7 @@ export function ownerCleanup(input,{home=homedir()}={}) {
   if(!value)fail('erasure-owner-transaction-missing');
   if(value.phase==='PREPARED'){
    const bundle=input.bundle;
-   if(!bundle||!Array.isArray(bundle.roots)||!Array.isArray(bundle.entries)||!Array.isArray(bundle.journalPaths)||bundle.scope?.workspace!==scope.workspace||bundle.scope?.changeId!==scope.changeId||canonicalContinuityDigest(bundle.scope?.runIds)!==canonicalContinuityDigest(scope.runIds)||scope.ids.some(id=>!bundle.scope.ids.includes(id)))fail('erasure-owner-bundle-divergent');
+   if(!bundle||!Array.isArray(bundle.roots)||!Array.isArray(bundle.entries)||!Array.isArray(bundle.journalPaths)||bundle.scope?.workspace!==scope.workspace||bundle.scope?.changeId!==scope.changeId||canonicalContinuityDigest(bundle.scope?.runIds)!==canonicalContinuityDigest(scope.runIds)||scope.ids.some(id=>!bundle.scope.ids.includes(id)&&!(scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.sharedIdentityIds.includes(id))))fail('erasure-owner-bundle-divergent');
    const roots=[...new Set(bundle.roots)];
    const plan=erasureFilePlan(roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots||[]});
    const legacyRoots=bundle.legacyRoots||[],entries=[...plan.entries,...bundle.entries].map(entry=>{

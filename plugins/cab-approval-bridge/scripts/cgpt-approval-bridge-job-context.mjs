@@ -13,7 +13,14 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.4.5";
+export const VERSION = "2.4.6";
+export function pendingReconciliationEffects({currentMandate,reconcilingCount,unmatchedCount,validations,decisionFor,ignoredRequestIds}){
+  const ignored=new Set(ignoredRequestIds);
+  return Boolean(currentMandate||reconcilingCount||unmatchedCount||validations.some(v=>{
+    const decision=decisionFor(v.requestId);
+    return !decision||decision.decision==='approved'&&!v.operationConsumed&&!v.operationInvalidated&&!ignored.has(v.requestId);
+  }));
+}
 if ([STEP_VERSION, MODEL_VERSION, TRANSITION_VERSION, PERMISSION_VERSION].some((value) => value !== VERSION)) throw new Error('CAB lifecycle component version mismatch');
 
 export function commandLengthLimit(environment = process.env) {
@@ -3561,6 +3568,9 @@ return {
     unmatchedNativePermissions.size || [...validations.values()].some((v) =>
       !httpDecisions.has(v.requestId) || (httpDecisions.get(v.requestId)?.decision === "approved" &&
         !v.operationConsumed && !v.operationInvalidated))),
+  pendingEffectsExceptUnissued: ignoredRequestIds=>pendingReconciliationEffects({currentMandate:job?.currentCabMandate,
+    reconcilingCount:reconcilingPermissions.size,unmatchedCount:unmatchedNativePermissions.size,
+    validations:[...validations.values()],decisionFor:id=>httpDecisions.get(id),ignoredRequestIds}),
   sessions: () => [job?.sessionId || run?.sessionId, job?.recovery?.sessionId].filter(Boolean),
   observedSessions: () => [...new Set([job?.sessionId || run?.sessionId, job?.recovery?.sessionId,
     ...(job?.sessionHandoffHistory || []).map(h => h.sourceSessionId)].filter(Boolean))],

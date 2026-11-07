@@ -49,3 +49,33 @@ preuve finale ; un certificat en attente de finalize ne l’est pas. Conserver
 les incidents CCAB encore nécessaires ; seuls les résolus concernés sont retirés.
 Une source historique non classée ou un effet incertain est diagnostiqué dans
 CCAB, sans contourner les gardes ni effacer le contexte pour cacher le refus.
+
+## Rétention partagée et reprise étroite
+
+Une identité secondaire réutilisée par un RUN conservé reste conservée. Avant
+application seulement, le helper2.4.6 peut réconcilier sa rétention sur le même
+reçu, après preuve propriétaire PREPARED. Les RUN/ids primaires ne changent pas ;
+la liste sharedIdentityIds ne peut que croître. L’ajout d’un SID ou d’un RUN
+primaire est interdit. Le propriétaire ne réancre sa préparation que dans ce
+cas, sans réappliquer de données. Projection et preuve d’absence ignorent les
+identités partagées ; le certificat conserve la portée et sa rétention.
+
+Le profil qualifié helper2.4.6/runtime2.4.5 termine une transaction déjà scellée
+avant CABU final : seuls les modules MJS propriétaires compatibles sont chargés
+par le broker5, sans changement de ses modules Python ni du contrôleur. Pour
+reconcile-retention, fournir sharedIdentityIds, evidence et ownerStatus issu
+du status propriétaire vérifié. Un redémarrage OC explicitement autorisé est
+réancré seulement si l’ancien PID est absent, la version identique, les SID
+ciblés absents et les SID réservés protégés présents ; deux lectures natives
+stables sont exigées. Aucune once n’est rejouée. Une preuve APPLIED/incertaine
+ou un job modifié refuse cette réconciliation.
+
+La préparation propriétaire précède la courte bascule ; après projection, le
+même transfert scellé est renouvelé seulement contre son empreinte de registre
+et son identité native. Le helper ne modifie aucun fichier de configuration OC.
+
+Les identifiants secondaires historiques n’ont pas de préfixe unique : leur
+rétention est fondée sur la preuve des références du propriétaire, pas sur
+leur nom. Le périmètre RUN et les SID primaires restent inchangés. Une reprise
+après redémarrage explicitement confirmé conserve l’historique de l’identité
+native précédente ; elle ne recrée pas les anciennes sessions.

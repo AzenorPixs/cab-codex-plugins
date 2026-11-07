@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.4.5
+# Noyau du contrat — CAB 2.4.6
 
 Dans le change validé, le codeur lit, explore et utilise ses outils de façon
 autonome. Son atelier propre `.cab-tests/<change>/<RUN>/` autorise aussi les
@@ -164,3 +164,7 @@ Ressources déclarées dans DEVOPS.md : appliquer la référence
 [devops-resources](devops-resources.md) du skill CAB installé
 (`devops-resources.md` depuis les références). Outils locaux RO et catalogue
 actualisé ; accès externes par voies CAB, sans secrets ni socket de contrôle.
+
+Tests : atelier prioritaire ; le codeur justifie à l’orchestrateur tout critère
+non réalisable qui nécessite LXC/Docker. L’orchestrateur tranche ; le codeur
+ne bascule pas seul. Voir autonomie et ateliers.

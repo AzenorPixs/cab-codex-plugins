@@ -2,7 +2,7 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.4.5';
+export const VERSION = '2.4.6';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -155,7 +155,7 @@ export class RecoveryCoordinator {
           '/locks/reconcile-preview?operationId=' + encodeURIComponent(access.accessId));
       }
       if (access.state === 'HELD' && !this.registry.restoredAccesses.has(access.accessId) &&
-          !access.timeoutQuarantine && ops.length && ops.every(op => op && ['COMPLETED','CANCELLED'].includes(op.state)))
+          !access.timeoutQuarantine && ops.length && ops.every(op => op && (['COMPLETED','CANCELLED'].includes(op.state)||op.state==='PREPARED'&&!op.native&&!op.nativeResult&&op.onceAcknowledged!==true)))
         offer('release-access', access.accessId, access.resources);
       for (const op of ops.filter(op => op && ['EXECUTING', 'UNKNOWN'].includes(op.state))) {
         if (!access.timeoutQuarantine && access.resources.every(resource => resource.mode === 'write' && resource.key.startsWith('port:'))) {
@@ -265,6 +265,7 @@ export class RecoveryCoordinator {
     const entity = reviewAction || portAction || boundaryAction ? this.registry.resourceState.operations[input.targetId] : leaseAction ? this.registry.resourceState.testReservations[input.targetId] :
       this.registry.resourceState.accesses[input.action === 'quarantine-port'
         ? this.registry.resourceState.operations[input.targetId]?.accessId : input.targetId];
+    if(input.action==='release-access'&&body.outcome!=='RECONCILED'&&entity?.operationIds?.some(id=>this.registry.resourceState.operations[id]?.state==='PREPARED'))fail('recovery-input-divergent');
     if (!entity || entity.runId !== runId || entity.contextId !== run.contextId) fail('recovery-target-divergent');
     const identityKey = leaseAction ? 'transactionId' : 'operationId';
     if (body[identityKey] !== undefined && body[identityKey] !== input.targetId ||
