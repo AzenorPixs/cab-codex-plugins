@@ -103,7 +103,7 @@ Token perdu, accès HELD dédié à un seul edit/shell refusé avant once :
 
 Remédiation COMPLETED avec livraisonfalse : [distinguer exécution et résultat vérifié](technical-recovery.md#résultat-vérifié-dune-réconciliation-de-notification), sans consommer un nouveau budget à l’aveugle.
 
-Depuis2.4.9, release-access peut aussi être offert pour un parent HELD non
+Depuis2.4.10, release-access peut aussi être offert pour un parent HELD non
 restauré/non quarantiné dont les membres sont terminaux ou PREPARED sans
 aucune entrée native/nativeResult. Pour ces membres non émis, seul RECONCILED
 est admis. Les gardes ordinaires restent exécutées : mandat clos, SID idle,

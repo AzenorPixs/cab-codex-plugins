@@ -1,5 +1,7 @@
 # Codex Approval Bridge — CAB - 100% IA
 
+Complément2.4.10 : les clés d’identité partagées ne retirent pas les valeurs appartenant aux RUN protégés. La réparation est additive, sur empreintes d’origine strictes, sans écrasement des progrès ni réactivation d’accès.
+
 Complément2.4.9 : les dépendances de changes sont vérifiées dans OpenSpec et les cadrages applicables, jamais dans l’historique CAB. Un change archivé complété ne prouve pas une activation produit. La récupération5 est bornée au reçu signé et au registre projeté exact, puis retirée avant CABU final.
 
 Complément2.4.8 : l’appartenance primaire aux RUN protégés prévaut sur les collisions secondaires historiques dans le nettoyage par lot. Les gardes de RUN contradictoire et de répertoire étranger restent exigées.

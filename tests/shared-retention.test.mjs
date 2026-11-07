@@ -74,3 +74,9 @@ test('Pairs : fichier de job sans RUN interne conservé par son chemin propriét
  for(const id of ['run-protected','run-retired']){mkdirSync(join(root,'runs',id,'1'),{recursive:true});writeFileSync(join(root,'runs',id,'1','controller-job.json'),JSON.stringify({changeId:id==='run-protected'?'live-change':'old-change',sessionId:'source-shared'}));}
  const plan=erasureFilePlan([root],scope());assert.equal(plan.entries.length,1);assert.ok(plan.entries[0].path.includes('/run-retired/'));
 });
+
+test('Pairs : une clé cible ne supprime pas sa valeur protégée ni sa preuve d’absence',()=>{
+ const s=scope(),peer={run_id:'run-protected',operationId:'source-shared',state:'COMPLETED'},old={run_id:'run-retired',operationId:'old-unique'};
+ const data={operations:{'source-shared':peer,'old-unique':old}};s.ids.push('old-unique');
+ const next=projectErasure(data,s);assert.deepEqual(next,{operations:{'source-shared':peer}});assert.deepEqual(erasureReferences(next,s),[]);
+});

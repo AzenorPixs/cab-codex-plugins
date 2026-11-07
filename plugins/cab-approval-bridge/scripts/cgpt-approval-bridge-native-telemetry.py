@@ -13,7 +13,7 @@ CODEX_TOKENS = {"input_tokens": "tokens_input", "output_tokens": "tokens_output"
                 "cache_write_input_tokens": "tokens_cache_write",
                 "total_tokens": "tokens_total"}
 MAX_LINE = 8 * 1024 * 1024
-VERSION = "2.4.9"
+VERSION = "2.4.10"
 
 
 def codex_source(path, home=None):

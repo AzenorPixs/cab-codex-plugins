@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.9';
+export const VERSION = '2.4.10';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -247,7 +247,7 @@ export function projectErasure(value, scope) {
     if(foreign(node)&&contains(node,related))fail('erasure-foreign-reference');
     const ownedPath=typeof node.name==='string'&&node.name.startsWith('runs/')&&scope.runIds.includes(node.name.split('/')[1]);
     if (own(node)||ownedPath) { if (foreign(node)||typeof node.directory==='string'&&node.directory!==scope.workspace) fail('erasure-foreign-reference'); return undefined; }
-    const result = Object.fromEntries(Object.entries(node).filter(([key]) => !(ids.has(key)&&unambiguousId(key))).map(([key,item]) => [key,key==='integrationOwner'&&ids.has(item)?null:visit(item,key)])
+    const result = Object.fromEntries(Object.entries(node).filter(([key,item]) => !(ids.has(key)&&unambiguousId(key))||retainedPeer(item,scope)).map(([key,item]) => [key,key==='integrationOwner'&&ids.has(item)?null:visit(item,key)])
       .filter(([,item]) => item !== undefined));
     if (record(node.bundle) && node.bundle.schemaVersion===1 && typeof node.bundle.sourceId==='string' &&
         typeof node.bundle.datasetId==='string' && typeof node.hash==='string') {
@@ -309,7 +309,7 @@ export function erasureReferences(value, scope, pattern=erasurePattern(scope)) {
     if(retainedPeer(node,scope))return;
     if(Array.isArray(node)){for(const item of node){if(identityLists.has(parentKey)&&ids.has(item))found.add(item);visit(item,parentKey)}return}
     if(record(node)){for(const [key,item] of Object.entries(node)){
-      if(ids.has(key)&&unambiguousId(key))found.add(key);
+      if(ids.has(key)&&unambiguousId(key)&&!retainedPeer(item,scope))found.add(key);
       if(identityKeys.has(key)&&ids.has(item))found.add(item);
       if(key==='name'&&typeof item==='string'&&item.startsWith('runs/')&&scope.runIds.includes(item.split('/')[1]))found.add(item.split('/')[1]);
       visit(item,key);}return;}
@@ -370,6 +370,7 @@ export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sour
   const pattern=erasurePattern(extended);
   const entries = [];
   for (const row of documents) {
+    if(retainedPeer(row.value,extended))continue;
     const ownedPath=extended.runIds.some(id=>row.path.includes('/runs/'+id+'/'))||extended.ids.some(id=>row.path.endsWith('/'+id+'.json'));
     if (!erasureReferences(row.value,extended,pattern).length&&!ownedPath) continue;
     if(row.value?.protocol==='cab-continuity-v1'&&(row.value.digest!==continuityDigest(row.value.value)||
