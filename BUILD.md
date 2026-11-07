@@ -1,5 +1,7 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Complément2.4.7 : les approbations appartenant aux RUN protégés gardent leurs citations historiques opaques, sans mutation de décision ni empreinte. Les objets ambigus et données cibles restent contrôlés.
+
 Complément2.4.6 : rétention des identités secondaires partagées sur le même
 reçu avant application, récupération qualifiée helper6/runtime5 et transfert
 réancré après projection vérifiée. Atelier prioritaire : le codeur justifie

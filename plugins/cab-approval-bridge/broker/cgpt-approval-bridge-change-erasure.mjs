@@ -7,7 +7,7 @@ import {digest as observationDigest,validateBundle} from './cgpt-approval-bridge
 import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.4.6';
+export const VERSION = '2.4.7';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -216,6 +216,17 @@ export function extendErasureScope(scope, documents) {
   return { ...scope, ids: [...ids].sort() };
 }
 
+// A retained RUN may cite a retired RUN in an immutable approval payload.
+// Only its verified primary ownership permits retaining that opaque payload.
+function retainedPeer(node,scope) {
+  if(scope.closureAuthority!=='authoritative-retired-run-batch-v1'||!record(node))return false;
+  const runs=['runId','run_id'].filter(key=>typeof node[key]==='string').map(key=>node[key]);
+  if(!runs.length||!runs.every(id=>id===runs[0]&&scope.protectedRunIds.includes(id)))return false;
+  if(typeof node.directory==='string'&&node.directory!==scope.workspace)return false;
+  const ids=new Set(effectiveIds(scope));
+  return !Object.entries(node).some(([key,value])=>identityKeys.has(key)&&ids.has(value));
+}
+
 // Only typed identity ownership selects records. Unclassified textual references
 // are rejected by the final scan rather than deleting an unrelated payload.
 export function projectErasure(value, scope) {
@@ -227,6 +238,7 @@ export function projectErasure(value, scope) {
   const contains=(node,predicate)=>predicate(node)||node&&typeof node==='object'&&Object.values(node).some(item=>contains(item,predicate));
   const related=node=>own(node)||typeof node==='string'&&unambiguousId(node)&&ids.has(node);
   const visit = (node,parentKey='') => {
+    if(retainedPeer(node,scope))return node;
     if (Array.isArray(node)) {
       if (!identityLists.has(parentKey) && node.length === 2 && unambiguousId(node[0]) && ids.has(node[0])) return undefined;
       return node.filter(item=>!(identityLists.has(parentKey)&&typeof item==='string'&&ids.has(item))&&
@@ -295,6 +307,7 @@ function erasurePattern(scope) {
 export function erasureReferences(value, scope, pattern=erasurePattern(scope)) {
   const ids=new Set(effectiveIds(scope)),found=new Set();
   const visit=(node,parentKey='')=>{
+    if(retainedPeer(node,scope))return;
     if(Array.isArray(node)){for(const item of node){if(identityLists.has(parentKey)&&ids.has(item))found.add(item);visit(item,parentKey)}return}
     if(record(node)){for(const [key,item] of Object.entries(node)){
       if(ids.has(key)&&unambiguousId(key))found.add(key);

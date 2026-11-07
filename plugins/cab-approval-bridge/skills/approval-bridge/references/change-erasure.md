@@ -253,9 +253,11 @@ Les seuls helpers propriétaires corrigés sont préparés avant reprise. Le cyc
 normal CABU actualise ensuite le jeu complet ; son bilan exige toutes les
 versions réellement actives et ne se déduit pas de la seule reprise du worker.
 
-Depuis2.4.6, la réconciliation de rétention du lot en attente conserve le même
+Depuis2.4.7, la réconciliation de rétention du lot en attente conserve le même
 reçu et n’ajoute que des identités secondaires partagées. Le profil
-helper2.4.6/runtime2.4.5 est borné à cette récupération. Les producteurs gardent
+helper2.4.7/runtime2.4.5 est borné à cette récupération. Les producteurs gardent
 leurs UID et leurs clés ; le broker5 charge seulement les modules MJS6
 qualifiés, puis CABU6 harmonise les briques après PURGED. Aucun module Python
 broker5 ni fichier de configuration OpenCode n’est changé pendant la reprise.
+
+Les approbations des RUN protégés peuvent citer textuellement les anciens RUN : leur contenu immuable est conservé. Seule une appartenance primaire protégée sans identité cible typée permet cette rétention ; les données hors de ces objets restent examinées. Le profil helper2.4.7/runtime2.4.5 conserve les mêmes gardes de reprise.
