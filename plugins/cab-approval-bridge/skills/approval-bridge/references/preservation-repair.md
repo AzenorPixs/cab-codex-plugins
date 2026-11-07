@@ -1,4 +1,4 @@
-# Préservation et réparation — CAB2.4.10
+# Préservation et réparation — CAB2.4.11
 
 Avant un effacement, vérifier la préservation des valeurs appartenant aux RUN protégés même si leur clé est une identité secondaire cible. Un contrôle d’absence n’autorise pas la disparition d’un pair. Après un échec du différentiel, suspendre les nouvelles purges et la restitution de succès ; conserver les progrès des pairs.
 
@@ -11,3 +11,16 @@ Une demande DRAINING GLOBAL_RECONCILIATION émise par technical-integrity-protec
 Cette opération libère uniquement la demande globale : tous les accès, baux, opérations, décisions et fences restent identiques, y compris les protections locales non réconciliées. L’orchestrateur applique ensuite leurs procédures owner ordinaires. Aucun accord humain supplémentaire n’est demandé dans le mandat déjà accordé ; les preuves manquantes ne sont pas inventées.
 
 Pour une application hors ligne, garder les services actifs pendant la préparation, puis utiliser le transport scellé pour une coupure du seul contrôleur, prendre l’autorité exclusive, revérifier les observations et l’empreinte, valider et persister le plan, réancrer le même transfert sur le registre résultant et renouveler son délai sous identité native inchangée. Vérifier continuité ADOPTED, préservation puis CABU final. Les anciens UID/services, secrets et configurations OpenCode ne sont pas modifiés.
+
+## Sérialisation du plan de libération
+
+`resolvedWithoutAcquire` est une annotation du reçu opérateur ; le lecteur du registre n’accepte pas ce champ dans le global persistant. Le consommateur garde cette annotation dans son reçu et transmet seulement les champs du schéma au lecteur :
+
+```javascript
+const {resolvedWithoutAcquire, ...global} = plan.next.coordination.global;
+receipt.globalReleaseAnnotation = {resolvedWithoutAcquire};
+plan.next.coordination.global = global;
+registry.validateResourceState(plan.next.coordination);
+```
+
+Le contrôle du lecteur et la persistance atomique restent obligatoires. La normalisation ne retire aucun champ métier, preuve, état, accès ou fencing.

@@ -1,7 +1,7 @@
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 import { commandDigest } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.4.10';
+export const VERSION = '2.4.11';
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,100}$/.test(value);

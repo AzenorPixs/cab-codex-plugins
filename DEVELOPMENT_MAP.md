@@ -1335,3 +1335,6 @@ flowchart LR
 ### Réattachement du plugin de contexte après arrêt — CAB 2.1.32
 
 `rebind-portability-plugin-after-dead-pid` : ARCHIVÉ — CAB 2.1.32 qualifié, code non attribué, attribution ACL ultérieure. Un PID préparé mort permet le rattachement au processus courant en mémoire ; PID actif ou état inconnu restent bloquants. Tests ciblés, globaux et OpenCode privé réussis ; activation distincte selon CABU. [Proposition](openspec/changes/archive/2026-10-31-rebind-portability-plugin-after-dead-pid/proposal.md), [tâches](openspec/changes/archive/2026-10-31-rebind-portability-plugin-after-dead-pid/tasks.md).
+
+## Présentation et maintenance documentaire
+[simplify-cab-readme-and-maintenance-guidance](openspec/changes/archive/2026-11-07-simplify-cab-readme-and-maintenance-guidance/) : README courant sans historique et sérialisation des annotations documentée ; aucune modification fonctionnelle.

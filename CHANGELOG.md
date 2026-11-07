@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.11
+- README recentré sur la présentation et l’utilisation courante, sans historique de versions.
+- Documentation de la sérialisation des annotations de réparation hors état persistant.
+
 ## 2.4.10
 - Conserver les entrées de dictionnaire des RUN protégés malgré les collisions de clés.
 - Réparation additive vérifiée sur les empreintes antérieures, sans reprise d’effet.
