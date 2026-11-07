@@ -14,7 +14,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.17"
+VERSION = "2.4.18"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -515,6 +515,55 @@ class RuntimeStore:
             self.db.execute("INSERT INTO receipts VALUES(?,?,?)",(action_id,digest(body),encoded(result)))
             return result
 
+    def purge_treated(self, incident_id):
+        identifier(incident_id)
+        with self.transaction():
+            row = self.db.execute("SELECT state FROM incidents WHERE incident_id=?", (incident_id,)).fetchone()
+            if row is None:
+                return {"status": "ALREADY_ABSENT", "incident_id": incident_id}
+            if row["state"] != "RESOLVED":
+                raise RuntimeErrorCode("ccab-purge-untreated")
+            self.db.execute("DELETE FROM incidents WHERE incident_id=?", (incident_id,))
+            for receipt in self.db.execute("SELECT * FROM receipts").fetchall():
+                body = json.loads(receipt['body'])
+                refs = set(body.get('incident_ids', [])) | ({body['incident_id']} if 'incident_id' in body else set())
+                if incident_id not in refs:
+                    continue
+                if not any(self.db.execute('SELECT 1 FROM incidents WHERE incident_id=?', (key,)).fetchone() for key in refs):
+                    self.db.execute('DELETE FROM receipts WHERE action_id=?', (receipt['action_id'],))
+            return {"status": "PURGED_TREATED", "incident_id": incident_id}
+
+    def purge_treated_batch(self, incident_ids):
+        if not isinstance(incident_ids, list) or not incident_ids or len(incident_ids) > 100:
+            raise RuntimeErrorCode("ccab-batch-invalid")
+        for incident_id in incident_ids:
+            identifier(incident_id)
+        if len(set(incident_ids)) != len(incident_ids):
+            raise RuntimeErrorCode("ccab-batch-invalid")
+        with self.transaction():
+            rows = [self.db.execute("SELECT state FROM incidents WHERE incident_id=?", (key,)).fetchone() for key in incident_ids]
+            if any(row is not None and row['state'] != 'RESOLVED' for row in rows):
+                raise RuntimeErrorCode("ccab-purge-untreated")
+            removed = sum(row is not None for row in rows)
+            self.db.executemany("DELETE FROM incidents WHERE incident_id=?", [(key,) for key in incident_ids])
+            removed_ids = set(incident_ids)
+            for receipt in self.db.execute("SELECT * FROM receipts").fetchall():
+                body = json.loads(receipt['body'])
+                refs = set(body.get('incident_ids', [])) | ({body['incident_id']} if 'incident_id' in body else set())
+                if refs & removed_ids and not any(self.db.execute('SELECT 1 FROM incidents WHERE incident_id=?', (key,)).fetchone() for key in refs):
+                    self.db.execute('DELETE FROM receipts WHERE action_id=?', (receipt['action_id'],))
+            return {"status": "PURGED_TREATED", "removed": removed}
+
+    def purge_all_treated(self):
+        with self.transaction():
+            if self.db.execute("SELECT 1 FROM incidents WHERE state != 'RESOLVED' LIMIT 1").fetchone():
+                raise RuntimeErrorCode("ccab-purge-untreated")
+            count = self.db.execute("SELECT count(*) FROM incidents").fetchone()[0]
+            receipts = self.db.execute("SELECT count(*) FROM receipts").fetchone()[0]
+            self.db.execute("DELETE FROM incidents")
+            self.db.execute("DELETE FROM receipts")
+            return {"status": "PURGED_TREATED", "removed": count, "receipts_removed": receipts}
+
     def purge_resolved(self,scope):
         removed=[];retained_receipts=0
         with self.transaction():
@@ -535,18 +584,18 @@ class RuntimeStore:
     def resolve(self, action_id, incident_id, claim, claimant, resolution):
         for value in (action_id, incident_id, claim, claimant):
             identifier(value)
-        if not isinstance(resolution, dict) or set(resolution) != {"classification", "method", "reporters_verified", "release"} or resolution["classification"] not in ("code-fix", "documentation-fix", "false-positive"):
+        if not isinstance(resolution, dict) or set(resolution) != {"classification", "method", "reporters_verified", "release"} or resolution["classification"] not in ("code-fix", "documentation-fix", "false-positive", "no-fix"):
             raise RuntimeErrorCode("ccab-resolution-invalid")
         if not isinstance(resolution["method"], str) or not 1 <= len(resolution["method"]) <= 4000 or not isinstance(resolution["reporters_verified"], list) or not resolution["reporters_verified"]:
             raise RuntimeErrorCode("ccab-reporter-verification-required")
         for reporter in resolution["reporters_verified"]:
             identifier(reporter)
-        if resolution["classification"] != "false-positive":
+        if resolution["classification"] in ("code-fix", "documentation-fix"):
             release = resolution["release"]
             if not isinstance(release, dict) or set(release) != {"version", "commit", "publication", "cabu_receipt"} or any(not isinstance(v, str) or not v or len(v) > 300 for v in release.values()):
                 raise RuntimeErrorCode("ccab-release-proof-required")
         elif resolution["release"] is not None:
-            raise RuntimeErrorCode("ccab-false-positive-release-invalid")
+            raise RuntimeErrorCode("ccab-no-fix-release-invalid" if resolution["classification"] == "no-fix" else "ccab-false-positive-release-invalid")
         body = {"incident_id": incident_id, "claim": claim, "claimant": claimant, "resolution": resolution}
         with self.transaction():
             old = self.db.execute("SELECT * FROM receipts WHERE action_id=?", (action_id,)).fetchone()

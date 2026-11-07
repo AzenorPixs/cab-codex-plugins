@@ -1352,3 +1352,5 @@ flowchart LR
 [clear-current-erasure-statistics-marker](openspec/changes/archive/2026-11-07-clear-current-erasure-statistics-marker/) : projection du marqueur éphémère de la transaction exacte, avec conservation des pairs et refus des références étrangères.
 
 [guard-permission-receipt-erasure](openspec/changes/archive/2026-11-07-guard-permission-receipt-erasure/), code non attribué : protection de l'intégrité des reçus natifs pendant le nettoyage ; source et tests qualifiés, activation à vérifier séparément.
+
+[close-treated-incidents-without-fix](openspec/changes/archive/2026-11-07-close-treated-incidents-without-fix/), code non attribué : réponse puis clôture et nettoyage individuel ou par lot de la file CCAB ; activation à vérifier séparément.

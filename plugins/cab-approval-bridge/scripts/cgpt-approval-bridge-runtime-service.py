@@ -33,7 +33,7 @@ native_module = importlib.util.module_from_spec(NATIVE_SPEC)
 NATIVE_SPEC.loader.exec_module(native_module)
 EMITTER_SPEC=importlib.util.spec_from_file_location('cab_sgs_emitter',SCRIPT_DIRECTORY/'cgpt-approval-bridge-sgs-emitter.py')
 emitter_module=importlib.util.module_from_spec(EMITTER_SPEC);EMITTER_SPEC.loader.exec_module(emitter_module)
-VERSION = "2.4.17"
+VERSION = "2.4.18"
 if store_module.VERSION != VERSION or native_module.VERSION != VERSION:
     raise RuntimeError("runtime-component-version-mismatch")
 MAX_BODY = 64 * 1024 * 1024
@@ -317,6 +317,15 @@ class RuntimeHandler(BaseHTTPRequestHandler):
             elif route==('POST','/purge-resolved'):
                 if set(body)!={'scope','closed'} or body['closed'] is not True:raise store_module.RuntimeErrorCode('ccab-purge-closure-required')
                 result=self.server.store.purge_resolved(body['scope'])
+            elif route==('POST','/purge-treated'):
+                if body != {'confirmed': True}:raise store_module.RuntimeErrorCode('ccab-purge-confirmation-required')
+                result=self.server.store.purge_all_treated()
+            elif route==('POST','/purge-incident'):
+                if set(body) != {'incident_id'}:raise store_module.RuntimeErrorCode('ccab-purge-target-invalid')
+                result=self.server.store.purge_treated(body['incident_id'])
+            elif route==('POST','/purge-batch'):
+                if set(body) != {'incident_ids'}:raise store_module.RuntimeErrorCode('ccab-purge-target-invalid')
+                result=self.server.store.purge_treated_batch(body['incident_ids'])
             else:
                 self.reply(404, {"error": "runtime-route-not-found"})
                 return
