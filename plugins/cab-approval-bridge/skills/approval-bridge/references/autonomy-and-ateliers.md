@@ -1,0 +1,116 @@
+# Autonomie du change — cible CAB 2.4.0
+
+Le développeur valide le change et ses ressources. Dans ce périmètre,
+l’orchestrateur décide, orchestre, contrôle et valide ; le codeur produit le
+travail. Une reprise technique déjà couverte ne nécessite pas un nouvel accord
+du développeur. Hors change et nouvelle allocation non couverte lui reviennent.
+
+| Action du codeur | Autorité requise |
+|---|---|
+| Lecture/exploration/outils et exécution sans effet extérieur au change | Autonome dans le mandat |
+| Création, copie, modification dans son atelier | Autonome dans le mandat |
+| Toute écriture projet hors atelier, y compris renommage, suppression ou droits | Validation préalable de l’orchestrateur sur contenu/lot exact |
+| Tout accès web, y compris via script, shell, navigateur ou outil | Validation préalable de l’orchestrateur |
+| Résultat de test réussi, échoué ou indisponible | Soumission et validation de l’orchestrateur avant acceptation comme preuve |
+| Action hors change ou ressources supplémentaires non allouées | Accord du développeur |
+
+L’atelier se trouve à la racine du projet : `.cab-tests/<change>/<RUN>/`.
+Chaque brique vérifie/crée la racine propre au projet ; ses parents et chemins
+physiques sont vérifiés. Les liens symboliques ne permettent pas de contourner
+les frontières. Les ateliers des pairs restent hors mandat. Le codeur peut
+copier les fichiers du change et réaliser autant d’essais que nécessaire dans
+son espace ; les résultats intermédiaires ne bloquent pas le diagnostic autonome.
+Il prépare un diff/lot exact pour validation avant application au projet.
+
+Dans le profil isolé disponible, le codeur utilise `atelier_execute` via Code
+Mode après discovery exacte, avec un payload littéral : request_id stable,
+run_id, reservation_version, session_id, change_id, directory et argv ;
+timeout_ms est facultatif. Aucun request_validation ni décision supplémentaire
+n’est requis pour cet essai : l’autorité est le mandat du RUN et l’exception
+d’atelier déjà accordée. Le contrôleur corrèle l’appel natif ; le broker lance
+la commande sous son UID avec projet/runtimes RO, atelier propre RW et réseau
+isolé. Bubblewrap est une capacité locale vérifiée, sans installation implicite.
+S’il manque, diagnostiquer la capacité et utiliser les voies existantes déjà
+autorisées ; ne jamais remplacer ce lanceur par un shell hôte libre.
+
+Une réponse perdue se consulte avec `atelier_status` sur le même request_id,
+RUN/change/directory et la génération/SID courants. Une identité existante
+INTENT/RUNNING/terminale n’est pas relancée. COMPLETED et exit0 décrivent le
+processus, pas une validation du résultat de test. Les écritures projet hors
+atelier et les accès web suivent les décisions CAB ordinaires. Les ressources
+de test déjà allouées conservent leurs voies autorisées ; aucune allocation
+nouvelle n’est déduite de cette capacité.
+
+La liberté d’exécuter un outil ne dispense pas de qualifier ses effets : un
+shell qui écrit dans le projet ou accède au web suit les lignes correspondantes.
+Les politiques natives doivent être réglées à la portée minimale vérifiable ;
+ne pas désactiver les contrôles des pairs pour autoriser un atelier. Les gardes
+d’identité, d’accès partagé et d’effet incertain restent actives. Une autorisation
+d’essai ne vaut ni validation du résultat ni accord de publication.
+
+## Lectures natives refusées par une politique héritée
+
+`read/glob/grep DENY` décrit une permission, pas l’absence d’outil. Le pilote
+peut amender la politique du seul SID dans son mandat, sans nouvel accord du
+développeur. Pour OpenCode2.2.5, `read` compare une ressource relative au
+workspace, même si l’input est absolu. Un ALLOW absolu peut donc rester inopérant.
+Utiliser des fichiers exacts/sous-arbres relatifs du change et les cadrages
+nécessaires, puis les DENY relatifs d’exclusions ; jamais un ALLOW `*` ou `**`
+global pour résoudre cette différence. Les règles non lecture et les DENY
+précis restent conservés. Qualifier glob/grep sur leur ressource réelle avant
+de prétendre leur portée maîtrisée ; les recherches de l’atelier isolé restent
+disponibles indépendamment.
+
+Le SDK fournit `configureNativeReads(SID,{paths:[...],tools:['read']})` à une
+frontière idle sans permission pendante. Le PATCH V2 utilise
+`permissions:[{action,resource,effect}]` ; les objets normalisés du SDK
+`{permission,pattern,action}` ne sont pas le format d’écriture natif. Relire
+la policy, conserver la preuve avant/après dans le checkpoint autorisé et faire
+qualifier une lecture native utile. La présence des règles ne suffit pas à
+prouver leur effet. La fusion agent puis session et le dernier match sont
+définis dans [le moteur2.2.5](https://github.com/anomalyco/opencode/blob/v2.2.5/packages/core/src/permission.ts).
+
+Le checkpoint propre à l’orchestrateur se lit/amende par son mécanisme local
+déjà mandaté. `source-read` n’est pas un prérequis à cette maintenance de suivi.
+Préserver les champs, les droits et l’atomicité, sans exposer de token. Ne pas
+écraser silencieusement un fichier illisible ou un JSON invalide. Un200 natif
+sans Content-Type reste un diagnostic distinct ; ne pas assouplir le garde pour
+le masquer ni étendre cette exception aux livrables métier du codeur.
+
+Le codeur peut obtenir le contrat complet applicable par `cab_contract` dans
+le broker, puis une référence exacte (`CCAB-SKILL.md`, `SGS-runtime.md`, etc.).
+Le noyau/index et le digest de version sont stables ; demander les références
+utiles à l’action. Cela ne nécessite pas l’accès au profil privé Codex d’un
+autre UID et ne confond pas la permission native `skill` avec la connaissance
+du protocole. Tracer la version et les obligations reçues avant travail et
+après update, sans rejouer un ancien mandat ou une once.
+
+À l’archivage ou à l’arrêt explicite pour dépendance insatisfaite, conserver
+les rapports/statistiques durables, terminer le nettoyage OC, puis nettoyer
+les briques et le seul sous-espace du RUN. La racine `.cab-tests/` reste présente.
+Une pause ou un blocage technique temporaire n’autorise pas ce nettoyage.
+
+Après démarrage, reprise ou mise à jour, transmettre le noyau et les références
+applicables, puis tracer leur connaissance par rôle/version avant travail.
+Le préfixe stable renvoie aux détails ; le codeur doit pouvoir consulter
+l’intégralité du contrat sans recevoir chaque fois tout son historique.
+
+CCAB est la file des incidents CAB, connue des deux rôles ; consulter le skill
+CCAB distribué pour déclaration ou traitement. SGS collecte les sources natives ;
+le LLM complète uniquement les faits non disponibles dans celles-ci.
+
+## Demande refusée avant admission, sans préparation locale
+
+Un reçu `NOT_ADMITTED/resource-revision-stale` est terminal. Si le registre
+complet ne contient ni requestId ni operationId, avec zéro décision, accès,
+permission et once, il n’existe aucune préparation à retirer. Un refus
+`recovery-target-divergent` ne crée pas cet objet. Conserver le reçu, vérifier
+la readiness fraîche et reprendre avec une unité neuve, revue et IDs neufs.
+Ne pas annuler/restaurer l’ancien terminal ni retirer les autres cibles du plan.
+
+`PENDING` désigne le broker, pas une admission contrôleur. Identifier l’unité
+par `lookup_validation` sur ses cinq identités puis lire le même approval_id.
+Ne pas déduire son état d’un compteur global ancien. Préparer SHA/digest hors
+wrapper, puis soumettre un retour MCP littéral exact. Une révision effective
+de dossier déjà agrégée ne s’applique pas une deuxième fois à un nouvel enfant :
+demander les révisions des clés exactes, ou calculer revision(key) sur la map brute.

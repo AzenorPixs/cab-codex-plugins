@@ -1,4 +1,14 @@
-## 2.3.3 — 2026-11-06
+# Historique des versions
+
+## 2.4.0 — 2026-11-07
+
+- Autonomie du codeur dans le change et son atelier isolé `.cab-tests/<change>/<RUN>/` ; validation préalable des écritures projet hors atelier et du web, validation des résultats par l’orchestrateur.
+- SGS permanent sous systemd : collecte native Codex/OpenCode, modèles et raisonnement horodatés, métriques natives et cache distincts, outbox reprise sans agent, import et conservation des rapports archivés.
+- CCAB permanent avec plugin, skill et commande : incidents FIFO, lots justifiés, baux de traitement et résolutions individuelles coordonnées avec les déclarants.
+- Effacement terminal réparti sous chaque UID, reprise des transactions scellées, conservation des pairs et des incidents encore nécessaires ; rapports durables avant purge et nettoyage de l’atelier propre.
+- Web Monitor : statistiques exclusivement SGS, incidents CCAB, contenu des archives réellement conservées et suppression explicite par le développeur ; mode Codex direct sans OpenCode fictif.
+- CABU : paquet complet contrôlé, activation vérifiée de SGS/CCAB et des moniteurs directs déjà actifs, sous-reçu reprenable sans redémarrage des services conformes ni rejeu des effets métier.
+- Contrat versionné accessible au codeur, cadrages cohérents avec les huit catégories, préparation locale des empreintes et révisions exactes, lectures bornées et collecte quantitative par lots.
 
 ## 2.3.10
 

@@ -1,0 +1,12 @@
+[Unit]
+Description=CAB 2.4.0 — File des incidents CCAB
+
+[Service]
+Type=simple
+Environment=PYTHONDONTWRITEBYTECODE=1
+ExecStart=/usr/bin/python3 %h/.local/share/cab-approval-bridge/cgpt-approval-bridge-runtime-service.py ccab
+Restart=on-failure
+RestartPreventExitStatus=78
+RestartSec=3
+UMask=0077
+NoNewPrivileges=true

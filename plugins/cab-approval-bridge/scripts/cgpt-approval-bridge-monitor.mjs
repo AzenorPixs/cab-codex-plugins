@@ -1,4 +1,7 @@
+import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
+import {ArchiveContent,archiveDirectory} from './cgpt-approval-bridge-archives.mjs';
 import { followOpenCodeLifetime, boundedCleanup, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
+import {ensureProjectTestRoot} from './cgpt-approval-bridge-autonomy.mjs';
 import { readFile, realpath } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
@@ -6,15 +9,17 @@ import { MonitorState, monitorConfiguration, VERSION as DATA_VERSION } from './c
 import { guardStatisticsPost, statisticsSelection, VERSION as MAINTENANCE_VERSION } from './cgpt-approval-bridge-statistics-maintenance.mjs';
 import { MonitorCatalog, MonitorServices, guardManagementPost, managementBody, VERSION as MANAGEMENT_VERSION } from './cgpt-approval-bridge-monitor-management.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 if ([DATA_VERSION, MAINTENANCE_VERSION, MANAGEMENT_VERSION, LIFECYCLE_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const assets = new Map([['/', ['index.html', 'text/html; charset=utf-8']],
   ['/stats.mjs', ['stats.mjs', 'text/javascript; charset=utf-8']],
   ['/app.mjs', ['app.mjs', 'text/javascript; charset=utf-8']], ['/style.css', ['style.css', 'text/css; charset=utf-8']]]);
 
 export async function createMonitorServer(configuration, options = {}) {
+  ensureProjectTestRoot(configuration.workspace);
   const state = new MonitorState(configuration, options);
   const catalog = new MonitorCatalog(configuration.stateDirectory, configuration.workspace);
+  const archiveContent=new ArchiveContent(options.archiveDirectory||configuration.archiveDirectory||archiveDirectory(configuration.workspace),configuration.workspace);
   await catalog.load();
   const services = new MonitorServices(configuration, options);
   let serviceError = null;
@@ -50,6 +55,7 @@ export async function createMonitorServer(configuration, options = {}) {
   });
   async function handleRequest(request, response) {
     if (closing) { response.writeHead(503).end(); return; }
+    const jsonReply=(status,value)=>{response.writeHead(status,{'content-type':'application/json'});response.end(JSON.stringify(value));};
     response.setHeader('cache-control', 'no-store');
     response.setHeader('x-content-type-options', 'nosniff');
     response.setHeader('referrer-policy', 'no-referrer');
@@ -63,7 +69,25 @@ export async function createMonitorServer(configuration, options = {}) {
         response.writeHead(403).end(); return;
       }
     } catch { response.writeHead(400).end(); return; }
+    if(url.pathname==='/api/archives'||url.pathname==='/api/archives/content'||url.pathname==='/api/archives/delete') {
+      try {
+        if(url.pathname==='/api/archives'&&request.method==='GET'&&!url.search)jsonReply(200,{archives:archiveContent.list()});
+        else if(url.pathname==='/api/archives/content'&&request.method==='GET') {
+          if(url.searchParams.getAll('archiveId').length!==1||url.searchParams.getAll('sha256').length!==1||[...url.searchParams.keys()].some(key=>!['archiveId','sha256'].includes(key)))throw new Error('archive-query-invalid');
+          jsonReply(200,archiveContent.content(url.searchParams.get('archiveId'),url.searchParams.get('sha256')));
+        }else if(url.pathname==='/api/archives/delete'&&request.method==='POST'&&!url.search) {
+          guardManagementPost(request,url);
+          const body=await managementBody(request);
+          if(Object.keys(body).sort().join(',')!=='archiveId,fingerprint')throw new Error('archive-delete-input-invalid');
+          await state.collect();
+          const active=state.runs().filter(run=>run.armed===true||run.state==='RESERVED'||run.mode==='direct').map(run=>run.runId);
+          jsonReply(200,archiveContent.remove(body.archiveId,body.fingerprint,active));
+        }else response.writeHead(405).end();
+      }catch(error){jsonReply(error.status||409,{error:error.code||'archive-operation-unavailable'});}
+      return;
+    }
     if (url.pathname.startsWith('/api/manage/')) {
+      if(configuration.mode==='direct'&&url.pathname==='/api/manage/service'){jsonReply(405,{error:'direct-monitor-service-management-unavailable'});return;}
       let acquired = false;
       try {
         if (!['/api/manage/catalog', '/api/manage/service'].includes(url.pathname) || url.search) {
@@ -96,61 +120,36 @@ export async function createMonitorServer(configuration, options = {}) {
       } finally { if (acquired) managementInFlight = false; }
       return;
     }
-    if (url.pathname === '/api/statistics' || url.pathname.startsWith('/api/statistics/retention/')) {
-      if (statisticsRequests >= 20) { response.writeHead(503).end(); return; }
+    if (url.pathname === '/api/statistics' || url.pathname==='/api/statistics/component' ||url.pathname==='/api/statistics/events'|| url.pathname.startsWith('/api/statistics/retention/') || url.pathname === '/api/ccab') {
+      if(request.method!=='GET'){response.writeHead(405,{allow:'GET'}).end();return;}
+      if(url.pathname.startsWith('/api/statistics/retention/')){jsonReply(409,{error:'sgs-retention-separate-from-runtime'});return;}
+      if(statisticsRequests>=20){response.writeHead(503).end();return;}
       statisticsRequests++;
       try {
-        let body;
-        let route;
-        if (url.pathname === '/api/statistics') {
-          if (request.method !== 'GET') { response.writeHead(405, { allow: 'GET' }).end(); return; }
-          statisticsSelection(url.searchParams);
-          route = '/statistics/dashboard' + url.search;
-        } else {
-          if (!['/api/statistics/retention/preview', '/api/statistics/retention/purge'].includes(url.pathname)) {
-            response.writeHead(404).end(); return;
-          }
-          if (request.method !== 'POST') { response.writeHead(405, { allow: 'POST' }).end(); return; }
-          guardStatisticsPost(request, url, server.address().port, true);
-          request.setTimeout(5000, () => request.destroy());
-          const chunks = []; let bytes = 0;
-          for await (const chunk of request) {
-            bytes += chunk.length;
-            if (bytes > 4096) throw Object.assign(new Error('statistics-request-too-large'), { status: 413 });
-            chunks.push(chunk);
-          }
-          try { body = JSON.stringify(JSON.parse(Buffer.concat(chunks).toString('utf8'))); }
-          catch { throw Object.assign(new Error('statistics-request-invalid'), { status: 400 }); }
-          route = url.pathname.slice(4);
+        const call=options.runtimeRequest||runtimeRequest;
+        if(url.pathname==='/api/ccab') {
+          let result;try{result=await call('ccab','/incidents');}catch{result={incidents:[],unavailable:true};}
+          const pending=state.sources.controller?.value?.brokerReadiness?.ccab_outbox;
+          jsonReply(200,{incidents:result.incidents.filter(item=>item.project===configuration.workspace),unavailable:result.unavailable||false,pendingBroker:pending?.entries||[]});
+        }else if(url.pathname==='/api/statistics/events') {
+          if(url.searchParams.getAll('binding').length!==1||[...url.searchParams.keys()].some(key=>!['binding','after','limit'].includes(key)))throw new Error('sgs-event-query-invalid');
+          const params=new URLSearchParams(url.searchParams);params.set('project',configuration.workspace);
+          jsonReply(200,await call('sgs','/events?'+params));
+        }else if(url.pathname==='/api/statistics/component') {
+          if(url.searchParams.getAll('component').length!==1||[...url.searchParams.keys()].some(key=>key!=='component'))throw new Error('sgs-component-query-invalid');
+          jsonReply(200,await call('sgs','/component/checkpoint?'+new URLSearchParams({project:configuration.workspace,component:url.searchParams.get('component')}),undefined,{maxResponseBytes:64*1024*1024}));
+        }else {
+          if([...url.searchParams.keys()].some(key=>!['selection','runId'].includes(key)) ||
+            url.searchParams.getAll('runId').length>1)throw new Error('sgs-selection-invalid');
+          const result=await call('sgs','/stats?project='+encodeURIComponent(configuration.workspace));
+          const runOptions=[...new Set(result.sessions.map(session=>session.run))].sort();
+          const runId=url.searchParams.get('runId');
+          jsonReply(200,{...result,backend:'sgs',runOptions,observedAt:new Date().toISOString(),
+            sessions:runId?result.sessions.filter(session=>session.run===runId):result.sessions,
+            archives:runId?[]:result.archives});
         }
-        const upstream = await (options.fetcher || fetch)(configuration.controllerUrl + route, {
-          method: body === undefined ? 'GET' : 'POST', body, redirect: 'error',
-          signal: AbortSignal.any([abort.signal, AbortSignal.timeout(configuration.timeoutMs)]),
-          headers: { accept: 'application/json', ...(body === undefined ? {} : {
-            'content-type': 'application/json', 'x-cab-statistics': '1' }) } });
-        if (!upstream.body) throw new Error('statistics-source-unavailable');
-        let bytes = 0; const chunks = [];
-        for await (const chunk of upstream.body) {
-          bytes += chunk.length;
-          if (bytes > 2 * 1024 * 1024) throw new Error('statistics-source-too-large');
-          chunks.push(chunk);
-        }
-        const value = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        if (!upstream.ok) {
-          const allowed = ['statistics-preview-expired', 'statistics-preview-changed', 'statistics-maintenance-busy',
-            'statistics-maintenance-unavailable', 'statistics-retention-invalid', 'statistics-confirmation-invalid', 'statistics-selection-invalid'];
-          response.writeHead([400, 403, 409, 503].includes(upstream.status) ? upstream.status : 503,
-            { 'content-type': 'application/json' });
-          response.end(JSON.stringify({ error: allowed.includes(value.error) ? value.error : 'statistics-source-unavailable' })); return;
-        }
-        if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('statistics-source-invalid');
-        response.writeHead(200, { 'content-type': 'application/json' }); response.end(JSON.stringify(value));
-      } catch (cause) {
-        if (!response.headersSent && !response.destroyed) {
-          response.writeHead(cause.status || 503, { 'content-type': 'application/json' });
-          response.end(JSON.stringify({ error: cause.status ? cause.message : 'statistics-source-unavailable' }));
-        }
-      } finally { statisticsRequests--; }
+      }catch{jsonReply(503,{error:url.pathname==='/api/ccab'?'ccab-unavailable':'sgs-unavailable'});}
+      finally{statisticsRequests--;}
       return;
     }
     if (request.method !== 'GET') { response.writeHead(405, { allow: 'GET' }).end(); return; }
@@ -159,7 +158,7 @@ export async function createMonitorServer(configuration, options = {}) {
       const maintenance=url.pathname==='/api/maintenance-identity';
       if(maintenance&&request.headers['x-cab-continuity']!=='cab-continuity-v1'){response.writeHead(403).end();return;}
       response.writeHead(200, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ version: VERSION,identity: { workspace: configuration.workspace },
+      response.end(JSON.stringify({ version: VERSION,identity: { workspace: configuration.workspace,mode:configuration.mode||'piloted' },
         ...(maintenance?{pid:process.pid,stateDirectory:configuration.stateDirectory}:{}) })); return;
     }
     if (url.pathname === '/api/snapshot') {
@@ -226,7 +225,7 @@ export async function createMonitorServer(configuration, options = {}) {
       await new Promise((resolve, reject) => { server.once('error', reject);
         server.listen(configuration.port, configuration.host, () => { server.off('error', reject); resolve(); }); });
       refresh(); interval = setInterval(refresh, configuration.pollMs);
-      streamTask = streamController();
+      streamTask = configuration.mode==='direct'?Promise.resolve():streamController();
       return server.address();
     },
     close() {
@@ -259,7 +258,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
       try { await boundedCleanup(() => monitor.close()); process.exit(0); }
       catch { process.stderr.write('Arrêt de CAB Monitor incomplet.\n'); process.exit(SHUTDOWN_INCOMPLETE); }
     };
-    const lifetime = followOpenCodeLifetime(monitor.state.openCode, { onExit: close,
+    const lifetime = configuration.mode==='direct'?{start(){},stop(){}}:followOpenCodeLifetime(monitor.state.openCode, { onExit: close,
       onDiagnostic: (code) => process.stderr.write(code + '\n') });
     lifetime.start();
     process.on('SIGTERM', () => { void close(); }); process.on('SIGINT', () => { void close(); });

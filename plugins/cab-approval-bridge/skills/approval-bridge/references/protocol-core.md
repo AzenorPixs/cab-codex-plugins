@@ -1,4 +1,16 @@
-# Noyau du contrat — CAB 2.2.40
+# Noyau du contrat — CAB 2.4.0
+
+Dans le change validé, le codeur lit, explore et utilise ses outils de façon
+autonome. Son atelier propre `.cab-tests/<change>/<RUN>/` autorise aussi les
+écritures et copies du projet sans décision supplémentaire. Toute écriture
+projet hors atelier et tout accès web exigent la validation préalable de
+l’orchestrateur ; tous les résultats de tests lui sont soumis avant de devenir
+des preuves acceptées. Hors change ou pour une nouvelle allocation de ressources,
+le développeur reste l’autorité. Les ateliers des pairs sont protégés.
+Lire [le contrat d’autonomie](autonomy-and-ateliers.md) pour les frontières,
+les lanceurs isolés et les réponses perdues. Après reprise ou mise à jour,
+chaque acteur recharge le contrat applicable et trace sa version et son rôle.
+SGS collecte les sources natives disponibles ; CCAB reçoit les incidents.
 
 Dans le change déjà validé, l’orchestrateur décide et valide les reprises ; le
 développeur est sollicité uniquement pour une décision hors de ce périmètre.

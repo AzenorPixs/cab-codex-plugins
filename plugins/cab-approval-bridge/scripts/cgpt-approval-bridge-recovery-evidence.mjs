@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -273,11 +273,11 @@ export function reviewedTerminalProof(parts, approval, review, run, sameIdentity
       calls[0].input?.session_id===approval.session_id && notAdmitted(calls[0].input.requestId)) continue;
     if(p.executed!==false || p.state?.status!=='completed' || p.state.metadata?.truncated!==false ||
       !Array.isArray(calls) || !calls.length || calls.length>2 || calls.some(c=>c.status!=='completed'||
-        !['cgpt-validation.request_validation','cgpt-validation.get_approval','cgpt-validation.poll_approval','cgpt-validation.broker_readiness','cgpt-validation.lookup_validation','cgpt-validation.broker_health'].includes(c.tool)))
+        !['cgpt-validation.request_validation','cgpt-validation.get_approval','cgpt-validation.poll_approval','cgpt-validation.broker_readiness','cgpt-validation.lookup_validation','cgpt-validation.broker_health','cgpt-validation.cab_contract','cgpt-validation.prepare_validation'].includes(c.tool)))
       fail('terminal-review-effects-uncovered');
     const last=calls.at(-1);
     if(calls.every(c=>['cgpt-validation.get_approval','cgpt-validation.poll_approval','cgpt-validation.lookup_validation',
-      'cgpt-validation.broker_health','cgpt-validation.broker_readiness'].includes(c.tool))) {
+      'cgpt-validation.broker_health','cgpt-validation.broker_readiness','cgpt-validation.cab_contract','cgpt-validation.prepare_validation'].includes(c.tool))) {
       // Diagnostic transformations are not authoritative approval results.
       // Their exact known MCP calls have no project execution capability.
       continue;

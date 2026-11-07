@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 export const SHUTDOWN_INCOMPLETE = 78;
 
 // /proc/stat is public process metadata; never inspect cmdline or environ.
@@ -16,6 +16,16 @@ export async function processIdentity(pid) {
     throw new Error('lifecycle-invalid-process-identity');
   }
   return { pid, startTime: fields[19], state: fields[0] };
+}
+
+export async function processOwnerIdentity(pid) {
+  const before=await processIdentity(pid);if(!before)return null;
+  let status;
+  try{status=await readFile(`/proc/${pid}/status`,'utf8');}catch(cause){if(['ENOENT','ESRCH'].includes(cause.code))return null;throw cause;}
+  const ids=status.match(/^Uid:\s+(\d+)\s+(\d+)\s+(\d+)\s+(\d+)$/m);
+  const after=await processIdentity(pid);
+  if(!ids||!after||before.startTime!==after.startTime||new Set(ids.slice(1)).size!==1)return null;
+  return {...after,uid:Number(ids[1])};
 }
 
 export function followOpenCodeLifetime(openCode, { onExit, onDiagnostic = () => {},

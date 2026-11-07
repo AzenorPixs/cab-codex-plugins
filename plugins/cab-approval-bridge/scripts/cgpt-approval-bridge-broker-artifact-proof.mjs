@@ -4,14 +4,17 @@ import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
 import { processIdentity, proofHash } from './cgpt-approval-bridge-maintenance-proof.mjs';
 
-export const VERSION = '2.3.10';
+export const VERSION = '2.4.0';
 export const BROKER_ARTIFACT_FILES = ['cgpt_approval_bridge_server.py', 'cgpt_approval_bridge_router.py', 'cgpt_approval_bridge_journal.py'];
+export const BROKER_PAYLOAD_FILES=[...BROKER_ARTIFACT_FILES,'cgpt_approval_bridge_owner_cleanup.mjs',
+  'cgpt_approval_bridge_atelier.py','cgpt_approval_bridge_reporting.py','cgpt-approval-bridge-contract.json',
+  ...['change-erasure','continuity','state-layout','observation-statistics'].map(name=>'cgpt-approval-bridge-'+name+'.mjs')];
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
 const object = (value) => value && typeof value === 'object' && !Array.isArray(value);
 const identity = (value) => object(value) && Object.keys(value).sort().join(',') === 'pid,startTime,uid' &&
   Number.isSafeInteger(value.pid) && value.pid > 0 && /^\d+$/.test(value.startTime) &&
   Number.isSafeInteger(value.uid) && value.uid >= 0;
-const version = (data) => data.toString('utf8').match(/^(?:SERVER_VERSION|VERSION)\s*=\s*["']([^"']+)["']/m)?.[1];
+const version = (data) => data.toString('utf8').match(/^(?:export )?(?:const )?(?:SERVER_VERSION|VERSION)\s*=\s*["']([^"']+)["']/m)?.[1];
 
 export function validateBrokerProof(proof, directory) {
   const keys = ['authorization','entry','expectedUid','expectedGid','manifest','loadedVersion','instanceId','opencodeProcess','brokerProcess'];
@@ -26,7 +29,8 @@ export function validateBrokerProof(proof, directory) {
       !Number.isSafeInteger(proof.expectedGid) || proof.expectedGid < 0 ||
       !object(proof.manifest) || Object.keys(proof.manifest).sort().join(',') !== [...BROKER_ARTIFACT_FILES].sort().join(',') ||
       Object.values(proof.manifest).some((value) => !/^[a-f0-9]{64}$/.test(value)) ||
-      !['1.7.1', '1.8.0', '1.9.0', '1.10.0', '1.10.1', '1.10.2', '1.10.3', '1.10.4', '1.10.5', '1.10.6', '1.10.7', '1.10.8', '1.10.9', '1.10.10', '2.1.0', '2.1.1', '2.1.2', '2.1.3', '2.1.4', '2.1.5', '2.1.32', '2.1.33', '2.1.34', VERSION].includes(proof.loadedVersion) ||
+      !['1.7.1', '1.8.0', '1.9.0', '1.10.0', '1.10.1', '1.10.2', '1.10.3', '1.10.4', '1.10.5', '1.10.6', '1.10.7', '1.10.8', '1.10.9', '1.10.10', '2.1.0', '2.1.1', '2.1.2', '2.1.3', '2.1.4', '2.1.5', '2.1.32', '2.1.33', '2.1.34',
+        '2.3.3','2.3.4','2.3.5','2.3.6','2.3.7','2.3.8','2.3.9','2.3.10',VERSION].includes(proof.loadedVersion) ||
       typeof proof.instanceId !== 'string' || !/^inst-[A-Za-z0-9-]{1,100}$/.test(proof.instanceId) ||
       !identity(proof.opencodeProcess) || !identity(proof.brokerProcess) ||
       proof.brokerProcess.uid !== proof.expectedUid || proof.opencodeProcess.uid !== proof.expectedUid ||
@@ -36,7 +40,7 @@ export function validateBrokerProof(proof, directory) {
   return proof;
 }
 
-async function artifact(path, proof) {
+async function artifact(path, proof, expectedHash) {
   let file;
   try { file = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK); }
   catch (cause) { if (cause.code === 'ELOOP') fail('update-broker-artifact-unsafe'); throw cause; }
@@ -46,7 +50,8 @@ async function artifact(path, proof) {
         stat.uid !== (proof.artifactOwnerUid ?? proof.expectedUid) || stat.gid !== proof.expectedGid || (stat.mode & 0o002)) fail('update-broker-artifact-unsafe');
     const data = await file.readFile();
     const digest = createHash('sha256').update(data).digest('hex');
-    if (digest !== proof.manifest[basename(path)] || version(data) !== VERSION) fail('update-broker-artifact-divergent');
+    const loadedVersion=path.endsWith('.json')?JSON.parse(data).version:version(data);
+    if (digest !== (expectedHash || proof.manifest[basename(path)]) || loadedVersion !== VERSION) fail('update-broker-artifact-divergent');
     return { sha256: digest, uid: stat.uid, gid: stat.gid, mode: stat.mode & 0o777,
       ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs, ctimeMs: stat.ctimeMs };
   } finally { await file.close(); }
@@ -70,6 +75,17 @@ export async function inspectBrokerArtifacts(directory, proof, packageDirectory)
             createHash('sha256').update(await file.readFile()).digest('hex') !== files[name].sha256) fail('update-broker-package-divergent');
       } finally { await file.close(); }
     }
+  }
+  if(packageDirectory)for(const name of BROKER_PAYLOAD_FILES.filter(name=>!BROKER_ARTIFACT_FILES.includes(name))) {
+    if(await realpath(dirname(join(packageDirectory,name)))!==resolve(packageDirectory))fail('update-broker-package-divergent');
+    const packaged=await open(join(packageDirectory,name),constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+    let data;
+    try {
+      const stat=await packaged.stat();
+      if(!stat.isFile()||stat.nlink!==1||stat.size>4*1024*1024)fail('update-broker-package-divergent');
+      data=await packaged.readFile();
+    }finally{await packaged.close();}
+    files[name]=await artifact(join(directory,name),proof,createHash('sha256').update(data).digest('hex'));
   }
   return { entry: proof.entry, version: VERSION, directory: resolve(directory),
     root: { uid: stat.uid, gid: stat.gid, mode: stat.mode & 0o777, ino: stat.ino }, files };
