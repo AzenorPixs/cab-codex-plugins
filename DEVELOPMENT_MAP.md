@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Visibilité de l’atelier — SCM 2.4.28
+
+[document-atelier-mcp-session-policy](openspec/changes/archive/2026-11-08-document-atelier-mcp-session-policy/), code non attribué : diagnostic de politique du SID et correction bornée ; contrôles ciblés validés le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
+
 ## Décision orchestrateur — SCM 2.4.27
 
 [document-orchestrator-decision-route](openspec/changes/archive/2026-11-08-document-orchestrator-decision-route/), code non attribué : route et reprise documentées, distribution vérifiée le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.

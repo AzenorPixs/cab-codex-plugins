@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat 2.4.27 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
+Contrat 2.4.28 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
 et les références utiles. Transmettre les obligations au codeur avant son mandat.
 AGENTS.md résout ce contrat ; ORCHESTRATED_CODING.md local n'est pas requis.
 
@@ -21,7 +21,7 @@ réponse réseau perdue ne permet ni nouvel effet ni rejeu de once.
 
 | Action | Références à lire |
 |---|---|
-| Liberté du codeur et atelier | [autonomie et ateliers](references/autonomy-and-ateliers.md) ; atelier prioritaire ; codeur justifie LXC/Docker, orchestrateur tranche |
+| Atelier et visibilité SID | [autonomie et ateliers](references/autonomy-and-ateliers.md) ; atelier prioritaire ; LXC/Docker justifié et tranché |
 | Statistiques natives ou CAB direct | Skill SGS du même paquet, référence `runtime-collection.md` ; direct uniquement sur demande explicite |
 | Incident CAB | Skill/commande CCAB du même paquet ; déclaration autonome, traitement par l’orchestrateur désigné |
 | Mandat write/edit | [arguments natifs et digest](references/native-input-guard.md) ; calculateur distribué et objet exact |
