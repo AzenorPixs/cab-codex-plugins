@@ -8,7 +8,7 @@ Le contrôleur refuse retry lorsque request_validation expire puis poll_approval
 
 - Accepter le refus terminal obtenu par polling après timeout, avec décision locale rejected non consommée et identités/opération intégralement corrélées.
 - Conserver candidate, job, RUN, historique, frontières natives, gel et tous les contrôles de contexte et d'absence d'effet.
-- Synchroniser les huit ORCHESTRATED_CODING.md, le skill distribué et la commande CAB ; clarifier le timeout seul et l'arrêt explicite du développeur.
+- Synchroniser les huit ancien protocole local, le skill distribué et la commande CAB ; clarifier le timeout seul et l'arrêt explicite du développeur.
 - Aligner les briques sources sur 1.0.2 avec cachebuster neuf, sans changer de schéma ni de protocole MCP.
 
 ## Impact

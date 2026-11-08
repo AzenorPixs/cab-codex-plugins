@@ -30,7 +30,7 @@ Les 27 ignorés correspondent aux 26 scénarios optionnels de maintenance avec p
 | TECHNICAL.md | Nouvelle réconciliation explicite, preuve canonique, reçu et release ; cibles courantes alignées |
 | BUILD.md | Distribution courante 2.1.7 et séquence archive puis CABU ; preuves historiques conservées |
 | DEVOPS.md | Inchangé : inventaire daté d'environnement, chemins Node/Python/OpenSpec réutilisés ; aucun nouvel outil |
-| ORCHESTRATED_CODING.md | Inchangé : protocole consommateur partagé ; retry ordinaire conservé, nouvelle exception détaillée dans le skill CAB et les commandes |
+| ancien protocole local | Inchangé : protocole consommateur partagé ; retry ordinaire conservé, nouvelle exception détaillée dans le skill CAB et les commandes |
 | README.md | Version source et procédure de réconciliation/release expliquées |
 | CHANGELOG.md | Entrée 2.1.7 décrivant comportement, limites et compatibilité |
 | DEVELOPMENT_MAP.md / BATCH_CODES.md | Entrée provisoire sans attribution de code ; liens et état actualisés lors de l'archive |

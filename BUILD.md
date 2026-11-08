@@ -703,7 +703,7 @@ La qualification source 1.0.2 doit couvrir les refus REJECTED obtenus par
 poll_approval et get_approval après timeout, ainsi que les refus des preuves
 divergentes, incomplètes ou accompagnées d'effets. La décision locale rejected
 non consommée reste obligatoire ; les versions installées et les RUN gelés ne
-sont pas migrés par ces tests. Les huit ORCHESTRATED_CODING.md et le skill
+sont pas migrés par ces tests. Les huit ancien protocole local et le skill
 source doivent porter la même règle sans écraser leurs clauses spécifiques.
 
 Le dépôt source reste l'autorité. Un répertoire de cache ou d'installation Codex ne doit jamais devenir la source de développement.

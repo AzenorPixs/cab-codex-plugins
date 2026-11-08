@@ -9,7 +9,7 @@
 - [x] 2.2 Exiger discovery request_validation et shell/edit ask avant prepare pour un RUN.
 - [x] 2.3 Refuser une discovery tardive avant validation/notification et empêcher une admission après wrapper non corrélé.
 - [x] 2.4 Borne request_validation et retourner le même approval ID pollable au timeout.
-- [x] 2.5 Documenter le protocole uniquement dans le plugin/commande CAB, sans étendre ORCHESTRATED_CODING.md.
+- [x] 2.5 Documenter le protocole uniquement dans le plugin/commande CAB, sans étendre ancien protocole local.
 
 ## 3. Vérification et livraison
 

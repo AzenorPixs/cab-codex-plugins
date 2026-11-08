@@ -83,7 +83,7 @@ vérifiés tels quels. Ces échecs initiaux ne sont pas comptés comme réussite
 | `TECHNICAL.md` | Mis à jour ; « Garde des permissions natives — CAB 1.0.1 » décrit le contrôle conservateur, les diagnostics et limites. Remédiation CISMP3 conservée. |
 | `BUILD.md` | Mis à jour ; §11 distingue vérifications source et future mise en service coordonnée. |
 | `DEVOPS.md` | Inchangé ; runtimes et chemins Node/OpenSpec utilisés tels que déclarés, aucune nouvelle dépendance. Empreinte initiale conservée. |
-| `ORCHESTRATED_CODING.md` | Mis à jour ; réactivation sûre et route retry par RUN alignée sur le skill et la commande. |
+| `ancien protocole local` | Mis à jour ; réactivation sûre et route retry par RUN alignée sur le skill et la commande. |
 | `README.md` | Mis à jour ; garde natif et version de base 1.0.1. |
 | `CHANGELOG.md` | Mis à jour ; entrée 1.0.1, comportement, compatibilité et absence de déploiement. |
 | Skill et commande CAB | Mis à jour ; séquence noReply/PATCH/lecture/génération, erreurs explicites et version de commande. |

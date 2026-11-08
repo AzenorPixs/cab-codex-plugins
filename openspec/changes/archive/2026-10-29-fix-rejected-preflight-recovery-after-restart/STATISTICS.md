@@ -14,7 +14,7 @@ Lectures et recherches ciblées, édition, commandes Node/Python, HTTP local fil
 
 ## 3. Fichiers modifiés
 
-Modules controller/job-context pour la nouvelle phase et la levée globale ; tests controller-session-recovery et concurrent-controller ; fichiers versionnés des quatre briques, copies broker, unités, plugins et commandes alignés en 2.1.7 ; PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md ; références et skills CAB/CABU ; cartographies et présent change OpenSpec. Le journal de l'incrément liste 62 fichiers de distribution/tests. Aucun fichier Pixs modifié par ce mandat SCM. AGENTS.md, ORCHESTRATED_CODING.md et DEVOPS.md restent inchangés avec justification dans la qualification.
+Modules controller/job-context pour la nouvelle phase et la levée globale ; tests controller-session-recovery et concurrent-controller ; fichiers versionnés des quatre briques, copies broker, unités, plugins et commandes alignés en 2.1.7 ; PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md ; références et skills CAB/CABU ; cartographies et présent change OpenSpec. Le journal de l'incrément liste 62 fichiers de distribution/tests. Aucun fichier Pixs modifié par ce mandat SCM. AGENTS.md, ancien protocole local et DEVOPS.md restent inchangés avec justification dans la qualification.
 
 ## 4. Commandes et validations
 

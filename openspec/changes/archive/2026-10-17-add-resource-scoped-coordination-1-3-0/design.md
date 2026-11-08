@@ -124,7 +124,7 @@ La réalisation isole le nouveau registre dans `plugins/cab-approval-bridge/scri
 | `cgpt-approval-bridge-prompts.py` | Modèle 1.3.0 cohérent, inventaire/diff avant propagation explicitement autorisée |
 | `.codex/commands/cab.md`, skills `approval-bridge` et `coding-session-statistics`, références et métadonnées | Protocole ciblé, consultations, exemples et frontières d'autorisation |
 | Manifeste plugin, catalogue marketplace, `pyproject.toml`, unités systemd | Base 1.3.0, cachebuster neuf, paquet complet ; un artefact sans version propre reste rattaché explicitement à la release |
-| `PROJECT.md`, `TECHNICAL.md`, `BUILD.md`, `README.md`, `CHANGELOG.md`, `ORCHESTRATED_CODING.md` | Architecture, API, migration et preuve de version ; `DEVOPS.md` ne change que si son inventaire doit réellement être régénéré |
+| `PROJECT.md`, `TECHNICAL.md`, `BUILD.md`, `README.md`, `CHANGELOG.md`, `ancien protocole local` | Architecture, API, migration et preuve de version ; `DEVOPS.md` ne change que si son inventaire doit réellement être régénéré |
 | Tests Python/Node et validations de distribution | Matrice de concurrence, anciens contrats refusés sans effet, cohérence de version et sécurité native |
 
 Tous les composants qui annoncent une version de projet passent à 1.3.0 ; les fichiers de support sans version ne reçoivent pas artificiellement un nouveau format de version. Le plugin peut porter `1.3.0+codex.<cachebuster-neuf>`. Versions de produit, schémas de données et protocole MCP sont distincts ; MCP reste `2024-11-05` si aucun changement de transport ne le requiert.

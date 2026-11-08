@@ -21,7 +21,7 @@ Validation humaine directe « Je valide » pour le correctif ciblé, qualificati
 | DEVOPS.md | Inchangé : Node/Python et Docker dédiés existants, aucune dépendance. |
 | README.md | Mis à jour : comportement et refus de preuve. |
 | CHANGELOG.md | Entrée 1.10.1 complétée. |
-| ORCHESTRATED_CODING.md | Inchangé : aucune permission, cycle de RUN ou mandat modifié. |
+| ancien protocole local | Inchangé : aucune permission, cycle de RUN ou mandat modifié. |
 | OpenSpec | Une exigence ajoutée à active-component-update ; validation stricte avant archive. |
 
 La référence component-update.md décrit les lectures de /proc et les limites. Le module ne lit aucun environnement et ne restitue aucun argv brut. ENOENT/ESRCH sur un thread disparu sont tolérés ; les autres erreurs restent bloquantes. Aucun paramètre runtime nouveau.

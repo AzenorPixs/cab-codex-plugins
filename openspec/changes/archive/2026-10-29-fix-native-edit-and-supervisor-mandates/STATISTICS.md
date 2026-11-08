@@ -16,7 +16,7 @@ La qualification native couvre catalogue, shell/write/edit, ask/once, refus, amb
 
 Périmètre : client V2, contexte de job, contrôleur, superviseur, statistiques, politique de modèle, schéma broker et copie distribuée ; tests correspondants ; versions communes, métadonnées/plugins/unités/commandes ; skill CAB, référence de politique et consignes statistiques ; PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md ; cartographie/registre ciblés ; cinq capacités OpenSpec et le présent dossier d’archive.
 
-AGENTS.md, DEVOPS.md et ORCHESTRATED_CODING.md : inchangés. Le protocole partagé template reste hors mandat ; ses exemples historiques constituent une limite documentaire préexistante signalée dans QUALIFICATION.md. Aucun fichier métier Pixs, secret ou stockage privé OpenCode modifié. Artefacts techniques sous output/scm-native-edit ignorés par Git. Décompte Git des chemins avant commit : 92, dont 11 créés dans cette seule archive ; liste contrôlée dans PREUVES-SCM.json. Aucun chemin inattendu ni changement concurrent détecté.
+AGENTS.md, DEVOPS.md et ancien protocole local : inchangés. Le protocole partagé template reste hors mandat ; ses exemples historiques constituent une limite documentaire préexistante signalée dans QUALIFICATION.md. Aucun fichier métier Pixs, secret ou stockage privé OpenCode modifié. Artefacts techniques sous output/scm-native-edit ignorés par Git. Décompte Git des chemins avant commit : 92, dont 11 créés dans cette seule archive ; liste contrôlée dans PREUVES-SCM.json. Aucun chemin inattendu ni changement concurrent détecté.
 
 ## 4. Commandes et validations
 

@@ -1,7 +1,7 @@
 ## ADDED Requirements
 
 ### Requirement: Distribution du correctif de polling 1.0.2
-Le broker, le contrôleur, le superviseur, les scripts versionnés, la commande et le plugin MUST publier la version de base 1.0.2 avec cachebuster neuf pour le plugin. Les schémas et le protocole MCP MUST rester inchangés. Le skill, la commande et les huit ORCHESTRATED_CODING.md MUST distinguer timeout seul et refus terminal corrélé par polling. La préparation source MUST NOT modifier services actifs, caches installés ou états des RUN.
+Le broker, le contrôleur, le superviseur, les scripts versionnés, la commande et le plugin MUST publier la version de base 1.0.2 avec cachebuster neuf pour le plugin. Les schémas et le protocole MCP MUST rester inchangés. Le skill, la commande et les huit ancien protocole local MUST distinguer timeout seul et refus terminal corrélé par polling. La préparation source MUST NOT modifier services actifs, caches installés ou états des RUN.
 
 #### Scenario: Correctif source cohérent
 - **WHEN** la distribution et les huit protocoles sont vérifiés

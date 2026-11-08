@@ -37,7 +37,7 @@ Le correctif ajoute cgpt-approval-bridge-update.mjs, ses tests et sa référence
 | README.md | Bloc /cab update : maintenance, attente de 120 s, relance, reprise et limites des installations gérées. |
 | CHANGELOG.md | Entrée 1.7.1 de préparation source ajoutée ; historique 1.7.0 et antérieur conservé. |
 | openspec/specs/ | Capacité active-component-update et deltas de distribution, concurrence et statistiques synchronisés à l'archivage. |
-| ORCHESTRATED_CODING.md | Alignement de version uniquement ; l'égalité de la référence embarquée est testée. |
+| ancien protocole local | Alignement de version uniquement ; l'égalité de la référence embarquée est testée. |
 | Commande et skill CAB | Procédure transactionnelle et référence component-update ; aucun démarrage implicite du pilotage par SCM. |
 | Sources et distribution | 27 versions cohérentes ; copies Python contrôlées octet pour octet, imports et paquet complet qualifiés. |
 
@@ -51,7 +51,7 @@ Fichiers existants modifiés :
 - `.codex/commands/cab.md`
 - `BUILD.md`
 - `CHANGELOG.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `PROJECT.md`
 - `README.md`
 - `TECHNICAL.md`

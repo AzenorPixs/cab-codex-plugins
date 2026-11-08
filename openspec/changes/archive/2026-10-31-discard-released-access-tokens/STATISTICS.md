@@ -18,7 +18,7 @@ Registre de coordination, contrôleur, tests de registre et contrôleur,
 spécification concurrente, documentation technique et distribution,
 changelog, cartographie, registre des codes et rapport d’archive.
 Le nombre exhaustif de chemins n’a pas été mesuré séparément des fichiers
-alignés pour l’incrément 2.1.35. Le `ORCHESTRATED_CODING.md` déjà synchronisé
+alignés pour l’incrément 2.1.35. Le `ancien protocole local` déjà synchronisé
 dans ce checkout reste hors du correctif CAB.
 
 ## 4. Commandes et vérifications

@@ -17,7 +17,7 @@
 | 3. Publication | Registre, contrôleur et contexte précités ; validation/publication ciblées, réconciliation affectée et REPORT | Lots 1/2 ; tests de révisions, preuves, publication idempotente et rapport |
 | 4. Exceptions et suivi | Scripts `cgpt-approval-bridge-supervisor.mjs`, `cgpt-approval-bridge-supervisor-context.mjs`, `cgpt-approval-bridge-opencode-sse-client.mjs`, `cgpt-approval-bridge-healthcheck.mjs`, `cgpt-approval-bridge-reset.py` ; quatre causes, ciblage, attente et refus de purge | Lots 1/2 ; tests de pause/arrêt, diagnostics et sécurité de purge |
 | 5. Mesures et release | Scripts statistiques effectivement livrés, `cgpt-approval-bridge-prompts.py`, `pyproject.toml`, `.codex/commands/cab.md`, manifeste, catalogue et unités du plugin ; métriques et cohérence 1.3.0 | Lots 1 à 4 ; tests de statistiques, inventaire et négociation |
-| 6. Contrats et documentation | Les huit deltas de ce dossier et leurs specs canoniques, PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md, ORCHESTRATED_CODING.md, skills/références/métadonnées du plugin | Mises à jour avec chaque lot ; revue documentaire et OpenSpec strict |
+| 6. Contrats et documentation | Les huit deltas de ce dossier et leurs specs canoniques, PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md, ancien protocole local, skills/références/métadonnées du plugin | Mises à jour avec chaque lot ; revue documentaire et OpenSpec strict |
 | 7. Qualification et archive | Tests Python/Node existants concernés et nouveaux tests ciblés ; archive de ce seul change et son STATISTIQUES.md | Tous les lots ; scénarios de design.md, tâches, validations et rapport réel |
 
 Tous les scripts mentionnés sans chemin complet dans le tableau appartiennent à `plugins/cab-approval-bridge/scripts/`. Les nouveaux tests et éventuels modules de coordination nécessaires restent dans les répertoires de code/test déjà établis, sans nouvelle dépendance. Leur responsabilité et emplacement doivent être consignés avant leur création.
@@ -60,7 +60,7 @@ La qualification sur un OpenCode vivant et les gains réels de productivité ne 
 | DEVOPS.md | Inventaire DIU et chemin explicite OpenSpec ; inchangé en l'absence de changement d'environnement |
 | README.md | Sections architecture/concurrence et version 1.2.1 ; mise à jour comportement public |
 | CHANGELOG.md | Convention de préparation source existante ; entrée 1.3.0 sans annoncer déploiement/publication |
-| ORCHESTRATED_CODING.md | Section concurrente et exemples sous barrière globale ; mise à jour protocole distribué |
+| ancien protocole local | Section concurrente et exemples sous barrière globale ; mise à jour protocole distribué |
 | openspec/specs/ | Huit capacités modifiées selon les deltas ; synchronisation avant archive éligible |
 
 ## Hors périmètre et repli

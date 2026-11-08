@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Retrait de la propagation historique — SCM 2.4.30
+
+[retire-local-protocol-propagator](openspec/changes/archive/2026-11-08-retire-local-protocol-propagator/), code non attribué : tests ciblés validés ; livraison et activation à vérifier.
+
 ## Sessions directes et pilotées — SCM 2.4.29
 
 [show-direct-and-piloted-runs](openspec/changes/archive/2026-11-08-show-direct-and-piloted-runs/) : code non attribué ; archivé et tests ciblés validés, publication et activation à vérifier.

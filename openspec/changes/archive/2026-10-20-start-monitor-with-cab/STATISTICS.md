@@ -73,7 +73,7 @@ Fichiers existants modifiés :
 - `.codex/commands/cab.md`
 - `BUILD.md`
 - `CHANGELOG.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `PROJECT.md`
 - `README.md`
 - `TECHNICAL.md`
@@ -153,7 +153,7 @@ et processus des fixtures sont nettoyés par les tests.
 | README.md | /cab start devient le lancement intégré ; lancement manuel et diagnostic indépendant conservés. |
 | CHANGELOG.md | Entrée 1.6.1 de préparation source, historique 1.6.0 et antérieur conservé. |
 | openspec/specs/ | Quatre capacités synchronisées ; **11/11**, code 0 après archivage. |
-| ORCHESTRATED_CODING.md | Version et démarrage indépendant documentés sans modifier les mandats ou le gate. |
+| ancien protocole local | Version et démarrage indépendant documentés sans modifier les mandats ou le gate. |
 | Commande, skill et reset | Référence de service, ordre de démarrage et maintien explicite du moniteur à l'arrêt/reset. |
 | Sources et distribution | Versions 1.6.1 cohérentes ; identité du moniteur ajoutée et modèle systemd sans couplage. |
 

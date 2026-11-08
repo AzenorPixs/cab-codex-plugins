@@ -45,7 +45,7 @@ et N/A motivé pour les mesures non collectées en SCM direct, sans sondes.
 | --- | --- |
 | Projet réel | Protocole distribué aligné et 82 tests rapportés dans les suites complètes finales ; aucune activation runtime |
 | AGENTS.md | Inchangé, empreinte vérifiée ; §7 distingue SCM direct et pilotage, rapport d'archive obligatoire |
-| ORCHESTRATED_CODING.md | Section de récupération alignée sur /cab et la skill ; identité locale corrigée de Pixs vers CAB |
+| ancien protocole local | Section de récupération alignée sur /cab et la skill ; identité locale corrigée de Pixs vers CAB |
 | PROJECT.md | §7 Résilience mis à jour pour écarts admissibles et continuité du RUN |
 | TECHNICAL.md | §3 version 0.87.1 et §7 exception automatique orchestrée ; contrat /job/recover conservé |
 | BUILD.md | §6 contrôles de distribution/récupération et §7 version alignés ; déploiement distinct |

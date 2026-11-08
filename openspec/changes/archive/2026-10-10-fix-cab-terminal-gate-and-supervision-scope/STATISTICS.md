@@ -213,7 +213,7 @@ capacité/niveau/chemin/message, et zéro ERROR.
 Le correctif couvre uniquement CGP-20261010-05 à 07. La matrice documentaire
 et les preuves détaillées figurent dans tasks.md de cette archive.
 TECHNICAL.md, README.md et CHANGELOG.md sont actualisés ; AGENTS.md,
-PROJECT.md, BUILD.md, DEVOPS.md et ORCHESTRATED_CODING.md sont inchangés
+PROJECT.md, BUILD.md, DEVOPS.md et ancien protocole local sont inchangés
 avec justification. Version source 0.87.1 conservée, sans publication ni
 installation de profil. Aucun test OpenCode réel ni opération Git exécuté.
 Les sources sensibles n'ont pas été consultées. Ce rapport est produit après

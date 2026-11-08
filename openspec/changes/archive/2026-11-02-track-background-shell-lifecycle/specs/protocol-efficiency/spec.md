@@ -9,7 +9,7 @@ Réduire le contexte et les échanges de pilotage inutiles grâce aux contrats c
 Le skill CAB MUST exposer un noyau commun court et les références normatives
 nécessaires à chaque branche. La commande CAB MUST router sans recopier le
 contrat complet. La migration MUST vérifier la destination de chaque obligation
-avant de supprimer ORCHESTRATED_CODING.md local. La règle AGENTS MUST être
+avant de supprimer ancien protocole local local. La règle AGENTS MUST être
 modifiée dans le template, puis propagée seulement aux cibles autorisées.
 
 #### Scenario: Consultation de statut

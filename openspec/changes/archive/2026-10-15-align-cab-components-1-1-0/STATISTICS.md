@@ -120,7 +120,7 @@ UTF-8/LF et six sections vérifiés.
 | BUILD.md | Version courante 1.1.0 et distribution du collecteur vérifiées |
 | README.md | Version 1.1.0 ; exports et clôture optimisée présents |
 | CHANGELOG.md | Préparation source 1.1.0 du 15/10, sans publication annoncée |
-| ORCHESTRATED_CODING.md | Retouché au correctif précédent, empreinte et clauses vérifiées ; aucun changement nécessaire pour cette métadonnée de version |
+| ancien protocole local | Retouché au correctif précédent, empreinte et clauses vérifiées ; aucun changement nécessaire pour cette métadonnée de version |
 | AGENTS.md | Inchangé : règles générales, permissions et gates conservés |
 | DEVOPS.md | Inchangé : inventaire daté, aucune modification système ou de dépendance |
 

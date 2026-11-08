@@ -10,7 +10,7 @@ Un RUN piloté sans currentCabMandate ne reçoit aucune relance génératrice. L
 
 ## Distribution et limites
 
-Aucune migration de stockage ni nouvelle dépendance. Les copies broker source/distribution restent identiques et tous les composants versionnés partagent 2.1.10. Les consignes CAB distinguent outils exposés, permissions et prompts V2. La référence externe ORCHESTRATED_CODING.md/template est signalée si une mise à jour en dehors du projet est nécessaire, sans écriture hors mandat. Les tests globaux et la revue documentaire précèdent l’archivage ; l’activation reste distincte.
+Aucune migration de stockage ni nouvelle dépendance. Les copies broker source/distribution restent identiques et tous les composants versionnés partagent 2.1.10. Les consignes CAB distinguent outils exposés, permissions et prompts V2. La référence externe ancien protocole local/template est signalée si une mise à jour en dehors du projet est nécessaire, sans écriture hors mandat. Les tests globaux et la revue documentaire précèdent l’archivage ; l’activation reste distincte.
 
 ## Extension V2
 

@@ -12,7 +12,7 @@ Correction de forme dans le périmètre autonome SCM Code Mode validé le 29 oct
 
 ## Matrice documentaire
 
-AGENTS.md : inchangé, règles de sécurité conservées. PROJECT.md : référence commune 2.1.9. TECHNICAL.md, BUILD.md, README.md : complément diagnostique sans autorité et limites décrits. CHANGELOG.md : entrée 2.1.9. DEVOPS.md : inchangé, chemins d'outils existants réutilisés ; aucune dépendance ajoutée. ORCHESTRATED_CODING.md : inchangé, protocole partagé conservé ; détail dans les commandes et le skill CAB courant. Commandes, références et manifestes : jeu homogène 2.1.9. Cartographies : entrée provisoire de ce seul correctif, sans attribution de code et sans modification des preuves archivées 2.1.8.
+AGENTS.md : inchangé, règles de sécurité conservées. PROJECT.md : référence commune 2.1.9. TECHNICAL.md, BUILD.md, README.md : complément diagnostique sans autorité et limites décrits. CHANGELOG.md : entrée 2.1.9. DEVOPS.md : inchangé, chemins d'outils existants réutilisés ; aucune dépendance ajoutée. ancien protocole local : inchangé, protocole partagé conservé ; détail dans les commandes et le skill CAB courant. Commandes, références et manifestes : jeu homogène 2.1.9. Cartographies : entrée provisoire de ce seul correctif, sans attribution de code et sans modification des preuves archivées 2.1.8.
 
 ## Suite opérationnelle
 

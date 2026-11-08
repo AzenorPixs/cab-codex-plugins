@@ -8,4 +8,4 @@ Un extracteur commun exige une variante dans au moins un champ parent (variant o
 
 Les tests utilisent exclusivement des fixtures génériques et le contrôleur isolé. Le budget providerMaxBytes et toutes les autres bornes restent inchangés. Un banc réseau désactivé à UID1000/1002 vérifie succès et récupération depuis 1.10.2, identités, pauses, sources broker et OpenCode conservés. La version source évolue en 1.10.3, sans prétendre qualifier les transitions optionnelles non exécutées.
 
-La copie projet ORCHESTRATED_CODING.md reste strictement inchangée à la demande humaine : ses trois écarts documentaires préexistants sont exclus du correctif produit et signalés dans la qualification. Leur référentiel est le projet template, hors de ce change ; les références de protocole distribuées par le plugin CAB restent qualifiées.
+La copie projet ancien protocole local reste strictement inchangée à la demande humaine : ses trois écarts documentaires préexistants sont exclus du correctif produit et signalés dans la qualification. Leur référentiel est le projet template, hors de ce change ; les références de protocole distribuées par le plugin CAB restent qualifiées.

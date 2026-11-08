@@ -17,7 +17,7 @@ La récupération reste explicite, documentée via les routes natives ciblées e
 - Python :80/80, sources Python finales inchangées après cette vérification.
 - Banc OpenCode2.2.1 privé :1/1, processus8,504s. Sonde depuis client technique hébergée au workspace partagé, deny global, aucun outil ; suppression vérifiée par404, PID serveur et broker conservés.
 - Même banc : après déconnexion du broker partagé privé, une session de sonde héritée dans un second workspace initialise un broker concurrent ; partagé failed et concurrent connected sont observés. Disconnect ciblé du concurrent puis connect du partagé donnent concurrent disabled et partagé connected, même PID serveur ; les deux sessions techniques et processus privés sont nettoyés.
-- Syntaxe :56JavaScript et16Python ; UTF-8/LF, copies broker identiques. Protocole ORCHESTRATED_CODING.md inchangé, SHA256962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4.
+- Syntaxe :56JavaScript et16Python ; UTF-8/LF, copies broker identiques. Protocole ancien protocole local inchangé, SHA256962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4.
 - OpenSpec avant archive :17/17 standard et strict ; delta ciblé strict valide.
 
 Les fixtures utilisent /workspace/shared, /workspace/technical et /shared-native, sans nom de consommateur. La reproduction native simule la disponibilité initiale perdue par déconnexion explicite du broker privé ; elle ne prétend pas reproduire le minuteur d’inactivité du serveur réel. Les états observés du conflit et de sa récupération sont réels sur ce serveur privé.
@@ -42,7 +42,7 @@ Premiers écarts : attente de variante du nouveau test utilisant la mauvaise cl�
 | openspec/config.yaml | Inchangé, schéma spec-driven compatible. |
 | openspec/specs/ | Trois capacités couvertes : transport V2, statistiques natives, distribution ; quatre exigences ajoutées et une modifiée. |
 | Skills/commande CAB | Référence mcp-location-isolation.md et méthodes explicites ; skill statistique renvoie vers la même règle sans changer sa cadence. |
-| concurrent-runs.md/ORCHESTRATED_CODING.md/template | Aucune écriture ; concordance du protocole embarqué conservée. |
+| concurrent-runs.md/ancien protocole local/template | Aucune écriture ; concordance du protocole embarqué conservée. |
 
 Les quatre désignations explicites de consommateur relevées dans les contenus courants ont été généralisées. Les identifiants officiels des dépôts de distribution, l’état généré de l’hôte et les preuves historiques ne sont pas réécrits. Aucune désignation nouvelle de consommateur n’est introduite dans ce change.
 

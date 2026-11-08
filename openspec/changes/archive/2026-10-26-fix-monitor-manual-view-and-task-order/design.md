@@ -32,7 +32,7 @@ Mettre les déclarations des quatre briques, modules, copies broker, manifeste,
 commande, unités et supports courants en 1.10.4. Conserver les versions historiques
 qualifiées et ajouter explicitement 1.10.3 aux origines broker admises par la
 maintenance ; les autres gardes restent inchangées. Ne modifier aucune archive,
-configuration privée, copie ORCHESTRATED_CODING.md ou installation active.
+configuration privée, copie ancien protocole local ou installation active.
 
 ## Vérifications
 
