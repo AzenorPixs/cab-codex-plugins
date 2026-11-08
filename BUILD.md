@@ -1,5 +1,7 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Le Web Monitor associe les RUN pilotés aux sessions CAB directes enregistrées dans SGS pour le même projet. Une source SGS indisponible ne masque pas les RUN pilotés ; les identités et les modes restent distincts.
+
 Complément2.4.10 : les clés d’identité partagées ne retirent pas les valeurs appartenant aux RUN protégés. La réparation est additive, sur empreintes d’origine strictes, sans écrasement des progrès ni réactivation d’accès.
 
 Complément2.4.9 : les dépendances de changes sont vérifiées dans OpenSpec et les cadrages applicables, jamais dans l’historique CAB. Un change archivé complété ne prouve pas une activation produit. La récupération5 est bornée au reçu signé et au registre projeté exact, puis retirée avant CABU final.
