@@ -6,7 +6,7 @@ import { ErasureTransaction, erasureScope, erasureFiles, extendErasureScope, era
 import { readRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { canonicalContinuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION='2.4.40';
+export const VERSION='2.4.41';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409})};
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
 export function erasureMonitorEndpoint(host='127.0.0.1',port='8790') {
@@ -186,9 +186,10 @@ export class ChangeErasureManager {
   }
   async diagnosticOwnerCommand(sender,peer) {
     const value=this.pending(),prepared=value?.ownerReceipts?.prepare;
-    if(!value||value.phase!=='FREEZING'||value.brokerTransport!=='owner-local-v1'||prepared?.state!=='PREPARED'||
+    const diagnosticPhase=value?.phase==='FREEZING'&&!value.ownerReceipts?.commit||value?.phase==='VERIFYING'&&value.ownerReceipts?.commit?.state==='APPLIED';
+    if(!value||!diagnosticPhase||value.brokerTransport!=='owner-local-v1'||prepared?.state!=='PREPARED'||
       value.scope?.closureAuthority!=='authoritative-retired-run-batch-v1'||!Array.isArray(value.scope.runIds)||value.scope.runIds.length!==1||
-      !Array.isArray(value.scope.protectedRunIds)||!value.scope.protectedRunIds.length||value.ownerReceipts?.commit||
+      !Array.isArray(value.scope.protectedRunIds)||!value.scope.protectedRunIds.length||
       prepared.scopeDigest!==canonicalContinuityDigest(value.scope)||
       !Number.isSafeInteger(sender?.pid)||!Number.isSafeInteger(sender?.uid)||sender.uid!==prepared.uid||
       peer?.pid!==sender.pid||peer?.uid!==sender.uid||
@@ -197,7 +198,8 @@ export class ChangeErasureManager {
     const identity=await this.brokerIdentity(sender.pid);
     if(!identity||identity.uid!==sender.uid||['Z','X'].includes(identity.state))fail('erasure-owner-diagnostic-identity-invalid');
     return this.transaction().seal({protocol:value.protocol,transport:'owner-local-v1',transactionId:value.transactionId,
-      action:'diagnose',scope:value.scope,brokerPid:sender.pid,brokerInstanceId:sender.instanceId,nodeExecutable:process.execPath});
+      action:'diagnose',scope:value.scope,brokerPid:sender.pid,brokerInstanceId:sender.instanceId,nodeExecutable:process.execPath,
+      ...(value.ownerReceipts?.commit?{ownerReceipt:value.ownerReceipts.commit}:{})});
   }
   async verifyDiagnosticOwnerReceipt(command,sender,peer,receipt) {
     const signed=this.transaction().verify(command),expected=await this.diagnosticOwnerCommand(sender,peer);
@@ -206,9 +208,9 @@ export class ChangeErasureManager {
       !exact(receipt,['protocol','transactionId','scopeDigest','state','uid','pid','ownerPhase','diagnostic'])||
       receipt?.protocol!=='cab-owner-erasure-v1'||receipt.transactionId!==value.transactionId||
       receipt.scopeDigest!==canonicalContinuityDigest(value.scope)||receipt.state!=='DIAGNOSED'||
-      receipt.uid!==sender.uid||receipt.pid!==sender.pid||!['PREPARED','APPLYING'].includes(receipt.ownerPhase)||
+      receipt.uid!==sender.uid||receipt.pid!==sender.pid||!['PREPARED','APPLYING','APPLIED'].includes(receipt.ownerPhase)||
       !exact(diagnostic,['status','stage',...(diagnostic?.code?['code']:[])])||
-      !['PLAN_VALID','PLAN_REFUSED'].includes(diagnostic.status)||!(/^(?:inventory|scope-extension|scope-directory-target-run|scope-directory-change-(?:run|session|request|operation|access|other|only)|scope-directory-change-approval-(?:atelier|child|foreign-(?:run|no-run)|tmp-(?:run|no-run)|home-(?:run|no-run)|home-project-(?:run|no-run-(?:clear|ambiguous)-(?:base|derived-base-strong|derived-discovered|derived-seed-(?:approval|other)-(?:nested-base|no-nested-base)-(?:canonical|noncanonical|trailing-slash|relative-path|relative-token|sentinel|dot|dotdot))))|scope-directory-secondary|scope-extension-owner|projection)$/.test(diagnostic.stage))||
+      !['PLAN_VALID','PLAN_REFUSED'].includes(diagnostic.status)||!(/^(?:inventory|scope-extension|scope-directory-target-run|scope-directory-change-(?:run|session|request|operation|access|other|only)|scope-directory-change-approval-(?:atelier|child|foreign-(?:run|no-run)|tmp-(?:run|no-run)|home-(?:run|no-run)|home-project-(?:run|no-run-(?:clear|ambiguous)-(?:base|derived-base-strong|derived-discovered|derived-seed-(?:approval|other)-(?:nested-base|no-nested-base)-(?:canonical|noncanonical|trailing-slash|relative-path|relative-token|sentinel|dot|dotdot))))|scope-directory-secondary|scope-extension-owner|projection|journal-reference-(?:run|change|base|derived)-(?:shared|unshared)-(?:mixed|approval|noapproval))$/.test(diagnostic.stage))||
       diagnostic.status==='PLAN_REFUSED'&&!/^erasure-[a-z0-9-]+$/.test(diagnostic.code||'')||
       diagnostic.status==='PLAN_VALID'&&Object.hasOwn(diagnostic,'code'))fail('erasure-owner-diagnostic-receipt-invalid');
     return {transactionId:value.transactionId,ownerPhase:receipt.ownerPhase,diagnostic};
