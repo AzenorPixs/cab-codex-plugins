@@ -65,7 +65,7 @@
     "openspec/BATCH_CODES.md": "correspondances conservées, entrée technique provisoire",
     "README.md": "contrat public décrit",
     "CHANGELOG.md": "entrée 2.1.5, historique conservé",
-    "ORCHESTRATED_CODING.md": "références de version commune alignées ; règles conservées",
+    "ancien-protocole-local": "références de version commune alignées ; règles conservées",
     "OpenSpec": "trois deltas validés, synchronisation à l’archive"
   },
   "limits": [

@@ -123,7 +123,7 @@
     "DEVOPS.md": "inchangé, binaires explicites réutilisés",
     "README.md": "compatibilité publique documentée",
     "CHANGELOG.md": "entrée 2.1.4, historique conservé",
-    "ORCHESTRATED_CODING.md": "seules références de version commune alignées, règles conservées",
+    "ancien-protocole-local": "seules références de version commune alignées, règles conservées",
     "DEVELOPMENT_MAP.md": "squelette non initialisé, laissé intact ; ACL recommandé",
     "openspec/BATCH_CODES.md": "absent, non créé ; ACL recommandé",
     "OpenSpec": "deux deltas validés, source de vérité synchronisée à l’archive"

@@ -6,7 +6,7 @@ import { ErasureTransaction, erasureScope, erasureFiles, extendErasureScope, era
 import { readRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { canonicalContinuityDigest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION='2.4.32';
+export const VERSION='2.4.33';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409})};
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(key=>Object.hasOwn(value,key));
 export function erasureMonitorEndpoint(host='127.0.0.1',port='8790') {
