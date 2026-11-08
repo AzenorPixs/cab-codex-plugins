@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.28 - 2026-11-08
+
+- Documenter le diagnostic des méthodes d’atelier masquées par la politique du SID et leur autorisation ciblée.
+
 ## 2.4.27 - 2026-11-08
 
 - Rendre explicite la route de décision orchestrateur et sa reprise sur le même requestId.

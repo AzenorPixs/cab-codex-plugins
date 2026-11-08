@@ -161,6 +161,10 @@ que la règle globale est ou n'est pas appliquée. Les refus déjà reçus ne so
 pas rejoués. Diagnostics : `native-mcp-readiness-policy-blocked` et
 `native-mcp-request-validation-policy-blocked`.
 
+Si le mandat prévoit l’atelier, vérifier aussi la visibilité et les règles de
+ses deux méthodes selon [autonomie et ateliers](autonomy-and-ateliers.md). Ce
+diagnostic complémentaire ne transforme pas le prévol existant en autorisation.
+
 La session de pilotage définit explicitement providerMaxBytes pour la lecture /provider dans /model-policy/resolve et le répète dans modelSelection à l'armement, selon references/model-policy.md du skill installé. Ce budget local en octets n'élargit ni les autres observations ni le catalogue PLLM.
 
 Pour le raccord courant, utiliser la préparation sans effet du catalogue dans references/model-policy.md avant le démarrage autorisé, transmettre son patch au contrôleur puis vérifier /model-policy/resolve avant nouvel armement. Conserver la provenance logique et employer le fournisseur natif vérifié. Les variantes parent imbriquée/historique et assistant présent doivent rester cohérentes. Aucune activation n’est déduite de cette préparation source.

@@ -33,6 +33,19 @@ isolé. Bubblewrap est une capacité locale vérifiée, sans installation implic
 S’il manque, diagnostiquer la capacité et utiliser les voies existantes déjà
 autorisées ; ne jamais remplacer ce lanceur par un shell hôte libre.
 
+### Méthodes masquées par la politique de session
+
+Si un atelier est nécessaire ou si sa discovery est vide, vérifier la location
+MCP partagée puis les règles effectives du SID pour
+`cgpt-validation_atelier_execute` et `cgpt-validation_atelier_status` : une
+règle universelle `deny` peut masquer ces méthodes malgré un broker connecté.
+Avec le mandat d’atelier existant, le propriétaire peut, session inactive et
+sans permission pendante, ajouter seulement les deux règles ALLOW nécessaires
+au SID ciblé. Il conserve et relit toutes les autres règles, notamment shell,
+edit/write, web et les sessions paires ; aucune configuration globale n’est
+modifiée. Relire la policy et effectuer la discovery exacte avant tout essai.
+Une discovery réussie ne prouve pas l’exécution ni la validation d’un test.
+
 Une réponse perdue se consulte avec `atelier_status` sur le même request_id,
 RUN/change/directory et la génération/SID courants. Une identité existante
 INTENT/RUNNING/terminale n’est pas relancée. COMPLETED et exit0 décrivent le
