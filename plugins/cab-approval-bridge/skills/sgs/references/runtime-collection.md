@@ -79,6 +79,23 @@ seul l’atelier propre est nettoyé.
 Une reprise conserve les mêmes identités et le même reçu. L’archive source et
 les ateliers des autres sessions restent présents.
 
+### Snapshot natif ajouté à un relevé existant
+
+Si le rapport contient déjà le relevé de la session mais pas le snapshot
+natif gelé, ne modifie pas ce relevé et ne crée pas une seconde session native.
+Relis le registre structuré du rapport et calcule sa contribution cumulée avec
+`ledger_contribution`. Prépare un nouveau relevé `scope=cumulative`, avec un
+identifiant de relevé distinct et stable et cette contribution exacte. Place
+dans `native_telemetry` le snapshot gelé vérifié, avec le véritable identifiant
+de session, son binding, projet, change et RUN. Compare en mémoire `metrics`,
+`agents`, `bounds`, `performance`, `costs`, `breakdowns`, `web_calls` et
+`proof_ids` avant/après ; la liste des relevés contient naturellement le nouvel
+identifiant. Si l'équivalence ou la provenance n'est pas établie, arrête sans
+écrire. Appelle `CHANGE` avec les preuves autorisées : il
+acquiert son propre verrou. Vérifie ensuite contribution, snapshot et empreinte.
+Un nouvel identifiant de relevé n'est ni une session supplémentaire ni une
+autorisation d'additionner deux fois les mêmes mesures.
+
 ## Copie historique explicitement supprimée
 
 La demande du développeur peut viser les copies CAB d’un rapport avant archivage

@@ -1,6 +1,6 @@
 ---
 description: Régénérer les statistiques globales du projet avec le moteur CAB
-version: 2.4.34
+version: 2.4.35
 ---
 
 Commande canonique `/SGS`, en MAJUSCULES. Répondre en français.
@@ -22,3 +22,5 @@ Utiliser réellement le moteur Python du skill jusqu’au résultat vérifié.
 Ne pas s’arrêter à INSPECT et ne pas démarrer CAB, OpenCode, CABU ou un pilotage.
 Les modes CHANGE et DELTA sont réservés aux points d’appel des sessions de
 codage déjà autorisées ; ils ne modifient pas le sens de cette commande manuelle.
+Pour un snapshot natif ajouté après un relevé existant, ces sessions suivent
+la procédure de reprise du skill SGS sans créer de nouvelle session native.
