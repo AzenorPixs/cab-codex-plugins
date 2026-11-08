@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.37 - 2026-11-08
+
+- Encadrer la reprise d’un nettoyage de lot figé après disparition du broker propriétaire, avec contrôle préalable des identités et des RUN protégés.
+
 ## 2.4.36 - 2026-11-08
 
 - Exclure les chaînes sentinelles des identités de nettoyage unitaire sans affaiblir la protection des RUN pairs.

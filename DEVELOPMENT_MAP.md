@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Reprise propriétaire figée — SCM 2.4.37
+
+[recover-frozen-owner-sentinel-compat](openspec/changes/archive/2026-11-08-recover-frozen-owner-sentinel-compat/), code non attribué : contrôles et tests ciblés validés ; reprise réelle, publication et activation à vérifier.
+
 ## Identités sentinelles — SCM 2.4.36
 
 [exclude-sentinel-identities-from-change-erasure](openspec/changes/archive/2026-11-08-exclude-sentinel-identities-from-change-erasure/), code non attribué : garde ciblée et pairs qualifiés ; reprise PA02 distincte.
