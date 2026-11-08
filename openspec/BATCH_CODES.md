@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[retain-updated-report-copies](changes/archive/2026-11-08-retain-updated-report-copies/), code non attribué : archivé, tests ciblés validés ; reprise effective distincte.
+
+[isolate-direct-session-finalization](changes/archive/2026-11-08-isolate-direct-session-finalization/), code non attribué : archivé, tests ciblés validés ; reprise des sessions distincte.
+
 [redact-retired-protocol-evidence](changes/archive/2026-11-08-redact-retired-protocol-evidence/), code non attribué : archivé ; preuve de rédaction et distribution vérifiées.
 
 [optimize-direct-session-observation](changes/archive/2026-11-08-optimize-direct-session-observation/), code non attribué : archivé, tests ciblés validés ; publication et activation à vérifier.

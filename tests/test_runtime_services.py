@@ -189,6 +189,53 @@ class RuntimeServicesTest(unittest.TestCase):
         self.assertEqual(self.store.purge_all_treated()["removed"], 2)
         self.assertEqual(self.store.incidents(), [])
 
+    def test_direct_purge_refuses_closed_pilot_without_authority(self):
+        self.store.close_binding('fixture-binding','2026-11-06T10:00:01Z',os.getuid())
+        pilot={**self.binding,'binding':'pilot-binding','session':'pilot-session','mode':'piloted','agent':'opencode'}
+        target={**self.binding,'binding':'direct-target','session':'direct-session','cab_direct':True}
+        self.store.bind(pilot,os.getuid());self.store.bind(target,os.getuid())
+        self.store.close_binding('pilot-binding','2026-11-06T10:00:02Z',os.getuid())
+        self.store.close_binding('direct-target','2026-11-06T10:00:03Z',os.getuid())
+        scope={'workspace':str(self.root),'changeId':'fixture-change','runIds':['fixture-run'],
+               'ids':['direct-session'],'sessionId':'direct-session','bindingId':'direct-target','closureAuthority':'direct-session-v1'}
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'direct-closure-pilot-authority-required'):
+            self.store.purge_preview(scope,os.getuid())
+        self.assertEqual(len(self.store.statistics(str(self.root))['sessions']),3)
+
+    def test_direct_purge_preserves_closed_history_and_refuses_active_peer(self):
+        import cab_sgs
+        target={**self.binding,'binding':'direct-target','session':'direct-session','cab_direct':True}
+        self.store.bind(target,os.getuid())
+        self.store.close_binding('direct-target','2026-11-06T10:00:05Z',os.getuid())
+        scope={'workspace':str(self.root),'changeId':'fixture-change','runIds':['fixture-run'],
+               'ids':['direct-session'],'sessionId':'direct-session','bindingId':'direct-target','closureAuthority':'direct-session-v1'}
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'direct-closure-active-peer'):
+            self.store.purge_preview(scope,os.getuid())
+        self.assertEqual(len(self.store.statistics(str(self.root))['sessions']),2)
+        self.store.close_binding('fixture-binding','2026-11-06T10:00:06Z',os.getuid())
+        snapshot={'format':'cab-native-sgs-1','sessions':self.store.statistics(str(self.root))['sessions']}
+        directory=self.root/'openspec/changes/archive/2026-11-06-fixture-change';directory.mkdir(parents=True)
+        evidence={'schema_version':1,'session_id':'fixture-report','scope':'cumulative',
+                  'contribution':cab_sgs.blank(),'native_telemetry':snapshot}
+        cab_sgs.change_report(self.root,str(directory.relative_to(self.root)),json.dumps(evidence).encode(),'archived')
+        native.import_archives(self.store,self.root)
+        other={**self.binding,'binding':'other-run-binding','run':'other-run','session':'other-session'}
+        self.store.bind(other,os.getuid())
+        self.store.component_checkpoint({'project':str(self.root),'component':'controller-statistics','sequence':1,
+            'at':'2026-11-06T10:00:00Z','data':{'kept':'history'}},os.getuid())
+        self.store.cursor('shared-cursor',{'offset':1},binding='fixture-binding')
+        self.store.cursor('shared-cursor',{'offset':1},binding='direct-target')
+        result=self.store.purge(scope,'direct-receipt',[],os.getuid())
+        self.assertEqual(result['bindingsRemoved'],1)
+        remaining=self.store.statistics(str(self.root))
+        self.assertEqual([row['binding'] for row in remaining['sessions']],['fixture-binding','other-run-binding'])
+        self.assertEqual(remaining['archives'][0]['native_telemetry'][0]['snapshot'],snapshot)
+        self.assertEqual(json.loads(self.store.db.execute('SELECT body FROM component_checkpoints').fetchone()[0]),{'kept':'history'})
+        self.assertEqual(self.store.cursor('shared-cursor'),{'offset':1})
+        self.assertEqual(self.store.purge(scope,'direct-receipt',[],os.getuid()),result)
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'direct-closure-binding-not-found'):
+            self.store.purge(scope,'new-receipt',[],os.getuid())
+
     def test_all_archived_reports_import_without_rewrite(self):
         directory = self.root / "openspec/changes/archive/2026-11-06-fixture"
         directory.mkdir(parents=True)

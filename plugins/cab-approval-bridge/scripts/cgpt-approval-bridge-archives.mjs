@@ -1,10 +1,10 @@
 /** Archives CAB réelles et suppression explicite, sans toucher aux sources projet. */
-import {existsSync,lstatSync,readdirSync,readFileSync,realpathSync,unlinkSync,rmdirSync} from 'node:fs';
+import {existsSync,lstatSync,readdirSync,readFileSync,realpathSync,unlinkSync,rmdirSync,mkdtempSync,renameSync,rmSync} from 'node:fs';
 import {join,dirname,relative} from 'node:path';
 import {createHash} from 'node:crypto';
 import {homedir} from 'node:os';
 import {ensurePrivateStateDirectory,readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.4.33';
+export const VERSION='2.4.34';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const id=value=>/^archive-[a-f0-9]{64}$/.test(value||'');
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};
@@ -33,15 +33,23 @@ export class ArchiveContent {
   }
   retain(scope,{reportPaths,closed,branch}) {
     if(closed!==true||!['TERMINÉ','BLOQUÉ'].includes(branch)||scope.workspace!==this.workspace||!Array.isArray(reportPaths)||!reportPaths.length)fail('archive-closure-proof-required');
-    const archiveId='archive-'+hash(JSON.stringify([scope.changeId,[...scope.runIds].sort()]));
-    const deleted=join(this.directory,'.delete-'+archiveId+'.json');
-    if(existsSync(deleted)) {
-      const receipt=readRuntimeJson(deleted).value;
-      if(receipt.state==='DONE')return {archiveId,fingerprint:receipt.fingerprint,retention:'DEVELOPER_DELETED'};
-      fail('archive-deletion-in-progress');
+    const runs=[...scope.runIds].sort(),baseId='archive-'+hash(JSON.stringify([scope.changeId,runs]));
+    const deletedReceipt=archiveId=>join(this.directory,'.delete-'+archiveId+'.json');
+    const checkDeleted=archiveId=>{
+      const path=deletedReceipt(archiveId);if(!existsSync(path))return null;
+      const receipt=readRuntimeJson(path).value;
+      if(receipt.state!=='DONE')fail('archive-deletion-in-progress');
+      return {archiveId,fingerprint:receipt.fingerprint,retention:'DEVELOPER_DELETED'};
+    };
+    const baseDeleted=checkDeleted(baseId);
+    if(baseDeleted)return baseDeleted;
+    const basePath=join(this.directory,baseId,'manifest.json');
+    const prior=existsSync(basePath)?this.load(baseId):null;
+    if(prior) {
+      if(prior.changeId!==scope.changeId||prior.branch!==branch||JSON.stringify(prior.runIds)!==JSON.stringify(runs))fail('archive-manifest-conflict');
+      for(const old of prior.files)this.content(baseId,old.sha256);
     }
-    const directory=join(this.directory,archiveId);ensurePrivateStateDirectory(directory);
-    const files=[];
+    const files=[],values=[];
     for(const path of reportPaths) {
       const tail=relative(this.workspace,path);
       if(!/^openspec\/changes\/(?:archive\/)?[^/]+\/[^/]+$/.test(tail)||!reports.has(path.slice(path.lastIndexOf('/')+1))||realpathSync(dirname(path))!==dirname(path))fail('archive-source-invalid');
@@ -51,14 +59,36 @@ export class ArchiveContent {
       if(!info.isFile()||info.isSymbolicLink()||info.size>4*1024*1024)fail('archive-source-invalid');
       const bytes=readFileSync(path),sha256=hash(bytes),content=bytes.toString('utf8');
       if(!Buffer.from(content).equals(bytes))fail('archive-encoding-invalid');
-      // Une copie CAB possède son origine et son empreinte ; elle n'est pas le fichier métier.
-      const name=sha256+'.json',value={content,sha256};
-      if(existsSync(join(directory,name))&&JSON.stringify(readRuntimeJson(join(directory,name)).value)!==JSON.stringify(value))fail('archive-content-conflict');
-      writeRuntimeJson(join(directory,name),value);files.push({origin:tail,sha256,name,bytes:bytes.length});
+      const name=sha256+'.json';values.push({name,value:{content,sha256},path,sha256});files.push({origin:tail,sha256,name,bytes:bytes.length});
     }
-    const manifest={archiveId,workspace:this.workspace,changeId:scope.changeId,runIds:[...scope.runIds].sort(),closed:true,branch,files};
-    if(existsSync(join(directory,'manifest.json'))&&JSON.stringify(readRuntimeJson(join(directory,'manifest.json')).value)!==JSON.stringify(manifest))fail('archive-manifest-conflict');
-    writeRuntimeJson(join(directory,'manifest.json'),manifest);
+    const checkSources=()=>{for(const item of values){const info=lstatSync(item.path);if(!info.isFile()||info.isSymbolicLink()||hash(readFileSync(item.path))!==item.sha256)fail('archive-source-changed');}};
+    checkSources();
+    const equalFiles=(left,right)=>JSON.stringify(left)===JSON.stringify(right);
+    if(prior&&equalFiles(prior.files,files))return {...prior,fingerprint:hash(JSON.stringify(prior))};
+    const revised=Boolean(prior);
+    const archiveId=revised?'archive-'+hash(JSON.stringify([baseId,files])):baseId;
+    const deleted=checkDeleted(archiveId);if(deleted)return deleted;
+    const directory=join(this.directory,archiveId),manifestPath=join(directory,'manifest.json');
+    const manifest={archiveId,workspace:this.workspace,changeId:scope.changeId,runIds:runs,closed:true,branch,files,...(revised?{supersedes:baseId}:{})};
+    if(existsSync(manifestPath)) {
+      const existing=this.load(archiveId);
+      if(JSON.stringify(existing)!==JSON.stringify(manifest))fail('archive-manifest-conflict');
+      for(const file of existing.files)this.content(archiveId,file.sha256);
+      return {...existing,fingerprint:hash(JSON.stringify(existing))};
+    }
+    if(existsSync(directory))fail('archive-incomplete');
+    const candidate=mkdtempSync(join(this.directory,'.candidate-'));
+    try {
+      for(const {name,value} of values)writeRuntimeJson(join(candidate,name),value);
+      writeRuntimeJson(join(candidate,'manifest.json'),manifest);
+      checkSources();
+      if(checkDeleted(baseId)||checkDeleted(archiveId))fail('archive-deletion-in-progress');
+      try{renameSync(candidate,directory);}catch(error){
+        if(!['EEXIST','ENOTEMPTY'].includes(error.code)||!existsSync(manifestPath))throw error;
+        const existing=this.load(archiveId);if(JSON.stringify(existing)!==JSON.stringify(manifest))fail('archive-manifest-conflict');
+        for(const file of existing.files)this.content(archiveId,file.sha256);
+      }
+    } finally {if(existsSync(candidate))rmSync(candidate,{recursive:true,force:true});}
     return {...manifest,fingerprint:hash(JSON.stringify(manifest))};
   }
   list() {

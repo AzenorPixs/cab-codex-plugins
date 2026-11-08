@@ -9,7 +9,7 @@ import {ensureProjectTestRoot,changeTestArea,cleanTestArea} from './cgpt-approva
 import {startDirectMonitor} from './cgpt-approval-bridge-direct-monitor.mjs';
 import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bridge-archives.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
-export const VERSION='2.4.33';
+export const VERSION='2.4.34';
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 
@@ -49,10 +49,14 @@ export async function finalizeDirect({project,change,run,session=process.env.COD
   if(!id(change)||!id(run)||!id(session)||!id(receiptId)||!['TERMINÉ','BLOQUÉ'].includes(branch))throw new Error('direct-closure-identity-invalid');
   project=await realpath(project);
   const request=options.request||runtimeRequest;
-  const sessions=(await request('sgs','/stats?'+new URLSearchParams({project,change}),undefined,{home})).sessions;
-  if(sessions.some(row=>row.run!==run||row.session!==session||row.mode!=='direct'||row.cab_direct!==true))throw new Error('direct-closure-peer-present');
-  if(sessions.some(row=>!row.ended_at))throw new Error('direct-closure-statistical-window-open');
-  const scope={workspace:project,changeId:change,runIds:[run],ids:[change,run,session].sort()};
+  const sessions=(await request('sgs','/stats?'+new URLSearchParams({project,change}),undefined,{home,timeout:15000})).sessions;
+  const own=sessions.filter(row=>row.run===run&&row.session===session&&row.mode==='direct'&&row.cab_direct===true);
+  if(own.length>1)throw new Error('direct-closure-identity-ambiguous');
+  if(sessions.some(row=>row.run===run&&!own.includes(row)&&!row.ended_at))throw new Error('direct-closure-active-peer');
+  if(sessions.some(row=>row.run===run&&row.mode==='piloted'))throw new Error('direct-closure-pilot-authority-required');
+  if(own.some(row=>!row.ended_at))throw new Error('direct-closure-statistical-window-open');
+  const bindingId='codex-'+hash([hostname(),process.getuid(),project,change,run,session,'coder']);
+  const scope={workspace:project,changeId:change,runIds:[run],ids:[session],sessionId:session,bindingId,closureAuthority:'direct-session-v1'};
   const repository=new ArchiveContent(options.archiveRoot||archiveDirectory(project,{home}),project);
   const retained=repository.retain(scope,{reportPaths:changeReports(project,change,branch),closed:true,branch});
   const statisticalCleanup=options.statisticsCleanup||{purge:purgeStatistics,verify:verifyStatisticsAbsence};

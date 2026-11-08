@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {runtimeRequest,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
 import {projectErasure,erasureReferences} from './cgpt-approval-bridge-change-erasure.mjs';
 import {readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.4.33';
+export const VERSION='2.4.34';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 function removeCurrentErasureMarker(data,component,receiptId) {
   if(component!=='broker-statistics'||!data||typeof data!=='object'||Array.isArray(data)||data.erasure_prepared!==receiptId)return data;
@@ -14,16 +14,28 @@ function removeCurrentErasureMarker(data,component,receiptId) {
 }
 
 export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),request=runtimeRequest}={}) {
-  const preview=await request('sgs','/purge/preview',{scope,branch},{home});
-  const bindingIds=new Set(preview.bindings),files=[],floors=new Map();
+  const direct=scope.closureAuthority==='direct-session-v1';
+  const preview=await request('sgs','/purge/preview',{scope,branch},{home,...(direct?{timeout:30000}:{})});
+  const bindingIds=new Set([...preview.bindings,...(scope.closureAuthority==='direct-session-v1'?[scope.bindingId]:[])]),files=[],floors=new Map();
   const directory=join(stateRootDirectory(home),'cab-approval-bridge/sgs-outbox');
   if(existsSync(directory))for(const name of await readdir(directory)) {
     if(!/^(?:binding-|source-|checkpoint-)?[a-f0-9]{64}\.json(?:\.candidate-[a-f0-9-]{36})?$/.test(name))continue;
     const path=join(directory,name),info=await lstat(path);
     if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o077)fail('sgs-outbox-owner-divergent');
     const value=readRuntimeJson(path).value;
-    if(value.project===scope.workspace&&(scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.runIds.includes(value.run):value.change===scope.changeId)&&value.binding)bindingIds.add(value.binding);
+    if(scope.closureAuthority!=='direct-session-v1'&&value.project===scope.workspace&&(scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.runIds.includes(value.run):value.change===scope.changeId)&&value.binding)bindingIds.add(value.binding);
     files.push({path,value});
+  }
+  if(scope.closureAuthority==='direct-session-v1') {
+    if(files.some(({value})=>bindingIds.has(value.binding)))fail('sgs-direct-outbox-pending');
+    const result=await request('sgs','/purge',{scope,receipt_id:receiptId,components:[]},{home,timeout:30000});
+    if(existsSync(directory))for(const name of await readdir(directory)) {
+      if(!/^(?:binding-|source-)?[a-f0-9]{64}\.json(?:\.candidate-[a-f0-9-]{36})?$/.test(name))continue;
+      const path=join(directory,name),info=await lstat(path);
+      if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o077)fail('sgs-outbox-owner-divergent');
+      if(bindingIds.has(readRuntimeJson(path).value.binding))fail('sgs-direct-outbox-pending-after-purge');
+    }
+    return result;
   }
   for(const {path,value} of files) {
     if(value.project===scope.workspace&&typeof value.component==='string') {
@@ -46,7 +58,7 @@ export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),req
 }
 
 export async function verifyStatisticsAbsence(scope,{home=homedir(),request=runtimeRequest}={}) {
-  const preview=await request('sgs','/purge/preview',{scope,branch:'VERIFY'},{home});
+  const preview=await request('sgs','/purge/preview',{scope,branch:'VERIFY'},{home,...(scope.closureAuthority==='direct-session-v1'?{timeout:30000}:{})});
   if(preview.bindings.length)fail('sgs-bindings-still-present');
   for(const component of preview.components) {
     const value=await request('sgs','/component/checkpoint?'+new URLSearchParams({project:scope.workspace,component:component.component}),undefined,{home,maxResponseBytes:64*1024*1024});

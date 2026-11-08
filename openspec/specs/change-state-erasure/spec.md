@@ -405,3 +405,35 @@ Lors de l'effacement terminal, CAB SHALL retirer entièrement un reçu de permis
 #### Scenario: Référence cible dans un reçu invalide
 - **WHEN** une enveloppe invalide contient une identité de la cible
 - **THEN** la projection est refusée sans altérer les fichiers
+
+### Requirement: Clôture directe ciblée
+
+La clôture directe MUST identifier exactement projet, change, RUN et session et sélectionner seulement la liaison SGS directe correspondante. Elle MUST préserver les autres liaisons, checkpoints et incidents. La cible MUST être fermée, sans outbox en attente, et couverte par un rapport durable à jour. Le reçu MUST être idempotent.
+
+#### Scenario: Liaisons de plusieurs RUN
+- **WHEN** une session directe clôturée partage un change avec des sessions d'autres RUN
+- **THEN** seule sa liaison est purgée après preuve durable et les liaisons et checkpoints pairs restent inchangés
+
+#### Scenario: Pair actif sur le même RUN
+- **WHEN** une autre liaison du même RUN est encore active
+- **THEN** la clôture refuse sans purger ni nettoyer l'atelier partagé
+
+#### Scenario: Historique piloté du même RUN
+- **WHEN** une ancienne liaison pilotée du même RUN existe
+- **THEN** la clôture refuse tant que l'autorité sur l'atelier partagé n'est pas qualifiée, même si la fenêtre statistique est fermée
+
+#### Scenario: Outbox non drainée
+- **WHEN** des éléments de la liaison cible restent en outbox
+- **THEN** la purge refuse sans supprimer ces éléments ni modifier les pairs
+
+### Requirement: Reprise avec rapport durable complété
+
+Après une tentative de clôture, CAB MUST pouvoir conserver une version complétée d'un rapport comme copie distincte liée au même RUN après validation du périmètre et de l'intégrité des copies antérieures. Les copies précédentes MUST rester consultables et identifiées comme antérieures. Une reprise inchangée MUST rester idempotente. Une suppression explicite MUST rester prioritaire.
+
+#### Scenario: Rapport complété
+- **WHEN** le rapport durable a été complété pour la même archive
+- **THEN** CAB conserve les copies précédentes et ajoute la nouvelle version avant la reprise
+
+#### Scenario: Copie antérieure altérée
+- **WHEN** une copie antérieure ne correspond plus à son empreinte
+- **THEN** CAB refuse la modification de l'archive

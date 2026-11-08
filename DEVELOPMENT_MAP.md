@@ -1,5 +1,13 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Copies de rapports complétés — SCM 2.4.34
+
+[retain-updated-report-copies](openspec/changes/archive/2026-11-08-retain-updated-report-copies/), code non attribué : copies distinctes testées ; publication et activation à vérifier.
+
+## Clôture directe ciblée — SCM 2.4.34
+
+[isolate-direct-session-finalization](openspec/changes/archive/2026-11-08-isolate-direct-session-finalization/), code non attribué : tests ciblés validés ; historique piloté du même RUN encore protégé, publication et activation à vérifier.
+
 ## Expurgation des preuves — SCM 2.4.33
 
 [redact-retired-protocol-evidence](openspec/changes/archive/2026-11-08-redact-retired-protocol-evidence/), code non attribué : preuves conservées avec relevé des empreintes avant/après ; publication et activation à vérifier.

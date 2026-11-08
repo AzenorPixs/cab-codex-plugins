@@ -169,7 +169,8 @@ async function refreshArchiveData() {
     const result=await request('/api/archives');holder.replaceChildren();
     for(const archive of result.archives) {
       const panel=node('section',null,'stats-source');
-      panel.append(node('h3',archive.changeId),node('p',archive.branch+' · '+archive.runIds.join(', '),'detail-note'));
+      const versionLabel=archive.supersedes?' · copie complétée':result.archives.some(other=>other.supersedes===archive.archiveId)?' · copie antérieure':'';
+      panel.append(node('h3',archive.changeId),node('p',archive.branch+' · '+archive.runIds.join(', ')+versionLabel,'detail-note'));
       for(const file of archive.files) {
         const row=node('div',null,'retention-actions');
         row.append(node('span',file.origin+' · '+file.bytes+' octets'));

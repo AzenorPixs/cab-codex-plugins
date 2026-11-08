@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 2.4.34 - 2026-11-08
+
+- Conserver une copie distincte des rapports complétés lors d’une reprise, avec vérification des copies antérieures.
+
+- Cibler la clôture SGS sur la seule session directe et conserver les checkpoints et liaisons des pairs.
+- Maintenir la garde pour un historique piloté du même RUN jusqu’à qualification de son autorité.
+
 ## 2.4.33 - 2026-11-08
 
 - Expurger les désignations résiduelles des preuves historiques en conservant leur structure et les empreintes avant/après.

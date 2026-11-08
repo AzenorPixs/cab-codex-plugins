@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {spawn} from 'node:child_process';
+import {spawn,spawnSync} from 'node:child_process';
 import {mkdtemp,mkdir,readFile,rm,readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -10,6 +10,7 @@ import {openCodeTelemetry} from '../plugins/cab-approval-bridge/scripts/cgpt-app
 import {StatisticsBackend} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics-backend.mjs';
 import {SessionStatistics} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-statistics.mjs';
 import {access} from 'node:fs/promises';
+import {purgeStatistics,verifyStatisticsAbsence} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-sgs-cleanup.mjs';
 
 test('SGS Unix réel : outbox acquittée, déduplication et arrêt propre sans OpenCode',async t=>{
   const home=await mkdtemp(join(tmpdir(),'cab-service-fixture-'));
@@ -56,6 +57,20 @@ test('SGS Unix réel : outbox acquittée, déduplication et arrêt propre sans O
   const checkpoint=await runtimeRequest('sgs','/component/checkpoint?'+new URLSearchParams({project:home,component:'controller-statistics'}),undefined,{home});
   assert.equal(Object.keys(checkpoint.data.contexts).length,1);
   await migrated.close();
+  const reportDir=join(home,'openspec/changes/archive/2026-11-06-change');await mkdir(reportDir,{recursive:true});
+  const snapshot=await runtimeRequest('sgs','/stats?project='+encodeURIComponent(home),undefined,{home});
+  const script="import sys,json;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import cab_sgs;e={'schema_version':1,'session_id':'fixture-report','scope':'cumulative','contribution':cab_sgs.blank(),'native_telemetry':{'format':'cab-native-sgs-1','sessions':json.load(sys.stdin)['sessions']}};cab_sgs.change_report(Path(sys.argv[2]),'openspec/changes/archive/2026-11-06-change',json.dumps(e).encode(),'archived')";
+  const generated=spawnSync('python3',['-B','-c',script,fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts',import.meta.url)),home],{input:JSON.stringify(snapshot),encoding:'utf8'});
+  assert.equal(generated.status,0,generated.stderr);
+  const beforePurge=await runtimeRequest('sgs','/component/checkpoint?'+new URLSearchParams({project:home,component:'controller-statistics'}),undefined,{home});
+  const scope={workspace:home,changeId:'change',runIds:['direct-run'],ids:['direct-session'],sessionId:'direct-session',bindingId:'direct-one',closureAuthority:'direct-session-v1'};
+  const result=await purgeStatistics(scope,'TERMINÉ','direct-real-receipt',{home});assert.equal(result.bindingsRemoved,1);
+  await verifyStatisticsAbsence(scope,{home});
+  const left=await runtimeRequest('sgs','/stats?project='+encodeURIComponent(home),undefined,{home});
+  assert.deepEqual(left.sessions.map(row=>row.binding),['fixture-binding']);
+  const unchanged=await runtimeRequest('sgs','/component/checkpoint?'+new URLSearchParams({project:home,component:'controller-statistics'}),undefined,{home});
+  assert.deepEqual(unchanged,beforePurge);
+  assert.equal((await purgeStatistics(scope,'TERMINÉ','direct-real-receipt',{home})).status,'PURGED');
   await assert.rejects(runtimeRequest('sgs','/events',{...event,event_id:'unsafe',prompt:'not-allowed'},{home}),/sgs-event-invalid/);
 });
 
