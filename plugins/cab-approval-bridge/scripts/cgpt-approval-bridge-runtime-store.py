@@ -14,7 +14,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.33"
+VERSION = "2.4.34"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -350,13 +350,25 @@ class RuntimeStore:
         if not isinstance(scope,dict) or not {'workspace','changeId','runIds','ids'}<=set(scope):raise RuntimeErrorCode('sgs-purge-scope-invalid')
         identifier(scope['changeId'])
         if not isinstance(scope['workspace'],str) or not Path(scope['workspace']).is_absolute() or not isinstance(scope['runIds'],list) or not isinstance(scope['ids'],list):raise RuntimeErrorCode('sgs-purge-scope-invalid')
+        direct=scope.get('closureAuthority')=='direct-session-v1'
+        if direct:
+            if set(scope)!={'workspace','changeId','runIds','ids','sessionId','bindingId','closureAuthority'} or len(scope['runIds'])!=1 or scope['ids']!=[scope['sessionId']]:raise RuntimeErrorCode('sgs-purge-scope-invalid')
+            identifier(scope['runIds'][0]);identifier(scope['sessionId']);identifier(scope['bindingId'])
         targets=[]
         for row in self.db.execute('SELECT * FROM bindings'):
             value=json.loads(row['body'])
-            if value['project']==scope['workspace'] and (value['run'] in scope['runIds'] if scope.get('closureAuthority')=='authoritative-retired-run-batch-v1' else value['change']==scope['changeId']):
+            if direct:
+                same_run=value['project']==scope['workspace'] and value['run']==scope['runIds'][0]
+                target=same_run and value['change']==scope['changeId'] and value['session']==scope['sessionId'] and value['binding']==scope['bindingId'] and value['mode']=='direct' and value.get('cab_direct') is True
+                if same_run and not target and not self.db.execute('SELECT 1 FROM binding_closures WHERE binding=?',(row['binding'],)).fetchone():raise RuntimeErrorCode('direct-closure-active-peer')
+                if same_run and not target and value['mode']=='piloted':raise RuntimeErrorCode('direct-closure-pilot-authority-required')
+            else:
+                target=value['project']==scope['workspace'] and (value['run'] in scope['runIds'] if scope.get('closureAuthority')=='authoritative-retired-run-batch-v1' else value['change']==scope['changeId'])
+            if target:
                 if row['uid']!=uid:raise RuntimeErrorCode('sgs-purge-owner-mismatch')
                 targets.append(value['binding'])
-        components=[{'component':row['component'],'fingerprint':row['fingerprint'],'sequence':row['sequence']} for row in self.db.execute('SELECT * FROM component_checkpoints WHERE project=?',(scope['workspace'],))]
+        if direct and len(targets)>1:raise RuntimeErrorCode('direct-closure-identity-ambiguous')
+        components=[] if direct else [{'component':row['component'],'fingerprint':row['fingerprint'],'sequence':row['sequence']} for row in self.db.execute('SELECT * FROM component_checkpoints WHERE project=?',(scope['workspace'],))]
         return {'bindings':targets,'components':components,'scope_digest':digest(scope)}
 
     def purge(self,scope,receipt_id,components,uid):
@@ -369,6 +381,7 @@ class RuntimeStore:
                 if old['scope_digest']!=scope_digest:raise RuntimeErrorCode('sgs-purge-receipt-conflict')
                 if preview['bindings']:raise RuntimeErrorCode('sgs-purge-reintroduced-data')
                 return json.loads(old['body'])
+            if scope.get('closureAuthority')=='direct-session-v1' and len(preview['bindings'])!=1:raise RuntimeErrorCode('direct-closure-binding-not-found')
             reports=[json.loads(row[0]) for row in self.db.execute('SELECT body FROM archive_reports WHERE project=?',(scope['workspace'],))]
             batch=scope.get('closureAuthority')=='authoritative-retired-run-batch-v1'
             if batch and (not scope.get('protectedRunIds') or set(scope['runIds'])&set(scope['protectedRunIds'])):raise RuntimeErrorCode('sgs-purge-scope-invalid')
@@ -392,7 +405,9 @@ class RuntimeStore:
             for binding in preview['bindings']:
                 producers=[row[0] for row in self.db.execute('SELECT producer FROM cursor_bindings WHERE binding=?',(binding,))]
                 producers.append('diagnostic-'+digest(binding))
-                for producer in producers:self.db.execute('DELETE FROM cursors WHERE producer=?',(producer,))
+                for producer in producers:
+                    if scope.get('closureAuthority')=='direct-session-v1' and self.db.execute('SELECT 1 FROM cursor_bindings WHERE producer=? AND binding<>? LIMIT 1',(producer,binding)).fetchone():continue
+                    self.db.execute('DELETE FROM cursors WHERE producer=?',(producer,))
                 self.db.execute('DELETE FROM cursor_bindings WHERE binding=?',(binding,))
                 for table in ('telemetry','native_sources','binding_closures'):
                     self.db.execute('DELETE FROM '+table+' WHERE binding=?',(binding,))

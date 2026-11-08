@@ -32,6 +32,25 @@ test('Copies CAB consultables, suppression développeur idempotente, pairs et so
  assert.equal(readFileSync(join(directory,'STATISTICS.md'),'utf8'),'# Statistiques synthétiques\n');
 });
 
+test('Rapport complété : les deux versions restent lisibles et la reprise est idempotente',t=>{
+ const root=mkdtempSync(join(tmpdir(),'cab-archive-revision-'));t.after(()=>rmSync(root,{recursive:true,force:true}));
+ const workspace=join(root,'project'),directory=join(workspace,'openspec/changes/archive/2026-11-06-fixture');
+ mkdirSync(directory,{recursive:true});const report=join(directory,'STATISTICS.md');writeFileSync(report,'ancienne version\n');
+ const repository=new ArchiveContent(join(root,'private-archives'),workspace),scope={workspace,changeId:'fixture',runIds:['run-fixture']};
+ const old=repository.retain(scope,{reportPaths:[report],closed:true,branch:'TERMINÉ'});
+ writeFileSync(report,'version complétée\n');
+ const updated=repository.retain(scope,{reportPaths:[report],closed:true,branch:'TERMINÉ'});
+ assert.notEqual(updated.archiveId,old.archiveId);assert.equal(updated.supersedes,old.archiveId);assert.equal(updated.files.length,1);
+ assert.equal(repository.content(old.archiveId,old.files[0].sha256).content,'ancienne version\n');
+ assert.equal(repository.content(updated.archiveId,updated.files[0].sha256).content,'version complétée\n');
+ assert.equal(repository.retain(scope,{reportPaths:[report],closed:true,branch:'TERMINÉ'}).fingerprint,updated.fingerprint);
+ assert.throws(()=>repository.remove(updated.archiveId,old.fingerprint),/content-changed/);
+ assert.equal(repository.remove(updated.archiveId,updated.fingerprint).state,'DONE');
+ assert.equal(repository.retain(scope,{reportPaths:[report],closed:true,branch:'TERMINÉ'}).retention,'DEVELOPER_DELETED');
+ writeFileSync(join(root,'private-archives',old.archiveId,old.files[0].name),'{}');
+ assert.throws(()=>repository.retain(scope,{reportPaths:[report],closed:true,branch:'TERMINÉ'}),/archive-content-divergent/);
+});
+
 test('Autorité2.4 : RUN clos nettoyable malgré traces anciennes, RUN en cours refusé',()=>{
  const run={runId:'fixture-run',ownerId:'fixture-owner',changeId:'fixture-change',state:'ABANDONED',contextId:1,version:1};
  const peer={runId:'peer-run',ownerId:'peer-owner',changeId:'peer-change',state:'RESERVED',contextId:2,version:2};
