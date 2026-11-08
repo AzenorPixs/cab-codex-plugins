@@ -11,6 +11,7 @@ import {fileURLToPath} from 'node:url';
 import {ownerCleanup} from '../plugins/cab-approval-bridge/broker/cgpt_approval_bridge_owner_cleanup.mjs';
 import {diagnoseErasureFilePlan} from '../plugins/cab-approval-bridge/broker/cgpt-approval-bridge-change-erasure.mjs';
 import {ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
+import {canonicalContinuityDigest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {ChangeErasureManager} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs';
 import {processOwnerIdentity} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
 import {startOwnerProxy} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-owner-proxy.mjs';
@@ -43,6 +44,26 @@ test('diagnostic propriétaire : reçu local authentifié et aucun changement',t
  assert.equal(result.state,'DIAGNOSED');assert.equal(result.ownerPhase,'PREPARED');
  assert.deepEqual(readFileSync(receiptPath),before);assert.deepEqual(readFileSync(f.file),data);
  assert.throws(()=>ownerCleanup({...input,scope:{...f.scope,changeId:'foreign'},action:'diagnose',bundle:{scope:f.scope,roots:[f.data],journalPaths:[],legacyRoots:[]}},{home:f.home}),/erasure-owner-transaction-divergent/);
+});
+test('diagnostic APPLIED : reconnaît les événements d’une approbation conservée',t=>{
+ const f=fixture(t),shared='approval-shared-derived-123';
+ const scope={...f.scope,closureAuthority:'authoritative-retired-run-batch-v1',changeIds:[f.scope.changeId],protectedRunIds:[f.peer.runId],sharedIdentityIds:[]};
+ const input={scope,transactionId:f.transactionId};ownerCleanup({...input,action:'prepare'},{home:f.home});
+ const ownerRoot=join(f.home,'.local/state/cab-owner-erasure',hash(f.workspace)),tx=new ErasureTransaction(ownerRoot,{createKey:false});
+ const journal=join(f.data,'journal.ndjson'),event={event_id:'event-one',event_type:'APPROVAL_REJECTED',approval_id:shared,change_id:scope.changeId};
+ writeFileSync(journal,JSON.stringify(event)+'\n',{mode:0o600});writeFileSync(f.file,JSON.stringify({rows:[{changeId:scope.changeId,approvalId:shared,directory:'relative-token'}]}),{mode:0o600});
+ tx.save({...tx.load(),phase:'APPLIED',roots:[f.data],journalPaths:[journal],legacyRoots:[],effectiveScope:{...scope,ids:[...scope.ids,shared],ownerBaseIds:scope.ids}});
+ const before=readFileSync(tx.path),bundle={scope:{...scope,ids:[...scope.ids,shared],sharedIdentityIds:[shared]},roots:[f.data],journalPaths:[journal],legacyRoots:[]};
+ const result=ownerCleanup({...input,action:'diagnose',bundle},{home:f.home});
+ assert.equal(result.ownerPhase,'APPLIED');assert.equal(result.diagnostic.status,'PLAN_VALID');assert.deepEqual(readFileSync(tx.path),before);
+ const invalid={...bundle,scope:{...bundle.scope,sharedIdentityIds:[shared,scope.runIds[0]]}};
+ assert.throws(()=>ownerCleanup({...input,action:'verify',bundle:invalid},{home:f.home}),/erasure-owner-retention-divergent/);assert.deepEqual(readFileSync(tx.path),before);
+ const verified=ownerCleanup({...input,action:'verify',bundle},{home:f.home});assert.equal(verified.state,'VERIFIED');
+ assert.ok(verified.effectiveScope.sharedIdentityIds.includes(shared));assert.equal(readFileSync(journal,'utf8'),JSON.stringify(event)+'\n');
+ const priorReceipt={scopeDigest:canonicalContinuityDigest(scope),roots:[f.data],journalPaths:[journal],effectiveScope:{...scope,ids:[...scope.ids,shared],ownerBaseIds:scope.ids}};
+ assert.equal(ownerCleanup({...input,action:'finalize'},{home:f.home}).state,'PURGED');
+ assert.equal(ownerCleanup({...input,action:'verify',bundle,ownerReceipt:priorReceipt},{home:f.home}).state,'VERIFIED');
+ assert.equal(existsSync(tx.path),false);
 });
 test('owner local : reprise idempotente, pair conservé, certificat puis oubli du reçu',t=>{
  const f=fixture(t),input={scope:f.scope,transactionId:f.transactionId};assert.equal(ownerCleanup({...input,action:'prepare'},{home:f.home}).state,'PREPARED');

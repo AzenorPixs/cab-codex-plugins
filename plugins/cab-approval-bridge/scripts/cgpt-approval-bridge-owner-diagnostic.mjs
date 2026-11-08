@@ -8,7 +8,7 @@ import {processOwnerIdentity} from './cgpt-approval-bridge-process-lifecycle.mjs
 import {startDiagnosticOwnerProxy} from './cgpt-approval-bridge-owner-diagnostic-proxy.mjs';
 import {authority} from './cgpt-approval-bridge-update.mjs';
 import {homedir} from 'node:os';
-export const VERSION='2.4.40';
+export const VERSION='2.4.41';
 
 const exec=promisify(execFile);
 const fail=code=>{throw Object.assign(new Error(code),{code})};
@@ -19,7 +19,7 @@ export async function diagnoseFrozenOwner({workspace,transactionId}) {
   try{
     const manager=new ChangeErasureManager({workspace,stateDirectory:runtimeStateDirectory(workspace),brokerIdentity:processOwnerIdentity});
     const value=manager.pending(),prepared=value?.ownerReceipts?.prepare;
-    if(!value||value.transactionId!==transactionId||value.scope?.workspace!==workspace||value.phase!=='FREEZING'||!Number.isSafeInteger(prepared?.uid)||!Number.isSafeInteger(prepared?.pid))fail('erasure-owner-diagnostic-input-invalid');
+    if(!value||value.transactionId!==transactionId||value.scope?.workspace!==workspace||!['FREEZING','VERIFYING'].includes(value.phase)||!Number.isSafeInteger(prepared?.uid)||!Number.isSafeInteger(prepared?.pid))fail('erasure-owner-diagnostic-input-invalid');
     try{process.kill(prepared.pid,0);fail('erasure-previous-broker-still-present');}catch(error){if(error.code!=='ESRCH')throw error;}
     const passwd=(await exec('/usr/bin/getent',['passwd',String(prepared.uid)],{timeout:5000,maxBuffer:4096})).stdout.trim().split(':');
     if(Number(passwd[2])!==prepared.uid||!passwd[5]?.startsWith('/')||resolve(passwd[5])!==passwd[5])fail('erasure-owner-diagnostic-identity-invalid');
@@ -31,7 +31,7 @@ export async function diagnoseFrozenOwner({workspace,transactionId}) {
     const code=await new Promise((resolve,reject)=>{child.once('error',reject);child.once('exit',resolve)});
     if(code!==0){let diagnostic;try{diagnostic=JSON.parse(err)}catch{}fail(/^erasure-[a-z0-9-]+$/.test(diagnostic?.error||'')?diagnostic.error:'erasure-owner-diagnostic-failed');}
     const result=JSON.parse(out);
-    if(result.transactionId!==transactionId||!['PREPARED','APPLYING'].includes(result.ownerPhase)||!result.diagnostic)fail('erasure-owner-diagnostic-result-invalid');
+    if(result.transactionId!==transactionId||!['PREPARED','APPLYING','APPLIED'].includes(result.ownerPhase)||!result.diagnostic)fail('erasure-owner-diagnostic-result-invalid');
     return {...result,coverage:'owner-default-paths-unverified'};
   }finally{if(proxy)await proxy.stop();await lock.close();}
 }

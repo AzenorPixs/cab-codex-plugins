@@ -67,6 +67,12 @@ le désarmement et la libération du RUN. Deux issues seulement : `TERMINÉ`,
 ou `BLOQUÉ` pour dépendance métier insatisfaite avec le change ouvert.
 Une alerte technique BLOCKED ne constitue pas ce second cas.
 
+Après application, si une approbation conservée ne peut pas être attribuée au
+RUN effacé, le propriétaire conserve aussi ses événements et vérifie la portée
+effective avant clôture. La reprise utilise le même reçu sans rejouer la
+suppression. Une preuve de propriétaire ou de reçu divergente interrompt la
+reprise ; les données des autres RUN restent conservées.
+
 Une opération PREPARED non retirée, ISSUING, EXECUTING ou UNKNOWN, une once sans
 résultat réconcilié, une permission en attente ou une ressource non libérée
 empêche l’effacement. L’archivage métier ne lève aucune de ces protections.
