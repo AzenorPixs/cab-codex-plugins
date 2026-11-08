@@ -1,6 +1,6 @@
 ---
 description: Mettre à jour CAB ; équivalent exact de /CAB update
-version: 2.4.21
+version: 2.4.22
 ---
 
 Réponds en français.

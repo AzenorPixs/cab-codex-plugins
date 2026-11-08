@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,writeFileSync,readFileSync,readdirSync,mkdirSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync,readFileSync,readdirSync,mkdirSync,symlinkSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
@@ -82,6 +82,24 @@ test('extension additive : accès protégé et anciens tokens/fencing/générati
  assert.ok(h.r.runs.get(run.runId).resources.some(x=>x.key===port(5174).key));
  assert.deepEqual(extensions.extend(run.runId,payload),result);
  assert.throws(()=>extensions.extend(run.runId,{...payload,resources:[port(5175)]}),/id-reused/);
+});
+test('extension compatible : lecture limitée à l’atelier canonique du RUN',async t=>{
+ const h=await registryFixture(t),run=h.reserve('a',[{key:'file:output/result',mode:'write'}]);
+ const own=join(h.root,'.cab-tests',run.changeId,run.runId),other=join(h.root,'.cab-tests',run.changeId,'other');
+ mkdirSync(own,{recursive:true});mkdirSync(other,{recursive:true});
+ writeFileSync(join(own,'draft'),'contenu');writeFileSync(join(other,'draft'),'autre');
+ symlinkSync(join(other,'draft'),join(own,'alias'));
+ const e=new ManifestExtensions(h.r,join(h.root,'state/extensions.json'));
+ const payload=extension(h.r,run),key=`file:.cab-tests/${run.changeId}/${run.runId}`;
+ for(const resource of [{key:`file:.cab-tests/${run.changeId}/other/draft`,mode:'read'},
+   {key:`${key}-other/draft`,mode:'read'},{key:`${key}/draft`,mode:'write'},{key:`${key}/alias`,mode:'read'}]){
+  assert.throws(()=>e.extend(run.runId,{...payload,extensionId:'bad-'+hash(resource.key+resource.mode).slice(0,12),resources:[resource]}),/outside-namespace/);
+ }
+ const before=structuredClone(h.r.resourceState);
+ const result=e.extend(run.runId,{...payload,resources:[{key:`${key}/draft`,mode:'read'}]});
+ assert.equal(result.state,'DONE');assert.equal(h.r.runs.get(run.runId).version,run.version);
+ assert.deepEqual(h.r.resourceState,before);
+ assert.ok(h.r.runs.get(run.runId).resources.some(x=>x.key===`${key}/draft`&&x.mode==='read'));
 });
 for(const variant of ['owner','stale','overlap','foreign-held','namespace','rights'])test('extension compatible refuse '+variant,async t=>{
  const h=await registryFixture(t),run=h.reserve('a',[port(5173)]),extensions=new ManifestExtensions(h.r,join(h.root,'state/extensions.json'));

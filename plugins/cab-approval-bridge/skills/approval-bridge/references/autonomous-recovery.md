@@ -117,7 +117,8 @@ issu du plan, resources (ajouts seulement), authorization (référence du mandat
 et evidence (références de revue).
 
 Les ajouts doivent rester dans le namespace et les droits déjà réservés
-(type/hôte ou répertoire), être disjoints des protections et ne créer aucun
+(type/hôte ou répertoire). Une lecture peut aussi viser le chemin canonique
+`.cab-tests/<change>/<RUN>/` du seul RUN propriétaire. Ils doivent être disjoints des protections et ne créer aucun
 conflit. Une route ne décide pas si un objectif différent est autorisé :
 l’orchestrateur confronte son choix au périmètre validé du change.
 Le manifeste grandit sans changer version, anciens tokens/fencing ou états.
@@ -125,6 +126,13 @@ Cette route ne remplace pas les gardes historiques de extend/reduce. Relire le
 même extensionId après réponse perdue ; un digest périmé ou reçu réutilisé
 avec un autre contenu est refusé. Les opérations sur le nouveau périmètre
 restent soumises à leur revue, demande, accès et permission propres.
+
+Pour transférer des octets revus depuis cet atelier vers le projet, déclarer la
+source en lecture et la destination en écriture ; l’orchestrateur valide la
+commande exacte et la destination. Lire la source une seule fois, vérifier
+l’empreinte et la taille du contenu effectivement lu, puis écrire ces mêmes
+octets ; protéger les chemins et refuser liens ou destination inattendue. Une
+empreinte relevée sur une autre lecture ne prouve pas les octets écrits.
 
 ## Conserver les prochains refus natifs
 

@@ -67,6 +67,8 @@ y créer, modifier et copier des fichiers du change sans autorisation
 supplémentaire, en préservant les espaces des autres sessions. L’atelier est
 prioritaire pour les tests ; le codeur justifie le recours à LXC ou Docker
 et l’orchestrateur tranche. Les résultats de tests sont soumis à sa validation.
+Une extension compatible peut ajouter la lecture de cet atelier propre ; un
+transfert vers le projet reste soumis à la validation de l’orchestrateur.
 
 ## Statistiques, incidents et nettoyage
 
