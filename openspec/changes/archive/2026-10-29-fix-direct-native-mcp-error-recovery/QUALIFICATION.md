@@ -36,7 +36,7 @@ Tests isolés : plusieurs pages complètes, réduction au milieu d’un historiq
 | CHANGELOG.md | Entrée 2.1.11 limitée aux deux remédiations. |
 | OpenSpec | Deltas transport, contrôleur et distribution validés avant code/tests. |
 | Skill/plugin/commande CAB | Procédure, gardes et limites 2.1.11 ; version commune alignée. |
-| ORCHESTRATED_CODING.md / template | Non écrits par cette session ; copie externe actualisée, empreinte préservée. Référence concurrent-runs.md alignée sur ses deux phrases applicables sans modifier la copie ni le template. |
+| ancien protocole local / template | Non écrits par cette session ; copie externe actualisée, empreinte préservée. Référence concurrent-runs.md alignée sur ses deux phrases applicables sans modifier la copie ni le template. |
 
 ## Validation et clôture
 
@@ -44,13 +44,13 @@ Client ciblé : 25 tests réussis. Récupération directe ciblée : 13/13. Les c
 
 ### État de la validation globale en attente documentaire
 
-Campagne Node globale : 547 tests, 518 réussis, 28 ignorés, 1 échec. L’unique échec compare le protocole embarqué : ORCHESTRATED_CODING.md préexistant diverge de references/concurrent-runs.md sur l’ordre de lecture et CAISM. La référence n’a pas été modifiée par le présent correctif ; l’empreinte de la copie préservée est enregistrée dans output/scm-direct-native-recovery/protocol-before.json. L’index courant des prompts ne répertorie pas CAISM. L’amendement de ces deux phrases dans la seule référence CAB est soumis au développeur ; aucune écriture du template ou de sa copie n’est proposée.
+Campagne Node globale : 547 tests, 518 réussis, 28 ignorés, 1 échec. L’unique échec compare le protocole embarqué : ancien protocole local préexistant diverge de references/concurrent-runs.md sur l’ordre de lecture et CAISM. La référence n’a pas été modifiée par le présent correctif ; l’empreinte de la copie préservée est enregistrée dans output/scm-direct-native-recovery/protocol-before.json. L’index courant des prompts ne répertorie pas CAISM. L’amendement de ces deux phrases dans la seule référence CAB est soumis au développeur ; aucune écriture du template ou de sa copie n’est proposée.
 
 Python global75/75 ; banc natif de régression1/1 ; OpenSpec global standard et strict17/17. L’échec documentaire n’est ni supprimé ni ignoré, et aucun succès global n’est déclaré. Archivage, statistiques d’archive et publications restent en attente de résolution et de revalidation. Les services/cache2.1.10 sont préservés.
 
 ### Reprise dans l’autorité documentaire existante
 
-Réexamen de SCM §4 et de l’autorisation humaine : la documentation CAB nécessaire est déjà comprise dans le périmètre validé. L’attente intermédiaire n’était pas requise ; aucune validation nouvelle n’est attribuée au parent. Les deux seules phrases de references/concurrent-runs.md ont été alignées sur les règles AGENTS/protocole applicables. Le test reste inchangé et la copie ORCHESTRATED_CODING.md n’est pas écrite par cette session. La campagne globale est rejouée ensuite.
+Réexamen de SCM §4 et de l’autorisation humaine : la documentation CAB nécessaire est déjà comprise dans le périmètre validé. L’attente intermédiaire n’était pas requise ; aucune validation nouvelle n’est attribuée au parent. Les deux seules phrases de references/concurrent-runs.md ont été alignées sur les règles AGENTS/protocole applicables. Le test reste inchangé et la copie ancien protocole local n’est pas écrite par cette session. La campagne globale est rejouée ensuite.
 
 ### Contrôles intermédiaires et incident de fixture
 

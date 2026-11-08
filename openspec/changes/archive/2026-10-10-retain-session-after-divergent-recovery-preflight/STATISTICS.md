@@ -48,7 +48,7 @@ Le prévol et les réponses once des tests sont des fixtures. Ils ne constituent
 | /home/devops/datas/cab/BUILD.md | Modifié |
 | /home/devops/datas/cab/README.md | Modifié |
 | /home/devops/datas/cab/CHANGELOG.md | Modifié |
-| /home/devops/datas/cab/ORCHESTRATED_CODING.md | Modifié |
+| /home/devops/datas/cab/ancien protocole local | Modifié |
 | /home/devops/datas/cab/pyproject.toml | Modifié |
 | /home/devops/datas/cab/.codex/commands/cab.md | Modifié |
 | /home/devops/datas/cab/plugins/cab-approval-bridge/.codex-plugin/plugin.json | Modifié |

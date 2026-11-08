@@ -57,7 +57,7 @@ constituent pas des tâches à cocher ou des validations réussies.
 | README.md | Inchangé ; section Cadences de pilotage déjà conforme à la politique retenue. |
 | CHANGELOG.md | Mis à jour dans l'entrée 1.10.4 de préparation source, sans nouvelle version ni publication. |
 | openspec/specs/ | Trois références réconciliées, deltas concordants et validations standard/stricte réussies. |
-| ORCHESTRATED_CODING.md, commande et skill CAB | Inchangés ; politique courante vérifiée par les 24 tests documentaires. Aucun fichier du référentiel template n'est modifié. |
+| ancien protocole local, commande et skill CAB | Inchangés ; politique courante vérifiée par les 24 tests documentaires. Aucun fichier du référentiel template n'est modifié. |
 | Code runtime | Inchangé ; aucune adaptation exécutable, migration ou activation. |
 
 ## Clôture du périmètre demandé

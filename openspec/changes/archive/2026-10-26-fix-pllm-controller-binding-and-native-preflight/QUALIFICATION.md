@@ -27,7 +27,7 @@ Les fixtures couvrent chemin absent/explicite/vide, JSON/schéma/lien invalides,
 
 ## Copie de protocole détenue par template
 
-Instruction humaine ultérieure : ORCHESTRATED_CODING.md doit être corrigé uniquement dans le projet template. La copie CAB a été rétablie exactement au baseline et reste inchangée. Les trois échecs sont : référence run-lifecycle.md absente ; ancien bloc concurrent non identique à la référence distribuée ; bootstrap du monitoring absent. Leurs conditions sont prouvées antérieures au change dans preexisting-documentary-gaps.json, avec empreintes du protocole et de la référence reconstituée. Aucun test n'a été affaibli ou désactivé. Une exécution intermédiaire avec un réalignement temporaire a réussi ; elle n'est pas présentée comme qualification de l'état final puisque ce réalignement a été retiré sur instruction humaine.
+Instruction humaine ultérieure : ancien protocole local doit être corrigé uniquement dans le projet template. La copie CAB a été rétablie exactement au baseline et reste inchangée. Les trois échecs sont : référence run-lifecycle.md absente ; ancien bloc concurrent non identique à la référence distribuée ; bootstrap du monitoring absent. Leurs conditions sont prouvées antérieures au change dans preexisting-documentary-gaps.json, avec empreintes du protocole et de la référence reconstituée. Aucun test n'a été affaibli ou désactivé. Une exécution intermédiaire avec un réalignement temporaire a réussi ; elle n'est pas présentée comme qualification de l'état final puisque ce réalignement a été retiré sur instruction humaine.
 
 La qualification du correctif produit est acquise ; la suite globale n'est pas annoncée verte. Ces écarts de la copie template sont signalés hors périmètre, sans les incorporer au correctif CAB ni modifier le projet template.
 
@@ -42,7 +42,7 @@ La qualification du correctif produit est acquise ; la suite globale n'est pas a
 | DEVOPS.md | Inchangé ; outils et conteneur autorisés employés, aucune dépendance ajoutée. |
 | README.md | Synthèse du correctif et référence contractuelle mises à jour. |
 | CHANGELOG.md | Entrée 1.10.3 ajoutée, historique conservé. |
-| ORCHESTRATED_CODING.md | Inchangé par consigne humaine ; écarts ci-dessus à traiter dans son référentiel template. |
+| ancien protocole local | Inchangé par consigne humaine ; écarts ci-dessus à traiter dans son référentiel template. |
 | Commande /cab, skill et références CAB | Préparation et fusion du patch, contrôle du processus et gardes de sélection documentés. |
 | OpenSpec | Exigences du raccord, distribution et origine de maintenance ; mentions courantes alignées par deltas. |
 

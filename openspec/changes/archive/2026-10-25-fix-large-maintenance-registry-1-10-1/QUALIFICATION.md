@@ -24,7 +24,7 @@ Périmètre explicitement validé : 16 Mio pour les seules lectures du registre 
 | DEVOPS.md | Inchangé, outils et Docker de qualification conservés. |
 | README.md | Version et maintenance des registres volumineux exposées. |
 | CHANGELOG.md | Entrée 1.10.1 distincte, historique 1.10.0 conservé. |
-| ORCHESTRATED_CODING.md | Versions courantes alignées ; référence de coordination embarquée cohérente. |
+| ancien protocole local | Versions courantes alignées ; référence de coordination embarquée cohérente. |
 | OpenSpec | Deltas de bornes et distribution, scénarios historiques conservés ; contrôle final strict requis avant archive. |
 | Commande/skills/références | Alignés 1.10.1 ; doctrine de provenance locale et anciennes releases conservées. |
 

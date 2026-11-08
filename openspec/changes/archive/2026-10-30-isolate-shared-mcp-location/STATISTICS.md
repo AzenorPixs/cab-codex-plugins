@@ -12,7 +12,7 @@ Lectures ciblées, éditions locales, Node/Python/OpenSpec et publications Git c
 
 Client V2 et six modules appelants pour les cibles MCP explicites ; tests du client, banc natif, doubles de maintenance/gestion de moniteur et distribution. Nouvelle référence mcp-location-isolation.md, skill/commande CAB, skill statistiques et cadrages concernés. AGENTS.md : une désignation de frontend généralisée ; TECHNICAL, CHANGELOG et titre du skill CAB également généralisés. Versions communes des modules, broker, plugins, unités, commandes, pyproject et attentes de tests. Trois capacités OpenSpec synchronisées ; +4 exigences, ~1 exigence.
 
-Development Map et BATCH_CODES : seul change ajouté en code non attribué, liens après archive ; aucune reconstruction ni attribution ACL. Aucun template, ORCHESTRATED_CODING.md, contrat concurrent embarqué, secret ou état privé natif modifié. Le nombre final de chemins est vérifié à l’étape Git et indiqué dans le bilan, sans nombre anticipé ici.
+Development Map et BATCH_CODES : seul change ajouté en code non attribué, liens après archive ; aucune reconstruction ni attribution ACL. Aucun template, ancien protocole local, contrat concurrent embarqué, secret ou état privé natif modifié. Le nombre final de chemins est vérifié à l’étape Git et indiqué dans le bilan, sans nombre anticipé ici.
 
 ## 4. Commandes et validations
 

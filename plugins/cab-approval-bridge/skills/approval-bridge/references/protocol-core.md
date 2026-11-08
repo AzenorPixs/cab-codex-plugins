@@ -24,7 +24,7 @@ Le protocole CAB est distribué avec le plugin et résolu par AGENTS.md.
 Le présent noyau est obligatoire pour le pilotage ; charger ensuite les seules
 références nécessaires via protocol-index.md. L'orchestrateur transmet à l'agent
 de codage les obligations de son mandat avant exécution. Aucun fichier local
-ORCHESTRATED_CODING.md n'est requis pour CAB. La lecture seule du contrat ne
+ancien protocole local n'est requis pour CAB. La lecture seule du contrat ne
 lance aucun service, RUN, évaluation ou maintenance. Les règles générales
 AGENTS.md ont pour référentiel le projet template ; le contrat CAB appartient
 au projet cab. Leurs propagations sont distinctes et explicitement autorisées.

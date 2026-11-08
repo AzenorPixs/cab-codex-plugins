@@ -108,7 +108,7 @@ Les deux manifestes complets sont dans activation-manifests-final.json.
 | README.md | Mis à jour : prévol orphelin, versions mixtes, releases et référence de diagnostic. |
 | CHANGELOG.md | Entrée unique 1.8.0 de préparation source, nouvelles options et limites ; historique antérieur conservé. |
 | openspec/specs/ | 13 canons strictement valides après synchronisation par les deux archivages natifs. |
-| ORCHESTRATED_CODING.md | Référence concurrente et bootstrap monitoring réconciliés ; égalité documentaire testée dans la suite finale. |
+| ancien protocole local | Référence concurrente et bootstrap monitoring réconciliés ; égalité documentaire testée dans la suite finale. |
 | Commande/skills/références distribuées | Versions 1.8.0, procédures de maintenance, aucune activation implicite. |
 
 La revue par empreintes compare les seuls chemins de la base autorisée et

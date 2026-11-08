@@ -42,7 +42,7 @@ Les journaux et diagnostics restent dans output/scm-codemode/, hors Git. Aucun s
 | TECHNICAL.md | Grammaire bornée, origine des parties, shell/write, permissions, rejet et limites explicités |
 | BUILD.md | Distribution commune et qualification native isolée ; archive et publication avant CABU |
 | DEVOPS.md | Inchangé : inventaire daté ; binaires OpenCode, Node/Python et OpenSpec réutilisés, aucune dépendance ajoutée |
-| ORCHESTRATED_CODING.md | Inchangé : rôles, mandats et once conservés ; détails du transport dans le skill CAB courant, sans réécriture du référentiel partagé |
+| ancien protocole local | Inchangé : rôles, mandats et once conservés ; détails du transport dans le skill CAB courant, sans réécriture du référentiel partagé |
 | README.md | Version courante et procédure Code Mode documentées |
 | CHANGELOG.md | Entrée 2.1.8 avec comportements, compatibilité et refus |
 | Skills, références et commandes CAB/CABU | Jeu courant aligné et protocole natif documenté ; procédure unique CABU conservée |

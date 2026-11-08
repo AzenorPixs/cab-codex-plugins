@@ -18,7 +18,7 @@ Limite assumée : l’absence sémantique d’effet d’un programme arbitraire 
 - OpenCode privé réel 2.2.1 : 1/1, serveur/fournisseur/broker privés nettoyés ; aucun serveur utilisateur modifié.
 - Syntaxe : 56 JavaScript et 16 Python ; UTF-8/LF ; trois copies broker identiques.
 - OpenSpec avant archivage : 17/17 standard et strict ; deltas ciblés strict valides.
-- SHA-256 du protocole ORCHESTRATED_CODING.md inchangé : 962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4.
+- SHA-256 du protocole ancien protocole local inchangé : 962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4.
 
 Preuves détaillées ignorées par Git : output/scm-unused-test-reservations/{targeted.log,http-targeted.log,node-global.log,python-global.log,native-global.log,source-verification.json,openspec-before-standard.log,openspec-before-strict.log}.
 
@@ -41,7 +41,7 @@ Les premiers essais ont corrigé deux erreurs du nouveau banc (statut progress 2
 | openspec/specs/ | Trois capacités couvertes par les deltas validés, synchronisées à l’archivage. |
 | Skill et commande CAB | Lien et consignes de la restitution sans effet ; alias CABU/cab et versions concordantes. |
 | references/concurrent-runs.md | Inchangé : décrit la restitution ordinaire ; concordance intégrale embarquée conservée. Nouvelle exception dans references/unused-test-reservations.md. |
-| ORCHESTRATED_CODING.md et template | Aucun écrit : protocole CAB inchangé au hash ci-dessus ; template hors périmètre. |
+| ancien protocole local et template | Aucun écrit : protocole CAB inchangé au hash ci-dessus ; template hors périmètre. |
 
 ## Archivage, publications et activation
 

@@ -68,7 +68,7 @@ empreintes sont dans activation-manifests-final.json, sans installation.
 | README.md | Mis à jour : comportement public et limites, lien vers component-update.md. |
 | CHANGELOG.md | Une entrée 1.8.0 avec options et compatibilité ; historique conservé. |
 | openspec/specs/ | Treize exigences ajoutées et dix-huit modifiées dans cinq capacités par l'archive L2. |
-| ORCHESTRATED_CODING.md | Références concurrentes et bootstrap monitoring réconciliés, cohérence testée. |
+| ancien protocole local | Références concurrentes et bootstrap monitoring réconciliés, cohérence testée. |
 | Références distribuées | Maintenance, versions, modes et diagnostic explicités ; aucun effet implicite. |
 
 La liste détaillée issue des empreintes est dans source-final.json. Elle

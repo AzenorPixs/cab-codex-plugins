@@ -38,7 +38,7 @@ Leur résultat sera consigné après exécution, sans réarchivage.
 | DEVOPS.md | Inchangé, aucune dépendance ni changement d'environnement ; empreinte identique |
 | README.md | Comportement de reprise et version actualisés |
 | CHANGELOG.md | Entrée 0.87.2, correction et impacts consignés |
-| ORCHESTRATED_CODING.md, skill, /cab, référence de purge | Protocole distribué cohérent ; nouvelle purge réservée au nouveau RUN |
+| ancien protocole local, skill, /cab, référence de purge | Protocole distribué cohérent ; nouvelle purge réservée au nouveau RUN |
 | openspec/config.yaml | Inchangé, règles de schéma inchangées |
 | OpenSpec ciblé | Trois capacités couvertes ; le remplacement initial CISMP reste inchangé |
 

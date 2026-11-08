@@ -120,7 +120,7 @@ ne sont ni repris ni archivés.
 
 ### CAB : deux nouveaux fichiers hors archive
 
-- `/home/devops/datas/cab/ORCHESTRATED_CODING.md`
+- `/home/devops/datas/cab/ancien protocole local`
 - `/home/devops/datas/cab/tests/controller-job-restoration.test.mjs`
 
 ### Archive : six artefacts créés puis déplacés, plus ce rapport
@@ -137,16 +137,16 @@ Les chemins actifs déplacés ne sont pas comptés une seconde fois.
 
 ### Sept autres projets : 14 chemins
 
-| `/home/devops/datas/diu` | AGENTS.md mis à jour ; ORCHESTRATED_CODING.md créé |
-| `/home/devops/datas/pldap` | AGENTS.md mis à jour ; ORCHESTRATED_CODING.md créé |
-| `/home/devops/datas/pfd` | AGENTS.md mis à jour ; ORCHESTRATED_CODING.md créé |
-| `/home/devops/datas/pixs` | AGENTS.md mis à jour ; ORCHESTRATED_CODING.md créé |
-| `/home/devops/datas/tools-codex` | AGENTS.md mis à jour ; ORCHESTRATED_CODING.md créé |
-| `/home/devops/datas/template` | AGENTS.md mis à jour ; ORCHESTRATED_CODING.md créé |
-| `/home/devops/datas/pixs-template` | AGENTS.md mis à jour ; ORCHESTRATED_CODING.md créé |
+| `/home/devops/datas/diu` | AGENTS.md mis à jour ; ancien protocole local créé |
+| `/home/devops/datas/pldap` | AGENTS.md mis à jour ; ancien protocole local créé |
+| `/home/devops/datas/pfd` | AGENTS.md mis à jour ; ancien protocole local créé |
+| `/home/devops/datas/pixs` | AGENTS.md mis à jour ; ancien protocole local créé |
+| `/home/devops/datas/tools-codex` | AGENTS.md mis à jour ; ancien protocole local créé |
+| `/home/devops/datas/template` | AGENTS.md mis à jour ; ancien protocole local créé |
+| `/home/devops/datas/pixs-template` | AGENTS.md mis à jour ; ancien protocole local créé |
 
 Chaque ligne représente exactement deux fichiers : AGENTS.md existant
-modifié et ORCHESTRATED_CODING.md nouveau. Les huit AGENTS.md concernés,
+modifié et ancien protocole local nouveau. Les huit AGENTS.md concernés,
 CAB compris, référencent leur document local et précisent explicitement
 qu'il est facultatif, uniquement présent pour les projets nécessitant un
 pilotage. L'absence normale ne bloque pas un projet non piloté ou SCM direct.
@@ -228,7 +228,7 @@ La version finale demandée est 0.87.0, avec le plugin
 0.87.0+codex.20261010070714. Aucun schéma persistant ni protocole MCP
 n'est modifié. Les installations utilisateur ne sont pas mises à niveau.
 
-ORCHESTRATED_CODING.md fournit le protocole et les détails techniques :
+ancien protocole local fournit le protocole et les détails techniques :
 rôles, états, messages, interfaces HTTP/MCP/SSE, contrat durable, mandats
 unitaires, permissions, preuves, prévol, erreurs de restauration, cadences,
 compactage, récupération et clôture. Son nom est anglais, son contenu
@@ -244,7 +244,7 @@ de version de statistiques reçoit l'alignement demandé.
 | Élément | Bilan documentaire et preuve |
 |---|---|
 | AGENTS.md | Huit fichiers mis à jour : protocole extrait, référence locale, caractère facultatif et règles générales conservées |
-| ORCHESTRATED_CODING.md | Huit documents dédiés créés ; contexte local, contrats techniques et renvois vérifiés |
+| ancien protocole local | Huit documents dédiés créés ; contexte local, contrats techniques et renvois vérifiés |
 | PROJECT.md | Modification concurrente du diagramme conservée sans écriture SCM ; responsabilités toujours cohérentes |
 | TECHNICAL.md | Section 7 précise le refus de restauration et l'absence de réparation ; version et rôle du document dédié précisés |
 | BUILD.md | Section 7 alignée sur 0.87.0 ; construction et déploiement inchangés |

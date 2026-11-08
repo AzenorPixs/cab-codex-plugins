@@ -3,7 +3,7 @@
 ### Requirement: Référence locale du protocole de codage piloté
 
 Le skill CAB et ses références MUST porter le contrat commun. AGENTS.md MUST
-le résoudre sans copie locale intégrale ORCHESTRATED_CODING.md. La commande
+le résoudre sans copie locale intégrale ancien protocole local. La commande
 MUST router vers les procédures utiles, chargées à la demande. La migration
 MUST vérifier la destination des obligations avant retrait du fichier local.
 Une session SCM directe MUST NOT déclencher de pilotage, OpenCode ou de

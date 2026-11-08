@@ -16,7 +16,7 @@ non instrumentés. Aucun accès web externe ni permission native réelle.
 
 Moniteur, tests, commande et skill CAB, cadrages, OpenSpec, cartographie,
 changelog et rapport statistique. Nombre exhaustif de fichiers distincts : N/A.
-`ORCHESTRATED_CODING.md` dans CAB reste inchangé ; son référentiel est le projet
+`ancien protocole local` dans CAB reste inchangé ; son référentiel est le projet
 template et sa mise à jour relève d’un correctif distinct.
 
 ## 4. Commandes et vérifications

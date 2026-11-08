@@ -47,7 +47,7 @@ Le contrôle ciblé compare 60 empreintes initiales et six nouveaux fichiers : *
 | `.codex/commands/cab.md` | modifié |
 | `BUILD.md` | modifié |
 | `CHANGELOG.md` | modifié |
-| `ORCHESTRATED_CODING.md` | modifié |
+| `ancien protocole local` | modifié |
 | `PROJECT.md` | modifié |
 | `README.md` | modifié |
 | `TECHNICAL.md` | modifié |

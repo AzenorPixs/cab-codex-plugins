@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.29
+version: 2.4.30
 ---
 
 Réponds en français. Commande : `/CAB`, pas `/cab`. Argument : `$ARGUMENTS`.
@@ -38,7 +38,7 @@ redémarrage d'une instance conforme. Revenir ensuite à la seule sous-commande
 demandée. Status, source, stats, pause, stop, test et update n'activent pas ce
 bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
-par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas requis.
+par `references/protocol-index.md` ; `ancien protocole local` local n'est pas requis.
 
 Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md`.
 Frontières historiques : `references/historical-owner-boundaries.md`.

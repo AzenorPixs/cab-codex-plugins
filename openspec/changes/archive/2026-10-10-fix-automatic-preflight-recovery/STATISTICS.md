@@ -46,7 +46,7 @@ Un exit0 n’est pas une approbation CAB. Les tests HTTP utilisent un faux OpenC
 
 | Chemin absolu complet | État | Part des chemins |
 | --- | --- | --- |
-| /home/devops/datas/cab/ORCHESTRATED_CODING.md | Modifié | 3.8 % |
+| /home/devops/datas/cab/ancien protocole local | Modifié | 3.8 % |
 | /home/devops/datas/cab/.codex/commands/cab.md | Modifié | 3.8 % |
 | /home/devops/datas/cab/plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md | Modifié | 3.8 % |
 | /home/devops/datas/cab/plugins/cab-approval-bridge/skills/approval-bridge/references/session-reset.md | Modifié | 3.8 % |

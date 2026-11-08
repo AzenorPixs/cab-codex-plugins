@@ -69,7 +69,7 @@ de la remédiation CISMP3 ont été conservées.
 | --- | --- |
 | `TECHNICAL.md` | Modifié dans ce SCM |
 | `BUILD.md` | Modifié dans ce SCM |
-| `ORCHESTRATED_CODING.md` | Modifié dans ce SCM |
+| `ancien protocole local` | Modifié dans ce SCM |
 | `README.md` | Modifié dans ce SCM |
 | `CHANGELOG.md` | Modifié dans ce SCM |
 | `pyproject.toml` | Modifié dans ce SCM |

@@ -23,7 +23,7 @@ Validation développeur : « Je valide », couvrant correction du lecteur et ré
 | DEVOPS.md | Inchangé : outils et conteneur dédiés utilisés, aucune dépendance ajoutée. |
 | README.md | Mis à jour : compatibilité et procédure de récupération 1.10.1. |
 | CHANGELOG.md | Entrée 1.10.1 complétée. |
-| ORCHESTRATED_CODING.md | Inchangé : aucun mandat ou protocole de permission assoupli. |
+| ancien protocole local | Inchangé : aucun mandat ou protocole de permission assoupli. |
 | OpenSpec | Deux deltas ciblés, validés strictement avant archive ; exigences RFC 2119. |
 
 ## Preuves et limites

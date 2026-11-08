@@ -76,7 +76,7 @@ de permissions ou de lignes modifiées, ni un état Git.
 |---|---|
 | /home/devops/datas/cab/BUILD.md | modified |
 | /home/devops/datas/cab/CHANGELOG.md | modified |
-| /home/devops/datas/cab/ORCHESTRATED_CODING.md | modified |
+| /home/devops/datas/cab/ancien protocole local | modified |
 | /home/devops/datas/cab/PROJECT.md | modified |
 | /home/devops/datas/cab/README.md | modified |
 | /home/devops/datas/cab/TECHNICAL.md | modified |

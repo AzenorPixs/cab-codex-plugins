@@ -69,6 +69,6 @@ les sources et les empreintes ci-dessus avant modification ; un fichier ayant
 évolué est relu et réconcilié, jamais remplacé à partir de cette ancienne base.
 
 Après cette adaptation, vérifier les renvois, retirer seulement le fichier
-ORCHESTRATED_CODING.md du dépôt CAB déjà autorisé, puis terminer cohérence,
+ancien protocole local du dépôt CAB déjà autorisé, puis terminer cohérence,
 archivage, statistiques et publication SCM. Les opérations Git sur le projet
 prompts et toute propagation vers d'autres consommateurs restent distinctes.

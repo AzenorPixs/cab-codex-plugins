@@ -99,7 +99,7 @@ cache d'un fournisseur commercial : N/A, aucun comparatif facturé effectué.
 | DEVELOPMENT_MAP.md et BATCH_CODES.md | Amendements ciblés du seul change ; aucun nouveau code de lot attribué |
 | OpenSpec | Deltas de continuité, récupération, shell, concurrence, efficacité et mise à jour ; validation strict réussie ; synchronisation finale non réalisée |
 | Skill et commandes | Routeurs courts ; 77 segments des anciens supports ont une destination ; liens contrôlés ; correspondance de segments distincte d'une preuve sémantique automatique |
-| ORCHESTRATED_CODING.md local | Retiré après contrôle des 77 segments et adaptation autorisée des renvois partagés ; empreinte dans retired-protocol.json |
+| ancien protocole local local | Retiré après contrôle des 77 segments et adaptation autorisée des renvois partagés ; empreinte dans retired-protocol.json |
 | Projet prompts | 18 fichiers adaptés sur deux accords explicites ; 4 éléments OpenSpec strict valides ; contrats métier conservés, aucune publication ni autre propagation |
 | Archives/statistiques/Git | Archive et synchronisation effectuées, rapport individuel vérifié, SGS recalculé ; publication Git attestée au bilan terminal |
 

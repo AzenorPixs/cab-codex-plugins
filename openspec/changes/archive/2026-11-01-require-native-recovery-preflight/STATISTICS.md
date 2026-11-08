@@ -23,7 +23,7 @@ documentation du plugin et de la commande CAB, OpenSpec, changelog, cadrages,
 unités, manifestes et versions CAB/CABU. Le nombre exhaustif d’écritures et
 de fichiers distincts attribuables à cette session n’a pas été instrumenté.
 Les synchronisations préexistantes de `DEVOPS.md` et
-`ORCHESTRATED_CODING.md` sont restées intactes.
+`ancien protocole local` sont restées intactes.
 
 ## 4. Commandes et vérifications
 

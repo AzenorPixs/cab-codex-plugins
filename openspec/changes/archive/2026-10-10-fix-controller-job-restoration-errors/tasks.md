@@ -15,7 +15,7 @@
 - [x] 3.1 Aligner les composants, la distribution, les tests et le delta de version sur 0.87.0.
 - [x] 3.2 Vérifier syntaxe, versions, UTF-8/LF et périmètre natif sans inspection Git.
 - [x] 3.3 Valider le change et les références, avec les seules réserves strictes historiques.
-- [x] 3.4 Extraire le protocole vers ORCHESTRATED_CODING.md et vérifier les huit renvois AGENTS.md autorisés.
+- [x] 3.4 Extraire le protocole vers ancien protocole local et vérifier les huit renvois AGENTS.md autorisés.
 
 ## 4. Clôture après validation
 
@@ -34,6 +34,6 @@ consignées seulement après leur exécution effective.
 - Suite Python : 38/38 réussis après alignement des attentes de version sur 0.87.0.
 - Syntaxe : contrôleur, superviseur, deux fichiers de tests JavaScript et trois fichiers Python modifiés valides ; cache de compilation propre à SCM nettoyé.
 - Après la demande documentaire complémentaire : suite Node complète 40/40, puis suite de distribution 13/13 après la précision du caractère facultatif ; aucune attente fonctionnelle préexistante affaiblie.
-- Huit AGENTS.md et huit ORCHESTRATED_CODING.md vérifiés en UTF-8/LF ; identité locale et règles générales conservées, absence normale explicitée pour les projets sans besoin de pilotage.
+- Huit AGENTS.md et huit ancien protocole local vérifiés en UTF-8/LF ; identité locale et règles générales conservées, absence normale explicitée pour les projets sans besoin de pilotage.
 - Références avant archive : 7/7 valides en mode standard ; strict global en échec sur les treize avertissements historiques, zéro ERROR. Le delta ciblé reste strictement valide.
 - PROJECT.md a reçu un diagramme concurrent : ajout identifié par empreinte inverse, conservé sans modification par SCM.

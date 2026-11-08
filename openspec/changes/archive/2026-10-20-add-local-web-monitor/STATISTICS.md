@@ -63,7 +63,7 @@ Fichiers existants modifiés :
 - `.codex/commands/cab.md`
 - `BUILD.md`
 - `CHANGELOG.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `PROJECT.md`
 - `README.md`
 - `TECHNICAL.md`
@@ -142,7 +142,7 @@ profils et workspaces de fixtures sont nettoyés par les tests.
 | README.md | Présentation, lancement manuel, port 8790 et limites de couverture. |
 | CHANGELOG.md | Entrée 1.5.0 de préparation source ; historique 1.4.0 et antérieur conservé. |
 | openspec/specs/ | Quatre capacités existantes synchronisées et nouvelle capacité local-web-monitor. |
-| ORCHESTRATED_CODING.md | Seules références de version courante alignées ; protocole métier conservé. |
+| ancien protocole local | Seules références de version courante alignées ; protocole métier conservé. |
 
 La marketplace reste inchangée : elle référence le plugin local sans numéro
 propre. Les supports HTML/CSS sont rattachés à la release, sans version

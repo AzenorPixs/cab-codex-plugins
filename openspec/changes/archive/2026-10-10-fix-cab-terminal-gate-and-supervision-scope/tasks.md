@@ -58,7 +58,7 @@ posséder six sections, UTF-8/LF et des totaux recoupés, sans skill de pilotage
 | README.md | Contrôleur et supervision actualisés : URL base ou /status, gate et activité ciblée |
 | CHANGELOG.md | Entrée Unreleased dédiée aux trois risques, sans nouvelle release ni incrément de version |
 | openspec/specs/ | controller-transport et persistent-job-supervision synchronisées par l'archivage autorisé ; validation globale sans strict 7/7 |
-| ORCHESTRATED_CODING.md | Inchangé : mêmes décisions unitaires, gel et clôture ; aucune session pilotée déclenchée |
+| ancien protocole local | Inchangé : mêmes décisions unitaires, gel et clôture ; aucune session pilotée déclenchée |
 
 ## Preuves après archivage
 

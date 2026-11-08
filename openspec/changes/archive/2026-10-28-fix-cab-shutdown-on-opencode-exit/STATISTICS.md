@@ -39,7 +39,7 @@ Deux décisions humaines couvrent le périmètre autonome initial puis l’exten
 - PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md et les seuls amendements ciblés des deux suivis.
 - Sept canons OpenSpec synchronisés et les artefacts de cette seule archive.
 
-AGENTS.md et DEVOPS.md restent inchangés ; ORCHESTRATED_CODING.md n’est pas modifié, la session étant directe. L’archive MAI11 et ses empreintes finales sont conservées. Le paquet 1.7.1 et les preuves historiques 2.1.5 ne sont pas réécrits. Les artefacts de test détaillés restent sous output/, hors versionnement.
+AGENTS.md et DEVOPS.md restent inchangés ; ancien protocole local n’est pas modifié, la session étant directe. L’archive MAI11 et ses empreintes finales sont conservées. Le paquet 1.7.1 et les preuves historiques 2.1.5 ne sont pas réécrits. Les artefacts de test détaillés restent sous output/, hors versionnement.
 
 ## 4. Commandes
 

@@ -10,4 +10,4 @@ Distribuer en2.1.17 une référence opérationnelle unique, chargée par le skil
 
 ## Impact
 
-OpenSpec distribution, référence du plugin, skill et commande, cadrages publics nécessaires et versions communes. Aucun algorithme, route HTTP, décision, permission, état métier, template ou ORCHESTRATED_CODING.md modifié. Validation documentaire et tests existants de distribution/version ; cycle SCM, publications conditionnelles puis CABU coordonné séparément.
+OpenSpec distribution, référence du plugin, skill et commande, cadrages publics nécessaires et versions communes. Aucun algorithme, route HTTP, décision, permission, état métier, template ou ancien protocole local modifié. Validation documentaire et tests existants de distribution/version ; cycle SCM, publications conditionnelles puis CABU coordonné séparément.

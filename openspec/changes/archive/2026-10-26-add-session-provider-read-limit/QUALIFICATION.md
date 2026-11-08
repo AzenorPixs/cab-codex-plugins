@@ -21,7 +21,7 @@ Demande humaine directe : correctif via SCM, limite définie par la session de p
 | DEVOPS.md | Inchangé : runtimes et Docker autorisé employés, aucune dépendance nouvelle. |
 | README.md | API et limites locales documentées. |
 | CHANGELOG.md | Entrée 1.10.2 ajoutée, historique conservé. |
-| ORCHESTRATED_CODING.md, commande /cab et skill | Version courante et passage explicite du budget par le pilotage. |
+| ancien protocole local, commande /cab et skill | Version courante et passage explicite du budget par le pilotage. |
 | OpenSpec | Trois exigences ajoutées et mentions courantes de version synchronisées dans les deltas, validation stricte avant archive. |
 
 PREUVES-SCM.json référence 68 fichiers contrôlés par empreinte. Journaux dans output/scm/add-session-provider-read-limit. Aucune réponse /provider réelle n'est sauvegardée ou exposée, seuls des jeux synthétiques sont employés dans les tests. Les archives historiques sont préservées. Pas de test LXC physique, de nouvelle génération fournisseur ou de modification du catalogue/provider PA02.

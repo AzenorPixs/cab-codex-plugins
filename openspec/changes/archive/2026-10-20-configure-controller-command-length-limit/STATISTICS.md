@@ -48,7 +48,7 @@ Les 45 fichiers existants modifiés :
 - `openspec/specs/controller-transport/spec.md`
 - `openspec/specs/approval-workflow/spec.md`
 - `.codex/commands/cab.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `openspec/specs/codex-integration-distribution/spec.md`
 - `openspec/specs/concurrent-run-coordination/spec.md`
 - `openspec/specs/native-session-statistics/spec.md`
@@ -105,7 +105,7 @@ Bilan documentaire final :
 | README.md | Version, variable, unité UTF-16, diagnostic et compatibilité actualisés. |
 | CHANGELOG.md | Entrée 1.4.0 de préparation source ; historique 1.3.0 et antérieur préservé. |
 | openspec/specs/ | Cinq capacités synchronisées par l'archivage ; neuf spécifications valides après archive. |
-| ORCHESTRATED_CODING.md | Seul bloc de concurrence remplacé par la référence distribuée exacte avec titres décalés ; préfixe et suffixe préservés. |
+| ancien protocole local | Seul bloc de concurrence remplacé par la référence distribuée exacte avec titres décalés ; préfixe et suffixe préservés. |
 
 Le préfixe extérieur au bloc du protocole conserve l'empreinte SHA-256 `1e2ffd66d4de2a50e399b0940006b015647b6bb41afb3fc71da9f159f5acdbea`. Les archives antérieures, profils installés et projets consommateurs n'ont pas été modifiés par les éditions du change.
 

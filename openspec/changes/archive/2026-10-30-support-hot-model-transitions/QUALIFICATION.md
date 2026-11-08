@@ -47,7 +47,7 @@ Preuves ignorées : output/scm-hot-model/{native20-provenance.json,native-live-c
 | openspec/specs/ | Quatre capacités ciblées, cohérence du nouveau choix avec l’armement ordinaire immuable. |
 | Plugin/skill/commande | Référence hot-model-switch.md complète, helper provider-connect, modèle de transition et liens actifs ; alias restent délégants. |
 | concurrent-runs.md / récupération skill/commande | Deux paragraphes alignés sur le protocole0.6 préexistant, contrôle exact conservé. |
-| ORCHESTRATED_CODING.md / template | Aucune écriture par ce mandat ; empreinte du protocole racine conservée. Sa contribution préexistante non commitée est préservée et incluse dans le commit complet SCM, sans édition du template. |
+| ancien protocole local / template | Aucune écriture par ce mandat ; empreinte du protocole racine conservée. Sa contribution préexistante non commitée est préservée et incluse dans le commit complet SCM, sans édition du template. |
 
 ## Activation et application réelle
 

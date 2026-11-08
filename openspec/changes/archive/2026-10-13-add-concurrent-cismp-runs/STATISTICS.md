@@ -110,7 +110,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `cab/.codex/commands/cab.md`
 - `cab/BUILD.md`
 - `cab/CHANGELOG.md`
-- `cab/ORCHESTRATED_CODING.md`
+- `cab/ancien protocole local`
 - `cab/PROJECT.md`
 - `cab/PROMPTS/ACSMP.md`
 - `cab/PROMPTS/ACSP.md`
@@ -173,7 +173,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `cab/tests/test_crash_recovery.py`
 - `cab/tests/test_piloted_prompts.py`
 - `cab/tests/test_session_reset.py`
-- `diu/ORCHESTRATED_CODING.md`
+- `diu/ancien protocole local`
 - `diu/PROMPTS/ACSMP.md`
 - `diu/PROMPTS/ACSP.md`
 - `diu/PROMPTS/CISMP.md`
@@ -183,7 +183,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `diu/PROMPTS/RSMP.md`
 - `diu/PROMPTS/SCMP.md`
 - `diu/PROMPTS/SPCMP.md`
-- `pfd/ORCHESTRATED_CODING.md`
+- `pfd/ancien protocole local`
 - `pfd/PROMPTS/ACSMP.md`
 - `pfd/PROMPTS/ACSP.md`
 - `pfd/PROMPTS/CISMP.md`
@@ -193,7 +193,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `pfd/PROMPTS/RSMP.md`
 - `pfd/PROMPTS/SCMP.md`
 - `pfd/PROMPTS/SPCMP.md`
-- `pixs-template/ORCHESTRATED_CODING.md`
+- `pixs-template/ancien protocole local`
 - `pixs-template/PROMPTS/ACSMP.md`
 - `pixs-template/PROMPTS/ACSP.md`
 - `pixs-template/PROMPTS/CISMP.md`
@@ -203,7 +203,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `pixs-template/PROMPTS/RSMP.md`
 - `pixs-template/PROMPTS/SCMP.md`
 - `pixs-template/PROMPTS/SPCMP.md`
-- `pixs/ORCHESTRATED_CODING.md`
+- `pixs/ancien protocole local`
 - `pixs/PROMPTS/ACSMP.md`
 - `pixs/PROMPTS/ACSP.md`
 - `pixs/PROMPTS/CISMP.md`
@@ -213,7 +213,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `pixs/PROMPTS/RSMP.md`
 - `pixs/PROMPTS/SCMP.md`
 - `pixs/PROMPTS/SPCMP.md`
-- `pldap/ORCHESTRATED_CODING.md`
+- `pldap/ancien protocole local`
 - `pldap/PROMPTS/ACSMP.md`
 - `pldap/PROMPTS/ACSP.md`
 - `pldap/PROMPTS/CISMP.md`
@@ -223,7 +223,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `pldap/PROMPTS/RSMP.md`
 - `pldap/PROMPTS/SCMP.md`
 - `pldap/PROMPTS/SPCMP.md`
-- `template/ORCHESTRATED_CODING.md`
+- `template/ancien protocole local`
 - `template/PROMPTS/ACSMP.md`
 - `template/PROMPTS/ACSP.md`
 - `template/PROMPTS/CISMP.md`
@@ -233,7 +233,7 @@ de credentials sur les sources modifiées n'a trouvé aucun ajout correspondant.
 - `template/PROMPTS/RSMP.md`
 - `template/PROMPTS/SCMP.md`
 - `template/PROMPTS/SPCMP.md`
-- `tools-codex/ORCHESTRATED_CODING.md`
+- `tools-codex/ancien protocole local`
 - `tools-codex/PROMPTS/ACSMP.md`
 - `tools-codex/PROMPTS/ACSP.md`
 - `tools-codex/PROMPTS/CISMP.md`

@@ -32,7 +32,7 @@ navigateur et les deux scénarios Docker sont rapportés séparément.
 Les sources, tests, supports, commande et versions des briques sont recensés
 dans output/scm/fix-monitor-manual-view-and-task-order/changed-files-final.json.
 Les six spécifications canoniques et les artefacts de ce seul change sont inclus.
-Le fichier ORCHESTRATED_CODING.md du référentiel template est corrigé ; sa copie
+Le fichier ancien protocole local du référentiel template est corrigé ; sa copie
 CAB est identique octet pour octet. La preuve est conservée dans
 protocol-source-proof.json. AGENTS.md et DEVOPS.md gardent leurs empreintes
 initiales au premier bilan ; une génération DIU ultérieure de DEVOPS.md est

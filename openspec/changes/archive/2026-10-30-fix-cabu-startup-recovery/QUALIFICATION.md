@@ -13,7 +13,7 @@ Le budget existant waitMs,120000ms par défaut et900000ms maximum, est appliqué
 - Python80/80 ; OpenCode2.2.1 privé1/1 avec sonde sûre, conflit et récupération ciblée sans changer le PID privé.
 - Syntaxe56JavaScript/16Python, UTF-8/LF et trois copies broker identiques.
 - OpenSpec17/17 standard/strict avant archive.
-- ORCHESTRATED_CODING.md inchangé, SHA256962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4.
+- ancien protocole local inchangé, SHA256962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4.
 
 L’échec réel2.1.14 est conservé dans update-0f1b36d2-bfce-4a15-818a-e4d4330c4531. Sa reprise s’est terminée après10,329s à partir de startAll, avec le reclassement incorrect PREPARATION_FAILED. Le premier échec masque sa cause précise ; la borne10s et ce reclassement sont prouvés par le code/journal, sans attribuer arbitrairement la cause à une session. Les services restaurés2.1.13 et le broker artefact2.1.14 ont été observés conformes à previousVersions ; le raccord natif du broker restauré a été rétabli explicitement, sans modifier le journal ni les RUN. Une demande PENDING interrompue reste à réconcilier par son propriétaire après alignement ; aucun READY global ni retour au développement normal n’est déduit de cet état mixte.
 
@@ -35,7 +35,7 @@ Preuves ignorées par Git : output/scm-cabu-startup-recovery/{targeted.log,node-
 | openspec/config.yaml | Inchangé, spec-driven adapté. |
 | openspec/specs/ | Trois exigences ajoutées dans active-component-update et distribution. |
 | Skill/commande/référence CABU | Budget --wait-ms et ROLLBACK_FAILED non terminal explicités ; versions communes. |
-| ORCHESTRATED_CODING.md/template | Aucune écriture, protocole embarqué conservé. |
+| ancien protocole local/template | Aucune écriture, protocole embarqué conservé. |
 
 ## Clôture et activation
 

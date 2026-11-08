@@ -63,7 +63,7 @@ Les commandes, durées, résultats, empreintes et chemins des preuves figurent d
 | DEVOPS.md | Non écrit par SCM. Régénération DIU concurrente conservée : seul horodatage 08:33:52Z vers 10:10:46Z ; identité de contenu prouvée après normalisation de cette ligne. Outils, autorisations et navigateurs identiques. |
 | README.md | Mis à jour : réservations, réglage de cadence, état Web, sélection automatique et limites source/runtime. |
 | CHANGELOG.md | Entrée 1.10.0 de préparation source, comportements, compatibilité et absence d'activation ; historique 1.9.0 préservé. |
-| ORCHESTRATED_CODING.md | Mis à jour : référence de coordination embarquée synchronisée et politique modèle distribuée ; aucune session pilotée lancée. |
+| ancien protocole local | Mis à jour : référence de coordination embarquée synchronisée et politique modèle distribuée ; aucune session pilotée lancée. |
 | openspec/config.yaml | Inchangé : schéma spec-driven, aucune configuration supplémentaire nécessaire. |
 | openspec/specs/ | Six capacités synchronisées ; 13 exigences ajoutées et 20 modifiées ; contrôle global final après archivage réussi, 14/14 en strict. Le Purpose de coding-model-policy a été renseigné après génération. |
 | Commande, skills et références distribuées | Mis à jour : contrat de réservations, navigateurs, model-policy et installation du jeu complet ; copies de prompts consommateurs inchangées. |

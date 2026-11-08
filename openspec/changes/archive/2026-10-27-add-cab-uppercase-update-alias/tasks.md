@@ -38,7 +38,7 @@
 | README.md | Mis à jour ; syntaxe canonique, alias et installation distincte de la préparation. |
 | CHANGELOG.md | Entrée 1.10.5 de préparation source ; anciennes entrées préservées. |
 | openspec/specs/ | Cinq spécifications synchronisées ; blocs conformes aux deltas. |
-| ORCHESTRATED_CODING.md et références distribuées | Casse et version courantes actualisées ; protocole métier et formats inchangés. |
+| ancien protocole local et références distribuées | Casse et version courantes actualisées ; protocole métier et formats inchangés. |
 
 Le premier démarrage Chromium a échoué ; le second utilise un TMPDIR plus court
 sous le projet et réussit avec Chromium et Firefox. L'image Docker absente a été

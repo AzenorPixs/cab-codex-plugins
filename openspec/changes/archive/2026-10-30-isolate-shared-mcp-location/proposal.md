@@ -10,4 +10,4 @@ Source commune 2.1.14. Découverte globale sans scope de workspace ; cibles MCP 
 
 ## Impact
 
-Modules client, appelants de maintenance/job/moniteur, tests du client et banc natif privé ; trois capacités OpenSpec, documentation et versions communes. Génération, mandats, décisions, accès, RUN, secrets et processus OpenCode préservés. Les quatre désignations explicites d’un projet consommateur dans les sources courantes sont généralisées. Les identifiants officiels des dépôts de distribution et les preuves historiques restent exacts. Aucun template ni copie ORCHESTRATED_CODING.md modifié.
+Modules client, appelants de maintenance/job/moniteur, tests du client et banc natif privé ; trois capacités OpenSpec, documentation et versions communes. Génération, mandats, décisions, accès, RUN, secrets et processus OpenCode préservés. Les quatre désignations explicites d’un projet consommateur dans les sources courantes sont généralisées. Les identifiants officiels des dépôts de distribution et les preuves historiques restent exacts. Aucun template ni copie ancien protocole local modifié.

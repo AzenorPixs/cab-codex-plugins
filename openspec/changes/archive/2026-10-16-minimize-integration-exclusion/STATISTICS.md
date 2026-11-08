@@ -50,7 +50,7 @@ collecteur de pilotage n'a été activé. Les arrondis sont à une décimale.
 |---|---|
 | /home/devops/datas/cab/BUILD.md | Modification source/documentation/test vérifiée |
 | /home/devops/datas/cab/CHANGELOG.md | Modification source/documentation/test vérifiée |
-| /home/devops/datas/cab/ORCHESTRATED_CODING.md | Modification source/documentation/test vérifiée |
+| /home/devops/datas/cab/ancien protocole local | Modification source/documentation/test vérifiée |
 | /home/devops/datas/cab/PROJECT.md | Modification source/documentation/test vérifiée |
 | /home/devops/datas/cab/README.md | Modification source/documentation/test vérifiée |
 | /home/devops/datas/cab/TECHNICAL.md | Modification source/documentation/test vérifiée |

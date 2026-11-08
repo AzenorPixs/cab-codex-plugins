@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 2.4.30 - 2026-11-08
+
+- Retirer les mentions de l’ancien protocole local et neutraliser le propagateur historique ; les références CAB distribuées restent l’autorité.
+- Aligner le contrôle de version de la commande CABU sur la distribution.
+
 ## 2.4.29 - 2026-11-08
 
 - Afficher conjointement les sessions CAB directes enregistrées dans SGS et les RUN pilotés, avec diagnostic de disponibilité SGS.
@@ -1774,7 +1779,7 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
   poll_approval/get_approval après timeout MCP, corrélé à une décision locale
   rejected non consommée. Candidate, job, gel et frontières natives conservés ;
   timeout seul, polling divergent, preuve perdue et effets restent refusés.
-- Huit ORCHESTRATED_CODING.md, skill et commande CAB alignés ; arrêt ciblé
+- Huit ancien protocole local, skill et commande CAB alignés ; arrêt ciblé
   explicite du développeur distingué de retry. Briques distribuées 1.0.2 et
   cachebuster neuf, sans migration, nouvelle dépendance, installation ou
   intervention sur les RUN actifs.
@@ -1815,7 +1820,7 @@ Toutes les évolutions significatives de CAB seront documentées dans ce fichier
   tests de protocole et de refus HTTP. Aucun nouvel endpoint, schéma,
   déploiement, purge réelle ou publication.
 
-- Protocole des sessions pilotées extrait vers ORCHESTRATED_CODING.md dans
+- Protocole des sessions pilotées extrait vers ancien protocole local dans
   les huit projets et templates possédant AGENTS.md. Les règles générales
   imposent la lecture du document local ; les contrats techniques, cadences,
   mandats, récupération et clôture y sont regroupés. Les tests de distribution

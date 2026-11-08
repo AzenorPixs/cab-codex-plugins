@@ -24,7 +24,7 @@ Tests HTTP isolés : polling get/poll après timeout, PENDING puis REJECTED, rej
 | README.md | Mis à jour, récupération et distribution : règle du polling, arrêt distinct et version source 1.0.2. |
 | CHANGELOG.md | Mis à jour, Unreleased : correctif 1.0.2, limites et absence de déploiement. Aucune date de publication inventée. |
 | openspec/specs/ | Deux capacités synchronisées par l'archive, validation stricte 8/8 ; autres capacités inchangées. Anciennes exigences de distribution 1.0.0/1.0.1 décrivent désormais leurs garanties conservées dans la version courante. |
-| ORCHESTRATED_CODING.md | Huit projets/templates mis à jour : section de retry identique, clauses spécifiques conservées, quatre anciens renvois corrigés. |
+| ancien protocole local | Huit projets/templates mis à jour : section de retry identique, clauses spécifiques conservées, quatre anciens renvois corrigés. |
 | Skill source et commande /cab | Mis à jour avec le même bloc de récupération et l'autorité d'arrêt explicite ; caches installés non modifiés. |
 
 # Qualification et limites

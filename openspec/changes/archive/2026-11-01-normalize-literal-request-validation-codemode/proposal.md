@@ -19,7 +19,7 @@ tool call MCP natif est unique et que ses métadonnées portent le payload exact
 ## Out of Scope
 
 - Aucun rejeu, annulation ou remplacement d'une validation en attente.
-- Aucune modification d'un projet consommateur ou d'`ORCHESTRATED_CODING.md`.
+- Aucune modification d'un projet consommateur ou d'`ancien protocole local`.
 
 ## Acceptance Criteria
 

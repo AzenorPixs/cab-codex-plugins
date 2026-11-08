@@ -35,7 +35,7 @@ Preuves ignorées par Git : output/scm-decision-diagnostics/{unit-targeted.log,h
 | openspec/config.yaml | Inchangé, schéma spec-driven adapté. |
 | openspec/specs/ | Transport/distribution couverts par trois exigences ADDED. |
 | Skill/commande CAB | Référence decision-http-diagnostics.md avec codes, reprise du pilote et limites. |
-| ORCHESTRATED_CODING.md/template/concurrent-runs.md | Aucune écriture ; protocole embarqué et ses contrôles de concordance conservés. |
+| ancien protocole local/template/concurrent-runs.md | Aucune écriture ; protocole embarqué et ses contrôles de concordance conservés. |
 
 Protocole SHA256 inchangé :962ced4a2ded1bdb4d57c90b61ac41f28d7cb1f603ae9a82ac2dfd15cf1277d4. Aucun projet consommateur nommé dans les exemples. Aucune reconstruction de statistiques ou décision historique, aucun nouveau réglage ou dépendance.
 

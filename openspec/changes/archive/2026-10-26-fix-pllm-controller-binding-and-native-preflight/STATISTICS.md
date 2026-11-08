@@ -2,7 +2,7 @@
 
 ## 1. Statistiques générales et décisions
 
-Session directe SCM résolue depuis DEVOPS.md, index et prompt lus intégralement. Autorisation humaine vérifiée pour un change unique, catalogue/fournisseur/variante, incrément commun, tests, paquet et archive. Publication par le développeur ; installation et activation seulement après confirmation de publication et preuves de PAUSE. Instruction ultérieure : ORCHESTRATED_CODING.md corrigé uniquement dans template ; copie CAB inchangée. Modèle exact, tokens, quotas et durée intégrale : N/A, non relevés. Aucun skill de statistiques pilotées invoqué.
+Session directe SCM résolue depuis DEVOPS.md, index et prompt lus intégralement. Autorisation humaine vérifiée pour un change unique, catalogue/fournisseur/variante, incrément commun, tests, paquet et archive. Publication par le développeur ; installation et activation seulement après confirmation de publication et preuves de PAUSE. Instruction ultérieure : ancien protocole local corrigé uniquement dans template ; copie CAB inchangée. Modèle exact, tokens, quotas et durée intégrale : N/A, non relevés. Aucun skill de statistiques pilotées invoqué.
 
 ## 2. Types de messages et d'outils
 
@@ -10,7 +10,7 @@ Compteurs exhaustifs de messages/outils : N/A, absence de mesure initiale. Suite
 
 ## 3. Fichiers modifiés
 
-64 fichiers source/tests/supports modifiés avant synchronisation, référencés par empreintes dans PREUVES-SCM.json, dont le nouvel outil de préparation sans effet. Cinq spécifications canoniques synchronisées et les artefacts de ce seul change archivés. Toutes les briques versionnées et copies sont en 1.10.3. AGENTS.md, DEVOPS.md et la copie ORCHESTRATED_CODING.md sont inchangés ; le projet template n'est pas modifié. Les trois copies broker correspondent aux sources et leurs propriétaires/groupes/modes sont conservés. Aucune archive précédente ou donnée métier restaurée. Aucun Git inspecté, préparé ou publié. Lignes modifiées : N/A, aucun diff Git effectué.
+64 fichiers source/tests/supports modifiés avant synchronisation, référencés par empreintes dans PREUVES-SCM.json, dont le nouvel outil de préparation sans effet. Cinq spécifications canoniques synchronisées et les artefacts de ce seul change archivés. Toutes les briques versionnées et copies sont en 1.10.3. AGENTS.md, DEVOPS.md et la copie ancien protocole local sont inchangés ; le projet template n'est pas modifié. Les trois copies broker correspondent aux sources et leurs propriétaires/groupes/modes sont conservés. Aucune archive précédente ou donnée métier restaurée. Aucun Git inspecté, préparé ou publié. Lignes modifiées : N/A, aucun diff Git effectué.
 
 ## 4. Commandes
 

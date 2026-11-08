@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[retire-local-protocol-propagator](changes/archive/2026-11-08-retire-local-protocol-propagator/), code non attribué : archivé, tests ciblés validés ; publication et activation à vérifier.
+
 [show-direct-and-piloted-runs](changes/archive/2026-11-08-show-direct-and-piloted-runs/), code non attribué : ARCHIVÉ, tests ciblés validés ; publication et activation à vérifier séparément.
 
 [document-atelier-mcp-session-policy](changes/archive/2026-11-08-document-atelier-mcp-session-policy/), code non attribué : ARCHIVÉ, protocole et contrôles ciblés validés ; livraison et activation à vérifier séparément.

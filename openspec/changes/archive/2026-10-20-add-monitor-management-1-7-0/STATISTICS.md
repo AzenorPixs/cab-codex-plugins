@@ -21,7 +21,7 @@ L'état Git a été consulté pendant l'exploration initiale, avant lecture du p
 
 Le périmètre comprend l'interface web, les modules monitor/monitor-data et le nouveau monitor-management, la garde temporaire du contrôleur, l'identité publique contrôleur/superviseur, les tests et la distribution 1.7.0. Les sources observées par les actions du produit restent intactes ; les seuls dossiers OpenSpec écrits pendant SCM sont ses spécifications et son change dédié.
 
-AGENTS.md et DEVOPS.md restent inchangés avec empreintes conservées : les règles générales et l'environnement déclaré restent applicables. PROJECT.md décrit la gestion locale et l'indépendance Web. TECHNICAL.md précise routes, éligibilité, catalogue, garde, délais et PID. BUILD.md et la référence monitor-service ajoutent le module requis au jeu isolé de onze ressources. README.md explique les actions, limites et stockage privé ; CHANGELOG.md conserve l'historique et ajoute 1.7.0. ORCHESTRATED_CODING.md n'est aligné que sur la version de distribution. Commande, skill et références distribuées restent cohérents ; aucune propagation vers les projets consommateurs.
+AGENTS.md et DEVOPS.md restent inchangés avec empreintes conservées : les règles générales et l'environnement déclaré restent applicables. PROJECT.md décrit la gestion locale et l'indépendance Web. TECHNICAL.md précise routes, éligibilité, catalogue, garde, délais et PID. BUILD.md et la référence monitor-service ajoutent le module requis au jeu isolé de onze ressources. README.md explique les actions, limites et stockage privé ; CHANGELOG.md conserve l'historique et ajoute 1.7.0. ancien protocole local n'est aligné que sur la version de distribution. Commande, skill et références distribuées restent cohérents ; aucune propagation vers les projets consommateurs.
 
 Le moniteur conserve une limite de 2 Mio et 2000 entrées pour son catalogue ; les lignes supprimées restent des marqueurs de présentation. Un verrou abandonné ou un catalogue invalide interdit une écriture sans réinitialisation silencieuse. Le Web lancé manuellement garde un redémarrage manuel. Aucun changement du schéma opérationnel CAB, aucune nouvelle dépendance ni migration réelle.
 
@@ -33,7 +33,7 @@ Fichiers existants modifiés :
 - `.codex/commands/cab.md`
 - `BUILD.md`
 - `CHANGELOG.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `PROJECT.md`
 - `README.md`
 - `TECHNICAL.md`

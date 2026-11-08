@@ -24,7 +24,7 @@ de contrats et de récupérations valides.
   numéros de schéma et de protocole restent inchangés. Les versions
   historiques des propositions, tâches et entrées de changelog sont conservées.
 - Le développeur a remplacé le lot de complément AGENTS.md par une extraction
-  explicite vers un document dédié, nommé en anglais ORCHESTRATED_CODING.md.
+  explicite vers un document dédié, nommé en anglais ancien protocole local.
   Le protocole existant est conservé dans ce document, complété par les
   cadences, la récupération, les statistiques et les contrats techniques
   déjà définis par CAB. Les huit AGENTS.md restent centrés sur les règles

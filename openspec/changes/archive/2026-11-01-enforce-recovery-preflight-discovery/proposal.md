@@ -29,7 +29,7 @@ signature scellée continuent de refuser toute discovery après `prepare`.
 
 - aucune modification d'un projet consommateur, d'un checkpoint ou du RUN par écriture de fichier ;
 - aucune autorisation de rejouer une décision ou permission `once` ;
-- aucune modification de `ORCHESTRATED_CODING.md` ;
+- aucune modification de `ancien protocole local` ;
 - aucune création de session ou job de remplacement.
 
 ## Critères d'acceptation

@@ -29,7 +29,7 @@ priorisent pas les changes ayant le plus de tâches cochées.
 
 Reprise autorisée par le développeur : finaliser ce change et corriger tous les
 problèmes empêchant son archivage. Le complément couvre le seul fichier
-ORCHESTRATED_CODING.md du référentiel template et la synchronisation de sa copie
+ancien protocole local du référentiel template et la synchronisation de sa copie
 CAB, les clauses documentaires contradictoires de commande/skill/TECHNICAL et
 leurs tests. Aucun autre consommateur, agent actif ou service n'est modifié.
 

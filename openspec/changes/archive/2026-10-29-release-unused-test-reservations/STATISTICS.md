@@ -12,7 +12,7 @@ Lectures ciblées, éditions locales, exécution Node/Python/OpenSpec, vérifica
 
 Deux modules fonctionnels : contrôleur et registre de coordination. Trois fichiers de tests : registre, contrôleur concurrent, distribution. Nouvelle référence distribuée unused-test-reservations.md, skill et commande CAB liés. Versions communes dans plugins, scripts, copies broker, unités, commandes, pyproject.toml et attentes de tests. Cadrages PROJECT/TECHNICAL/BUILD, README et CHANGELOG actualisés. Development Map et BATCH_CODES : seule entrée provisoire du change, sans attribution de code. Six exigences ADDED et une MODIFIED synchronisées dans trois spécifications. Artefacts du seul change archivés avec les preuves de qualification.
 
-AGENTS.md, DEVOPS.md, ORCHESTRATED_CODING.md, template et contrat concurrent embarqué inchangés. Aucun secret, état privé OpenCode, runtime installé ou fichier du projet Pixs modifié. Nombre final de chemins du commit : communiqué après vérification Git, aucune mesure inventée ici.
+AGENTS.md, DEVOPS.md, ancien protocole local, template et contrat concurrent embarqué inchangés. Aucun secret, état privé OpenCode, runtime installé ou fichier du projet Pixs modifié. Nombre final de chemins du commit : communiqué après vérification Git, aucune mesure inventée ici.
 
 ## 4. Commandes et vérifications
 

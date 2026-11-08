@@ -57,7 +57,7 @@ revue propriétaire et l’application de l’action restent séparées de ce te
 ## Échecs intermédiaires et réparation
 
 L’alignement a sélectionné sources au lieu de files dans le manifeste de
-migration historique : FileNotFoundError sur ORCHESTRATED_CODING.md avant toute
+migration historique : FileNotFoundError sur ancien protocole local avant toute
 écriture de ce manifeste. Le dictionnaire files a ensuite été sélectionné
 explicitement et ses destinations actuelles rehachées. Les sources/spans
 historiques et le fichier supprimé n’ont été ni modifiés ni recréés. Versions

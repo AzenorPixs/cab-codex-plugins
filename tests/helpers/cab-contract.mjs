@@ -13,7 +13,7 @@ const readRefs=names=>names.map(name=>readRawFileSync(new URL(name+'.md',refs),'
 export function readContractFileSync(path,encoding='utf8') {
   const filename=path instanceof URL ? fileURLToPath(path) : String(path);
   const local=filename.replace(fileURLToPath(root),'');
-  if(local==='ORCHESTRATED_CODING.md')return readRefs(protocol.map(name=>'protocol-'+name));
+  if(local==='cab-distributed-protocol')return readRefs(protocol.map(name=>'protocol-'+name));
   if(local==='.codex/commands/CAB.md')return readRawFileSync(path,encoding)+'\n'+
     readRefs(protocol.map(name=>'protocol-'+name))+'\n'+readRefs(commands.map(name=>'command-'+name));
   if(local==='plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md')return readRawFileSync(path,encoding)+'\n'+
