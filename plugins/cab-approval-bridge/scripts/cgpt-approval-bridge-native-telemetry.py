@@ -13,7 +13,7 @@ CODEX_TOKENS = {"input_tokens": "tokens_input", "output_tokens": "tokens_output"
                 "cache_write_input_tokens": "tokens_cache_write",
                 "total_tokens": "tokens_total"}
 MAX_LINE = 8 * 1024 * 1024
-VERSION = "2.4.37"
+VERSION = "2.4.38"
 
 
 def codex_source(path, home=None):
@@ -200,6 +200,21 @@ def store_module_timestamp(value):
     return result.astimezone(timezone.utc)
 
 
+def filtered_release_ledger(store,project,change,ledger):
+    hidden={row[0] for row in store.db.execute('SELECT record_digest FROM released_change_records WHERE project=? AND path_digest=?',(project,store_module_digest('change:'+change)))}
+    binding_hashes={row[0] for row in store.db.execute('SELECT binding_digest FROM released_snapshot_suppressions WHERE project=? AND path_digest=?',
+                                                       (project,store_module_digest('openspec/changes/'+change+'/STATISTICS.md')))}
+    retained=[];reused=set();filtered=False
+    for record in ledger['sessions']:
+        if store_module_digest(record['id']) not in hidden:
+            retained.append(record);continue
+        native=record.get('native_telemetry',{}).get('sessions',[])
+        if any(isinstance(row,dict) and isinstance(row.get('binding'),str) and store_module_digest(row['binding']) not in binding_hashes for row in native):
+            retained.append(record);reused.add(record['id'])
+        filtered=True
+    return hidden,retained,filtered,reused
+
+
 def import_archives(store, project):
     """Importer tous les rapports existants sans créer ni modifier leurs sources."""
     import cab_sgs
@@ -231,14 +246,25 @@ def import_archives(store, project):
                 contribution = cab_sgs.extract(text)
                 marker=cab_sgs.MARKER.search(text)
                 telemetry=[]
+                import re
+                change = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", directory.name)
+                hidden={row[0] for row in store.db.execute('SELECT record_digest FROM released_change_records WHERE project=? AND path_digest=?',(str(root),store_module_digest('change:'+change)))}
+                if hidden and not marker:
+                    unavailable.append({'path':relative,'reason':'sgs-released-report-unstructured'});continue
                 if marker:
                     ledger=cab_sgs.load_json(marker[1])
-                    telemetry=[{"record_id":record["id"],"snapshot":record["native_telemetry"]} for record in ledger["sessions"] if "native_telemetry" in record]
+                    hidden,retained,filtered,_reused=filtered_release_ledger(store,str(root),change,ledger)
+                    if hidden and not retained:continue
+                    if hidden and filtered:
+                        if any(row['scope']=='cumulative' for row in retained):
+                            contribution=cab_sgs.blank();contribution['sessions']=[row['id'] for row in retained]
+                        else:
+                            contribution=cab_sgs.ledger_contribution({'format':ledger['format'],'sessions':retained})
+                    telemetry=[{"record_id":record["id"],"snapshot":record["native_telemetry"]} for record in retained if "native_telemetry" in record]
+                    telemetry,_,_=store.project_released_snapshots(str(root),'openspec/changes/'+change+'/STATISTICS.md',telemetry)
             except (cab_sgs.SGSError, UnicodeDecodeError):
                 unavailable.append({"path": relative, "reason": "sgs-archive-extraction-unavailable"})
                 continue
-            import re
-            change = re.sub(r"^\d{4}-\d{2}-\d{2}-", "", directory.name)
             store.import_archive(str(root), relative, {"change": change, "sha256": fingerprint, "contribution": contribution,"native_telemetry":telemetry})
             imported += 1
     return {"imported": imported, "unavailable": unavailable}
@@ -253,10 +279,32 @@ def import_blocked_report(store,project,change):
     if path.is_symlink() or not path.is_file() or path.stat().st_size>cab_sgs.MAX_BYTES:raise ValueError('sgs-blocked-report-required')
     raw=path.read_bytes();text=raw.decode('utf-8');contribution=cab_sgs.extract(text);marker=cab_sgs.MARKER.search(text)
     telemetry=[]
+    hidden={row[0] for row in store.db.execute('SELECT record_digest FROM released_change_records WHERE project=? AND path_digest=?',(str(root),store_module_digest('change:'+change)))}
+    if hidden and not marker:return {'path':str(path.relative_to(root)),'status':'released-change-unstructured'}
     if marker:
-        telemetry=[{'record_id':row['id'],'snapshot':row['native_telemetry']} for row in cab_sgs.load_json(marker[1])['sessions'] if 'native_telemetry' in row]
-    relative=str(path.relative_to(root));value={'project':str(root),'path':relative,'change':change,'state':'blocked',
+        ledger=cab_sgs.load_json(marker[1]);relative=str(path.relative_to(root))
+        hidden,retained,filtered,reused=filtered_release_ledger(store,str(root),change,ledger)
+        if hidden and not retained:return {'path':relative,'status':'released-change-suppressed'}
+        if hidden and filtered:
+            if any(row['scope']=='cumulative' for row in retained):
+                contribution=cab_sgs.blank();contribution['sessions']=[row['id'] for row in retained]
+            else:
+                contribution=cab_sgs.ledger_contribution({'format':ledger['format'],'sessions':retained})
+        telemetry=[{'record_id':row['id'],'snapshot':row['native_telemetry']} for row in retained if 'native_telemetry' in row]
+    relative=str(path.relative_to(root));telemetry,released_ids,released_session_digests=store.project_released_snapshots(str(root),relative,telemetry)
+    value={'project':str(root),'path':relative,'change':change,'state':'blocked',
         'sha256':hashlib.sha256(raw).hexdigest(),'contribution':contribution,'native_telemetry':telemetry}
+    if any(store_module_digest(session) in released_session_digests and session not in released_ids and session not in (reused if marker else set()) for session in contribution.get('sessions',[])):
+        raise ValueError('sgs-report-released-contribution-unclassified')
+    if released_ids:
+        if not telemetry:return {'path':relative,'status':'released-snapshot-suppressed'}
+        # Un agrégat historique ne peut être attribué aux seuls pairs restants.
+        if store.has_known_report_aggregate(contribution):raise ValueError('sgs-report-aggregate-not-separable')
+    def contains_released(node):
+        if isinstance(node,dict):return any(contains_released(k) or contains_released(v) for k,v in node.items())
+        if isinstance(node,list):return any(contains_released(v) for v in node)
+        return isinstance(node,str) and node in released_ids
+    if contains_released(value):raise ValueError('sgs-report-unclassified-target-reference')
     store.db.execute('INSERT INTO archive_reports VALUES(?,?,?,?) ON CONFLICT(project,path) DO UPDATE SET fingerprint=excluded.fingerprint,body=excluded.body',
         (str(root),relative,store_module_digest(value),json.dumps(value,ensure_ascii=False,sort_keys=True)))
     return {'path':relative,'status':'imported'}

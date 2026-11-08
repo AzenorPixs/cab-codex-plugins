@@ -10,7 +10,7 @@ import { createServer } from 'node:http';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
-import { updateComponents } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs';
+import { updateComponents, VERSION as CURRENT_VERSION } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-update.mjs';
 import { BROKER_ARTIFACT_FILES,BROKER_PAYLOAD_FILES, validateBrokerProof, inspectBrokerArtifacts, inspectBrokerProcess } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-broker-artifact-proof.mjs';
 import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 
@@ -303,7 +303,7 @@ test('déploiement complet puis deuxième invocation conforme sans nouvelle coup
   const h = await fixture(t, { realSyntax: true }); h.state.sharedMcpDirectory = '/shared-native';
   const before = await readFile(h.runtime, 'utf8');
   const result = await updateComponents(h.c, h.options);
-  assert.equal(result.status, 'completed'); assert.equal(result.version, '2.4.28');
+  assert.equal(result.status, 'completed'); assert.equal(result.version, CURRENT_VERSION);
   assert.equal(await readFile(join(h.scripts, 'cab_sgs.py'), 'utf8'),
     await readFile(join(h.c.pluginRoot, 'scripts/cab_sgs.py'), 'utf8'));
   const sgsVersion = await new Promise((resolve, reject) => {
@@ -314,9 +314,9 @@ test('déploiement complet puis deuxième invocation conforme sans nouvelle coup
     child.once('error', reject);
     child.once('close', code => code === 0 ? resolve(JSON.parse(output)) : reject(new Error(errors)));
   });
-  assert.deepEqual(sgsVersion, { version: '2.4.28', engine_format: 'cab-sgs-1' });
-  assert.deepEqual(h.state.versions, { controller: '2.4.28', supervisor: '2.4.28', monitor: '2.4.28' });
-  assert.equal(h.state.brokerVersion, '2.4.28'); assert.equal(h.state.global, null);
+  assert.deepEqual(sgsVersion, { version: CURRENT_VERSION, engine_format: 'cab-sgs-1' });
+  assert.deepEqual(h.state.versions, { controller: CURRENT_VERSION, supervisor: CURRENT_VERSION, monitor: CURRENT_VERSION });
+  assert.equal(h.state.brokerVersion, CURRENT_VERSION); assert.equal(h.state.global, null);
   assert.equal(await readFile(h.runtime, 'utf8'), before); assert.equal(await readFile(h.catalog, 'utf8'), 'ARCHIVE-SENTINEL');
   assert.equal(h.state.run.suspension.action, 'PAUSE');
   const brokerActions = h.state.events.filter((event) => ['/api/experimental/mcp/cgpt-validation/disconnect','/api/experimental/mcp/cgpt-validation/connect'].includes(event[1]));
