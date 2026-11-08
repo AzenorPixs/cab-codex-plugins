@@ -245,6 +245,16 @@ try {
       await browser.evaluate("document.querySelector('#archives-retained .danger-button').click();true");
       await wait(()=>browser.evaluate("document.querySelector('#archives-retained').textContent.includes('Aucun rapport conservé')"),browser.name+' suppression copie CAB');
       assert.equal(await readFile(join(directory,'STATISTICS.md'),'utf8'),'# Rapport synthétique consultable\n');
+      const revisedChange='fixture-revision-'+browser.name.toLowerCase(),revisedDir=join(root,'openspec/changes/archive/2026-11-06-'+revisedChange);
+      await mkdir(revisedDir,{recursive:true});const revisedReport=join(revisedDir,'STATISTICS.md');await writeFile(revisedReport,'Ancien rapport\n');
+      const revisedScope={workspace:root,changeId:revisedChange,runIds:['REVISION-FIXTURE']};
+      const beforeRevision=repository.retain(revisedScope,{reportPaths:[revisedReport],closed:true,branch:'TERMINÉ'});
+      await writeFile(revisedReport,'Rapport complété\n');const afterRevision=repository.retain(revisedScope,{reportPaths:[revisedReport],closed:true,branch:'TERMINÉ'});
+      await browser.evaluate("document.querySelector('#monitor-nav').click();true");
+      await wait(()=>browser.evaluate("location.hash==='#monitor'"),browser.name+' retour moniteur');
+      await browser.evaluate("document.querySelector('#archives-nav').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#archives-retained').textContent.includes('copie complétée')&&document.querySelector('#archives-retained').textContent.includes('copie antérieure')"),browser.name+' copies identifiées');
+      repository.remove(beforeRevision.archiveId,beforeRevision.fingerprint);repository.remove(afterRevision.archiveId,afterRevision.fingerprint);
       await finishUnit(browser,['SGS_ONLY','CCAB','ARCHIVE_CONTENT','DEVELOPER_DELETE_SOURCE_PRESERVED']);continue;
     }
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096')"), true);

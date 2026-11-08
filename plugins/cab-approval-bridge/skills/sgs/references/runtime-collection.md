@@ -70,9 +70,12 @@ Avant le rapport terminal, terminer la collecte et appeler `freeze --project
 Générer ensuite le rapport avec son annexe native et le vérifier. Après archive,
 ou arrêt explicite pour dépendance avec BLOCKERS.md, appeler `finalize --project
 /racine --change <change> --run <RUN> --session <session-native> --branch
-TERMINÉ|BLOQUÉ --receipt-id <identité-stable>`. Ce nettoyage refuse une fenêtre
-statistique ouverte ou un autre RUN/session du même change, vérifie le rapport
-via SGS, conserve les copies consultables puis nettoie le seul atelier propre.
+TERMINÉ|BLOQUÉ --receipt-id <identité-stable>`. Ce nettoyage cible la seule liaison directe et conserve les autres liaisons,
+checkpoints et incidents. Il refuse une fenêtre cible ouverte, une outbox
+cible non drainée ou un pair actif sur le même RUN. Il conserve aussi le refus
+en présence d’un historique piloté du même RUN, tant que l’autorité sur
+l’atelier partagé n’est pas qualifiée. SGS vérifie le rapport durable, puis
+seul l’atelier propre est nettoyé.
 Une reprise conserve les mêmes identités et le même reçu. L’archive source et
 les ateliers des autres sessions restent présents.
 
