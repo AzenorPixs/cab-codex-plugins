@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.24 - 2026-11-08
+
+- Qualifier le retrait d’un tour terminé sans effet, rejeté avant le tour suivant et confirmé ensuite par un poll natif exact.
+
 ## 2.4.23 - 2026-11-08
 
 - Aligner la commande SGS sur la distribution et vérifier les versions des commandes CAB, CABU, SGS et CCAB avant livraison.
