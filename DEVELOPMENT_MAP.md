@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Rejet après tour clos — SCM 2.4.24
+
+[qualify-rejected-closed-turn](openspec/changes/archive/2026-11-08-qualify-rejected-closed-turn/), code non attribué : qualification d’un tour clos sans effet avec rejet avant le tour suivant et confirmation native ultérieure ; tests ciblés réussis. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
+
 ## Alignement des commandes — SCM 2.4.23
 
 [align-sgs-command-release](openspec/changes/archive/2026-11-08-align-sgs-command-release/), code non attribué : frontmatter SGS aligné et contrôle des quatre commandes ; tests ciblés réussis le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.

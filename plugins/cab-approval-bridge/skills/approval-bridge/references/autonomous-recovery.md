@@ -18,6 +18,13 @@ Un journal synchronisé sans événements pertinents est une lacune, pas NO_EFFE
 `unresolvedOperationCount` et `hasUnresolvedOperation` incluent le registre durable.
 Un agrégat historique non nul ne gèle pas les ressources prouvées compatibles.
 
+Un tour qui s’est terminé sans effet après une réponse PENDING peut être
+qualifié si son rejet durable a été enregistré avant le tour utilisateur
+suivant et qu’un poll natif ultérieur confirme la même identité REJECTED.
+La frontière originale, l’absence de reprise de son parent et les deux lectures
+stables restent obligatoires ; les tours ultérieurs et leurs effets restent
+conservés, sans être attribués à cette validation.
+
 | Frontière | Suite dans le mandat |
 |---|---|
 | Politique absente | L’orchestrateur qualifie sa délégation et installe une policy neuve liée au RUN/contexte/version et aux ressources ; aucun nouveau consentement humain si le mandat couvre déjà l’action. |

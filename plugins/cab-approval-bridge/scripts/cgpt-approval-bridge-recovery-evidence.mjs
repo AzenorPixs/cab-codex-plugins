@@ -2,7 +2,7 @@ import {resolve} from 'node:path';
 import { createHash } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.4.23';
+export const VERSION = '2.4.24';
 export const commandDigest = command => createHash('sha256').update(command).digest('hex');
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -310,12 +310,56 @@ export function reviewedTerminalProof(parts, approval, review, run, sameIdentity
 // This proof retires coordination only; it never authorizes the refused input.
 // A rejected coordination can be retired on its complete native user-turn graph.
 // Later turns are retained in the sealed transcript; they are not declared effect-free.
+function rejectedAfterClosedTurn(messages, operation, approval, requestPart, noEnvironment, sameIdentity, decisionAt) {
+  const at=messages.findIndex(message=>message.parts?.includes(requestPart)), first=messages[at], parent=first?.info?.parentID;
+  if(at<0||first.info?.role!=='assistant'||!id(first.info.id)||first.info.sessionID!==operation.sessionId||!id(parent)||
+      first.info.finish!=='tool-calls'||requestPart.tool!=='cgpt-validation_request_validation'||
+      requestPart.executed!==false||requestPart.state?.status!=='completed'||requestPart.state.metadata?.truncated!==false||
+      first.parts.filter(part=>part.type==='tool').length!==1||!noEnvironment(requestPart))return null;
+  let initial;try{initial=JSON.parse(requestPart.state.output);}catch{return null;}
+  if(initial?.status!=='PENDING'||!sameIdentity(initial))return null;
+  const users=messages.slice(0,at).filter(m=>m.info?.role==='user'&&m.info.id===parent&&m.info.sessionID===operation.sessionId);
+  if(users.length!==1||messages.slice(at).some(m=>m.info?.sessionID!==operation.sessionId||!Array.isArray(m.parts)||m.info?.role==='user'&&m.info.id===parent)||
+      !Number.isFinite(users[0].info.time?.created)||!Number.isFinite(first.info.time?.created)||
+      !Number.isFinite(first.info.time?.completed)||users[0].info.time.created>first.info.time.created||
+      first.info.time.completed<first.info.time.created)return null;
+  const next=messages.findIndex((m,index)=>index>at&&m.info?.role==='user');
+  if(next<0||messages[next].info.sessionID!==operation.sessionId||!Number.isFinite(messages[next].info.time?.created))return null;
+  const between=messages.slice(at+1,next), assistants=between.filter(m=>m.info?.role==='assistant');
+  if(assistants.length!==1||!Array.isArray(assistants[0].parts)||!id(messages[next].info.id))return null;
+  const terminal=assistants[0], info=terminal.info;
+  if(!id(info.id)||info.parentID!==parent||info.sessionID!==operation.sessionId||info.finish!=='stop'||
+      !Number.isFinite(info.time?.created)||!Number.isFinite(info.time?.completed)||
+      info.time.created<first.info.time.completed||info.time.completed<info.time.created||
+      info.time.completed>decisionAt||decisionAt>messages[next].info.time.created||
+      terminal.parts.some(part=>part.type==='tool')||
+      between.some(m=>m!==terminal&&(!['idle','system'].includes(m.info?.role)||m.info.sessionID!==operation.sessionId||m.parts?.length))||
+      messages.slice(next).some(m=>m.info?.role==='assistant'&&m.info.parentID===parent))return null;
+  const confirmations=[];
+  for(const message of messages.slice(next))for(const part of message.parts||[]) {
+    if(!['cgpt-validation_get_approval','cgpt-validation_poll_approval'].includes(part.tool)||part.executed!==false||
+       part.state?.status!=='completed'||part.state.metadata?.truncated!==false||!id(part.callID)||
+       part.state.input?.approval_id!==approval.approval_id||message.info?.role!=='assistant'||message.info.sessionID!==operation.sessionId||!id(message.info.id)||
+       !Number.isFinite(message.info.time?.created)||!Number.isFinite(message.info.time?.completed)||
+       message.info.time.created<messages[next].info.time.created||message.info.time.completed<message.info.time.created||message.info.time.completed<decisionAt)continue;
+    let result;try{result=JSON.parse(part.state.output);}catch{continue;}
+    if(result?.status==='REJECTED'&&sameIdentity(result))confirmations.push({messageId:message.info.id,callId:part.callID,partDigest:digest(part)});
+  }
+  if(!confirmations.length)return null;
+  return {kind:'REJECTED_UNISSUED_TERMINAL_TURN',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',
+    evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW',terminalTurn:{parentMessageId:parent,requestMessageId:first.info.id,
+      terminalMessageId:info.id,nextUserMessageId:messages[next].info.id,rejected:confirmations[0],decisionAt,
+      rejectionObservedLater:true,scopeDigest:digest(messages.slice(at,next)),laterMessagesDigest:digest(messages.slice(next)),wholeTranscriptDigest:digest(messages)}};
+}
+
 export function rejectedUnissuedTurnProof(messages, operation, approval, requestPart, noEnvironment, sameIdentity) {
   if (!Array.isArray(messages) || operation?.decision?.status !== 'rejected' || operation.native ||
       operation.nativeResult || operation.onceAcknowledged || operation.requestId !== approval?.requestId ||
       operation.sessionId !== approval.session_id || typeof sameIdentity !== 'function') return null;
   const decisionAt = Date.parse(operation.decision.recordedAt);
   if (!Number.isFinite(decisionAt)) return null;
+  const delayed=rejectedAfterClosedTurn(messages,operation,approval,requestPart,noEnvironment,sameIdentity,decisionAt);
+  if(delayed)return delayed;
   const at = messages.findIndex(message => message.parts?.includes(requestPart)), first = messages[at];
   const parent = first?.info?.parentID;
   if (at < 0 || first.info.role !== 'assistant' || !id(parent) || first.info.sessionID !== operation.sessionId) return null;

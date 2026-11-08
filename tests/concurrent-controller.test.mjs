@@ -5034,19 +5034,23 @@ for(const variant of ['valid','part-changed','unknown-call'])test('retrait HTTP 
  const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(op.state,variant==='valid'?'CANCELLED':'PREPARED');assert.equal(h.native.replies.length,before);
 });
 
-for(const variant of ['valid','effect-before-rejection','changed-second-boundary'])test('rejet HTTP : séquence native close et suffixe conservé '+variant,async t=>{
+for(const variant of ['valid','delayed','effect-before-rejection','changed-second-boundary'])test('rejet HTTP : séquence native close et suffixe conservé '+variant,async t=>{
  const {h,run,approval,base}=await unissuedWithdrawalFixture(t,'rejected');
  const source=h.native.messages[run.sessionId].at(-1).parts[0],op=(await h.get('/runs')).body.coordination.operations[approval.operation_id],stamp=Date.parse(op.decision.recordedAt);
  const user=(id,created)=>({info:{id,role:'user',sessionID:run.sessionId,time:{created}},parts:[]});
  const assistant=(id,parentID,created,completed,finish,parts)=>({info:{id,role:'assistant',sessionID:run.sessionId,parentID,finish,time:{created,completed}},parts});
  const future={type:'tool',tool:'shell',executed:false,callID:'later-independent-call',state:{status:'completed',input:{command:approval.commands[0]},metadata:{status:'completed',exit:0},output:'later-native-result',time:{start:stamp+7,end:stamp+8}}};
  h.native.messages[run.sessionId]=[user('msg_user_rejected',stamp-100),assistant('msg_request_rejected','msg_user_rejected',stamp-50,stamp+1,'tool-calls',[source]),assistant('msg_stop_rejected','msg_user_rejected',stamp+2,stamp+3,'stop',[]),user('msg_later_user',stamp+4),assistant('msg_later_assistant','msg_later_user',stamp+5,stamp+9,'stop',[future])];
+ if(variant==='delayed'){
+  source.executed=false;source.state.metadata={truncated:false};source.state.output=JSON.stringify({...approval,status:'PENDING'});
+  h.native.messages[run.sessionId]=[user('msg_user_rejected',stamp-100),assistant('msg_request_rejected','msg_user_rejected',stamp-90,stamp-80,'tool-calls',[source]),assistant('msg_stop_rejected','msg_user_rejected',stamp-70,stamp-60,'stop',[]),user('msg_later_user',stamp+4),assistant('msg_later_assistant','msg_later_user',stamp+5,stamp+10,'tool-calls',[future,{type:'tool',tool:'cgpt-validation_poll_approval',executed:false,callID:'later-rejection',state:{status:'completed',input:{approval_id:approval.approval_id},output:JSON.stringify({...approval,status:'REJECTED'}),metadata:{truncated:false}}}])];
+ }
  if(variant==='effect-before-rejection')h.native.messages[run.sessionId][1].parts.push({...structuredClone(future),callID:'target-environmental-call'});
  const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body,plan=(await h.get(base+'/recovery')).body;
  if(variant==='changed-second-boundary'){let reads=0;h.native.onRequest=async path=>{if(path==='/session/'+run.sessionId+'/message'&&++reads===2)future.state.output='changed-later-boundary';};}
  const payload={actionId:'rejected-native-turn',ownerId:run.ownerId,policyId:'withdraw-policy',boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/native-rejected-turn']}};
- const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,variant==='valid'?200:409,JSON.stringify(result));
- const after=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(after.state,variant==='valid'?'CANCELLED':'PREPARED');assert.equal(after.native,null);assert.equal(after.nativeResult,null);assert.equal(h.native.replies.length,0);
+ const success=['valid','delayed'].includes(variant),result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,success?200:409,JSON.stringify(result));
+ const after=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];assert.equal(after.state,success?'CANCELLED':'PREPARED');assert.equal(after.native,null);assert.equal(after.nativeResult,null);assert.equal(h.native.replies.length,0);
  if(variant==='valid'){
   const receipts=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory),'recovery-policies.json'))).value.receipts;
   const proof=receipts.find(r=>r.actionId===payload.actionId).observation;assert.equal(proof.kind,'REJECTED_UNISSUED_TERMINAL_TURN');assert.ok(proof.terminalTurn.laterMessagesDigest);
