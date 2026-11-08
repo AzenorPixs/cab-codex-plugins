@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 2.4.31 - 2026-11-08
+
+- Accélérer la lecture des sessions directes du moniteur en évitant le recalcul des statistiques.
+- Retirer deux copies locales obsolètes du protocole.
+
 ## 2.4.30 - 2026-11-08
 
 - Retirer les mentions de l’ancien protocole local et neutraliser le propagateur historique ; les références CAB distribuées restent l’autorité.

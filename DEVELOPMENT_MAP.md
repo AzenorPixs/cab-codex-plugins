@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Observation SGS légère — SCM 2.4.31
+
+[optimize-direct-session-observation](openspec/changes/archive/2026-11-08-optimize-direct-session-observation/), code non attribué : tests ciblés validés, publication et activation à vérifier.
+
 ## Retrait de la propagation historique — SCM 2.4.30
 
 [retire-local-protocol-propagator](openspec/changes/archive/2026-11-08-retire-local-protocol-propagator/), code non attribué : tests ciblés validés ; livraison et activation à vérifier.
