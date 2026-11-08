@@ -2,7 +2,7 @@
 import {lstatSync,readdirSync,readFileSync,realpathSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
-export const VERSION='2.4.28';
+export const VERSION='2.4.29';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 function regular(path){const s=lstatSync(path);if(!s.isFile()||s.isSymbolicLink()||s.size>4*1024*1024)fail('dependency-openspec-source-unsafe');return readFileSync(path,'utf8');}
 export function dependencyAuthority(project,changeId){

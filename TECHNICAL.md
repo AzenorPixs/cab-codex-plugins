@@ -1,5 +1,7 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Le Web Monitor associe les RUN pilotés aux sessions CAB directes enregistrées dans SGS pour le même projet. Une source SGS indisponible ne masque pas les RUN pilotés ; les identités et les modes restent distincts.
+
 Lors d'un redémarrage OpenCode, le suivi des processus suspend les effets puis
 vérifie l'identité, la location MCP et les sessions avant de rouvrir chaque
 RUN vérifié. Les reçus historiques et essais d'atelier sont examinés selon les

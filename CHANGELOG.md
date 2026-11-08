@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.29 - 2026-11-08
+
+- Afficher conjointement les sessions CAB directes enregistrées dans SGS et les RUN pilotés, avec diagnostic de disponibilité SGS.
+
 ## 2.4.28 - 2026-11-08
 
 - Documenter le diagnostic des méthodes d’atelier masquées par la politique du SID et leur autorisation ciblée.

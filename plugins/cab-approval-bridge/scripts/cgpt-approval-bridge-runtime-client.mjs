@@ -6,7 +6,7 @@ import { join,isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import {randomUUID} from 'node:crypto';
 
-export const VERSION = '2.4.28';
+export const VERSION = '2.4.29';
 const key = /^[A-Za-z0-9][A-Za-z0-9_.:/+@-]{0,255}$/;
 export const stateRootDirectory=home=>{
   const root=process.env.OC_Codex_RUNTIME_STATE_ROOT||process.env.OC_CGPT_RUNTIME_STATE_ROOT||join(home||homedir(),'.local/state');

@@ -60,7 +60,7 @@ l’import runtime n’est pas une autorisation de REBUILD global.
 
 `node cgpt-approval-bridge-direct.mjs start --project /racine --change <change>
 --run <RUN>` est l’opt-in CAB direct. Il lie la véritable session Codex à SGS,
-crée son atelier et ouvre son moniteur dédié sans OpenCode. `track` raccorde
+crée son atelier et ouvre son moniteur dédié sans OpenCode. Le moniteur piloté du même projet affiche également cette session parmi les RUN, avec son mode et son identité propres. `track` raccorde
 seulement la télémétrie dans un mandat de suivi existant, sans activer CAB direct.
 Le fournisseur, le modèle et le raisonnement proviennent de la télémétrie native
 quand ils sont exposés ; aucun texte de conversation n’est transmis à SGS.

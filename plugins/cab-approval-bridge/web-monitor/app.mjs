@@ -12,6 +12,7 @@ function node(tag, className, content) {
 }
 let model = null;
 let selectedRun = null;
+const runSelection = run => JSON.stringify([run.mode === 'direct' ? 'direct' : 'piloted', run.runId, run.sessionId]);
 let selectedChange = null;
 let view = 'runs';
 let connected = false;
@@ -96,7 +97,7 @@ function isStale(name, at = Date.parse(model.generatedAt)) {
   return !source?.available || !source.lastSuccessAt || at - Date.parse(source.lastSuccessAt) > model.configuration.staleMs;
 }
 function runState(run) {
-  if(run.mode==='direct')return [run.state==='RELEASED'?'CLOS':'DIRECT','neutral'];
+  if(run.mode==='direct')return [isStale('sgs')?'UNKNOWN':run.state==='RELEASED'?'CLOS':'DIRECT','neutral'];
   const state = isStale('controller') || (run.runId !== 'legacy' && run.state && isStale('registry')) ? 'UNKNOWN' : run.operationalState || 'UNKNOWN';
   return [state, ({ RUNNING: 'good', WAITING: 'warn', PAUSED: 'warn', STOPPED: 'neutral', BLOCKED: 'bad',
     DONE: 'good', DEGRADED: 'warn', RELEASED: 'neutral', IDLE: 'neutral', UNKNOWN: 'neutral' })[state] || 'neutral'];
@@ -111,7 +112,7 @@ function progress(change) {
   box.append(title, bar); return box;
 }
 function changeFor(id) { return model.changes.changes.find((change) => change.changeId === id); }
-const terminalRun = (run) => ['RELEASED', 'DELIVERED', 'ABANDONED'].includes(run.state) || run.gate.status === 'VALIDATED';
+const terminalRun = (run) => ['RELEASED', 'DELIVERED', 'ABANDONED'].includes(run.state) || run.gate?.status === 'VALIDATED';
 function renderHealth() {
   const holder = $('#health');
   const focus = holder.contains(document.activeElement) ? document.activeElement.getAttribute('aria-label') : null;
@@ -194,7 +195,7 @@ function renderWork() {
   for (const value of values) {
     const isRun = view === 'runs';
     const change = isRun ? changeFor(value.changeId) : value;
-    const row = node('tr', (isRun ? selectedRun === value.runId : selectedChange === value.changeId) ? 'selected' : '');
+    const row = node('tr', (isRun ? selectedRun === runSelection(value) : selectedChange === value.changeId) ? 'selected' : '');
     if (isRun) {
       row.dataset.state = runState(value)[0];
       if (row.dataset.state === 'WAITING') row.classList.add('run-waiting');
@@ -204,9 +205,9 @@ function renderWork() {
     }
     const identity = node('td'); const button = node('button', isRun ? 'run-button' : 'change-button', isRun ? value.runId : value.changeId);
     button.dataset[isRun ? 'run' : 'change'] = isRun ? value.runId : value.changeId;
-    button.addEventListener('click', () => { if (isRun) selectedRun = value.runId; else selectedChange = value.changeId;
+    button.addEventListener('click', () => { if (isRun) selectedRun = runSelection(value); else selectedChange = value.changeId;
       tasksOpen = false; cycleOpen = false; historyOpen = false; render(); });
-    identity.append(button, node('div', 'subtext', isRun ? value.changeId || 'Change non observé' : value.title)); row.append(identity);
+    identity.append(button, node('div', 'subtext', isRun ? (value.changeId || 'Change non observé') + (value.mode === 'direct' ? ' · Direct' : ' · Piloté') : value.title)); row.append(identity);
     row.append(node('td', 'lot-code', (isRun ? changeFor(value.changeId) : value)?.lotCode || ''));
     const state = node('td'); state.append(isRun ? badge(...runState(value)) : badge(value.location === 'archived' ? 'Archivé' : value.location === 'active' ? 'Actif' : 'Indisponible', 'neutral')); row.append(state);
     if (isRun) {
@@ -278,7 +279,7 @@ function cycleDetails(run) {
   return section;
 }
 function renderDetail() {
-  const holder = $('#detail'); const run = model.runs.find((value) => value.runId === selectedRun);
+  const holder = $('#detail'); const run = model.runs.find((value) => runSelection(value) === selectedRun);
   const change = view === 'changes' ? changeFor(selectedChange) : run ? changeFor(run.changeId) : null;
   $('#detail-title').textContent = view === 'runs' ? 'Détail du RUN' : 'Détail du change';
   holder.replaceChildren();
@@ -318,7 +319,7 @@ function render() {
   const focusedRun = document.activeElement?.dataset.run;
   const focusedChange = document.activeElement?.dataset.change;
   const focusedAction = document.activeElement?.classList.contains('small-action') ? document.activeElement.getAttribute('aria-label') : null;
-  if (!selectedRun && model.runs.length) selectedRun = model.runs[0].runId;
+  if (!selectedRun && model.runs.length) selectedRun = runSelection(model.runs[0]);
   if (!selectedChange && model.changes.changes.length) selectedChange = model.changes.changes[0].changeId;
   $('#updated').textContent = 'Dernière vue · ' + date(model.generatedAt, true);
   $('#cadence').textContent = 'Collecte ' + model.configuration.pollMs / 1000 + ' s · vue ' + $('#refresh-interval').selectedOptions[0].textContent;

@@ -1,5 +1,7 @@
 # Codex Approval Bridge — CAB
 
+Le Web Monitor présente les sessions CAB directes et les RUN pilotés du même projet, avec leur mode et leur identité.
+
 CAB coordonne un agent orchestrateur et un agent de codage OpenCode : mandats,
 validations, accès aux ressources, reprise des échanges et suivi des sessions.
 Il fournit aussi des statistiques et une file d’incidents utilisables en
