@@ -9,7 +9,7 @@ import {ensureProjectTestRoot,changeTestArea,cleanTestArea} from './cgpt-approva
 import {startDirectMonitor} from './cgpt-approval-bridge-direct-monitor.mjs';
 import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bridge-archives.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
-export const VERSION='2.4.22';
+export const VERSION='2.4.23';
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 

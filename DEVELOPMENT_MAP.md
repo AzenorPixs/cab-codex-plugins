@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Alignement des commandes — SCM 2.4.23
+
+[align-sgs-command-release](openspec/changes/archive/2026-11-08-align-sgs-command-release/), code non attribué : frontmatter SGS aligné et contrôle des quatre commandes ; tests ciblés réussis le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
+
 ## Lecture de l’atelier du RUN — SCM 2.4.22
 
 [allow-owned-atelier-read-scope](openspec/changes/archive/2026-11-08-allow-owned-atelier-read-scope/), code non attribué : lecture canonique propre dans une extension compatible ; tests ciblés validés le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
