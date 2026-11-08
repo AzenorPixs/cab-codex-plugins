@@ -18,7 +18,7 @@ import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 import { activateRuntimeServices } from './cgpt-approval-bridge-runtime-install.mjs';
 import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-export const VERSION = '2.4.31';
+export const VERSION = '2.4.32';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');

@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.32 - 2026-11-08
+
+- Retirer les copies et instantanés historiques concernés par le protocole local retiré.
+
 ## 2.4.31 - 2026-11-08
 
 - Accélérer la lecture des sessions directes du moniteur en évitant le recalcul des statistiques.
