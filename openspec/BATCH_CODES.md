@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[recover-frozen-owner-sentinel-compat](changes/archive/2026-11-08-recover-frozen-owner-sentinel-compat/), code non attribué : archivé ; reprise réelle, publication et activation à vérifier.
+
 [exclude-sentinel-identities-from-change-erasure](changes/archive/2026-11-08-exclude-sentinel-identities-from-change-erasure/), code non attribué : archivé ; publication et reprise à vérifier.
 
 [document-sgs-native-snapshot-revision](changes/archive/2026-11-08-document-sgs-native-snapshot-revision/), code non attribué : archivé ; distribution à vérifier.

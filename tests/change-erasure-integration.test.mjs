@@ -9,7 +9,7 @@ import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt
 import { ChangeErasureManager, VERSION } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs';
 import { ErasureTransaction, erasureReferences } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
 import { cleanupChange } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-cleanup.mjs';
-import { TransportHandoff } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
+import { TransportHandoff,canonicalContinuityDigest } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import { writeRuntimeJson, readRuntimeJson } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
 const source=resolve('plugins/cab-approval-bridge/broker');
@@ -106,6 +106,47 @@ test('Reprise2.4.1 : runtime2.4.0 explicite, même reçu, certificat distinct et
  const final=await cleanupChange({...input,action:'finalize',certificate},f.dependencies);
  assert.equal(final.status,'PURGED');assert.equal(final.transactionId,plan.transactionId);
  assert.equal((await cleanupChange({...input,action:'verify',certificate},f.dependencies)).status,'PURGED');
+});
+
+test('reprise owner 2.4.35 : aucun effet sans reçu de commit du nouveau broker',async t=>{
+ const f=await fixture(t,'TERMINÉ',{runtimeVersion:'2.4.35'});
+ const plan=await f.manager.prepare({changeId:f.target.changeId,ownerId:'owner',branch:'TERMINÉ',retainedSessionId:null,evidence:['fixture-business-report-reviewed'],dependencyEvidence:null});
+ f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
+ const tx=new ErasureTransaction(f.state,{createKey:false}),value=tx.load();
+ tx.save({...value,phase:'FREEZING',brokerTransport:'owner-local-v1',brokerPid:99999999,
+   scope:{...value.scope,closureAuthority:'authoritative-retired-run-batch-v1',protectedRunIds:[f.peer.runId]},
+   ownerReceipts:{prepare:{state:'PREPARED',uid:process.getuid(),pid:99999999,instanceId:'old-instance'}}});
+ const before=readFileSync(tx.path);
+ await assert.rejects(cleanupChange({workspace:f.workspace,action:'execute',transactionId:plan.transactionId,runtimeVersion:'2.4.35'},f.dependencies),/erasure-owner-rebind-proof-invalid/);
+ assert.deepEqual(readFileSync(tx.path),before);assert.equal(f.serviceCalls.length,0);
+});
+
+test('reprise owner 2.4.35 : même reçu, broker corrigé et pair conservé',async t=>{
+ const f=await fixture(t,'TERMINÉ',{runtimeVersion:'2.4.35'});
+ const plan=await f.manager.prepare({mode:'retired-runs-v1',runIds:[f.target.runId],protectedRunIds:[f.peer.runId],ownerId:'owner',evidence:['fixture-reviewed']});
+ f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
+ const tx=new ErasureTransaction(f.state,{createKey:false}),value=tx.load(),oldPid=99999999,newPid=99999998;
+ tx.save({...value,phase:'FREEZING',brokerTransport:'owner-local-v1',brokerPid:oldPid,transportTransactionId:'continuity-fixture',sharedDirectory:f.workspace,
+   componentPids:{controller:10001,supervisor:10002,monitor:10003},
+   ownerReceipts:{prepare:{state:'PREPARED',uid:process.getuid(),pid:oldPid,instanceId:'old-instance',scopeDigest:canonicalContinuityDigest(value.scope)},
+     commit:{state:'APPLIED',uid:process.getuid(),pid:newPid,instanceId:'new-instance',scopeDigest:canonicalContinuityDigest(value.scope)}}});
+ const originalHttp=f.dependencies.http;let connected=true;
+ f.native.mcp=async()=>({'cgpt-validation':{status:connected?'connected':'disabled'}});
+ f.native.disconnectMcp=async()=>{connected=false};f.native.connectMcp=async()=>{connected=true};
+ f.dependencies.http=async(base,path,body)=>{
+   if(path==='/cleanup/owner/action')return {accepted:true};
+   if(path==='/cleanup/status')return {brokerPid:newPid,brokerInstanceId:'new-instance',
+     ownerStates:{commit:'APPLIED',verify:'VERIFIED',finalize:'PURGED'},ownerInstances:{commit:'new-instance',verify:'new-instance',finalize:'new-instance'}};
+   if(path==='/status'&&base.endsWith(':8788'))return {workspace:f.workspace,version:'2.4.35',
+     runs:{[f.peer.runId]:f.peer},brokerReadiness:{ready:true,server_version:VERSION,broker_process:{pid:newPid},instance_id:'new-instance',checked_at:new Date().toISOString()}};
+   return originalHttp(base,path,body);
+ };
+ const input={workspace:f.workspace,transactionId:plan.transactionId,runtimeVersion:'2.4.35'};
+ const certificate=await cleanupChange({...input,action:'execute'},f.dependencies);
+ assert.equal(certificate.recoveryCompatibility.profile,'frozen-owner-sentinel-v1');
+ assert.equal(certificate.recoveryCompatibility.ownerRebound.brokerPid,newPid);
+ assert.equal((await cleanupChange({...input,action:'finalize',certificate},f.dependencies)).status,'PURGED');
+ assert.equal(f.getRegistry().runs.get(f.peer.runId).state,'RESERVED');
 });
 
 test('Récupération de préparation : nouveaux PID vérifiés sans projection ni rollback',async t=>{

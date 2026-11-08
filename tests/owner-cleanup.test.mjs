@@ -33,6 +33,17 @@ test('owner local : aucun finalize avant commit et aucun scope substitué',t=>{c
  assert.equal(JSON.parse(readFileSync(f.file)).rows.length,2);
 });
 
+test('owner local : lot historique avec sentinelle conserve les objets étrangers',t=>{
+ const f=fixture(t),historic={runId:'run-historic-foreign',accessId:'null'},protectedPeer={...f.peer,accessId:'null'};
+ const target={runId:f.scope.runIds[0],changeId:f.scope.changeId,accessId:'null'};
+ const scope={...f.scope,closureAuthority:'authoritative-retired-run-batch-v1',changeIds:[f.scope.changeId],
+   protectedRunIds:[f.peer.runId],sharedIdentityIds:[],ids:[...f.scope.ids,'null']};
+ writeFileSync(f.file,JSON.stringify({rows:[target,historic,protectedPeer]}),{mode:0o600});
+ const input={scope,transactionId:f.transactionId};ownerCleanup({...input,action:'prepare'},{home:f.home});
+ const receipt=ownerCleanup({...input,action:'commit',bundle:{scope,roots:[f.data],entries:[],journalPaths:[]}},{home:f.home});
+ assert.equal(receipt.state,'APPLIED');assert.deepEqual(JSON.parse(readFileSync(f.file)).rows,[historic,protectedPeer]);
+});
+
 test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible et cleanup sous le propriétaire',async t=>{
  const sudo=spawnSync('sudo',['-n','true']);if(sudo.status!==0){t.skip('sudo non disponible pour le fixture à deux UID');return;}
  const requested=process.env.CAB_TEST_FOREIGN_UID;
@@ -45,7 +56,7 @@ test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible 
  for(const path of [workspace,master,code])mkdirSync(path,{mode:path===master?0o700:0o755});
  assert.equal(spawnSync('sudo',['-n','install','-d','-m','0755','-o',uid,'-g',gid,foreign]).status,0);
  t.after(()=>{spawnSync('sudo',['-n','rm','-rf','--',root]);});
- for(const name of ['cgpt_approval_bridge_server.py','cgpt_approval_bridge_router.py','cgpt_approval_bridge_journal.py','cgpt_approval_bridge_owner_cleanup.mjs','cgpt-approval-bridge-change-erasure.mjs','cgpt-approval-bridge-continuity.mjs','cgpt-approval-bridge-state-layout.mjs','cgpt-approval-bridge-observation-statistics.mjs']){
+ for(const name of ['cgpt_approval_bridge_server.py','cgpt_approval_bridge_router.py','cgpt_approval_bridge_journal.py','cgpt_approval_bridge_owner_cleanup.mjs','cgpt-approval-bridge-change-erasure.mjs','cgpt-approval-bridge-continuity.mjs','cgpt-approval-bridge-state-layout.mjs','cgpt-approval-bridge-observation-statistics.mjs','cgpt-approval-bridge-permission-replies.mjs']){
   if(process.env.CAB_TEST_LEGACY_BROKER_REF&&/^(?:cgpt_approval_bridge_server|cgpt_approval_bridge_router|cgpt_approval_bridge_journal)\.py$/.test(name)){
    assert.match(process.env.CAB_TEST_LEGACY_BROKER_REF,/^[a-f0-9]{40}$/);
    const legacy=spawnSync('git',['-c','safe.directory='+process.cwd(),'show',process.env.CAB_TEST_LEGACY_BROKER_REF+':plugins/cab-approval-bridge/broker/'+name],{maxBuffer:4*1024*1024});
