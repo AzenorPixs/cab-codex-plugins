@@ -1,5 +1,7 @@
 # Codex Approval Bridge — CAB
 
+La projection de nettoyage évite les calculs répétés pour réduire la durée de maintenance.
+
 Le nettoyage d’un change clos peut retirer sa copie statistique CAB tout en conservant son rapport source dans le projet.
 Il conserve les approbations des autres sessions et les événements nécessaires à leur cohérence.
 

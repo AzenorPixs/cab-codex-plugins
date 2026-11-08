@@ -8,7 +8,7 @@ import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bri
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { PermissionReplyJournal, validPermissionReply } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.4.39';
+export const VERSION = '2.4.40';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -249,20 +249,20 @@ export function extendErasureScope(scope, documents, {diagnosticStage=()=>{},bas
 // Only its verified primary ownership permits retaining that opaque payload.
 function retainedPeer(node,scope) {
   if(scope.closureAuthority!=='authoritative-retired-run-batch-v1'||!record(node))return false;
-  const ids=new Set(Array.isArray(scope.ownerBaseIds)?scope.ownerBaseIds.filter(identityValue):effectiveIds(scope));
-  const strong=value=>{
-    if(typeof value==='string')return unambiguousId(value)&&ids.has(value);
-    if(Array.isArray(value))return value.some(strong);
-    if(!record(value))return false;
-    return Object.entries(value).some(([key,item])=>!['changeId','change_id'].includes(key)&&
-      (unambiguousId(key)&&ids.has(key)||identityKeys.has(key)&&typeof item==='string'&&ids.has(item)||strong(item)));
-  };
-  if(Array.isArray(scope.ownerBaseIds)&&typeof node.event_id==='string'&&typeof node.event_type==='string'&&
-    typeof node.approval_id==='string'&&(scope.sharedIdentityIds||[]).includes(node.approval_id)&&!strong(node))return true;
+  const retainedEvent=Array.isArray(scope.ownerBaseIds)&&typeof node.event_id==='string'&&typeof node.event_type==='string'&&
+    typeof node.approval_id==='string'&&(scope.sharedIdentityIds||[]).includes(node.approval_id);
   const explicitForeign=typeof node.directory==='string'&&node.directory.startsWith('/')&&resolve(node.directory)===node.directory&&node.directory!==scope.workspace;
   const unattributedApproval=Array.isArray(scope.ownerBaseIds)&&typeof node.directory==='string'&&node.directory!==scope.workspace&&
     !node.directory.startsWith('/')&&['approvalId','approval_id'].some(key=>typeof node[key]==='string');
-  if(explicitForeign||unattributedApproval){
+  if(retainedEvent||explicitForeign||unattributedApproval){
+    const ids=new Set(Array.isArray(scope.ownerBaseIds)?scope.ownerBaseIds.filter(identityValue):effectiveIds(scope));
+    const strong=value=>{
+      if(typeof value==='string')return unambiguousId(value)&&ids.has(value);
+      if(Array.isArray(value))return value.some(strong);
+      if(!record(value))return false;
+      return Object.entries(value).some(([key,item])=>!['changeId','change_id'].includes(key)&&
+        (unambiguousId(key)&&ids.has(key)||identityKeys.has(key)&&typeof item==='string'&&ids.has(item)||strong(item)));
+    };
     if(!strong(node))return true;
   }
   const runs=['runId','run_id'].filter(key=>typeof node[key]==='string').map(key=>node[key]);
@@ -279,10 +279,23 @@ export function projectErasure(value, scope) {
     typeof node.id==='string'&&node.id.startsWith('ses_')&&ids.has(node.id)&&node.directory===scope.workspace);
   const foreign = node => record(node) && Object.entries(node).some(([key,item]) => ownerKeys.has(key) && typeof item === 'string' && !ids.has(item)&&
     !(['changeId','change_id'].includes(key)&&scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.changeIds.includes(item)));
-  const contains=(node,predicate)=>retainedPeer(node,scope)?predicate===foreign:predicate(node)||node&&typeof node==='object'&&Object.values(node).some(item=>contains(item,predicate));
+  const peerCache=new WeakMap(),containsCaches=new Map();
+  const peer=node=>{
+    if(!node||typeof node!=='object')return false;
+    if(!peerCache.has(node))peerCache.set(node,retainedPeer(node,scope));
+    return peerCache.get(node);
+  };
+  const contains=(node,predicate)=>{
+    if(!node||typeof node!=='object')return predicate(node);
+    if(!containsCaches.has(predicate))containsCaches.set(predicate,new WeakMap());
+    const cache=containsCaches.get(predicate);
+    if(cache.has(node))return cache.get(node);
+    const result=peer(node)?predicate===foreign:predicate(node)||Object.values(node).some(item=>contains(item,predicate));
+    cache.set(node,result);return result;
+  };
   const related=node=>own(node)||typeof node==='string'&&unambiguousId(node)&&ids.has(node);
   const visit = (node,parentKey='') => {
-    if(retainedPeer(node,scope))return node;
+    if(peer(node))return node;
     if (Array.isArray(node)) {
       if (!identityLists.has(parentKey) && node.length === 2 && unambiguousId(node[0]) && ids.has(node[0])) return undefined;
       return node.filter(item=>!(identityLists.has(parentKey)&&typeof item==='string'&&ids.has(item))&&
@@ -292,7 +305,7 @@ export function projectErasure(value, scope) {
     if(foreign(node)&&contains(node,related))fail('erasure-foreign-reference');
     const ownedPath=typeof node.name==='string'&&node.name.startsWith('runs/')&&scope.runIds.includes(node.name.split('/')[1]);
     if (own(node)||ownedPath) { if (foreign(node)||typeof node.directory==='string'&&node.directory!==scope.workspace) fail('erasure-foreign-reference'); return undefined; }
-    const result = Object.fromEntries(Object.entries(node).filter(([key,item]) => !(ids.has(key)&&unambiguousId(key))||retainedPeer(item,scope)).map(([key,item]) => [key,key==='integrationOwner'&&ids.has(item)?null:visit(item,key)])
+    const result = Object.fromEntries(Object.entries(node).filter(([key,item]) => !(ids.has(key)&&unambiguousId(key))||peer(item)).map(([key,item]) => [key,key==='integrationOwner'&&ids.has(item)?null:visit(item,key)])
       .filter(([,item]) => item !== undefined));
     if (record(node.bundle) && node.bundle.schemaVersion===1 && typeof node.bundle.sourceId==='string' &&
         typeof node.bundle.datasetId==='string' && typeof node.hash==='string') {

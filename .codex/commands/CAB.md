@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.39
+version: 2.4.40
 ---
 
 Réponds en français. Commande : `/CAB`, pas `/cab`. Argument : `$ARGUMENTS`.
