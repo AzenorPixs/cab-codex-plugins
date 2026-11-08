@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Projection du nettoyage — SCM 2.4.40
+
+[optimize-erasure-projection](openspec/changes/archive/2026-11-08-optimize-erasure-projection/) : code non attribué, portée et pairs comparés en lecture seule ; publication, activation et durée de reprise réelle à vérifier.
+
 ## Journal et reprise propriétaire — SCM 2.4.39
 
 [preserve-retained-approval-journal](openspec/changes/archive/2026-11-08-preserve-retained-approval-journal/) : code non attribué, tests ciblés validés ; publication, activation et reprise C08 restent à vérifier. La provenance des deux événements postérieurs à l’incident demeure non établie.

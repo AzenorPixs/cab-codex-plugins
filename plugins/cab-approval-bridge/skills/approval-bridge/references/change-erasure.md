@@ -287,6 +287,11 @@ Les événements associés à une approbation conservée restent protégés ; un
 Si une projection est refusée avant application côté contrôleur, CAB remet les
 services à disposition et conserve le reçu de reprise.
 
+Le helper et le broker 2.4.40 reprennent ce même profil avec les services
+2.4.35 après un rattachement 2.4.38 ou 2.4.39. La projection évite les
+recalculs ; les résultats et les RUN pairs sont conservés. La mesure en lecture
+seule ne remplace pas la durée observée de la reprise réelle.
+
 Pour un reçu propriétaire figé dont le commit n'est pas attesté, le diagnostic
 isolé `cgpt-approval-bridge-owner-diagnostic.mjs <projet> <transactionId>`
 vérifie le reçu signé et l'identité du propriétaire, sans route de commit. Il

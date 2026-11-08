@@ -6,7 +6,7 @@ import os
 import stat
 import sys
 
-VERSION = "2.4.39"
+VERSION = "2.4.40"
 
 
 def main():

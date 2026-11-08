@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 2.4.40 - 2026-11-08
+
+- Accélérer la projection de nettoyage en évitant les parcours et constructions redondants.
+- Reprendre le même reçu propriétaire après interruption de la projection avec les services 2.4.35.
+
 ## 2.4.39 - 2026-11-08
 
 - Préserver les événements des approbations conservées et identifier les événements reconstruits depuis le magasin.

@@ -1,5 +1,7 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+La projection d’un nettoyage réutilise ses calculs pour limiter la durée d’indisponibilité des briques.
+
 Les événements des approbations conservées restent associés au journal ; les événements reconstruits depuis le magasin sont identifiés comme tels.
 
 Le nettoyage ciblé d’un change clos peut retirer sa copie SGS sans supprimer le rapport métier du projet ni réimporter les anciens relevés.

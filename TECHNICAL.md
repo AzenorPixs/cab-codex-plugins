@@ -1,5 +1,7 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+La projection évite les constructions répétées et mémorise localement les parcours, sans changer la portée ni les protections des autres RUN.
+
 Le nettoyage protège les événements des identifiants partagés par une approbation conservée ; les reconstructions depuis le magasin sont marquées et ne rejouent aucune décision.
 
 Le retrait SGS d’un change clos est borné au change, refuse les RUN actifs et conserve les sources ; les anciens relevés sont filtrés lors des imports ultérieurs.

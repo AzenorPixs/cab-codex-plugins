@@ -4,9 +4,18 @@ import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,statSync,rmSync} from '
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
-import {ErasureTransaction,erasureReferences} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
+import {ErasureTransaction,erasureReferences,projectErasure} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
 import {ownerCleanup} from '../plugins/cab-approval-bridge/broker/cgpt_approval_bridge_owner_cleanup.mjs';
 const hash=value=>createHash('sha256').update(value).digest('hex');
+
+test('projection : parcours borné des sous-arbres imbriqués',()=>{
+ const count=depth=>{
+  let reads=0,node={runId:'peer-run-123456789'};
+  for(let i=0;i<depth;i++){const child=node;node={get children(){reads++;return [child]}};}
+  projectErasure(node,{ids:['target-run-123456789'],runIds:['target-run-123456789']});return reads;
+ };
+ const small=count(120),large=count(240);assert.ok(large<small*3,`${small} -> ${large}`);
+});
 
 test('Références : motifs littéraux imbriqués, Unicode, identités typées et compatibilité RegExp',()=>{
  const ids=['op-fixture-123456789','fixture-123456789','ses_fixture_123456789'];
