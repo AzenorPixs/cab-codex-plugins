@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[align-sgs-command-release](changes/archive/2026-11-08-align-sgs-command-release/), code non attribué : ARCHIVÉ, cohérence des commandes testée ; livraison et activation à vérifier séparément.
+
 [allow-owned-atelier-read-scope](changes/archive/2026-11-08-allow-owned-atelier-read-scope/), code non attribué : ARCHIVÉ, tests ciblés réussis ; livraison et activation à vérifier séparément.
 
 ## Frontières historiques SCM 2.3.3

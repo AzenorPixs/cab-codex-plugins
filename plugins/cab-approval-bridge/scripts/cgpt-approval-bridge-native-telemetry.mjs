@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import { registerStatisticsBinding,registerStatisticsSource, flushStatistics } from './cgpt-approval-bridge-runtime-client.mjs';
-export const VERSION = '2.4.22';
+export const VERSION = '2.4.23';
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const count = value => Number.isSafeInteger(value) && value >= 0;
 
