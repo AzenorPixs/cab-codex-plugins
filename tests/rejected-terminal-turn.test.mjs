@@ -17,6 +17,35 @@ test('rejet : chaîne native complète jusqu’au rejet observé, suffixe scell�
  const f=fixture(),p=f.proof();assert.equal(p.kind,'REJECTED_UNISSUED_TERMINAL_TURN');assert.equal(p.executionOutcome,'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE');assert.equal(p.terminalTurn.terminalMessageId,'msg_stop');assert.ok(p.terminalTurn.laterMessagesDigest);assert.equal(p.nativeResult,undefined);assert.equal(p.once,undefined);
  f.messages.at(-1).parts[0].state.metadata.exit=1;assert.notEqual(f.proof().terminalTurn.wholeTranscriptDigest,p.terminalTurn.wholeTranscriptDigest);
 });
+function delayedFixture(){
+ const f=fixture();f.operation.decision.recordedAt=new Date(1600).toISOString();
+ f.requestPart.executed=false;f.requestPart.state.metadata={truncated:false};
+ f.rejectPart.executed=false;f.rejectPart.state.metadata={truncated:false};
+ f.messages[4].parts.unshift({type:'tool',tool:'bash',state:{status:'completed'}});
+ return f;
+}
+test('rejet différé : tour initial clos sans effet, décision avant nouveau tour et poll exact ultérieur',()=>{
+ const f=delayedFixture(),p=f.proof();assert.equal(p.kind,'REJECTED_UNISSUED_TERMINAL_TURN');
+ assert.equal(p.terminalTurn.rejectionObservedLater,true);assert.equal(p.terminalTurn.terminalMessageId,'msg_pending_stop');
+ assert.equal(p.terminalTurn.rejected.callId,'reject-call');assert.ok(p.terminalTurn.laterMessagesDigest);
+});
+for(const variant of ['late-decision','effect-in-original','foreign-rejection','truncated-poll','wrong-approval','same-parent-later','unterminated','missing-poll','early-decision','poll-before-next-user','duplicate-user','truncated-request'])
+ test('rejet différé refuse '+variant,()=>{
+  const f=delayedFixture();
+  if(variant==='late-decision')f.operation.decision.recordedAt=new Date(5000).toISOString();
+  if(variant==='effect-in-original')f.messages[1].parts.push({type:'tool',tool:'bash',state:{status:'completed'}});
+  if(variant==='foreign-rejection')f.rejectPart.state.output=JSON.stringify({...f.approval,requestId:'foreign',status:'REJECTED'});
+  if(variant==='truncated-poll')f.rejectPart.state.metadata.truncated=true;
+  if(variant==='wrong-approval')f.rejectPart.state.input.approval_id='other';
+  if(variant==='same-parent-later')f.messages.at(-1).info.parentID='msg_user1';
+  if(variant==='unterminated')f.messages[2].info.finish='tool-calls';
+  if(variant==='missing-poll')f.rejectPart.state.output=JSON.stringify({...f.approval,status:'PENDING'});
+  if(variant==='early-decision')f.operation.decision.recordedAt=new Date(1200).toISOString();
+  if(variant==='poll-before-next-user')f.messages[4].info.time.created=1601;
+  if(variant==='duplicate-user')f.messages.at(-2).info.id='msg_user1';
+  if(variant==='truncated-request')f.requestPart.state.metadata.truncated=true;
+  assert.equal(f.proof(),null);
+ });
 for(const variant of ['approved','native','once','unknown-decision-time','late-decision','no-rejected-observation','foreign-rejected-observation','effect-before-rejected','effect-after-pending-stop','foreign-parent','incomplete','late-same-parent','system-tool','no-next-user','foreign-sid','no-parent'])test('tour rejeté conserve les gardes : '+variant,()=>{
  const f=fixture();
  switch(variant){
