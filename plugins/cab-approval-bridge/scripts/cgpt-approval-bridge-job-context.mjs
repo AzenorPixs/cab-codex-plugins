@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.4.31";
+export const VERSION = "2.4.32";
 export function pendingReconciliationEffects({currentMandate,reconcilingCount,unmatchedCount,validations,decisionFor,ignoredRequestIds}){
   const ignored=new Set(ignoredRequestIds);
   return Boolean(currentMandate||reconcilingCount||unmatchedCount||validations.some(v=>{
