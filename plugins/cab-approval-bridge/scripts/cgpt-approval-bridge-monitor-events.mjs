@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { ContinuityStore } from './cgpt-approval-bridge-continuity.mjs';
 import { stepDefinition, STEP_STATUSES, VERSION as STEP_VERSION } from './cgpt-approval-bridge-run-steps.mjs';
 
-export const VERSION = '2.4.25';
+export const VERSION = '2.4.26';
 if (STEP_VERSION !== VERSION) throw new Error('CAB observation lifecycle component version mismatch');
 const identifier = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/;
 

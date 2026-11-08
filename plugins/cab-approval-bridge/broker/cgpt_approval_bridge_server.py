@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.4.25"
+SERVER_VERSION = "2.4.26"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -9248,7 +9248,7 @@ APPROVAL_REQUEST_PROPERTIES = {
 TOOLS = [
     {'name':'ccab_report','description':'Dépose un incident CAB en file CCAB, avec outbox locale si la liaison est indisponible. Ne décide pas d’un correctif et ne relance aucune opération.',
      'inputSchema':{'type':'object','properties':{**{key:{'type':'string'} for key in ('incident_id','session_id','directory','run_id','change_id','category','summary')},
-         'evidence':{'type':'array','items':{'type':'object','properties':{'reference':{'type':'string'},'sha256':{'type':'string'}},'required':['reference','sha256'],'additionalProperties':False}}},
+         'evidence':{'type':'array','maxItems':32,'items':{'type':'object','properties':{'reference':{'type':'string','minLength':1,'maxLength':1000},'sha256':{'type':'string','pattern':'^[a-f0-9]{64}$'}},'required':['reference','sha256'],'additionalProperties':False}}},
        'required':['incident_id','session_id','directory','category','summary','evidence'],'additionalProperties':False}},
     {'name':'prepare_validation','description':'Calcule les IDs, révisions effectives et SHA de l’input natif exact pour une unité neuve, sans créer de demande ni accorder de permission. Soumettre ensuite validation par un appel littéral séparé à request_validation.',
      'inputSchema':{'type':'object','properties':{

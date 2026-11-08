@@ -15,6 +15,17 @@ identité de sa session, version, catégorie, résumé et références de preuve
 avec empreintes. Aucun secret, prompt ou sortie brute ne va dans la file.
 L’entrée reste accessible après nettoyage du RUN tant que nécessaire.
 
+Chaque preuve est un objet `{reference, sha256}` : référence non vide de
+1 000 caractères au plus et SHA-256 complet en 64 caractères hexadécimaux
+minuscules. Le broker refuse une nouvelle preuve invalide avant mise en file.
+Pour corriger une ancienne entrée locale invalide, le déclarant soumet le même
+incident avec les mêmes session, projet, change, RUN, catégorie et résumé, et
+des preuves vérifiées conformes. Seules les preuves invalides sont remplacées ;
+la date initiale est conservée. Une autre différence ou une modification de
+preuves déjà valides est refusée. La copie locale reste en attente si le relais
+échoue ; vérifier son acquittement avant de solder et purger l’entrée centrale.
+Ne jamais éditer directement l’outbox privée.
+
 L’orchestrateur désigné par le développeur consulte la vue globale, prend
 la plus ancienne entrée disponible par défaut, puis se coordonne avec ses
 déclarants dans les autorisations de communication existantes. Il peut choisir

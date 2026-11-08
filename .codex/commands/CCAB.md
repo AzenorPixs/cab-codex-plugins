@@ -1,6 +1,6 @@
 ---
 description: Consulter, déclarer ou traiter les incidents CAB
-version: 2.4.25
+version: 2.4.26
 ---
 
 Charger le skill CCAB du plugin CCAB de même version que CAB.
@@ -12,6 +12,8 @@ La coordination utile entre déclarant et correcteur CCAB désigné est
 autorisée par le développeur même entre projets, sans redemande par échange ;
 vérifier les identités et les permissions techniques, sans transmettre de secret.
 Conserver les reçus et les protections des RUN ; aucune relance d’effet incertain.
+Pour une ancienne outbox aux preuves invalides, suivre la correction ciblée du
+skill CCAB et vérifier l’acquittement avant de purger l’entrée centrale.
 Une entrée traitée sans correctif se solde en `no-fix` avec justification et
 limites ; cette clôture ne signifie pas que les données concernées sont réparées.
 Après réponse vérifiée et clôture, nettoyer l'entrée traitée sans attendre

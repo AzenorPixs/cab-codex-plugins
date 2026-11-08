@@ -14,7 +14,7 @@ import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bri
 import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 
-export const VERSION='2.4.25';
+export const VERSION='2.4.26';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const exec=promisify(execFile);
 const unit=name=>'cgpt-approval-bridge-'+name+'.service';
@@ -33,7 +33,7 @@ export async function cleanupChange(input, dependencies={}) {
 async function executeCleanup(input,dependencies) {
   if(!['preview','prepare','seal','status','execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action))fail('erasure-action-invalid');
   const runtimeVersion=input.runtimeVersion??VERSION;
-  const compatibleRecovery=VERSION==='2.4.25'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.25'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
+  const compatibleRecovery=VERSION==='2.4.26'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.26'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
   if(runtimeVersion!==VERSION&&!compatibleRecovery)fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');

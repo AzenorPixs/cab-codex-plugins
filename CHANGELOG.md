@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.26 - 2026-11-08
+
+- Valider les preuves CCAB avant mise en outbox et permettre la correction ciblée des preuves invalides d’une entrée historique.
+
 ## 2.4.25 - 2026-11-08
 
 - Préciser le schéma natif write et le JSON compact utilisé pour son empreinte, avec un vecteur de vérification synthétique.
