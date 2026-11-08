@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.25
+version: 2.4.26
 ---
 
 Réponds en français. Commande : `/CAB` ; `/cab` n'est pas pris en charge.

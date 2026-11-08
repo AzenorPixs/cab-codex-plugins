@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[validate-ccab-outbox-evidence](changes/archive/2026-11-08-validate-ccab-outbox-evidence/), code non attribué : ARCHIVÉ, tests ciblés réussis ; livraison, activation et reprise à vérifier séparément.
+
 [document-native-write-digest](changes/archive/2026-11-08-document-native-write-digest/), code non attribué : ARCHIVÉ, documentation et tests ciblés validés ; publication et activation à vérifier séparément.
 
 [qualify-rejected-closed-turn](changes/archive/2026-11-08-qualify-rejected-closed-turn/), code non attribué : ARCHIVÉ, source et tests ciblés qualifiés ; publication et activation à vérifier séparément.
