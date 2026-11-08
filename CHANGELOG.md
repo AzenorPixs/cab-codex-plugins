@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.22 - 2026-11-08
+
+- Permettre l’ajout en lecture de l’atelier propre à un RUN dans un manifeste protégé, sans changer la validation des écritures projet.
+
 ## 2.4.21 - 2026-11-08
 
 - Distinguer un reçu de rejet absent d'un reçu invalide, sans présumer de l'absence d'effet.

@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Lecture de l’atelier du RUN — SCM 2.4.22
+
+[allow-owned-atelier-read-scope](openspec/changes/archive/2026-11-08-allow-owned-atelier-read-scope/), code non attribué : lecture canonique propre dans une extension compatible ; tests ciblés validés le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
+
 ## Clés protégées SCM2.4.10
 [preserve-protected-identity-map-entries](openspec/changes/archive/2026-11-07-preserve-protected-identity-map-entries/) : correction des clés secondaires et réparation exacte42opérations/38accès clos, conservant les progrès et les once.
 

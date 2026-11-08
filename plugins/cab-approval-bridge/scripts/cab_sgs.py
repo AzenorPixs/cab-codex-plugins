@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-VERSION = "2.4.21"
+VERSION = "2.4.22"
 FORMAT = "cab-sgs-1"
 # Bounded inputs below make this precision sufficient for all exact additive states.
 getcontext().prec = 100

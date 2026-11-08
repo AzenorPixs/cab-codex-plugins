@@ -4,7 +4,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.4.21';
+export const VERSION = '2.4.22';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -1630,7 +1630,10 @@ export class ResourceRunRegistry extends RunRegistry {
     const additions = this.resources(payload.resources);
     const namespace = key => key.startsWith('file:') ? 'file:' + key.slice(5).split('/').slice(0,-1).join('/')
       : key.includes('/') ? key.slice(0,key.lastIndexOf('/')) : key;
-    if (additions.some(resource => !run.resources.some(existing => namespace(existing.key) === namespace(resource.key) &&
+    const atelier = `file:.cab-tests/${run.changeId}/${run.runId}`;
+    const ownAtelierRead = resource => resource.mode === 'read' &&
+      (resource.key === atelier || resource.key.startsWith(`${atelier}/`));
+    if (additions.some(resource => !ownAtelierRead(resource) && !run.resources.some(existing => namespace(existing.key) === namespace(resource.key) &&
         (existing.mode === 'write' || resource.mode === 'read'))))
       throw new CoordinationError('compatible-extension-outside-namespace');
     if (additions.some(resource => run.resources.some(existing => covers(existing, resource) || overlaps(existing.key, resource.key))))

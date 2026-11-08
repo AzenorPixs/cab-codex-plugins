@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[allow-owned-atelier-read-scope](changes/archive/2026-11-08-allow-owned-atelier-read-scope/), code non attribué : ARCHIVÉ, tests ciblés réussis ; livraison et activation à vérifier séparément.
+
 ## Frontières historiques SCM 2.3.3
 
 [reconcile-historical-owner-boundaries](changes/archive/2026-11-06-reconcile-historical-owner-boundaries/), code non attribué : ARCHIVÉ, source qualifiée.
