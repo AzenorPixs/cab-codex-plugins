@@ -19,6 +19,14 @@ function migrationPath() {
   return 'openspec/changes/archive/'+archives[0]+'/migration-coverage.json';
 }
 
+test('commandes : toutes annoncent la version de la distribution',()=>{
+  const version=read('pyproject.toml').match(/^version = "([^\"]+)"$/m)[1];
+  for(const name of ['CAB','CABU','SGS','CCAB']){
+    const match=read(`.codex/commands/${name}.md`).match(/^version: (\S+)$/m);
+    assert.ok(match,`${name} sans version`);assert.equal(match[1],version,name);
+  }
+});
+
 test('migration : tous les segments historiques ont une destination présente et vérifiée',()=>{
   const historicalPath=migrationPath(),manifest=JSON.parse(read(historicalPath));
   assert.equal(manifest.version,'2.2.0');
