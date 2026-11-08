@@ -856,6 +856,7 @@ test('entrée modèle : absence intentionnelle du niveau conservée', async t =>
 
 
 test('empreinte native : clés triées, chaînes et Unicode exacts, métadonnées libres exclues',async t=>{
+ assert.equal(nativeToolInputDigest({path:'a.txt',content:'é\n'}),'b024ef9ce7db198b58287a2ded400c0b657789d7845d137822d64c6fe99ea1b5');
  const input={path:'/workspace/one.py',content:'é\n'};
  assert.equal(nativeToolInputDigest(input),nativeToolInputDigest({content:'é\n',path:input.path}));
  assert.notEqual(nativeToolInputDigest(input),nativeToolInputDigest({...input,content:'e\u0301\n'}));
