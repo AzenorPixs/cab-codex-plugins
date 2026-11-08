@@ -1,5 +1,7 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Le nettoyage protège les événements des identifiants partagés par une approbation conservée ; les reconstructions depuis le magasin sont marquées et ne rejouent aucune décision.
+
 Le retrait SGS d’un change clos est borné au change, refuse les RUN actifs et conserve les sources ; les anciens relevés sont filtrés lors des imports ultérieurs.
 
 Les RUN directs sont observés par une lecture SGS limitée à leurs identités et bornes, sans recalcul des événements statistiques à chaque rafraîchissement.

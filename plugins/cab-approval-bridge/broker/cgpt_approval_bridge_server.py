@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.4.38"
+SERVER_VERSION = "2.4.39"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -1082,7 +1082,7 @@ def recover_after_unclean_shutdown():
             for event in journal.read_events()
         }
         for item in approvals.values():
-            repair_journal_for_item(item, event_index=event_index)
+            repair_journal_for_item(item, event_index=event_index, reconstructed=True)
 
     consistency_before = store_journal_consistency_snapshot()
     repair_result = None
@@ -1857,6 +1857,7 @@ def ensure_journal_event(
     actor,
     data=None,
     event_index=None,
+    reconstructed=False,
 ):
     approval_id = item.get(
         "approval_id",
@@ -1881,11 +1882,12 @@ def ensure_journal_event(
             "",
         ),
     }
-
     if data:
         payload.update(
             data
         )
+    if reconstructed:
+        payload['reconstruction'] = 'from-retained-store-not-original'
 
     event = journal.append_event(
         event_type=event_type,
@@ -1908,7 +1910,7 @@ def ensure_journal_event(
     return event
 
 
-def ensure_created_event(item, event_index=None):
+def ensure_created_event(item, event_index=None, reconstructed=False):
     return ensure_journal_event(
         item,
         "APPROVAL_CREATED",
@@ -1932,6 +1934,7 @@ def ensure_created_event(item, event_index=None):
             ),
         },
         event_index=event_index,
+        reconstructed=reconstructed,
     )
 
 
@@ -2041,7 +2044,7 @@ def terminal_event_data(item):
     return payload
 
 
-def ensure_terminal_event(item, event_index=None):
+def ensure_terminal_event(item, event_index=None, reconstructed=False):
     status = item.get(
         "status"
     )
@@ -2063,19 +2066,22 @@ def ensure_terminal_event(item, event_index=None):
             item
         ),
         event_index=event_index,
+        reconstructed=reconstructed,
     )
 
 
-def repair_journal_for_item(item, event_index=None):
+def repair_journal_for_item(item, event_index=None, reconstructed=False):
     """Repare les evenements fondamentaux manquants."""
     ensure_created_event(
         item,
         event_index=event_index,
+        reconstructed=reconstructed,
     )
 
     ensure_terminal_event(
         item,
         event_index=event_index,
+        reconstructed=reconstructed,
     )
 
 
@@ -5307,7 +5313,7 @@ def do_repair_consistency():
                     skipped_missing.append(approval_id)
                     continue
 
-                repair_journal_for_item(item)
+                repair_journal_for_item(item,reconstructed=True)
                 repaired.append(approval_id)
 
                 journal_consistency_repair_event(
@@ -8672,6 +8678,24 @@ def erasure_owns_item(item,scope):
             item.get('change_id') in scope.get('changeIds',[]) and item.get('change_id') not in scope.get('sharedIdentityIds',[]))
 
 
+def protected_approval_ids(data,scope):
+    """Identifiants dérivés présents dans un objet non attribué au RUN."""
+    if scope.get('closureAuthority')!='authoritative-retired-run-batch-v1':return set()
+    original=set(scope['ids']);foreign=set();derived=set()
+    keys={'runId','run_id','changeId','change_id','sessionId','session_id','requestId','approvalId','approval_id','operation_id','access_id'}
+    for item in data['approvals'].values():
+        foreign_directory=item.get('directory')!=scope['workspace'] and item.get('run_id') not in scope['runIds'] and item.get('runId') not in scope['runIds']
+        if foreign_directory:
+            approval=item.get('approval_id') or item.get('approvalId')
+            if isinstance(approval,str) and approval:foreign.add(approval)
+        if erasure_owns_item(item,scope) and not foreign_directory:
+            derived.update(v for k,v in item.items() if k in keys and isinstance(v,str) and v)
+            derived.update(item_request_ids(item))
+    protected=foreign & (original|derived)
+    if protected & original:raise ValidationError('erasure-shared-original-identity')
+    return protected
+
+
 def owner_terminal_erasure(command):
     global ERASURE_PREPARED
     if command.get("brokerPid") != os.getpid() or command.get("transport") != "owner-local-v1":
@@ -8784,6 +8808,9 @@ def diagnostic_terminal_erasure_bundle(command):
     data, migrated = migrate_store(data)
     if migrated:
         raise ValidationError('erasure-owner-diagnostic-migration-required')
+    protected=protected_approval_ids(data,scope)
+    if protected or 'sharedIdentityIds' in scope:
+        scope['sharedIdentityIds']=sorted(set(scope.get('sharedIdentityIds',[]))|protected)
     ids = set(scope['ids'])
     approval_seeds=set()
     keys = {'runId','run_id','changeId','change_id','sessionId','session_id','requestId','approval_id','operation_id','access_id'}
@@ -8877,6 +8904,9 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
                      "requestId", "approval_id", "operation_id", "access_id"}
     with locked_store(store_path()):
         data = load_store(store_path())
+        protected=protected_approval_ids(data,scope)
+        if protected or 'sharedIdentityIds' in scope:
+            scope['sharedIdentityIds']=sorted(set(scope.get('sharedIdentityIds',[]))|protected)
         for item in data["approvals"].values():
             if erasure_owns_item(item,scope):
                 ids.update(v for k, v in item.items() if k in identity_keys and isinstance(v, str) and v)
@@ -8909,6 +8939,8 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
             return False
 
         for event in events:
+            if event.get('approval_id') in protected:
+                continue
             if owns_event(event):
                 if event.get("change_id") and event["change_id"] not in scope.get('changeIds',[scope["changeId"]]):
                     raise ValidationError("erasure-journal-foreign-reference")
@@ -9108,6 +9140,7 @@ def reconcile_pending_approvals():
                 repair_journal_for_item(
                     item,
                     event_index=event_index,
+                    reconstructed=True,
                 )
 
                 if item.get(

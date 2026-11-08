@@ -1,5 +1,7 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+La qualification de reprise contrôle la cohérence magasin–journal, la protection des RUN pairs et la disponibilité des services après un refus de projection.
+
 La qualification du nettoyage SGS comprend le refus d’un RUN actif, la préservation des autres changes et du rapport source, ainsi que l’absence de réimport des anciens relevés.
 
 Les RUN directs sont observés par une lecture SGS limitée à leurs identités et bornes, sans recalcul des événements statistiques à chaque rafraîchissement.

@@ -168,7 +168,10 @@ items={}
 for name in ['target','peer']:
  item={'approval_id':'approval-'+name,'requestId':'request-'+name,'change_id':'change-'+name+'-owner-123','run_id':'run-'+name+'-owner-123','directory':${JSON.stringify(workspace)},'status':'APPROVED','created_at':'2026-11-05T00:00:00Z','expires_at':'2099-01-01T00:00:00Z'}
  items[item['approval_id']]=item
- cab.journal.append_event('FIXTURE_EVENT',approval_id=item['approval_id'],request_id=item['requestId'],change_id=item['change_id'],data={'payload':name})
+ if ${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'}:
+  cab.journal.append_event('APPROVAL_CREATED',approval_id=item['approval_id'],request_id=item['requestId'],change_id=item['change_id'])
+  cab.journal.append_event('APPROVAL_APPROVED',approval_id=item['approval_id'],request_id=item['requestId'],change_id=item['change_id'])
+ else:cab.journal.append_event('FIXTURE_EVENT',approval_id=item['approval_id'],request_id=item['requestId'],change_id=item['change_id'],data={'payload':name})
 cab.save_store(cab.store_path(),{'approvals':items})
 print(json.dumps({'pid':os.getpid(),'uid':os.getuid(),'instanceId':cab.INSTANCE_ID,'keyReadable':os.access(${JSON.stringify(tx.keyPath)},os.R_OK),'home':str(Path.home())}),flush=True)
 for line in sys.stdin:
@@ -178,11 +181,12 @@ for line in sys.stdin:
   if ${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} and result['state']=='PREPARED':
    with cab.locked_store(cab.store_path()):
     snapshot=cab.load_store(cab.store_path())
-    snapshot['approvals']['foreign-alias']={'approval_id':'approval-target','requestId':'request-other','change_id':'change-target-owner-123','directory':'relative-token','status':'APPROVED','created_at':'2026-11-05T00:00:00Z','expires_at':'2099-01-01T00:00:00Z'}
+    snapshot['approvals']['target-alias']=snapshot['approvals'].pop('approval-target')
+    snapshot['approvals']['approval-target']={'approval_id':'approval-target','requestId':'request-other','change_id':'change-target-owner-123','directory':'relative-token','status':'APPROVED','created_at':'2026-11-05T00:00:00Z','expires_at':'2099-01-01T00:00:00Z'}
     cab.save_store(cab.store_path(),snapshot)
   with cab.locked_store(cab.store_path()):
    saved=cab.load_store(cab.store_path())
-  print(json.dumps({'state':result['state'],'pairPreserved':'approval-peer' in saved['approvals'],'foreignPreserved':${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} is False or 'foreign-alias' in saved['approvals'],'journalOK':cab.journal.verify_journal()['ok']}),flush=True)
+  print(json.dumps({'state':result['state'],'pairPreserved':'approval-peer' in saved['approvals'],'foreignPreserved':${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} is False or 'approval-target' in saved['approvals'] and (result['state']=='PREPARED' or 'target-alias' not in saved['approvals']),'journalOK':cab.journal.verify_journal()['ok'], 'consistent':cab.store_journal_consistency_snapshot()['ok'] if ${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} and result['state']!='PREPARED' else True}),flush=True)
  except Exception as error:
   detail={'error':type(error).__name__+':'+str(error)}
   if ${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} and command.get('action')=='commit':
@@ -200,7 +204,7 @@ for line in sys.stdin:
  t.after(()=>{const own=join(hello.home,'.local/state/cab-owner-erasure',hash(workspace));spawnSync('sudo',['-n','rm','-rf','--',own]);});
  assert.equal(hello.uid,Number(uid));assert.equal(hello.keyReadable,false);
  broker={...broker,broker_process:{pid:hello.pid},instance_id:hello.instanceId};
- const send=async()=>{child.stdin.write(JSON.stringify(manager.brokerCommand())+'\n');const result=await next();assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.pairPreserved,true);assert.equal(result.foreignPreserved,true);assert.equal(result.journalOK,true);return result;};
+ const send=async()=>{child.stdin.write(JSON.stringify(manager.brokerCommand())+'\n');const result=await next();assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.pairPreserved,true);assert.equal(result.foreignPreserved,true);assert.equal(result.journalOK,true);assert.equal(result.consistent,true);return result;};
  assert.equal((await send()).state,'PREPARED');
  const current=tx.load();tx.save({...current,phase:'FREEZING'});manager.ownerAction({transactionId:value.transactionId,action:'commit'});
  assert.equal((await send()).state,'APPLIED');

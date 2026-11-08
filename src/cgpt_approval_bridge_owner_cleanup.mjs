@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes,retentionOnlyRebind,diagnoseErasureFilePlan} from './cgpt-approval-bridge-change-erasure.mjs';
 import {ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
-export const VERSION='2.4.38';
+export const VERSION='2.4.39';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function ownerCleanup(input,{home=homedir()}={}) {
  const {action,scope,transactionId}=input;
@@ -24,11 +24,14 @@ export function ownerCleanup(input,{home=homedir()}={}) {
  const receipt=state=>({protocol:'cab-owner-erasure-v1',transactionId,scopeDigest,state,uid:process.getuid(),pid:process.ppid});
  if(action==='diagnose'){
   const bundle=input.bundle;
+  const priorShared=scope.sharedIdentityIds||[],nextShared=bundle?.scope?.sharedIdentityIds||[];
+  const baseScope=bundle?.scope?{...bundle.scope,ids:scope.ids,...(Object.hasOwn(scope,'sharedIdentityIds')?{sharedIdentityIds:priorShared}:{})}:null;
   if(!value||!['PREPARED','APPLYING'].includes(value.phase)||!bundle||!Array.isArray(bundle.roots)||
      !Array.isArray(bundle.journalPaths)||!Array.isArray(bundle.legacyRoots)||
      !bundle.scope||!Array.isArray(bundle.scope.ids)||
-     canonicalContinuityDigest({...bundle.scope,ids:scope.ids})!==scopeDigest||
-     !scope.ids.every(id=>bundle.scope.ids.includes(id))||!bundle.scope.ids.every(id=>typeof id==='string'))fail('erasure-owner-diagnostic-input-invalid');
+     !Array.isArray(priorShared)||!Array.isArray(nextShared)||canonicalContinuityDigest(baseScope)!==scopeDigest||
+     !scope.ids.every(id=>bundle.scope.ids.includes(id)||priorShared.includes(id))||!bundle.scope.ids.every(id=>typeof id==='string')||
+     !priorShared.every(id=>nextShared.includes(id))||nextShared.some(id=>!priorShared.includes(id)&&scope.ids.includes(id)))fail('erasure-owner-diagnostic-input-invalid');
   const result=diagnoseErasureFilePlan(bundle.roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots,baseIds:scope.ids,approvalSeeds:bundle.diagnosticApprovalSeeds||[]});
   return {...receipt('DIAGNOSED'),ownerPhase:value.phase,diagnostic:result};
  }
@@ -54,7 +57,8 @@ export function ownerCleanup(input,{home=homedir()}={}) {
   if(!value)fail('erasure-owner-transaction-missing');
   if(value.phase==='PREPARED'){
    const bundle=input.bundle;
-   if(!bundle||!Array.isArray(bundle.roots)||!Array.isArray(bundle.entries)||!Array.isArray(bundle.journalPaths)||bundle.scope?.workspace!==scope.workspace||bundle.scope?.changeId!==scope.changeId||canonicalContinuityDigest(bundle.scope?.runIds)!==canonicalContinuityDigest(scope.runIds)||scope.ids.some(id=>!bundle.scope.ids.includes(id)&&!(scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.sharedIdentityIds.includes(id))))fail('erasure-owner-bundle-divergent');
+   if(!bundle||!Array.isArray(bundle.roots)||!Array.isArray(bundle.entries)||!Array.isArray(bundle.journalPaths)||bundle.scope?.workspace!==scope.workspace||bundle.scope?.changeId!==scope.changeId||canonicalContinuityDigest(bundle.scope?.runIds)!==canonicalContinuityDigest(scope.runIds)||!Array.isArray(bundle.scope.ids)||scope.ids.some(id=>!bundle.scope.ids.includes(id)&&!(scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.sharedIdentityIds.includes(id)))||
+     scope.closureAuthority==='authoritative-retired-run-batch-v1'&&(!Array.isArray(bundle.scope.sharedIdentityIds)||!scope.sharedIdentityIds.every(id=>bundle.scope.sharedIdentityIds.includes(id))||bundle.scope.sharedIdentityIds.some(id=>!scope.sharedIdentityIds.includes(id)&&scope.ids.includes(id))))fail('erasure-owner-bundle-divergent');
    const roots=[...new Set(bundle.roots)];
    const plan=erasureFilePlan(roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots||[],
      ...(scope.closureAuthority==='authoritative-retired-run-batch-v1'?{baseIds:scope.ids}:{})});
