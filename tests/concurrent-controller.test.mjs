@@ -21,6 +21,7 @@ import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-app
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
+import {runtimeRequest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-client.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -5137,4 +5138,63 @@ test('cleanup preview HTTP : inventaire exact sans transaction ni effet',async t
  assert.match(preview.body.inventoryDigest,/^[a-f0-9]{64}$/);assert.equal(existsSync(join(runtimeStateDirectory(h.directory),'change-erasure.json')),false);
  assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
  const refused=await h.post('/cleanup/preview',{changeId:run.changeId,ownerId:'foreign-owner'});assert.equal(refused.status,409);
+});
+
+test('nettoyage SGS simple : RUN actif refusé sans effet',async t=>{
+ const h=await setup(t),run=await h.reserve('cleanup-active'),before=(await h.get('/runs')).body;
+ const result=await h.post('/cleanup/simple-sgs',{changeId:run.changeId,runId:run.runId,bindingId:'fixture-binding'});
+ assert.equal(result.status,409);assert.match(JSON.stringify(result.body),/cleanup-target-active/);
+ assert.deepEqual((await h.get('/runs')).body,before);assert.equal(h.native.replies.length,0);
+});
+test('nettoyage SGS simple : verrou ciblé et progression des autres changes',async t=>{
+ const h=await setup(t),socketDirectory=join(fixtureEnvironment.OC_Codex_RUNTIME_STATE_ROOT,'cab-approval-bridge','sgs');
+ mkdirSync(socketDirectory,{recursive:true,mode:0o700});const socketPath=join(socketDirectory,'sgs.sock');
+ let release,entered;const waiting=new Promise(resolve=>{entered=resolve});
+ const service=createServer(async(req,res)=>{let raw='';for await(const part of req)raw+=part;const body=JSON.parse(raw);
+  if(req.url!=='/reports/forget-closed-change'){res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({status:'stored'}));return;}
+  assert.equal(req.url,'/reports/forget-closed-change');assert.deepEqual(body,{project:h.directory,change:'change-z',run:'direct-run',binding:'direct-binding'});
+  entered();await new Promise(resolve=>{release=resolve});res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({status:'CHANGE_REPORT_FORGOTTEN'}));});
+ await new Promise(resolve=>service.listen(socketPath,resolve));t.after(()=>new Promise(resolve=>service.close(resolve)));
+ const cleanup=h.post('/cleanup/simple-sgs',{changeId:'change-z',runId:'direct-run',bindingId:'direct-binding'});await waiting;
+ assert.equal((await h.post('/runs/reserve',h.candidate('z'))).status,409);
+ assert.equal((await h.reserve('other')).state,'RESERVED');
+ release();assert.equal((await cleanup).body.status,'CHANGE_REPORT_FORGOTTEN');
+ assert.equal((await h.reserve('z')).state,'RESERVED');
+});
+test('nettoyage SGS simple : reçu figé d’un autre change reste intact',async t=>{
+ const h=await setup(t),root=runtimeStateDirectory(h.directory),tx=new ErasureTransaction(root);
+ const frozen={protocol:'cab-change-erasure-v1',transactionId:'erasure-11111111-1111-4111-8111-111111111111',phase:'FREEZING',
+  scope:{workspace:h.directory,changeId:'frozen-change',changeIds:['frozen-change'],runIds:['frozen-run'],ids:['frozen-run']}};
+ tx.save(frozen);const before=readFileSync(tx.path);
+ const socketDirectory=join(fixtureEnvironment.OC_Codex_RUNTIME_STATE_ROOT,'cab-approval-bridge','sgs');mkdirSync(socketDirectory,{recursive:true,mode:0o700});
+ const service=createServer(async(req,res)=>{for await(const _ of req){}res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify({status:req.url==='/reports/forget-closed-change'?'CHANGE_REPORT_FORGOTTEN':'stored'}));});
+ await new Promise(resolve=>service.listen(join(socketDirectory,'sgs.sock'),resolve));t.after(()=>new Promise(resolve=>service.close(resolve)));
+ const same=await h.post('/cleanup/simple-sgs',{changeId:'frozen-change',runId:'frozen-run',bindingId:'frozen-binding'});assert.equal(same.status,409);assert.match(JSON.stringify(same.body),/cleanup-target-in-progress/);
+ const result=await h.post('/cleanup/simple-sgs',{changeId:'other-change',runId:'other-direct-run',bindingId:'other-binding'});
+ assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.status,'CHANGE_REPORT_FORGOTTEN');assert.deepEqual(readFileSync(tx.path),before);
+});
+test('nettoyage SGS simple : contrôleur et vrai service retirent le rapport sans réimport',async t=>{
+ const h=await setup(t),servicePath=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-service.py',import.meta.url));
+ const service=spawn('python3',['-B',servicePath,'sgs','--no-external-collectors'],{env:fixtureEnvironment,stdio:['ignore','ignore','pipe']});let stderr='';service.stderr.on('data',b=>stderr+=b);
+ t.after(()=>{if(service.exitCode===null)service.kill('SIGTERM')});
+ const socketPath=join(fixtureEnvironment.OC_Codex_RUNTIME_STATE_ROOT,'cab-approval-bridge','sgs','sgs.sock');
+ await waitFor(()=>{if(service.exitCode!==null)throw new Error(stderr);return existsSync(socketPath)});
+ const change='change-direct',run='direct-run',session='direct-session',binding='direct-binding',uid=process.getuid();
+ await runtimeRequest('sgs','/bindings',{binding,host:'fixture-host',instance:'codex-'+session+'-uid'+uid,project:h.directory,change,run,session,role:'coder',agent:'codex',mode:'direct',cab_direct:true,started_at:'2026-11-06T10:00:00Z'});
+ await runtimeRequest('sgs','/bindings/close',{binding,ended_at:'2026-11-06T10:00:05Z'});
+ const snapshot={format:'cab-native-sgs-1',sessions:(await runtimeRequest('sgs','/stats?project='+encodeURIComponent(h.directory))).sessions};
+ const directory=join(h.directory,'openspec/changes',change);mkdirSync(directory,{recursive:true});writeFileSync(join(directory,'BLOCKERS.md'),'fixture\n');
+ const evidence={schema_version:1,session_id:session,scope:'cumulative',contribution:null,native_telemetry:snapshot};
+ const script=`import json,sys;from pathlib import Path;sys.path.insert(0,sys.argv[1]);import cab_sgs;e=json.load(sys.stdin);e['contribution']=cab_sgs.blank();cab_sgs.change_report(Path(sys.argv[2]),sys.argv[3],json.dumps(e).encode(),'blocked')`;
+ const builder=spawn('python3',['-B','-c',script,fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/',import.meta.url)),h.directory,'openspec/changes/'+change],{stdio:['pipe','ignore','pipe']});let buildError='';builder.stderr.on('data',b=>buildError+=b);builder.stdin.end(JSON.stringify(evidence));assert.equal(await new Promise(resolve=>builder.on('exit',resolve)),0,buildError);
+ const reportPath=join(directory,'STATISTICS.md'),before=readFileSync(reportPath,'utf8');
+ const scope={workspace:h.directory,changeId:change,runIds:[run],ids:[session],sessionId:session,bindingId:binding,closureAuthority:'direct-session-v1'};
+ await runtimeRequest('sgs','/purge/preview',{scope,branch:'BLOQUÉ'});
+ await runtimeRequest('sgs','/purge',{scope,receipt_id:'fixture-direct-cleanup',components:[]});
+ const result=await h.post('/cleanup/simple-sgs',{changeId:change,runId:run,bindingId:binding});assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.status,'CHANGE_REPORT_FORGOTTEN');
+ const retry=await h.post('/cleanup/simple-sgs',{changeId:change,runId:run,bindingId:binding});assert.equal(retry.status,200);assert.equal(retry.body.status,'ALREADY_ABSENT');
+ const other=await h.post('/cleanup/simple-sgs',{changeId:change,runId:run,bindingId:'different-binding'});assert.equal(other.status,409);
+ assert.equal((await runtimeRequest('sgs','/stats?project='+encodeURIComponent(h.directory))).archives.length,0);
+ await runtimeRequest('sgs','/purge/preview',{scope,branch:'BLOQUÉ'});
+ assert.equal((await runtimeRequest('sgs','/stats?project='+encodeURIComponent(h.directory))).archives.length,0);assert.equal(readFileSync(reportPath,'utf8'),before);
 });

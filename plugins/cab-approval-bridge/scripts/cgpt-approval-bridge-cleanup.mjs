@@ -14,7 +14,7 @@ import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bri
 import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 
-export const VERSION='2.4.37';
+export const VERSION='2.4.38';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function verifyFrozenOwnerRebind(value,{status,nativeIdentity,oldPidAbsent,now=Date.now()}={}) {
   const scope=value?.scope,prepared=value?.ownerReceipts?.prepare,commit=value?.ownerReceipts?.commit;
@@ -48,8 +48,8 @@ export async function cleanupChange(input, dependencies={}) {
 async function executeCleanup(input,dependencies) {
   if(!['preview','prepare','seal','status','execute','finalize','verify','recover-preparation','reconcile-retention','preflight-owner-rebind'].includes(input.action))fail('erasure-action-invalid');
   const runtimeVersion=input.runtimeVersion??VERSION;
-  const frozenOwnerProfile=VERSION==='2.4.37'&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind'].includes(input.action);
-  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.37'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.37'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
+  const frozenOwnerProfile=VERSION==='2.4.38'&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind'].includes(input.action);
+  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.38'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.38'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
   if(runtimeVersion!==VERSION&&!compatibleRecovery)fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
@@ -133,7 +133,7 @@ async function executeCleanup(input,dependencies) {
     const verifyArtifacts=dependencies.verifyBrokerArtifacts||((directory)=>{
       if(typeof directory!=='string'||!directory.startsWith('/')||realpathSync(directory)!==directory)fail('erasure-broker-source-invalid');
       const packageRoot=resolve(dirname(fileURLToPath(import.meta.url)),'../broker');
-      for(const name of ['cgpt_approval_bridge_server.py','cgpt_approval_bridge_router.py','cgpt_approval_bridge_journal.py','cgpt_approval_bridge_atelier.py','cgpt_approval_bridge_reporting.py','cgpt_approval_bridge_owner_cleanup.mjs','cgpt-approval-bridge-contract.json','cgpt-approval-bridge-change-erasure.mjs','cgpt-approval-bridge-continuity.mjs','cgpt-approval-bridge-state-layout.mjs','cgpt-approval-bridge-observation-statistics.mjs','cgpt-approval-bridge-permission-replies.mjs']){
+      for(const name of ['cgpt_approval_bridge_server.py','cgpt_approval_bridge_router.py','cgpt_approval_bridge_journal.py','cgpt_approval_bridge_atelier.py','cgpt_approval_bridge_reporting.py','cgpt_approval_bridge_owner_cleanup.mjs','cgpt_approval_bridge_owner_diagnostic.py','cgpt-approval-bridge-contract.json','cgpt-approval-bridge-change-erasure.mjs','cgpt-approval-bridge-continuity.mjs','cgpt-approval-bridge-state-layout.mjs','cgpt-approval-bridge-observation-statistics.mjs','cgpt-approval-bridge-permission-replies.mjs']){
         const source=join(directory,name),expected=join(packageRoot,name),a=lstatSync(source),b=lstatSync(expected);
         if(!a.isFile()||a.isSymbolicLink()||!b.isFile()||b.isSymbolicLink()||createHash('sha256').update(readFileSync(source)).digest('hex')!==createHash('sha256').update(readFileSync(expected)).digest('hex'))fail('erasure-broker-source-divergent');
       }
@@ -343,7 +343,8 @@ async function executeCleanup(input,dependencies) {
     if(ownerScope&&(ownerScope.workspace!==value.scope.workspace||ownerScope.changeId!==value.scope.changeId||
       canonicalContinuityDigest(ownerScope.runIds)!==canonicalContinuityDigest(value.scope.runIds)||!Array.isArray(ownerScope.ids)||
       ownerScope.ids.some(id=>typeof id!=='string'||id.length>256)||value.scope.ids.some(id=>!ownerScope.ids.includes(id)&&!(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'&&value.scope.sharedIdentityIds.includes(id)))))fail('erasure-owner-effective-scope-divergent');
-    const projectionScope=ownerScope?{...value.scope,ids:[...new Set([...value.scope.ids,...ownerScope.ids])].sort()}:value.scope;
+    const projectionScope=ownerScope?{...value.scope,ids:[...new Set([...value.scope.ids,...ownerScope.ids])].sort(),
+      ...(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'?{ownerBaseIds:value.scope.ids}:{})}:value.scope;
     const bundle=value.brokerTransport==='owner-local-v1'?{transactionId:value.transactionId,brokerPid:value.brokerPid,scope:projectionScope,roots:[],entries:[],journalPaths:[]}:tx.verify(readRuntimeJson(bundlePath).value);
     if(bundle.transactionId!==value.transactionId||bundle.brokerPid!==value.brokerPid||
       bundle.scope.changeId!==value.scope.changeId||canonicalContinuityDigest(bundle.scope.runIds)!==canonicalContinuityDigest(value.scope.runIds))fail('erasure-broker-bundle-divergent');

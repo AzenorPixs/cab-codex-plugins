@@ -4,7 +4,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.4.37';
+export const VERSION = '2.4.38';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -53,6 +53,15 @@ function emptyState() {
 // The old registry remains the reader for historical identities and receipts.
 // This profile never exposes its ordinary global integration transitions.
 export class ResourceRunRegistry extends RunRegistry {
+  beginChangeCleanup(changeId) {
+    this.mutable();
+    if(!id(changeId))throw new CoordinationError('cleanup-change-invalid',400);
+    this.cleanupChanges ||= new Set();
+    if(this.cleanupChanges.has(changeId))throw new CoordinationError('cleanup-change-in-progress');
+    if([...this.runs.values()].some(run=>run.changeId===changeId&&run.state==='RESERVED'))throw new CoordinationError('cleanup-target-active');
+    this.cleanupChanges.add(changeId);
+  }
+  endChangeCleanup(changeId) { this.cleanupChanges?.delete(changeId); }
   acceptsSchema(version) { return [1, 2, 3, 4].includes(version); }
   restore() {
     this.resourceState = undefined;
@@ -694,6 +703,7 @@ export class ResourceRunRegistry extends RunRegistry {
     try{verifyDependencies(this.directory,candidate.dependsOn);}catch(error){throw new CoordinationError(error.code||'dependency-openspec-unavailable');}
   }
   reserve(payload) {
+    if(this.cleanupChanges?.has(payload?.changeId))throw new CoordinationError('cleanup-change-in-progress');
     if (Object.values(this.resourceState.sessionHandoffs || {}).some(h => h.state !== 'ABORTED' &&
         this.runs.get(h.runId)?.state === 'RESERVED' &&
         (h.sourceSessionId === payload?.sessionId || h.state === 'PREPARED' && h.sessionId === payload?.sessionId)))

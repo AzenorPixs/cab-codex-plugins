@@ -24,6 +24,152 @@ service = module('runtime-service')
 
 
 class RuntimeServicesTest(unittest.TestCase):
+    def test_released_snapshot_projection_preserves_peer_and_new_run(self):
+        original = [{'record_id': 'report-one', 'snapshot': {'format': 'cab-native-sgs-1',
+            'sessions': [{'binding': 'released', 'value': 1}, {'binding': 'peer', 'value': 2}]}},
+            {'record_id': 'report-two', 'snapshot': {'format': 'cab-native-sgs-1',
+            'sessions': [{'binding': 'new-run', 'value': 3}]}}]
+        before = json.dumps(original, sort_keys=True)
+        projected = runtime.filter_released_native_snapshots(original, {'released'})
+        self.assertEqual([row['binding'] for record in projected for row in record['snapshot']['sessions']], ['peer', 'new-run'])
+        self.assertEqual(json.dumps(original, sort_keys=True), before)
+        self.assertEqual(runtime.filter_released_native_snapshots(projected, {'released'}), projected)
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode, 'sgs-report-projection-invalid'):
+            runtime.filter_released_native_snapshots([{'snapshot': {'sessions': [{}]}}], {'released'})
+
+    def test_aggregate_detection_keeps_unseparable_values_protected(self):
+        self.assertTrue(runtime.has_known_aggregate({'metrics': {'tokens': {'state': 'known', 'value': '7'}}}))
+        self.assertFalse(runtime.has_known_aggregate({'metrics': {'tokens': {'state': 'unavailable', 'value': None}}}))
+
+    def test_release_filter_keeps_new_binding_even_if_session_id_reused(self):
+        project=str(self.root);change='fixture-change';relative='openspec/changes/fixture-change/STATISTICS.md'
+        self.store.db.execute('INSERT INTO released_change_records VALUES(?,?,?)',(project,runtime.digest('change:'+change),runtime.digest('same-session')))
+        self.store.db.execute('INSERT INTO released_snapshot_suppressions VALUES(?,?,?,?,?,?)',
+            (project,runtime.digest(relative),runtime.digest('old-binding'),runtime.digest('same-session'),runtime.digest('old-run'),os.getuid()))
+        old={'id':'same-session','scope':'cumulative','native_telemetry':{'sessions':[{'binding':'old-binding','session':'same-session'}]}}
+        new={'id':'same-session','scope':'cumulative','native_telemetry':{'sessions':[{'binding':'new-binding','session':'same-session'}]}}
+        self.assertEqual(native.filtered_release_ledger(self.store,project,change,{'sessions':[old]})[1],[])
+        _hidden,retained,filtered,reused=native.filtered_release_ledger(self.store,project,change,{'sessions':[new]})
+        self.assertEqual(retained,[new]);self.assertTrue(filtered);self.assertEqual(reused,{'same-session'})
+
+    def test_only_released_snapshot_removes_report_and_aggregate_without_reimport(self):
+        import cab_sgs
+        target={**self.binding,'binding':'direct-target','run':'other-run','session':'direct-session',
+                'instance':f'codex-direct-session-uid{os.getuid()}','cab_direct':True}
+        self.store.bind(target,os.getuid())
+        self.store.close_binding('direct-target','2026-11-06T10:00:05Z',os.getuid())
+        scope={'workspace':str(self.root),'changeId':'fixture-change','runIds':['other-run'],
+               'ids':['direct-session'],'sessionId':'direct-session','bindingId':'direct-target','closureAuthority':'direct-session-v1'}
+        directory=self.root/'openspec/changes/fixture-change';directory.mkdir(parents=True)
+        (directory/'BLOCKERS.md').write_text('fixture')
+        snapshot={'format':'cab-native-sgs-1','sessions':[s for s in self.store.statistics(str(self.root))['sessions'] if s['binding']=='direct-target']}
+        contribution=cab_sgs.blank();contribution['metrics']['tests']={'state':'known','value':'7','reason':None,'evidence':[{'line':1,'note':'fixture'}]}
+        evidence={'schema_version':1,'session_id':'direct-session','scope':'cumulative',
+                  'contribution':contribution,'native_telemetry':snapshot}
+        cab_sgs.change_report(self.root,str(directory.relative_to(self.root)),json.dumps(evidence).encode(),'blocked')
+        report=directory/'STATISTICS.md';before=report.read_bytes()
+        native.import_blocked_report(self.store,str(self.root),'fixture-change')
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-open-run-still-registered'):
+            self.store.forget_open_run(str(self.root),'fixture-change','other-run',os.getuid())
+        self.store.purge(scope,'released-only-receipt',[],os.getuid())
+        row=self.store.db.execute('SELECT project,path,body FROM archive_reports').fetchone()
+        mixed=json.loads(row['body']);mixed['contribution']['sessions'].append('unrelated-session')
+        self.store.db.execute('UPDATE archive_reports SET body=? WHERE project=? AND path=?',(json.dumps(mixed),row['project'],row['path']))
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-report-aggregate-not-separable'):
+            self.store.forget_released_snapshot(scope,'released-only-receipt',os.getuid())
+        self.store.db.execute('UPDATE archive_reports SET body=? WHERE project=? AND path=?',(row['body'],row['project'],row['path']))
+        self.assertEqual(self.store.forget_open_run(str(self.root),'fixture-change','other-run',os.getuid())['status'],'SNAPSHOT_FORGOTTEN')
+        self.assertEqual(self.store.statistics(str(self.root))['archives'],[])
+        self.assertEqual(self.store.forget_open_run(str(self.root),'fixture-change','other-run',os.getuid())['status'],'ABSENT')
+        self.assertEqual(native.import_blocked_report(self.store,str(self.root),'fixture-change')['status'],'released-change-suppressed')
+        self.assertEqual(self.store.statistics(str(self.root))['archives'],[])
+        self.assertEqual(self.store.forget_released_snapshot(scope,'released-only-receipt',os.getuid())['status'],'SNAPSHOT_FORGOTTEN')
+        self.assertEqual(report.read_bytes(),before)
+
+    def test_closed_change_forget_removes_history_but_keeps_other_changes_and_future_run(self):
+        import cab_sgs
+        target={**self.binding,'binding':'pa10-binding','change':'pa10-change','run':'pa10-run','session':'pa10-session',
+                'instance':f'codex-pa10-session-uid{os.getuid()}','cab_direct':True}
+        self.store.bind(target,os.getuid());self.store.close_binding('pa10-binding','2026-11-06T10:00:05Z',os.getuid())
+        directory=self.root/'openspec/changes/pa10-change';directory.mkdir(parents=True);(directory/'BLOCKERS.md').write_text('fixture')
+        snapshot={'format':'cab-native-sgs-1','sessions':[s for s in self.store.statistics(str(self.root))['sessions'] if s['binding']=='pa10-binding']}
+        for session_id,scope,native_data in [('legacy-pa10','cumulative',None),('pa10-session','increment',snapshot)]:
+            evidence={'schema_version':1,'session_id':session_id,'scope':scope,'contribution':cab_sgs.blank()}
+            if native_data:evidence['native_telemetry']=native_data
+            cab_sgs.change_report(self.root,str(directory.relative_to(self.root)),json.dumps(evidence).encode(),'blocked')
+        report=directory/'STATISTICS.md';before=report.read_bytes();native.import_blocked_report(self.store,str(self.root),'pa10-change')
+        scope={'workspace':str(self.root),'changeId':'pa10-change','runIds':['pa10-run'],'ids':['pa10-session'],
+               'sessionId':'pa10-session','bindingId':'pa10-binding','closureAuthority':'direct-session-v1'}
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-open-change-still-registered'):
+            self.store.forget_open_change(str(self.root),'pa10-change','pa10-run',os.getuid())
+        self.store.purge(scope,'pa10-receipt',[],os.getuid())
+        row=self.store.db.execute('SELECT body FROM archive_reports WHERE project=?',(str(self.root),)).fetchone()
+        mixed=json.loads(row['body']);foreign={**snapshot['sessions'][0],'change':'other-change','binding':'foreign-binding'}
+        mixed['native_telemetry'][0]['snapshot']['sessions'].append(foreign)
+        self.store.db.execute('UPDATE archive_reports SET body=? WHERE project=?',(json.dumps(mixed),str(self.root)))
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-open-change-foreign-session'):
+            self.store.forget_open_change(str(self.root),'pa10-change','pa10-run',os.getuid())
+        self.store.db.execute('UPDATE archive_reports SET body=? WHERE project=?',(row['body'],str(self.root)))
+        self.assertEqual(self.store.forget_open_change(str(self.root),'pa10-change','pa10-run',os.getuid())['status'],'CHANGE_REPORT_FORGOTTEN')
+        self.assertEqual(self.store.forget_open_change(str(self.root),'pa10-change','pa10-run',os.getuid())['status'],'ALREADY_ABSENT')
+        self.assertEqual(native.import_blocked_report(self.store,str(self.root),'pa10-change')['status'],'released-change-suppressed')
+        self.assertEqual(self.store.statistics(str(self.root))['archives'],[])
+        self.assertEqual(self.stats()['binding'],'fixture-binding');self.assertEqual(report.read_bytes(),before)
+        archive=self.root/'openspec/changes/archive/2026-11-08-pa10-change';archive.mkdir(parents=True)
+        (archive/'STATISTICS.md').write_bytes(before)
+        self.assertEqual(native.import_archives(self.store,str(self.root))['imported'],0)
+        self.assertEqual(self.store.statistics(str(self.root))['archives'],[])
+        new={**target,'binding':'future-binding','run':'future-run','session':'future-session','instance':f'codex-future-session-uid{os.getuid()}'}
+        self.store.bind(new,os.getuid());new_snapshot={'format':'cab-native-sgs-1','sessions':[s for s in self.store.statistics(str(self.root))['sessions'] if s['binding']=='future-binding']}
+        evidence={'schema_version':1,'session_id':'future-session','scope':'increment','contribution':cab_sgs.blank(),'native_telemetry':new_snapshot}
+        cab_sgs.change_report(self.root,str(directory.relative_to(self.root)),json.dumps(evidence).encode(),'blocked')
+        native.import_blocked_report(self.store,str(self.root),'pa10-change')
+        current=self.store.statistics(str(self.root))['archives'][0]
+        self.assertEqual(current['contribution']['sessions'],['future-session'])
+        self.assertEqual([s['binding'] for r in current['native_telemetry'] for s in r['snapshot']['sessions']],['future-binding'])
+        # Un cumul ultérieur peut inclure l'ancien historique : ne pas le réattribuer.
+        later={'schema_version':1,'session_id':'future-cumulative','scope':'cumulative','contribution':cab_sgs.blank(),'native_telemetry':new_snapshot}
+        later['contribution']['metrics']['tests']={'state':'known','value':'9','reason':None,'evidence':[{'line':1,'note':'fixture'}]}
+        cab_sgs.change_report(self.root,str(directory.relative_to(self.root)),json.dumps(later).encode(),'blocked')
+        native.import_blocked_report(self.store,str(self.root),'pa10-change')
+        current=self.store.statistics(str(self.root))['archives'][0]
+        self.assertEqual(current['contribution']['metrics']['tests']['state'],'unavailable')
+
+    def test_forget_released_open_snapshot_preserves_peer_and_prevents_reimport(self):
+        import cab_sgs
+        target={**self.binding,'binding':'direct-target','session':'direct-session','instance':f'codex-direct-session-uid{os.getuid()}','cab_direct':True}
+        self.store.bind(target,os.getuid())
+        self.store.close_binding('fixture-binding','2026-11-06T10:00:05Z',os.getuid())
+        self.store.close_binding('direct-target','2026-11-06T10:00:05Z',os.getuid())
+        scope={'workspace':str(self.root),'changeId':'fixture-change','runIds':['fixture-run'],
+               'ids':['direct-session'],'sessionId':'direct-session','bindingId':'direct-target','closureAuthority':'direct-session-v1'}
+        directory=self.root/'openspec/changes/fixture-change';directory.mkdir(parents=True)
+        (directory/'BLOCKERS.md').write_text('fixture')
+        snapshot={'format':'cab-native-sgs-1','sessions':self.store.statistics(str(self.root))['sessions']}
+        evidence={'schema_version':1,'session_id':'fixture-report','scope':'cumulative',
+                  'contribution':cab_sgs.blank(),'native_telemetry':snapshot}
+        cab_sgs.change_report(self.root,str(directory.relative_to(self.root)),json.dumps(evidence).encode(),'blocked')
+        report=directory/'STATISTICS.md';before=report.read_bytes()
+        native.import_blocked_report(self.store,str(self.root),'fixture-change')
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-report-release-proof-invalid'):
+            self.store.forget_released_snapshot(scope,'not-released',os.getuid())
+        self.store.purge(scope,'released-receipt',[],os.getuid())
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-report-release-owner-mismatch'):
+            self.store.forget_released_snapshot(scope,'released-receipt',os.getuid()+1)
+        row=self.store.db.execute('SELECT project,path,fingerprint,body FROM archive_reports').fetchone()
+        mixed=json.loads(row['body']);mixed['contribution']['metrics']['tests']={'state':'known','value':'7','reason':None,'evidence':[{'line':1,'note':'fixture'}]}
+        self.store.db.execute('UPDATE archive_reports SET body=? WHERE project=? AND path=?',(json.dumps(mixed),row['project'],row['path']))
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-report-aggregate-not-separable'):
+            self.store.forget_released_snapshot(scope,'released-receipt',os.getuid())
+        self.assertEqual(self.store.db.execute('SELECT body FROM archive_reports').fetchone()[0],json.dumps(mixed))
+        self.store.db.execute('UPDATE archive_reports SET body=? WHERE project=? AND path=?',(row['body'],row['project'],row['path']))
+        self.assertEqual(self.store.forget_released_snapshot(scope,'released-receipt',os.getuid())['status'],'SNAPSHOT_FORGOTTEN')
+        self.assertEqual(self.store.forget_released_snapshot(scope,'released-receipt',os.getuid())['status'],'SNAPSHOT_FORGOTTEN')
+        native.import_blocked_report(self.store,str(self.root),'fixture-change')
+        telemetry=self.store.statistics(str(self.root))['archives'][0]['native_telemetry']
+        self.assertEqual([s['binding'] for r in telemetry for s in r['snapshot']['sessions']],['fixture-binding'])
+        self.assertEqual(report.read_bytes(),before)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix="cab-runtime-fixture-")
         self.addCleanup(self.temp.cleanup)
@@ -227,6 +373,11 @@ class RuntimeServicesTest(unittest.TestCase):
         self.store.cursor('shared-cursor',{'offset':1},binding='direct-target')
         result=self.store.purge(scope,'direct-receipt',[],os.getuid())
         self.assertEqual(result['bindingsRemoved'],1)
+        self.assertEqual(self.store.verify_released_snapshot(scope,'direct-receipt',os.getuid())['status'],'RELEASE_VERIFIED')
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-report-release-proof-invalid'):
+            self.store.verify_released_snapshot({**scope,'sessionId':'foreign','ids':['foreign']},'direct-receipt',os.getuid())
+        with self.assertRaisesRegex(runtime.RuntimeErrorCode,'sgs-report-release-proof-invalid'):
+            self.store.verify_released_snapshot(scope,'unknown-receipt',os.getuid())
         remaining=self.store.statistics(str(self.root))
         self.assertEqual([row['binding'] for row in remaining['sessions']],['fixture-binding','other-run-binding'])
         self.assertEqual(remaining['archives'][0]['native_telemetry'][0]['snapshot'],snapshot)

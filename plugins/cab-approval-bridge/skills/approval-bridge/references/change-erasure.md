@@ -275,3 +275,15 @@ Les approbations des RUN protégés peuvent citer textuellement les anciens RUN 
 Dans le lot, la propriété primaire d’un RUN protégé cohérent conserve intégralement son objet, même si un SID ou identifiant secondaire historique apparaît dans la portée cible. Cette règle est commune à la collecte, projection et absence ; RUN contradictoires/répertoires étrangers restent contrôlés. Les sentinelles null/undefined ne sont pas des identités. Profil compatible helper2.4.15/runtime2.4.5, même reçu.
 
 Le profil borné helper 2.4.37 et services 2.4.35 permet la reprise d’un même reçu de lot propriétaire déjà figé. Avant toute reconnexion, `preflight-owner-rebind` contrôle le reçu signé, les identités natives et des services, les RUN protégés et les fichiers du broker. La reconnexion MCP ciblée peut déclencher automatiquement le commit déjà demandé : son effet précédent reste inconnu jusqu’à obtention du reçu propriétaire. Ne pas créer de nouveau reçu ; la reprise exige une preuve APPLIED du même périmètre et du même UID avant de poursuivre. Après vérification du nettoyage, CABU aligne les versions actives.
+
+Le helper et le broker 2.4.38 qualifient le même profil avec les services
+2.4.35 pour le reçu propriétaire de lot figé ; la reprise ne vaut pas CABU.
+
+Pour un reçu propriétaire figé dont le commit n'est pas attesté, le diagnostic
+isolé `cgpt-approval-bridge-owner-diagnostic.mjs <projet> <transactionId>`
+vérifie le reçu signé et l'identité du propriétaire, sans route de commit. Il
+retourne une catégorie bornée et signale que les chemins par défaut restent à
+corroborer par la configuration effective. Les approbations à répertoire
+relatif non attribuées au périmètre initial sont conservées ; un nom de change
+commun ne suffit pas à leur attribuer un RUN. La suppression reste ciblée et
+une identité initiale présente dans un objet étranger conserve sa protection.

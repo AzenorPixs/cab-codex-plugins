@@ -33,7 +33,7 @@ native_module = importlib.util.module_from_spec(NATIVE_SPEC)
 NATIVE_SPEC.loader.exec_module(native_module)
 EMITTER_SPEC=importlib.util.spec_from_file_location('cab_sgs_emitter',SCRIPT_DIRECTORY/'cgpt-approval-bridge-sgs-emitter.py')
 emitter_module=importlib.util.module_from_spec(EMITTER_SPEC);EMITTER_SPEC.loader.exec_module(emitter_module)
-VERSION = "2.4.37"
+VERSION = "2.4.38"
 if store_module.VERSION != VERSION or native_module.VERSION != VERSION:
     raise RuntimeError("runtime-component-version-mismatch")
 MAX_BODY = 64 * 1024 * 1024
@@ -295,6 +295,10 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                 elif route==('POST','/archives/forget'):
                     if set(body)!={'project','paths'}:raise store_module.RuntimeErrorCode('sgs-archive-deletion-invalid')
                     result=self.server.store.forget_archives(body['project'],body['paths'])
+                elif route==('POST','/reports/forget-closed-change'):
+                    if set(body)!={'project','change','run','binding'}:raise store_module.RuntimeErrorCode('sgs-open-run-input-invalid')
+                    store_module.identifier(body['binding'])
+                    result=self.server.store.forget_open_change(body['project'],body['change'],body['run'],uid,body['binding'])
                 elif route==('GET','/events'):
                     if not {'project','binding'}<=set(query) or not set(query)<={'project','binding','after','limit'}:raise store_module.RuntimeErrorCode('sgs-event-query-invalid')
                     binding=self.server.store.db.execute('SELECT uid,body FROM bindings WHERE binding=?',(query['binding'][0],)).fetchone()

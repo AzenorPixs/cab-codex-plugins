@@ -1,5 +1,7 @@
 # Codex Approval Bridge — CAB
 
+Le nettoyage d’un change clos peut retirer sa copie statistique CAB tout en conservant son rapport source dans le projet.
+
 Le Web Monitor présente les sessions CAB directes et les RUN pilotés du même projet, avec leur mode et leur identité.
 
 CAB coordonne un agent orchestrateur et un agent de codage OpenCode : mandats,

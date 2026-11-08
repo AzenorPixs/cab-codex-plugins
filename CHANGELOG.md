@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 2.4.38 - 2026-11-08
+
+- Permettre un diagnostic propriétaire en lecture seule et conserver les approbations non attribuées pendant le nettoyage d’un lot.
+- Retirer la copie SGS d’un change clos sans réimporter ses anciens relevés, en préservant les autres changes et les rapports source.
+- Amorcer le nettoyage indépendant par brique, avec refus d’un RUN actif et reprise ciblée.
+
 ## 2.4.37 - 2026-11-08
 
 - Encadrer la reprise d’un nettoyage de lot figé après disparition du broker propriétaire, avec contrôle préalable des identités et des RUN protégés.

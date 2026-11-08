@@ -3,18 +3,18 @@ import {homedir} from 'node:os';
 import {join,resolve,relative,isAbsolute} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
-import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes,retentionOnlyRebind} from './cgpt-approval-bridge-change-erasure.mjs';
+import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes,retentionOnlyRebind,diagnoseErasureFilePlan} from './cgpt-approval-bridge-change-erasure.mjs';
 import {ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
-export const VERSION='2.4.37';
+export const VERSION='2.4.38';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function ownerCleanup(input,{home=homedir()}={}) {
  const {action,scope,transactionId}=input;
- if(!['prepare','commit','status','verify','finalize'].includes(action)||!/^erasure-[a-f0-9-]{36}$/.test(transactionId||'')||
+ if(!['prepare','commit','status','verify','finalize','diagnose'].includes(action)||!/^erasure-[a-f0-9-]{36}$/.test(transactionId||'')||
    !scope||!Array.isArray(scope.ids)||!Array.isArray(scope.runIds)||!scope.runIds.length||typeof scope.workspace!=='string'||resolve(scope.workspace)!==scope.workspace||scope.workspace==='/')fail('erasure-owner-input-invalid');
  const root=join(home,'.local/state/cab-owner-erasure',createHash('sha256').update(scope.workspace).digest('hex'));
- ensurePrivateStateDirectory(root);
- const tx=new ErasureTransaction(root),scopeDigest=canonicalContinuityDigest(scope);
+ if(action!=='diagnose')ensurePrivateStateDirectory(root);
+ const tx=new ErasureTransaction(root,action==='diagnose'?{createKey:false,readOnly:true}:{}),scopeDigest=canonicalContinuityDigest(scope);
  let value=tx.load();
  if(value&&(value.transactionId!==transactionId||canonicalContinuityDigest(value.scope)!==scopeDigest)){
   if(value.transactionId===transactionId&&action==='prepare'&&value.phase==='PREPARED'&&!value.entries?.length&&retentionOnlyRebind(value.scope,scope)){
@@ -22,6 +22,16 @@ export function ownerCleanup(input,{home=homedir()}={}) {
   }else fail('erasure-owner-transaction-divergent');
  }
  const receipt=state=>({protocol:'cab-owner-erasure-v1',transactionId,scopeDigest,state,uid:process.getuid(),pid:process.ppid});
+ if(action==='diagnose'){
+  const bundle=input.bundle;
+  if(!value||!['PREPARED','APPLYING'].includes(value.phase)||!bundle||!Array.isArray(bundle.roots)||
+     !Array.isArray(bundle.journalPaths)||!Array.isArray(bundle.legacyRoots)||
+     !bundle.scope||!Array.isArray(bundle.scope.ids)||
+     canonicalContinuityDigest({...bundle.scope,ids:scope.ids})!==scopeDigest||
+     !scope.ids.every(id=>bundle.scope.ids.includes(id))||!bundle.scope.ids.every(id=>typeof id==='string'))fail('erasure-owner-diagnostic-input-invalid');
+  const result=diagnoseErasureFilePlan(bundle.roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots,baseIds:scope.ids,approvalSeeds:bundle.diagnosticApprovalSeeds||[]});
+  return {...receipt('DIAGNOSED'),ownerPhase:value.phase,diagnostic:result};
+ }
  const isLegacy=(v,path)=>(v.legacyRoots||[]).some(root=>path===root||path.startsWith(root+'/'));
  const committedEpoch=v=>{
   const entry=v.entries?.at(-1),journal=v.journalPaths?.[0];
@@ -46,7 +56,8 @@ export function ownerCleanup(input,{home=homedir()}={}) {
    const bundle=input.bundle;
    if(!bundle||!Array.isArray(bundle.roots)||!Array.isArray(bundle.entries)||!Array.isArray(bundle.journalPaths)||bundle.scope?.workspace!==scope.workspace||bundle.scope?.changeId!==scope.changeId||canonicalContinuityDigest(bundle.scope?.runIds)!==canonicalContinuityDigest(scope.runIds)||scope.ids.some(id=>!bundle.scope.ids.includes(id)&&!(scope.closureAuthority==='authoritative-retired-run-batch-v1'&&scope.sharedIdentityIds.includes(id))))fail('erasure-owner-bundle-divergent');
    const roots=[...new Set(bundle.roots)];
-   const plan=erasureFilePlan(roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots||[]});
+   const plan=erasureFilePlan(roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots||[],
+     ...(scope.closureAuthority==='authoritative-retired-run-batch-v1'?{baseIds:scope.ids}:{})});
    const legacyRoots=bundle.legacyRoots||[],entries=[...plan.entries,...bundle.entries].map(entry=>{
     if(existsSync(entry.path)&&lstatSync(entry.path).uid!==process.getuid())fail('erasure-owner-file-foreign');
     const legacy=entry.legacy===true||legacyRoots.some(root=>entry.path===root||entry.path.startsWith(root+'/'));

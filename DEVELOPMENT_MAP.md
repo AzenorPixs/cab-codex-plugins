@@ -1,5 +1,17 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Simplification du nettoyage — en cours
+
+[simplify-terminal-cleanup](openspec/changes/simplify-terminal-cleanup/) : code non attribué, coordination et premiers adaptateurs testés ; raccordement des autres briques et validation finale à poursuivre.
+
+## Diagnostic du reçu propriétaire — en cours
+
+[diagnose-frozen-owner-erasure](openspec/changes/diagnose-frozen-owner-erasure/) : diagnostic et correction qualifiés en fixture ; reprise réelle et incidents CCAB associés à vérifier. Les preuves restent à leur emplacement tant que les incidents les référencent.
+
+## Retrait SGS des changes clos — SCM 2.4.38
+
+[remove-released-open-report-snapshots](openspec/changes/archive/2026-11-08-remove-released-open-report-snapshots/), code non attribué : contrôleur et SGS qualifiés en environnement isolé ; publication, activation et retraits PA10/C97 restent à vérifier.
+
 ## Reprise propriétaire figée — SCM 2.4.37
 
 [recover-frozen-owner-sentinel-compat](openspec/changes/archive/2026-11-08-recover-frozen-owner-sentinel-compat/), code non attribué : contrôles et tests ciblés validés ; reprise réelle, publication et activation à vérifier.
