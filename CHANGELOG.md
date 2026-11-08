@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.42 - 2026-11-08
+
+- Aligner les unités systemd distribuées sur la version du paquet afin de permettre la préparation CABU.
+
 ## 2.4.41 - 2026-11-08
 
 - Reprendre la vérification d’un nettoyage déjà appliqué en conservant les approbations non attribuées et leurs événements.

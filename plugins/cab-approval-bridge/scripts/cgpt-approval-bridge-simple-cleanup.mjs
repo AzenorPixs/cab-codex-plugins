@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {isAbsolute,resolve} from 'node:path';
-export const VERSION='2.4.41';
+export const VERSION='2.4.42';
 
 export function cleanupInspector({getRuns,getStatistics}) {
   if(typeof getRuns!=='function'||typeof getStatistics!=='function')throw new Error('cleanup-inspector-invalid');
