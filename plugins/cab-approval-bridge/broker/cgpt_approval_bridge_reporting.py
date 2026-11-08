@@ -9,7 +9,7 @@ import threading
 import re
 from datetime import datetime,timezone
 
-VERSION='2.4.25'
+VERSION='2.4.26'
 LOCK=threading.RLock()
 ROOT=None
 
@@ -41,6 +41,14 @@ def write(path,value):
         if os.path.exists(candidate):os.unlink(candidate)
 
 
+def valid_evidence(evidence):
+    return isinstance(evidence,list) and len(evidence)<=32 and all(
+        isinstance(item,dict) and set(item)=={'reference','sha256'} and
+        isinstance(item['reference'],str) and 1<=len(item['reference'])<=1000 and
+        isinstance(item['sha256'],str) and re.fullmatch(r'[a-f0-9]{64}',item['sha256']) is not None
+        for item in evidence)
+
+
 def enqueue_incident(args,relay):
     required={'incident_id','session_id','directory','summary','category','evidence'}
     if not isinstance(args,dict) or set(args)-{'run_id','change_id'}!=required:raise ValueError('ccab-report-input-invalid')
@@ -48,12 +56,18 @@ def enqueue_incident(args,relay):
     if not isinstance(args['summary'],str) or not 1<=len(args['summary'])<=2000:raise ValueError('ccab-summary-invalid')
     for key in ('incident_id','session_id','category'):
         if not isinstance(args[key],str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:/+@-]{0,255}',args[key]):raise ValueError('ccab-identity-invalid')
+    if not valid_evidence(args['evidence']):raise ValueError('ccab-evidence-invalid')
     root=directory(args['directory'])/'ccab-pending';root.mkdir(mode=0o700,exist_ok=True)
     key=hashlib.sha256(args['incident_id'].encode()).hexdigest();path=root/('incident-'+key+'.json')
     with LOCK:
         if path.exists():
             packet=json.loads(path.read_text())
-            if packet['args']!=args:raise ValueError('ccab-incident-conflict')
+            if packet['args']!=args:
+                previous=packet['args']
+                if not isinstance(previous,dict) or valid_evidence(previous.get('evidence')) or \
+                    {k:v for k,v in previous.items() if k!='evidence'}!={k:v for k,v in args.items() if k!='evidence'}:
+                    raise ValueError('ccab-incident-conflict')
+                packet={**packet,'args':args};write(path,packet)
         else:
             packet={'args':args,'reportedAt':datetime.now(timezone.utc).isoformat()};write(path,packet)
     try:

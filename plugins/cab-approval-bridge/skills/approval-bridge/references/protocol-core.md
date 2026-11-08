@@ -1,4 +1,4 @@
-# Noyau du contrat — CAB 2.4.25
+# Noyau du contrat — CAB 2.4.26
 
 Dans le change validé, le codeur lit, explore et utilise ses outils de façon
 autonome. Son atelier propre `.cab-tests/<change>/<RUN>/` autorise aussi les

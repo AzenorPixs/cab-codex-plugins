@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Preuves de l’outbox CCAB — SCM 2.4.26
+
+[validate-ccab-outbox-evidence](openspec/changes/archive/2026-11-08-validate-ccab-outbox-evidence/), code non attribué : validation des preuves avant mise en file et correction ciblée historique ; tests locaux réussis le 8 novembre 2026. Publication, activation et reprise réelle à vérifier séparément ; attribution ACL ultérieure.
+
 ## Digest natif write — SCM 2.4.25
 
 [document-native-write-digest](openspec/changes/archive/2026-11-08-document-native-write-digest/), code non attribué : schéma write, sérialisation JavaScript compacte et vecteur testés le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
