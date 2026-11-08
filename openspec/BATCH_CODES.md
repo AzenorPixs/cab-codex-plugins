@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[optimize-erasure-projection](changes/archive/2026-11-08-optimize-erasure-projection/), code non attribué : archivé et testé ; publication et reprise réelle restent distinctes.
+
 [preserve-retained-approval-journal](changes/archive/2026-11-08-preserve-retained-approval-journal/), code non attribué : archivé et testé ; reprise, activation et traitement CCAB restent à vérifier.
 
 [simplify-terminal-cleanup](changes/simplify-terminal-cleanup/), code non attribué : en cours ; raccordements et validation finale à poursuivre.

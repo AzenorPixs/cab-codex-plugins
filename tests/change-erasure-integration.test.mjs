@@ -150,7 +150,7 @@ test('reprise owner 2.4.35 : même reçu, broker corrigé et pair conservé',asy
  assert.equal(f.getRegistry().runs.get(f.peer.runId).state,'RESERVED');
 });
 
-test('reprise owner 2.4.35 : rattache les nouveaux PID sans écraser le reçu APPLIED',async t=>{
+for(const previous of ['2.4.38','2.4.39'])test('reprise owner 2.4.35 : rattache les nouveaux PID depuis '+previous+' sans écraser le reçu APPLIED',async t=>{
  const f=await fixture(t,'TERMINÉ',{runtimeVersion:'2.4.35'});
  const plan=await f.manager.prepare({mode:'retired-runs-v1',runIds:[f.target.runId],protectedRunIds:[f.peer.runId],ownerId:'owner',evidence:['fixture-reviewed']});
  f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
@@ -159,7 +159,7 @@ test('reprise owner 2.4.35 : rattache les nouveaux PID sans écraser le reçu AP
  const oldCommit={state:'APPLIED',uid,pid:oldBroker,instanceId:'old-broker',scopeDigest};
  tx.save({...value,phase:'STOPPING',brokerTransport:'owner-local-v1',brokerPid:oldBroker,sharedDirectory:f.workspace,transportTransactionId:'continuity-fixture',
    componentPids:{controller:111,supervisor:112,monitor:113},ownerReceipts:{prepare,commit:oldCommit},
-   recoveryCompatibility:{profile:'frozen-owner-sentinel-v1',helperVersion:'2.4.38',runtimeVersion:'2.4.35',brokerVersion:'2.4.38',ownerRebound:{brokerPid:oldBroker,instanceId:'old-broker'}}});
+   recoveryCompatibility:{profile:'frozen-owner-sentinel-v1',helperVersion:previous,runtimeVersion:'2.4.35',brokerVersion:previous,ownerRebound:{brokerPid:oldBroker,instanceId:'old-broker'}}});
  let connected=false;
  f.native.mcp=async()=>({'cgpt-validation':{status:connected?'connected':'disabled'}});
  f.native.connectMcp=async()=>{connected=true;const current=tx.load();tx.save({...current,ownerReceipts:{...current.ownerReceipts,commit:{...oldCommit,pid:newBroker,instanceId:'new-broker'}}});};

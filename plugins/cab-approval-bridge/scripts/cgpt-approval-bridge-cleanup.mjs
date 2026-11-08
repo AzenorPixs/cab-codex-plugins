@@ -15,7 +15,7 @@ import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 import {processOwnerIdentity} from './cgpt-approval-bridge-process-lifecycle.mjs';
 
-export const VERSION='2.4.39';
+export const VERSION='2.4.40';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function verifyFrozenOwnerRebind(value,{status,nativeIdentity,oldPidAbsent,now=Date.now()}={}) {
   const scope=value?.scope,prepared=value?.ownerReceipts?.prepare,commit=value?.ownerReceipts?.commit;
@@ -49,8 +49,8 @@ export async function cleanupChange(input, dependencies={}) {
 async function executeCleanup(input,dependencies) {
   if(!['preview','prepare','seal','status','execute','finalize','verify','recover-preparation','reconcile-retention','preflight-owner-rebind'].includes(input.action))fail('erasure-action-invalid');
   const runtimeVersion=input.runtimeVersion??VERSION;
-  const frozenOwnerProfile=VERSION==='2.4.39'&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind','recover-preparation'].includes(input.action);
-  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.39'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.39'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
+  const frozenOwnerProfile=VERSION==='2.4.40'&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind','recover-preparation'].includes(input.action);
+  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.40'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.40'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
   if(runtimeVersion!==VERSION&&!compatibleRecovery)fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
@@ -171,12 +171,12 @@ async function executeCleanup(input,dependencies) {
       value={...value,brokerPid:rebind.brokerPid,recoveryCompatibility:{profile:'frozen-owner-sentinel-v1',helperVersion:VERSION,runtimeVersion,brokerVersion:VERSION,ownerRebound:rebind}};
       tx.save(value);
     } else if(value.recoveryCompatibility.profile!=='frozen-owner-sentinel-v1'||
-      !(value.recoveryCompatibility.helperVersion===VERSION||input.action==='recover-preparation'&&VERSION==='2.4.39'&&value.recoveryCompatibility.helperVersion==='2.4.38')||
+      !(value.recoveryCompatibility.helperVersion===VERSION||input.action==='recover-preparation'&&VERSION==='2.4.40'&&['2.4.38','2.4.39'].includes(value.recoveryCompatibility.helperVersion))||
       value.recoveryCompatibility.runtimeVersion!==runtimeVersion||value.recoveryCompatibility.brokerVersion!==VERSION||
       value.brokerPid!==value.recoveryCompatibility.ownerRebound.brokerPid){
       const prior=value.recoveryCompatibility;
-      if(!(input.action==='recover-preparation'&&VERSION==='2.4.39'&&prior?.profile==='frozen-owner-sentinel-v1'&&
-        prior.helperVersion==='2.4.38'&&prior.runtimeVersion===runtimeVersion&&prior.brokerVersion==='2.4.38'&&
+      if(!(input.action==='recover-preparation'&&VERSION==='2.4.40'&&prior?.profile==='frozen-owner-sentinel-v1'&&
+        ['2.4.38','2.4.39'].includes(prior.helperVersion)&&prior.runtimeVersion===runtimeVersion&&prior.brokerVersion===prior.helperVersion&&
         value.brokerPid===prior.ownerRebound?.brokerPid&&value.phase==='STOPPING'&&value.ownerReceipts?.commit?.state==='APPLIED'))
         fail('erasure-runtime-compatibility-refused');
     }
