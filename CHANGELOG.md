@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.36 - 2026-11-08
+
+- Exclure les chaînes sentinelles des identités de nettoyage unitaire sans affaiblir la protection des RUN pairs.
+
 ## 2.4.35 - 2026-11-08
 
 - Documenter l’ajout d’un snapshot natif gelé sans créer de session fictive ni compter deux fois les mesures.

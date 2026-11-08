@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Identités sentinelles — SCM 2.4.36
+
+[exclude-sentinel-identities-from-change-erasure](openspec/changes/archive/2026-11-08-exclude-sentinel-identities-from-change-erasure/), code non attribué : garde ciblée et pairs qualifiés ; reprise PA02 distincte.
+
 ## Relevé natif SGS — SCM 2.4.35
 
 [document-sgs-native-snapshot-revision](openspec/changes/archive/2026-11-08-document-sgs-native-snapshot-revision/), code non attribué : procédure vérifiée sur les clôtures CISM1 et CISM2 ; publication et activation à vérifier.
