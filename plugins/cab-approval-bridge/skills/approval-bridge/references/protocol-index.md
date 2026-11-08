@@ -27,6 +27,7 @@ Après le nettoyage OC : [effacement ciblé des briques](change-erasure.md).
 | Unité approuvée avec accès HELD avant once | [retrait APPROVED/HELD](approved-held-retirement.md) ; clôture par le propriétaire dans son mandat |
 | Récupération autorisée | [recovery-policy](recovery-policy.md), [protocol-recovery](protocol-recovery.md), [technical-recovery](technical-recovery.md) |
 | Adaptations OpenCode V2 | [technical-native](technical-native.md) ; suivre ses références spécialisées uniquement selon l'incident |
+| Digest natif write/edit | [native-input-guard](native-input-guard.md) ; schéma, sérialisation et vecteur |
 | Attente et mesures | [protocol-cadences](protocol-cadences.md) |
 | Contexte sous pression | [protocol-compaction](protocol-compaction.md) |
 | Rapport d'archive et nettoyage | [protocol-lifecycle](protocol-lifecycle.md), [protocol-closure](protocol-closure.md), [technical-lifecycle](technical-lifecycle.md) |

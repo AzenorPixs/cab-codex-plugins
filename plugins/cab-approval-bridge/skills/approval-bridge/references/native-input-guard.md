@@ -4,6 +4,31 @@
 
 Pour chaque nouveau mandat natif write/edit, préparer les arguments EXACTS de l’outil (path/content ou path/oldString/newString/replaceAll selon son contrat). Calculer tool_input_sha256 avec nativeToolInputDigest exporté par cgpt-approval-bridge-opencode-client.mjs. C’est le SHA256 du JSON UTF-8 à clés d’objets triées récursivement ; ordre des tableaux et chaînes conservés, aucune normalisation Unicode ou de fin de ligne. Une empreinte du fichier seul ou inscrite dans summary ne remplace pas ce champ.
 
+### Sérialisation et vecteur synthétique
+
+Pour `write` V2, l’objet source est `{path, content}` : `path` est la chaîne
+effectivement transmise et `content` la chaîne complète, avec ses fins de ligne
+exactes. Pour `edit`, utiliser les champs natifs effectivement transmis ; ne
+pas ajouter ni omettre un champ optionnel par supposition. Le calculateur
+reconstruit récursivement les objets avec `Object.keys(...).sort()`, conserve
+l’ordre des tableaux, puis applique `JSON.stringify` JavaScript sans argument
+d’indentation : JSON compact, sans espace après `,` ou `:`. Les règles
+d’énumération et d’échappement de JavaScript s’appliquent ; ce contrat n’est
+pas une promesse d’équivalence avec un sérialiseur d’un autre langage.
+Le SHA-256 porte sur les octets UTF-8 de ce JSON, sans saut de ligne ajouté.
+Utiliser le calculateur distribué plutôt qu’une sérialisation manuelle.
+
+Vecteur synthétique : pour `path = "a.txt"` et `content = "é\n"` (un seul
+retour LF), le JSON compact est `{"content":"é\n","path":"a.txt"}` et le
+digest vaut `b024ef9ce7db198b58287a2ded400c0b657789d7845d137822d64c6fe99ea1b5`.
+Le `\n` affiché dans le JSON est son échappement ; il ne remplace pas le LF
+dans la chaîne d’entrée. Un CRLF ou une représentation Unicode différente
+produit une autre empreinte. Ne journaliser ni le contenu réel ni les secrets.
+
+Si un digest historique diverge et que l’objet qui l’a produit n’est pas
+disponible avec sa provenance, sa cause reste inconnue ; ne pas le reconstruire
+par supposition ni l’utiliser pour approuver une nouvelle écriture.
+
 Transmettre tool_input_sha256 au request_validation du fichier unique et vérifier sa concordance avec les arguments revus AVANT décision APPROVED. Le broker conserve le champ et refuse sa substitution ou suppression sur une même identité ; la décision corrélée reprend la même empreinte. La neutralité de CAB et l’examen par l’orchestrateur restent indispensables : le modèle ne s’autorise pas en fournissant une empreinte de son choix.
 
 ## Garde avant effet
