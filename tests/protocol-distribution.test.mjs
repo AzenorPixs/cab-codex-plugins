@@ -96,3 +96,13 @@ test('monitoring : version attendue résolue depuis le paquet et non figée dans
   }
   assert.match(read(skill+'references/command-update.md'),/sans arrêt ni redémarrage/);
 });
+
+test('SGS : snapshot ajouté sans nouvelle session native ni double comptage',()=>{
+ const skill=read('plugins/cab-approval-bridge/skills/sgs/SKILL.md');
+ const reference=read('plugins/cab-approval-bridge/skills/sgs/references/runtime-collection.md');
+ const command=read('.codex/commands/SGS.md');
+ assert.match(skill,/identifiant de relevé\s+distinct ne crée pas une nouvelle session native/);
+ for(const part of ['ledger_contribution','scope=cumulative','native_telemetry','binding','proof_ids'])assert.ok(reference.includes(part),part);
+ assert.match(reference,/ne crée pas une seconde session native/);
+ assert.match(command,/sans créer de nouvelle session native/);
+});

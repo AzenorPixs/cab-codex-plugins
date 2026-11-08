@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.35 - 2026-11-08
+
+- Documenter l’ajout d’un snapshot natif gelé sans créer de session fictive ni compter deux fois les mesures.
+
 ## 2.4.34 - 2026-11-08
 
 - Conserver une copie distincte des rapports complétés lors d’une reprise, avec vérification des copies antérieures.

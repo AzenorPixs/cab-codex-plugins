@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[document-sgs-native-snapshot-revision](changes/archive/2026-11-08-document-sgs-native-snapshot-revision/), code non attribué : archivé ; distribution à vérifier.
+
 [retain-updated-report-copies](changes/archive/2026-11-08-retain-updated-report-copies/), code non attribué : archivé, tests ciblés validés ; reprise effective distincte.
 
 [isolate-direct-session-finalization](changes/archive/2026-11-08-isolate-direct-session-finalization/), code non attribué : archivé, tests ciblés validés ; reprise des sessions distincte.
