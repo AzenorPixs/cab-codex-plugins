@@ -1,5 +1,7 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Le retrait SGS d’un change clos est borné au change, refuse les RUN actifs et conserve les sources ; les anciens relevés sont filtrés lors des imports ultérieurs.
+
 Les RUN directs sont observés par une lecture SGS limitée à leurs identités et bornes, sans recalcul des événements statistiques à chaque rafraîchissement.
 
 Le Web Monitor associe les RUN pilotés aux sessions CAB directes enregistrées dans SGS pour le même projet. Une source SGS indisponible ne masque pas les RUN pilotés ; les identités et les modes restent distincts.

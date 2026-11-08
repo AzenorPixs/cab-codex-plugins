@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 import hashlib
@@ -14,7 +15,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.37"
+VERSION = "2.4.38"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -31,6 +32,33 @@ SOURCES = frozenset(("codex-native", "opencode-native", "cab-component", "llm-su
 
 class RuntimeErrorCode(ValueError):
     """Erreur publique sans données confidentielles."""
+
+
+def filter_released_native_snapshots(telemetry, released):
+    """Projette les snapshots sans modifier la source ; preuve de libération à vérifier par l'appelant."""
+    if not isinstance(telemetry, list) or not isinstance(released, set):
+        raise RuntimeErrorCode('sgs-report-projection-invalid')
+    result = []
+    for record in telemetry:
+        if not isinstance(record, dict) or not isinstance(record.get('snapshot'), dict):
+            raise RuntimeErrorCode('sgs-report-projection-invalid')
+        sessions = record['snapshot'].get('sessions')
+        if not isinstance(sessions, list) or any(not isinstance(row, dict) or not isinstance(row.get('binding'), str) for row in sessions):
+            raise RuntimeErrorCode('sgs-report-projection-invalid')
+        kept = [deepcopy(row) for row in sessions if row['binding'] not in released]
+        if kept or not sessions:
+            projected = deepcopy(record)
+            projected['snapshot']['sessions'] = kept
+            result.append(projected)
+    return result
+
+
+def has_known_aggregate(node):
+    if isinstance(node, dict):
+        return node.get('state') == 'known' or any(has_known_aggregate(value) for value in node.values())
+    if isinstance(node, list):
+        return any(has_known_aggregate(value) for value in node)
+    return False
 
 
 def identifier(value):
@@ -86,6 +114,8 @@ def private_directory(path):
 
 
 class RuntimeStore:
+    has_known_report_aggregate = staticmethod(has_known_aggregate)
+
     def __init__(self, directory):
         self.directory = private_directory(directory)
         path = self.directory / "runtime.sqlite3"
@@ -121,6 +151,15 @@ class RuntimeStore:
           body TEXT NOT NULL, PRIMARY KEY(project,path));
         CREATE TABLE IF NOT EXISTS archive_suppressions(
           project TEXT NOT NULL, path_digest TEXT NOT NULL, PRIMARY KEY(project,path_digest));
+        CREATE TABLE IF NOT EXISTS released_snapshot_suppressions(
+          project TEXT NOT NULL, path_digest TEXT NOT NULL, binding_digest TEXT NOT NULL, session_digest TEXT NOT NULL, run_digest TEXT NOT NULL, uid INTEGER NOT NULL,
+          PRIMARY KEY(project,path_digest,binding_digest));
+        CREATE TABLE IF NOT EXISTS released_change_records(
+          project TEXT NOT NULL, path_digest TEXT NOT NULL, record_digest TEXT NOT NULL,
+          PRIMARY KEY(project,path_digest,record_digest));
+        CREATE TABLE IF NOT EXISTS released_change_proofs(
+          project TEXT NOT NULL, change_digest TEXT NOT NULL, run_digest TEXT NOT NULL, binding_digest TEXT NOT NULL, uid INTEGER NOT NULL,
+          PRIMARY KEY(project,change_digest,run_digest,binding_digest,uid));
         CREATE TABLE IF NOT EXISTS incidents(
           sequence INTEGER PRIMARY KEY AUTOINCREMENT, incident_id TEXT UNIQUE NOT NULL,
           created TEXT NOT NULL, updated TEXT NOT NULL, state TEXT NOT NULL,
@@ -416,6 +455,196 @@ class RuntimeStore:
                     'componentsProjected':len(components),'reportProofs':sorted(report['sha256'] for report in reports)}
             self.db.execute('INSERT INTO purge_receipts VALUES(?,?,?)',(receipt_id,scope_digest,encoded(result)))
             return result
+
+    def verify_released_snapshot(self, scope, receipt_id, uid):
+        """Vérifie le reçu SGS exact et l'absence de la liaison, sans écriture."""
+        identifier(receipt_id)
+        if not isinstance(scope, dict) or scope.get('closureAuthority') != 'direct-session-v1':
+            raise RuntimeErrorCode('sgs-report-release-proof-invalid')
+        preview = self.purge_preview(scope, uid)
+        receipt = self.db.execute('SELECT scope_digest,body FROM purge_receipts WHERE receipt_id=?', (receipt_id,)).fetchone()
+        if not receipt or receipt['scope_digest'] != digest(scope) or preview['bindings']:
+            raise RuntimeErrorCode('sgs-report-release-proof-invalid')
+        body = json.loads(receipt['body'])
+        if body.get('status') != 'PURGED' or body.get('scope_digest') != receipt['scope_digest'] or body.get('bindingsRemoved') != 1:
+            raise RuntimeErrorCode('sgs-report-release-proof-invalid')
+        return {'status': 'RELEASE_VERIFIED', 'scope_digest': receipt['scope_digest']}
+
+    def project_released_snapshots(self, project, relative, telemetry):
+        """Applique les suppressions attestées à une importation de rapport ouvert."""
+        suppressions = list(self.db.execute(
+            'SELECT binding_digest,session_digest FROM released_snapshot_suppressions WHERE project=? AND path_digest=?',
+            (project, digest(relative))))
+        suppressed = {row['binding_digest'] for row in suppressions}
+        bindings, released_sessions = set(), set()
+        for record in telemetry:
+            if not isinstance(record, dict) or not isinstance(record.get('snapshot'), dict):
+                raise RuntimeErrorCode('sgs-report-projection-invalid')
+            sessions = record['snapshot'].get('sessions')
+            if not isinstance(sessions, list):
+                raise RuntimeErrorCode('sgs-report-projection-invalid')
+            for row in sessions:
+                if not isinstance(row, dict) or not isinstance(row.get('binding'), str):
+                    raise RuntimeErrorCode('sgs-report-projection-invalid')
+                if digest(row['binding']) in suppressed:
+                    bindings.add(row['binding'])
+                    if isinstance(row.get('session'),str):
+                        released_sessions.add(row['session'])
+        projected = filter_released_native_snapshots(telemetry, bindings)
+        remaining_sessions={row.get('session') for record in projected for row in record['snapshot']['sessions'] if isinstance(row.get('session'),str)}
+        for record in projected:
+            if record.get('record_id') in bindings | (released_sessions-remaining_sessions):
+                record['record_id'] = 'retained-' + digest(record['record_id'])
+        return projected, bindings | (released_sessions-remaining_sessions), {row['session_digest'] for row in suppressions} | suppressed
+
+    def forget_released_snapshot(self, scope, receipt_id, uid):
+        """Retire les snapshots attestés d'un rapport ouvert sans modifier sa source."""
+        if not isinstance(scope, dict) or not isinstance(scope.get('changeId'), str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,199}',scope['changeId']) or scope['changeId'] in ('.','..','archive'):
+            raise RuntimeErrorCode('sgs-report-release-proof-invalid')
+        relative = 'openspec/changes/' + scope['changeId'] + '/STATISTICS.md'
+        with self.transaction():
+            proof = self.verify_released_snapshot(scope, receipt_id, uid)
+            row = self.db.execute('SELECT body FROM archive_reports WHERE project=? AND path=?',
+                                  (scope['workspace'], relative)).fetchone()
+            if not row:
+                present = self.db.execute('SELECT 1 FROM released_snapshot_suppressions WHERE project=? AND path_digest=? AND binding_digest=? AND uid=?',
+                                          (scope['workspace'],digest(relative),digest(scope['bindingId']),uid)).fetchone()
+                if present:
+                    return {'status':'SNAPSHOT_FORGOTTEN','scope_digest':proof['scope_digest'],
+                            'reimportSuppressed':True}
+                raise RuntimeErrorCode('sgs-open-report-not-found')
+            value = json.loads(row['body'])
+            if value.get('state') != 'blocked' or value.get('change') != scope['changeId']:
+                raise RuntimeErrorCode('sgs-open-report-invalid')
+            telemetry = value.get('native_telemetry')
+            projected = filter_released_native_snapshots(telemetry, {scope['bindingId']})
+            selected = [item for record in telemetry for item in record['snapshot']['sessions']
+                        if item['binding'] == scope['bindingId']]
+            expected_instance = 'codex-' + scope['sessionId'] + '-uid' + str(uid)
+            if any(item.get('instance') != expected_instance or item.get('project') != scope['workspace'] or
+                   item.get('change') != scope['changeId'] or item.get('run') != scope['runIds'][0] or
+                   item.get('session') != scope['sessionId'] or item.get('mode') != 'direct' or
+                   item.get('cab_direct') is not True or not item.get('ended_at') for item in selected):
+                raise RuntimeErrorCode('sgs-report-release-owner-mismatch')
+            if projected == telemetry:
+                present = self.db.execute('SELECT 1 FROM released_snapshot_suppressions WHERE project=? AND path_digest=? AND binding_digest=? AND uid=?',
+                                          (scope['workspace'],digest(relative),digest(scope['bindingId']),uid)).fetchone()
+                if not present:
+                    raise RuntimeErrorCode('sgs-report-snapshot-not-found')
+            for record in projected:
+                if record.get('record_id') in (scope['bindingId'], scope['sessionId']):
+                    record['record_id'] = 'retained-' + digest(record['record_id'])
+            contribution = value.get('contribution')
+            if not isinstance(contribution,dict) or not isinstance(contribution.get('sessions'),list):
+                raise RuntimeErrorCode('sgs-report-aggregate-not-separable')
+            if not projected and any(item not in (scope['bindingId'],scope['sessionId']) for item in contribution['sessions']):
+                raise RuntimeErrorCode('sgs-report-aggregate-not-separable')
+            if projected and has_known_aggregate(contribution):
+                raise RuntimeErrorCode('sgs-report-aggregate-not-separable')
+            value['native_telemetry'] = projected
+            def references_target(node):
+                if isinstance(node, dict):
+                    return any(references_target(key) or references_target(item) for key,item in node.items())
+                if isinstance(node, list):
+                    return any(references_target(item) for item in node)
+                return isinstance(node,str) and node in (scope['bindingId'],scope['sessionId'])
+            if projected and references_target(value):
+                raise RuntimeErrorCode('sgs-report-unclassified-target-reference')
+            self.db.execute('INSERT OR IGNORE INTO released_snapshot_suppressions VALUES(?,?,?,?,?,?)',
+                            (scope['workspace'], digest(relative), digest(scope['bindingId']),digest(scope['sessionId']),digest(scope['runIds'][0]),uid))
+            if projected:
+                self.db.execute('UPDATE archive_reports SET fingerprint=?,body=? WHERE project=? AND path=?',
+                                (digest(value), encoded(value), scope['workspace'], relative))
+            else:
+                for record_id in contribution['sessions']:
+                    self.db.execute('INSERT OR IGNORE INTO released_change_records VALUES(?,?,?)',
+                                    (scope['workspace'],digest('change:'+scope['changeId']),digest(record_id)))
+                self.db.execute('DELETE FROM archive_reports WHERE project=? AND path=?',(scope['workspace'],relative))
+        return {'status':'SNAPSHOT_FORGOTTEN','scope_digest':proof['scope_digest'],
+                'reimportSuppressed':True}
+
+    def forget_open_run(self, project, change, run, uid):
+        """Résout une session directe close et son reçu à partir du RUN ciblé."""
+        if not isinstance(project,str) or not Path(project).is_absolute() or not isinstance(change,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,199}',change) or change in ('.','..','archive'):
+            raise RuntimeErrorCode('sgs-open-run-input-invalid')
+        identifier(run)
+        if any((lambda value:value.get('project')==project and value.get('change')==change and value.get('run')==run)(json.loads(row[0]))
+               for row in self.db.execute('SELECT body FROM bindings')):
+            raise RuntimeErrorCode('sgs-open-run-still-registered')
+        relative='openspec/changes/'+change+'/STATISTICS.md'
+        row=self.db.execute('SELECT body FROM archive_reports WHERE project=? AND path=?',(project,relative)).fetchone()
+        if not row:
+            proof=self.db.execute('SELECT 1 FROM released_snapshot_suppressions WHERE project=? AND path_digest=? AND run_digest=? AND uid=?',
+                                  (project,digest(relative),digest(run),uid)).fetchone()
+            if proof:return {'status':'ABSENT'}
+            raise RuntimeErrorCode('sgs-open-run-absence-unverified')
+        report=json.loads(row['body'])
+        if report.get('state')!='blocked' or report.get('change')!=change:
+            raise RuntimeErrorCode('sgs-open-report-invalid')
+        candidates={}
+        for record in report.get('native_telemetry',[]):
+            for session in record.get('snapshot',{}).get('sessions',[]):
+                if session.get('project')==project and session.get('change')==change and session.get('run')==run:
+                    candidates[(session.get('binding'),session.get('session'))]=session
+        if len(candidates)!=1:
+            raise RuntimeErrorCode('sgs-open-run-identity-unverified')
+        binding,session=next(iter(candidates))
+        identifier(binding);identifier(session)
+        scope={'workspace':project,'changeId':change,'runIds':[run],'ids':[session],
+               'sessionId':session,'bindingId':binding,'closureAuthority':'direct-session-v1'}
+        matches=self.db.execute('SELECT receipt_id FROM purge_receipts WHERE scope_digest=?',(digest(scope),)).fetchall()
+        if len(matches)!=1:
+            raise RuntimeErrorCode('sgs-report-release-proof-invalid')
+        return self.forget_released_snapshot(scope,matches[0]['receipt_id'],uid)
+
+    def forget_open_change(self, project, change, run, uid, expected_binding=None):
+        """Retire la copie SGS d'un change clos, sans altérer son rapport source."""
+        if not isinstance(project,str) or not Path(project).is_absolute() or not isinstance(change,str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,199}',change) or change in ('.','..','archive'):
+            raise RuntimeErrorCode('sgs-open-run-input-invalid')
+        identifier(run);relative='openspec/changes/'+change+'/STATISTICS.md'
+        with self.transaction():
+            if any((lambda value:value.get('project')==project and value.get('change')==change)(json.loads(row[0]))
+                   for row in self.db.execute('SELECT body FROM bindings')):
+                raise RuntimeErrorCode('sgs-open-change-still-registered')
+            row=self.db.execute('SELECT body FROM archive_reports WHERE project=? AND path=?',(project,relative)).fetchone()
+            if not row:
+                proof=self.db.execute('SELECT binding_digest FROM released_change_proofs WHERE project=? AND change_digest=? AND run_digest=? AND uid=?',
+                                      (project,digest(change),digest(run),uid)).fetchall()
+                proof=any(expected_binding is None or row['binding_digest']==digest(expected_binding) for row in proof)
+                if proof:return {'status':'ALREADY_ABSENT'}
+                raise RuntimeErrorCode('sgs-open-report-not-found')
+            report=json.loads(row['body']);contribution=report.get('contribution')
+            if report.get('state')!='blocked' or report.get('change')!=change or not isinstance(contribution,dict) or not isinstance(contribution.get('sessions'),list):
+                raise RuntimeErrorCode('sgs-open-report-invalid')
+            sessions=[session for record in report.get('native_telemetry',[]) for session in record.get('snapshot',{}).get('sessions',[])]
+            if any(s.get('project')!=project or s.get('change')!=change for s in sessions):
+                raise RuntimeErrorCode('sgs-open-change-foreign-session')
+            target=[s for s in sessions if s.get('run')==run and s.get('mode')=='direct' and s.get('cab_direct') is True]
+            if len(target)!=1:raise RuntimeErrorCode('sgs-open-run-identity-unverified')
+            session=target[0];binding=identifier(session.get('binding'));session_id=identifier(session.get('session'))
+            if expected_binding is not None and binding!=expected_binding:raise RuntimeErrorCode('sgs-open-run-identity-unverified')
+            if session.get('instance')!='codex-'+session_id+'-uid'+str(uid) or not session.get('ended_at'):
+                raise RuntimeErrorCode('sgs-report-release-owner-mismatch')
+            scope={'workspace':project,'changeId':change,'runIds':[run],'ids':[session_id],
+                   'sessionId':session_id,'bindingId':binding,'closureAuthority':'direct-session-v1'}
+            receipts=self.db.execute('SELECT receipt_id FROM purge_receipts WHERE scope_digest=?',(digest(scope),)).fetchall()
+            if len(receipts)!=1:raise RuntimeErrorCode('sgs-report-release-proof-invalid')
+            proof=self.verify_released_snapshot(scope,receipts[0]['receipt_id'],uid)
+            record_ids=contribution['sessions']
+            if not record_ids or any(not isinstance(item,str) or not item for item in record_ids):raise RuntimeErrorCode('sgs-open-report-invalid')
+            for record_id in record_ids:
+                self.db.execute('INSERT OR IGNORE INTO released_change_records VALUES(?,?,?)',(project,digest('change:'+change),digest(record_id)))
+            for record in report.get('native_telemetry',[]):
+                if isinstance(record.get('record_id'),str):
+                    self.db.execute('INSERT OR IGNORE INTO released_change_records VALUES(?,?,?)',(project,digest('change:'+change),digest(record['record_id'])))
+            for old in sessions:
+                if not old.get('ended_at'):raise RuntimeErrorCode('sgs-statistical-window-open')
+                old_binding=identifier(old.get('binding'));old_session=identifier(old.get('session'));old_run=identifier(old.get('run'))
+                self.db.execute('INSERT OR IGNORE INTO released_snapshot_suppressions VALUES(?,?,?,?,?,?)',
+                                (project,digest(relative),digest(old_binding),digest(old_session),digest(old_run),uid))
+            self.db.execute('DELETE FROM archive_reports WHERE project=? AND path=?',(project,relative))
+            self.db.execute('INSERT OR IGNORE INTO released_change_proofs VALUES(?,?,?,?,?)',(project,digest(change),digest(run),digest(binding),uid))
+        return {'status':'CHANGE_REPORT_FORGOTTEN','scope_digest':proof['scope_digest'],'reimportSuppressed':True}
 
     def import_archive(self, project, relative, contribution):
         """Contribution extraite/validée par cab_sgs, jamais réécriture du rapport."""

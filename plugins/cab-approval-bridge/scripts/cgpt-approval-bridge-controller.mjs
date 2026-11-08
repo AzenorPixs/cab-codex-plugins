@@ -36,7 +36,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.4.37";
+const version = "2.4.38";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -2299,6 +2299,20 @@ async function handleRequest(request, response) {
       guardContinuityRequest(request,url,server.address().port);
       if(request.method!=='POST')throw new CoordinationError('erasure-method-invalid',405);
       const input=await readJson(request,url.pathname.startsWith('/cleanup/owner/')?4*1024*1024:8192);
+      if(url.pathname==='/cleanup/simple-sgs'){
+        if(!input||Object.keys(input).sort().join(',')!=='bindingId,changeId,runId'||typeof input.changeId!=='string'||typeof input.runId!=='string'||typeof input.bindingId!=='string'||!input.bindingId)
+          throw new CoordinationError('cleanup-input-invalid',400);
+        const target=registry.runs.get(input.runId);
+        if(target)throw new CoordinationError(target.state==='RESERVED'?'cleanup-target-active':'cleanup-piloted-run-requires-separate-cleanup');
+        const pending=erasure.pending();
+        if(pending&&(pending.scope?.changeId===input.changeId||pending.scope?.changeIds?.includes(input.changeId)))
+          throw new CoordinationError('cleanup-target-in-progress');
+        registry.beginChangeCleanup(input.changeId);
+        try{
+          const result=await runtimeRequest('sgs','/reports/forget-closed-change',{project:workspace,change:input.changeId,run:input.runId,binding:input.bindingId},{timeout:15000});
+          json(response,200,result);return;
+        }finally{registry.endChangeCleanup(input.changeId);}
+      }
       if(['/cleanup/owner/poll','/cleanup/owner/exchange'].includes(url.pathname)){
         if(!ownerProxy)throw new CoordinationError('erasure-owner-proxy-unavailable');
         const peer=ownerProxy.peer(request),sender=url.pathname.endsWith('/poll')?input:input.sender;

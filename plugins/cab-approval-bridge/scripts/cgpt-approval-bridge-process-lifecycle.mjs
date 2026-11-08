@@ -1,6 +1,6 @@
 import { readFile, readdir } from 'node:fs/promises';
 
-export const VERSION = '2.4.37';
+export const VERSION = '2.4.38';
 export const SHUTDOWN_INCOMPLETE = 78;
 
 // /proc/stat is public process metadata; never inspect cmdline or environ.

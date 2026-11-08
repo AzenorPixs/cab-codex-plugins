@@ -9,6 +9,7 @@ import {spawn,spawnSync} from 'node:child_process';
 import readline from 'node:readline';
 import {fileURLToPath} from 'node:url';
 import {ownerCleanup} from '../plugins/cab-approval-bridge/broker/cgpt_approval_bridge_owner_cleanup.mjs';
+import {diagnoseErasureFilePlan} from '../plugins/cab-approval-bridge/broker/cgpt-approval-bridge-change-erasure.mjs';
 import {ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
 import {ChangeErasureManager} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs';
 import {processOwnerIdentity} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
@@ -20,6 +21,29 @@ function fixture(t){const root=mkdtempSync(join(tmpdir(),'cab-owner-')),workspac
  const scope={protocol:'cab-change-erasure-v1',workspace,changeId:'change-target-owner-123',ownerId:'owner-target',runIds:['run-target-owner-123'],ids:['change-target-owner-123','run-target-owner-123','ses_target_owner123'],registrySequence:1,coordinationSequence:1};
  const target={runId:scope.runIds[0],changeId:scope.changeId,sessionId:scope.ids[2]},peer={runId:'run-peer-owner-123',changeId:'change-peer-owner-123',sessionId:'ses_peer_owner123'};
  const file=join(data,'approvals.json');writeFileSync(file,JSON.stringify({rows:[target,peer]}),{mode:0o600});return {root,workspace,home,data,scope,peer,file,transactionId:'erasure-'+randomUUID()};}
+test('diagnostic propriétaire : conflit classé sans contenu ni modification',t=>{
+ const f=fixture(t);writeFileSync(f.file,JSON.stringify({rows:[{runId:f.scope.runIds[0],directory:'/foreign',secret:'private-marker'}]}),{mode:0o600});
+ const before=readFileSync(f.file),result=diagnoseErasureFilePlan([f.data],f.scope);
+ assert.deepEqual(result,{status:'PLAN_REFUSED',stage:'scope-directory-target-run',code:'erasure-foreign-reference'});
+ assert.deepEqual(readFileSync(f.file),before);assert.doesNotMatch(JSON.stringify(result),/private-marker|\/foreign|cab-owner-/);
+});
+test('diagnostic propriétaire : projection mixte refusée sans écrire',t=>{
+ const f=fixture(t);writeFileSync(f.file,JSON.stringify({runId:'run-foreign-owner-456',nested:{runId:f.scope.runIds[0]}}),{mode:0o600});
+ const before=readFileSync(f.file),result=diagnoseErasureFilePlan([f.data],f.scope);
+ assert.deepEqual(result,{status:'PLAN_REFUSED',stage:'projection',code:'erasure-foreign-reference'});
+ assert.deepEqual(readFileSync(f.file),before);
+});
+test('diagnostic propriétaire : reçu local authentifié et aucun changement',t=>{
+ const f=fixture(t),input={scope:f.scope,transactionId:f.transactionId};
+ assert.throws(()=>ownerCleanup({...input,action:'diagnose',bundle:{scope:f.scope,roots:[f.data],journalPaths:[],legacyRoots:[]}},{home:f.home}),/erasure-control-root-missing/);
+ ownerCleanup({...input,action:'prepare'},{home:f.home});
+ const ownerRoot=join(f.home,'.local/state/cab-owner-erasure',hash(f.workspace));
+ const receiptPath=join(ownerRoot,'change-erasure.json'),before=readFileSync(receiptPath),data=readFileSync(f.file);
+ const result=ownerCleanup({...input,action:'diagnose',bundle:{scope:f.scope,roots:[f.data],journalPaths:[],legacyRoots:[]}},{home:f.home});
+ assert.equal(result.state,'DIAGNOSED');assert.equal(result.ownerPhase,'PREPARED');
+ assert.deepEqual(readFileSync(receiptPath),before);assert.deepEqual(readFileSync(f.file),data);
+ assert.throws(()=>ownerCleanup({...input,scope:{...f.scope,changeId:'foreign'},action:'diagnose',bundle:{scope:f.scope,roots:[f.data],journalPaths:[],legacyRoots:[]}},{home:f.home}),/erasure-owner-transaction-divergent/);
+});
 test('owner local : reprise idempotente, pair conservé, certificat puis oubli du reçu',t=>{
  const f=fixture(t),input={scope:f.scope,transactionId:f.transactionId};assert.equal(ownerCleanup({...input,action:'prepare'},{home:f.home}).state,'PREPARED');
  const bundle={scope:f.scope,roots:[f.data],entries:[],journalPaths:[]};const applied=ownerCleanup({...input,action:'commit',bundle},{home:f.home});assert.equal(applied.state,'APPLIED');assert.deepEqual(JSON.parse(readFileSync(f.file)),{rows:[f.peer]});
@@ -44,6 +68,50 @@ test('owner local : lot historique avec sentinelle conserve les objets étranger
  assert.equal(receipt.state,'APPLIED');assert.deepEqual(JSON.parse(readFileSync(f.file)).rows,[historic,protectedPeer]);
 });
 
+test('owner local : même change dans un autre projet conservé, identité cible étrangère refusée',t=>{
+ const f=fixture(t),scope={...f.scope,closureAuthority:'authoritative-retired-run-batch-v1',changeIds:[f.scope.changeId],protectedRunIds:[f.peer.runId],sharedIdentityIds:[]};
+ const foreign={changeId:scope.changeId,approvalId:'foreign-approval-unrelated-123',directory:'/other-project'},target={runId:scope.runIds[0],changeId:scope.changeId,directory:scope.workspace};
+ writeFileSync(f.file,JSON.stringify({rows:[foreign,target]}),{mode:0o600});
+ const input={scope,transactionId:f.transactionId};ownerCleanup({...input,action:'prepare'},{home:f.home});
+ const receipt=ownerCleanup({...input,action:'commit',bundle:{scope,roots:[f.data],entries:[],journalPaths:[]}},{home:f.home});
+ assert.equal(receipt.state,'APPLIED');assert.deepEqual(JSON.parse(readFileSync(f.file)).rows,[foreign]);
+ const compromised={...foreign,nested:{sessionId:scope.ids[2]}};writeFileSync(f.file,JSON.stringify({rows:[compromised]}),{mode:0o600});
+ assert.equal(diagnoseErasureFilePlan([f.data],scope).code,'erasure-foreign-reference');
+});
+
+test('owner local : approbation identique entre projets reste protégée',t=>{
+ const f=fixture(t),shared='approval-shared-foreign-123';
+ const scope={...f.scope,ids:[...f.scope.ids,shared],closureAuthority:'authoritative-retired-run-batch-v1',changeIds:[f.scope.changeId],protectedRunIds:[f.peer.runId],sharedIdentityIds:[]};
+ const data={rows:[{changeId:scope.changeId,approvalId:shared,directory:'/other-project'},
+   {runId:scope.runIds[0],changeId:scope.changeId,approvalId:shared,directory:scope.workspace}]};
+ writeFileSync(f.file,JSON.stringify(data),{mode:0o600});const before=readFileSync(f.file);
+ const input={scope,transactionId:f.transactionId};ownerCleanup({...input,action:'prepare'},{home:f.home});
+ assert.throws(()=>ownerCleanup({...input,action:'commit',bundle:{scope,roots:[f.data],entries:[],journalPaths:[]}},{home:f.home}),/erasure-foreign-reference/);
+ assert.deepEqual(readFileSync(f.file),before);
+});
+
+test('owner local : identifiant dérivé partagé conserve le pair et efface la cible',t=>{
+ const f=fixture(t),shared='approval-shared-derived-123';
+ const scope={...f.scope,closureAuthority:'authoritative-retired-run-batch-v1',changeIds:[f.scope.changeId],protectedRunIds:[f.peer.runId],sharedIdentityIds:[]};
+ const foreign={changeId:scope.changeId,approvalId:shared,directory:'/other-project',note:'foreign-opaque'};
+ const target={runId:scope.runIds[0],changeId:scope.changeId,approvalId:shared,directory:scope.workspace};
+ writeFileSync(f.file,JSON.stringify({rows:[foreign,target]}),{mode:0o600});
+ const input={scope,transactionId:f.transactionId};ownerCleanup({...input,action:'prepare'},{home:f.home});
+ const receipt=ownerCleanup({...input,action:'commit',bundle:{scope:{...scope,ids:[...scope.ids,shared]},roots:[f.data],entries:[],journalPaths:[]}},{home:f.home});
+ assert.equal(receipt.state,'APPLIED');assert.deepEqual(JSON.parse(readFileSync(f.file)).rows,[foreign]);
+ assert.equal(ownerCleanup({...input,action:'verify'},{home:f.home}).state,'VERIFIED');
+});
+
+test('owner local : approbation non attribuée à répertoire relatif conservée',t=>{
+ const f=fixture(t),shared='approval-relative-unknown-123';
+ const scope={...f.scope,closureAuthority:'authoritative-retired-run-batch-v1',changeIds:[f.scope.changeId],protectedRunIds:[f.peer.runId],sharedIdentityIds:[]};
+ const unknown={changeId:scope.changeId,approvalId:shared,directory:'relative-token'},target={runId:scope.runIds[0],changeId:scope.changeId,directory:scope.workspace};
+ writeFileSync(f.file,JSON.stringify({rows:[unknown,target]}),{mode:0o600});
+ const input={scope,transactionId:f.transactionId};ownerCleanup({...input,action:'prepare'},{home:f.home});
+ const result=ownerCleanup({...input,action:'commit',bundle:{scope:{...scope,ids:[...scope.ids,shared]},roots:[f.data],entries:[],journalPaths:[]}},{home:f.home});
+ assert.equal(result.state,'APPLIED');assert.deepEqual(JSON.parse(readFileSync(f.file)).rows,[unknown]);
+});
+
 test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible et cleanup sous le propriétaire',async t=>{
  const sudo=spawnSync('sudo',['-n','true']);if(sudo.status!==0){t.skip('sudo non disponible pour le fixture à deux UID');return;}
  const requested=process.env.CAB_TEST_FOREIGN_UID;
@@ -65,6 +133,7 @@ test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible 
   chmodSync(join(code,name),0o644);
  }
  const scope={protocol:'cab-change-erasure-v1',workspace,changeId:'change-target-owner-123',ownerId:'owner-target',runIds:['run-target-owner-123'],ids:['change-target-owner-123','run-target-owner-123','ses_target_owner123'],registrySequence:1,coordinationSequence:1};
+ if(process.env.CAB_TEST_RELATIVE_PEER==='1')Object.assign(scope,{closureAuthority:'authoritative-retired-run-batch-v1',changeIds:[scope.changeId],protectedRunIds:['run-peer-owner-123'],sharedIdentityIds:[]});
  const tx=new ErasureTransaction(master),value=tx.prepare({scope,phase:'SEALED',sessionIds:[],roots:[master],coverage:['controller','broker']});
  let broker={coordination_capabilities:['owner-local-erasure-v1']};
  const manager=new ChangeErasureManager({workspace,stateDirectory:master,registry:{},openCode:{},monitorIdentity:()=>{},broker:()=>broker,brokerIdentity:processOwnerIdentity});
@@ -106,11 +175,22 @@ for line in sys.stdin:
  try:
   command=json.loads(line)
   result=cab.owner_terminal_erasure(command)
+  if ${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} and result['state']=='PREPARED':
+   with cab.locked_store(cab.store_path()):
+    snapshot=cab.load_store(cab.store_path())
+    snapshot['approvals']['foreign-alias']={'approval_id':'approval-target','requestId':'request-other','change_id':'change-target-owner-123','directory':'relative-token','status':'APPROVED','created_at':'2026-11-05T00:00:00Z','expires_at':'2099-01-01T00:00:00Z'}
+    cab.save_store(cab.store_path(),snapshot)
   with cab.locked_store(cab.store_path()):
    saved=cab.load_store(cab.store_path())
-  print(json.dumps({'state':result['state'],'pairPreserved':'approval-peer' in saved['approvals'],'journalOK':cab.journal.verify_journal()['ok']}),flush=True)
+  print(json.dumps({'state':result['state'],'pairPreserved':'approval-peer' in saved['approvals'],'foreignPreserved':${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} is False or 'foreign-alias' in saved['approvals'],'journalOK':cab.journal.verify_journal()['ok']}),flush=True)
  except Exception as error:
-  print(json.dumps({'error':type(error).__name__+':'+str(error)}),flush=True)
+  detail={'error':type(error).__name__+':'+str(error)}
+  if ${process.env.CAB_TEST_RELATIVE_PEER==='1'?'True':'False'} and command.get('action')=='commit':
+   try:
+    bundle=cab.prepare_terminal_erasure_bundle(command)
+    detail['diagnostic']=cab.owner_erasure_worker(command,'diagnose',bundle=bundle)['diagnostic']
+   except Exception as diagnostic_error:detail['diagnosticError']=type(diagnostic_error).__name__+':'+str(diagnostic_error)
+  print(json.dumps(detail),flush=True)
  `;
  const child=spawn('sudo',['-n','-u','#'+uid,'python3','-B','-c',childCode],{stdio:['pipe','pipe','pipe']});let stderr='';child.stderr.on('data',b=>stderr+=b);
  t.after(()=>{child.stdin.end();if(child.exitCode===null)child.kill('SIGTERM');});
@@ -120,7 +200,7 @@ for line in sys.stdin:
  t.after(()=>{const own=join(hello.home,'.local/state/cab-owner-erasure',hash(workspace));spawnSync('sudo',['-n','rm','-rf','--',own]);});
  assert.equal(hello.uid,Number(uid));assert.equal(hello.keyReadable,false);
  broker={...broker,broker_process:{pid:hello.pid},instance_id:hello.instanceId};
- const send=async()=>{child.stdin.write(JSON.stringify(manager.brokerCommand())+'\n');const result=await next();assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.pairPreserved,true);assert.equal(result.journalOK,true);return result;};
+ const send=async()=>{child.stdin.write(JSON.stringify(manager.brokerCommand())+'\n');const result=await next();assert.equal(result.error,undefined,JSON.stringify(result));assert.equal(result.pairPreserved,true);assert.equal(result.foreignPreserved,true);assert.equal(result.journalOK,true);return result;};
  assert.equal((await send()).state,'PREPARED');
  const current=tx.load();tx.save({...current,phase:'FREEZING'});manager.ownerAction({transactionId:value.transactionId,action:'commit'});
  assert.equal((await send()).state,'APPLIED');

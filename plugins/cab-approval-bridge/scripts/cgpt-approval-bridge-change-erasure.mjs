@@ -8,7 +8,7 @@ import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bri
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { PermissionReplyJournal, validPermissionReply } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.4.37';
+export const VERSION = '2.4.38';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -192,7 +192,7 @@ export function retiredJobDigest(root,runIds){
   }).sort().map(path=>({path:relative(root,path),job:readRuntimeJson(path).value})));
 }
 
-export function extendErasureScope(scope, documents) {
+export function extendErasureScope(scope, documents, {diagnosticStage=()=>{},baseIds=[],seedIds=[],approvalSeeds=[]} = {}) {
   const ids = new Set(effectiveIds(scope));
   const shared=new Set(scope.sharedIdentityIds||[]);
   const owned = value => record(value) && (Object.entries(value).some(([key,item]) => identityKeys.has(key) && ids.has(item))||
@@ -202,9 +202,36 @@ export function extendErasureScope(scope, documents) {
     changed = false;
     const collect = value => {
       if (!value || typeof value !== 'object'||retainedPeer(value,scope)) return;
-      if(owned(value)&&typeof value.directory==='string'&&value.directory!==scope.workspace)fail('erasure-foreign-reference');
+      if(owned(value)&&typeof value.directory==='string'&&value.directory!==scope.workspace){
+        const primary=['runId','run_id'].some(key=>scope.runIds.includes(value[key]));
+        const change=['changeId','change_id'].some(key=>scope.changeIds?.includes(value[key])||value[key]===scope.changeId);
+        const matches=Object.entries(value).filter(([key,item])=>identityKeys.has(key)&&!['changeId','change_id'].includes(key)&&ids.has(item)).map(([key])=>key);
+        const session=matches.some(key=>['sessionId','session_id','sessionID'].includes(key));
+        const run=matches.some(key=>['runId','run_id'].includes(key));
+        const detail=run?'run':session?'session':matches.some(key=>/^(?:approvalId|approval_id)$/.test(key))?'approval':
+          matches.some(key=>/^(?:requestId|request_id)$/.test(key))?'request':matches.some(key=>/^(?:operationId|operation_id)$/.test(key))?'operation':
+          matches.some(key=>/^(?:accessId|access_id)$/.test(key))?'access':matches.length?'other':'only';
+        const candidate=resolve(value.directory),workspace=resolve(scope.workspace);
+        const area=candidate.startsWith(workspace+'/.cab-tests/')?'atelier':candidate.startsWith(workspace+'/')?'child':candidate.startsWith('/tmp/')?'tmp':candidate.startsWith(homedir()+'/datas/')?'home-project':candidate.startsWith(homedir()+'/')?'home':'foreign';
+        const hasRun=['runId','run_id'].some(key=>typeof value[key]==='string'&&value[key]);
+        const approvalMatch=Object.entries(value).filter(([key,item])=>['approvalId','approval_id'].includes(key)&&ids.has(item)).map(([,item])=>item);
+        const qualifier=area==='home-project'&&!hasRun?(approvalMatch.every(unambiguousId)?'-clear':'-ambiguous'):'';
+        const anyBase=Object.entries(value).some(([key,item])=>identityKeys.has(key)&&!['changeId','change_id'].includes(key)&&baseIds.includes(item));
+        const seed=approvalMatch.some(item=>seedIds.includes(item));
+        const deepBase=(node,depth=0)=>{
+          if(depth>0&&typeof node==='string')return unambiguousId(node)&&baseIds.includes(node);
+          if(Array.isArray(node))return node.some(item=>deepBase(item,depth+1));
+          if(!record(node))return false;
+          return Object.entries(node).some(([key,item])=>!['changeId','change_id'].includes(key)&&
+            (depth>0&&identityKeys.has(key)&&typeof item==='string'&&baseIds.includes(item)||deepBase(item,depth+1)));
+        };
+        const nested=(deepBase(value)?'-nested-base':'-no-nested-base')+(['null','undefined'].includes(value.directory)?'-sentinel':value.directory==='.'?'-dot':value.directory==='..'?'-dotdot':!value.directory.startsWith('/')?(value.directory.includes('/')?'-relative-path':'-relative-token'):candidate===value.directory?'-canonical':candidate===value.directory.replace(/\/+$/,'')?'-trailing-slash':'-noncanonical');
+        const origin=qualifier&&baseIds.length?(approvalMatch.some(item=>baseIds.includes(item))?'-base':anyBase?'-derived-base-strong':seed?(approvalMatch.some(item=>approvalSeeds.includes(item))?'-derived-seed-approval'+nested:'-derived-seed-other'+nested):'-derived-discovered'):'';
+        diagnosticStage(primary?'scope-directory-target-run':change&&detail==='approval'?'scope-directory-change-approval-'+area+(['foreign','tmp','home','home-project'].includes(area)?(hasRun?'-run':'-no-run'):'')+qualifier+origin:change?'scope-directory-change-'+detail:'scope-directory-secondary');
+        fail('erasure-foreign-reference');
+      }
       if (owned(value)) for (const [key,item] of Object.entries(value)) if (identityKeys.has(key) && identityValue(item) && !ids.has(item)&&!shared.has(item)) {
-        if (ownerKeys.has(key)) fail('erasure-foreign-reference');
+        if (ownerKeys.has(key)){diagnosticStage('scope-extension-owner');fail('erasure-foreign-reference');}
         ids.add(item); changed = true;
       }
       if(owned(value))for(const key of ['sourceSessions','revokedSessions','sessionIds','session_ids'])
@@ -222,6 +249,20 @@ export function extendErasureScope(scope, documents) {
 // Only its verified primary ownership permits retaining that opaque payload.
 function retainedPeer(node,scope) {
   if(scope.closureAuthority!=='authoritative-retired-run-batch-v1'||!record(node))return false;
+  const explicitForeign=typeof node.directory==='string'&&node.directory.startsWith('/')&&resolve(node.directory)===node.directory&&node.directory!==scope.workspace;
+  const unattributedApproval=Array.isArray(scope.ownerBaseIds)&&typeof node.directory==='string'&&node.directory!==scope.workspace&&
+    !node.directory.startsWith('/')&&['approvalId','approval_id'].some(key=>typeof node[key]==='string');
+  if(explicitForeign||unattributedApproval){
+    const ids=new Set(Array.isArray(scope.ownerBaseIds)?scope.ownerBaseIds.filter(identityValue):effectiveIds(scope));
+    const strong=value=>{
+      if(typeof value==='string')return unambiguousId(value)&&ids.has(value);
+      if(Array.isArray(value))return value.some(strong);
+      if(!record(value))return false;
+      return Object.entries(value).some(([key,item])=>!['changeId','change_id'].includes(key)&&
+        (unambiguousId(key)&&ids.has(key)||identityKeys.has(key)&&typeof item==='string'&&ids.has(item)||strong(item)));
+    };
+    if(!strong(node))return true;
+  }
   const runs=['runId','run_id'].filter(key=>typeof node[key]==='string').map(key=>node[key]);
   if(!runs.length||!runs.every(id=>id===runs[0]&&scope.protectedRunIds.includes(id)))return false;
   if(typeof node.directory==='string'&&node.directory!==scope.workspace)return false;
@@ -349,7 +390,10 @@ export function erasureFiles(root,{legacy=false,sourceArtifacts=false}={}) {
   visit(resolve(root)); return files;
 }
 
-export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sourceArtifactRoots=[] } = {}) {
+export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sourceArtifactRoots=[],diagnosticStage=()=>{},baseIds=[],approvalSeeds=[] } = {}) {
+  if(baseIds.length&&(!Array.isArray(baseIds)||!baseIds.every(id=>typeof id==='string')||scope.closureAuthority!=='authoritative-retired-run-batch-v1'))fail('erasure-owner-base-scope-invalid');
+  if(baseIds.length)scope={...scope,ownerBaseIds:[...baseIds]};
+  diagnosticStage('inventory');
   const excluded = new Set(exclude);
   const files = [...new Set(roots.flatMap(root=>erasureFiles(root,{legacy:legacyRoots.some(legacy=>root===legacy||root.startsWith(legacy+'/')),sourceArtifacts:sourceArtifactRoots.includes(root)})))].filter(path => !excluded.has(path));
   const documents = [];
@@ -368,9 +412,11 @@ export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sour
       throw Object.assign(new Error('erasure-format-uncovered'), { code: 'erasure-format-uncovered', path, cause }); }
     documents.push({ path, legacy:legacyRoots.some(root=>path===root||path.startsWith(root+'/')), ...document });
   }
-  const extended = extendErasureScope(scope, documents.map(row => row.value));
+  diagnosticStage('scope-extension');
+  const extended = extendErasureScope(scope, documents.map(row => row.value),{diagnosticStage,baseIds,seedIds:scope.ids,approvalSeeds});
   const pattern=erasurePattern(extended);
   const entries = [];
+  diagnosticStage('projection');
   for (const row of documents) {
     if(retainedPeer(row.value,extended))continue;
     const ownedPath=extended.runIds.some(id=>row.path.includes('/runs/'+id+'/'))||extended.ids.some(id=>row.path.endsWith('/'+id+'.json'));
@@ -395,6 +441,16 @@ export function erasureFilePlan(roots, scope, { exclude = [],legacyRoots=[],sour
     entries.push({ path: row.path, before: row.sha256, next: next ?? null, remove: next === undefined||ownedPath,legacy:row.legacy });
   }
   return { scope: extended, entries, inventoryDigest: canonicalContinuityDigest(entries) };
+}
+
+// Le diagnostic ne retourne ni chemin ni contenu ; il ne produit aucun candidat persistant.
+export function diagnoseErasureFilePlan(roots,scope,options={}) {
+  let stage='inventory';
+  try { erasureFilePlan(roots,scope,{...options,diagnosticStage:value=>{stage=value}}); return {status:'PLAN_VALID',stage}; }
+  catch(error) {
+    if(!/^erasure-[a-z0-9-]+$/.test(error?.code||''))throw error;
+    return {status:'PLAN_REFUSED',stage,code:error.code};
+  }
 }
 
 function syncDirectory(path) {
@@ -426,12 +482,17 @@ export function removeErasureDirectories(roots,scope) {
 }
 
 export class ErasureTransaction {
-  constructor(root,{createKey=true}={}) {
-    this.root = resolve(root); ensurePrivateStateDirectory(this.root);
+  constructor(root,{createKey=true,readOnly=false}={}) {
+    this.root = resolve(root);
+    if(readOnly){
+      if(!existsSync(this.root)||realpathSync(this.root)!==this.root)fail('erasure-control-root-missing');
+      const stat=lstatSync(this.root);
+      if(!stat.isDirectory()||stat.uid!==process.getuid()||(stat.mode&0o077))fail('erasure-control-root-unsafe');
+    }else ensurePrivateStateDirectory(this.root);
     this.path = join(this.root,'change-erasure.json');
     this.keyPath = join(this.root,'change-erasure.key');
     if (!existsSync(this.keyPath)) {
-      if(!createKey)fail('erasure-control-key-missing');
+      if(!createKey||readOnly)fail('erasure-control-key-missing');
       const fd = openSync(this.keyPath,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
       try { const key=randomBytes(32); writeRuntimeKey(fd,key); } finally { closeSync(fd); }
       syncDirectory(this.root);

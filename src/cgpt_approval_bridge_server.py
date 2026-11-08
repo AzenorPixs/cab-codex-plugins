@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.4.37"
+SERVER_VERSION = "2.4.38"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -8659,6 +8659,14 @@ def owner_erasure_worker(command, action, bundle=None, owner_receipt=None):
 
 
 def erasure_owns_item(item,scope):
+    # Un nom de change n'est pas une identité globale entre projets.
+    directory=item.get('directory')
+    if directory != scope['workspace']:
+        original=set(scope['ids'])
+        strong={'runId','run_id','sessionId','session_id','sessionID','requestId','request_id',
+                'approvalId','approval_id','operationId','operation_id','accessId','access_id'}
+        if not any(key in strong and isinstance(value,str) and value in original for key,value in item.items()):
+            return False
     return (item.get('run_id') in scope['runIds'] or item.get('change_id')==scope['changeId'] or
             scope.get('closureAuthority')=='authoritative-retired-run-batch-v1' and
             item.get('change_id') in scope.get('changeIds',[]) and item.get('change_id') not in scope.get('sharedIdentityIds',[]))
@@ -8748,6 +8756,56 @@ def prepare_terminal_erasure(signed):
         erasure_journal_snapshot_unlocked(journal.journal_path())
     with ERASURE_LOCK:
         ERASURE_PREPARED = signed
+
+
+def diagnostic_terminal_erasure_bundle(command):
+    """Inventaire propriétaire sans clé créée, sans journal réécrit ni candidat."""
+    import stat
+    from pathlib import Path
+    if command.get('action') != 'diagnose' or command.get('transport') != 'owner-local-v1':
+        raise ValidationError('erasure-owner-diagnostic-input-invalid')
+    scope = dict(command['scope'])
+    path = store_path()
+    if os.path.realpath(path) != os.path.abspath(path):
+        raise ValidationError('erasure-owner-diagnostic-store-unsafe')
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    try:
+        before = os.fstat(fd)
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_uid != os.getuid() or before.st_size > 64 * 1024 * 1024:
+            raise ValidationError('erasure-owner-diagnostic-store-unsafe')
+        with os.fdopen(os.dup(fd), 'r', encoding='utf-8') as handle:
+            data = json.load(handle)
+        after = os.fstat(fd)
+        current=os.stat(path,follow_symlinks=False)
+        if (before.st_dev,before.st_ino,before.st_size,before.st_mtime_ns) != (after.st_dev,after.st_ino,after.st_size,after.st_mtime_ns) or (before.st_dev,before.st_ino)!=(current.st_dev,current.st_ino):
+            raise ValidationError('erasure-owner-diagnostic-store-changed')
+    finally:
+        os.close(fd)
+    data, migrated = migrate_store(data)
+    if migrated:
+        raise ValidationError('erasure-owner-diagnostic-migration-required')
+    ids = set(scope['ids'])
+    approval_seeds=set()
+    keys = {'runId','run_id','changeId','change_id','sessionId','session_id','requestId','approval_id','operation_id','access_id'}
+    for item in data['approvals'].values():
+        if erasure_owns_item(item,scope):
+            ids.update(v for k,v in item.items() if k in keys and isinstance(v,str) and v)
+            if item.get('directory')==scope['workspace'] or item.get('run_id') in scope['runIds']:
+                approval_seeds.update(v for k,v in item.items() if k in ('approvalId','approval_id') and isinstance(v,str) and v)
+            ids.update(item_request_ids(item))
+    ids.difference_update(scope.get('sharedIdentityIds',[]));scope['ids']=sorted(ids)
+    journal_path=journal.journal_path();checkpoint=journal.checkpoint_path()
+    roots={path,journal_path,checkpoint,journal_path+'.erasure-epoch.json',AUTO_REMEDIATION_CIRCUIT_STATE_PATH}
+    atelier=Path.home()/'.local/state/cab-ateliers'/hashlib.sha256(scope['workspace'].encode()).hexdigest()
+    if atelier.exists():roots.add(str(atelier))
+    for file_path in (path,journal_path,checkpoint):
+        parent=os.path.dirname(file_path)
+        if any(part.startswith(('cab-approval-bridge','cgpt-approval-bridge')) or part=='broker' for part in parent.split(os.sep)):
+            roots.add(parent)
+    legacy=os.path.join(scope['workspace'],'.opencode','state','cgpt-approval-bridge')
+    legacy_roots=sorted({os.path.dirname(p) for p in (path,journal_path,checkpoint) if os.path.dirname(p)==legacy or os.path.dirname(p).startswith(legacy+os.sep)})
+    return {'scope':scope,'roots':sorted(roots),'journalPaths':[journal_path,checkpoint],'legacyRoots':legacy_roots,
+            'diagnosticApprovalSeeds':sorted(approval_seeds)}
 
 
 def prepare_terminal_erasure_bundle(_owner_command=None):

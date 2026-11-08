@@ -1,5 +1,11 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[simplify-terminal-cleanup](changes/simplify-terminal-cleanup/), code non attribué : en cours ; raccordements et validation finale à poursuivre.
+
+[diagnose-frozen-owner-erasure](changes/diagnose-frozen-owner-erasure/), code non attribué : en cours ; reprise réelle et incidents CCAB à vérifier.
+
+[remove-released-open-report-snapshots](changes/archive/2026-11-08-remove-released-open-report-snapshots/), code non attribué : archivé et testé ; publication, activation et nettoyage réel restent distincts.
+
 [recover-frozen-owner-sentinel-compat](changes/archive/2026-11-08-recover-frozen-owner-sentinel-compat/), code non attribué : archivé ; reprise réelle, publication et activation à vérifier.
 
 [exclude-sentinel-identities-from-change-erasure](changes/archive/2026-11-08-exclude-sentinel-identities-from-change-erasure/), code non attribué : archivé ; publication et reprise à vérifier.

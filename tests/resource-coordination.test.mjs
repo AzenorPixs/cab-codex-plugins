@@ -55,6 +55,15 @@ async function fixture(t) {
   return { directory, state, reserve, prepare, acquire, start, complete, release, restart, get r() { return registry; } };
 }
 
+test('nettoyage par change : refuse le RUN actif et laisse les autres changes travailler',async t=>{
+ const h=await fixture(t);h.reserve('a',[file('a','read')]);
+ assert.throws(()=>h.r.beginChangeCleanup('change-a'),/cleanup-target-active/);
+ h.r.beginChangeCleanup('change-z');
+ assert.throws(()=>h.reserve('z',[file('z','read')]),/cleanup-change-in-progress/);
+ assert.equal(h.reserve('b',[file('b','read')]).state,'RESERVED');
+ h.r.endChangeCleanup('change-z');assert.equal(h.reserve('z',[file('z','read')]).state,'RESERVED');
+});
+
 test('stopped abandoned RUN can reserve a fresh generation after restart', async (t) => {
   const h = await fixture(t); const a = h.reserve('a', [file('x', 'read')]);
   h.r.suspend('a', { version: a.version, action: 'STOP', evidence: ['targeted stop'] });
