@@ -12,7 +12,7 @@ import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approv
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 
-export const VERSION = '2.4.30';
+export const VERSION = '2.4.31';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -263,7 +263,7 @@ export class MonitorState {
   constructor(configuration, { now = () => Date.now(), fetcher = fetch, statisticsProbe = async()=>{
     try{const value=await runtimeRequest('sgs','/status');return {state:value.version===VERSION?'AVAILABLE':'VERSION_MISMATCH',available:value.version===VERSION&&value.status==='READY',version:value.version,reason:value.version===VERSION?null:'sgs-version-mismatch'};}
     catch{return {state:'UNAVAILABLE',available:false,version:null,reason:'sgs-service-unavailable'};}
-  }, directSessionsProbe = project => runtimeRequest('sgs','/stats?project='+encodeURIComponent(project)) } = {}) {
+  }, directSessionsProbe = project => runtimeRequest('sgs','/direct-sessions?project='+encodeURIComponent(project)) } = {}) {
     this.configuration = configuration; this.now = now; this.fetcher = fetcher;
     this.openCode = createOpenCodeV2ClientFromEnv({ directory: configuration.workspace,
       baseUrl: configuration.opencodeUrl, fetchImpl: fetcher });
@@ -391,7 +391,7 @@ export class MonitorState {
       statisticsEngine:this.statistics,
       nativeHealth: this.sources.opencode?.available === true && /^2\./.test(this.sources.opencode?.value?.version || '') ? true : null,
       brokerConnection: code(this.sources.mcp?.value?.['cgpt-validation']?.status),
-      runsTruncated: !Array.isArray(this.sources.registry?.value?.runs) || this.sources.registry.value.runs.length > 200 ||
+      runsTruncated: this.sources.sgs?.value?.truncated === true || !Array.isArray(this.sources.registry?.value?.runs) || this.sources.registry.value.runs.length > 200 ||
         this.sources.registry.value.truncated === true || Object.keys(record(controller.runs)).length > 200,
       configuration: { pollMs: this.configuration.pollMs, staleMs: this.configuration.staleMs,
         maxCommandLength: Number.isSafeInteger(limit) && limit > 0 ? limit : null,
