@@ -12,7 +12,7 @@ Lectures ciblées, édition, Node/Python, OpenSpec et contrôle HTTP local filtr
 
 ## 3. Fichiers modifiés
 
-Parseur du client V2 : forme search suivie d'une chaîne littérale ; tests client et banc OpenCode natif. Distribution commune, manifestes, commandes, unités et copies broker en 2.1.9 : 62 fichiers de version alignés. PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md, références CAB et cartographies amendés ; nouvelles spécifications et archive. AGENTS.md et ORCHESTRATED_CODING.md inchangés avec justification dans QUALIFICATION.md. DEVOPS.md n'est pas édité par l'agent : sa régénération DIU extérieure observée au contrôle précommit est conservée dans le commit complet SCM ; chemins d'outils relus. Aucun code métier Pixs modifié.
+Parseur du client V2 : forme search suivie d'une chaîne littérale ; tests client et banc OpenCode natif. Distribution commune, manifestes, commandes, unités et copies broker en 2.1.9 : 62 fichiers de version alignés. PROJECT.md, TECHNICAL.md, BUILD.md, README.md, CHANGELOG.md, références CAB et cartographies amendés ; nouvelles spécifications et archive. AGENTS.md et ancien protocole local inchangés avec justification dans QUALIFICATION.md. DEVOPS.md n'est pas édité par l'agent : sa régénération DIU extérieure observée au contrôle précommit est conservée dans le commit complet SCM ; chemins d'outils relus. Aucun code métier Pixs modifié.
 
 ## 4. Commandes et validations
 

@@ -41,7 +41,7 @@ spécification courante et le delta archivé ont été corrigés, sans nouvel
 archivage. Le rapport est le fichier ajouté après l'archive.
 
 `PROJECT.md`, `TECHNICAL.md`, `BUILD.md`, `README.md`, `CHANGELOG.md` et
-`ORCHESTRATED_CODING.md` décrivent la version et la règle courantes. `AGENTS.md`
+`ancien protocole local` décrivent la version et la règle courantes. `AGENTS.md`
 et `DEVOPS.md` sont restés inchangés. Le dépôt avait des changements locaux
 antérieurs ; l'inventaire Git exhaustif sera examiné pendant l'étape SCM de
 commit autorisée.

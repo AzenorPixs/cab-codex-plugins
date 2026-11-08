@@ -29,7 +29,7 @@ Le périmètre final comprend 58 fichiers, répartis sans double comptage ci-des
 
 | Groupe | Nombre | Périmètre |
 | --- | ---: | --- |
-| Supports et configuration de version | 8 | `.codex/commands/cab.md`, `pyproject.toml`, `PROJECT.md`, `TECHNICAL.md`, `BUILD.md`, `README.md`, `ORCHESTRATED_CODING.md`, `CHANGELOG.md` |
+| Supports et configuration de version | 8 | `.codex/commands/cab.md`, `pyproject.toml`, `PROJECT.md`, `TECHNICAL.md`, `BUILD.md`, `README.md`, `ancien protocole local`, `CHANGELOG.md` |
 | Canon OpenSpec | 3 | `concurrent-run-coordination`, `codex-integration-distribution`, `native-session-statistics` ; version 1.6.4 et deux exigences de reprise dans la première capacité |
 | Scripts distribués | 19 | Les 16 modules `.mjs` et 3 scripts `.py` de `plugins/cab-approval-bridge/scripts/` ; correction fonctionnelle limitée à `ResourceRunRegistry.reserve` |
 | Skills et références distribués | 6 | Deux `SKILL.md` ; références `concurrent-runs.md`, `monitor-service.md`, `run-lifecycle.md`, `observations.md` |
@@ -81,7 +81,7 @@ Je dispose d'un correctif source 1.6.4 validé, de quatre régressions nouvelles
 | `DEVOPS.md` | Inchangé : aucun runtime, outil ou environnement de développement modifié |
 | `README.md` | Mis à jour : version, comportement de reprise et limite source/runtime |
 | `CHANGELOG.md` | Entrée 1.6.4 ajoutée ; préparation 1.6.3 et historique conservés |
-| `ORCHESTRATED_CODING.md` | Versions et référence embarquée de coordination alignées ; SCM reste une session directe |
+| `ancien protocole local` | Versions et référence embarquée de coordination alignées ; SCM reste une session directe |
 | OpenSpec | Deux exigences, cinq scénarios ajoutés ; change archivé et validation stricte après archivage réussie |
 
 Les métriques de pilotage, quotas, temps productif, tokens, coûts et gains causaux restent N/A avec les motifs indiqués. Le rapport ne prouve ni publication Git, ni mise à jour marketplace, ni activation runtime, ni adoption des deltas Auth Pixs. Ces étapes restent séparées de la clôture source SCM.

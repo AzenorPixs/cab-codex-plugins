@@ -32,7 +32,7 @@ Test HTTP intégré ciblé1/1 : trois notifications identiques de révision pér
 | CHANGELOG.md | Entrée2.1.12 décrivant les deux correctifs. |
 | Skill/commande CAB | Procédure de diagnostic, limites et absence d’autorité du FAILED documentées. |
 | Référence concurrent-runs.md | Deux clarifications du protocole0.5 reprises (priorité resource-scoped et archive avant REPORT), dans le périmètre documentaire nécessaire. Test d’embarquement intégral conservé. |
-| ORCHESTRATED_CODING.md / template | Non écrits. La copie régénérée0.5 préexistante est préservée par empreinte ; ses exemples historiques sont un écart documentaire connu hors correction de ce lot. |
+| ancien protocole local / template | Non écrits. La copie régénérée0.5 préexistante est préservée par empreinte ; ses exemples historiques sont un écart documentaire connu hors correction de ce lot. |
 | OpenSpec | Deltas workflow/transport/distribution avant code ; références communes mises à jour, archivage suivi séparément. |
 
 Le contrôle documentaire PLLM a été adapté au nouveau titre et aux formulations équivalentes du protocole0.5 : mêmes invariants obligatoires sur les trois supports, identité stricte entre skill et commande conservée. Le test ne suppose plus l’identité textuelle avec l’ancien titre de protocole. Aucun test ou garde de fraîcheur/conservation/attente humaine/prévol/rejeu n’est supprimé. L’attente d’un nouveau consentement n’a pas été réintroduite pour ces ajustements documentaires nécessaires déjà autorisés.

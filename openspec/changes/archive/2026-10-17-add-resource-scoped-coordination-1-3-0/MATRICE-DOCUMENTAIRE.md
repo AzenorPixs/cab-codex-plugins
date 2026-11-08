@@ -12,7 +12,7 @@ Revue finale du jeu source commun aux deux changes autorisés. Les preuves de qu
 | DEVOPS.md | Inchangé, empreinte initiale conservée. Chemins Python 3.14.8, Node 24.22.0 et OpenSpec 1.14.2 utilisés ; aucune dépendance ni modification d'environnement requise. |
 | README.md | Mis à jour : version publique, coordination ciblée, diagramme, cinq consultations et limites des imports historiques. |
 | CHANGELOG.md | Entrée 1.3.0 — préparation source complétée : coordination, compatibilité, statistiques et absence de déploiement. Aucune date de publication inventée. |
-| ORCHESTRATED_CODING.md | Mis à jour : protocole embarqué identique à la référence distribuée après décalage des titres ; test de distribution exécuté. Aucune session pilotée déclenchée. |
+| ancien protocole local | Mis à jour : protocole embarqué identique à la référence distribuée après décalage des titres ; test de distribution exécuté. Aucune session pilotée déclenchée. |
 | openspec/specs/ | Huit capacités concernées par les deltas du change de coordination ; deux par le change statistiques. Validation stricte des deux changes et des neuf références : 11/11 avant archive. La CLI d'archive synchronise les références ; contrôle global strict requis après les deux archives. |
 | Commande /cab et skills sources | Mis à jour : version, cinq vues en lecture seule, pause/arrêt ciblés ou globaux explicites, ressources, migration et références. Modification de la commande source Codex autorisée dans le périmètre ; aucun cache installé ou prompt consommateur modifié. |
 | Catalogue marketplace | Inchangé, empreinte initiale conservée : rattache déjà le plugin complet ; aucune version propre à créer. |

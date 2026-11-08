@@ -12,7 +12,7 @@ Lectures ciblées, écritures source, tests isolés, commandes OpenSpec/Git pré
 
 Broker Python et copie distribuée ; contrôleur/contexte de job ; tests broker/contrôleur ; versions communes des modules/plugins/unités/commandes et attentes associées ; skill/commande/cadrages/README/CHANGELOG ; référence concurrent-runs et test documentaire adaptés au protocole0.5 existant ; cartographie/registre ciblés ; quatre capacités OpenSpec et ce dossier d’archive. Le schéma statistique existant est conservé.
 
-Aucun template, copie de protocole, configuration, transcript, secret ou fichier métier Pixs écrit par cette session. Les apports externes éventuellement déjà présents restent conservés et identifiés lors du commit complet SCM. Liste des 87 chemins vérifiée et conservée dans PREUVES-SCM.json ; ORCHESTRATED_CODING.md est un apport externe préservé, non écrit par cette session. Artefacts techniques output/scm-notification-diagnostics ignorés par Git.
+Aucun template, copie de protocole, configuration, transcript, secret ou fichier métier Pixs écrit par cette session. Les apports externes éventuellement déjà présents restent conservés et identifiés lors du commit complet SCM. Liste des 87 chemins vérifiée et conservée dans PREUVES-SCM.json ; ancien protocole local est un apport externe préservé, non écrit par cette session. Artefacts techniques output/scm-notification-diagnostics ignorés par Git.
 
 ## 4. Commandes et validations
 

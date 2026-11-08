@@ -23,7 +23,7 @@ distribution, le delta et la spécification OpenSpec, la référence de recovery
 les commandes et skills CAB/CABU, le changelog, les cadrages et les versions
 communes. Le nombre exhaustif d’écritures et de fichiers distincts n’a pas été
 mesuré séparément. Aucun fichier d’un projet consommateur ni
-`ORCHESTRATED_CODING.md` n’a été modifié.
+`ancien protocole local` n’a été modifié.
 
 ## 4. Commandes et vérifications
 

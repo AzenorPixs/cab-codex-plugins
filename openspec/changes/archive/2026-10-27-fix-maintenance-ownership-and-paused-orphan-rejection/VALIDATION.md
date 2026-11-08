@@ -21,7 +21,7 @@ Les logs détaillés et résultats JSON sont dans `output/scm/fix-maintenance-ow
 | DEVOPS.md | Inchangé : runtimes et banc Docker déjà autorisés. |
 | README.md | Comportements publics et version de distribution actualisés. |
 | CHANGELOG.md | Entrée 1.10.7 ajoutée. |
-| ORCHESTRATED_CODING.md | Inchangé : contrat commun conservé, référence concurrent-runs byte-compatible. |
+| ancien protocole local | Inchangé : contrat commun conservé, référence concurrent-runs byte-compatible. |
 | OpenSpec | Deux capacités enrichies, deltas stricts et canons synchronisés. |
 
 ## Exploitation

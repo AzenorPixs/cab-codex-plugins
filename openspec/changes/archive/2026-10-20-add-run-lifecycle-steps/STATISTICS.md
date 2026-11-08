@@ -61,7 +61,7 @@ Fichiers existants modifiés :
 - `.codex/commands/cab.md`
 - `BUILD.md`
 - `CHANGELOG.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `PROJECT.md`
 - `README.md`
 - `TECHNICAL.md`
@@ -112,7 +112,7 @@ profils de fixtures sont nettoyés par les tests.
 | README.md | Présentation ETAT/ÉTAPE, phase en détail, versions et couleurs des lignes. |
 | CHANGELOG.md | Entrée 1.5.0 existante complétée, sans nouvelle version ou date de publication. |
 | openspec/specs/ | Quatre capacités existantes synchronisées ; **10/10**, code 0. |
-| ORCHESTRATED_CODING.md | Déclaration d'étape, séquence et référence distribuée ajoutées ; mandats et gates conservés. |
+| ancien protocole local | Déclaration d'étape, séquence et référence distribuée ajoutées ; mandats et gates conservés. |
 | Commande et skill CAB | Catalogue et producteur documentés, dépendances run-steps et monitor-events explicitées. |
 | Manifeste et pyproject | Inchangés, empreintes conservées, version de base 1.5.0. |
 

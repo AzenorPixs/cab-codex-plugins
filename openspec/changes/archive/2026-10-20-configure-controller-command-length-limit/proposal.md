@@ -31,7 +31,7 @@ Contrôleur, contexte de job, notification broker, suites de configuration/corr�
 
 ## Version de livraison
 
-Toutes les briques CAB passent de 1.3.0 à 1.4.0, avec un cachebuster Codex neuf. Les versions courantes des sources, commande, manifeste, unités, skills, tests et cadrages sont alignées. Les historiques du changelog et des archives restent inchangés. Le seul bloc de concurrence de ORCHESTRATED_CODING.md est synchronisé avec la référence distribuée. Cette préparation source ne déploie rien et ne change aucun schéma de données ni identifiant de protocole.
+Toutes les briques CAB passent de 1.3.0 à 1.4.0, avec un cachebuster Codex neuf. Les versions courantes des sources, commande, manifeste, unités, skills, tests et cadrages sont alignées. Les historiques du changelog et des archives restent inchangés. Le seul bloc de concurrence de ancien protocole local est synchronisé avec la référence distribuée. Cette préparation source ne déploie rien et ne change aucun schéma de données ni identifiant de protocole.
 
 ## Garde de consommation
 

@@ -30,7 +30,7 @@ Preuves ignorées : output/scm-incident-coordination/{distribution-targeted.log,
 | openspec/config.yaml | Inchangé, schéma spec-driven. |
 | openspec/specs/codex-integration-distribution | Deux exigences ajoutées avec scénarios. |
 | Plugin/skill/commande | Référence unique coding-incidents.md et mêmes consignes ; alias CABU/cab restent délégants. |
-| Template/ORCHESTRATED_CODING.md/concurrent-runs.md | Aucune écriture ; concordance conservée par les contrôles de distribution. |
+| Template/ancien protocole local/concurrent-runs.md | Aucune écriture ; concordance conservée par les contrôles de distribution. |
 
 ## Livraison et activation
 

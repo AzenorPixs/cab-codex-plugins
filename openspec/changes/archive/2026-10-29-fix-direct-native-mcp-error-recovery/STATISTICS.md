@@ -14,7 +14,7 @@ Lectures ciblées, parties tool natives filtrées, commandes/tests et liaison au
 
 Client V2 et garde retry ; tests client/contrôleur ; versions communes et attentes associées ; skill/commande/référence CAB, cadrages/README/CHANGELOG ; cartographie/registre ciblés ; trois capacités OpenSpec et ce dossier d’archive. La référence concurrent-runs.md reçoit deux phrases de cohérence sans changer son test.
 
-AGENTS.md et ORCHESTRATED_CODING.md n’ont pas été écrits par cette session : leurs apports externes observés sont préservés. Aucun template, fichier métier Pixs, secret, configuration ou stockage privé OpenCode modifié. Le commit complet SCM conserve les contributions déjà présentes, identifiées séparément lors de sa revue. Liste exacte des 85 chemins contrôlée à l’étape Git et conservée dans PREUVES-SCM.json, dont AGENTS.md/ORCHESTRATED_CODING.md identifiés comme apports externes non écrits par cette session. Artefacts techniques output/scm-direct-native-recovery ignorés par Git.
+AGENTS.md et ancien protocole local n’ont pas été écrits par cette session : leurs apports externes observés sont préservés. Aucun template, fichier métier Pixs, secret, configuration ou stockage privé OpenCode modifié. Le commit complet SCM conserve les contributions déjà présentes, identifiées séparément lors de sa revue. Liste exacte des 85 chemins contrôlée à l’étape Git et conservée dans PREUVES-SCM.json, dont AGENTS.md/ancien protocole local identifiés comme apports externes non écrits par cette session. Artefacts techniques output/scm-direct-native-recovery ignorés par Git.
 
 ## 4. Commandes et validations
 

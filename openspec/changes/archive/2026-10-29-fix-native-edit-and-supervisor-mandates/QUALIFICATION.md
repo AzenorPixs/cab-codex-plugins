@@ -48,7 +48,7 @@ Le banc privé final annonce API 2.2.1, conforme au CLI 2.2.1. Son search edit a
 | CHANGELOG.md | Entrée 2.1.10, édition native et attente sans mandat. |
 | OpenSpec | Deltas transport V2, contrôleur, supervision, distribution et politique de modèle validés avant les adaptations ; archivage natif suivi séparément. |
 | Skill et commande CAB | Signature edit directe, catalogue natif distinct de MCP, refus en lecture seule, réactivation PATCH/lecture/prompt V2 et attente de l’orchestrateur. |
-| ORCHESTRATED_CODING.md | Inchangé : copie de protocole gérée par le référentiel template hors mandat. Son ancien exemple tools en lecture seule reste un écart externe préexistant signalé ; les consignes CAB V2 de ce change et le delta correspondant sont explicites. Aucune correction du template déduite de ce mandat. |
+| ancien protocole local | Inchangé : copie de protocole gérée par le référentiel template hors mandat. Son ancien exemple tools en lecture seule reste un écart externe préexistant signalé ; les consignes CAB V2 de ce change et le delta correspondant sont explicites. Aucune correction du template déduite de ce mandat. |
 
 ## Validation globale
 

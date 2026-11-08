@@ -32,7 +32,7 @@ Preuves ignorées : output/scm-model-input/{client-targeted.log,client-distribut
 | openspec/config.yaml | Inchangé, schéma spec-driven. |
 | openspec/specs/ | Transport et distribution couverts par deux exigences ; autres comportements conservés. |
 | Plugin/skill/commande | model-policy.md contient le contrat et la conversion explicite ; skill/commande renvoient à cette référence. Alias CABU/cab inchangés hors version. |
-| ORCHESTRATED_CODING.md/template/concurrent-runs.md | Aucune écriture par ce mandat ; protocole local0.6 préexistant conservé et contrôles adaptés à ses garanties actuelles. |
+| ancien protocole local/template/concurrent-runs.md | Aucune écriture par ce mandat ; protocole local0.6 préexistant conservé et contrôles adaptés à ses garanties actuelles. |
 
 ## Livraison et limites
 

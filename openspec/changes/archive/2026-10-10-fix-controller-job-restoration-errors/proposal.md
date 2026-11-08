@@ -17,7 +17,7 @@ absent sans diagnostic, ce qui compromet la continuité de supervision.
   suppression ou réinitialisation automatique.
 - Ajouter des tests isolés et les précisions documentaires nécessaires.
 - À la demande complémentaire du développeur, extraire le protocole des
-  sessions pilotées dans `ORCHESTRATED_CODING.md` à la racine de chacun des
+  sessions pilotées dans `ancien protocole local` à la racine de chacun des
   huit projets possédant AGENTS.md, templates compris, et remplacer le bloc
   de protocole de leurs AGENTS.md par un renvoi obligatoire. Y documenter
   les détails techniques déjà validés du pilotage CAB et adapter les tests
@@ -44,7 +44,7 @@ absent sans diagnostic, ce qui compromet la continuité de supervision.
 Contrôleur Node.js, tests de restauration et de distribution, documentation
 technique et publique, changelog, références OpenSpec et versions distribuées.
 Lot documentaire complémentaire autorisé : AGENTS.md et
-ORCHESTRATED_CODING.md de cab, diu, pldap, pfd, pixs, tools-codex, template et
+ancien protocole local de cab, diu, pldap, pfd, pixs, tools-codex, template et
 pixs-template. Aucun AGENTS.md n'a été trouvé dans AutoIt ou pixs-perl dans
 l'inventaire ciblé ; leurs sources ne sont pas modifiées.
 Le change est le seul traité et archivé par cette session SCM directe.

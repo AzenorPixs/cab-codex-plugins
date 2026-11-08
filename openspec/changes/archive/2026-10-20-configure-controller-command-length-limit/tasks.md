@@ -60,6 +60,6 @@ Le test de distribution a révélé le bloc local CAB 1.0.0 divergent de la réf
 | README.md | Mis à jour : version, configuration, comptage, refus et compatibilité. |
 | CHANGELOG.md | Entrée 1.4.0 de préparation source ; historique 1.3.0 et antérieur conservé. |
 | openspec/specs/ | Cinq capacités couvertes par les deltas ; synchronisation confiée à l'archivage validant. |
-| ORCHESTRATED_CODING.md | Seul bloc de concurrence remplacé, aligné sur la référence 1.4.0 ; contenu extérieur conservé. |
+| ancien protocole local | Seul bloc de concurrence remplacé, aligné sur la référence 1.4.0 ; contenu extérieur conservé. |
 
 Les sources exclues et les états CAB actifs n'ont pas été utilisés. Les transports des tests sont simulés et les workspaces temporaires isolés. Le scénario OpenCode réel n'a pas été exécuté : aucun succès de production n'est revendiqué. Lint, typage et construction tiers sont non pertinents au périmètre : aucune configuration de ces contrôles ni dépendance tierce n'est définie pour les scripts concernés.

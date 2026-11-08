@@ -200,7 +200,7 @@ La restriction lecture seule MUST NOT modifier la configuration persistante Open
 ### Requirement: Référence locale du protocole de codage piloté
 
 Le skill CAB et ses références MUST porter le contrat commun. AGENTS.md MUST
-le résoudre sans copie locale intégrale ORCHESTRATED_CODING.md. La commande
+le résoudre sans copie locale intégrale ancien protocole local. La commande
 MUST router vers les procédures utiles, chargées à la demande. La migration
 MUST vérifier la destination des obligations avant retrait du fichier local.
 Une session SCM directe MUST NOT déclencher de pilotage, OpenCode ou de
@@ -1108,3 +1108,11 @@ La distribution MUST annoncer la même version de base sur CAB, CABU, SGS et CCA
 #### Scenario: Commandes alignées
 - **WHEN** les quatre commandes portent la version du paquet
 - **THEN** le contrôle de cohérence des versions réussit
+
+### Requirement: Retrait de l'outil historique de propagation
+
+Le point d'entrée historique de propagation des prompts MUST refuser explicitement toute opération avant lecture ou écriture d'un projet. Il MUST NOT générer de copie locale du protocole ni propager d'ancien bloc de pilotage. Le diagnostic MUST orienter vers le contrat CAB distribué.
+
+#### Scenario: Tentative de propagation
+- **WHEN** l'outil historique est invoqué avec ou sans option d'application
+- **THEN** il retourne un échec explicite avant toute modification de projet et indique le contrat distribué

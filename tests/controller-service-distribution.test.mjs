@@ -104,7 +104,7 @@ test('le catalogue des étapes et son producteur sont distribués en 2.3.10', as
   for (const step of RUN_STEPS) {
     assert.ok(reference.includes(step.id), step.id); assert.ok(reference.includes(step.name), step.name);
   }
-  for (const path of ['../ORCHESTRATED_CODING.md', '../.codex/commands/CAB.md',
+  for (const path of ['../cab-distributed-protocol', '../.codex/commands/CAB.md',
     '../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md']) {
     const source = readFileSync(new URL(path, import.meta.url), 'utf8');
     assert.match(source, /run-lifecycle\.md/); assert.match(source, /expectedStepSequence/);
@@ -296,8 +296,7 @@ test("AGENTS résout le contrat CAB distribué et conserve des règles agnostiqu
   assert.match(agents,/Une session de codage directe ne nécessite aucun protocole de pilotage/);
   assert.match(agents,/contrat CAB distribué/);
   assert.match(agents,/Les deux agents DOIVENT connaître ces/);
-  assert.doesNotMatch(agents,/\[ORCHESTRATED_CODING\.md\]\(ORCHESTRATED_CODING\.md\)/);
-  const protocol=readFileSync(new URL('../ORCHESTRATED_CODING.md',import.meta.url),'utf8');
+  const protocol=readFileSync(new URL('../cab-distributed-protocol',import.meta.url),'utf8');
   for(const endpoint of ['POST /runs/<run_id>/job/arm','POST /runs/<run_id>/job/progress',
     'POST /runs/<run_id>/job/recover','POST /runs/<run_id>/job/terminal-gate','GET /decision/<requestId>']) {
     assert.ok(protocol.includes(endpoint),endpoint);
@@ -308,7 +307,7 @@ test("AGENTS résout le contrat CAB distribué et conserve des règles agnostiqu
 
 test("le protocole exige un rapport par archive et empêche une clôture sans preuve", () => {
   const protocolPaths = [
-    "../ORCHESTRATED_CODING.md",
+    "../cab-distributed-protocol",
     "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
     "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
@@ -316,16 +315,16 @@ test("le protocole exige un rapport par archive et empêche une clôture sans pr
   for (const path of protocolPaths) {
     const protocol = readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
     assert.match(protocol, /openspec\/changes\/archive\/<archive>\/STATISTICS\.md/, path);
-    assert.match(protocol, path === '../ORCHESTRATED_CODING.md'
+    assert.match(protocol, path === '../cab-distributed-protocol'
       ? /mandat unitaire distinct de ceux de `BLOCKERS\.md`, de `tasks\.md` et de l'archivage/
       : /mandat d'édition distinct/, path);
     assert.match(protocol, /six sections/, path);
-    if (path === '../ORCHESTRATED_CODING.md') {
+    if (path === '../cab-distributed-protocol') {
       assert.match(protocol, /Archivage OpenSpec autorisé et réussi/, path);
       assert.match(protocol, /Chaque rapport couvre uniquement le change auquel il est rattaché/, path);
     } else assert.match(protocol, /rapport par archive/, path);
     assert.match(protocol, /N\/A/, path);
-    assert.match(protocol, path === '../ORCHESTRATED_CODING.md'
+    assert.match(protocol, path === '../cab-distributed-protocol'
       ? /sans doublon, réouverture ni réarchivage/
       : /sans réarchiver|Ne pas réarchiver/, path);
     assert.match(protocol, /TERMINÉ/, path);
@@ -358,7 +357,7 @@ test("le protocole distribué protège la lecture seule et décrit la récupéra
 test("le protocole distribue des cadences indépendantes et conserve le choix PLLM sans réessai implicite", () => {
   const selections = [];
   for (const path of [
-    "../ORCHESTRATED_CODING.md",
+    "../cab-distributed-protocol",
     "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
   ]) {
@@ -469,7 +468,7 @@ test("la réactivation sûre est distribuée sans tools true pendant la généra
 test("le prévol divergent conserve la candidate et le job dans le protocole distribué", () => {
   const sections = [];
   for (const path of [
-    "../ORCHESTRATED_CODING.md",
+    "../cab-distributed-protocol",
     "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
   ]) {
@@ -500,7 +499,7 @@ test("le prévol divergent conserve la candidate et le job dans le protocole dis
 
 test("les sondes statistiques n'arrêtent pas le travail pour attendre le créneau", () => {
   for (const path of [
-    "../ORCHESTRATED_CODING.md",
+    "../cab-distributed-protocol",
     "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md",
     "../plugins/cab-approval-bridge/skills/coding-session-statistics/SKILL.md",
@@ -522,7 +521,7 @@ test("les sondes statistiques n'arrêtent pas le travail pour attendre le créne
 
 
 test("le refus par polling après timeout est distribué avec une sortie humaine explicite", () => {
-  for (const path of ["../ORCHESTRATED_CODING.md", "../.codex/commands/CAB.md",
+  for (const path of ["../cab-distributed-protocol", "../.codex/commands/CAB.md",
     "../plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md"]) {
     const source = readFileSync(new URL(path, import.meta.url), "utf8").replace(/\s+/g, " ");
     for (const clause of ["Depuis CAB 1.0.2", "`poll_approval` ou `get_approval`",

@@ -77,7 +77,7 @@ Fichiers existants modifiés :
 - `.codex/commands/cab.md`
 - `BUILD.md`
 - `CHANGELOG.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `PROJECT.md`
 - `README.md`
 - `TECHNICAL.md`
@@ -153,7 +153,7 @@ Nouveaux fichiers, dont le présent rapport :
 | README.md | Section supervision : navigation, sélections, confirmation et limites de purge ; schéma actualisé. |
 | CHANGELOG.md | Entrée 1.6.0 « préparation source » ; entrées historiques 1.5.0 et antérieures conservées. |
 | openspec/specs/ | local-web-monitor, native-session-statistics, codex-integration-distribution et concurrent-run-coordination synchronisées ; nouvelle web-statistics-retention ; strict final 11/11. |
-| ORCHESTRATED_CODING.md | Références de version courante alignées ; règles métier conservées. Aucun pilotage exécuté. |
+| ancien protocole local | Références de version courante alignées ; règles métier conservées. Aucun pilotage exécuté. |
 
 La marketplace ne porte pas de numéro de version propre et reste inchangée ;
 son référencement est couvert par le test de distribution. Les schémas JSON,

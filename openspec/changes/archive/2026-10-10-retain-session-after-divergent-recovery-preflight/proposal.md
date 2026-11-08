@@ -16,6 +16,6 @@ Le prévol divergent provoque actuellement une nouvelle session CAB et une purge
 - persistent-job-supervision : continuité du job et de son suivi.
 
 ## Impact
-Skill, référence de purge, commande CAB, ORCHESTRATED_CODING.md, contrôleur, tests de récupération/distribution, versions, PROJECT/TECHNICAL/BUILD/README/CHANGELOG. Le remplacement initial prévu par CISMP reste inchangé. Les trois changes historiques actifs restent intacts. Aucun déploiement, Git, service réel, dépendance ou édition de PROMPTS.
+Skill, référence de purge, commande CAB, ancien protocole local, contrôleur, tests de récupération/distribution, versions, PROJECT/TECHNICAL/BUILD/README/CHANGELOG. Le remplacement initial prévu par CISMP reste inchangé. Les trois changes historiques actifs restent intacts. Aucun déploiement, Git, service réel, dépendance ou édition de PROMPTS.
 
 Le développeur a validé explicitement ce périmètre, son archivage et son rapport après présentation de la proposition SCM.

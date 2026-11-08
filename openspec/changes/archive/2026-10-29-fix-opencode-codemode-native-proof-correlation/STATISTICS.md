@@ -16,7 +16,7 @@ Recherches et lectures ciblées, édition, commandes Node/Python, HTTP local fil
 
 Client OpenCode V2 : grammaire de données, projection Code Mode, origine des enveloppes et vérification des permissions sources. Contrôleur : preuve native shell/write sous once. Contexte de job : contrôles shell ask, diagnostics de découverte et rejet après interruption. Tests du client, recovery, contrôleur concurrent et nouveau banc `native-opencode-codemode.test.mjs` ; helper V2 étendu pour représenter les vrais formats.
 
-Distribution commune 2.1.8 : 62 fichiers de versions/manifestes/commandes et copies broker alignés. Cadrages, README.md, CHANGELOG.md, références CAB et cartographies amendés ; deltas OpenSpec et présente archive. AGENTS.md, ORCHESTRATED_CODING.md et DEVOPS.md restent inchangés avec motifs dans [QUALIFICATION.md](QUALIFICATION.md). Aucun fichier métier Pixs modifié par ce correctif.
+Distribution commune 2.1.8 : 62 fichiers de versions/manifestes/commandes et copies broker alignés. Cadrages, README.md, CHANGELOG.md, références CAB et cartographies amendés ; deltas OpenSpec et présente archive. AGENTS.md, ancien protocole local et DEVOPS.md restent inchangés avec motifs dans [QUALIFICATION.md](QUALIFICATION.md). Aucun fichier métier Pixs modifié par ce correctif.
 
 ## 4. Commandes et validations
 

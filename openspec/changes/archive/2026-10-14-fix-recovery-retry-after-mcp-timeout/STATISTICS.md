@@ -47,7 +47,7 @@ Coordination autorisée avec le chat RUN CISMP1 persistant : information du pér
 | `.codex/commands/cab.md` | 19 | 4 |
 | `BUILD.md` | 9 | 2 |
 | `CHANGELOG.md` | 9 | 0 |
-| `ORCHESTRATED_CODING.md` | 20 | 5 |
+| `ancien protocole local` | 20 | 5 |
 | `PROJECT.md` | 8 | 0 |
 | `README.md` | 9 | 1 |
 | `TECHNICAL.md` | 9 | 1 |
@@ -77,13 +77,13 @@ Coordination autorisée avec le chat RUN CISMP1 persistant : information du pér
 | `tests/native-opencode.test.mjs` | 3 | 3 |
 | `tests/test_crash_recovery.py` | 1 | 1 |
 | `tests/test_session_reset.py` | 1 | 1 |
-| `/home/devops/datas/diu/ORCHESTRATED_CODING.md` | 18 | 3 |
-| `/home/devops/datas/pfd/ORCHESTRATED_CODING.md` | 18 | 3 |
-| `/home/devops/datas/pixs-template/ORCHESTRATED_CODING.md` | 20 | 5 |
-| `/home/devops/datas/pixs/ORCHESTRATED_CODING.md` | 20 | 5 |
-| `/home/devops/datas/pldap/ORCHESTRATED_CODING.md` | 18 | 3 |
-| `/home/devops/datas/template/ORCHESTRATED_CODING.md` | 20 | 5 |
-| `/home/devops/datas/tools-codex/ORCHESTRATED_CODING.md` | 18 | 3 |
+| `/home/devops/datas/diu/ancien protocole local` | 18 | 3 |
+| `/home/devops/datas/pfd/ancien protocole local` | 18 | 3 |
+| `/home/devops/datas/pixs-template/ancien protocole local` | 20 | 5 |
+| `/home/devops/datas/pixs/ancien protocole local` | 20 | 5 |
+| `/home/devops/datas/pldap/ancien protocole local` | 18 | 3 |
+| `/home/devops/datas/template/ancien protocole local` | 20 | 5 |
+| `/home/devops/datas/tools-codex/ancien protocole local` | 18 | 3 |
 
 | Artefact de cette archive | État |
 | --- | --- |
@@ -94,7 +94,7 @@ Coordination autorisée avec le chat RUN CISMP1 persistant : information du pér
 | `specs/codex-integration-distribution/spec.md` | Créé puis archivé |
 | `STATISTIQUES.md` | Rapport créé après archive |
 
-**Total : 46 chemins livrés = 40 fichiers existants modifiés + 5 artefacts archivés + 1 rapport**. Aucun fichier source supprimé ; seuls les cinq artefacts du change ont été déplacés par archivage. Temporaires régénérables de test/compilation exclus. AGENTS.md, DEVOPS.md et la marketplace sont identiques au relevé initial. Hors CAB, seuls les sept ORCHESTRATED_CODING.md autorisés changent. Les clauses spécifiques des huit protocoles sont conservées ; leurs blocs retry sont identiques. Bilan documentaire par fichier dans design.md.
+**Total : 46 chemins livrés = 40 fichiers existants modifiés + 5 artefacts archivés + 1 rapport**. Aucun fichier source supprimé ; seuls les cinq artefacts du change ont été déplacés par archivage. Temporaires régénérables de test/compilation exclus. AGENTS.md, DEVOPS.md et la marketplace sont identiques au relevé initial. Hors CAB, seuls les sept ancien protocole local autorisés changent. Les clauses spécifiques des huit protocoles sont conservées ; leurs blocs retry sont identiques. Bilan documentaire par fichier dans design.md.
 
 ## 4. Commandes
 

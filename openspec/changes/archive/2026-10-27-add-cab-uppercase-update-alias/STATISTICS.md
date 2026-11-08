@@ -48,7 +48,7 @@ conservés. Les copies broker sont identiques octet pour octet aux trois sources
 
 Revue documentaire : PROJECT.md section 5.5, TECHNICAL.md section 16,
 BUILD.md installation/version/qualification, README.md syntaxe et CHANGELOG.md
-entrée 1.10.5 mis à jour. ORCHESTRATED_CODING.md et références embarquées
+entrée 1.10.5 mis à jour. ancien protocole local et références embarquées
 reprennent la casse et la version courantes ; formats et gardes métier conservés.
 AGENTS.md et DEVOPS.md restent inchangés avec justification dans tasks.md.
 Les cinq spécifications synchronisées concordent exactement avec leurs deltas.

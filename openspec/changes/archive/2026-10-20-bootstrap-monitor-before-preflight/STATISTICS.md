@@ -82,7 +82,7 @@ Fichiers existants modifiés :
 - `.codex/commands/cab.md`
 - `BUILD.md`
 - `CHANGELOG.md`
-- `ORCHESTRATED_CODING.md`
+- `ancien protocole local`
 - `PROJECT.md`
 - `README.md`
 - `TECHNICAL.md`
@@ -152,7 +152,7 @@ Nouveaux fichiers :
 | README.md | Version et Supervision web locale : entrée/reprise, ordre et lancement manuel conservé. |
 | CHANGELOG.md | Nouvelle entrée 1.6.3 de préparation source ; historique conservé. |
 | openspec/specs/ | Trois capacités synchronisées : distribution, concurrence, statistiques ; strict 11/11. |
-| ORCHESTRATED_CODING.md | Bootstrap avant identité/PLLM, exemption SCM, mandats existants préservés. |
+| ancien protocole local | Bootstrap avant identité/PLLM, exemption SCM, mandats existants préservés. |
 | Commande et skill | Routage et contrôle obligatoire en reprise, preuves HTTP, diagnostics séparés. |
 | Sources et distribution | 22 modules en 1.6.3 ; unités inchangées hors description de version. |
 

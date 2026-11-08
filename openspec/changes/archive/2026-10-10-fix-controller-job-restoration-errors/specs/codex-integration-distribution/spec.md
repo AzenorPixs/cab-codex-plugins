@@ -22,7 +22,7 @@ version de base `0.87.0`, le plugin pouvant ajouter un cachebuster Codex.
 
 ### Requirement: Référence locale du protocole de codage piloté
 
-ORCHESTRATED_CODING.md MAY être absent d'un projet sans besoin de pilotage.
+ancien protocole local MAY être absent d'un projet sans besoin de pilotage.
 AGENTS.md MUST préciser ce caractère facultatif et conditionnel. Lorsqu'un
 projet nécessite une session orchestrateur–agent de codage, il MUST disposer
 de ce document et les deux agents MUST le lire avant le pilotage. Le document
