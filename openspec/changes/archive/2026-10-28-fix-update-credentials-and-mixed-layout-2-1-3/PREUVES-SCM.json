@@ -57,7 +57,7 @@
     "DEVOPS.md": "inchangé : généré DIU, déclare OPENCODE_PASSWORD dans project.env et binaires de validation",
     "README.md": "mis à jour : version, option explicite, absence d’obligation pour projets sans OC",
     "CHANGELOG.md": "mis à jour : entrée 2.1.3, historique 2.1.2 conservé",
-    "ORCHESTRATED_CODING.md": "version commune alignée ; contrat de coordination conservé, référence embarquée réalignée sur son contenu",
+    "ancien-protocole-local": "version commune alignée ; contrat de coordination conservé, référence embarquée réalignée sur son contenu",
     "OpenSpec": "4 spécifications synchronisées puis change archivé avec succès"
   },
   "integrity": {

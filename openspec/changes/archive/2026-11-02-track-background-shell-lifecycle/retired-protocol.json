@@ -1,6 +1,6 @@
 {
   "date": "2026-11-02",
-  "path": "ORCHESTRATED_CODING.md",
+  "path": "ancien-protocole-local",
   "sha256": "b6b2a07dcc697e1acbc25b805165539a539df671f2910840c5560d46969ed87e",
   "bytes": 111325,
   "reason": "authorised modular migration; 18 shared prompt references adapted with explicit approval",

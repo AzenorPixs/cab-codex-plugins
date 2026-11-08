@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.33 - 2026-11-08
+
+- Expurger les désignations résiduelles des preuves historiques en conservant leur structure et les empreintes avant/après.
+
 ## 2.4.32 - 2026-11-08
 
 - Retirer les copies et instantanés historiques concernés par le protocole local retiré.

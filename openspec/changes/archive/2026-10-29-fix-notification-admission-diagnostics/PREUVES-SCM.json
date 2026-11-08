@@ -103,7 +103,7 @@
     "BUILD.md",
     "CHANGELOG.md",
     "DEVELOPMENT_MAP.md",
-    "ORCHESTRATED_CODING.md",
+    "ancien-protocole-local",
     "PROJECT.md",
     "README.md",
     "TECHNICAL.md",
@@ -187,6 +187,6 @@
   ],
   "changedPathCount": 87,
   "preservedExternalContributions": [
-    "ORCHESTRATED_CODING.md"
+    "ancien-protocole-local"
   ]
 }

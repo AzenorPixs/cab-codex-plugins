@@ -1,7 +1,7 @@
 {
   "version": "2.2.0",
   "sources": {
-    "ORCHESTRATED_CODING.md": {
+    "ancien-protocole-local": {
       "lines": 1642,
       "sha256": "b6b2a07dcc697e1acbc25b805165539a539df671f2910840c5560d46969ed87e",
       "bytes": 111325
@@ -19,7 +19,7 @@
   },
   "entries": [
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 1,
       "end": 138,
       "sourceSha256": "02c9b7e07c43fd7aff14c32ec4b7efbb51c90cc5941c833dfd4603628d3e3f95",
@@ -27,7 +27,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 139,
       "end": 332,
       "sourceSha256": "156eb22e7134c11db06f78e254998264551bba5400c3ec790540dc577756b9de",
@@ -35,7 +35,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 333,
       "end": 413,
       "sourceSha256": "1be77238957c75bb57c120b92c936019eefd5f3a4c3f0277c571364f6608d57f",
@@ -43,7 +43,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 414,
       "end": 518,
       "sourceSha256": "9af642ed4ed47ac20deb2c16b9e365c319f9bc149a9ca8281009f8e7e5a45b98",
@@ -51,7 +51,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 519,
       "end": 783,
       "sourceSha256": "f09670112a32250ccc2f68390d89fa7b8c97e56cfcd57b47147dfa87ece68884",
@@ -59,7 +59,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 784,
       "end": 1106,
       "sourceSha256": "b3fce6182a7f8fcdf41ce2894ab0aa639f19a1b78d3de8c1783a57cdac7651e9",
@@ -67,7 +67,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 1107,
       "end": 1320,
       "sourceSha256": "a9b7b1cbf9a1ca7133efcd6f734843d9a09e28319106de5cba5c2b6a6ccd79fc",
@@ -75,7 +75,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 1345,
       "end": 1454,
       "sourceSha256": "043111b4dd00a23d5b83fafeec763176936c31e37c1e67a109bc2c8a984947f6",
@@ -83,7 +83,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 1475,
       "end": 1522,
       "sourceSha256": "121e1476420136375a337937dab9458fac40fe7ecfdb2aaaf47381a20ece94b3",
@@ -91,7 +91,7 @@
       "adaptation": "Contrat déplacé ; références locales et interfaces V2 réconciliées."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 1523,
       "end": 1642,
       "sourceSha256": "5171d355c5a3ae65340a735c27806200b726725463b761b8f1d8f38ce8b8a8a9",
@@ -99,7 +99,7 @@
       "adaptation": "Coordination par ressource conservée ; libération des baux limitée à leurs effets."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 1321,
       "end": 1344,
       "sourceSha256": "0148f5308ce9796dbaf5112822af0cf9a5d1b3bb2bf990cd818e6fc3c1d8d1c6",
@@ -107,7 +107,7 @@
       "adaptation": "Cadences fixes remplacées par événements et collecte native selon les deltas 2.2.0."
     },
     {
-      "source": "ORCHESTRATED_CODING.md",
+      "source": "ancien-protocole-local",
       "start": 1455,
       "end": 1474,
       "sourceSha256": "dd7805c0c3baeee394feede40c6a024de5951ecf72d2819fe0b31e1af52b30fb",

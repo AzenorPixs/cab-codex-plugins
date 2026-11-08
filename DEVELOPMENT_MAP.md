@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Expurgation des preuves — SCM 2.4.33
+
+[redact-retired-protocol-evidence](openspec/changes/archive/2026-11-08-redact-retired-protocol-evidence/), code non attribué : preuves conservées avec relevé des empreintes avant/après ; publication et activation à vérifier.
+
 ## Observation SGS légère — SCM 2.4.31
 
 [optimize-direct-session-observation](openspec/changes/archive/2026-11-08-optimize-direct-session-observation/), code non attribué : tests ciblés validés, publication et activation à vérifier.

@@ -1,0 +1,95 @@
+{
+  "redaction": "Désignation du protocole local retirée ; les chemins modifiés sont des alias non résolubles et les empreintes internes restent historiques.",
+  "records": [
+    {
+      "path": "openspec/changes/archive/2026-10-17-add-resource-scoped-coordination-1-3-0/INVENTAIRE-SCM.json",
+      "before_sha256": "fc7587fef58bab99a88d5c4012f66ea5c485190afc3b9120b285515eeadf8a91",
+      "after_sha256": "ecbe1a79d5e9268d653d51daa4789ca8cb4d51cb40377a426fc02396f5f8ea49",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-17-add-resource-scoped-coordination-1-3-0/PREUVES-SCM.json",
+      "before_sha256": "0ebca275ea8b22e2e170192138e4b974266b346c020144eefb546566115633db",
+      "after_sha256": "3d9e48db2e9af6ae2748faa89abc0595ffd5c24fcad4a37e575d7767774d8e6b",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-17-add-resource-scoped-coordination-1-3-0/VALIDATIONS-SCM.json",
+      "before_sha256": "aa34e591e8d72afff67a3a521b25153cc160642ab73808247df7cde025f81e85",
+      "after_sha256": "f043043b631ce9ef0a033bdb83197adaf3d5a6cb307e27274720aab0bdd5ddd6",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-25-add-container-test-resource-locking/PREUVES-SCM.json",
+      "before_sha256": "866cbc15b20a38afb201dfa1e42b9982c3bec5dee2adeddf288b06a42c794764",
+      "after_sha256": "018ebfb6b93c9f3b2eb8ddfa100bb454cc5b262d5edd2d2da4b1315b9a95ea08",
+      "count": 4
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-25-fix-large-maintenance-registry-1-10-1/PREUVES-SCM.json",
+      "before_sha256": "eae12cedf86d87994105fb85420cd6989c446dde60adcd7ab5ca7a78d13802ec",
+      "after_sha256": "0228278c63d3ad268bcc2cea688076b32e0d3750906a0be769384eb938e0276e",
+      "count": 2
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-26-add-session-provider-read-limit/PREUVES-SCM.json",
+      "before_sha256": "9f03a75ac5e6454dfc822c8ff8a684ddcd73d6ae2820d29f960e19c973e10aeb",
+      "after_sha256": "03c19d2e6bb48e77f253de7df2ea6573250ffae78a2d84c9f4d25a65d0d56e42",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-26-fix-pllm-controller-binding-and-native-preflight/PREUVES-SCM.json",
+      "before_sha256": "9e0054361b3a2be506ea2e0805eede7b534eed722178206b416f871f0cb95c39",
+      "after_sha256": "3dc360394a471d37d2ff5076738143cb32061a971b0a59142376f38a92be719a",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-28-fix-native-v2-pagination-and-preflight-2-1-5/PREUVES-SCM.json",
+      "before_sha256": "20c5300419505901a851d6b7eeaf34c40a124043eb9998888ed1c7586acf476c",
+      "after_sha256": "62495eae1f18aad71e3543447c7d962e65e635f62d4a3acf231a05d76e8cea97",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-28-fix-update-credentials-and-mixed-layout-2-1-3/PREUVES-SCM.json",
+      "before_sha256": "3b2d17609ec43fd68e938f817ad3b0da7a1301edc88056295ffbb135d6a99204",
+      "after_sha256": "eff8bd2343bc195cf65e266c402400b9ccd88d1d6ecbee6d2671d85b3fae3cc4",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-28-support-pllm-catalog-3-7-2-1-4/PREUVES-SCM.json",
+      "before_sha256": "b23ca405a85c46770a1f6d1879c59fdab486b6eba5c58f92a4295d52c9b50c3d",
+      "after_sha256": "2c0e554d95ba34a62e93d61c354fb8d9a38864b5ce66476dab76180737a72c2f",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-29-fix-direct-native-mcp-error-recovery/PREUVES-SCM.json",
+      "before_sha256": "ce83ebb9b16afa1a1741a0d612059412202e1d842feb53c95689a59c1fb09801",
+      "after_sha256": "a9b9415bc61e7f6b41c6ce1f64d42254e0e9e18c4643c699f4cadb982849decf",
+      "count": 2
+    },
+    {
+      "path": "openspec/changes/archive/2026-10-29-fix-notification-admission-diagnostics/PREUVES-SCM.json",
+      "before_sha256": "31c365bee89cf19e3b71057baeff56cc2bb1f6dd0a0673accb7ffd7001e2a61c",
+      "after_sha256": "81da0339ecf7b387cb5dcf887090009d40b79756dda5fc527e6222e1f66eb6bf",
+      "count": 2
+    },
+    {
+      "path": "openspec/changes/archive/2026-11-02-track-background-shell-lifecycle/migration-coverage.json",
+      "before_sha256": "5037d6b69e8ee9a964ddc20f778805ff2889c0e301729f3df9b1fc1334884f51",
+      "after_sha256": "d104bb5edabe3eeeaacc5c024708f55e0640972379b56fd2b2d36bbb902eaf8c",
+      "count": 13
+    },
+    {
+      "path": "openspec/changes/archive/2026-11-02-track-background-shell-lifecycle/retired-protocol.json",
+      "before_sha256": "24b08b5cac9f96cf8d36ab8901c8866063e71edd700652fabe551e78f194053d",
+      "after_sha256": "c119b4180330122e295fdb91184a3039736a77984ba96f53fa8ebdb39b5c6036",
+      "count": 1
+    },
+    {
+      "path": "openspec/changes/archive/2026-11-02-track-background-shell-lifecycle/prompts-reference-update.diff",
+      "before_sha256": "c87ea44e625d74f163be75130c8b73720e7b8ceeb9c75244b40c6100ffc87089",
+      "after_sha256": "4dbaeaa000d9df41acba8c591f1d33cee86a09302695c2781892d0a0241aebee",
+      "count": 160
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[redact-retired-protocol-evidence](changes/archive/2026-11-08-redact-retired-protocol-evidence/), code non attribué : archivé ; preuve de rédaction et distribution vérifiées.
+
 [optimize-direct-session-observation](changes/archive/2026-11-08-optimize-direct-session-observation/), code non attribué : archivé, tests ciblés validés ; publication et activation à vérifier.
 
 [retire-local-protocol-propagator](changes/archive/2026-11-08-retire-local-protocol-propagator/), code non attribué : archivé, tests ciblés validés ; publication et activation à vérifier.
