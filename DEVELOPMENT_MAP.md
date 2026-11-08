@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Sessions directes et pilotées — SCM 2.4.29
+
+[show-direct-and-piloted-runs](openspec/changes/archive/2026-11-08-show-direct-and-piloted-runs/) : code non attribué ; archivé et tests ciblés validés, publication et activation à vérifier.
+
 ## Visibilité de l’atelier — SCM 2.4.28
 
 [document-atelier-mcp-session-policy](openspec/changes/archive/2026-11-08-document-atelier-mcp-session-policy/), code non attribué : diagnostic de politique du SID et correction bornée ; contrôles ciblés validés le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.

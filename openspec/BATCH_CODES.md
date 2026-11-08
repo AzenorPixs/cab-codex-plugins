@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[show-direct-and-piloted-runs](changes/archive/2026-11-08-show-direct-and-piloted-runs/), code non attribué : ARCHIVÉ, tests ciblés validés ; publication et activation à vérifier séparément.
+
 [document-atelier-mcp-session-policy](changes/archive/2026-11-08-document-atelier-mcp-session-policy/), code non attribué : ARCHIVÉ, protocole et contrôles ciblés validés ; livraison et activation à vérifier séparément.
 
 [document-orchestrator-decision-route](changes/archive/2026-11-08-document-orchestrator-decision-route/), code non attribué : ARCHIVÉ, documentation et distribution vérifiées ; publication et activation à vérifier séparément.

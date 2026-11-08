@@ -188,9 +188,9 @@ test('versions propres à chaque source, cycle structuré et état WAITING disti
     return new Response(JSON.stringify(value), { headers: { 'content-type': 'application/json' } });
   };
   const state = new MonitorState({ ...config(), workspace, controllerUrl: 'http://127.0.0.1:10001',
-    supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher });
+    supervisorUrl: 'http://127.0.0.1:10002', opencodeUrl: 'http://127.0.0.1:10003' }, { fetcher, statisticsProbe: async()=>({state:'AVAILABLE',available:true,version:'2.4.6',reason:null}) });
   await state.collect(); const result = state.snapshot();
-  assert.deepEqual(result.componentVersions, { controller: '2.4.6', supervisor: '1.4.0', broker: '2.4.6', opencode: '2.4.6', monitor: '2.4.6', statistics:'2.4.6' });
+  assert.deepEqual(result.componentVersions, { controller: '2.4.6', supervisor: '1.4.0', broker: '2.4.6', opencode: '2.4.6', monitor: monitorVersion, statistics:'2.4.6' });
   assert.equal(result.stepCatalog.length, 11); assert.equal(result.runs[0].step.name, 'Implémentation');
   assert.equal(result.runs[0].step.position, 6); assert.equal(result.runs[0].phase, 'WORK');
   assert.equal(result.runs[0].operationalState, 'WAITING'); assert.equal(result.runs[0].stepHistory.length, 2);
@@ -261,7 +261,7 @@ test('bootstrap identité minimale : version/workspace seulement, sans données 
   const base = 'http://127.0.0.1:' + address.port;
   const response = await fetch(base + '/api/identity'); assert.equal(response.status, 200);
   const identity = await response.json();
-  assert.deepEqual(identity,{version:monitorVersion,identity:{workspace}});
+  assert.deepEqual(identity,{version:monitorVersion,identity:{workspace,mode:'piloted'}});
   assert.equal((await fetch(base+'/api/maintenance-identity')).status,403);
   const maintenance=await (await fetch(base+'/api/maintenance-identity',{headers:{'x-cab-continuity':'cab-continuity-v1'}})).json();
   assert.deepEqual(Object.keys(maintenance).sort(),['identity','pid','stateDirectory','version']);
@@ -290,41 +290,27 @@ test('serveur indépendant : page, snapshot multi-RUN, CSP, SSE initial et mutat
   assert.match(new TextDecoder().decode(first.value), /event: snapshot/); abort.abort(); await reader.cancel().catch(() => {});
 });
 
-test('relais STATS : routes fixes, origine obligatoire, corps borné et panne', async (t) => {
-  const workspace = await fixture(t); const requests = []; let failed = false;
-  const upstream = await listen(t, async (request, response) => {
-    if (!request.url.startsWith('/statistics/')) { response.writeHead(503).end(); return; }
-    requests.push({ url: request.url, method: request.method });
-    if (failed) { response.writeHead(503).end(); return; }
-    if (request.method === 'POST') {
-      assert.equal(request.headers['x-cab-statistics'], '1');
-      let body = ''; for await (const chunk of request) body += chunk;
-      return json(response, { received: JSON.parse(body) });
-    }
-    return json(response, { sources: [], cumulative: [], selection: '7d' });
-  });
+test('relais STATS utilise SGS et conserve les gardes de rétention', async (t) => {
+  const workspace = await fixture(t); let failed = false; const calls=[];
+  const upstream = await listen(t, (_request, response) => { response.writeHead(503).end(); });
+  const runtime = async (service,path) => {
+    calls.push({service,path});
+    if(failed)throw new Error('unavailable');
+    return {sessions:[{run:'run-a'}],archives:[]};
+  };
   const monitor = await createMonitorServer({ ...config(), workspace, port: 0, controllerUrl: upstream,
-    supervisorUrl: upstream, opencodeUrl: upstream });
+    supervisorUrl: upstream, opencodeUrl: upstream },{runtimeRequest:runtime});
   const address = await monitor.start(); t.after(() => monitor.close());
   const base = 'http://127.0.0.1:' + address.port;
   assert.equal((await fetch(base + '/stats.mjs')).status, 200);
-  assert.equal((await fetch(base + '/api/statistics?selection=7d')).status, 200);
-  assert.equal((await fetch(base + '/api/statistics?path=/private')).status, 400);
-  const path = base + '/api/statistics/retention/preview';
-  const headers = { 'content-type': 'application/json', 'x-cab-statistics': '1', origin: base };
-  const before = requests.length;
-  assert.equal((await fetch(path, { method: 'POST', headers: { ...headers, origin: 'http://foreign.invalid' }, body: '{"days":7}' })).status, 403);
-  assert.equal((await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json', 'x-cab-statistics': '1' }, body: '{"days":7}' })).status, 403);
-  assert.equal((await fetch(path, { method: 'POST', headers, body: ' '.repeat(4097) })).status, 413);
-  assert.equal(requests.length, before);
-  const response = await fetch(path, { method: 'POST', headers, body: '{"days":7}' });
-  assert.deepEqual(await response.json(), { received: { days: 7 } });
-  assert.deepEqual(requests.at(-1), { url: '/statistics/retention/preview', method: 'POST' });
-  assert.equal((await fetch(base + '/api/statistics/retention/arbitrary', { method: 'POST', headers })).status, 404);
-  failed = true;
-  assert.equal((await fetch(base + '/api/statistics?selection=7d')).status, 503);
+  const result = await (await fetch(base + '/api/statistics?selection=7d')).json();
+  assert.equal(result.backend, 'sgs'); assert.deepEqual(result.runOptions,['run-a']);
+  assert.equal(calls.at(-1).service,'sgs');
+  assert.equal((await fetch(base + '/api/statistics?path=/private')).status, 503);
+  assert.equal((await fetch(base + '/api/statistics/retention/preview')).status,409);
+  assert.equal((await fetch(base + '/api/statistics/retention/preview',{method:'POST'})).status,405);
+  failed=true;assert.equal((await fetch(base + '/api/statistics?selection=7d')).status,503);
 });
-
 
 test('registre compact : collecte indépendante de l’historique complet et refus détaillés bornés',async t=>{
  const workspace=await fixture(t);let fullReads=0;const base=await listen(t,(req,res)=>{if(req.url==='/runs'){fullReads++;return json(res,{history:'x'.repeat(3*1024*1024),runs:[]})}if(req.url==='/monitor/runs')return json(res,{snapshot_only:true,totalRuns:1,truncated:false,runs:[{runId:'a',changeId:'change-a',sessionId:'ses_a',state:'RESERVED',version:1}]});res.writeHead(503).end()});
@@ -344,6 +330,28 @@ test('identité de maintenance : PID et racine bornés, accès explicite, bootst
  const base='http://127.0.0.1:'+address.port;
  assert.equal((await fetch(base+'/api/maintenance-identity')).status,403);
  const response=await fetch(base+'/api/maintenance-identity',{headers:{'x-cab-continuity':'cab-continuity-v1'}});
- assert.equal(response.status,200);assert.deepEqual(await response.json(),{version:monitorVersion,identity:{workspace},pid:process.pid,stateDirectory:configuration.stateDirectory});
- assert.deepEqual(await(await fetch(base+'/api/identity')).json(),{version:monitorVersion,identity:{workspace}});
+ assert.equal(response.status,200);assert.deepEqual(await response.json(),{version:monitorVersion,identity:{workspace,mode:'piloted'},pid:process.pid,stateDirectory:configuration.stateDirectory});
+ assert.deepEqual(await(await fetch(base+'/api/identity')).json(),{version:monitorVersion,identity:{workspace,mode:'piloted'}});
+});
+
+test('coexistence directe et pilotée et perte de SGS sans perte du RUN piloté', async () => {
+  let online = true;
+  const state = new MonitorState(config(), {directSessionsProbe: async () => {
+    if (!online) throw new Error('unavailable');
+    return {sessions:[{run:'same-run',change:'change-a',session:'direct-session',binding:'binding',mode:'direct',cab_direct:true,agent:'codex'}]};
+  }});
+  state.sources.registry = {value:{runs:[{runId:'same-run',state:'RESERVED',changeId:'change-a',sessionId:'pilot-session'}]}};
+  state.sources.controller = {value:{mode:'concurrent',runs:{'same-run':{job:{sessionId:'pilot-session'}}}}};
+  await state.collectDirectSessions();
+  let runs = state.snapshot().runs;
+  assert.equal(runs.length, 2);
+  assert.equal(runs.find(run => run.mode === 'direct').sessionId, 'direct-session');
+  assert.equal(runs.find(run => run.mode === 'direct').operationalState, 'DIRECT');
+  assert.equal(runs.find(run => run.mode !== 'direct').sessionId, 'pilot-session');
+  online = false;
+  await state.collectDirectSessions();
+  runs = state.snapshot().runs;
+  assert.equal(state.snapshot().sources.sgs.available, false);
+  assert.equal(runs.find(run => run.mode === 'direct').operationalState, 'UNKNOWN');
+  assert.equal(runs.find(run => run.mode !== 'direct').sessionId, 'pilot-session');
 });

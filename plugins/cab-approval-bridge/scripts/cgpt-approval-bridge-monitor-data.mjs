@@ -12,7 +12,7 @@ import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approv
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 
-export const VERSION = '2.4.28';
+export const VERSION = '2.4.29';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -263,7 +263,7 @@ export class MonitorState {
   constructor(configuration, { now = () => Date.now(), fetcher = fetch, statisticsProbe = async()=>{
     try{const value=await runtimeRequest('sgs','/status');return {state:value.version===VERSION?'AVAILABLE':'VERSION_MISMATCH',available:value.version===VERSION&&value.status==='READY',version:value.version,reason:value.version===VERSION?null:'sgs-version-mismatch'};}
     catch{return {state:'UNAVAILABLE',available:false,version:null,reason:'sgs-service-unavailable'};}
-  } } = {}) {
+  }, directSessionsProbe = project => runtimeRequest('sgs','/stats?project='+encodeURIComponent(project)) } = {}) {
     this.configuration = configuration; this.now = now; this.fetcher = fetcher;
     this.openCode = createOpenCodeV2ClientFromEnv({ directory: configuration.workspace,
       baseUrl: configuration.opencodeUrl, fetchImpl: fetcher });
@@ -277,6 +277,7 @@ export class MonitorState {
     this.instances = [];
     this.lastSequence = 0;
     this.statisticsProbe=statisticsProbe;
+    this.directSessionsProbe=directSessionsProbe;
     this.statistics={state:'UNOBSERVED',available:false,version:null,reason:null,checkedAt:null};
   }
   async collectStatistics() {
@@ -284,6 +285,13 @@ export class MonitorState {
     let value;
     try{value=await this.statisticsProbe();}catch{value={state:'UNAVAILABLE',available:false,version:null,reason:'engine-check-failed'};}
     this.statistics={...value,checkedAt:new Date(this.now()).toISOString()};
+  }
+  async collectDirectSessions() {
+    await this.source('sgs', async () => {
+      const result = await this.directSessionsProbe(this.configuration.workspace);
+      if (!Array.isArray(result?.sessions)) throw Object.assign(new Error('source-invalid'), {code:'source-invalid'});
+      return result;
+    });
   }
   ingest(journal) {
     if (!journal || !id(journal.instanceId) || !Array.isArray(journal.events)) return;
@@ -333,15 +341,10 @@ export class MonitorState {
     try {
       if(c.mode==='direct') {
         const at=new Date(this.now()).toISOString();
-        try {
-          const result=await runtimeRequest('sgs','/stats?project='+encodeURIComponent(c.workspace));
-          this.directSessions=result.sessions.filter(session=>session.mode==='direct'&&session.cab_direct===true);
-          this.sources.sgs={available:true,attemptedAt:at,lastSuccessAt:at,value:result};
-          this.statistics={state:'AVAILABLE',available:true,version:result.version,reason:null,checkedAt:at};
-        }catch{
-          this.sources.sgs={available:false,attemptedAt:at,lastSuccessAt:null,error:'sgs-unavailable'};
-          this.statistics={state:'UNAVAILABLE',available:false,version:null,reason:'sgs-unavailable',checkedAt:at};
-        }
+        await this.collectDirectSessions();
+        const source=this.sources.sgs;
+        this.statistics=source.available?{state:'AVAILABLE',available:true,version:source.value.version,reason:null,checkedAt:at}:
+          {state:'UNAVAILABLE',available:false,version:null,reason:'sgs-unavailable',checkedAt:at};
         this.changes=await readChanges(c.workspace,[]);
         this.publish();return;
       }
@@ -350,7 +353,7 @@ export class MonitorState {
         this.source('opencode', () => this.openCode.info()),
         this.source('mcp', () => this.openCode.mcp()),
         this.source('sessions', () => this.openCode.sessionStatus(c.workspace)),
-        this.source('observations', c.controllerUrl + '/monitor/events'),this.collectStatistics()]);
+        this.source('observations', c.controllerUrl + '/monitor/events'),this.collectStatistics(),this.collectDirectSessions()]);
       this.ingest(this.sources.observations?.value);
       const runs = this.runs();
       this.changes = await readChanges(c.workspace, runs.map((run) => run.changeId),{referencedOnly:this.referencedOnly});
@@ -358,11 +361,12 @@ export class MonitorState {
     } finally { this.running = false; }
   }
   runs() {
-    if(this.configuration.mode==='direct')return (this.directSessions||[]).map(session=>({runId:session.run,changeId:session.change,
+    const direct=(this.sources.sgs?.value?.sessions||[]).filter(session=>session.mode==='direct'&&session.cab_direct===true).map(session=>({runId:session.run,changeId:session.change,
       sessionId:session.session,mode:'direct',state:session.ended_at?'RELEASED':'DIRECT',operationalState:session.ended_at?'RELEASED':'DIRECT',agent:session.agent,ownerId:session.agent,
-      contextId:session.binding,resources:[],armed:null}));
-    return normalizeRuns(this.sources.controller?.value, this.sources.registry?.value,
-    this.sources.supervisor?.value, this.sources.sessions?.value); }
+      contextId:session.binding,resources:[],armed:null,gate:{status:null},blockers:[],stepHistory:[]}));
+    if(this.configuration.mode==='direct')return direct;
+    return [...normalizeRuns(this.sources.controller?.value, this.sources.registry?.value,
+    this.sources.supervisor?.value, this.sources.sessions?.value), ...direct]; }
   snapshot() {
     const now = this.now();
     const sources = Object.fromEntries(Object.entries(this.sources).map(([name, source]) => [name, {
@@ -395,7 +399,8 @@ export class MonitorState {
       broker: { status: code(controller.brokerReadiness?.status), observedAt: stamp(controller.brokerReadinessReceivedAt),
         stale: sources.controller?.stale !== false || !stamp(controller.brokerReadinessReceivedAt) ||
           now - Date.parse(controller.brokerReadinessReceivedAt) > this.configuration.staleMs },
-      runs: this.runs().map((run) => ({ ...run, operationalState: operationalState(run, {
+      runs: this.runs().map((run) => ({ ...run, operationalState: run.mode === 'direct' ?
+        (sources.sgs?.stale === false ? run.operationalState : 'UNKNOWN') : operationalState(run, {
         controllerFresh: sources.controller?.stale === false, registryFresh: sources.registry?.stale === false }) })),
       changes: this.changes, coverage: { ...this.coverage }, events: [...this.events] };
   }

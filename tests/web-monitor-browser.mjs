@@ -219,6 +219,13 @@ try {
     await browser.viewport(1440, 1100); await browser.navigate(url);
     await wait(() => browser.evaluate("document.querySelector('#connection').textContent.includes('connectée') && document.querySelectorAll('#work-content tbody tr').length === 3"), browser.name + ' affichage initial');
     if(unit==='240') {
+      monitor.state.directSessionsProbe=async()=>({sessions:[{run:'fixture-direct',change:changeIds[0],session:'session-direct',binding:'binding-direct',mode:'direct',cab_direct:true,agent:'codex'}]});
+      await monitor.state.collect();
+      await wait(()=>browser.evaluate("[...document.querySelectorAll('#work-content tbody tr')].some(row=>row.textContent.includes('fixture-direct')&&row.textContent.includes('Direct'))"),browser.name+' RUN direct et pilotés');
+      await browser.evaluate("[...document.querySelectorAll('#work-content button')].find(button=>button.textContent==='fixture-direct').click();true");
+      assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('session-direct')"),true);
+      monitor.state.directSessionsProbe=async()=>({sessions:[]});
+      await monitor.state.collect();
       await browser.evaluate("document.querySelector('#stats-nav').click();true");
       await wait(()=>browser.evaluate("document.querySelector('#stats-content').textContent.includes('fixture-model')"),browser.name+' StatsSGS');
       assert.equal(await browser.evaluate("document.querySelector('.retention-panel').hidden"),true);

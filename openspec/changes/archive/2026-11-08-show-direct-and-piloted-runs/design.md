@@ -1,0 +1,3 @@
+# Conception
+
+Le moniteur piloté recueille les sessions CAB directes depuis SGS pour son workspace et les projette avec les RUN du contrôleur. Le mode direct conserve son indépendance d'OpenCode. Les identités distinctes sont conservées ; une collision de RUN est signalée sans fusionner ou écraser les enregistrements. Une erreur SGS rend sa source indisponible sans supprimer la visibilité des RUN pilotés. La clôture directe et les statistiques continuent d'utiliser les mécanismes SGS existants. Les prompts directs enregistrent la session réelle et suivent le cycle existant sans imposer de pilotage.
