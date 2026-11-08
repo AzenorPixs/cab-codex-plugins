@@ -246,6 +246,9 @@ resume:false, dispose, nouveau SID, compactage ou édition de stockage.
 
 Appliquer [native-input-guard.md](native-input-guard.md) : pour tout nouveau mandat write/edit, calculer tool_input_sha256 sur les arguments natifs exacts avec nativeToolInputDigest, vérifier ce champ avant APPROVED puis comparer la preuve native avant once. Une divergence bloque et invalide l’exécution sans permission consommée ; réconcilier sans effet et rejeter la permission avant nouvelle identité. Les anciens mandats sans empreinte ne sont pas annoncés protégés. Conserver la vérification du fichier après effet et le choix PLLM.
 
+L’entrée native OpenCode V2 `write` est `{path, content}` ; la sérialisation
+compacte, l’encodage et un vecteur de contrôle figurent dans cette référence.
+
 
 
 ## Admission observée — CAB2.1.32

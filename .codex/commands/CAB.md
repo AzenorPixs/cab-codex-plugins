@@ -1,12 +1,11 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.24
+version: 2.4.25
 ---
 
-Réponds en français. Commande canonique : `/CAB` ; `/cab` n'est pas
-pris en charge. Argument reçu : `$ARGUMENTS`. `/CABU` sans argument charge ce
-fichier frère de même version et lui délègue exactement `update` dans le même
-tour ; aucune logique de maintenance parallèle.
+Réponds en français. Commande : `/CAB` ; `/cab` n'est pas pris en charge.
+Argument : `$ARGUMENTS`. `/CABU` sans argument charge ce fichier frère de même
+version et lui délègue `update` dans le même tour.
 
 Essais : objet JSON littéral, directory racine projet, atelier propre au RUN.
 Le profil isole l’atelier, pas tout OpenCode.
@@ -16,11 +15,10 @@ métier. Les vérifications et le cycle de vie CAB demandés sont autorisés ;
 mandats métier et permissions techniques restent distincts. SCM/version ne
 prouve pas activation. frozen-recovery-controller exige son accord spécifique.
 
-Résoudre le skill CAB installé et ses références de même version.
-Lire seulement la procédure de l'argument reçu ci-dessous. Une consultation ne
-charge pas les branches de pilotage, prévol, mise à jour ou statistiques LLM.
-Un argument manquant, ambigu ou inconnu affiche la syntaxe sans collecte ni
-mutation. Jamais de sous-commande implicite.
+Résoudre le skill CAB et ses références de même version. Lire seulement la
+procédure de l'argument reçu. Une consultation ne charge pas les branches de
+pilotage, prévol, mise à jour ou statistiques LLM. Argument manquant, ambigu
+ou inconnu : syntaxe sans collecte ni mutation. Pas de sous-commande implicite.
 
 | Arguments | Référence dans le skill CAB installé |
 |---|---|
@@ -48,6 +46,7 @@ Frontières historiques : `references/historical-owner-boundaries.md`.
 Pour piloter/reprendre : `references/pilot-state-matrix.md` puis la seule voie
 utile ; `references/validation-submission.md` distingue décision, accès et once.
 APPROVED ne vaut pas HELD. Retrait, rejeu ou élargissement ne sont pas implicites.
+Mandat write/edit : `references/native-input-guard.md` pour le schéma et le digest exacts.
 Changement de SID : `references/session-handoff.md`, sans effet implicite de run/resume.
 Accords permanents ASK/MCP : `references/native-permission-grants.md` et
 `references/mcp-pending-recovery.md`. Retraits : l’index du contrat.

@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Digest natif write — SCM 2.4.25
+
+[document-native-write-digest](openspec/changes/archive/2026-11-08-document-native-write-digest/), code non attribué : schéma write, sérialisation JavaScript compacte et vecteur testés le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
+
 ## Rejet après tour clos — SCM 2.4.24
 
 [qualify-rejected-closed-turn](openspec/changes/archive/2026-11-08-qualify-rejected-closed-turn/), code non attribué : qualification d’un tour clos sans effet avec rejet avant le tour suivant et confirmation native ultérieure ; tests ciblés réussis. Publication et activation à vérifier séparément ; attribution ACL ultérieure.

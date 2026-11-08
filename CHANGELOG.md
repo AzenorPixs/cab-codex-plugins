@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.25 - 2026-11-08
+
+- Préciser le schéma natif write et le JSON compact utilisé pour son empreinte, avec un vecteur de vérification synthétique.
+
 ## 2.4.24 - 2026-11-08
 
 - Qualifier le retrait d’un tour terminé sans effet, rejeté avant le tour suivant et confirmé ensuite par un poll natif exact.

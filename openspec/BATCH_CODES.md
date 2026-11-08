@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[document-native-write-digest](changes/archive/2026-11-08-document-native-write-digest/), code non attribué : ARCHIVÉ, documentation et tests ciblés validés ; publication et activation à vérifier séparément.
+
 [qualify-rejected-closed-turn](changes/archive/2026-11-08-qualify-rejected-closed-turn/), code non attribué : ARCHIVÉ, source et tests ciblés qualifiés ; publication et activation à vérifier séparément.
 
 [align-sgs-command-release](changes/archive/2026-11-08-align-sgs-command-release/), code non attribué : ARCHIVÉ, cohérence des commandes testée ; livraison et activation à vérifier séparément.
