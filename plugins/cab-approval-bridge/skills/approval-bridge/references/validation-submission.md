@@ -99,6 +99,21 @@ wrapper concerne la prochaine unité neuve, pas la réécriture de l’ancienne.
 
 ## 3. Décision puis acquisition : deux opérations distinctes
 
+Après revue de la demande exacte, l’orchestrateur transmet sa décision au
+contrôleur local par `POST /runs/<run_id>/decision/<requestId>` avec l’objet
+JSON minimal `{"decision":"approved"}`, `{"decision":"rejected"}` ou
+`{"decision":"needs_clarification"}` selon son examen. Cette voie est
+disponible même sans outil MCP de décision dans la surface Codex. Elle répond
+au même requestId déjà admis et ne crée pas de demande ; ne pas attendre idle
+si le codeur attend précisément cette décision.
+
+Relire le reçu `GET /runs/<run_id>/decision/<requestId>` et vérifier ses
+identités et empreintes. Une réponse perdue, `decision-already-recorded` ou
+`decision_recorded=true` impose cette relecture, sans POST aveugle. La décision
+reste distincte de l’accès HELD et de la permission native : seul le contrôleur
+émet la once après acquisition et gardes. Les codes et limites de l’API sont
+dans [decision-http-diagnostics](decision-http-diagnostics.md).
+
 Avant de conclure à une divergence broker/contrôleur, relier les preuves de
 l’unité courante : requestId, approval_id, operation_id/operationDigest,
 SID/RUN/version et empreinte native exacte. Lire le requestId enregistré pour

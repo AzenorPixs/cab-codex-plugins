@@ -1,11 +1,10 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.26
+version: 2.4.27
 ---
 
-Réponds en français. Commande : `/CAB` ; `/cab` n'est pas pris en charge.
-Argument : `$ARGUMENTS`. `/CABU` sans argument charge ce fichier frère de même
-version et lui délègue `update` dans le même tour.
+Réponds en français. Commande : `/CAB`, pas `/cab`. Argument : `$ARGUMENTS`.
+`/CABU` sans argument charge ce fichier frère de même version et délègue `update`.
 
 Essais : objet JSON littéral, directory racine projet, atelier propre au RUN.
 Le profil isole l’atelier, pas tout OpenCode.
@@ -44,7 +43,7 @@ par `references/protocol-index.md` ; `ORCHESTRATED_CODING.md` local n'est pas re
 Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md`.
 Frontières historiques : `references/historical-owner-boundaries.md`.
 Pour piloter/reprendre : `references/pilot-state-matrix.md` puis la seule voie
-utile ; `references/validation-submission.md` distingue décision, accès et once.
+utile ; `references/validation-submission.md` indique la route de décision, accès et once.
 APPROVED ne vaut pas HELD. Retrait, rejeu ou élargissement ne sont pas implicites.
 Mandat write/edit : `references/native-input-guard.md` pour le schéma et le digest exacts.
 Changement de SID : `references/session-handoff.md`, sans effet implicite de run/resume.
