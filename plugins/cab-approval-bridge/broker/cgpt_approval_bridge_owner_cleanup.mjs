@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes,retentionOnlyRebind,diagnoseErasureFilePlan} from './cgpt-approval-bridge-change-erasure.mjs';
 import {ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
-export const VERSION='2.4.40';
+export const VERSION='2.4.41';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function ownerCleanup(input,{home=homedir()}={}) {
  const {action,scope,transactionId}=input;
@@ -16,6 +16,7 @@ export function ownerCleanup(input,{home=homedir()}={}) {
  if(action!=='diagnose')ensurePrivateStateDirectory(root);
  const tx=new ErasureTransaction(root,action==='diagnose'?{createKey:false,readOnly:true}:{}),scopeDigest=canonicalContinuityDigest(scope);
  let value=tx.load();
+ const ownerStatePresent=Boolean(value);
  if(value&&(value.transactionId!==transactionId||canonicalContinuityDigest(value.scope)!==scopeDigest)){
   if(value.transactionId===transactionId&&action==='prepare'&&value.phase==='PREPARED'&&!value.entries?.length&&retentionOnlyRebind(value.scope,scope)){
    value={...value,scope,retentionReboundAt:Date.now()};tx.save(value);
@@ -26,13 +27,29 @@ export function ownerCleanup(input,{home=homedir()}={}) {
   const bundle=input.bundle;
   const priorShared=scope.sharedIdentityIds||[],nextShared=bundle?.scope?.sharedIdentityIds||[];
   const baseScope=bundle?.scope?{...bundle.scope,ids:scope.ids,...(Object.hasOwn(scope,'sharedIdentityIds')?{sharedIdentityIds:priorShared}:{})}:null;
-  if(!value||!['PREPARED','APPLYING'].includes(value.phase)||!bundle||!Array.isArray(bundle.roots)||
+  if(!value||!['PREPARED','APPLYING','APPLIED'].includes(value.phase)||!bundle||!Array.isArray(bundle.roots)||
      !Array.isArray(bundle.journalPaths)||!Array.isArray(bundle.legacyRoots)||
      !bundle.scope||!Array.isArray(bundle.scope.ids)||
      !Array.isArray(priorShared)||!Array.isArray(nextShared)||canonicalContinuityDigest(baseScope)!==scopeDigest||
      !scope.ids.every(id=>bundle.scope.ids.includes(id)||priorShared.includes(id))||!bundle.scope.ids.every(id=>typeof id==='string')||
      !priorShared.every(id=>nextShared.includes(id))||nextShared.some(id=>!priorShared.includes(id)&&scope.ids.includes(id)))fail('erasure-owner-diagnostic-input-invalid');
-  const result=diagnoseErasureFilePlan(bundle.roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots,baseIds:scope.ids,approvalSeeds:bundle.diagnosticApprovalSeeds||[]});
+  let result=diagnoseErasureFilePlan(bundle.roots,bundle.scope,{exclude:bundle.journalPaths,legacyRoots:bundle.legacyRoots,baseIds:scope.ids,approvalSeeds:bundle.diagnosticApprovalSeeds||[]});
+  if(value.phase==='APPLIED'&&result.status==='PLAN_VALID'){
+    const effective={...value.effectiveScope,sharedIdentityIds:bundle.scope.sharedIdentityIds,ownerBaseIds:scope.ids};
+    const texts=(value.journalPaths||[]).map(path=>readErasureBytes(path,{legacy:(value.legacyRoots||[]).some(root=>path===root||path.startsWith(root+'/'))}).toString('utf8'));
+    const refs=texts.flatMap(text=>erasureReferences(text,effective));
+    if(refs.length){const stage=refs.some(id=>scope.runIds.includes(id))?'journal-reference-run':
+      refs.some(id=>(scope.changeIds||[]).includes(id))?'journal-reference-change':
+      refs.some(id=>scope.ids.includes(id))?'journal-reference-base':'journal-reference-derived';
+      const events=texts.flatMap(text=>text.split('\n').map(line=>{try{return JSON.parse(line)}catch{return null}}).filter(Boolean));
+      const reduced={...effective,ids:refs},pattern=new RegExp(refs.map(id=>id.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|'),'g');
+      const offending=events.filter(event=>erasureReferences(event,reduced,pattern).length);
+      const shared=offending.length>0&&offending.every(event=>effective.sharedIdentityIds.includes(event.approval_id));
+      const withApproval=offending.some(event=>typeof event.approval_id==='string'&&event.approval_id);
+      const withoutApproval=offending.some(event=>!event.approval_id);
+      const ownership=withApproval&&withoutApproval?'mixed':withApproval?'approval':'noapproval';
+      result={status:'PLAN_REFUSED',stage:stage+(shared?'-shared':'-unshared')+'-'+ownership,code:'erasure-owner-absence-unverified'};}
+  }
   return {...receipt('DIAGNOSED'),ownerPhase:value.phase,diagnostic:result};
  }
  const isLegacy=(v,path)=>(v.legacyRoots||[]).some(root=>path===root||path.startsWith(root+'/'));
@@ -85,6 +102,16 @@ export function ownerCleanup(input,{home=homedir()}={}) {
  if(!value){
   if(!input.ownerReceipt||input.ownerReceipt.scopeDigest!==scopeDigest||!Array.isArray(input.ownerReceipt.roots))fail('erasure-owner-receipt-required');
   value={scope,effectiveScope:input.ownerReceipt.effectiveScope||scope,roots:input.ownerReceipt.roots,journalPaths:input.ownerReceipt.journalPaths||[]};
+ }
+ if(action==='verify'&&input.bundle&&(value.phase==='APPLIED'||!ownerStatePresent)&&value.effectiveScope&&scope.closureAuthority==='authoritative-retired-run-batch-v1'){
+  const candidateScope=input.bundle.scope,prior=value.effectiveScope.sharedIdentityIds||[],next=candidateScope?.sharedIdentityIds;
+  if(!candidateScope||!Array.isArray(candidateScope.ids)||!Array.isArray(next)||!prior.every(id=>next.includes(id))||
+    next.some(id=>typeof id!=='string'||!prior.includes(id)&&scope.ids.includes(id))||
+    canonicalContinuityDigest({...candidateScope,ids:scope.ids,sharedIdentityIds:scope.sharedIdentityIds})!==scopeDigest)
+    fail('erasure-owner-retention-divergent');
+  const updated={...value,effectiveScope:{...value.effectiveScope,sharedIdentityIds:next,ownerBaseIds:scope.ids}};
+  if(!absent(updated))fail('erasure-owner-absence-unverified');
+  if(canonicalContinuityDigest(updated.effectiveScope)!==canonicalContinuityDigest(value.effectiveScope)){value=updated;if(ownerStatePresent)tx.save(value);}
  }
  if(!absent(value))fail('erasure-owner-absence-unverified');
  if(action==='finalize'&&existsSync(tx.path))unlinkSync(tx.path);

@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.4.40"
+SERVER_VERSION = "2.4.41"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -8725,7 +8725,9 @@ def owner_terminal_erasure(command):
             bundle=prepare_terminal_erasure_bundle(command) if state["state"]=="PREPARED" else None
             result=owner_erasure_worker(command,"commit",bundle=bundle)
     elif action in ("verify","finalize"):
-        result=owner_erasure_worker(command,action,owner_receipt=command.get("ownerReceipt"))
+        with locked_store(store_path()), journal.locked_journal(journal.journal_path()):
+            bundle=diagnostic_terminal_erasure_bundle({**command,'action':'diagnose'}) if action=='verify' and command.get('ownerReceipt') else None
+            result=owner_erasure_worker(command,action,bundle=bundle,owner_receipt=command.get("ownerReceipt"))
     else:
         raise ValidationError("erasure-owner-action-invalid")
     result["instanceId"]=INSTANCE_ID
@@ -8809,6 +8811,20 @@ def diagnostic_terminal_erasure_bundle(command):
     if migrated:
         raise ValidationError('erasure-owner-diagnostic-migration-required')
     protected=protected_approval_ids(data,scope)
+    prior_effective=(command.get('ownerReceipt') or {}).get('effectiveScope')
+    if prior_effective is not None:
+        if not isinstance(prior_effective,dict) or not isinstance(prior_effective.get('ids'),list):
+            raise ValidationError('erasure-owner-diagnostic-input-invalid')
+        prior_shared=prior_effective.get('sharedIdentityIds',[])
+        if not isinstance(prior_shared,list) or any(not isinstance(item,str) for item in prior_shared):
+            raise ValidationError('erasure-owner-diagnostic-input-invalid')
+        protected.update(prior_shared)
+        previous=set(prior_effective['ids']);original=set(scope['ids'])
+        for item in data['approvals'].values():
+            approval=item.get('approval_id') or item.get('approvalId')
+            same_change=item.get('change_id') in scope.get('changeIds',[]) or item.get('changeId') in scope.get('changeIds',[])
+            if isinstance(approval,str) and (approval in previous or same_change) and approval not in original and not erasure_owns_item(item,scope):
+                protected.add(approval)
     if protected or 'sharedIdentityIds' in scope:
         scope['sharedIdentityIds']=sorted(set(scope.get('sharedIdentityIds',[]))|protected)
     ids = set(scope['ids'])

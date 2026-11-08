@@ -5,7 +5,7 @@ description: Piloter et reprendre une session OpenCode via le protocole CAB, ses
 
 # CAB — Codex Approval Bridge
 
-Contrat 2.4.40 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
+Contrat 2.4.41 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
 et les références utiles. Transmettre les obligations au codeur avant son mandat.
 AGENTS.md résout ce contrat ; aucune copie locale historique n'est requise.
 

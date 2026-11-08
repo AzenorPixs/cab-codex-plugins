@@ -9,7 +9,7 @@ import {join,resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 import {readRuntimeJson,writeRuntimeJson,ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.4.40';
+export const VERSION='2.4.41';
 const execute=promisify(execFile),components=['sgs','ccab'];
 export async function activateRuntimeServices({transactionId,home=homedir(),pluginRoot=new URL('..',import.meta.url).pathname},options={}) {
   if(!/^update-[a-f0-9-]{36}$/.test(transactionId||'')||resolve(home)!==home)throw new Error('runtime-activation-identity-invalid');

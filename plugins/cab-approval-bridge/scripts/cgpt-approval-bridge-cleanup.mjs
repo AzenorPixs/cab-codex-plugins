@@ -15,7 +15,7 @@ import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
 import {processOwnerIdentity} from './cgpt-approval-bridge-process-lifecycle.mjs';
 
-export const VERSION='2.4.40';
+export const VERSION='2.4.41';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function verifyFrozenOwnerRebind(value,{status,nativeIdentity,oldPidAbsent,now=Date.now()}={}) {
   const scope=value?.scope,prepared=value?.ownerReceipts?.prepare,commit=value?.ownerReceipts?.commit;
@@ -31,6 +31,17 @@ export function verifyFrozenOwnerRebind(value,{status,nativeIdentity,oldPidAbsen
     nativeIdentity?.pid!==value.nativeIdentity?.pid||nativeIdentity?.version!==value.nativeIdentity?.version)
     fail('erasure-owner-rebind-proof-invalid');
   return {previousBrokerPid:prepared.pid,brokerPid:commit.pid,uid:commit.uid,previousInstanceId:prepared.instanceId,instanceId:commit.instanceId};
+}
+export function verifyAppliedOwnerRebind(value,{status,nativeIdentity,ownerIdentity,now=Date.now()}={}) {
+  const readiness=status?.brokerReadiness,receipt=value?.ownerReceipts?.verify,prepared=value?.ownerReceipts?.prepare;
+  const pid=readiness?.broker_process?.pid,checked=Date.parse(readiness?.checked_at||'');
+  if(value?.phase!=='VERIFYING'||value.ownerReceipts?.commit?.state!=='APPLIED'||receipt?.state!=='VERIFIED'||
+    receipt.transactionId!==value.transactionId||receipt.pid!==pid||receipt.instanceId!==readiness?.instance_id||receipt.uid!==prepared?.uid||
+    receipt.scopeDigest!==canonicalContinuityDigest(value.scope)||ownerIdentity?.uid!==prepared?.uid||['Z','X'].includes(ownerIdentity?.state)||
+    readiness?.ready!==true||readiness.server_version!==VERSION||!Number.isFinite(checked)||checked>now||now-checked>10000||
+    nativeIdentity?.pid!==value.nativeIdentity?.pid||nativeIdentity?.version!==value.nativeIdentity?.version)
+    fail('erasure-owner-rebind-proof-invalid');
+  return {pid,instanceId:receipt.instanceId};
 }
 const exec=promisify(execFile);
 const unit=name=>'cgpt-approval-bridge-'+name+'.service';
@@ -49,8 +60,8 @@ export async function cleanupChange(input, dependencies={}) {
 async function executeCleanup(input,dependencies) {
   if(!['preview','prepare','seal','status','execute','finalize','verify','recover-preparation','reconcile-retention','preflight-owner-rebind'].includes(input.action))fail('erasure-action-invalid');
   const runtimeVersion=input.runtimeVersion??VERSION;
-  const frozenOwnerProfile=VERSION==='2.4.40'&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind','recover-preparation'].includes(input.action);
-  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.40'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.40'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
+  const frozenOwnerProfile=['2.4.40','2.4.41'].includes(VERSION)&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind','recover-preparation'].includes(input.action);
+  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.41'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.41'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
   if(runtimeVersion!==VERSION&&!compatibleRecovery)fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
@@ -170,13 +181,23 @@ async function executeCleanup(input,dependencies) {
       if((current.sharedIdentityIds||[]).some(id=>targetIds.has(id)&&!originalShared.has(id)))fail('erasure-protected-identity-changed');
       value={...value,brokerPid:rebind.brokerPid,recoveryCompatibility:{profile:'frozen-owner-sentinel-v1',helperVersion:VERSION,runtimeVersion,brokerVersion:VERSION,ownerRebound:rebind}};
       tx.save(value);
+    } else if(input.action==='execute'&&VERSION==='2.4.41'&&value.phase==='VERIFYING'&&
+      value.recoveryCompatibility.profile==='frozen-owner-sentinel-v1'&&value.recoveryCompatibility.helperVersion==='2.4.40'&&
+      value.recoveryCompatibility.runtimeVersion===runtimeVersion&&value.recoveryCompatibility.brokerVersion==='2.4.40'){
+      const [live,info]=await Promise.all([http(controller,'/status'),native.info(true)]),readiness=live.brokerReadiness;
+      const latest=tx.load();
+      const pid=readiness?.broker_process?.pid,identity=Number.isSafeInteger(pid)?await (dependencies.processOwnerIdentity||processOwnerIdentity)(pid):null;
+      if(latest.transactionId!==value.transactionId)fail('erasure-owner-rebind-proof-invalid');
+      const rebound=verifyAppliedOwnerRebind(latest,{status:live,nativeIdentity:info,ownerIdentity:identity});
+      value={...latest,brokerPid:pid,recoveryCompatibility:{...latest.recoveryCompatibility,helperVersion:VERSION,brokerVersion:VERSION,
+        ownerRebound:{...latest.recoveryCompatibility.ownerRebound,brokerPid:rebound.pid,instanceId:rebound.instanceId}}};tx.save(value);
     } else if(value.recoveryCompatibility.profile!=='frozen-owner-sentinel-v1'||
-      !(value.recoveryCompatibility.helperVersion===VERSION||input.action==='recover-preparation'&&VERSION==='2.4.40'&&['2.4.38','2.4.39'].includes(value.recoveryCompatibility.helperVersion))||
+      !(value.recoveryCompatibility.helperVersion===VERSION||input.action==='recover-preparation'&&VERSION==='2.4.41'&&['2.4.38','2.4.39','2.4.40'].includes(value.recoveryCompatibility.helperVersion))||
       value.recoveryCompatibility.runtimeVersion!==runtimeVersion||value.recoveryCompatibility.brokerVersion!==VERSION||
       value.brokerPid!==value.recoveryCompatibility.ownerRebound.brokerPid){
       const prior=value.recoveryCompatibility;
-      if(!(input.action==='recover-preparation'&&VERSION==='2.4.40'&&prior?.profile==='frozen-owner-sentinel-v1'&&
-        ['2.4.38','2.4.39'].includes(prior.helperVersion)&&prior.runtimeVersion===runtimeVersion&&prior.brokerVersion===prior.helperVersion&&
+      if(!(input.action==='recover-preparation'&&VERSION==='2.4.41'&&prior?.profile==='frozen-owner-sentinel-v1'&&
+        ['2.4.38','2.4.39','2.4.40'].includes(prior.helperVersion)&&prior.runtimeVersion===runtimeVersion&&prior.brokerVersion===prior.helperVersion&&
         value.brokerPid===prior.ownerRebound?.brokerPid&&value.phase==='STOPPING'&&value.ownerReceipts?.commit?.state==='APPLIED'))
         fail('erasure-runtime-compatibility-refused');
     }
@@ -441,7 +462,17 @@ async function executeCleanup(input,dependencies) {
         c.brokerReadiness?.ready!==true||erasureReferences(c,workScope(value)).length||erasureReferences(s,workScope(value)).length||erasureReferences(m,workScope(value)).length)return false;
       return true;
     });
-    if(value.brokerTransport==='owner-local-v1')await ownerCall('verify');
+    if(value.brokerTransport==='owner-local-v1'){
+      await ownerCall('verify');
+      if(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'){
+        const next=value.ownerReceipts?.verify?.effectiveScope?.sharedIdentityIds,prior=value.effectiveScope?.sharedIdentityIds||[];
+        if(!Array.isArray(next)||!prior.every(id=>next.includes(id))||next.some(id=>typeof id!=='string'||!prior.includes(id)&&value.scope.ids.includes(id)))
+          fail('erasure-owner-retention-divergent');
+        if(canonicalContinuityDigest(next)!==canonicalContinuityDigest(prior)){
+          value={...value,effectiveScope:{...value.effectiveScope,sharedIdentityIds:next,ownerBaseIds:value.scope.ids}};tx.save(value);
+        }
+      }
+    }
     await statisticalCleanup.verify(workScope(value));
     if(!absent(value,excluded))
       fail('erasure-final-absence-unverified');

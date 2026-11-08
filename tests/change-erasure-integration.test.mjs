@@ -8,11 +8,22 @@ import { join, resolve } from 'node:path';
 import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 import { ChangeErasureManager, VERSION } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-erasure-manager.mjs';
 import { ErasureTransaction, erasureReferences } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
-import { cleanupChange } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-cleanup.mjs';
+import { cleanupChange, verifyAppliedOwnerRebind } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-cleanup.mjs';
 import { TransportHandoff,canonicalContinuityDigest } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import { writeRuntimeJson, readRuntimeJson } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
 const source=resolve('plugins/cab-approval-bridge/broker');
+test('reprise VERIFYING : accepte uniquement le broker vérifié du reçu courant',()=>{
+  const now=Date.now(),scope={ids:['run-target']},transactionId='transaction-cible';
+  const value={phase:'VERIFYING',transactionId,scope,nativeIdentity:{pid:31,version:'oc'},ownerReceipts:{
+    prepare:{uid:1000},commit:{state:'APPLIED'},verify:{state:'VERIFIED',transactionId,pid:41,uid:1000,instanceId:'broker-41',scopeDigest:canonicalContinuityDigest(scope)}}};
+  const proof={now,nativeIdentity:{pid:31,version:'oc'},ownerIdentity:{uid:1000,state:'S'},
+    status:{brokerReadiness:{ready:true,server_version:VERSION,checked_at:new Date(now).toISOString(),broker_process:{pid:41},instance_id:'broker-41'}}};
+  assert.deepEqual(verifyAppliedOwnerRebind(value,proof),{pid:41,instanceId:'broker-41'});
+  assert.throws(()=>verifyAppliedOwnerRebind(value,{...proof,ownerIdentity:{uid:1001,state:'S'}}),/erasure-owner-rebind-proof-invalid/);
+  assert.throws(()=>verifyAppliedOwnerRebind(value,{...proof,now:now+11000}),/erasure-owner-rebind-proof-invalid/);
+  assert.throws(()=>verifyAppliedOwnerRebind({...value,transactionId:'autre'},proof),/erasure-owner-rebind-proof-invalid/);
+});
 async function fixture(t,branch,{multiOwner=false,legacy=false,runtimeVersion=VERSION}={}) {
   const root=mkdtempSync(join(tmpdir(),'cab-erasure-integration-'));
   const workspace=join(root,'workspace'),state=join(root,'runtime'),monitor=join(root,'monitor'),brokerRoot=join(root,'broker'),update=join(root,'update');
@@ -135,7 +146,7 @@ test('reprise owner 2.4.35 : même reçu, broker corrigé et pair conservé',asy
  f.native.mcp=async()=>({'cgpt-validation':{status:connected?'connected':'disabled'}});
  f.native.disconnectMcp=async()=>{connected=false};f.native.connectMcp=async()=>{connected=true};
  f.dependencies.http=async(base,path,body)=>{
-   if(path==='/cleanup/owner/action')return {accepted:true};
+   if(path==='/cleanup/owner/action'){if(body.action==='verify'){const current=tx.load(),shared=[...current.effectiveScope.sharedIdentityIds,'approval-retained-derived-123'];tx.save({...current,ownerReceipts:{...current.ownerReceipts,verify:{effectiveScope:{...current.effectiveScope,sharedIdentityIds:shared}}}});}return {accepted:true};}
    if(path==='/cleanup/status')return {brokerPid:newPid,brokerInstanceId:'new-instance',
      ownerStates:{commit:'APPLIED',verify:'VERIFIED',finalize:'PURGED'},ownerInstances:{commit:'new-instance',verify:'new-instance',finalize:'new-instance'}};
    if(path==='/status'&&base.endsWith(':8788'))return {workspace:f.workspace,version:'2.4.35',
@@ -146,6 +157,7 @@ test('reprise owner 2.4.35 : même reçu, broker corrigé et pair conservé',asy
  const certificate=await cleanupChange({...input,action:'execute'},f.dependencies);
  assert.equal(certificate.recoveryCompatibility.profile,'frozen-owner-sentinel-v1');
  assert.equal(certificate.recoveryCompatibility.ownerRebound.brokerPid,newPid);
+ assert.ok(certificate.effectiveScope.sharedIdentityIds.includes('approval-retained-derived-123'));
  assert.equal((await cleanupChange({...input,action:'finalize',certificate},f.dependencies)).status,'PURGED');
  assert.equal(f.getRegistry().runs.get(f.peer.runId).state,'RESERVED');
 });
@@ -166,7 +178,7 @@ for(const previous of ['2.4.38','2.4.39'])test('reprise owner 2.4.35 : rattache 
  f.native.disconnectMcp=async()=>{connected=false};
  f.dependencies.processOwnerIdentity=async pid=>({uid,state:pid===newBroker?'S':'Z'});
  const original=f.dependencies.http;f.dependencies.http=async(base,path,body)=>{
-   if(path==='/cleanup/owner/action')return {accepted:true};
+   if(path==='/cleanup/owner/action'){if(body.action==='verify'){const current=tx.load();tx.save({...current,ownerReceipts:{...current.ownerReceipts,verify:{effectiveScope:current.effectiveScope}}});}return {accepted:true};}
    if(path==='/cleanup/status')return {brokerPid:newBroker,brokerInstanceId:'new-broker',ownerStates:{commit:'APPLIED',verify:'VERIFIED',finalize:'PURGED'},ownerInstances:{commit:'new-broker',verify:'new-broker',finalize:'new-broker'}};
    if(path==='/status'&&base.endsWith(':8788'))return {workspace:f.workspace,version:'2.4.35',brokerReadiness:{ready:true,server_version:VERSION}};
    return original(base,path,body);

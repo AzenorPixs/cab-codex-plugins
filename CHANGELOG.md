@@ -1,5 +1,10 @@
 # Historique des versions
 
+## 2.4.41 - 2026-11-08
+
+- Reprendre la vérification d’un nettoyage déjà appliqué en conservant les approbations non attribuées et leurs événements.
+- Vérifier le reçu et l’identité du propriétaire avant de rattacher le broker au nettoyage en cours.
+
 ## 2.4.40 - 2026-11-08
 
 - Accélérer la projection de nettoyage en évitant les parcours et constructions redondants.
