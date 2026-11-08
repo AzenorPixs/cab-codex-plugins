@@ -36,7 +36,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.4.42";
+const version = "2.4.43";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -2216,7 +2216,7 @@ async function handleRequest(request, response) {
     const restartSafeRoute = ['/broker/readiness','/transport/cancel'].includes(url.pathname);
     if (request.method !== 'GET' && !restartSafeRoute &&
         (nativeRestartPending || restartRun && nativeRestartUnsafeRuns.has(restartRun) ||
-          !restartRun && (nativeRestartUnsafeRuns.size || nativeRestartUnsafeLegacy) && url.pathname !== '/runs'))
+          !restartRun && (nativeRestartUnsafeLegacy || nativeRestartUnsafeRuns.size && url.pathname !== '/cleanup/simple-sgs') && url.pathname !== '/runs'))
       throw new CoordinationError('opencode-restart-reconciliation-required',503);
     if (request.method !== 'GET' && !restartSafeRoute &&
         !await verifyFollowedNativeInstance(restartRun ?? null))
