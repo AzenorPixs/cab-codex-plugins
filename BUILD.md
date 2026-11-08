@@ -1,5 +1,7 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Les RUN directs sont observés par une lecture SGS limitée à leurs identités et bornes, sans recalcul des événements statistiques à chaque rafraîchissement.
+
 Le Web Monitor associe les RUN pilotés aux sessions CAB directes enregistrées dans SGS pour le même projet. Une source SGS indisponible ne masque pas les RUN pilotés ; les identités et les modes restent distincts.
 
 Complément2.4.10 : les clés d’identité partagées ne retirent pas les valeurs appartenant aux RUN protégés. La réparation est additive, sur empreintes d’origine strictes, sans écrasement des progrès ni réactivation d’accès.

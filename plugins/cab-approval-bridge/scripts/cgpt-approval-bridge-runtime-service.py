@@ -33,7 +33,7 @@ native_module = importlib.util.module_from_spec(NATIVE_SPEC)
 NATIVE_SPEC.loader.exec_module(native_module)
 EMITTER_SPEC=importlib.util.spec_from_file_location('cab_sgs_emitter',SCRIPT_DIRECTORY/'cgpt-approval-bridge-sgs-emitter.py')
 emitter_module=importlib.util.module_from_spec(EMITTER_SPEC);EMITTER_SPEC.loader.exec_module(emitter_module)
-VERSION = "2.4.30"
+VERSION = "2.4.31"
 if store_module.VERSION != VERSION or native_module.VERSION != VERSION:
     raise RuntimeError("runtime-component-version-mismatch")
 MAX_BODY = 64 * 1024 * 1024
@@ -284,6 +284,10 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                     self.server.store.db.execute("UPDATE native_sources SET status=? WHERE binding=? AND source='opencode-native'",(body['status'],body['binding']))
                     self.server.store.cursor('diagnostic-'+store_module.digest(body['binding']),{'reason':reason})
                     result={'status':'recorded'}
+                elif route == ("GET", "/direct-sessions"):
+                    if set(query) != {"project"}:
+                        raise store_module.RuntimeErrorCode("runtime-query-invalid")
+                    result = {"version": VERSION, **self.server.store.direct_sessions(query["project"][0])}
                 elif route == ("GET", "/stats"):
                     if not set(query) <= {"project", "change"} or "project" not in query:
                         raise store_module.RuntimeErrorCode("runtime-query-invalid")

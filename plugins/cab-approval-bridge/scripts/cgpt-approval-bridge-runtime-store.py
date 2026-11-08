@@ -14,7 +14,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.30"
+VERSION = "2.4.31"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -216,6 +216,16 @@ class RuntimeStore:
                 body["binding"], body["event_id"], body["source"], body["stream"], body["sequence"],
                 timestamp(body["at"]), datetime.now(timezone.utc).isoformat(), encoded(body), digest(body)))
         return {"event_id": body["event_id"], "status": "duplicate" if old else "stored"}
+
+    def direct_sessions(self, project):
+        rows = self.db.execute("""SELECT b.body, c.ended_at FROM bindings b
+            LEFT JOIN binding_closures c ON c.binding=b.binding
+            WHERE json_extract(b.body, '$.project')=?
+              AND json_extract(b.body, '$.mode')='direct'
+              AND json_extract(b.body, '$.cab_direct')=1
+            ORDER BY b.binding LIMIT 5001""", (project,)).fetchall()
+        return {"sessions": [{**json.loads(row['body']), "ended_at": row['ended_at']}
+                             for row in rows[:5000]], "truncated": len(rows) > 5000}
 
     def statistics(self, project, change=None, bindings=None):
         result = []

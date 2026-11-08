@@ -6,7 +6,7 @@ import {createOpenCodeV2ClientFromEnv,normalizeOpenCodeEvent} from './cgpt-appro
 import {openCodeTelemetry} from './cgpt-approval-bridge-native-telemetry.mjs';
 import {processOwnerIdentity} from './cgpt-approval-bridge-process-lifecycle.mjs';
 import {proofHash} from './cgpt-approval-bridge-maintenance-proof.mjs';
-export const VERSION='2.4.30';
+export const VERSION='2.4.31';
 const socketPath=process.argv[2];
 if(!socketPath?.startsWith('/'))throw new Error('sgs-collector-socket-required');
 let closing=false;

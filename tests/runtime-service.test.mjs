@@ -37,6 +37,15 @@ test('SGS Unix réel : outbox acquittée, déduplication et arrêt propre sans O
   const stats=await runtimeRequest('sgs','/stats?project='+encodeURIComponent(home),undefined,{home});
   assert.equal(stats.sessions[0].metrics.commands,'1');
   assert.equal(stats.sessions[0].coverage.tokens_input,'unavailable');
+  const other=join(home,'other-project');await mkdir(other);
+  const binding={host:'fixture',instance:'fixture',change:'change',role:'coder',agent:'codex',mode:'direct',started_at:'2026-11-06T10:00:00Z',cab_direct:true};
+  await runtimeRequest('sgs','/bindings',{...binding,binding:'direct-one',project:home,run:'direct-run',session:'direct-session'},{home});
+  await runtimeRequest('sgs','/bindings',{...binding,binding:'direct-other',project:other,run:'other-run',session:'other-session'},{home});
+  await runtimeRequest('sgs','/bindings/close',{binding:'direct-one',ended_at:'2026-11-06T11:00:00Z'},{home});
+  const direct=await runtimeRequest('sgs','/direct-sessions?project='+encodeURIComponent(home),undefined,{home});
+  assert.equal(direct.truncated,false);assert.equal(direct.sessions.length,1);
+  assert.equal(direct.sessions[0].session,'direct-session');assert.equal(Date.parse(direct.sessions[0].ended_at),Date.parse('2026-11-06T11:00:00Z'));
+  assert.equal(Object.hasOwn(direct.sessions[0],'metrics'),false);
   const legacy=join(home,'legacy-controller');await mkdir(legacy,{mode:0o700});
   const before=new SessionStatistics(legacy,{project:home,intervalMs:0});
   before.registry({project:home,runs:[{runId:'runtime-fixture',contextId:1,changeId:'change',sessionId:'ses_fixture',state:'RESERVED',version:1}],referenceVersion:0,integrationOwner:null});
