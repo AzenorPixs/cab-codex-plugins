@@ -95,6 +95,11 @@ compatible ; ne pas utiliser un fichier commun entre sessions concurrentes.
 Le codeur fournit les mesures disponibles, les notes et tableaux détaillés,
 avec un identifiant stable de relevé et sans mesure native inventée.
 
+Pour rattacher un snapshot natif gelé à un rapport qui contient déjà le relevé
+de cette session, appliquer la procédure « Snapshot natif ajouté à un relevé
+existant » dans `references/runtime-collection.md`. Un identifiant de relevé
+distinct ne crée pas une nouvelle session native.
+
 Appeler CHANGE avec --project-root, --change et --state blocked après création
 vérifiée de BLOCKERS.md, ou --state archived sur l’archive existante. Le moteur
 verrouille le seul répertoire du rapport et n’accède pas à la transaction globale.

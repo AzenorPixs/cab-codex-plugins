@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Relevé natif SGS — SCM 2.4.35
+
+[document-sgs-native-snapshot-revision](openspec/changes/archive/2026-11-08-document-sgs-native-snapshot-revision/), code non attribué : procédure vérifiée sur les clôtures CISM1 et CISM2 ; publication et activation à vérifier.
+
 ## Copies de rapports complétés — SCM 2.4.34
 
 [retain-updated-report-copies](openspec/changes/archive/2026-11-08-retain-updated-report-copies/), code non attribué : copies distinctes testées ; publication et activation à vérifier.
