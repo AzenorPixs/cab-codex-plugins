@@ -279,6 +279,14 @@ Le profil borné helper 2.4.37 et services 2.4.35 permet la reprise d’un même
 Le helper et le broker 2.4.38 qualifient le même profil avec les services
 2.4.35 pour le reçu propriétaire de lot figé ; la reprise ne vaut pas CABU.
 
+Le helper 2.4.39 peut réconcilier les PID du même reçu en STOPPING avec un
+propriétaire APPLIED et les services 2.4.35, puis poursuivre sans créer une
+transaction. Les sentinelles `null` et `undefined` ne sont pas des identités.
+Les événements associés à une approbation conservée restent protégés ; un
+événement reconstruit depuis le magasin est signalé et ne vaut pas original.
+Si une projection est refusée avant application côté contrôleur, CAB remet les
+services à disposition et conserve le reçu de reprise.
+
 Pour un reçu propriétaire figé dont le commit n'est pas attesté, le diagnostic
 isolé `cgpt-approval-bridge-owner-diagnostic.mjs <projet> <transactionId>`
 vérifie le reçu signé et l'identité du propriétaire, sans route de commit. Il

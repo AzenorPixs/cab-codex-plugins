@@ -1,6 +1,7 @@
 # Codex Approval Bridge — CAB
 
 Le nettoyage d’un change clos peut retirer sa copie statistique CAB tout en conservant son rapport source dans le projet.
+Il conserve les approbations des autres sessions et les événements nécessaires à leur cohérence.
 
 Le Web Monitor présente les sessions CAB directes et les RUN pilotés du même projet, avec leur mode et leur identité.
 

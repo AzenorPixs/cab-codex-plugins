@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Journal et reprise propriétaire — SCM 2.4.39
+
+[preserve-retained-approval-journal](openspec/changes/archive/2026-11-08-preserve-retained-approval-journal/) : code non attribué, tests ciblés validés ; publication, activation et reprise C08 restent à vérifier. La provenance des deux événements postérieurs à l’incident demeure non établie.
+
 ## Simplification du nettoyage — en cours
 
 [simplify-terminal-cleanup](openspec/changes/simplify-terminal-cleanup/) : code non attribué, coordination et premiers adaptateurs testés ; raccordement des autres briques et validation finale à poursuivre.

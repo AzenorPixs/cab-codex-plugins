@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[preserve-retained-approval-journal](changes/archive/2026-11-08-preserve-retained-approval-journal/), code non attribué : archivé et testé ; reprise, activation et traitement CCAB restent à vérifier.
+
 [simplify-terminal-cleanup](changes/simplify-terminal-cleanup/), code non attribué : en cours ; raccordements et validation finale à poursuivre.
 
 [diagnose-frozen-owner-erasure](changes/diagnose-frozen-owner-erasure/), code non attribué : en cours ; reprise réelle et incidents CCAB à vérifier.

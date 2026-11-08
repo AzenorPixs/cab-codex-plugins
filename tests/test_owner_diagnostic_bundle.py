@@ -8,6 +8,21 @@ import unittest
 
 
 class OwnerDiagnosticBundleTest(unittest.TestCase):
+    def test_reconstructed_events_are_explicit_and_idempotent(self):
+        broker=Path(__file__).resolve().parents[1]/'plugins/cab-approval-bridge/broker'
+        with tempfile.TemporaryDirectory(prefix='cab-reconstruction-') as directory:
+            root=Path(directory);env=os.environ.copy()
+            env['CGPT_APPROVAL_STORE']=str(root/'approvals.json');env['CGPT_APPROVAL_JOURNAL']=str(root/'events.ndjson')
+            env['CGPT_JOURNAL_CHECKPOINT_PATH']=str(root/'checkpoint.json')
+            for key in ('CGPT_JOURNAL_HMAC_KEY','CGPT_JOURNAL_HMAC_PREVIOUS_KEYS'):env.pop(key,None)
+            script="""import json,sys;sys.path.insert(0,sys.argv[1]);import cgpt_approval_bridge_server as b
+item={'approval_id':'approval-test','requestId':'request-test','change_id':'change-test','status':'REJECTED','created_at':'2026-11-05T00:00:00Z','expires_at':'2099-01-01T00:00:00Z'}
+b.repair_journal_for_item(item,reconstructed=True);b.repair_journal_for_item(item,reconstructed=True)
+events=b.journal.read_events(approval_id='approval-test');print(json.dumps([{'type':e['event_type'],'origin':e['data'].get('reconstruction')} for e in events]))"""
+            result=subprocess.run(['python3','-B','-c',script,str(broker)],env=env,text=True,capture_output=True,check=True)
+            self.assertEqual(json.loads(result.stdout),[{'type':'APPROVAL_CREATED','origin':'from-retained-store-not-original'},
+                                                        {'type':'APPROVAL_REJECTED','origin':'from-retained-store-not-original'}])
+
     def test_same_change_in_other_project_is_not_owned_by_change_name_alone(self):
         broker=Path(__file__).resolve().parents[1]/'plugins/cab-approval-bridge/broker'
         script="""import sys;sys.path.insert(0,sys.argv[1]);import cgpt_approval_bridge_server as b

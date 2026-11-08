@@ -8,7 +8,7 @@ import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bri
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { PermissionReplyJournal, validPermissionReply } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.4.38';
+export const VERSION = '2.4.39';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -249,18 +249,20 @@ export function extendErasureScope(scope, documents, {diagnosticStage=()=>{},bas
 // Only its verified primary ownership permits retaining that opaque payload.
 function retainedPeer(node,scope) {
   if(scope.closureAuthority!=='authoritative-retired-run-batch-v1'||!record(node))return false;
+  const ids=new Set(Array.isArray(scope.ownerBaseIds)?scope.ownerBaseIds.filter(identityValue):effectiveIds(scope));
+  const strong=value=>{
+    if(typeof value==='string')return unambiguousId(value)&&ids.has(value);
+    if(Array.isArray(value))return value.some(strong);
+    if(!record(value))return false;
+    return Object.entries(value).some(([key,item])=>!['changeId','change_id'].includes(key)&&
+      (unambiguousId(key)&&ids.has(key)||identityKeys.has(key)&&typeof item==='string'&&ids.has(item)||strong(item)));
+  };
+  if(Array.isArray(scope.ownerBaseIds)&&typeof node.event_id==='string'&&typeof node.event_type==='string'&&
+    typeof node.approval_id==='string'&&(scope.sharedIdentityIds||[]).includes(node.approval_id)&&!strong(node))return true;
   const explicitForeign=typeof node.directory==='string'&&node.directory.startsWith('/')&&resolve(node.directory)===node.directory&&node.directory!==scope.workspace;
   const unattributedApproval=Array.isArray(scope.ownerBaseIds)&&typeof node.directory==='string'&&node.directory!==scope.workspace&&
     !node.directory.startsWith('/')&&['approvalId','approval_id'].some(key=>typeof node[key]==='string');
   if(explicitForeign||unattributedApproval){
-    const ids=new Set(Array.isArray(scope.ownerBaseIds)?scope.ownerBaseIds.filter(identityValue):effectiveIds(scope));
-    const strong=value=>{
-      if(typeof value==='string')return unambiguousId(value)&&ids.has(value);
-      if(Array.isArray(value))return value.some(strong);
-      if(!record(value))return false;
-      return Object.entries(value).some(([key,item])=>!['changeId','change_id'].includes(key)&&
-        (unambiguousId(key)&&ids.has(key)||identityKeys.has(key)&&typeof item==='string'&&ids.has(item)||strong(item)));
-    };
     if(!strong(node))return true;
   }
   const runs=['runId','run_id'].filter(key=>typeof node[key]==='string').map(key=>node[key]);

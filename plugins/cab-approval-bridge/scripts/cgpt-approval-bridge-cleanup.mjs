@@ -13,8 +13,9 @@ import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-c
 import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bridge-archives.mjs';
 import {cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
+import {processOwnerIdentity} from './cgpt-approval-bridge-process-lifecycle.mjs';
 
-export const VERSION='2.4.38';
+export const VERSION='2.4.39';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function verifyFrozenOwnerRebind(value,{status,nativeIdentity,oldPidAbsent,now=Date.now()}={}) {
   const scope=value?.scope,prepared=value?.ownerReceipts?.prepare,commit=value?.ownerReceipts?.commit;
@@ -48,8 +49,8 @@ export async function cleanupChange(input, dependencies={}) {
 async function executeCleanup(input,dependencies) {
   if(!['preview','prepare','seal','status','execute','finalize','verify','recover-preparation','reconcile-retention','preflight-owner-rebind'].includes(input.action))fail('erasure-action-invalid');
   const runtimeVersion=input.runtimeVersion??VERSION;
-  const frozenOwnerProfile=VERSION==='2.4.38'&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind'].includes(input.action);
-  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.38'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.38'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
+  const frozenOwnerProfile=VERSION==='2.4.39'&&runtimeVersion==='2.4.35'&&['execute','finalize','verify','preflight-owner-rebind','recover-preparation'].includes(input.action);
+  const compatibleRecovery=frozenOwnerProfile||VERSION==='2.4.39'&&runtimeVersion==='2.4.5'&&['execute','finalize','verify','recover-preparation','reconcile-retention'].includes(input.action)||['2.4.1','2.4.2','2.4.3','2.4.4','2.4.5','2.4.39'].includes(VERSION)&&runtimeVersion==='2.4.0'&&['execute','finalize','verify','recover-preparation'].includes(input.action);
   if(runtimeVersion!==VERSION&&!compatibleRecovery)fail('erasure-runtime-compatibility-refused');
   const workspace=resolve(input.workspace),root=dependencies.stateDirectory||runtimeStateDirectory(workspace);
   if(input.action==='execute'&&root!==runtimeStateDirectory(workspace)&&!dependencies.statisticsCleanup)fail('erasure-sgs-isolation-adapter-required');
@@ -169,9 +170,16 @@ async function executeCleanup(input,dependencies) {
       if((current.sharedIdentityIds||[]).some(id=>targetIds.has(id)&&!originalShared.has(id)))fail('erasure-protected-identity-changed');
       value={...value,brokerPid:rebind.brokerPid,recoveryCompatibility:{profile:'frozen-owner-sentinel-v1',helperVersion:VERSION,runtimeVersion,brokerVersion:VERSION,ownerRebound:rebind}};
       tx.save(value);
-    } else if(value.recoveryCompatibility.profile!=='frozen-owner-sentinel-v1'||value.recoveryCompatibility.helperVersion!==VERSION||
+    } else if(value.recoveryCompatibility.profile!=='frozen-owner-sentinel-v1'||
+      !(value.recoveryCompatibility.helperVersion===VERSION||input.action==='recover-preparation'&&VERSION==='2.4.39'&&value.recoveryCompatibility.helperVersion==='2.4.38')||
       value.recoveryCompatibility.runtimeVersion!==runtimeVersion||value.recoveryCompatibility.brokerVersion!==VERSION||
-      value.brokerPid!==value.recoveryCompatibility.ownerRebound.brokerPid)fail('erasure-runtime-compatibility-refused');
+      value.brokerPid!==value.recoveryCompatibility.ownerRebound.brokerPid){
+      const prior=value.recoveryCompatibility;
+      if(!(input.action==='recover-preparation'&&VERSION==='2.4.39'&&prior?.profile==='frozen-owner-sentinel-v1'&&
+        prior.helperVersion==='2.4.38'&&prior.runtimeVersion===runtimeVersion&&prior.brokerVersion==='2.4.38'&&
+        value.brokerPid===prior.ownerRebound?.brokerPid&&value.phase==='STOPPING'&&value.ownerReceipts?.commit?.state==='APPLIED'))
+        fail('erasure-runtime-compatibility-refused');
+    }
   } else if(runtimeVersion!==VERSION){
     if(value.protocol!=='cab-change-erasure-v1'||!['SEALED','FREEZING','STOPPING','APPLYING','RESTARTING','VERIFYING','CERTIFIED'].includes(value.phase))fail('erasure-runtime-compatibility-refused');
     value={...value,recoveryCompatibility:{helperVersion:VERSION,runtimeVersion}};
@@ -245,7 +253,9 @@ async function executeCleanup(input,dependencies) {
     if(action==='connect')await native.connectMcp('cgpt-validation',value.sharedDirectory,{timeout:20000});
     else await native.disconnectMcp('cgpt-validation',value.sharedDirectory,{timeout:20000});
     if((await native.mcp(value.sharedDirectory))['cgpt-validation']?.status!==desired)fail('erasure-mcp-transition-unverified');
-    value={...value,mcpTransition:{action,state:'VERIFIED'}};tx.save(value);
+    const latest=tx.load();
+    if(!latest||latest.transactionId!==value.transactionId||latest.phase!==value.phase||latest.mcpTransition?.action!==action||latest.mcpTransition?.state!=='INTENT')fail('erasure-mcp-transition-unverified');
+    value={...latest,mcpTransition:{action,state:'VERIFIED'}};tx.save(value);
   };
   const start=async()=>{
     await releaseOfflineLocks();
@@ -276,7 +286,15 @@ async function executeCleanup(input,dependencies) {
       const row=[c,s,m][i],pid=await servicePid(name);
       if(!pid||row.pid!==pid||row.version!==runtimeVersion||(row.workspace||row.identity?.workspace)!==workspace)fail('erasure-service-identity-changed');pids[name]=pid;
     }
-    if(!Number.isSafeInteger(status.brokerPid)||status.brokerPid<=0||live.brokerReadiness?.server_version!==runtimeVersion||live.brokerReadiness?.ready!==true)fail('erasure-broker-identity-unverified');
+    if(!Number.isSafeInteger(status.brokerPid)||status.brokerPid<=0||live.brokerReadiness?.server_version!==(frozenOwnerProfile?VERSION:runtimeVersion)||live.brokerReadiness?.ready!==true)fail('erasure-broker-identity-unverified');
+    if(frozenOwnerProfile){
+      const latest=tx.load(),commit=latest.ownerReceipts?.commit,prepared=latest.ownerReceipts?.prepare,identity=await (dependencies.processOwnerIdentity||processOwnerIdentity)(status.brokerPid);
+      if(commit?.state!=='APPLIED'||commit.pid!==status.brokerPid||commit.instanceId!==status.brokerInstanceId||
+        commit.scopeDigest!==canonicalContinuityDigest(latest.scope)||commit.uid!==prepared?.uid||identity?.uid!==prepared.uid||
+        ['Z','X'].includes(identity?.state))fail('erasure-owner-rebind-proof-invalid');
+      value={...latest,recoveryCompatibility:{...latest.recoveryCompatibility,helperVersion:VERSION,brokerVersion:VERSION,
+        ownerRebound:{...latest.recoveryCompatibility.ownerRebound,brokerPid:commit.pid,instanceId:commit.instanceId}}};
+    }
     const recovery={at:Date.now(),previousPids:value.componentPids||{},verifiedPids:pids};
     value={...value,componentPids:pids,brokerPid:status.brokerPid,preparationRecovery:recovery};tx.save(value);
     return {status:'PRESERVED_PREPARATION_REBOUND',transactionId:value.transactionId,phase:value.phase,helperVersion:VERSION,runtimeVersion,pids};
@@ -342,9 +360,10 @@ async function executeCleanup(input,dependencies) {
     const ownerScope=value.ownerReceipts?.commit?.effectiveScope;
     if(ownerScope&&(ownerScope.workspace!==value.scope.workspace||ownerScope.changeId!==value.scope.changeId||
       canonicalContinuityDigest(ownerScope.runIds)!==canonicalContinuityDigest(value.scope.runIds)||!Array.isArray(ownerScope.ids)||
-      ownerScope.ids.some(id=>typeof id!=='string'||id.length>256)||value.scope.ids.some(id=>!ownerScope.ids.includes(id)&&!(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'&&value.scope.sharedIdentityIds.includes(id)))))fail('erasure-owner-effective-scope-divergent');
+      ownerScope.ids.some(id=>typeof id!=='string'||id.length>256)||value.scope.ids.some(id=>!['null','undefined'].includes(id)&&!ownerScope.ids.includes(id)&&!(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'&&value.scope.sharedIdentityIds.includes(id)))||
+      value.scope.closureAuthority==='authoritative-retired-run-batch-v1'&&(!Array.isArray(ownerScope.sharedIdentityIds)||!value.scope.sharedIdentityIds.every(id=>ownerScope.sharedIdentityIds.includes(id))||ownerScope.sharedIdentityIds.some(id=>!value.scope.sharedIdentityIds.includes(id)&&value.scope.ids.includes(id)))))fail('erasure-owner-effective-scope-divergent');
     const projectionScope=ownerScope?{...value.scope,ids:[...new Set([...value.scope.ids,...ownerScope.ids])].sort(),
-      ...(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'?{ownerBaseIds:value.scope.ids}:{})}:value.scope;
+      ...(value.scope.closureAuthority==='authoritative-retired-run-batch-v1'?{ownerBaseIds:value.scope.ids,sharedIdentityIds:ownerScope.sharedIdentityIds}:{})}:value.scope;
     const bundle=value.brokerTransport==='owner-local-v1'?{transactionId:value.transactionId,brokerPid:value.brokerPid,scope:projectionScope,roots:[],entries:[],journalPaths:[]}:tx.verify(readRuntimeJson(bundlePath).value);
     if(bundle.transactionId!==value.transactionId||bundle.brokerPid!==value.brokerPid||
       bundle.scope.changeId!==value.scope.changeId||canonicalContinuityDigest(bundle.scope.runIds)!==canonicalContinuityDigest(value.scope.runIds))fail('erasure-broker-bundle-divergent');
@@ -372,6 +391,10 @@ async function executeCleanup(input,dependencies) {
       if(value.phase==='STOPPING'&&!value.ownerReceipts?.commit&&value.mcpTransition?.state!=='INTENT'&&cause.code!=='erasure-service-identity-changed'){
         value={...value,phase:'RESTORING_PRESERVED',failureCode:typeof cause.code==='string'?cause.code:'erasure-preparation-failed'};tx.save(value);
         await start();value={...value,phase:'SEALED'};tx.save(value);
+      }else if(value.phase==='STOPPING'&&value.ownerReceipts?.commit?.state==='APPLIED'&&!value.entries?.length&&!value.expectedPeers&&
+        value.mcpTransition?.state!=='INTENT'&&cause.code!=='erasure-service-identity-changed'){
+        // Ne pas laisser les autres RUN sans services après un refus de projection.
+        try{await start();}catch(recoveryError){cause.recoveryFailure=recoveryError.code||'erasure-service-restore-failed';}
       }
       throw cause;
     }
@@ -438,5 +461,6 @@ if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).hr
       if(!key||!args[i+1]||input[key]!==undefined)fail('erasure-cli-invalid');input[key]=args[i+1]}
     if(!input.workspace)fail('erasure-workspace-required');
     console.log(JSON.stringify(await cleanupChange(input)));
-  }catch(cause){console.error(JSON.stringify({status:'INCOMPLETE',error:typeof cause.code==='string'?cause.code:'erasure-failed'}));process.exitCode=1}
+  }catch(cause){console.error(JSON.stringify({status:'INCOMPLETE',error:typeof cause.code==='string'?cause.code:'erasure-failed',
+    ...(/^[a-z0-9-]+$/.test(cause.recoveryFailure||'')?{recoveryFailure:cause.recoveryFailure}:{})}));process.exitCode=1}
 }

@@ -126,10 +126,11 @@ test('reprise owner 2.4.35 : même reçu, broker corrigé et pair conservé',asy
  const plan=await f.manager.prepare({mode:'retired-runs-v1',runIds:[f.target.runId],protectedRunIds:[f.peer.runId],ownerId:'owner',evidence:['fixture-reviewed']});
  f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
  const tx=new ErasureTransaction(f.state,{createKey:false}),value=tx.load(),oldPid=99999999,newPid=99999998;
- tx.save({...value,phase:'FREEZING',brokerTransport:'owner-local-v1',brokerPid:oldPid,transportTransactionId:'continuity-fixture',sharedDirectory:f.workspace,
+ const signedScope={...value.scope,ids:[...value.scope.ids,'null']},effectiveScope={...signedScope,ids:signedScope.ids.filter(id=>id!=='null')};
+ tx.save({...value,scope:signedScope,phase:'FREEZING',brokerTransport:'owner-local-v1',brokerPid:oldPid,transportTransactionId:'continuity-fixture',sharedDirectory:f.workspace,
    componentPids:{controller:10001,supervisor:10002,monitor:10003},
-   ownerReceipts:{prepare:{state:'PREPARED',uid:process.getuid(),pid:oldPid,instanceId:'old-instance',scopeDigest:canonicalContinuityDigest(value.scope)},
-     commit:{state:'APPLIED',uid:process.getuid(),pid:newPid,instanceId:'new-instance',scopeDigest:canonicalContinuityDigest(value.scope)}}});
+   ownerReceipts:{prepare:{state:'PREPARED',uid:process.getuid(),pid:oldPid,instanceId:'old-instance',scopeDigest:canonicalContinuityDigest(signedScope)},
+     commit:{state:'APPLIED',uid:process.getuid(),pid:newPid,instanceId:'new-instance',scopeDigest:canonicalContinuityDigest(signedScope),effectiveScope}}});
  const originalHttp=f.dependencies.http;let connected=true;
  f.native.mcp=async()=>({'cgpt-validation':{status:connected?'connected':'disabled'}});
  f.native.disconnectMcp=async()=>{connected=false};f.native.connectMcp=async()=>{connected=true};
@@ -146,6 +147,61 @@ test('reprise owner 2.4.35 : même reçu, broker corrigé et pair conservé',asy
  assert.equal(certificate.recoveryCompatibility.profile,'frozen-owner-sentinel-v1');
  assert.equal(certificate.recoveryCompatibility.ownerRebound.brokerPid,newPid);
  assert.equal((await cleanupChange({...input,action:'finalize',certificate},f.dependencies)).status,'PURGED');
+ assert.equal(f.getRegistry().runs.get(f.peer.runId).state,'RESERVED');
+});
+
+test('reprise owner 2.4.35 : rattache les nouveaux PID sans écraser le reçu APPLIED',async t=>{
+ const f=await fixture(t,'TERMINÉ',{runtimeVersion:'2.4.35'});
+ const plan=await f.manager.prepare({mode:'retired-runs-v1',runIds:[f.target.runId],protectedRunIds:[f.peer.runId],ownerId:'owner',evidence:['fixture-reviewed']});
+ f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
+ const tx=new ErasureTransaction(f.state,{createKey:false}),value=tx.load(),oldBroker=99999998,newBroker=99999997,uid=process.getuid(),scopeDigest=canonicalContinuityDigest(value.scope);
+ const prepare={state:'PREPARED',uid,pid:99999999,instanceId:'initial',scopeDigest};
+ const oldCommit={state:'APPLIED',uid,pid:oldBroker,instanceId:'old-broker',scopeDigest};
+ tx.save({...value,phase:'STOPPING',brokerTransport:'owner-local-v1',brokerPid:oldBroker,sharedDirectory:f.workspace,transportTransactionId:'continuity-fixture',
+   componentPids:{controller:111,supervisor:112,monitor:113},ownerReceipts:{prepare,commit:oldCommit},
+   recoveryCompatibility:{profile:'frozen-owner-sentinel-v1',helperVersion:'2.4.38',runtimeVersion:'2.4.35',brokerVersion:'2.4.38',ownerRebound:{brokerPid:oldBroker,instanceId:'old-broker'}}});
+ let connected=false;
+ f.native.mcp=async()=>({'cgpt-validation':{status:connected?'connected':'disabled'}});
+ f.native.connectMcp=async()=>{connected=true;const current=tx.load();tx.save({...current,ownerReceipts:{...current.ownerReceipts,commit:{...oldCommit,pid:newBroker,instanceId:'new-broker'}}});};
+ f.native.disconnectMcp=async()=>{connected=false};
+ f.dependencies.processOwnerIdentity=async pid=>({uid,state:pid===newBroker?'S':'Z'});
+ const original=f.dependencies.http;f.dependencies.http=async(base,path,body)=>{
+   if(path==='/cleanup/owner/action')return {accepted:true};
+   if(path==='/cleanup/status')return {brokerPid:newBroker,brokerInstanceId:'new-broker',ownerStates:{commit:'APPLIED',verify:'VERIFIED',finalize:'PURGED'},ownerInstances:{commit:'new-broker',verify:'new-broker',finalize:'new-broker'}};
+   if(path==='/status'&&base.endsWith(':8788'))return {workspace:f.workspace,version:'2.4.35',brokerReadiness:{ready:true,server_version:VERSION}};
+   return original(base,path,body);
+ };
+ const result=await cleanupChange({workspace:f.workspace,transactionId:plan.transactionId,runtimeVersion:'2.4.35',action:'recover-preparation'},f.dependencies);
+ assert.equal(result.status,'PRESERVED_PREPARATION_REBOUND');assert.equal(tx.load().phase,'STOPPING');
+ assert.equal(tx.load().ownerReceipts.commit.pid,newBroker);assert.equal(tx.load().recoveryCompatibility.helperVersion,VERSION);
+ assert.equal(tx.load().brokerPid,newBroker);assert.equal(f.getRegistry().runs.get(f.peer.runId).state,'RESERVED');
+ await f.dependencies.http('http://127.0.0.1:8788','/transport/prepare',{transactionId:'continuity-fixture'});
+ const input={workspace:f.workspace,transactionId:plan.transactionId,runtimeVersion:'2.4.35'};
+ const certificate=await cleanupChange({...input,action:'execute'},f.dependencies);
+ assert.equal((await cleanupChange({...input,action:'finalize',certificate},f.dependencies)).status,'PURGED');
+ assert.equal(f.getRegistry().runs.get(f.peer.runId).state,'RESERVED');
+});
+
+test('reprise owner : refus de portée réelle restaure les services des pairs',async t=>{
+ const f=await fixture(t,'TERMINÉ',{runtimeVersion:'2.4.35'});
+ const plan=await f.manager.prepare({mode:'retired-runs-v1',runIds:[f.target.runId],protectedRunIds:[f.peer.runId],ownerId:'owner',evidence:['fixture-reviewed']});
+ f.clearNative();await f.manager.seal({transactionId:plan.transactionId});
+ const tx=new ErasureTransaction(f.state,{createKey:false}),value=tx.load(),oldPid=99999999,newPid=99999998,scopeDigest=canonicalContinuityDigest(value.scope);
+ const effectiveScope={...value.scope,ids:value.scope.ids.filter(id=>id!==f.target.runId)};
+ tx.save({...value,phase:'FREEZING',brokerTransport:'owner-local-v1',brokerPid:oldPid,transportTransactionId:'continuity-fixture',sharedDirectory:f.workspace,
+   componentPids:{controller:10001,supervisor:10002,monitor:10003},ownerReceipts:{
+    prepare:{state:'PREPARED',uid:process.getuid(),pid:oldPid,instanceId:'old-instance',scopeDigest},
+    commit:{state:'APPLIED',uid:process.getuid(),pid:newPid,instanceId:'new-instance',scopeDigest,effectiveScope}}});
+ let connected=true;f.native.mcp=async()=>({'cgpt-validation':{status:connected?'connected':'disabled'}});
+ f.native.disconnectMcp=async()=>{connected=false};f.native.connectMcp=async()=>{connected=true};
+ const original=f.dependencies.http;f.dependencies.http=async(base,path,body)=>{
+   if(path==='/cleanup/status')return {brokerPid:newPid,brokerInstanceId:'new-instance',ownerStates:{commit:'APPLIED'},ownerInstances:{commit:'new-instance'}};
+   if(path==='/status'&&base.endsWith(':8788'))return {workspace:f.workspace,version:'2.4.35',brokerReadiness:{ready:true,server_version:VERSION,broker_process:{pid:newPid},instance_id:'new-instance',checked_at:new Date().toISOString()}};
+   return original(base,path,body);
+ };
+ await assert.rejects(cleanupChange({workspace:f.workspace,transactionId:plan.transactionId,runtimeVersion:'2.4.35',action:'execute'},f.dependencies),/erasure-owner-effective-scope-divergent/);
+ assert.equal(tx.load().phase,'STOPPING');assert.equal(connected,true);
+ for(const name of ['controller','supervisor','monitor'])assert.ok(f.serviceCalls.some(([component,action])=>component===name&&action==='start'));
  assert.equal(f.getRegistry().runs.get(f.peer.runId).state,'RESERVED');
 });
 
