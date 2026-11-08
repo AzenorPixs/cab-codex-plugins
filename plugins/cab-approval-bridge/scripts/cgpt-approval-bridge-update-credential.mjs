@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { open, lstat, mkdir, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.4.26';
+export const VERSION = '2.4.27';
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
 async function safeDirectories(path, create = false) {

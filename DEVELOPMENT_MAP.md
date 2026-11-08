@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Décision orchestrateur — SCM 2.4.27
+
+[document-orchestrator-decision-route](openspec/changes/archive/2026-11-08-document-orchestrator-decision-route/), code non attribué : route et reprise documentées, distribution vérifiée le 8 novembre 2026. Publication et activation à vérifier séparément ; attribution ACL ultérieure.
+
 ## Preuves de l’outbox CCAB — SCM 2.4.26
 
 [validate-ccab-outbox-evidence](openspec/changes/archive/2026-11-08-validate-ccab-outbox-evidence/), code non attribué : validation des preuves avant mise en file et correction ciblée historique ; tests locaux réussis le 8 novembre 2026. Publication, activation et reprise réelle à vérifier séparément ; attribution ACL ultérieure.

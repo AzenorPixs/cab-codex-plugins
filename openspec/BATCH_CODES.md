@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[document-orchestrator-decision-route](changes/archive/2026-11-08-document-orchestrator-decision-route/), code non attribué : ARCHIVÉ, documentation et distribution vérifiées ; publication et activation à vérifier séparément.
+
 [validate-ccab-outbox-evidence](changes/archive/2026-11-08-validate-ccab-outbox-evidence/), code non attribué : ARCHIVÉ, tests ciblés réussis ; livraison, activation et reprise à vérifier séparément.
 
 [document-native-write-digest](changes/archive/2026-11-08-document-native-write-digest/), code non attribué : ARCHIVÉ, documentation et tests ciblés validés ; publication et activation à vérifier séparément.
