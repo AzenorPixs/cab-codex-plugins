@@ -189,6 +189,22 @@ test('référence imbriquée nécessaire à un pair : refus avant modification',
  assert.throws(()=>projectErasure(data,scope()),/foreign-reference/);
 });
 
+test('effacement unitaire : sentinelles partagées ignorées, vrais conflits préservés',()=>{
+ const data=registry();
+ data.coordination.operations['op-target12345'].accessId='null';
+ data.coordination.operations['op-target12345'].requestId='undefined';
+ data.coordination.operations['op-peer12345'].accessId='null';
+ data.coordination.operations['op-peer12345'].requestId='undefined';
+ const initial=erasureScope(data,run.changeId,'owner',{closedAuthority:true});
+ assert.equal(initial.ids.includes('null'),false);assert.equal(initial.ids.includes('undefined'),false);
+ const extended=extendErasureScope(initial,[data]);
+ assert.equal(extended.ids.includes('null'),false);assert.equal(extended.ids.includes('undefined'),false);
+ const projected=projectErasure(data,extended);
+ assert.equal(projected.coordination.operations['op-target12345'],undefined);
+ assert.deepEqual(projected.coordination.operations['op-peer12345'],data.coordination.operations['op-peer12345']);
+ assert.throws(()=>extendErasureScope(initial,[{runId:peer.runId,accessId:'op-target12345'}]),/foreign-reference/);
+});
+
 test('directory cleanup skips file roots and preserves peer data and symlink guards',()=>fixture(root=>{
   const store=join(root,'approvals.json');writeFileSync(store,'{"peer":true}\n');
   const target=join(root,'runs',run.runId),other=join(root,'runs',peer.runId);

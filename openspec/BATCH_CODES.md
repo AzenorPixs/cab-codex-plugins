@@ -1,5 +1,7 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+[exclude-sentinel-identities-from-change-erasure](changes/archive/2026-11-08-exclude-sentinel-identities-from-change-erasure/), code non attribué : archivé ; publication et reprise à vérifier.
+
 [document-sgs-native-snapshot-revision](changes/archive/2026-11-08-document-sgs-native-snapshot-revision/), code non attribué : archivé ; distribution à vérifier.
 
 [retain-updated-report-copies](changes/archive/2026-11-08-retain-updated-report-copies/), code non attribué : archivé, tests ciblés validés ; reprise effective distincte.

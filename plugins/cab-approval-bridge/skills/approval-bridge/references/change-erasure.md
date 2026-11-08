@@ -57,6 +57,10 @@ d’absence actuelle avant de compacter le reçu APPLIED. Le reçu contient le t
 de preuve et l’empreinte du plan. Un marqueur divergent ou une référence encore
 présente ne permet pas cette récupération ; aucun candidat divergent n’est écrasé.
 
+Pour l'effacement unitaire comme pour les lots, les chaînes sentinelles `null`
+et `undefined` ne sont pas des identités. Elles ne créent aucune appartenance
+ni référence étrangère ; une identité réelle d'un pair reste protégée.
+
 L’orchestrateur réalise ce cycle dans le change déjà autorisé, sans nouvelle
 approbation du développeur. Il vérifie d’abord les rapports, le gate validé,
 le désarmement et la libération du RUN. Deux issues seulement : `TERMINÉ`,

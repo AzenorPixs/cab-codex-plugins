@@ -8,11 +8,12 @@ import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bri
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { PermissionReplyJournal, validPermissionReply } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.4.35';
+export const VERSION = '2.4.36';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const identifier = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
+const identityValue = value => identifier(value) && !['null','undefined'].includes(value);
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 const sha = value => createHash('sha256').update(value).digest('hex');
 const identityKeys = new Set(['runId','run_id','changeId','change_id','sessionId','session_id','sessionID',
@@ -22,7 +23,7 @@ const ownerKeys = new Set(['runId','run_id','changeId','change_id']);
 const identityLists=new Set(['runIds','run_ids','scopeRunIds','sessionIds','session_ids','operationIds','requestIds','approvalIds','revokedSessions','sourceSessions','onceAcknowledged','restoredAccesses']);
 const unambiguousId=value=>typeof value==='string'&&(value.length>=16||/^(?:ses_|op-|req-|request-|approval-|apr-|call_|job-|policy-|access-|erasure-|run-)/.test(value));
 const terminalOperations = new Set(['COMPLETED','NO_EFFECT','RECONCILED','CANCELLED']);
-const effectiveIds=scope=>scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.ids.filter(id=>!['null','undefined'].includes(id)&&!(scope.sharedIdentityIds||[]).includes(id)):scope.ids;
+const effectiveIds=scope=>scope.ids.filter(id=>identityValue(id)&&!(scope.closureAuthority==='authoritative-retired-run-batch-v1'&&(scope.sharedIdentityIds||[]).includes(id)));
 const secondaryRetentionId=id=>identifier(id)&&!id.startsWith('ses_');
 export function reconcileRetiredRetention(value,{sharedIdentityIds,evidence,ownerStatus}){
   if(value?.scope?.closureAuthority!=='authoritative-retired-run-batch-v1'||value.brokerTransport!=='owner-local-v1'||!['SEALED','FREEZING'].includes(value.phase)||
@@ -135,7 +136,7 @@ export function erasureScope(registry, changeId, ownerId,{terminalProofs=[],owne
     if (!value || typeof value !== 'object') return;
     if (Array.isArray(value)) { for (const item of value) visit(item); return; }
     for (const [key, item] of Object.entries(value)) {
-      if (identityKeys.has(key) && identifier(item)) ids.add(item);
+      if (identityKeys.has(key) && identityValue(item)) ids.add(item);
       else if (item && typeof item === 'object') visit(item);
     }
   };
@@ -170,7 +171,7 @@ export function retiredRunScope(registry,{runIds,protectedRunIds,ownerId,evidenc
   for(const row of others)for(const key of ['runId','changeId','sessionId'])if(identifier(row[key]))shared.add(row[key]);
   const ids=new Set(runIds),collect=value=>{
     if(!value||typeof value!=='object')return;
-    for(const [key,item] of Object.entries(value))if(identityKeys.has(key)&&identifier(item)&&!shared.has(item))ids.add(item);else if(item&&typeof item==='object')collect(item);
+    for(const [key,item] of Object.entries(value))if(identityKeys.has(key)&&identityValue(item)&&!shared.has(item))ids.add(item);else if(item&&typeof item==='object')collect(item);
   };
   targets.forEach(collect);
   for(const name of ['operations','accesses','testReservations','publications'])for(const row of Object.values(registry.coordination?.[name]||{}))if(selected.has(row.runId)) {
@@ -202,7 +203,7 @@ export function extendErasureScope(scope, documents) {
     const collect = value => {
       if (!value || typeof value !== 'object'||retainedPeer(value,scope)) return;
       if(owned(value)&&typeof value.directory==='string'&&value.directory!==scope.workspace)fail('erasure-foreign-reference');
-      if (owned(value)) for (const [key,item] of Object.entries(value)) if (identityKeys.has(key) && identifier(item) && !ids.has(item)&&!shared.has(item)) {
+      if (owned(value)) for (const [key,item] of Object.entries(value)) if (identityKeys.has(key) && identityValue(item) && !ids.has(item)&&!shared.has(item)) {
         if (ownerKeys.has(key)) fail('erasure-foreign-reference');
         ids.add(item); changed = true;
       }

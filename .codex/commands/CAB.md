@@ -1,6 +1,6 @@
 ---
 description: Piloter la communication de validation OpenCode–Codex
-version: 2.4.35
+version: 2.4.36
 ---
 
 Réponds en français. Commande : `/CAB`, pas `/cab`. Argument : `$ARGUMENTS`.
@@ -30,7 +30,7 @@ ou inconnu : syntaxe sans collecte ni mutation. Pas de sous-commande implicite.
 | `pause`, `resume`, `stop` avec `--run <run_id>` ou `--all` | `references/command-pause.md` ; respecter la portée exacte |
 | `stop` sans portée | `references/command-stop.md` ; ne jamais déduire `--all` |
 | `update ...` | `references/command-update.md` et `references/component-update.md` |
-| `cleanup ...` | `references/change-erasure.md`, `references/retired-run-cleanup.md` ; portée explicite |
+| `cleanup ...` | `references/change-erasure.md`, `references/retired-run-cleanup.md` ; sentinelles exclues |
 
 Pour start, run ou resume, résoudre le workspace canonique puis appliquer
 `references/monitor-service.md` avant PLLM et les prévols, sans purge, reset ou
@@ -38,7 +38,7 @@ redémarrage d'une instance conforme. Revenir ensuite à la seule sous-commande
 demandée. Status, source, stats, pause, stop, test et update n'activent pas ce
 bootstrap. Pour le détail des arguments et du transport, consulter seulement
 si nécessaire `references/command-overview.md`. Le contrat normatif est indexé
-par `references/protocol-index.md` ; `ancien protocole local` local n'est pas requis.
+par `references/protocol-index.md` ; aucune copie locale historique n'est requise.
 
 Incident : `references/owner-diagnostics.md`, puis `references/incident-triage.md`.
 Frontières historiques : `references/historical-owner-boundaries.md`.
