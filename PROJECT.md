@@ -1,5 +1,7 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+Les événements des approbations conservées restent associés au journal ; les événements reconstruits depuis le magasin sont identifiés comme tels.
+
 Le nettoyage ciblé d’un change clos peut retirer sa copie SGS sans supprimer le rapport métier du projet ni réimporter les anciens relevés.
 
 Les RUN directs sont observés par une lecture SGS limitée à leurs identités et bornes, sans recalcul des événements statistiques à chaque rafraîchissement.

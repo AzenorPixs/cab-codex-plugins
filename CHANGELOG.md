@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 2.4.39 - 2026-11-08
+
+- Préserver les événements des approbations conservées et identifier les événements reconstruits depuis le magasin.
+- Ignorer les sentinelles dans la portée effective et permettre la reprise ciblée après redémarrage des services.
+- Rétablir les services des autres RUN si une projection est refusée avant application.
+
 ## 2.4.38 - 2026-11-08
 
 - Permettre un diagnostic propriétaire en lecture seule et conserver les approbations non attribuées pendant le nettoyage d’un lot.
