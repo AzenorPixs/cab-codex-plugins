@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 2.4.43 - 2026-11-08
+
+- Permettre le nettoyage SGS d’un change clos lorsque seul un autre RUN possède une session native non vérifiée.
+
 ## 2.4.42 - 2026-11-08
 
 - Aligner les unités systemd distribuées sur la version du paquet afin de permettre la préparation CABU.

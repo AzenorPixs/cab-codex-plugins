@@ -110,6 +110,9 @@ test('redémarrage : session manquante isolée puis reprise après vérification
  const a=await (await fetch(f.bases.controller+'/runs/a/status')).json();assert.equal(a.nativeRestart.state,'VERIFIED');
  const blocked=await fetch(f.bases.controller+'/runs/b/locks/acquire',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});assert.equal(blocked.status,503);
  const independent=await fetch(f.bases.controller+'/runs/a/locks/acquire',{method:'POST',headers:{'content-type':'application/json'},body:'{}'});assert.notEqual(independent.status,503);
+ const cleanup=body=>fetch(f.bases.controller+'/cleanup/simple-sgs',{method:'POST',headers:{'content-type':'application/json','x-cab-continuity':'cab-continuity-v1'},body:JSON.stringify(body)});
+ const same=await cleanup({changeId:'change-b',runId:'direct-b',bindingId:'binding-b'});assert.equal(same.status,409);assert.equal((await same.json()).error,'cleanup-target-active');
+ const other=await cleanup({changeId:'change-independent',runId:'direct-other',bindingId:'binding-other'});assert.notEqual(other.status,503);
  replacement.send('restore-session');
  await until(async()=>{const d=await (await fetch(f.bases.controller+'/runs/b/status')).json();return d.nativeRestart?.state==='VERIFIED';},8000);
 });

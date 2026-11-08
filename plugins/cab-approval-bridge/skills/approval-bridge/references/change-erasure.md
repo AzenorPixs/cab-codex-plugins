@@ -73,6 +73,10 @@ effective avant clôture. La reprise utilise le même reçu sans rejouer la
 suppression. Une preuve de propriétaire ou de reçu divergente interrompt la
 reprise ; les données des autres RUN restent conservées.
 
+Après un redémarrage OpenCode, une session non vérifiée d’un autre RUN ne
+bloque pas le retrait SGS d’un change clos. L’identité native et le verrou du
+change cible restent vérifiés ; un RUN réservé pour ce change interdit le retrait.
+
 Une opération PREPARED non retirée, ISSUING, EXECUTING ou UNKNOWN, une once sans
 résultat réconcilié, une permission en attente ou une ressource non libérée
 empêche l’effacement. L’archivage métier ne lève aucune de ces protections.
