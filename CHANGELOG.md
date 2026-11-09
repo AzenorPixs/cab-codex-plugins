@@ -2,6 +2,10 @@
 
 ## Non publié
 
+## 2.5.3 - 2026-11-09
+
+- Consolider les instantanés natifs des rapports de coordination et leur nettoyage SGS vérifié, sans double comptage.
+
 ## 2.5.2 - 2026-11-09
 
 - Exposer les capacités de l’adaptateur commun de coordination directe et pilotée sans création de magasin.
