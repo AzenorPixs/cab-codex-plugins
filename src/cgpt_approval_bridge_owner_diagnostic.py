@@ -7,7 +7,7 @@ from uuid import uuid4
 
 import cgpt_approval_bridge_server as broker
 
-VERSION = '2.5.2'
+VERSION = '2.5.3'
 
 
 def run(identity):
