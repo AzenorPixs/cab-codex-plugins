@@ -18,7 +18,7 @@ import struct
 import time
 from urllib.parse import quote, urlencode, urlsplit
 
-VERSION = "2.5.1"
+VERSION = "2.5.2"
 TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/#-]{0,255}$")
 KINDS = frozenset(("change", "task", "capability"))
 

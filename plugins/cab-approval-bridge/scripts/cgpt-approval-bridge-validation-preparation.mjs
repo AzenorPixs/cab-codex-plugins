@@ -2,7 +2,7 @@
 import {randomUUID} from 'node:crypto';
 import {resolve,relative,isAbsolute} from 'node:path';
 import {nativeToolInputDigest} from './cgpt-approval-bridge-opencode-client.mjs';
-export const VERSION='2.5.1';
+export const VERSION='2.5.2';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:400});};
 export function prepareValidationData(run,input,resources,revisions) {
   if(!run||run.state!=='RESERVED'||input.run_id!==run.runId||input.reservation_version!==run.version||input.session_id!==run.sessionId||
