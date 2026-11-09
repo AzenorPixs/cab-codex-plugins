@@ -294,8 +294,9 @@ Les éléments versionnés ou protégés suivants NE DOIVENT PAS être supprimé
 * `openspec/specs/`
 
 `project.env` est un fichier local protégé situé à la racine du projet.
-L'agent NE DOIT PAS le créer, le modifier ou le régénérer. Sa consultation
-est limitée à l'extraction définie en section « Sources du projet ».
+L'agent NE DOIT PAS le créer, le modifier ou le régénérer. Il PEUT en extraire
+les variables utiles au travail autorisé dont il pourrait avoir besoin, dans
+les conditions définies en section « Sources du projet ».
 
 ## 9. Sources du projet
 
@@ -306,8 +307,10 @@ Les fichiers du projet non explicitement exclus PEUVENT être utilisés comme so
 * d'informations techniques ;
 * d'informations fonctionnelles.
 
-Hors exception limitée d’extraction des variables locales non secrètes définie ci-dessous,
-les sources exclues NE DOIVENT PAS être lues, analysées, indexées ou utilisées :
+Les sources exclues NE DOIVENT PAS être lues, analysées, indexées ou utilisées,
+sauf pour l'accès local aux fichiers sensibles nécessaire au travail autorisé
+dans les conditions de la section « Secrets » et pour l'extraction définie
+ci-dessous :
 
 ```text id="6zj1eg"
 __pycache__/
@@ -369,13 +372,12 @@ venv/
 ### Exception limitée — variables locales non secrètes de project.env
 
 Pour les besoins du projet et du travail autorisé, l’agent PEUT lancer, sans
-validation supplémentaire, une extraction locale filtrée de toutes les
-variables non secrètes disponibles dans `project.env`, situé à la racine du
+validation supplémentaire, une extraction locale filtrée des
+variables utiles au travail autorisé dans `project.env`, situé à la racine du
 projet concerné. Cette autorisation couvre notamment `PROJECT_*`,
 `LOCAL_DEFAULT_BRANCH`, `GIT_*` et `REMOTE_*`, sans se limiter à ces noms ou
 préfixes. Elle ne dépend pas de l’exécution d’un prompt particulier.
-Cette exception prévaut sur l’exclusion générale des fichiers `.env` et sur
-l’interdiction d’ouvrir un fichier sensible de la section « Secrets »,
+Cette exception prévaut sur l’exclusion générale des fichiers `.env`
 uniquement pour ce traitement local.
 
 Seul le processus local parcourt le fichier ; l’agent ne reçoit que les noms
@@ -393,12 +395,12 @@ clés dupliquées et les syntaxes nécessitant une interprétation sont ambiguë
 Aucune ligne rejetée ni sortie brute du fichier ne DOIT être restituée.
 
 Si le fichier est absent ou inaccessible, si une variable nécessaire manque
-ou si sa valeur est vide ou ambiguë, demander uniquement les valeurs non
-secrètes nécessaires et manquantes ou non vérifiables au développeur.
+ou si sa valeur est vide ou ambiguë, demander au développeur uniquement la
+valeur manquante ou non vérifiable.
 L’agent NE DOIT PAS créer, modifier ou régénérer `project.env`.
-Cette exception n’autorise aucun autre accès aux fichiers exclus ni aux
-secrets, et ne s’applique pas si le développeur interdit précisément cette
-extraction.
+Cette exception ne s’applique pas si le développeur interdit précisément
+cette extraction. Les autres accès aux fichiers sensibles restent soumis à
+la section « Secrets ».
 
 ### Inclusions explicites
 
@@ -429,8 +431,8 @@ reports/
 
 L’inclusion de `project.env` concerne exclusivement le fichier situé à la
 racine du projet et l’extraction locale filtrée définie ci-dessus. Elle
-n’autorise ni sa lecture brute, ni l’accès aux secrets, ni sa création,
-sa modification ou sa régénération.
+n’autorise ni sa restitution brute, ni sa création, sa modification ou sa
+régénération.
 
 Ces éléments ne constituent pas nécessairement une source de vérité fonctionnelle.
 
@@ -450,11 +452,14 @@ Leur modification nécessite une demande ou validation explicite concernant, sel
 
 ## 10. Secrets
 
+L'ouverture locale des fichiers sensibles est autorisée dans le cadre du projet
+et du travail autorisé. Pour un fichier sensible, l'agent PEUT uniquement
+signaler sa présence à partir de son nom ou de son chemin ; son contenu ne
+DOIT PAS être restitué lorsqu'il contient des secrets.
+
 L'agent NE DOIT PAS :
 
-* ouvrir un fichier sensible ;
 * transmettre un secret au modèle ;
-* analyser un secret ;
 * indexer un secret ;
 * ajouter un secret à Git ;
 * afficher un secret dans les journaux ou sorties.
@@ -468,18 +473,18 @@ Les données sensibles comprennent notamment :
 * certificats ;
 * identifiants de connexion.
 
-Pour un fichier sensible, l'agent PEUT uniquement signaler sa présence à partir de son nom ou chemin.
-L’extraction locale des variables non secrètes de `project.env` à la racine
-du projet constitue la seule
-exception définie dans la section « Sources du projet » ; elle n’autorise
-jamais la transmission d’un secret au modèle.
+Pour `project.env`, l'agent NE DOIT PAS le créer, le modifier ou le régénérer.
+Il PEUT en extraire les variables utiles au travail autorisé selon les
+conditions définies dans la section « Sources du projet ». Toute valeur
+secrète ou dont le caractère non secret ne peut pas être établi DOIT être
+exclue de la restitution ; aucune ligne rejetée ni sortie brute ne DOIT être
+affichée.
 
-Les secrets DOIVENT rester hors des sources versionnées et accessibles aux agents.
+Les secrets DOIVENT rester hors des sources versionnées.
 
 Un emplacement local tel que `.opencode/share/` PEUT contenir des secrets uniquement s'il est exclu :
 
 * de Git ;
-* de la lecture par les agents ;
 * de l'indexation.
 
 ## 11. Sécurité

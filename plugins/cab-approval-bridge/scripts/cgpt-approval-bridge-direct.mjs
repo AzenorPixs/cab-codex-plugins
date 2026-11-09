@@ -3,15 +3,57 @@ import {readdir,readFile,realpath,mkdir} from 'node:fs/promises';
 import {homedir,hostname} from 'node:os';
 import {join,resolve} from 'node:path';
 import {createHash} from 'node:crypto';
-import {pathToFileURL} from 'node:url';
-import {runtimeRequest,registerStatisticsBinding,registerStatisticsSource,flushStatistics} from './cgpt-approval-bridge-runtime-client.mjs';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+import {runtimeRequest,registerStatisticsBinding,registerStatisticsSource,flushStatistics,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
+import {dependencyCloseCheck,dependencyGate} from './cgpt-approval-bridge-dependency-gate.mjs';
 import {ensureProjectTestRoot,changeTestArea,cleanTestArea} from './cgpt-approval-bridge-autonomy.mjs';
 import {startDirectMonitor} from './cgpt-approval-bridge-direct-monitor.mjs';
 import {ArchiveContent,archiveDirectory,changeReports} from './cgpt-approval-bridge-archives.mjs';
 import {purgeStatistics,verifyStatisticsAbsence} from './cgpt-approval-bridge-sgs-cleanup.mjs';
-export const VERSION='2.4.43';
+export const VERSION='2.5.0';
 const hash=value=>createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const id=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
+const execFileAsync=promisify(execFile);
+
+export async function registerDependencySession({project,run,session,mode,reopen=false},runner=execFileAsync) {
+  if(!id(run)||!id(session)||!['direct','piloted'].includes(mode))throw new Error('direct-dependency-identity-invalid');
+  const script=fileURLToPath(new URL('./cgpt-approval-bridge-dependencies.py',import.meta.url));
+  try {
+    const result=await runner('python3',['-B',script,'register','--project',project,'--session',session,'--run',run,'--mode',mode],{timeout:5000,maxBuffer:65536});
+    const value=JSON.parse(result.stdout);
+    if(value.status!=='registered')throw new Error('invalid');
+    return {status:'registered',native_notification:value.native_notification};
+  } catch (error) {
+    let code;try{code=JSON.parse(error.stderr||'{}').error;}catch{}
+    if(reopen&&mode==='direct'&&code==='coordination-session-closed') {
+      try {
+        const result=await runner('python3',['-B',script,'reopen-direct','--project',project,'--session',session,'--run',run],{timeout:10000,maxBuffer:65536});
+        const value=JSON.parse(result.stdout);if(value.status==='reopened')return value;
+      } catch {}
+    }
+    return {status:'unavailable',reason:'direct-dependency-registration-unavailable'};
+  }
+}
+
+export function dependencySessionMode(action,role) {
+  if(action==='start')return 'direct';
+  if(action==='track'&&role==='orchestrator')return 'piloted';
+  return null;
+}
+
+export async function closeDependencySession({project,change,run,session,receiptId,home},runner=execFileAsync) {
+  const script=fileURLToPath(new URL('./cgpt-approval-bridge-dependencies.py',import.meta.url));
+  const args=['-B',script,'close-direct','--project',project,'--change',change,'--run',run,'--session',session,'--receipt-id',receiptId];
+  try {
+    const result=await runner('python3',args,{timeout:10000,maxBuffer:65536,
+      env:{...process.env,OC_Codex_RUNTIME_STATE_ROOT:stateRootDirectory(home)}});
+    const value=JSON.parse(result.stdout);
+    if(!['closed','absent','retained-for-peers','cleanup-pending'].includes(value.status))throw new Error('invalid');
+    return value;
+  } catch { return {status:'unavailable',reason:'direct-dependency-closure-unavailable'}; }
+}
 
 async function findNativeSession(home,session) {
   const root=join(home,'.codex/sessions');let result=[];
@@ -55,6 +97,10 @@ export async function finalizeDirect({project,change,run,session=process.env.COD
   if(sessions.some(row=>row.run===run&&!own.includes(row)&&!row.ended_at))throw new Error('direct-closure-active-peer');
   if(sessions.some(row=>row.run===run&&row.mode==='piloted'))throw new Error('direct-closure-pilot-authority-required');
   if(own.some(row=>!row.ended_at))throw new Error('direct-closure-statistical-window-open');
+  const gate=await (options.dependencyGate||dependencyGate)({stateRoot:stateRootDirectory(home),project,run,mode:'run'});
+  let result;
+  try {
+  await (options.dependencyCloseCheck||dependencyCloseCheck)({stateRoot:stateRootDirectory(home),project,run,session});
   const bindingId='codex-'+hash([hostname(),process.getuid(),project,change,run,session,'coder']);
   const scope={workspace:project,changeId:change,runIds:[run],ids:[session],sessionId:session,bindingId,closureAuthority:'direct-session-v1'};
   const repository=new ArchiveContent(options.archiveRoot||archiveDirectory(project,{home}),project);
@@ -64,8 +110,27 @@ export async function finalizeDirect({project,change,run,session=process.env.COD
   const statistics=await statisticalCleanup.purge(scope,branch,receiptId,{home});
   await statisticalCleanup.verify(scope,{home});
   const atelier=cleanTestArea(project,change,run,{closed:true,reportsDurable:true});
-  return {status:'DIRECT_CLEANUP_VERIFIED',receiptId,scope,statistics,atelier,
+  result={status:'DIRECT_CLEANUP_VERIFIED',receiptId,scope,statistics,atelier,
     archive:{archiveId:retained.archiveId,fingerprint:retained.fingerprint}};
+  } finally { await gate.close(); }
+  const dependencies=await (options.dependencyClose||closeDependencySession)({project,change,run,session,receiptId,home});
+  return {...result,dependencies,...(dependencies.status==='unavailable'||dependencies.retained===true?{status:'DIRECT_CLEANUP_INCOMPLETE'}:{})};
+}
+
+export async function freezeDirect({project,binding,home=homedir()},options={}) {
+  if(!binding)throw new Error('direct-binding-required');
+  project=await realpath(project);
+  const request=options.request||runtimeRequest;
+  const read=async()=>(await request('sgs','/stats?project='+encodeURIComponent(project),undefined,{home})).sessions.find(row=>row.binding===binding);
+  const session=await read();if(!session)throw new Error('direct-binding-not-found');
+  const gate=await (options.dependencyGate||dependencyGate)({stateRoot:stateRootDirectory(home),project,run:session.run,mode:'run'});
+  try {
+    const current=await read();
+    if(!current||current.run!==session.run||current.session!==session.session||current.started_at!==session.started_at)
+      throw new Error('direct-binding-changed');
+    await (options.dependencyCloseCheck||dependencyCloseCheck)({stateRoot:stateRootDirectory(home),project,run:session.run,session:session.session});
+    return await request('sgs','/bindings/close',{binding,ended_at:current.ended_at||new Date().toISOString()},{home});
+  } finally { await gate.close(); }
 }
 
 async function main(argv) {
@@ -74,14 +139,19 @@ async function main(argv) {
   if(action==='finalize')return finalizeDirect({project:values['--project']||process.cwd(),change:values['--change'],run:values['--run'],
     session:values['--session']||process.env.CODEX_THREAD_ID,branch:values['--branch'],receiptId:values['--receipt-id']});
   if(action==='freeze') {
-    const binding=values['--binding'];if(!binding)throw new Error('direct-binding-required');
-    const project=await realpath(values['--project']||process.cwd());
-    const session=(await runtimeRequest('sgs','/stats?project='+encodeURIComponent(project))).sessions.find(row=>row.binding===binding);
-    if(!session)throw new Error('direct-binding-not-found');
-    return runtimeRequest('sgs','/bindings/close',{binding,ended_at:session.ended_at||new Date().toISOString()});
+    return freezeDirect({project:values['--project']||process.cwd(),binding:values['--binding']});
   }
-  const result=await trackCodex({project:values['--project']||process.cwd(),change:values['--change'],run:values['--run'],session:values['--session']||process.env.CODEX_THREAD_ID,
-    role:values['--role']||'coder',direct:action==='start',startedAt:values['--started-at'],sourcePath:values['--source']});
+  const targetProject=await realpath(values['--project']||process.cwd());
+  const startGate=await dependencyGate({stateRoot:stateRootDirectory(homedir()),project:targetProject,run:values['--run'],mode:'run'});
+  let result;
+  try {
+    result=await trackCodex({project:targetProject,change:values['--change'],run:values['--run'],session:values['--session']||process.env.CODEX_THREAD_ID,
+      role:values['--role']||'coder',direct:action==='start',startedAt:values['--started-at'],sourcePath:values['--source']});
+  } finally { await startGate.close(); }
+  const dependencyMode=dependencySessionMode(action,result.role);
+  result.dependencies=dependencyMode
+    ? await registerDependencySession({project:result.project,run:result.run,session:result.session,mode:dependencyMode,reopen:action==='start'})
+    : {status:'unavailable',reason:'direct-dependency-mode-unknown'};
   if(action==='start') {
     try{result.monitor=await startDirectMonitor(result.project);}
     catch(error){result.monitor={status:'unavailable',reason:/^direct-monitor-[a-z-]+$/.test(error.message)?error.message:'direct-monitor-unavailable'};}
@@ -89,6 +159,7 @@ async function main(argv) {
   return result;
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href) {
-  try{process.stdout.write(JSON.stringify(await main(process.argv.slice(2)))+'\n');}
+  try{const result=await main(process.argv.slice(2));process.stdout.write(JSON.stringify(result)+'\n');
+    if(result.status==='DIRECT_CLEANUP_INCOMPLETE')process.exitCode=1;}
   catch(error){process.stderr.write(JSON.stringify({error:/^(?:direct|sgs|runtime)-[a-z-]+$/.test(error.message)?error.message:'direct-tracking-unavailable'})+'\n');process.exitCode=1;}
 }

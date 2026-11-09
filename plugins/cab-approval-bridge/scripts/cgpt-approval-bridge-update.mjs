@@ -1,5 +1,5 @@
 import {migrationPendingValidations,migrationRegistryDigest,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
-import {runtimeStateDirectory,legacyStateDirectory,legacyRuntimeFiles,initializeRuntimeState,readRuntimeJson,writeRuntimeJson,ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
+import {runtimeStateDirectory,legacyStateDirectory,legacyRuntimeFiles,runtimeFiles,initializeRuntimeState,readRuntimeJson,writeRuntimeJson,ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import { constants } from 'node:fs';
 import { lstat, mkdir, open, readFile, realpath, readdir, rename, unlink, readlink, symlink } from 'node:fs/promises';
 import { createHash, randomUUID } from 'node:crypto';
@@ -18,7 +18,7 @@ import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 import { activateRuntimeServices } from './cgpt-approval-bridge-runtime-install.mjs';
 import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-export const VERSION = '2.4.43';
+export const VERSION = '2.5.0';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -179,6 +179,7 @@ const runIdentity = (registry) => hash(JSON.stringify({
   requestOwners: Object.entries(registry.requestOwners || {}).sort(([a], [b]) => a.localeCompare(b)) }));
 
 export async function updateComponents(input, options = {}) {
+  if (input.recaptureMigration !== undefined && (!/^update-[a-f0-9-]{36}$/.test(input.recaptureMigration) || input.profile !== undefined || input.brokerPolicy === 'reuse-readonly' || input.recoverMcp !== undefined || input.resumeForward !== undefined || options.rollbackOnly)) throw error('update-migration-recapture-authorization-invalid');
   if (input.recoverMcp !== undefined && (!/^update-[a-f0-9-]{36}$/.test(input.recoverMcp) || input.profile !== undefined || input.brokerPolicy === 'reuse-readonly')) throw error('update-mcp-recovery-authorization-invalid');
   if (input.resumeForward !== undefined && (!/^update-[a-f0-9-]{36}$/.test(input.resumeForward) || input.recoverMcp !== undefined ||
       input.profile !== undefined || input.brokerPolicy === 'reuse-readonly')) throw error('update-forward-recovery-authorization-invalid');
@@ -258,7 +259,7 @@ export async function updateComponents(input, options = {}) {
     const allowed = file.group === 'broker' ? brokerPayloadFiles.includes(file.name) : file.group === 'units' ?
       ['controller', 'supervisor', 'monitor','sgs','ccab','monitor-direct@'].some((component) => file.name === unit(component)) : file.group === 'web' ?
         ['index.html', 'app.mjs', 'stats.mjs', 'style.css'].includes(file.name) :
-          (['scripts','monitorScripts'].includes(file.group) && ['cab_sgs.py','cgpt-approval-bridge-contract.json'].includes(file.name)) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(file.name);
+          (['scripts','monitorScripts'].includes(file.group) && ['cab_sgs.py','cab_session_dependencies.py','cgpt-approval-bridge-contract.json'].includes(file.name)) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(file.name);
     if (!allowed) throw error('update-journal-invalid');
     return join(c.roots[file.group], file.name);
   };
@@ -397,6 +398,70 @@ export async function updateComponents(input, options = {}) {
     receipt.continuity={protocol:CONTINUITY_PROTOCOL,state:'LEGACY',reason:'private-runtime-migration',transactionId:receipt.id};
     await save('PREPARED');return true;
   }
+  async function recaptureMigrationIdentity() {
+    if(input.recaptureMigration!==receipt.id||receipt.phase!=='STOPPING'||receipt.runtimeMigration?.state!=='CAPTURED'||receipt.mcpTransition&&!['CONFIRMED','RECONCILED'].includes(receipt.mcpTransition.state))
+      throw error('update-migration-recapture-boundary-invalid');
+    const destination=receipt.runtimeMigration.destination;
+    if(destination!==runtimeStateDirectory(c.serviceWorkspace,{home:c.home})||await optional(join(destination,'runtime-migration.json')))
+      throw error('update-migration-recapture-boundary-invalid');
+    for(const component of ['controller','supervisor','monitor']) {
+      const meta=await metadata(component);
+      if(meta.ActiveState==='active'||Number(meta.MainPID)!==0)throw error('update-migration-source-not-quiescent');
+    }
+    const file=join(transaction(),'runtime-migration.json'),auditFile=join(transaction(),'runtime-migration-native-recovery.json');
+    const proof=readRuntimeJson(file).value,previous=await optional(auditFile);
+    let audit=previous?JSON.parse(previous.data):null;
+    if(audit&&(audit.transactionId!==receipt.id||!['INTENT','VERIFIED'].includes(audit.state)||
+        ![proofHash(audit.before),proofHash(audit.after)].includes(proofHash(proof))))throw error('update-migration-recapture-audit-invalid');
+    if(proof.transactionId!==receipt.id||proof.workspace!==c.serviceWorkspace||proof.protocol!==RUNTIME_MIGRATION_PROTOCOL||
+        !Array.isArray(proof.pending)||proof.pending.length||!proof.sourceFiles?.length)throw error('update-migration-recapture-boundary-invalid');
+    const layoutFile=await optional(join(destination,'runtime-layout.json'));
+    if(layoutFile){
+      const layout=readRuntimeJson(join(destination,'runtime-layout.json')).value;
+      if(layout.schema!==1||layout.workspace!==c.serviceWorkspace||layout.source!==legacyStateDirectory(c.serviceWorkspace)||layout.phase!=='COPYING'||
+          migrationFilesDigest(layout.files)!==migrationFilesDigest(proof.sourceFiles))throw error('update-migration-recapture-boundary-invalid');
+    }
+    let copyRepair;
+    for(const target of runtimeFiles(destination))if(!proof.sourceFiles.some(file=>file.name===target.name&&file.sha256===target.sha256)) {
+      const state=readRuntimeJson(join(destination,target.name)).value;
+      if(!layoutFile||target.name!=='supervisor-state.json'||state.state!=='WAITING'||state.reason!=='reconciliation-failed'||
+          state.resumeInFlight!==false||state.resumeAttemptCount!==0||state.lastReconciliationAt!==null||
+          ['runId','sessionId','jobId','directory'].some(key=>state[key]!=null)||state.lastResumeAttempt?.result!=='failed'||
+          state.lastResumeAttempt?.sessionId!=null||state.lastResumeAttempt?.jobId!=null)
+        throw error('update-migration-copy-divergent');
+      const captured=proof.sourceFiles.find(file=>file.name===target.name);
+      if(!captured)throw error('update-migration-copy-divergent');
+      copyRepair={name:target.name,beforeHash:target.sha256,afterHash:captured.sha256};
+    }
+    const files=legacyRuntimeFiles(c.serviceWorkspace);
+    if(migrationFilesDigest(files)!==migrationFilesDigest(proof.sourceFiles))throw error('update-migration-source-changed');
+    const reader=await validateMigrationReader(files);
+    if(reader.registryDigest!==proof.registryDigest||Object.values(reader.status.runs||{}).some(run=>run.activeValidations?.length))throw error('update-migration-source-changed');
+    const snapshot=await recoveryObservation();
+    if(snapshot.activeSessionCount||snapshot.sharedPermissionCount)throw error('update-migration-recapture-native-busy');
+    const identity={pid:snapshot.pid,version:snapshot.version,directory:snapshot.sharedDirectory};
+    if(audit&&proofHash(audit.after.nativeIdentity)!==proofHash(identity))throw error('update-migration-native-changed');
+    if(audit&&copyRepair&&proofHash(copyRepair)!==proofHash(audit.copyRepair))throw error('update-migration-copy-divergent');
+    if(!audit)audit={transactionId:receipt.id,state:'INTENT',before:proof,after:{...proof,nativeIdentity:identity},snapshot,at:now(),...(copyRepair?{copyRepair}: {})};
+    const fresh=await recoveryObservation();
+    if(!sameRecoveryIdentity(snapshot,fresh)||fresh.activeSessionCount||fresh.sharedPermissionCount)throw error('update-migration-native-changed');
+    if(migrationFilesDigest(legacyRuntimeFiles(c.serviceWorkspace))!==migrationFilesDigest(proof.sourceFiles))throw error('update-migration-source-changed');
+    if(audit.copyRepair){
+      const repair=audit.copyRepair,backup=join(transaction(),'recapture-supervisor-state.backup.json');
+      if(repair.name!=='supervisor-state.json'||!proof.sourceFiles.some(file=>file.name===repair.name&&file.sha256===repair.afterHash))throw error('update-migration-recapture-audit-invalid');
+      const target=readRuntimeJson(join(destination,repair.name)),saved=await optional(backup);
+      if(saved&&hash(saved.data)!==repair.beforeHash||![repair.beforeHash,repair.afterHash].includes(target.sha256))throw error('update-migration-copy-divergent');
+      if(!saved){if(target.sha256!==repair.beforeHash)throw error('update-migration-copy-divergent');await atomic(backup,target.bytes);}
+    }
+    if(!previous)await atomic(auditFile,JSON.stringify(audit)+'\n');
+    if(audit.copyRepair){
+      const repair=audit.copyRepair,source=readRuntimeJson(join(legacyStateDirectory(c.serviceWorkspace),repair.name),{legacy:true});
+      if(source.sha256!==repair.afterHash)throw error('update-migration-source-changed');
+      await atomic(join(destination,repair.name),source.bytes);
+    }
+    await atomic(file,JSON.stringify(audit.after)+'\n');
+    audit.state='VERIFIED';await atomic(auditFile,JSON.stringify(audit)+'\n');
+  }
   async function finishRuntimeMigration() {
     const m=receipt.runtimeMigration;
     if(!m||m.protocol!==RUNTIME_MIGRATION_PROTOCOL||m.destination!==runtimeStateDirectory(c.serviceWorkspace,{home:c.home}))throw error('update-migration-journal-invalid');
@@ -439,8 +504,18 @@ export async function updateComponents(input, options = {}) {
       m.state='COPIED';await save('INSTALLING');
     }
     for(const file of receipt.files){
-      const actual=await deployed(file),known=receipt.offlineRecovery?.observedBrokerFiles?.find(item=>item.group===file.group&&item.name===file.name);
-      if(![file.beforeHash,file.afterHash,...(known?[known.sha256]:[])].includes(actual?hash(actual.data):null))throw error('update-installed-artifact-changed');
+      const actual=await deployed(file),known=receipt.offlineRecovery?.observedBrokerFiles?.filter(item=>item.group===file.group&&item.name===file.name)||[];
+      if([file.beforeHash,file.afterHash,...known.map(item=>item.sha256)].includes(actual?hash(actual.data):null))continue;
+      if(!receipt.offlineRecovery||c.brokerPolicy!=='cab-source'||file.group!=='broker'||!brokerFiles.includes(file.name)||!actual||!newer(VERSION,receipt.version))throw error('update-installed-artifact-changed');
+      const packaged=await regular(join(c.pluginRoot,'broker',file.name));
+      if(sourceVersion(packaged.data)!==VERSION||hash(packaged.data)!==hash(actual.data))throw error('update-installed-artifact-changed');
+      const index=receipt.files.indexOf(file),stage=await regular(join(transaction(),'stage',String(index)));
+      if(hash(stage.data)!==file.afterHash)throw error('update-stage-changed');
+      if(file.beforeHash&&hash((await regular(join(transaction(),'backup',String(index)))).data)!==file.beforeHash)throw error('update-backup-invalid');
+      await atomic(join(transaction(),'observed-broker-forward',file.name),actual.data);
+      receipt.offlineRecovery.observedBrokerFiles||=[];
+      receipt.offlineRecovery.observedBrokerFiles.push({group:file.group,name:file.name,version:VERSION,sha256:hash(actual.data)});
+      await save(receipt.phase);
     }
     await installManagedFiles();
     if(receipt.files.some(f=>f.group==='units'&&f.beforeHash!==f.afterHash))await service(['daemon-reload']);
@@ -1035,6 +1110,7 @@ export async function updateComponents(input, options = {}) {
   }
   try {
     const existing = await optional(currentFile);
+    if(input.recaptureMigration!==undefined&&!existing)throw error('update-migration-recapture-authorization-invalid');
     const cleanup=await optional(join(runtimeStateDirectory(c.serviceWorkspace||c.workspace,{home:c.home}),'change-erasure.json'));
     if(cleanup&&['FREEZING','STOPPING','APPLYING','RESTORING_PRESERVED','RESTARTING','VERIFYING'].includes(JSON.parse(cleanup.data.toString('utf8'))?.phase))
       throw error('update-erasure-forward-recovery-required');
@@ -1045,8 +1121,10 @@ export async function updateComponents(input, options = {}) {
       if (input.resumeForward !== undefined && (receipt.id !== input.resumeForward || receipt.phase !== 'ROLLBACK_FAILED')) {
         throw error('update-forward-recovery-receipt-invalid');
       }
+      if(input.recaptureMigration!==undefined&&(receipt.id!==input.recaptureMigration||complete.has(receipt.phase)))throw error('update-migration-recapture-authorization-invalid');
       if (complete.has(receipt.phase)) receipt = null;
       else receiptProcessing: {
+      if(input.recaptureMigration!==undefined&&!receipt.runtimeMigration)throw error('update-migration-recapture-boundary-invalid');
       if (receipt.schema !== 1 || (!complete.has(receipt.phase) && receipt.contextKey !== contextKey) || !/^update-[a-f0-9-]{36}$/.test(receipt.id) ||
           !Array.isArray(receipt.files) || receipt.files.length > 128 || !receipt.active ||
           !['PREPARING', 'PREPARED', 'FREEZING', 'WAITING', 'STOPPING', 'INSTALLING', 'RESTARTING', 'VERIFYING',
@@ -1099,7 +1177,8 @@ export async function updateComponents(input, options = {}) {
       if (receipt.phase === 'MCP_RECOVERY_REQUIRED' && !receipt.mcpRecovery) throw error('update-journal-invalid');
       receiptTrusted = true;
       receiptLayout=receipt.managed?'managed-release':'classic';
-      if(receipt.runtimeMigration&&['PREPARED','STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
+      if(!options.rollbackOnly&&receipt.runtimeMigration&&['PREPARED','STOPPING','INSTALLING','RESTARTING','VERIFYING'].includes(receipt.phase)) {
+        if(input.recaptureMigration!==undefined)await recaptureMigrationIdentity();
         if(receipt.phase==='PREPARED')await save('STOPPING');
         if(receipt.phase==='STOPPING')await stopAll();
         return await finishRuntimeMigration();
@@ -1296,7 +1375,7 @@ export async function updateComponents(input, options = {}) {
         receipt.jobIdentity=jobsIdentity(status);
         for (const name of brokerFiles) await validate(join(c.pluginRoot,'broker',name),transaction());
       }
-      const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => ['cab_sgs.py','cgpt-approval-bridge-contract.json'].includes(name) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
+      const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => ['cab_sgs.py','cab_session_dependencies.py','cgpt-approval-bridge-contract.json'].includes(name) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
       const required = ['runtime-migration.mjs', 'state-layout.mjs', 'controller.mjs', 'job-context.mjs', 'continuity.mjs', 'recovery.mjs', 'recovery-evidence.mjs', 'port-recovery.mjs', 'native-instances.mjs', 'permission-replies.mjs', 'manifest-extensions.mjs', 'model-policy.mjs', 'model-transition.mjs', 'provider-connect.mjs', 'context-portability.mjs', 'shell-stage.mjs', 'permission-policy.mjs', 'runs.mjs', 'resource-coordination.mjs',
         'statistics.mjs', 'observation-statistics.mjs', 'statistics-maintenance.mjs', 'import-observations.mjs',
         'registry-lock.py', 'supervisor.mjs', 'supervisor-context.mjs', 'opencode-sse-client.mjs', 'healthcheck.mjs',
@@ -1859,7 +1938,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
       '--controller-url': 'controllerUrl', '--supervisor-url': 'supervisorUrl', '--monitor-url': 'monitorUrl', '--opencode-url': 'opencodeUrl', '--wait-ms': 'waitMs',
       '--profile': 'profile', '--frozen-proof-file': 'frozenProofFile', '--layout':'layout',
       '--opencode-password-env-file':'passwordEnvFile','--service-workspace':'serviceWorkspace','--broker-policy':'brokerPolicy','--broker-proof-file':'brokerProofFile',
-      '--recover-mcp':'recoverMcp','--resume-forward':'resumeForward' };
+      '--recapture-migration':'recaptureMigration','--recover-mcp':'recoverMcp','--resume-forward':'resumeForward' };
     const input = {}; let rollbackOnly = false;
     for (let i = 2; i < process.argv.length; i++) {
       const argument = process.argv[i];
