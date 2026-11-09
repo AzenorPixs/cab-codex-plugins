@@ -7,15 +7,19 @@ une session de codage. Il complète les règles OpenSpec et ne les remplace pas.
 
 ### Dépendances entre sessions
 
-Lorsque la coordination de dépendances du change
-`coordinate-project-coding-sessions` est qualifiée et activée, l'orchestrateur
-utilise l'[interface de coordination](session-dependencies.md) : il rattache
-les identités réelles, déclare les prérequis précis, publie les avis fondés sur
-preuves et consulte sa boîte aux frontières des unités actives. Il examine les
-sources et vérifie ses propres critères avant d'acquitter un avis. Une pause
-explicite reste en vigueur et n'est jamais levée pour consulter la boîte ; une
-indisponibilité ou un résultat incertain reste visible. L'interface en cours de
-préparation ne prouve pas son activation ni un envoi natif automatique.
+Le propriétaire de coordination charge l'[adaptateur commun](session-coordination-adapter.md)
+et vérifie ses capacités avant inscription. En direct, le propriétaire est
+l'agent ; en pilotage, il est l'orchestrateur. ACSP remonte ses dépendances
+et preuves au parent, qui les valide et publie ; aucun double propriétaire
+n'est créé pour ce codeur. La politique SCMP utilise les obligations SCM.
+
+Les frontières et décisions métier appartiennent aux prompts. L'adaptateur
+CAB fournit déclarations, avis, notifications, consultation, acquittement et
+réconciliation. Une capacité indisponible n'autorise ni installation implicite,
+ni arrêt du travail indépendant, ni reprise d'une pause. Le mode direct ne
+crée aucun pilotage OpenCode. Les garanties et limites sont celles de
+[l'interface de boîte](session-dependencies.md), sans promettre un envoi natif
+par la seule inscription.
 
 ### Rôles
 
@@ -281,14 +285,14 @@ Une tâche de production de sources peut être validée selon ses propres
 critères ; sa coche ne prouve pas une intégration ou une qualification encore
 impossible.
 
-Dès que ces unités sont épuisées, clôturer proprement la session sans attendre
-que les dépendances soient réalisées. Ne maintenir aucune boucle d'attente,
-surveillance ou réessai automatique pour ces dépendances et ne pas ouvrir un
-nouveau change pour prolonger cette attente. La session est clôturée pour
-dépendances manquantes ; le change reste ouvert, en attente de finalisation.
-Cet état ne constitue ni une réussite globale ni une livraison. Aucun
-archivage forcé n'est permis ; l'archivage reste soumis à tous ses critères
-et validations.
+Dès que ces unités sont épuisées, appliquer la politique du prompt parent.
+SCM/SCMP poursuivent les dépendances autorisées et soumettent les extensions
+nécessaires au développeur, sans pause ou arrêt du seul fait d'une dépendance.
+CISM/CISMP et ISM/ISMP conservent le choix explicite pause ou arrêt prévu par
+leur mandat ; aucune branche n'est choisie sans décision. ACSP transmet le
+bilan au parent. Ne créer aucune surveillance ou réessai automatique déduit
+d'un avis. Un change incomplet reste ouvert ; une décision d'arrêt ne constitue
+ni réussite globale, ni livraison, ni autorisation d'archivage forcé.
 
 Avant la clôture, enregistrer le bilan dans `BLOCKERS.md` selon la section
 « Rapport durable de blocage et réévaluation », puis appliquer « Statistiques
@@ -299,7 +303,7 @@ leurs preuves, la phase empêchée et les conditions vérifiables de reprise.
 Les contrôles empêchés restent explicitement non exécutés ou indisponibles ;
 ils ne sont ni cochés ni exigés comme réussis pour cet arrêt partiel.
 
-Libérer rapidement les ressources propres à la session après sauvegarde et
+Lorsqu'un arrêt est autorisé, libérer les ressources propres à la session après sauvegarde et
 réconciliation de l'état réel, sans supprimer les travaux ni les preuves,
 sans interrompre les ressources d'autres sessions et sans masquer un effet
 inconnu. Si une libération échoue, signaler la ressource encore détenue et
@@ -314,12 +318,12 @@ ou à la revalidation sans correction.
 En session pilotée, l'agent de codage fournit les preuves ; l'orchestrateur
 valide explicitement les tâches puis autorise les coches sous les mandats
 unitaires applicables. L'agent rapporte le blocage et ne clôt pas seul la
-session. L'orchestrateur clôture pour `BLOQUÉ`, motif « dépendances manquantes »,
-dès qu'aucune unité indépendante autorisée ne reste réalisable. Cette cause
+session. Après décision d'arrêt conforme au parent, l'orchestrateur clôture
+pour `BLOQUÉ`, motif « dépendances manquantes ». Cette cause
 est distincte d'un incident opérationnel récupérable : ne pas tenter de la
 résoudre en recréant une session ou en attendant.
 
-L'orchestrateur traite le dernier rapport, réconcilie et clôt les mandats et
+Pour cette seule branche d'arrêt, l'orchestrateur traite le dernier rapport, réconcilie et clôt les mandats et
 permissions du seul RUN, sauvegarde son bilan, vérifie le gate `BLOQUÉ`,
 désarme le job puis libère sa réservation avec `delivered=false` et les
 preuves requises. Le change OpenSpec reste ouvert ; une réservation libérée

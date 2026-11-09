@@ -1,5 +1,9 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+La CLI de dépendances expose `capabilities` sans écriture ni bootstrap.
+L’adaptateur commun décrit propriétaires, opérations et limites de transport
+dans [sa référence](plugins/cab-approval-bridge/skills/approval-bridge/references/session-coordination-adapter.md).
+
 La clé HMAC locale du journal accepte `0770` lorsque son propriétaire et son
 groupe sont vérifiés ; tout droit pour les autres comptes reste refusé. Les
 clés privées existantes restent lisibles et les nouvelles clés utilisent `0770`.

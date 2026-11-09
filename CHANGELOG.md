@@ -2,6 +2,12 @@
 
 ## Non publié
 
+## 2.5.2 - 2026-11-09
+
+- Exposer les capacités de l’adaptateur commun de coordination directe et pilotée sans création de magasin.
+- Harmoniser les responsabilités et frontières techniques ; le codeur ACSP relaie au parent et les politiques propres aux mandats restent applicables.
+- Qualifier les quatre couples de modes en CLI et conserver les contrôles de notification, pause et résultat incertain.
+
 ## 2.5.1 - 2026-11-09
 
 - Accepter la clé HMAC locale en `0770` pour le groupe vérifié et coordonner ses droits avec DIU ; les accès aux autres comptes restent refusés.

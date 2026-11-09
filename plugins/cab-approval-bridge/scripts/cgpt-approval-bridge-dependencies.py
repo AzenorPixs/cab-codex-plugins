@@ -12,7 +12,9 @@ import sys
 from cab_session_dependencies import (CoordinationError, DependencyStore, check_close, codex_proxy_exchange,
                                       codex_active_turn, codex_verified_sender, controller_admission, encoded, same_state_root, verify_pilot_binding)
 
-VERSION = '2.5.1'
+VERSION = '2.5.2'
+ADAPTER_PROTOCOL = 'cab-session-coordination-1'
+ACTIONS = ("version", "capabilities", "register", "state", "decide", "decisions", "subscribe", "publish", "inbox", "outbox", "discover-turn", "notify-all", "ack", "release-notice", "notify-piloted", "notify-direct", "reconcile-piloted", "reconcile-direct", "cancel-prepared", "check-close", "close-direct", "reopen-direct")
 
 
 def discover_target(store, project, session, run, notice_id, target, state_root, controller_url, codex_socket):
@@ -60,7 +62,7 @@ def verify_origin(store,project,session,run,state_root):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("version", "register", "state", "decide", "decisions", "subscribe", "publish", "inbox", "outbox", "discover-turn", "notify-all", "ack", "release-notice", "notify-piloted", "notify-direct", "reconcile-piloted", "reconcile-direct", "cancel-prepared", "check-close", "close-direct", "reopen-direct"))
+    parser.add_argument("action", choices=ACTIONS)
     parser.add_argument("--store")
     parser.add_argument("--state-root")
     parser.add_argument("--project")
@@ -99,6 +101,17 @@ def main():
     args = parser.parse_args()
     if args.action == "version":
         print(json.dumps({"version": VERSION, "protocol": "cab-dependency-mailbox-1"}))
+        return 0
+    if args.action == "capabilities":
+        print(json.dumps({"version": VERSION, "protocol": "cab-dependency-mailbox-1",
+                          "adapter_protocol": ADAPTER_PROTOCOL, "operations": list(ACTIONS),
+                          "mode_owners": {"direct": "agent", "piloted": "orchestrator"},
+                          "mandate_mapping": {"SCM": "SCM", "SCMP": "SCM",
+                                              "CISM": "other", "CISMP": "other",
+                                              "ISM": "other", "ISMP": "other"},
+                          "scope": "same-project-same-uid", "passive_mailbox": True,
+                          "native_delivery": "per-attempt-verification", "automatic_resume": False},
+                         sort_keys=True))
         return 0
     state_root = args.state_root or os.environ.get("OC_Codex_RUNTIME_STATE_ROOT") or os.environ.get("OC_CGPT_RUNTIME_STATE_ROOT") or str(Path.home() / ".local/state")
     if args.action == 'check-close':

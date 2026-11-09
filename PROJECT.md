@@ -1,5 +1,8 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+CAB fournit l’adaptateur technique `cab-session-coordination-1` pour les
+sessions directes et pilotées ; le contrat métier reste dans le projet prompts.
+
 La coordination des dépendances entre sessions de CAB 2.5.0 est définie par
 `coordinate-project-coding-sessions` ; le transport a été qualifié sur un serveur
 Codex isolé. La liaison SGS vérifie les identités déclarées mais n'authentifie

@@ -1,6 +1,6 @@
-# Coordination de dépendances — interface expérimentale
+# Coordination de dépendances — cab-dependency-mailbox-1
 
-Le contrat du change `coordinate-project-coding-sessions` est en cours de réalisation ; cette interface n'est pas une livraison ni une activation. Elle ne remplace ni les réservations CAB, ni la vérification OpenSpec, ni les protections natives.
+Le contrat du change archivé `coordinate-project-coding-sessions` est réalisé au niveau source. Le raccordement des clients suit l'[adaptateur commun](session-coordination-adapter.md). La présence de la CLI ne prouve pas la santé du runtime, l'adoption d'un prompt ou une notification native ; réservations, OpenSpec et protections restent applicables.
 
 Le script `scripts/cgpt-approval-bridge-dependencies.py` fournit le protocole `cab-dependency-mailbox-1` et les opérations documentées ci-dessous. Chaque appel, sauf `version` et `check-close`, requiert `--project` (racine réelle), `--session` et `--run`. Le magasin par défaut est `cab-approval-bridge/dependencies` sous la racine d'état runtime CAB existante ; `--store` le remplace pour un banc isolé. Ce répertoire doit appartenir à l'utilisateur et être privé, mode 0700. `register` prend `--mode direct|piloted` et éventuellement `--mandate SCM|other|unknown`. `state` prend `--state active|paused`, `--reason explicit|dependency` et `--generation` croissante ; il ne modifie ni ne constate lui-même la pause native. `subscribe` prend `--dependency-id`, `--kind change|task|capability`, `--subject` et `--criterion`, éventuellement `--batch-code` attesté et, pour une capacité, `--batch-change` identifiant le change associé. `publish` prend `--notice-id`, `--kind`, `--subject`, `--proof` (référence relative non sensible). `ack` prend `--dependency-id` et `--notice-id`.
 
@@ -17,8 +17,8 @@ est actif, consulter sa boîte, vérifier les critères dans les sources et
 acquitter séparément les avis traités. Une boîte indisponible ou une publication
 non confirmée doit être signalée et réconciliée avant réessai ; aucun résultat
 incertain ne vaut avis reçu. Une session explicitement en pause ne doit pas être
-réveillée pour cette consultation. Cette boucle est une interface à intégrer
-et qualifier dans les prompts concernés, pas la preuve qu'ils l'appliquent déjà.
+réveillée pour cette consultation. Cette boucle suit le contrat commun des prompts ; son adoption réelle
+reste à vérifier par les traces de chaque session consommatrice.
 L'émetteur utilise `outbox --notice-id <id>` pour identifier uniquement les
 destinataires de son avis. Pour un destinataire actif, `discover-turn` prend
 ses identifiants, l'avis, le contrôleur et le socket ; il retourne uniquement
@@ -118,7 +118,7 @@ blocage dû à l'effet inconnu sans transformer l'accusé réseau en succès.
 `cancel-prepared` permet à l'auteur d'annuler une intention encore `prepared`,
 avant la frontière native ; il refuse une tentative devenue incertaine.
 
-**Limites actuelles :** `native_notification: unavailable` dans l'inscription ou la consultation ne prouve aucun envoi ; un envoi séparé doit retourner son propre résultat. Les permissions du répertoire isolent les comptes système, pas les processus d'un même compte : la liaison SGS vérifie les identités natives, sans authentifier cryptographiquement chaque processus de cet UID. Ne pas déposer de données sensibles dans la boîte ni l'utiliser comme autorité pour une action. L'intégration des prompts, les contrôles de pause directe hors de leur protocole et le nettoyage coordonné restent à qualifier. La rétention des avis est conservatrice.
+**Limites actuelles :** `native_notification: unavailable` dans l'inscription ou la consultation ne prouve aucun envoi ; un envoi séparé doit retourner son propre résultat. Les permissions du répertoire isolent les comptes système, pas les processus d'un même compte : la liaison SGS vérifie les identités natives, sans authentifier cryptographiquement chaque processus de cet UID. Ne pas déposer de données sensibles dans la boîte ni l'utiliser comme autorité pour une action. L'adoption des prompts et les pauses directes hors de leur protocole nécessitent leurs preuves propres ; les tests de boîte ne les établissent pas. La rétention des avis est conservatrice.
 
 Le magasin par défaut appartient à un seul UID ; il ne démontre pas la
 coordination entre comptes système distincts. Une configuration de plusieurs

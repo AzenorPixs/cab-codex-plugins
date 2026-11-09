@@ -4,7 +4,7 @@ import {join,dirname,relative} from 'node:path';
 import {createHash} from 'node:crypto';
 import {homedir} from 'node:os';
 import {ensurePrivateStateDirectory,readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.5.1';
+export const VERSION='2.5.2';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const id=value=>/^archive-[a-f0-9]{64}$/.test(value||'');
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};

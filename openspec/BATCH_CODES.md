@@ -1,5 +1,9 @@
 # Registre des codes de lot — Codex Approval Bridge
 
+Raccordement commun du 9 novembre 2026 : `unify-session-coordination-adapter`, ARCHIVÉ,
+code non attribué ; réalisation source et validations propres au projet cab
+vérifiées, rapport individuel vérifié ; livraison distincte à constater. [Tâches](changes/archive/2026-11-09-unify-session-coordination-adapter/tasks.md).
+
 [optimize-erasure-projection](changes/archive/2026-11-08-optimize-erasure-projection/), code non attribué : archivé et testé ; publication et reprise réelle restent distinctes.
 
 [preserve-retained-approval-journal](changes/archive/2026-11-08-preserve-retained-approval-journal/), code non attribué : archivé et testé ; reprise, activation et traitement CCAB restent à vérifier.

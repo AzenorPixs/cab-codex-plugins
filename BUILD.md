@@ -1,5 +1,9 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Le paquet inclut la référence session-coordination-adapter.md et la
+découverte des capacités. Sa qualification CLI et native isolée ne prouve
+pas à elle seule le chargement des prompts par un agent consommateur.
+
 La qualification de la clé HMAC couvre `0770` avec groupe vérifié, la
 compatibilité des clés privées et le refus des droits ouverts aux autres comptes.
 

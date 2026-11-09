@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+Raccordement commun du 9 novembre 2026 : `unify-session-coordination-adapter`, ARCHIVÉ,
+code non attribué ; réalisation source et validations propres au projet cab
+vérifiées, rapport individuel vérifié ; livraison distincte à constater. [Tâches](openspec/changes/archive/2026-11-09-unify-session-coordination-adapter/tasks.md).
+
 Correctif SCM du 9 novembre 2026 : `reconcile-hmac-key-permissions`, ARCHIVÉ,
 code non attribué ; droits `0770` du groupe vérifié, 4/4 tâches source et
 rapport individuel validés. CI/CD, correctif DIU et CABU à vérifier séparément.
