@@ -7,6 +7,7 @@ import tempfile
 import unittest
 from contextlib import ExitStack
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -90,6 +91,7 @@ class ChangeErasureTest(unittest.TestCase):
     def test_unconfigured_anchor_prepares_authenticated_bundle_without_rewriting_journal(self):
         events=self.events();self.store();before=(self.root/'events.ndjson').read_bytes()
         bridge.prepare_terminal_erasure(self.authorize_stop());bridge.prepare_terminal_erasure_bundle()
+        self.assertEqual((self.root/'events.ndjson.hmac.key').stat().st_mode & 0o777, 0o770)
         self.assertEqual((self.root/'events.ndjson').read_bytes(),before)
         bundle=json.loads((self.control/'broker-erasure.json').read_text())
         signature=bundle.pop('signature')
@@ -120,6 +122,32 @@ class ChangeErasureTest(unittest.TestCase):
         bridge.prepare_terminal_erasure(self.authorize_stop())
         with self.assertRaises(OSError):
             bridge.prepare_terminal_erasure_bundle()
+
+    def test_local_key_modes_and_group_authority(self):
+        key=self.root/'events.ndjson.hmac.key'
+        key.write_bytes(b'x'*32)
+        for mode in (0o600, 0o770):
+            with self.subTest(mode=oct(mode)):
+                key.chmod(mode)
+                self.assertEqual(bridge.journal.checkpoint_key(allow_unanchored=True), b'x'*32)
+        key.chmod(0o775)
+        with self.assertRaisesRegex(bridge.journal.JournalError, 'cle locale du journal non sure'):
+            bridge.journal.checkpoint_key(allow_unanchored=True)
+        key.chmod(0o770)
+        with patch.object(bridge.journal.os, 'getgroups', return_value=[]), \
+             patch.object(bridge.journal.os, 'getgid', return_value=key.stat().st_gid+100000):
+            with self.assertRaisesRegex(bridge.journal.JournalError, 'cle locale du journal non sure'):
+                bridge.journal.checkpoint_key(allow_unanchored=True)
+        original_stat = os.stat
+        def altered_parent(path, *args, **kwargs):
+            result = original_stat(path, *args, **kwargs)
+            if str(path) == str(self.root):
+                return SimpleNamespace(st_mode=result.st_mode, st_uid=result.st_uid,
+                                       st_gid=result.st_gid+100000)
+            return result
+        with patch.object(bridge.journal.os, 'stat', side_effect=altered_parent):
+            with self.assertRaisesRegex(bridge.journal.JournalError, 'cle locale du journal non sure'):
+                bridge.journal.checkpoint_key(allow_unanchored=True)
 
     def test_post_erasure_new_proposal_cannot_recreate_retired_approval_offline(self):
         (self.root/'events.ndjson.erasure-epoch.json').write_text('{"epoch":1,"generation":10}')

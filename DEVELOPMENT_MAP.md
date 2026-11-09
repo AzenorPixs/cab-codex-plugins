@@ -1,5 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+Correctif SCM du 9 novembre 2026 : `reconcile-hmac-key-permissions`, ARCHIVÉ,
+code non attribué ; droits `0770` du groupe vérifié, 4/4 tâches source et
+rapport individuel validés. CI/CD, correctif DIU et CABU à vérifier séparément.
+[Archive](openspec/changes/archive/2026-11-09-reconcile-hmac-key-permissions/tasks.md).
+
 ## Projection du nettoyage — SCM 2.4.40
 
 [optimize-erasure-projection](openspec/changes/archive/2026-11-08-optimize-erasure-projection/) : code non attribué, portée et pairs comparés en lecture seule ; publication, activation et durée de reprise réelle à vérifier.

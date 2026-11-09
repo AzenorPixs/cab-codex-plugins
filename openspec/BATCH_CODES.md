@@ -619,3 +619,4 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 | --- | --- | --- | --- |
 | code non attribué | coordinate-project-coding-sessions | ARCHIVÉ ; validations source réussies ; attribution ACL ultérieure | [archive](changes/archive/2026-11-09-coordinate-project-coding-sessions/) |
 | code non attribué | clarify-recovery-boundaries | ARCHIVÉ ; clarification et tests validés ; attribution ACL ultérieure | [archive](changes/archive/2026-11-09-clarify-recovery-boundaries/) |
+| code non attribué | reconcile-hmac-key-permissions | ARCHIVÉ ; validations source et rapport individuel | [archive](changes/archive/2026-11-09-reconcile-hmac-key-permissions/) |

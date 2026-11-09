@@ -8,7 +8,7 @@ from pathlib import Path
 import stat
 import sys
 
-VERSION = '2.5.0'
+VERSION = '2.5.1'
 
 
 def name(prefix, parts):

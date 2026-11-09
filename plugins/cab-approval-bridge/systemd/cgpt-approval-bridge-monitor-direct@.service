@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 2.5.0 — Web Monitor direct indépendant
+Description=CAB 2.5.1 — Web Monitor direct indépendant
 
 [Service]
 Type=simple
