@@ -1,5 +1,10 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+Le paquet source 2.5.0 comprend les scripts de boîte de dépendances et leur bibliothèque
+Python standard. Leur présence dans le paquet ne démontre ni l'activation de
+l'interface. La notification native a été qualifiée sur serveur Codex isolé,
+distinctement des essais de distribution et de l'activation utilisateur.
+
 La qualification de la projection compare ses résultats et sa durée sur un inventaire en lecture seule ; la durée d’une bascule réelle est vérifiée séparément.
 
 La qualification de reprise contrôle la cohérence magasin–journal, la protection des RUN pairs et la disponibilité des services après un refus de projection.

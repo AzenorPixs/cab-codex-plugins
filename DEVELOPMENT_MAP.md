@@ -1444,3 +1444,19 @@ flowchart LR
 [resume-after-opencode-restart](openspec/changes/archive/2026-11-08-resume-after-opencode-restart/), code non attribué : continuité après redémarrage, prévol MCP, coordination CCAB et récupération qualifiée ; activation et reprise des déclarants à vérifier séparément.
 
 [distinguish-absent-permission-receipt](openspec/changes/archive/2026-11-08-distinguish-absent-permission-receipt/), code non attribué : diagnostic distinct pour un reçu exact absent ; activation à vérifier séparément.
+
+### Coordination des dépendances des sessions — 9 novembre 2026
+
+`clarify-recovery-boundaries` : ARCHIVÉ, **code non attribué** ; 4/4 tâches,
+19 tests ciblés et 444 tests contrôleur validés. Rapport individuel SGS produit ;
+le couple global SGS incompatible est préservé. Aucune livraison ni activation
+n'est déduite. [Archive](openspec/changes/archive/2026-11-09-clarify-recovery-boundaries/tasks.md).
+
+`coordinate-project-coding-sessions` : ARCHIVÉ, **code non attribué** ; 7/7 tâches, qualification native isolée et validations source réussies. Rapport individuel SGS produit ; le couple SGS global incompatible est préservé. Aucune livraison ni activation établie ; l'adaptation des prompts relève de leur session propre. [Archive](openspec/changes/archive/2026-11-09-coordinate-project-coding-sessions/tasks.md). Attribution ultérieure par ACL.
+
+```mermaid
+flowchart LR
+    coordinateSessions["coordinate-project-coding-sessions<br/>code non attribué — ARCHIVÉ"]
+    classDef provisional stroke-dasharray: 4 4
+    class coordinateSessions provisional
+```

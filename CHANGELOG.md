@@ -1,5 +1,13 @@
 # Historique des versions
 
+## Non publié
+
+## 2.5.0 - 2026-11-09
+
+- Clarifier les chemins de retrait et de libération d'accès ainsi que le statut d'une lecture native tronquée ; aligner les tests sur les exigences existantes.
+- Ajouter une boîte locale transactionnelle pour les avis de dépendances entre sessions, les protections de pause et la clôture ciblée ; qualifier le transport sur un serveur Codex isolé. L'intégration des prompts et l'authentification cryptographique des processus d'un même compte restent distinctes.
+- Compléter la reprise ciblée d'une migration CABU avant copie et la vérification des artefacts broker avancés.
+
 ## 2.4.43 - 2026-11-08
 
 - Permettre le nettoyage SGS d’un change clos lorsque seul un autre RUN possède une session native non vérifiée.

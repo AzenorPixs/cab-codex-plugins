@@ -15,7 +15,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.4.43"
+VERSION = "2.5.0"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -375,6 +375,52 @@ class RuntimeStore:
             if old and old[0]!=ended_at:raise RuntimeErrorCode('sgs-close-boundary-conflict')
             self.db.execute("INSERT OR IGNORE INTO binding_closures VALUES(?,?)",(binding,ended_at))
         return {'binding':binding,'ended_at':ended_at,'status':'closed'}
+
+    def verify_codex_binding(self, project, run, session, uid, mode='piloted'):
+        """Expose only whether one exact, live native-verified Codex binding exists."""
+        if not isinstance(project, str) or not Path(project).is_absolute():
+            raise RuntimeErrorCode('sgs-binding-scope-invalid')
+        if mode not in ('piloted','direct'):raise RuntimeErrorCode('sgs-binding-scope-invalid')
+        identifier(run); identifier(session)
+        matches=[]
+        rows=self.db.execute('''SELECT b.binding,b.body,s.location,s.status FROM bindings b
+          JOIN native_sources s ON s.binding=b.binding LEFT JOIN binding_closures c ON c.binding=b.binding
+          WHERE b.uid=? AND s.source='codex-native' AND c.binding IS NULL''',(uid,))
+        for row in rows:
+            body=json.loads(row['body'])
+            role='orchestrator' if mode=='piloted' else 'coder'
+            if (body.get('project'),body.get('run'),body.get('session'),body.get('mode'),body.get('role')) != (project,run,session,mode,role) or (mode=='direct' and body.get('cab_direct') is not True):
+                continue
+            producer='codex-'+hashlib.sha256((row['binding']+row['location']).encode()).hexdigest()
+            cursor=self.cursor(producer)
+            try:
+                source=Path(row['location']);info=source.lstat()
+                valid=(row['status']=='collecting' and isinstance(cursor,dict) and cursor.get('verified') is True and
+                       source.resolve()==source and stat.S_ISREG(info.st_mode) and info.st_uid==uid and
+                       cursor.get('file')==[info.st_dev,info.st_ino] and type(cursor.get('offset')) is int and
+                       0<=cursor['offset']<=info.st_size)
+                if valid:
+                    fd=os.open(source,os.O_RDONLY | os.O_NOFOLLOW)
+                    with os.fdopen(fd,'rb') as stream:
+                        opened=os.fstat(stream.fileno());first=stream.readline(1024*1024+1)
+                    def unique(pairs):
+                        result={}
+                        for key,value in pairs:
+                            if key in result:raise ValueError('duplicate metadata field')
+                            result[key]=value
+                        return result
+                    metadata=json.loads(first,object_pairs_hook=unique) if len(first)<=1024*1024 and first.endswith(b'\n') else None
+                    payload=metadata.get('payload') if isinstance(metadata,dict) else None
+                    valid=((opened.st_dev,opened.st_ino)==(info.st_dev,info.st_ino) and
+                           isinstance(payload,dict) and metadata.get('type')=='session_meta' and
+                           payload.get('id')==session and payload.get('cwd')==project)
+            except (OSError, RuntimeError, ValueError, UnicodeError):
+                valid=False
+            if valid:matches.append(row['binding'])
+        return {'status':'VERIFIED' if len(matches)==1 else 'AMBIGUOUS' if len(matches)>1 else 'UNAVAILABLE'}
+
+    def verify_piloted_codex_binding(self,project,run,session,uid):
+        return self.verify_codex_binding(project,run,session,uid,'piloted')
 
     def cursor(self, producer, value=None,binding=None):
         identifier(producer)

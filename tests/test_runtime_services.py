@@ -1,11 +1,14 @@
 """Qualification vitale SGS/CCAB, exclusivement sur données synthétiques privées."""
 import importlib.util
+import hashlib
 import json
 import os
+import socket
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "plugins/cab-approval-bridge/scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -24,6 +27,74 @@ service = module('runtime-service')
 
 
 class RuntimeServicesTest(unittest.TestCase):
+    def test_piloted_codex_binding_requires_verified_live_source(self):
+        source=self.root/'native-source.jsonl';source.write_text(json.dumps({'type':'session_meta','payload':{'id':'pilot-session','cwd':str(self.root)}})+'\n',encoding='utf-8')
+        binding={**self.binding,'binding':'pilot-binding','session':'pilot-session','run':'pilot-run',
+                 'mode':'piloted','role':'orchestrator'}
+        self.store.bind(binding,os.getuid())
+        self.store.db.execute('INSERT INTO native_sources VALUES(?,?,?,?)',('pilot-binding','codex-native',str(source),'collecting'))
+        producer='codex-'+hashlib.sha256(('pilot-binding'+str(source)).encode()).hexdigest()
+        self.assertEqual(self.store.verify_piloted_codex_binding(str(self.root),'pilot-run','pilot-session',os.getuid())['status'],'UNAVAILABLE')
+        info=source.stat();self.store.cursor(producer,{'verified':True,'file':[info.st_dev,info.st_ino],'offset':1},binding='pilot-binding')
+        self.assertEqual(self.store.verify_piloted_codex_binding(str(self.root),'pilot-run','pilot-session',os.getuid())['status'],'VERIFIED')
+        self.assertEqual(self.store.verify_piloted_codex_binding(str(self.root),'other','pilot-session',os.getuid())['status'],'UNAVAILABLE')
+        direct_source=self.root/'direct-source.jsonl';direct_source.write_text(json.dumps({'type':'session_meta','payload':{'id':'direct-session','cwd':str(self.root)}})+'\n',encoding='utf-8')
+        direct_info=direct_source.stat()
+        direct={**self.binding,'binding':'direct-verified','session':'direct-session','run':'direct-run','cab_direct':True}
+        self.store.bind(direct,os.getuid())
+        self.store.db.execute('INSERT INTO native_sources VALUES(?,?,?,?)',('direct-verified','codex-native',str(direct_source),'collecting'))
+        direct_producer='codex-'+hashlib.sha256(('direct-verified'+str(direct_source)).encode()).hexdigest()
+        self.store.cursor(direct_producer,{'verified':True,'file':[direct_info.st_dev,direct_info.st_ino],'offset':1},binding='direct-verified')
+        self.assertEqual(self.store.verify_codex_binding(str(self.root),'direct-run','direct-session',os.getuid(),'direct')['status'],'VERIFIED')
+        self.assertEqual(self.store.verify_codex_binding(str(self.root),'direct-run','direct-session',os.getuid(),'piloted')['status'],'UNAVAILABLE')
+        self.store.close_binding('direct-verified','2026-11-06T10:00:05Z',os.getuid())
+        self.assertEqual(self.store.verify_codex_binding(str(self.root),'direct-run','direct-session',os.getuid(),'direct')['status'],'UNAVAILABLE')
+        duplicate={**binding,'binding':'pilot-duplicate'};self.store.bind(duplicate,os.getuid())
+        self.store.db.execute('INSERT INTO native_sources VALUES(?,?,?,?)',('pilot-duplicate','codex-native',str(source),'collecting'))
+        duplicate_producer='codex-'+hashlib.sha256(('pilot-duplicate'+str(source)).encode()).hexdigest()
+        self.store.cursor(duplicate_producer,{'verified':True,'file':[info.st_dev,info.st_ino],'offset':1},binding='pilot-duplicate')
+        self.assertEqual(self.store.verify_piloted_codex_binding(str(self.root),'pilot-run','pilot-session',os.getuid())['status'],'AMBIGUOUS')
+        source.write_text(json.dumps({'type':'session_meta','payload':{'id':'other-session','cwd':str(self.root)}})+'\n',encoding='utf-8')
+        self.assertEqual(self.store.verify_piloted_codex_binding(str(self.root),'pilot-run','pilot-session',os.getuid())['status'],'UNAVAILABLE')
+        replacement=self.root/'replacement.jsonl';replacement.write_text('different',encoding='utf-8');os.replace(replacement,source)
+        self.assertEqual(self.store.verify_piloted_codex_binding(str(self.root),'pilot-run','pilot-session',os.getuid())['status'],'UNAVAILABLE')
+
+    def test_release_verification_route_requires_exact_request(self):
+        calls = []
+        class Store:
+            def verify_released_snapshot(self, scope, receipt, uid):
+                calls.append((scope, receipt, uid))
+                return {'status': 'RELEASE_VERIFIED', 'scope_digest': 'test'}
+        host = SimpleNamespace(component='sgs', allowed_uids={os.getuid()}, store=Store())
+        def request(body):
+            client, server = socket.socketpair()
+            self.addCleanup(client.close)
+            payload = json.dumps(body).encode()
+            client.sendall(b'POST /purge/verify-released HTTP/1.0\r\nContent-Length: ' +
+                           str(len(payload)).encode() + b'\r\n\r\n' + payload)
+            service.RuntimeHandler(server, ('local', 0), host)
+            server.close()
+            return client.recv(65536)
+        response = request({'scope': {'fixture': True}, 'receipt_id': 'receipt'})
+        self.assertIn(b'200 OK', response)
+        self.assertEqual(calls, [({'fixture': True}, 'receipt', os.getuid())])
+        response = request({'scope': {}, 'receipt_id': 'receipt', 'extra': True})
+        self.assertIn(b'409', response)
+        self.assertEqual(len(calls), 1)
+
+    def test_binding_route_exposes_only_scoped_verification(self):
+        calls=[]
+        class Store:
+            def verify_codex_binding(self,project,run,session,uid,mode):
+                calls.append((project,run,session,uid,mode));return {'status':'VERIFIED'}
+        host=SimpleNamespace(component='sgs',allowed_uids={os.getuid()},store=Store())
+        client,server=socket.socketpair();self.addCleanup(client.close)
+        client.sendall(b'GET /session-binding?project=%2Fproject&run=run&session=sid HTTP/1.0\r\n\r\n')
+        service.RuntimeHandler(server,('local',0),host);server.close()
+        response=client.recv(65536)
+        self.assertIn(b'200 OK',response);self.assertEqual(calls,[('/project','run','sid',os.getuid(),'piloted')])
+        self.assertNotIn(b'location',response)
+
     def test_released_snapshot_projection_preserves_peer_and_new_run(self):
         original = [{'record_id': 'report-one', 'snapshot': {'format': 'cab-native-sgs-1',
             'sessions': [{'binding': 'released', 'value': 1}, {'binding': 'peer', 'value': 2}]}},

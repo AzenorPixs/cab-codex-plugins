@@ -5,6 +5,18 @@
 Ce protocole s'applique à tout agent de codage OpenCode piloté par CGPT pendant
 une session de codage. Il complète les règles OpenSpec et ne les remplace pas.
 
+### Dépendances entre sessions
+
+Lorsque la coordination de dépendances du change
+`coordinate-project-coding-sessions` est qualifiée et activée, l'orchestrateur
+utilise l'[interface de coordination](session-dependencies.md) : il rattache
+les identités réelles, déclare les prérequis précis, publie les avis fondés sur
+preuves et consulte sa boîte aux frontières des unités actives. Il examine les
+sources et vérifie ses propres critères avant d'acquitter un avis. Une pause
+explicite reste en vigueur et n'est jamais levée pour consulter la boîte ; une
+indisponibilité ou un résultat incertain reste visible. L'interface en cours de
+préparation ne prouve pas son activation ni un envoi natif automatique.
+
 ### Rôles
 
 CGPT fixe le périmètre, valide les choix fonctionnels et techniques, décide

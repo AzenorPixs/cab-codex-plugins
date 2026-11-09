@@ -612,3 +612,10 @@ supprimés des accès RELEASED et rejeu idempotent conservé par empreinte ;
 | code non attribué | forward-recover-cabu-after-controller-rollback-failure | ARCHIVÉ, source 2.1.68 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-forward-recover-cabu-after-controller-rollback-failure/tasks.md) |
 | code non attribué | preserve-conflicting-restored-accesses | ARCHIVÉ, source 2.1.69 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-preserve-conflicting-restored-accesses/tasks.md) |
 | code non attribué | continue-cabu-forward-recovery-after-disconnect | ARCHIVÉ, source 2.1.70 qualifiée ; publication et CABU rapportés séparément, attribution ACL ultérieure | [tâches](changes/archive/2026-11-02-continue-cabu-forward-recovery-after-disconnect/tasks.md) |
+
+### Entrée provisoire SCM — 9 novembre 2026
+
+| Code | Change | État | Source |
+| --- | --- | --- | --- |
+| code non attribué | coordinate-project-coding-sessions | ARCHIVÉ ; validations source réussies ; attribution ACL ultérieure | [archive](changes/archive/2026-11-09-coordinate-project-coding-sessions/) |
+| code non attribué | clarify-recovery-boundaries | ARCHIVÉ ; clarification et tests validés ; attribution ACL ultérieure | [archive](changes/archive/2026-11-09-clarify-recovery-boundaries/) |

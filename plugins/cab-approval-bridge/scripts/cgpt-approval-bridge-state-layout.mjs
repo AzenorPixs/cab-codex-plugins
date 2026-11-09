@@ -2,7 +2,7 @@ import {createHash,randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {dirname,isAbsolute,join,relative,resolve} from 'node:path';
 import {constants,closeSync,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync,chmodSync} from 'node:fs';
-export const VERSION='2.4.43';
+export const VERSION='2.5.0';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const hash=b=>createHash('sha256').update(b).digest('hex');
 export function legacyStateDirectory(workspace){return join(workspace,'.opencode/state/cgpt-approval-bridge');}
@@ -44,7 +44,7 @@ export function writeRuntimeJson(path,value) {
 const names=new Set(['controller-runs.json','controller-job.json','controller-communication.json','controller-statistics.json',
  'controller-observations.json','protocol-observations.json','protocol-efficiency.json','recovery-policies.json','manifest-extensions.json',
  'native-instances.json','shell-lifecycle.json','shell-stages.json','supervisor-state.json','model-transitions.json']);
-function runtimeFiles(source,{legacy=false}={}) {
+export function runtimeFiles(source,{legacy=false}={}) {
  const files=[];
  const visit=(directory,tail='')=>{
   if(!existsSync(directory))return;

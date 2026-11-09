@@ -7,7 +7,7 @@ import {homedir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {ensurePrivateStateDirectory,writeRuntimeJson,readRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.4.43';
+export const VERSION='2.5.0';
 const execute=promisify(execFile);
 export async function startDirectMonitor(workspace,{home=homedir(),service=async args=>(await execute('systemctl',['--user',...args],{timeout:10000,maxBuffer:16384})).stdout}={}) {
   if(/[\r\n\0]/.test(workspace))throw new Error('direct-monitor-workspace-invalid');

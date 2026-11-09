@@ -1,5 +1,8 @@
 # Codex Approval Bridge — CAB
 
+CAB 2.5.0 comprend une interface de coordination des dépendances entre sessions ;
+sa qualification isolée ne vaut pas activation de la distribution.
+
 La projection de nettoyage évite les calculs répétés pour réduire la durée de maintenance.
 
 Le nettoyage d’un change clos peut retirer sa copie statistique CAB tout en conservant son rapport source dans le projet.
@@ -42,6 +45,11 @@ l’exécution des sessions ; il ne remplace pas ce référentiel.
 Les services conservent uniquement les données utiles à leur rôle.
 Une décision, un accès et une permission native sont des objets distincts.
 Une réponse réseau perdue ne permet pas de rejouer un effet ou une once.
+
+Une interface expérimentale de boîte de dépendances est décrite dans sa
+[référence](plugins/cab-approval-bridge/skills/approval-bridge/references/session-dependencies.md).
+Elle ne prouve pas la notification native d'une session ni l'authentification
+entre sessions du même compte ; son intégration reste en cours.
 
 ## Utilisation
 
