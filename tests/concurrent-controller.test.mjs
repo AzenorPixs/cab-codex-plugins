@@ -18,10 +18,11 @@ import { nativeToolInputDigest, createOpenCodeV2Client } from '../plugins/cab-ap
 import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-maintenance-proof.mjs';
 import { portProbeCommand } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-port-recovery.mjs';
 import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
-import { ResourceRunRegistry } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
+import { ResourceRunRegistry, VERSION as CAB_VERSION } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
 import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
 import {runtimeRequest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-client.mjs';
+import {dependencyGate} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-dependency-gate.mjs';
 
 const controllerPath = fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs', import.meta.url));
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -111,13 +112,14 @@ async function setup(t, { reconnectMs = 30, environment = {}, codingPolicy = fal
       ...environment,
     } });
     child.stderr.on('data', (data) => { stderr += data; });
-    await waitFor(async () => { if (child.exitCode !== null) throw new Error(stderr);
+    try { await waitFor(async () => { if (child.exitCode !== null) throw new Error(stderr);
       let status;
       try { const response = await fetch(base + '/status', { headers: { connection: 'close' }, signal: AbortSignal.timeout(500) }); if (!response.ok) return false; status = await response.json(); }
       catch { return false; }
       assert.equal(status.pid, child.pid, 'fixture controller PID mismatch');
       assert.equal(status.workspace, directory, 'fixture controller workspace mismatch');
-      return status.opencodeSse === 'connected'; }, 10000);
+      return status.opencodeSse === 'connected'; }, 10000); }
+    catch (error) { throw new Error(`controller start: ${error.message}; native routes: ${native.requests.join(',')}; stderr: ${stderr}`); }
   }
   async function stop() {
     if (child.exitCode !== null) return;
@@ -1095,8 +1097,9 @@ test('publication ciblée HTTP : reçu après reprise, génération, gate et pai
 });
 
 test('le contrôle global exceptionnel regroupe les lectures natives de la cohorte', async (t) => {
-  // La mesure vise la requête de cohorte, sans le polling périodique des permissions.
-  const h = await setup(t, { reconnectMs: 10000 });
+  // Une première connexion peut précéder l'identité native ; permettre son
+  // réessai avant la borne de démarrage sans modifier les assertions de cohorte.
+  const h = await setup(t, { reconnectMs: 1000 });
   await waitFor(() => h.native.requests.includes('/session/status'));
   for (const id of ['a', 'b', 'c']) await h.reserve(id);
   const g = await h.post('/coordination/global/request', { cause: 'SHARED_MAINTENANCE', scope: 'all',
@@ -2163,7 +2166,7 @@ test('un broker MCP réel transporte trois validations parallèles sans confondr
     broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
   const initialized = await call('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'synthetic-test', version: '1' } });
-  assert.equal(initialized.result.serverInfo.version, '2.4.6');
+  assert.equal(initialized.result.serverInfo.version, CAB_VERSION);
   broker.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
   const approvals = runs.map((r) => h.approval(r, 'mcp-' + r.runId));
   const replies = approvals.map((approval) => call('tools/call', { name: 'request_validation',
@@ -2378,6 +2381,9 @@ test('consultations et import statistique HTTP ne changent ni registre ni permis
 test('pause ciblée et intégrité commune ferment leurs admissions sans approbation implicite', async (t) => {
   const h = await setup(t); const a = await h.reserve('a'); const b = await h.reserve('b');
   assert.equal((await h.post('/runs/a/suspend', { version: a.version, action: 'PAUSE', evidence: ['pause A'] })).status, 200);
+  const admission=await h.get('/runs/a/dependency-admission');
+  assert.equal(admission.body.protocol,'dependency-pause-gate-v1');
+  assert.equal(admission.body.runId,'a');assert.equal(admission.body.active,false);
   assert.equal((await h.post('/validation/request', { approval: h.approval(a, 'paused') })).body.error, 'run-pause');
   assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'independent') })).status, 202);
   assert.equal((await h.post('/runs/b/decision/independent', { decision: 'rejected' })).status, 201);
@@ -2386,6 +2392,123 @@ test('pause ciblée et intégrité commune ferment leurs admissions sans approba
   assert.equal(global.cause, 'GLOBAL_RECONCILIATION'); assert.equal(global.state, 'DRAINING');
   assert.equal((await h.post('/validation/request', { approval: h.approval(b, 'integrity-blocked') })).body.error, 'global-coordination-suspended');
   assert.equal(h.native.replies.length, 0);
+});
+
+test('la pause attend une notification admise sans suspendre un RUN pair', async (t) => {
+  const h=await setup(t),a=await h.reserve('a'),b=await h.reserve('b');
+  const gate=await dependencyGate({stateRoot:fixtureEnvironment.OC_Codex_RUNTIME_STATE_ROOT,project:h.directory,run:'a',mode:'run'});
+  t.after(()=>gate.close());
+  const pause=h.post('/runs/a/suspend',{version:a.version,action:'PAUSE',evidence:['explicit pause']});
+  const early=await Promise.race([pause.then(()=>true),delay(100).then(()=>false)]);
+  assert.equal(early,false);
+  assert.equal((await h.post('/runs/b/suspend',{version:b.version,action:'PAUSE',evidence:['peer pause']})).status,200);
+  await gate.close();
+  assert.equal((await pause).status,200);
+  assert.equal((await h.get('/runs/a/dependency-admission')).body.active,false);
+});
+
+test('la pause globale attend la frontière des notifications admises', async (t) => {
+  const h=await setup(t);await h.reserve('a');
+  assert.equal((await h.get('/dependency-global-admission')).body.active,true);
+  const gate=await dependencyGate({stateRoot:fixtureEnvironment.OC_Codex_RUNTIME_STATE_ROOT,project:h.directory,run:'a',mode:'run'});
+  t.after(()=>gate.close());
+  const pause=h.post('/coordination/global/request',{cause:'GLOBAL_PAUSE',scope:'all',transactionId:'global-gate-test',
+    authorization:'explicit developer pause',evidence:['pause requested']});
+  assert.equal(await Promise.race([pause.then(()=>true),delay(100).then(()=>false)]),false);
+  await gate.close();
+  assert.equal((await pause).status,202);
+  assert.equal((await h.get('/coordination/global')).body.global.cause,'GLOBAL_PAUSE');
+  assert.equal((await h.get('/dependency-global-admission')).body.active,false);
+});
+
+test('désarmement refuse un avis incertain sans toucher au RUN pair',async t=>{
+  const h=await setup(t);await h.reserve('a');await h.reserve('b');
+  const modulePath=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cab_session_dependencies.py',import.meta.url));
+  const source="import importlib.util,sys; p=importlib.util.spec_from_file_location('d',sys.argv[1]); m=importlib.util.module_from_spec(p); p.loader.exec_module(m); s=m.DependencyStore(sys.argv[2]+'/cab-approval-bridge/dependencies'); q=sys.argv[3]; s.register(q,'sender','source','direct'); s.register(q,'recipient','a','piloted'); s.subscribe(q,'recipient','a','dep','change','change','done'); s.publish(q,'sender','source','note','change','change','proof.md'); s.set_session_state(q,'recipient','a','active',1); s.prepare_delivery(q,'recipient','a','dep','note','attempt','turn'); s.record_delivery(q,'recipient','a','dep','note','attempt','unknown'); s.close()";
+  await new Promise((resolve,reject)=>{const child=spawn('python3',['-B','-c',source,modulePath,fixtureEnvironment.OC_Codex_RUNTIME_STATE_ROOT,h.directory]);let err='';child.stderr.on('data',c=>err+=c);child.once('error',reject);child.once('exit',code=>code===0?resolve():reject(new Error(err)));});
+  const refused=await h.post('/runs/a/job/disarm',{jobId:'job-a'});
+  assert.equal(refused.status,409);assert.equal(refused.body.error,'dependency-delivery-unresolved');
+  assert.equal((await h.get('/runs/b/status')).status,200);
+});
+
+test('notifications directe et pilotée : contrôleur réel et transports natifs isolés', {timeout:15000}, async t=>{
+  const h=await setup(t),run=await h.reserve('a');
+  const admission=(await h.get('/runs/a/dependency-admission')).body;
+  assert.equal(admission.active,true,JSON.stringify(admission));
+  const stateRoot=fixtureEnvironment.OC_Codex_RUNTIME_STATE_ROOT;
+  const sgsDir=join(stateRoot,'cab-approval-bridge','sgs');mkdirSync(sgsDir,{recursive:true,mode:0o700});
+  const sgsPath=join(sgsDir,'sgs.sock');
+  const sgs=createServer((_req,res)=>{res.writeHead(200,{'content-type':'application/json'});res.end('{"status":"VERIFIED"}');});
+  await new Promise((resolve,reject)=>{sgs.once('error',reject);sgs.listen(sgsPath,resolve);});chmodSync(sgsPath,0o600);
+  t.after(()=>new Promise(resolve=>sgs.close(resolve)));
+  const nativePath=join(h.directory,'codex.sock'),methods=[],nativeSockets=new Set();
+  const native=createServer();native.on('upgrade',(request,socket)=>{
+    nativeSockets.add(socket);socket.once('close',()=>nativeSockets.delete(socket));
+    const accept=createHash('sha1').update(request.headers['sec-websocket-key']+'258EAFA5-E914-47DA-95CA-C5AB0DC85B11').digest('base64');
+    socket.write('HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: '+accept+'\r\n\r\n');
+    let buffer=Buffer.alloc(0);socket.on('data',chunk=>{buffer=Buffer.concat([buffer,chunk]);
+      while(buffer.length>=2){let length=buffer[1]&127,offset=2;
+        if(length===126){if(buffer.length<4)return;length=buffer.readUInt16BE(2);offset=4;}
+        else if(length===127){if(buffer.length<10)return;length=Number(buffer.readBigUInt64BE(2));offset=10;}
+        if(!(buffer[1]&128)||buffer.length<offset+4+length)return;
+        const mask=buffer.subarray(offset,offset+4),body=Buffer.from(buffer.subarray(offset+4,offset+4+length));
+        for(let i=0;i<body.length;i++)body[i]^=mask[i%4];buffer=buffer.subarray(offset+4+length);
+        const message=JSON.parse(body.toString());let result;
+        if(message.method==='initialize')result={};
+        else if(message.method==='thread/read'){methods.push(message.method);result={thread:{id:message.params.threadId,cwd:h.directory,canAcceptDirectInput:true,status:{type:'active',activeFlags:[]}}};}
+        else if(message.method==='thread/turns/list'){methods.push(message.method);result={data:[{id:'turn',status:'inProgress',items:[]}],nextCursor:null};}
+        else if(message.method==='turn/steer'){methods.push(message.method);result={turnId:message.params.expectedTurnId};}
+        if(result){const payload=Buffer.from(JSON.stringify({id:message.id,result}));
+          const prefix=payload.length<126?Buffer.from([0x81,payload.length]):Buffer.from([0x81,126,payload.length>>8,payload.length&255]);
+          socket.write(Buffer.concat([prefix,payload]));}
+      }});
+  });
+  await new Promise((resolve,reject)=>{native.once('error',reject);native.listen(nativePath,resolve);});chmodSync(nativePath,0o600);
+  t.after(()=>{for(const socket of nativeSockets)socket.destroy();return new Promise(resolve=>native.close(resolve));});
+  const script=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-dependencies.py',import.meta.url));
+  const call=(session,args)=>new Promise((resolve,reject)=>{
+    const child=spawn('python3',['-B',script,...args,'--project',h.directory,'--session',session],
+      {env:{...fixtureEnvironment,CODEX_THREAD_ID:session},stdio:['ignore','pipe','pipe']});
+    let out='',err='';child.stdout.on('data',c=>out+=c);child.stderr.on('data',c=>err+=c);
+    child.once('error',reject);child.once('close',code=>code===0?resolve(JSON.parse(out)):reject(new Error(err)));
+  });
+  await call('sender',['register','--run','sender-run','--mode','direct']);
+  await call('sender',['state','--run','sender-run','--state','active','--generation','1']);
+  await call('recipient',['register','--run','a','--mode','piloted']);
+  await call('direct-recipient',['register','--run','direct-run','--mode','direct']);
+  await call('recipient',['state','--run','a','--state','active','--generation','1']);
+  await call('direct-recipient',['state','--run','direct-run','--state','active','--generation','1']);
+  await call('recipient',['subscribe','--run','a','--dependency-id','dep','--kind','change','--subject','change','--criterion','ready']);
+  await call('direct-recipient',['subscribe','--run','direct-run','--dependency-id','dep','--kind','change','--subject','change','--criterion','ready']);
+  await call('sender',['publish','--run','sender-run','--notice-id','note','--kind','change','--subject','change','--proof','proof.md']);
+  const outbox=await call('sender',['outbox','--run','sender-run','--notice-id','note']);assert.equal(outbox.recipients.length,2);
+  const discovered=await call('sender',['discover-turn','--run','sender-run','--recipient-session','recipient','--recipient-run','a',
+    '--dependency-id','dep','--notice-id','note','--controller-url',h.base,'--codex-socket',nativePath]);
+  assert.equal(discovered.status,'ready');assert.equal(discovered.reservation_version,run.version);
+  const result=await call('sender',['notify-piloted','--run','sender-run','--recipient-session','recipient','--recipient-run','a',
+    '--dependency-id','dep','--notice-id','note','--attempt-id',discovered.attempt_id,'--turn-id',discovered.turn_id,'--reservation-version',String(run.version),
+    '--controller-url',h.base,'--codex-socket',nativePath]);
+  assert.equal(result.status,'accepted');assert.equal(result.dependency_verified,false);
+  assert.deepEqual(methods,['thread/read','thread/turns/list','thread/read','turn/steer']);
+  await call('sender',['publish','--run','sender-run','--notice-id','note2','--kind','change','--subject','change','--proof','proof.md']);
+  assert.equal((await h.post('/runs/a/suspend',{version:run.version,action:'PAUSE',evidence:['explicit pause']})).status,200);
+  await assert.rejects(call('sender',['notify-piloted','--run','sender-run','--recipient-session','recipient','--recipient-run','a',
+    '--dependency-id','dep','--notice-id','note2','--attempt-id','attempt2','--turn-id','turn','--reservation-version',String(run.version),
+    '--controller-url',h.base,'--codex-socket',nativePath]),/coordination-native-barrier-unavailable/);
+  assert.deepEqual(methods,['thread/read','thread/turns/list','thread/read','turn/steer']);
+  const batch=await call('sender',['notify-all','--run','sender-run','--notice-id','note2','--controller-url',h.base,'--codex-socket',nativePath]);
+  assert.equal(batch.recipients.find(r=>r.session==='recipient').status,'waiting');
+  assert.equal(batch.recipients.find(r=>r.session==='recipient').reason,'run-paused');
+  assert.equal(batch.recipients.find(r=>r.session==='direct-recipient').status,'accepted');
+  const repeated=await call('sender',['notify-all','--run','sender-run','--notice-id','note2','--controller-url',h.base,'--codex-socket',nativePath]);
+  assert.equal(repeated.recipients.find(r=>r.session==='direct-recipient').status,'accepted');
+  assert.equal((await h.post('/coordination/global/request',{cause:'GLOBAL_PAUSE',scope:'all',transactionId:'global-notify',
+    authorization:'explicit global pause',evidence:['pause']})).status,202);
+  await call('sender',['publish','--run','sender-run','--notice-id','note3','--kind','change','--subject','change','--proof','proof.md']);
+  await assert.rejects(call('sender',['notify-direct','--run','sender-run','--recipient-session','direct-recipient','--recipient-run','direct-run',
+    '--dependency-id','dep','--notice-id','note3','--attempt-id','attempt4','--turn-id','turn2','--controller-url',h.base,'--codex-socket',nativePath]),/coordination-native-barrier-unavailable/);
+  assert.deepEqual(methods,['thread/read','thread/turns/list','thread/read','turn/steer',
+    'thread/read','thread/turns/list','thread/read','turn/steer']);
 });
 
 test('ancien broker ou anciens champs refusés sans permission ni gel ordinaire', async (t) => {
@@ -3936,9 +4059,9 @@ async function portReconciliationFixture(t,{reboot=false,handoff=false,sealed=fa
   quarantineId:'port-recovery-quarantine',boundaryDigest:preview.body.boundaryDigest,evidence:['native timeout observed']})).status,200);
  if(handoff){
   const old=run.sessionId,next='ses_reboot_current',base='/runs/'+run.runId;
-  h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};
-  h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
-  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.4.6'})}}]}];
+  h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}, {permission:'cgpt-validation_broker_readiness',pattern:'*',action:'allow'}, {permission:'cgpt-validation_request_validation',pattern:'*',action:'allow'}];
+  h.native.sessions[next]={id:next,directory:h.directory,permission:h.native.rules[next]};
+  h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-current',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:CAB_VERSION})}}]}];
   const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
   const result=await h.post(base+'/session-handoff',{handoffId:'port-reboot-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:old,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'continue read-only probes after qualified handoff',evidence:['fixture/native handoff']});
   assert.equal(result.status,201,JSON.stringify(result));run.sessionId=next;
@@ -4664,7 +4787,7 @@ for(const variant of ['native-read','native-read-window','unlinked-read','execut
  payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
  payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
  const before=(await h.get('/runs')).body.coordination,result=await h.post(base+'/recovery/action',payload);
- const accepted=['native-read','native-read-window','unlinked-read'].includes(variant);
+ const accepted=['native-read','native-read-window','unlinked-read','truncated'].includes(variant);
  assert.equal(result.status,accepted?200:409,JSON.stringify(result));
  const after=(await h.get('/runs')).body.coordination;
  assert.deepEqual(after.accesses,before.accesses);assert.deepEqual(after.revisions,before.revisions);assert.deepEqual(after.testReservations,before.testReservations);
@@ -4854,7 +4977,7 @@ for(const variant of ['clean','missing-ack','busy','permission','extra-effect','
  await h.post(base+'/recovery/policy',{policyId:'singleton-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation','release-access'],resources:run.resources,authorization:'same change; reject before once, then owner release'});
  payload.policyId='singleton-policy';payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
  const plan=(await h.get(base+'/recovery')).body;
- assert.ok(plan.actions.some(a=>a.action==='withdraw-unissued-validation'&&a.targetId===approval.operation_id));assert.equal(plan.actions.some(a=>a.action==='release-access'&&a.targetId===access.accessId),false);
+ assert.ok(plan.actions.some(a=>a.action==='withdraw-unissued-validation'&&a.targetId===approval.operation_id));assert.ok(plan.actions.some(a=>a.action==='release-access'&&a.targetId===access.accessId));
  if(variant==='missing-ack'){const d=join(runtimeStateDirectory(h.directory),'permission-replies');for(const f of readdirSync(d))unlinkSync(join(d,f));}
  if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
  if(variant==='permission')h.native.permissions.push({id:'pending-singleton',sessionID:run.sessionId,permission:'bash',metadata:{command:'/usr/bin/false'}});
@@ -4995,8 +5118,8 @@ for(const handoff of [false,true])test('port après reboot : réconciliation HTT
 
 test('retraite historique HTTP : ancien SID révoqué sans réactiver sa permission',async t=>{
  const {h,run,approval,base}=await unissuedWithdrawalFixture(t,'rejected'),next='ses_retirement_current';
- h.native.sessions[next]={id:next,directory:h.directory,permission:[{permission:'*',pattern:'*',action:'ask'}]};h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}];
- h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:'2.4.6'})}}]}];
+ h.native.rules[next]=[{permission:'*',pattern:'*',action:'ask'}, {permission:'cgpt-validation_broker_readiness',pattern:'*',action:'allow'}, {permission:'cgpt-validation_request_validation',pattern:'*',action:'allow'}];h.native.sessions[next]={id:next,directory:h.directory,permission:h.native.rules[next]};
+ h.native.messages[next]=[{parts:[{type:'tool',tool:'execute',executed:false,callID:'ready-historical',state:{status:'completed',input:{code:'return await tools["cgpt-validation"].broker_readiness('+JSON.stringify({run_id:run.runId})+');'},metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.broker_readiness',status:'completed',input:{run_id:run.runId}}]},output:JSON.stringify({run_id:run.runId,status:'READY',pending_count:0,server_version:CAB_VERSION})}}]}];
  const preview=await h.get(base+'/session-handoff?sessionId='+next);assert.equal(preview.status,200,JSON.stringify(preview));
  const handoff=await h.post(base+'/session-handoff',{handoffId:'retirement-handoff',ownerId:run.ownerId,version:run.version,jobId:preview.body.jobId,expectedSessionId:run.sessionId,sessionId:next,checkpointDigest:preview.body.checkpointDigest,boundaryDigest:preview.body.boundaryDigest,reason:'qualified owner handoff',evidence:['audit/handoff']});assert.equal(handoff.status,201,JSON.stringify(handoff));
  const current=(await h.get('/runs')).body.runs.find(r=>r.runId===run.runId);

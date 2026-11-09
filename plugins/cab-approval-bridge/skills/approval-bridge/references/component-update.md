@@ -629,3 +629,40 @@ la copie reprend le même reçu et l’adoption déjà vérifiée. Le contrôleu
 ne reçoit pas de droit d’adoption implicite ; ne pas forcer une relance ancienne
 ou éditer les JSON pour supprimer la collision. Après COMPLETED de la cible
 historique, traiter nextUpdateRequired et vérifier l’alignement courant distinct.
+
+## Reprise explicite avant copie après changement OpenCode
+
+Après diagnostic du reçu exact et autorisation de récupération, l’option
+`--recapture-migration <transactionId>` permet de reprendre une migration en
+`STOPPING/CAPTURED`. Elle refuse les profils spécialisés, les transitions MCP
+incertaines, une migration déclarée COPIED/ACTIVE ou une preuve cible existante.
+Un manifeste COPYING sans preuve cible est admis uniquement si son inventaire
+et tous les fichiers déjà copiés correspondent exactement aux sources capturées.
+Les trois services doivent être arrêtés (MainPID nul). Les empreintes de toutes
+les sources capturées et le lecteur cible sont revérifiés ; aucune validation
+pendante n’est admise. Deux observations OpenCode doivent établir la même
+identité courante, sans session active ni permission partagée.
+
+Le fichier privé `runtime-migration-native-recovery.json` conserve la preuve
+initiale et la nouvelle preuve, avec une intention durable puis un état VERIFIED.
+Une interruption reprend cet audit, sans écraser l’identité initiale ni accepter
+un autre redémarrage. Cette recapture n’affirme aucune continuité historique du
+processus et ne rejoue aucune permission ou opération métier. Le même reçu
+achève sa cible historique ; l’alignement vers le paquet courant suit ensuite
+par une invocation CABU normale distincte.
+
+Dans une copie COPYING seulement, un ancien `supervisor-state.json` global en
+WAITING/reconciliation-failed, sans job/SID/RUN/directory, avec zéro tentative,
+aucune reprise en vol et aucune réconciliation réussie, peut être conservé dans
+`recapture-supervisor-state.backup.json`, puis remplacé par les octets capturés.
+L’audit lie les deux empreintes avant ce remplacement. Toute autre divergence
+reste refusée, y compris une seule tentative de reprise.
+Le retour arrière explicite avant copie atteint désormais la voie de repli ;
+COPIED/ACTIVE continuent d’exiger une reprise en avant.
+
+Une reprise offline déjà COPIED peut reconnaître les trois modules broker
+`cab-source` avancés uniquement s’ils correspondent octet pour octet au paquet
+courant, plus récent que la cible historique. Les stages et sauvegardes sont
+revérifiés ; les octets observés sont conservés dans `observed-broker-forward/`
+et ajoutés à l’audit sans remplacer les observations antérieures. La cible
+historique reste inchangée et l’alignement courant demeure une transaction distincte.

@@ -1,8 +1,8 @@
 {
   "files": {
-    ".codex/commands/CAB.md": "788e0c6b13ce14ae4ace1aa8003fae76ebfea9868cc0379b88e2038493fd1918",
-    ".codex/commands/SGS.md": "b4d16179b8a3836722e516af30f85b4f712de4df753daa7991bf57c3dca36f97",
-    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "6c390434465e09d03d85857b2d00892b015dd3f1441993a08e0117bcb6ca3655",
+    ".codex/commands/CAB.md": "088bf5cf3a49042d18b88cf7e6d97abdedaa7c643844fabaf31cfb5481352589",
+    ".codex/commands/SGS.md": "5e65a9c2f5149fc61503be960c07f599bc7675e356334a75484f9b66b3c5a735",
+    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "b9a1424c4f2880cfb4ad9614c4acca2ecfe557a79c1be1b4e369d101c7fafd72",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-incidents.md": "c3aec695133f3a6f350fa9b16e207807aaefbefd7b7f04d92369962c115a9164",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-native.md": "37bb42986a9850c2a65b3dfd995a2551f48a4d2ab6d74effb005ec0ac3851867",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-overview.md": "09c1405c8b58f62652fba48fbe2fd0dfdcc5ab8109082f50b16c10adb535fc5c",
@@ -15,7 +15,7 @@
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-stop.md": "211fa70a2d403c1b8eb7dd2c3c8d20c949f59b1a06e0ce47ef87b3d6f62b84f7",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-test.md": "86b887e912d6f1a4ec87b3161150279f87e5f87ce77f670ed3e88706de03398b",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-update.md": "2fcb1b418b0270000b17e1c89e41016f5bbe929a90c476b66d8795bbd3aca83e",
-    "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md": "7a83232b1454fe1bc46d8fdbc07ce0bf3fa8a52e1eaf222a2d296d80521b924a",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/component-update.md": "b6ccc20c7eb8e9ae5cfd35924fc5d0bf052427c259b1666cfde0877dae8e6360",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-bootstrap.md": "e2a396f24d8219dadd182a53ca4516631624a9c3f1104c400981f71a0824ceb6",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-cadences.md": "a985a0c9777177f25434193e1547c03c879d947167457227a6413a2a099af8ab",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-closure.md": "3a35f138bc7113050b22110a0cd33a56efb11e29f167add24a2c2b4b997e0977",
@@ -26,7 +26,8 @@
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-lifecycle.md": "234188f0a36665fd37e302716df1c6407cd773cd9256738c58a63346fc50d165",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-model.md": "29809e908b0ee6b236aec3c29dfe38e7c494e4d4e1d06e25a6a266795b2f38fb",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-recovery.md": "6d384a59e4b4783d17bc0fa5e32390f4c93bda80b712c6f12355f4f3986f9f67",
-    "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-session.md": "b7f5435030ceca5654d00ffc47cceced6952d2d12ee3be4d68f04c38b290030d",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/protocol-session.md": "14e59158cd3d6a39fd7059af1fdbb124a19abfbec3f487b68952117cb88b7269",
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/session-dependencies.md": "70e6f7a21678f252029dfcb774946bee2bba5e88a79b38c64faabc985b803a32",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-lifecycle.md": "52bc2586e012c6e2eda3bb21f81507fedca2b814f98b2d79c43d4516a4a18929",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-mandates.md": "c0c102a0b458cee3553d975f0ab66d6383f00364e29fd04a906520b31d2fe509",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/technical-native.md": "f31a7c34971dfd971251256adbe7c2c8331841dc476fd2a04e5fa51afc5479f3",
@@ -41,5 +42,5 @@
   "historical_manifest_sha256": "d104bb5edabe3eeeaacc5c024708f55e0640972379b56fd2b2d36bbb902eaf8c",
   "schema_version": 1,
   "scope": "Empreintes du routage et des destinations courantes après revue ; preuve historique de migration conservée sans réécriture.",
-  "version": "2.4.43"
+  "version": "2.5.0"
 }

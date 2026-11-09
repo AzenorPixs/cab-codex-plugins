@@ -8,7 +8,9 @@ import { EfficiencyLedger } from './cgpt-approval-bridge-efficiency.mjs';
 import { NativeTelemetryPublisher } from './cgpt-approval-bridge-native-telemetry.mjs';
 import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 import {prepareValidationData} from './cgpt-approval-bridge-validation-preparation.mjs';
-import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
+import {runtimeRequest,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
+import {dependencyCloseCheck,dependencyGate,VERSION as DEPENDENCY_GATE_VERSION} from './cgpt-approval-bridge-dependency-gate.mjs';
+import {homedir} from 'node:os';
 import { ShellLifecycle } from './cgpt-approval-bridge-shell-lifecycle.mjs';
 import { nativeMcpPreflight } from './cgpt-approval-bridge-permission-policy.mjs';
 import { followOpenCodeRestart, verifiedNativeChild, boundedCleanup, closeHttpServer, processIdentity, processOwnerIdentity, SHUTDOWN_INCOMPLETE, VERSION as LIFECYCLE_VERSION } from './cgpt-approval-bridge-process-lifecycle.mjs';
@@ -36,8 +38,8 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.4.43";
-if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
+const version = "2.5.0";
+if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION,DEPENDENCY_GATE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
 process.umask(process.umask() | 0o077);
@@ -2201,6 +2203,7 @@ async function handleRequest(request, response) {
   if (closing) { json(response, 503, { error: 'cab-stopping' }); return; }
   request.cabReceivedAt = Date.now();
   let transitionRun = null;
+  let dependencyTransitionGate = null;
   let observedRun = null;
   let attemptedReservation = null;
   let lifecycleMutation = false;
@@ -2475,7 +2478,10 @@ async function handleRequest(request, response) {
           generation: global.generation, sealDigest: checked.journal.sealDigest, buildDigest: loadedBuildDigest }); return;
       }
       if (url.pathname === '/coordination/global/request') {
-        json(response, 202, registry.requestGlobal(payload)); return;
+        const gate=await dependencyGate({stateRoot:stateRootDirectory(homedir()),project:workspace,run:'',mode:'global'});
+        let result; try { result=registry.requestGlobal(payload); } finally { await gate.close(); }
+        json(response, 202, result);
+        return;
       }
       if (['/coordination/global/confirm', '/coordination/global/release', '/coordination/migrate', '/coordination/rollback', '/coordination/legacy/reconcile'].includes(url.pathname)) {
         proofReferences(payload);
@@ -2515,6 +2521,12 @@ async function handleRequest(request, response) {
     }
     if (request.method === 'GET' && url.pathname === '/runs') {
       json(response, 200, publicRunSnapshot()); return;
+    }
+    if (request.method === 'GET' && url.pathname === '/dependency-global-admission') {
+      const global=registry.resourceState.global;
+      const reason=global&&global.state!=='RELEASED'?(global.cause==='GLOBAL_PAUSE'?'global-paused':global.cause==='GLOBAL_STOP'?'global-stopped':'global-blocked'):null;
+      json(response,200,{protocol:'dependency-pause-gate-v1',workspace,stateRoot:stateRootDirectory(homedir()),
+        active:reason===null,reason});return;
     }
     if (request.method === 'GET' && url.pathname === '/status' && !url.searchParams.has('runId')) {
       const entries = activeContexts();
@@ -2740,7 +2752,20 @@ async function handleRequest(request, response) {
         transitions.add(runId);
         transitionRun = runId;
       }
+      if(request.method==='POST'&&['/suspend','/release','/closing','/job/disarm','/job/recover'].includes(url.pathname)) {
+        dependencyTransitionGate=await dependencyGate({stateRoot:stateRootDirectory(homedir()),project:workspace,run:runId,mode:'run'});
+        if(['/release','/job/disarm'].includes(url.pathname))
+          await dependencyCloseCheck({stateRoot:stateRootDirectory(homedir()),project:workspace,run:runId});
+      }
       if (request.method === 'GET' && url.pathname === '/status') { json(response, 200, statusFor(runId, context)); return; }
+      if (request.method === 'GET' && url.pathname === '/dependency-admission') {
+        const global=registry.resourceState.global;
+        const reason=global&&global.state!=='RELEASED'?(global.cause==='GLOBAL_PAUSE'?'global-paused':global.cause==='GLOBAL_STOP'?'global-stopped':'global-blocked'):
+          run.suspension?(run.suspension.action==='PAUSE'?'run-paused':'run-stopped'):
+            run.state!=='RESERVED'||run.phase!=='WORK'||context.publicJob()?.armed!==true?'job-inactive':null;
+        json(response,200,{protocol:'dependency-pause-gate-v1',workspace,runId,version:run.version,stateRoot:stateRootDirectory(homedir()),
+          active:reason===null,reason}); return;
+      }
       if(request.method==='POST'&&['/atelier/authorize','/atelier/status-authorize'].includes(url.pathname)) {
         registry.admission(runId);
         const messages=await openCode.messages(run.sessionId,run.directory);
@@ -3250,7 +3275,9 @@ async function handleRequest(request, response) {
       }
       if (request.method === 'POST' && url.pathname === '/suspend') {
         if (payload.action === 'RESUME' && context.publicJob()?.modelTransition) throw new CoordinationError('model-transition-pending');
-        json(response, 200, registry.suspend(runId, payload)); return;
+        const result=registry.suspend(runId, payload);
+        await dependencyTransitionGate.close();dependencyTransitionGate=null;
+        json(response, 200, result); return;
       }
       if (request.method === 'GET' && url.pathname === '/integration-status') {
         json(response, 200, { runId, referenceVersion: registry.referenceVersion,
@@ -3264,7 +3291,11 @@ async function handleRequest(request, response) {
         proofReferences(payload);
         await checkNative(context.publicJob()?.sessionId || run.sessionId, true);
         if (url.pathname === '/resources') json(response, 200, registry.reduce(runId, payload));
-        else json(response, 200, registry.closing(runId, payload));
+        else {
+          const result=registry.closing(runId,payload);
+          await dependencyTransitionGate.close();dependencyTransitionGate=null;
+          json(response,200,result);
+        }
         return;
       }
       if (request.method === 'POST' && ['/ready', '/reconcile'].includes(url.pathname)) {
@@ -3302,6 +3333,7 @@ async function handleRequest(request, response) {
         const released = registry.release(runId, payload.version, payload.delivered);
         context.close();
         contexts.delete(runId);
+        await dependencyTransitionGate.close();dependencyTransitionGate=null;
         json(response, 200, released); return;
       }
       if (request.method === 'POST' && url.pathname === '/job/arm') {
@@ -3419,11 +3451,28 @@ async function handleRequest(request, response) {
         if (registry.unresolvedAccess(runId)) throw new CoordinationError('run-accesses-unresolved');
       }
     }
+    if (dependencyTransitionGate && request.method==='POST' && ['/job/disarm','/job/recover'].includes(url.pathname)) {
+      const writeHead=response.writeHead.bind(response), end=response.end.bind(response);
+      let head=null,body;
+      response.writeHead=(...args)=>{head=args;return response;};
+      response.end=(value)=>{body=value;return response;};
+      const oldSession=context.publicJob()?.sessionId;
+      try { await context.handle(request,response,url); }
+      finally { response.writeHead=writeHead;response.end=end; }
+      if (!head) throw new CoordinationError('dependency-transition-response-missing');
+      const newSession=context.publicJob()?.sessionId;
+      if(runId&&oldSession&&newSession!==oldSession)registry.transfer(runId,newSession);
+      await dependencyTransitionGate.close();dependencyTransitionGate=null;
+      if(transitionRun){transitions.delete(transitionRun);transitionRun=null;}
+      writeHead(...head);end(body);return;
+    }
     const oldSession = context.publicJob()?.sessionId;
     await context.handle(request, response, url);
     const newSession = context.publicJob()?.sessionId;
     if (runId && oldSession && newSession !== oldSession) registry.transfer(runId, newSession);
   } catch (cause) {
+    if (dependencyTransitionGate) { await dependencyTransitionGate.close(); dependencyTransitionGate=null; }
+    if (transitionRun) { transitions.delete(transitionRun); transitionRun=null; }
     if(cause.code==='native-validation-evidence-unavailable')response.setHeader('retry-after','1');
     request.cabObserveHttpFailure(cause.code);
     observeStatistics(() => statistics.admissionFailure(attemptedReservation, cause.code));
@@ -3432,6 +3481,7 @@ async function handleRequest(request, response) {
         ? cause.diagnostic : { error: cause.code || cause.message });
     else response.destroy();
   } finally {
+    if (dependencyTransitionGate) await dependencyTransitionGate.close();
     if (transitionRun) transitions.delete(transitionRun);
     if (lifecycleMutation) lifecycleMutations--;
   }

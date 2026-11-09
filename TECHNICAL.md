@@ -1,5 +1,15 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Un plan de récupération ne garantit pas l'admission d'une libération : les
+gardes restent applicables. Une lecture native tronquée qualifiée peut être
+non mutante sans prouver le contenu complet lu.
+
+La boîte d'avis de dépendances de CAB 2.5.0 utilise SQLite et des transactions
+locales ; SGS vérifie ses liaisons natives et son transport a été qualifié sur
+un serveur Codex isolé. Les processus d'un même UID ne sont pas authentifiés
+cryptographiquement et l'intégration des prompts reste distincte.
+Son contrat et ses limites figurent dans [sa référence](plugins/cab-approval-bridge/skills/approval-bridge/references/session-dependencies.md).
+
 La projection évite les constructions répétées et mémorise localement les parcours, sans changer la portée ni les protections des autres RUN.
 
 Le nettoyage protège les événements des identifiants partagés par une approbation conservée ; les reconstructions depuis le magasin sont marquées et ne rejouent aucune décision.

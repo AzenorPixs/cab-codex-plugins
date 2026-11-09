@@ -3,7 +3,7 @@
 
 import sys
 
-VERSION = "2.4.43"
+VERSION = "2.5.0"
 
 
 def main():

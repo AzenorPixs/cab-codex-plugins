@@ -33,7 +33,7 @@ native_module = importlib.util.module_from_spec(NATIVE_SPEC)
 NATIVE_SPEC.loader.exec_module(native_module)
 EMITTER_SPEC=importlib.util.spec_from_file_location('cab_sgs_emitter',SCRIPT_DIRECTORY/'cgpt-approval-bridge-sgs-emitter.py')
 emitter_module=importlib.util.module_from_spec(EMITTER_SPEC);EMITTER_SPEC.loader.exec_module(emitter_module)
-VERSION = "2.4.43"
+VERSION = "2.5.0"
 if store_module.VERSION != VERSION or native_module.VERSION != VERSION:
     raise RuntimeError("runtime-component-version-mismatch")
 MAX_BODY = 64 * 1024 * 1024
@@ -269,6 +269,9 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                 elif route==('POST','/purge'):
                     if set(body)!={'scope','receipt_id','components'}:raise store_module.RuntimeErrorCode('sgs-purge-input-invalid')
                     result=self.server.store.purge(body['scope'],body['receipt_id'],body['components'],uid)
+                elif route==('POST','/purge/verify-released'):
+                    if set(body)!={'scope','receipt_id'}:raise store_module.RuntimeErrorCode('sgs-purge-input-invalid')
+                    result=self.server.store.verify_released_snapshot(body['scope'],body['receipt_id'],uid)
                 elif route == ("POST", "/bindings/close"):
                     if set(body)!={'binding','ended_at'}:raise store_module.RuntimeErrorCode('sgs-close-input-invalid')
                     result=self.server.store.close_binding(body['binding'],body['ended_at'],uid)
@@ -277,6 +280,9 @@ class RuntimeHandler(BaseHTTPRequestHandler):
                 elif route==('GET','/sources'):
                     rows=self.server.store.db.execute("SELECT s.source,s.location,b.body FROM native_sources s JOIN bindings b ON b.binding=s.binding LEFT JOIN binding_closures c ON c.binding=b.binding WHERE c.binding IS NULL AND b.uid=?",(uid,)).fetchall()
                     result={'sources':[{'source':row['source'],'location':row['location'],'binding':json.loads(row['body'])} for row in rows]}
+                elif route==('GET','/session-binding'):
+                    if set(query) not in ({'project','run','session'},{'project','run','session','mode'}):raise store_module.RuntimeErrorCode('sgs-binding-scope-invalid')
+                    result=self.server.store.verify_codex_binding(query['project'][0],query['run'][0],query['session'][0],uid,query.get('mode',['piloted'])[0])
                 elif route==('POST','/collector/status'):
                     if self.server.native_collector is None or self.server.native_collector.pid!=pid or set(body)-{'reason'}!={'binding','status'} or body['status'] not in ('collecting','native-source-unavailable'):raise store_module.RuntimeErrorCode('sgs-native-collector-required')
                     reason=body.get('reason')
