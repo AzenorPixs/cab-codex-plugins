@@ -12,7 +12,7 @@ import sys
 from cab_session_dependencies import (CoordinationError, DependencyStore, check_close, codex_proxy_exchange,
                                       codex_active_turn, codex_verified_sender, controller_admission, encoded, same_state_root, verify_pilot_binding)
 
-VERSION = '2.5.0'
+VERSION = '2.5.1'
 
 
 def discover_target(store, project, session, run, notice_id, target, state_root, controller_url, codex_socket):

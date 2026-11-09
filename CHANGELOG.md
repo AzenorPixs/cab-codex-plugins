@@ -2,6 +2,10 @@
 
 ## Non publié
 
+## 2.5.1 - 2026-11-09
+
+- Accepter la clé HMAC locale en `0770` pour le groupe vérifié et coordonner ses droits avec DIU ; les accès aux autres comptes restent refusés.
+
 ## 2.5.0 - 2026-11-09
 
 - Clarifier les chemins de retrait et de libération d'accès ainsi que le statut d'une lecture native tronquée ; aligner les tests sur les exigences existantes.

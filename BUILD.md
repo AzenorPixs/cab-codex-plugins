@@ -1,5 +1,8 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+La qualification de la clé HMAC couvre `0770` avec groupe vérifié, la
+compatibilité des clés privées et le refus des droits ouverts aux autres comptes.
+
 Le paquet source 2.5.0 comprend les scripts de boîte de dépendances et leur bibliothèque
 Python standard. Leur présence dans le paquet ne démontre ni l'activation de
 l'interface. La notification native a été qualifiée sur serveur Codex isolé,

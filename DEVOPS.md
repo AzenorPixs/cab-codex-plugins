@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-07T08:35:17Z
+Début du relevé (UTC) : 2026-11-09T13:26:21Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -115,9 +115,13 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
   * /home/devops/node/current/bin/npm
 
 
+## Dépendances JavaScript du projet
+
+  * Inventaire incomplet : limite d'entrées de découverte atteinte
+
 # OpenCode
 
-  * 2.2.5
+  * 2.2.6
   * /home/devops/.opencode/bin/opencode
   * La variable OPENCODE_PASSWORD pour l'API est chargée depuis project.env
 

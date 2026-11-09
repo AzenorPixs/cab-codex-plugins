@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.5.0"
+SERVER_VERSION = "2.5.1"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -8969,8 +8969,9 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
             if checkpoint.get("enabled"):
                 raise ValidationError("erasure-primary-signing-key-unavailable")
             key_path = path + ".hmac.key"
-            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            fd = os.open(key_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
             try:
+                os.fchmod(fd, 0o770)
                 signing_key = os.urandom(32)
                 if os.write(fd, signing_key) != len(signing_key):
                     raise OSError("erasure-key-write-incomplete")

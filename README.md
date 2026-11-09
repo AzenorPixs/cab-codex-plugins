@@ -1,5 +1,8 @@
 # Codex Approval Bridge — CAB
 
+La clé HMAC locale du journal accepte les droits `0770` du groupe vérifié,
+en coordination avec la normalisation DIU, sans accès pour les autres comptes.
+
 CAB 2.5.0 comprend une interface de coordination des dépendances entre sessions ;
 sa qualification isolée ne vaut pas activation de la distribution.
 
