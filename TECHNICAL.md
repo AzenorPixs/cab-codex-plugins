@@ -1,5 +1,9 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+La clé HMAC locale du journal accepte `0770` lorsque son propriétaire et son
+groupe sont vérifiés ; tout droit pour les autres comptes reste refusé. Les
+clés privées existantes restent lisibles et les nouvelles clés utilisent `0770`.
+
 Un plan de récupération ne garantit pas l'admission d'une libération : les
 gardes restent applicables. Une lecture native tronquée qualifiée peut être
 non mutante sans prouver le contenu complet lu.

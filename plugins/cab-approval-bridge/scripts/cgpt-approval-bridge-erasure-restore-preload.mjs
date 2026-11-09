@@ -3,7 +3,7 @@ import {readFileSync,realpathSync} from 'node:fs';import {dirname,join} from 'no
 import {ErasureTransaction} from './cgpt-approval-bridge-change-erasure.mjs';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
 import {verifyDependencies} from './cgpt-approval-bridge-dependency-authority.mjs';
-export const VERSION='2.5.0';
+export const VERSION='2.5.1';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 const receiptPath=process.env.CAB_ERASURE_RESTORE_RECEIPT,transactionId=process.env.CAB_ERASURE_RESTORE_TRANSACTION;
 if(!receiptPath||!transactionId)fail('erasure-restore-authorization-required');

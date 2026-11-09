@@ -82,7 +82,7 @@ import stat
 import threading
 import uuid
 
-VERSION = "2.5.0"
+VERSION = "2.5.1"
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -292,9 +292,18 @@ def checkpoint_key(allow_unanchored=False):
         try:
             info = os.fstat(fd)
             if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                    or info.st_uid != os.getuid() or info.st_mode & 0o077
+                    or info.st_uid != os.getuid() or info.st_mode & 0o007
                     or info.st_size != 32):
                 raise JournalError("cle locale du journal non sure")
+            if info.st_mode & 0o070:
+                try:
+                    parent = os.stat(os.path.dirname(path) or ".", follow_symlinks=False)
+                except OSError as exc:
+                    raise JournalError("cle locale du journal non sure") from exc
+                if (not stat.S_ISDIR(parent.st_mode) or parent.st_uid != os.getuid()
+                        or parent.st_gid != info.st_gid
+                        or info.st_gid not in set(os.getgroups()) | {os.getgid()}):
+                    raise JournalError("cle locale du journal non sure")
             return os.read(fd, 32)
         finally:
             os.close(fd)
