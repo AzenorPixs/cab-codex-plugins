@@ -1,5 +1,9 @@
 # Codex Approval Bridge — CAB
 
+La coordination directe et pilotée utilise un adaptateur commun,
+`cab-session-coordination-1`, découvert sans démarrage de service. Le contrat
+métier des prompts est maintenu dans son propre projet.
+
 La clé HMAC locale du journal accepte les droits `0770` du groupe vérifié,
 en coordination avec la normalisation DIU, sans accès pour les autres comptes.
 
