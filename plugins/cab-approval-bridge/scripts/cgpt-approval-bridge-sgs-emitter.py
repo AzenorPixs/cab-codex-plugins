@@ -10,7 +10,7 @@ import threading
 import time
 from datetime import datetime,timezone
 
-VERSION='2.5.2'
+VERSION='2.5.3'
 
 
 class Emitter:
