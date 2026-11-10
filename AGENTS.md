@@ -1,6 +1,6 @@
 # AGENTS.md — Codex Approval Bridge
 
-Version : 0.7
+Version : 0.8
 
 ## 1. Contexte
 
@@ -60,6 +60,10 @@ En cas de contradiction, appliquer cet ordre :
 7. Environnement de développement : `DEVOPS.md` ;
 8. documentation officielle du projet ;
 9. code existant.
+
+Pour le choix des outils de développement, de construction, de test et de
+validation, `DEVOPS.md` fait autorité selon la section 13.1, sous réserve
+des instructions de priorité supérieure.
 
 `DEVELOPMENT_MAP.md` est une synthèse de cadrage subordonnée aux sources
 de vérité et aux preuves applicables. Il ne modifie pas leur ordre de
@@ -560,6 +564,22 @@ Avant toute proposition de commit, l'agent DOIT :
 ## 13. Langages de programmation
 
 ### 13.1. Règles communes
+
+`DEVOPS.md` constitue le référentiel faisant autorité pour le choix des
+outils de développement, de construction, de test et de validation, sous
+réserve des instructions de priorité supérieure. L'agent DOIT utiliser les
+outils qui y sont définis ; un outil hors de ce périmètre ne peut pas leur
+être substitué sans validation explicite du développeur.
+
+Si un outil nécessaire est absent de `DEVOPS.md`, l'agent DOIT demander
+explicitement au développeur l'autorisation de l'utiliser, en précisant son
+rôle et la justification du besoin, puis attendre son accord avant toute
+installation ou utilisation. Sa disponibilité sur la machine ne vaut pas
+autorisation. Si un outil prescrit est indisponible, l'agent DOIT le signaler
+et obtenir cet accord avant toute substitution. Seules les opérations
+nécessitant cet outil restent en attente ; les travaux indépendants déjà
+autorisés peuvent se poursuivre. Ces règles n'autorisent pas la modification
+ou la régénération de `DEVOPS.md`.
 
 Le code DOIT rester compatible avec les versions des langages, runtimes et dépendances supportées par le projet.
 
