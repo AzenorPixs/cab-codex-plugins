@@ -5321,3 +5321,52 @@ test('nettoyage SGS simple : contrôleur et vrai service retirent le rapport san
  await runtimeRequest('sgs','/purge/preview',{scope,branch:'BLOQUÉ'});
  assert.equal((await runtimeRequest('sgs','/stats?project='+encodeURIComponent(h.directory))).archives.length,0);assert.equal(readFileSync(reportPath,'utf8'),before);
 });
+
+function appendCancelledRefusalSuffix(h, approval, variant='valid') {
+ const identity={request_id:approval.requestId,run_id:approval.run_id,session_id:approval.session_id,
+  change_id:approval.change_id,directory:approval.directory,reservation_version:approval.reservation_version};
+ const part=(name,input,output,status='completed')=>({type:'tool',tool:'cgpt-validation_'+name,executed:false,
+  callID:'call-'+name+'-'+variant,state:{status,input,output:typeof output==='string'?output:JSON.stringify(output),
+   ...(status==='error'?{error:output}:{}),metadata:{truncated:false,...(status==='error'?{error:true}:{}),
+    toolCalls:[{tool:'cgpt-validation.'+name,status,input:structuredClone(input)}]}}});
+ const message='MCP tool "atelier_execute" on server "cgpt-validation" failed: atelier-jobs-not-private';
+ const failed=part('atelier_execute',{...identity,argv:['/usr/bin/true'],timeout_ms:120000},message,'error');
+ const other={...structuredClone(approval),requestId:approval.requestId+'-other',approval_id:approval.approval_id+'-other',
+  operation_id:approval.operation_id+'-other',operation_digest:'a'.repeat(64),tool_input_sha256:'b'.repeat(64)};
+ const prepInput={...identity,request_id:other.requestId,native_tool:'shell',native_input:{command:'/usr/bin/true'}};
+ const prepared=part('prepare_validation',prepInput,{snapshot_only:true,authorization:false,admitted:false,validation:other});
+ const output={...structuredClone(other),status:'NOT_ADMITTED',notification_diagnostic:{http_status:409,error_code:'run-mandate-already-active'}};
+ const literal=x=>Array.isArray(x)?'['+x.map(literal).join(',')+']':x&&typeof x==='object'?'{'+Object.entries(x).map(([k,v])=>(/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(k)?k:JSON.stringify(k))+':'+literal(v)).join(',')+'}':JSON.stringify(x);
+ const proposed={type:'tool',tool:'execute',executed:false,callID:'call-propose-'+variant,state:{status:'completed',
+  input:{code:'return await tools["cgpt-validation"].propose_approval('+literal(other)+');'},output:JSON.stringify(output),
+  metadata:{truncated:false,toolCalls:[{tool:'cgpt-validation.propose_approval',status:'completed',input:structuredClone(other)}]}}};
+ const status=part('atelier_status',identity,{found:false,snapshot_only:true,requestId:approval.requestId});
+ if(variant==='missing-status')status.state.output=JSON.stringify({found:true,snapshot_only:true,requestId:approval.requestId});
+ if(variant==='wrong-error')failed.state.error=failed.state.output='other failure';
+ if(variant==='wrong-identity')prepared.state.metadata.toolCalls[0].input.run_id='other';
+ if(variant==='admitted')output.status='PENDING';
+ if(variant==='admitted')proposed.state.output=JSON.stringify(output);
+ if(variant==='extra-code')proposed.state.input.code+=' doSomething();';
+ if(variant==='truncated')failed.state.metadata.truncated=true;
+ if(variant==='wrong-digest'){output.tool_input_sha256='c'.repeat(64);proposed.state.output=JSON.stringify(output);}
+ if(variant==='extra-tool')proposed.state.metadata.toolCalls.push({tool:'shell',status:'completed',input:{command:'/usr/bin/true'}});
+ if(variant==='status-wrong-run')status.state.input.run_id='another-run';
+ const discovery={type:'tool',tool:'cab_codemode_discovery',executed:false,state:{status:'completed',metadata:{truncated:false,toolCalls:[{tool:'search',status:'completed'}]}}};
+ const read={type:'tool',tool:'read',nativeFormat:'opencode-v2',nativeTool:'read',executed:false,callID:'call-read-'+variant,state:{status:'error',input:{path:'fixture'},metadata:{}}};
+ h.native.messages[approval.session_id].push({parts:[discovery,failed,prepared,proposed,read,status]});
+}
+
+for(const variant of ['valid','direct-cancel','direct-extra','missing-status','wrong-error','wrong-identity','status-wrong-run','admitted','extra-code','extra-tool','truncated','wrong-digest'])test('annulation après refus qualifiés : '+variant,async t=>{
+ const h=await setup(t),run=await h.reserve('cancel-refusal-'+variant),base='/runs/'+run.runId;
+ const approval=h.approval(run,'cancel-refusal-'+variant);
+ assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
+ wrapNativeRequestValidationInCodeMode(h,approval);appendNativeCodeModeCancelledTranscript(h,approval);
+ if(['direct-cancel','direct-extra'].includes(variant)){const cancel=h.native.messages[run.sessionId].at(-1).parts[0];cancel.state.metadata.toolCalls=cancel.state.metadata.toolCalls.slice(1);cancel.state.input.code='return await tools["cgpt-validation"].cancel_approval({approval_id: '+JSON.stringify(approval.approval_id)+'});'+(variant==='direct-extra'?' doSomething();':'');}
+ appendCancelledRefusalSuffix(h,approval,variant);
+ await h.stop();await h.start();await h.post('/broker/readiness',{status:'READY',pending_count:0,infrastructure_status:'READY'});
+ if(['valid','direct-cancel'].includes(variant))await waitFor(async()=>(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state==='CANCELLED');
+ else await delay(100);
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,['valid','direct-cancel'].includes(variant)?'CANCELLED':'PREPARED');assert.equal(op.decision,null);assert.equal(op.native,null);assert.equal(op.nativeResult,null);
+ assert.deepEqual(h.native.replies,[]);assert.equal(h.native.permissions.length,0);
+});

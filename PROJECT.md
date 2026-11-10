@@ -1,6 +1,8 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
 
+La réconciliation d’une annulation native accepte certains refus ultérieurs uniquement sur preuves complètes et frontière sans effet ; les autres appels restent bloquants.
+
 Les reçus d’atelier acceptent le groupe DevOps vérifié en 0770/2770, sans droit pour les autres comptes ; les anciens reçus privés restent lisibles.
 CAB fournit l’adaptateur technique `cab-session-coordination-1` pour les
 sessions directes et pilotées ; le contrat métier reste dans le projet prompts.

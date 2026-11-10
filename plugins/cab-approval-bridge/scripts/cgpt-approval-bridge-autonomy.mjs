@@ -1,7 +1,7 @@
 import {mkdirSync,lstatSync,realpathSync,chmodSync,chownSync,existsSync,rmSync} from 'node:fs';
 import {isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {createHash} from 'node:crypto';
-export const VERSION='2.5.5';
+export const VERSION='2.5.6';
 const identity=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};
 function sharedDirectory(path,workspace) {
