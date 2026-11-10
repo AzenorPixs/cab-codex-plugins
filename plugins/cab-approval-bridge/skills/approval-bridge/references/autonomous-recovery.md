@@ -362,8 +362,9 @@ SID idle, zéro permission, aucun accès/native/once, sans décision de substitu
 Lire l’opération exacte et son admission ; une absence de convergence exige
 son diagnostic de preuve, pas une nouvelle demande ou un arbitrage humain.
 
-Le gabarit qualifié reste search littéral cancel_approval, assertion du chemin
-exact, puis return await du cancel unique à l’approval_id exact. Les blancs
+Le gabarit qualifié est soit search littéral cancel_approval avec assertion du
+chemin exact puis return await, soit un unique return await littéral direct du
+cancel à l’approval_id exact. Les blancs
 légaux hors chaînes sont tolérés ; chaînes, tokens et données restent exacts.
 Le matcher n’évalue aucun JavaScript et reste borné à16384caractères.
 Commentaires, instructions ajoutées, mots fusionnés ou saut de ligne après
@@ -397,3 +398,21 @@ cet accord à chaque session ; une frontière active se coordonne sans forçage.
 
 Edit ou shell refusé avant once avec parent HELD seulement référencé :
 [retrait propriétaire isolé](approved-attached-shell-retirement.md), sans faux rattachement.
+
+### Suffixe de refus attestés après annulation
+
+Le contrôleur peut aussi qualifier un suffixe fermé comprenant exactement un
+essai atelier de même identité refusé `atelier-jobs-not-private` avant effet,
+suivi d’un `atelier_status` `found:false`, et une préparation snapshot-only
+suivie d’une proposition distincte `NOT_ADMITTED`/409
+`run-mandate-already-active`. Les identités et digests de la préparation, de
+la proposition et du résultat doivent concorder ; aucun owner, opération ou
+accès ne doit exister pour la proposition refusée. Son wrapper doit être un
+unique retour littéral exact. Lectures natives et discoveries qualifiées sont
+sans effet ; une sortie tronquée de lecture ne prouve pas son contenu.
+
+Le transcript original est lié à la preuve ; deux lectures stables, session
+idle, zéro permission, absence d’accès et d’effet restent obligatoires. Un
+appel supplémentaire ou une preuve divergente conserve PREPARED. Aucune
+décision, permission, exécution ou nouvelle demande n’est fabriquée ; les
+reçus des demandes refusées et les autres RUN restent conservés.

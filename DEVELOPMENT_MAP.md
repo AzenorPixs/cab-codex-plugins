@@ -1,6 +1,10 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
 
+## Annulation native après refus attestés — SCM
+
+[reconcile-cancelled-validation-after-refusals](openspec/changes/archive/2026-11-11-reconcile-cancelled-validation-after-refusals/) : correctif archivé pour une validation annulée avec suffixe sans effet ; livraison et activation à vérifier ; code non attribué.
+
 ## Atelier et permissions de groupe — SCM
 
 [support-group-atelier-jobs](openspec/changes/archive/2026-11-10-support-group-atelier-jobs/) : compatibilité des reçus d’atelier avec la normalisation DIU ; archivage effectué, livraison et activation à vérifier. Code non attribué.
