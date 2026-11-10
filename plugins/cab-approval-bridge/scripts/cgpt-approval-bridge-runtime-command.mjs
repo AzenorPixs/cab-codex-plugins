@@ -2,7 +2,7 @@
 /** Commande locale commune ; les mutations lisent un objet JSON sur stdin. */
 import { runtimeRequest } from './cgpt-approval-bridge-runtime-client.mjs';
 import { pathToFileURL } from 'node:url';
-export const VERSION='2.5.3';
+export const VERSION='2.5.4';
 export async function runtimeCommand(argv, input=process.stdin) {
   const [component,action,...rest]=argv;
   const routes={sgs:{status:['GET','/status'],bind:['POST','/bindings'],close:['POST','/bindings/close'],source:['POST','/sources'],event:['POST','/events'],stats:['GET','/stats']},

@@ -2,6 +2,10 @@
 
 ## Non publié
 
+## 2.5.4 - 2026-11-10
+
+- Clarifier l’examen coordonné des bancs de test autorisés et la portée des preuves avant un blocage d’environnement.
+
 ## 2.5.3 - 2026-11-09
 
 - Consolider les instantanés natifs des rapports de coordination et leur nettoyage SGS vérifié, sans double comptage.

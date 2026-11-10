@@ -1,0 +1,5 @@
+## Conception
+
+Le codeur rapporte le critère, l’échec ou la capacité manquante de l’atelier, les bancs pertinents connus et les preuves disponibles. Avant de conclure à une impossibilité d’environnement ou de présenter un blocage de cette nature, l’orchestrateur examine DEVOPS et les sources applicables, distingue déclaration et disponibilité observée, vérifie la portée des autorisations et restrictions, puis décide des opérations utiles déjà autorisées. Il fait poursuivre une voie pertinente encore possible ; une voie écartée est motivée.
+
+La priorité de l’atelier et la justification d’un recours LXC/Docker restent applicables. La préparation ou installation ne découle pas d’une simple déclaration : respecter les autorisations effectives, les limites du mandat et les décisions CAB. Les résultats décrivent le banc et le critère couverts ; aucun résultat LXC ne vaut automatiquement qualification Desktop. Le contrôle du texte distribué vérifie la présence et la cohérence du contrat, pas le raisonnement effectif d’un agent.

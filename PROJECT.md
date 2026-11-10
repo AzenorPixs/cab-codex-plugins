@@ -8,6 +8,8 @@ La coordination des dépendances entre sessions de CAB 2.5.0 est définie par
 Codex isolé. La liaison SGS vérifie les identités déclarées mais n'authentifie
 pas cryptographiquement les processus d'un même compte ; l'activation reste distincte.
 
+Avant un blocage d’environnement, le codeur et l’orchestrateur examinent les bancs de test pertinents autorisés et conservent la portée des preuves ; voir la référence autonomie et ateliers du contrat distribué.
+
 La projection d’un nettoyage réutilise ses calculs pour limiter la durée d’indisponibilité des briques.
 
 Les événements des approbations conservées restent associés au journal ; les événements reconstruits depuis le magasin sont identifiés comme tels.
