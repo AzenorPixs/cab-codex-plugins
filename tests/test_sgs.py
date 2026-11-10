@@ -1,6 +1,8 @@
 """SGS behavior on synthetic projects; never touches real reports or services."""
 import importlib.util
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import unittest
@@ -33,6 +35,12 @@ class SGSTest(unittest.TestCase):
     def build(self):
         with sgs.locked(self.root):
             return sgs.rebuild(self.root,self.contract,['NONE'],{})
+
+    def test_cli_accepts_group_executable_project_mode(self):
+        result = subprocess.run([sys.executable, '-B', str(ROOT/'plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-sgs.py'),
+                                 'VERSION', '--file-mode', '0770'], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)['engine_format'], 'cab-sgs-1')
 
     def test_missing_value_is_not_zero(self):
         c = sgs.extract('SCM directe.\n| Mesure | Valeur |\n|---|---|\n| Tokens d’entrée | N/A |\n| Appels web | 0 |\n')

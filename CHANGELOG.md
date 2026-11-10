@@ -2,6 +2,10 @@
 
 ## Non publié
 
+## 2.5.5 - 2026-11-10
+
+- Accepter les jobs d’atelier normalisés en 2770 pour le groupe qualifié, créer leurs reçus en 0770 et autoriser la publication SGS en 0770.
+
 ## 2.5.4 - 2026-11-10
 
 - Clarifier l’examen coordonné des bancs de test autorisés et la portée des preuves avant un blocage d’environnement.
