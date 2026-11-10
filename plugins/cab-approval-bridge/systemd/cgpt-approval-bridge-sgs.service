@@ -1,5 +1,5 @@
 [Unit]
-Description=CAB 2.5.5 — Collecte et statistiques SGS permanentes
+Description=CAB 2.5.6 — Collecte et statistiques SGS permanentes
 
 [Service]
 Type=simple

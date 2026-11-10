@@ -38,7 +38,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.5.5";
+const version = "2.5.6";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION,DEPENDENCY_GATE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -771,7 +771,8 @@ async function restoreApprovedOperations(run, context) {
         const identityHash = createHash('sha256').update(JSON.stringify(nativeIdentity(approval))).digest('hex');
         const owner = registry.requestOwners[current.requestId];
         if (owner?.runId !== run.runId || owner.digest !== identityHash) continue;
-        const cancelledProof = nativeCancelledValidationProof(parts, approval);
+        const projected = projectCancelledRefusalSuffix(parts, approval, registry);
+        const cancelledProof = nativeCancelledValidationProof(projected || parts, approval, projected ? { originalParts:parts } : {});
         const alreadyRejected = current.state === 'CANCELLED' && current.decision?.status === 'rejected' &&
           typeof current.completionDigest === 'string';
         let candidate;
@@ -798,7 +799,8 @@ async function restoreApprovedOperations(run, context) {
           ]);
           const secondParts = Array.isArray(secondMessages)
             ? secondMessages.flatMap((message) => Array.isArray(message.parts) ? message.parts : []) : [];
-          const secondProof = nativeCancelledValidationProof(secondParts, approval);
+          const secondProjected = projectCancelledRefusalSuffix(secondParts, approval, registry);
+          const secondProof = nativeCancelledValidationProof(secondProjected || secondParts, approval, secondProjected ? { originalParts:secondParts } : {});
           const permissionPending = permissions.some((permission) => permission.sessionID === current.sessionId) ||
             secondPermissions.some((permission) => permission.sessionID === current.sessionId);
           const linkedAccess = Object.values(registry.resourceState.accesses).some((access) =>
@@ -1165,7 +1167,16 @@ function cancellationWrapperTokens(code) {
 }
 function exactCancelApprovalWrapper(wrapper, approval) {
   if(!wrapper||wrapper.tool!=='execute'||wrapper.executed!==false||wrapper.status!=='completed'||
-      wrapper.truncated!==false||!Array.isArray(wrapper.toolCalls)||wrapper.toolCalls.length!==2)return false;
+      wrapper.truncated!==false||!Array.isArray(wrapper.toolCalls))return false;
+  if(wrapper.toolCalls.length===1){
+    const cancel=wrapper.toolCalls[0],input=cancel?.input;
+    if(cancel?.tool!=='cgpt-validation.cancel_approval'||cancel.status!=='completed'||!input||
+       Object.keys(input).length!==1||input.approval_id!==approval.approval_id)return false;
+    const expected=`return await tools["cgpt-validation"].cancel_approval({approval_id: ${JSON.stringify(approval.approval_id)}});`;
+    const tokens=cancellationWrapperTokens(wrapper.code);
+    return tokens!==null && JSON.stringify(tokens)===JSON.stringify(cancellationWrapperTokens(expected));
+  }
+  if(wrapper.toolCalls.length!==2)return false;
   const [search,cancel]=wrapper.toolCalls;
   const searchInput=search?.input,cancelInput=cancel?.input;
   if(search?.tool!=='search'||search.status!=='completed'||
@@ -1180,7 +1191,79 @@ function exactCancelApprovalWrapper(wrapper, approval) {
   const tokens=cancellationWrapperTokens(code);
   return tokens!==null && JSON.stringify(tokens)===JSON.stringify(cancellationWrapperTokens(expected));
 }
-function nativeCancelledValidationProof(parts, approval, { allowApprovedHistory = false } = {}) {
+// A projection is allowed only for the complete, paired no-effect boundary.
+// Any unfamiliar part stays in the transcript and the ordinary guard refuses it.
+function projectCancelledRefusalSuffix(parts, approval, registry) {
+  const identity=(input,requestId)=>input && input.request_id===requestId &&
+    input.run_id===approval.run_id && input.session_id===approval.session_id &&
+    input.directory===approval.directory && input.change_id===approval.change_id &&
+    input.reservation_version===approval.reservation_version;
+  const one=(part,name,status)=>part?.type==='tool' && part.executed===false &&
+    part.state?.status===status && part.state.metadata?.truncated===false &&
+    Array.isArray(part.state.metadata.toolCalls) && part.state.metadata.toolCalls.length===1 &&
+    part.state.metadata.toolCalls[0]?.tool==='cgpt-validation.'+name &&
+    part.state.metadata.toolCalls[0]?.status===status &&
+    proofHash(part.state.input)===proofHash(part.state.metadata.toolCalls[0].input);
+  const parse=part=>{try{return JSON.parse(part.state.output);}catch{return null;}};
+  const direct=(part,name)=>part.tool==='cgpt-validation_'+name && one(part,name,'completed');
+  const literals=value=>Array.isArray(value)?'['+value.map(literals).join(',')+']':
+    value && typeof value==='object'?'{'+Object.entries(value).map(([key,val])=>
+      (/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key)?key:JSON.stringify(key))+':'+literals(val)).join(',')+'}':JSON.stringify(value);
+  const cancels=parts.map((part,index)=>({part,index})).filter(({part})=>part?.type==='tool' &&
+    (part.tool==='cgpt-validation_cancel_approval' && part.state?.input?.approval_id===approval.approval_id ||
+     part.tool==='execute' && part.state?.metadata?.toolCalls?.some(call=>call.tool==='cgpt-validation.cancel_approval' && call.input?.approval_id===approval.approval_id)));
+  if(cancels.length!==1)return null;
+  const after=parts.slice(cancels[0].index+1), errors=after.filter(part=>part?.tool==='cgpt-validation_atelier_execute');
+  const statuses=after.filter(part=>part?.tool==='cgpt-validation_atelier_status');
+  const preparations=after.filter(part=>part?.tool==='cgpt-validation_prepare_validation');
+  const proposals=after.filter(part=>part?.tool==='execute' && Array.isArray(part.state?.metadata?.toolCalls) && part.state.metadata.toolCalls.some(call=>call?.tool==='cgpt-validation.propose_approval'));
+  if(errors.length!==1 || statuses.length!==1 || preparations.length!==1 || proposals.length!==1)return null;
+  const [failed]=errors,[status]=statuses,[prepared]=preparations,[proposed]=proposals;
+  const message='MCP tool "atelier_execute" on server "cgpt-validation" failed: atelier-jobs-not-private';
+  if(!one(failed,'atelier_execute','error') || failed.state.metadata.error!==true ||
+      failed.state.error!==message || failed.state.output!==message || !identity(failed.state.input,approval.requestId))return null;
+  const statusOutput=parse(status);
+  if(!direct(status,'atelier_status') || !identity(status.state.input,approval.requestId) ||
+      statusOutput?.found!==false || statusOutput.snapshot_only!==true || statusOutput.requestId!==approval.requestId ||
+      parts.indexOf(status)<=parts.indexOf(failed))return null;
+  const prepOutput=parse(prepared), prepInput=prepared.state?.input, validation=prepOutput?.validation;
+  if(!direct(prepared,'prepare_validation') || prepOutput?.snapshot_only!==true || prepOutput.authorization!==false ||
+      prepOutput.admitted!==false || !validation || validation.requestId===approval.requestId ||
+      !identity(prepInput,validation.requestId))return null;
+  if(proposed.executed!==false || proposed.state?.status!=='completed' || proposed.state.metadata?.truncated!==false ||
+      proposed.state.metadata.toolCalls.length!==1 || proposed.state.metadata.toolCalls[0]?.tool!=='cgpt-validation.propose_approval' ||
+      proposed.state.metadata.toolCalls[0]?.status!=='completed')return null;
+  const input=proposed.state.metadata.toolCalls[0].input, output=parse(proposed);
+  if(!input || output?.status!=='NOT_ADMITTED' || output.notification_diagnostic?.http_status!==409 ||
+      output.notification_diagnostic?.error_code!=='run-mandate-already-active' ||
+      proofHash(nativeIdentity(input))!==proofHash(nativeIdentity(validation)) ||
+      proofHash(nativeIdentity(input))!==proofHash(nativeIdentity(output)) ||
+      !/^[a-f0-9]{64}$/.test(input.tool_input_sha256||'') ||
+      input.tool_input_sha256!==validation.tool_input_sha256 || input.tool_input_sha256!==output.tool_input_sha256 ||
+      input.run_id!==approval.run_id || input.session_id!==approval.session_id || input.change_id!==approval.change_id ||
+      input.directory!==approval.directory || input.reservation_version!==approval.reservation_version ||
+      input.requestId===approval.requestId || !input.operation_id || !input.approval_id ||
+      registry.requestOwners[input.requestId] || registry.resourceState.operations[input.operation_id] ||
+      Object.values(registry.resourceState.accesses || {}).some(access=>access?.accessId===input.access_id ||
+        access?.accessId===input.operation_id || access?.operationIds?.includes(input.operation_id)) ||
+      output.decision_id || output.decision_applied_at ||
+      parts.indexOf(proposed)<=parts.indexOf(prepared))return null;
+  const expected=`return await tools["cgpt-validation"].propose_approval(${literals(input)});`;
+  const actualTokens=cancellationWrapperTokens(proposed.state.input?.code),expectedTokens=cancellationWrapperTokens(expected);
+  if(!actualTokens || !expectedTokens || JSON.stringify(actualTokens)!==JSON.stringify(expectedTokens))return null;
+  const excluded=new Set([failed,status,prepared,proposed]);
+  for(const part of parts){
+    if(part?.type!=='tool')continue;
+    if(part.tool==='cab_codemode_discovery' && part.executed===false && part.state?.status==='completed' &&
+       part.state.metadata?.truncated===false && Array.isArray(part.state.metadata.toolCalls) &&
+       part.state.metadata.toolCalls.length===1 && part.state.metadata.toolCalls[0]?.tool==='search' &&
+       part.state.metadata.toolCalls[0]?.status==='completed')excluded.add(part);
+    if(after.includes(part) && part.tool==='read' && part.state?.status==='error' && nativeNoEnvironmentObservation({...part,state:{...part.state,status:'completed'}}))excluded.add(part);
+  }
+  return parts.filter(part=>!excluded.has(part));
+}
+
+function nativeCancelledValidationProof(parts, approval, { allowApprovedHistory = false, originalParts = null } = {}) {
   const allowed = new Set(['cgpt-validation.request_validation','cgpt-validation.cancel_approval',
     'cgpt-validation.get_approval','cgpt-validation.poll_approval','search']);
   const entries = [];
@@ -1259,7 +1342,7 @@ function nativeCancelledValidationProof(parts, approval, { allowApprovedHistory 
   if (!terminal.length || suffix.some((entry) =>
       entry.tool === 'cgpt-validation.request_validation' && entry !== requests[0].entry)) return null;
   return proofHash({ approval:nativeIdentity(approval), request:requests[0].entry,
-    cancellation:terminal.at(-1), suffix });
+    cancellation:terminal.at(-1), suffix, ...(originalParts ? { originalTranscript:proofHash(originalParts) } : {}) });
 }
 const noEffectToolNames=new Set(['bash','shell','edit','write','apply_patch','delete','move','rename','install','execute_command']);
 const noEffectReadOnlyToolNames=new Set(['search','read','glob','grep','list','find','webfetch','web_search','websearch',

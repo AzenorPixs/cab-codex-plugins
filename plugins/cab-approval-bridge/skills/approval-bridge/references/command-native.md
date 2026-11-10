@@ -258,8 +258,9 @@ complete. Cette voie ne remplace ni retry ni la procédure CABU.
 Après redémarrage, réconcilier la même validation annulée par OpenCode si
 `request_validation` et `cancel_approval` sont tous deux visibles dans des
 wrappers Code Mode complets, non tronqués et `executed=false`. Le wrapper
-d’annulation doit contenir le code littéral exact qui découvre
-`cancel_approval`, puis son appel unique avec l’`approval_id` exact ; la sortie
+d’annulation doit contenir soit la discovery littérale exacte puis l’appel
+unique, soit un retour littéral direct unique de `cancel_approval` avec
+l’`approval_id` exact ; la sortie
 doit confirmer `CANCELLED`, `cancelled_by=OC` et les identités complètes de la
 demande. Exiger deux lectures identiques du transcript, une session inactive,
 et l’absence de permission et d’accès. Toute divergence, troncature ou appel

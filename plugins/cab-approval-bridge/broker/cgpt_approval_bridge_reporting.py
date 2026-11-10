@@ -9,7 +9,7 @@ import threading
 import re
 from datetime import datetime,timezone
 
-VERSION='2.5.5'
+VERSION='2.5.6'
 LOCK=threading.RLock()
 ROOT=None
 

@@ -2,6 +2,10 @@
 
 ## Non publié
 
+## 2.5.6 - 2026-11-11
+
+- Réconcilier une annulation native après des refus ultérieurs strictement prouvés, sans rejouer de permission ni modifier les autres demandes.
+
 ## 2.5.5 - 2026-11-10
 
 - Accepter les jobs d’atelier normalisés en 2770 pour le groupe qualifié, créer leurs reçus en 0770 et autoriser la publication SGS en 0770.
