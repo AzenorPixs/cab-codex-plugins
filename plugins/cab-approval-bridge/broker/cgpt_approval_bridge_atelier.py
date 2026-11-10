@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-VERSION = "2.5.4"
+VERSION = "2.5.5"
 LOCK = threading.RLock()
 ACTIVE_PROCESSES={}
 SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$|^(?:\.npmrc|\.pypirc|opencode\.password|\.netrc)$)")
@@ -29,9 +29,9 @@ def ensure_project(workspace):
     if not project.is_absolute() or project.resolve()!=project or not project.is_dir():raise AtelierError('atelier-project-invalid')
     root=project/'.cab-tests'
     if not root.exists():
-        root.mkdir(mode=0o775)
+        root.mkdir(mode=0o770)
         if root.stat().st_gid!=project.stat().st_gid:os.chown(root,-1,project.stat().st_gid)
-        root.chmod(0o775|(project.stat().st_mode&0o2000))
+        root.chmod(0o770|(project.stat().st_mode&0o2000))
     if root.resolve()!=root or not root.is_dir():raise AtelierError('atelier-root-invalid')
     return root
 
@@ -152,7 +152,7 @@ def sandbox_identity(command,home):
         destination=home/('.cab-'+name)
         fd,candidate=tempfile.mkstemp(prefix='.cab-identity-',dir=home)
         try:
-            with os.fdopen(fd,'w') as stream:stream.write(content);stream.flush();os.fchmod(stream.fileno(),0o775)
+            with os.fdopen(fd,'w') as stream:stream.write(content);stream.flush();os.fchmod(stream.fileno(),0o770)
             os.replace(candidate,destination)
         finally:
             if os.path.exists(candidate):os.unlink(candidate)
@@ -233,9 +233,9 @@ def sandbox_command(args,grant):
                 command += ['--ro-bind','/dev/null',str(path)];masked.append(str(path.relative_to(expected)))
     for name in (".tmp",".home"):
         path=expected/name
-        path.mkdir(mode=0o775,exist_ok=True)
+        path.mkdir(mode=0o770,exist_ok=True)
         if path.resolve()!=path or not path.is_dir():raise AtelierError("atelier-scratch-unsafe")
-        path.chmod(0o775)
+        path.chmod(0o770)
     sandbox_identity(command,expected/'.home')
     # Les sockets Unix des navigateurs ont une limite de chemin courte. Cette
     # vue privée pointe uniquement vers le temporaire du RUN, jamais l'hôte.
@@ -252,17 +252,68 @@ def sandbox_command(args,grant):
 
 def private_jobs(directory,home=None):
     root=(Path(home) if home else Path.home())/".local/state/cab-ateliers"/hashlib.sha256(directory.encode()).hexdigest()
-    root.mkdir(mode=0o700,parents=True,exist_ok=True)
-    info=root.lstat()
-    if root.resolve()!=root or not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:raise AtelierError("atelier-jobs-not-private")
+    if root.parent.resolve()!=root.parent:raise AtelierError("atelier-jobs-not-private")
+    root.parent.mkdir(mode=0o770,parents=True,exist_ok=True)
+    parent=root.parent.lstat()
+    groups=set(os.getgroups()) | {os.getgid()}
+    if (root.parent.resolve()!=root.parent or not stat.S_ISDIR(parent.st_mode)
+            or parent.st_uid!=os.getuid() or parent.st_mode&0o007
+            or parent.st_mode&0o070 and parent.st_gid not in groups):
+        raise AtelierError("atelier-jobs-not-private")
+    parent_fd=os.open(root.parent,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        opened_parent=os.fstat(parent_fd)
+        if (opened_parent.st_dev,opened_parent.st_ino)!=(parent.st_dev,parent.st_ino):
+            raise AtelierError("atelier-jobs-not-private")
+        created=False
+        try:
+            os.mkdir(root.name,0o770,dir_fd=parent_fd)
+            created=True
+        except FileExistsError:
+            pass
+        try:
+            fd=os.open(root.name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent_fd)
+        except OSError as error:
+            raise AtelierError("atelier-jobs-not-private") from error
+        try:
+            info=os.fstat(fd)
+            if (not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o007
+                    or info.st_mode&0o070 and (info.st_gid!=parent.st_gid or info.st_gid not in groups)):
+                raise AtelierError("atelier-jobs-not-private")
+            if created:os.fchmod(fd,0o770)
+        finally:
+            os.close(fd)
+    finally:
+        os.close(parent_fd)
+    if root.resolve()!=root:raise AtelierError("atelier-jobs-not-private")
     return root
+
+
+def read_job(path):
+    try:
+        fd=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
+    except FileNotFoundError:
+        return None
+    except OSError as error:
+        raise AtelierError("atelier-job-not-private") from error
+    try:
+        info=os.fstat(fd)
+        if (not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=os.getuid() or info.st_mode&0o007
+                or info.st_mode&0o070 and (info.st_gid!=path.parent.stat().st_gid
+                                           or info.st_gid not in set(os.getgroups()) | {os.getgid()})):
+            raise AtelierError("atelier-job-not-private")
+        with os.fdopen(fd,"r",encoding="utf-8") as stream:
+            fd=-1
+            return json.load(stream)
+    finally:
+        if fd!=-1:os.close(fd)
 
 
 def save(path,value):
     fd,candidate=tempfile.mkstemp(prefix=".atelier-",dir=path.parent)
     try:
-        with os.fdopen(fd,"w") as stream:
-            json.dump(value,stream,ensure_ascii=False);stream.flush();os.fsync(stream.fileno())
+        with os.fdopen(fd,"w",encoding="utf-8") as stream:
+            json.dump(value,stream,ensure_ascii=False);stream.flush();os.fchmod(stream.fileno(),0o770);os.fsync(stream.fileno())
         os.replace(candidate,path)
     finally:
         if os.path.exists(candidate):os.unlink(candidate)
@@ -275,8 +326,8 @@ def execute(args,authorize,*,job_home=None):
     path=root/(hashlib.sha256((args["run_id"]+"\0"+args["request_id"]).encode()).hexdigest()+".json")
     fingerprint=hashlib.sha256(canonical(args).encode()).hexdigest()
     with LOCK:
-        if path.exists():
-            previous=json.loads(path.read_text())
+        previous=read_job(path)
+        if previous is not None:
             if previous["input_sha256"]!=fingerprint:raise AtelierError("atelier-request-conflict")
             return previous
         plan=sandbox_command(args,grant);command=plan['argv']
@@ -287,7 +338,7 @@ def execute(args,authorize,*,job_home=None):
     output=Path(grant["atelier"])/(".cab-result-"+fingerprint+".log")
     if output.is_symlink():raise AtelierError("atelier-output-symlink")
     with output.open("x+b") as stream:
-        os.fchmod(stream.fileno(),0o775)
+        os.fchmod(stream.fileno(),0o770)
         try:
             process=subprocess.Popen(command,stdin=subprocess.DEVNULL,stdout=stream,stderr=subprocess.STDOUT,env={"PATH":"/usr/bin:/bin"},start_new_session=True)
             with LOCK:ACTIVE_PROCESSES[str(path)]={"process":process,"runId":args["run_id"],"workspace":args["directory"]}
@@ -314,8 +365,8 @@ def status(args,authorize):
     authorize(args)
     root=private_jobs(args["directory"])
     path=root/(hashlib.sha256((args["run_id"]+"\0"+args["request_id"]).encode()).hexdigest()+".json")
-    if not path.exists():return {"found":False,"requestId":args["request_id"],"snapshot_only":True,'devops_resources':devops_resources(args['directory'])}
-    value=json.loads(path.read_text())
+    value=read_job(path)
+    if value is None:return {"found":False,"requestId":args["request_id"],"snapshot_only":True,'devops_resources':devops_resources(args['directory'])}
     if value.get("runId")!=args["run_id"] or value.get("changeId")!=args["change_id"]:raise AtelierError("atelier-status-owner-divergent")
     return {"found":True,"snapshot_only":True,**value}
 

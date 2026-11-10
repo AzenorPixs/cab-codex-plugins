@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+
+## Atelier et permissions de groupe — SCM
+
+[support-group-atelier-jobs](openspec/changes/archive/2026-11-10-support-group-atelier-jobs/) : compatibilité des reçus d’atelier avec la normalisation DIU ; archivage effectué, livraison et activation à vérifier. Code non attribué.
 Raccordement commun du 9 novembre 2026 : `unify-session-coordination-adapter`, ARCHIVÉ,
 code non attribué ; réalisation source et validations propres au projet cab
 vérifiées, rapport individuel vérifié ; livraison distincte à constater. [Tâches](openspec/changes/archive/2026-11-09-unify-session-coordination-adapter/tasks.md).

@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-VERSION = "2.5.4"
+VERSION = "2.5.5"
 FORMAT = "cab-sgs-1"
 # Bounded inputs below make this precision sufficient for all exact additive states.
 getcontext().prec = 100
@@ -1989,7 +1989,7 @@ def main(argv=None):
     def permission_mode(value):
         try:mode=int(value,8)
         except ValueError as exc:raise argparse.ArgumentTypeError('Mode octal attendu') from exc
-        if mode not in {0o600,0o640,0o644,0o660,0o664,0o775}:raise argparse.ArgumentTypeError('Mode de fichier non autorisé')
+        if mode not in {0o600,0o640,0o644,0o660,0o664,0o770,0o775}:raise argparse.ArgumentTypeError('Mode de fichier non autorisé')
         return mode
     parser.add_argument('--file-mode',type=permission_mode,help='Mode de publication du projet (ex. 0775), sans modifier les temporaires techniques')
     parser.add_argument('--code-root',action='append',default=[])

@@ -1,5 +1,7 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+
+Les reçus d’atelier acceptent le groupe DevOps vérifié en 0770/2770, sans droit pour les autres comptes ; les anciens reçus privés restent lisibles.
 La CLI de dépendances expose `capabilities` sans écriture ni bootstrap.
 L’adaptateur commun décrit propriétaires, opérations et limites de transport
 dans [sa référence](plugins/cab-approval-bridge/skills/approval-bridge/references/session-coordination-adapter.md).
