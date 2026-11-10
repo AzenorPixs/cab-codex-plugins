@@ -159,3 +159,32 @@ Le codeur ne décide pas seul de la bascule. Les ressources déjà allouées son
 utilisées ; une allocation supplémentaire reste du ressort du développeur.
 Les écritures projet hors atelier, accès web et résultats gardent leurs
 validations. Aucun réglage global OpenCode n’est modifié implicitement.
+
+
+## Examen coordonné des bancs de test
+
+Avant de conclure à une impossibilité d’environnement ou de présenter un
+blocage de cette nature, le codeur transmet le critère empêché, la preuve de
+l’échec ou de la capacité manquante de l’atelier et les bancs pertinents connus.
+L’orchestrateur examine les bancs pertinents déclarés dans DEVOPS.md et les
+sources applicables, leurs autorisations et leur disponibilité observée. Une
+déclaration seule ne prouve ni disponibilité effective ni allocation nouvelle.
+Il examine les solutions utiles déjà autorisées, motive les voies écartées et
+demande la poursuite lorsqu’une voie pertinente reste possible. Une investigation
+incomplète reste non vérifiable et ne démontre pas une impossibilité générale.
+
+Rattacher chaque restriction à sa source et à son périmètre : une interdiction
+d’installation limitée au Desktop ne s’étend pas au LXC sans source applicable.
+Vérifier séparément les autorisations effectives de préparation, installation,
+exécution et nettoyage de chaque banc. La priorité de l’atelier et la justification
+LXC/Docker ci-dessus, les réservations, les permissions natives, les décisions
+unitaires et les limites d’allocation restent applicables. Une ressource nouvelle
+non couverte exige l’accord du développeur.
+
+Chaque résultat identifie le banc, le critère, la preuve et ses limites. Une
+preuve d’intégration LXC peut être utile sans qualifier le profil Desktop ; une
+limite de qualification n’interdit pas un test utile et autorisé. Ne pas cocher
+un critère global incomplet ni transformer un test simulé en intégration réelle.
+Le codeur soumet les résultats ; l’orchestrateur les examine et décide de leur
+portée avant de les retenir. Le contrat métier du prompt applicable reste la
+source des conditions de poursuite, de pause et d’arrêt.
