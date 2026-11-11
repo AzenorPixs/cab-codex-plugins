@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {lstatSync,readdirSync,readFileSync,realpathSync} from 'node:fs';
 import {join,relative,resolve,sep} from 'node:path';
 
-export const VERSION='2.6.0';
+export const VERSION='2.7.0';
 export const AUTONOMY_PROTOCOL='autonomous-change-v1';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};
 const text=value=>typeof value==='string'&&value.trim().length>0&&value.length<=4000;
@@ -49,6 +49,7 @@ export function sourceRevision(directory,paths) {
 
 export function grantAutonomy(registry,runId,payload) {
   registry.admission(runId);
+  if(Object.values(registry.runs.get(runId)?.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state)))fail('external-effects-unresolved');
   const run=registry.owned(runId,payload.version);
   if(payload.protocol!==AUTONOMY_PROTOCOL||!id(payload.mandateId)||payload.sessionId!==run.sessionId||
     payload.decisionsResolved!==true||!Array.isArray(payload.decisions)||!payload.decisions.every(text)||
@@ -58,7 +59,7 @@ export function grantAutonomy(registry,runId,payload) {
   let replaced;
   if(run.autonomy) {
     if(run.autonomy.inputDigest===fingerprint)return structuredClone(run.autonomy);
-    if(payload.replaces!==run.autonomy.inputDigest||Object.values(run.autonomy.calls).some(c=>c.state==='INTENT')||
+    if(payload.replaces!==run.autonomy.inputDigest||Object.values(run.autonomy.calls).some(c=>['INTENT','WAITING'].includes(c.state))||
        (run.autonomy.previousMandates||[]).length>=100)fail('autonomy-mandate-conflict');
     replaced=run.autonomy;
   }
@@ -66,13 +67,13 @@ export function grantAutonomy(registry,runId,payload) {
   const resources=roots.map(path=>({key:'file:'+relative(run.directory,path),mode:'write'}));
   registry.scope(runId,run.version,resources);
   for(const other of registry.runs.values())if(other.runId!==runId&&other.state==='RESERVED'&&
-    other.resources.some(r=>resources.some(s=>r.key==='project:*'||r.key===s.key||r.key.startsWith(s.key+'/')||s.key.startsWith(r.key+'/'))))fail('autonomy-peer-conflict');
+    !payload.coordination&&other.resources.some(r=>resources.some(s=>r.key==='project:*'||r.key===s.key||r.key.startsWith(s.key+'/')||s.key.startsWith(r.key+'/'))))fail('autonomy-peer-conflict');
   if(Object.values(registry.resourceState.operations).some(op=>op.runId===runId&&!['COMPLETED','CANCELLED'].includes(op.state)))fail('autonomy-operation-pending');
   const baseline=sourceRevision(run.directory,payload.paths);
   run.autonomy={protocol:AUTONOMY_PROTOCOL,mandateId:payload.mandateId,inputDigest:fingerprint,
     sessionId:run.sessionId,reservationVersion:run.version,contextId:run.contextId,paths:[...payload.paths],
     objective:payload.objective,criteria:payload.criteria,constraints:payload.constraints,decisions:payload.decisions,
-    baseline,state:'WORKING',calls:{},submissions:[],reviews:[],exceptions:[],grantedAt:new Date().toISOString(),
+    baseline,...(payload.coordination?{resourcePolicy:'operation-scoped-v1'}:{}),state:'WORKING',calls:{},submissions:[],reviews:[],exceptions:[],grantedAt:new Date().toISOString(),
     metrics:{initialMandates:1,intermediateDecisions:0,submissions:0,reviews:0,exceptions:0},
     ...(replaced?{previousMandates:[...(replaced.previousMandates||[]),{...replaced,previousMandates:undefined}]}:{})};
   registry.persist();return structuredClone(run.autonomy);
@@ -90,15 +91,27 @@ export function autonomousGrant(registry,runId,args,grant,{snapshot=false}={}) {
   if(args.session_id!==run.sessionId||args.reservation_version!==run.version||args.change_id!==run.changeId||args.directory!==run.directory)fail('autonomy-identity-divergent');
   if(snapshot)return grant;
   const fingerprint=mandateDigest(args),previous=m.calls[args.request_id];
+  if(previous&&!['WAITING','INTENT','COMPLETED','TIMED_OUT','FAILED_TO_START','CANCELLED'].includes(previous.state))fail('autonomy-call-state-invalid');
   if(previous&&previous.inputDigest!==fingerprint)fail('autonomy-request-conflict');
-  if(!previous) {
-    if(m.state!=='WORKING'||Object.values(m.calls).some(call=>call.state==='INTENT'))fail('autonomy-not-working');
-    if(Object.keys(m.calls).length>=10000)fail('autonomy-call-limit');
-    sourceRevision(run.directory,m.paths);
-    m.calls[args.request_id]={inputDigest:fingerprint,state:'INTENT'};
+  if(!previous||previous.state==='WAITING') {
+    if(m.state!=='WORKING'||Object.entries(m.calls).some(([key,call])=>key!==args.request_id&&call.state==='INTENT'))fail('autonomy-not-working');
+    if(!previous&&Object.keys(m.calls).length>=10000)fail('autonomy-call-limit');
+    if(m.resourcePolicy==='operation-scoped-v1') {
+      if(!previous){m.calls[args.request_id]={inputDigest:fingerprint,state:'WAITING',order:++registry.resourceState.sequence};registry.persist();}
+      const waiting=m.calls[args.request_id];
+      if(autonomousBlockers(registry,runId,args.request_id,waiting.order).length) {
+        const error=Object.assign(new Error('autonomy-resources-busy'),{code:'autonomy-resources-busy',status:423});throw error;
+      }
+    }
+    const revision=sourceRevision(run.directory,m.paths);
+    if(args.expected_revision!==undefined&&args.expected_revision!==revision) {
+      if(m.calls[args.request_id]?.state==='WAITING'){m.calls[args.request_id].state='CANCELLED';registry.persist();}
+      fail('autonomy-source-revision-stale');
+    }
+    m.calls[args.request_id]={...(m.calls[args.request_id]||{}),inputDigest:fingerprint,state:'INTENT'};
     registry.persist();
-  }
-  return {...grant,autonomy:{protocol:AUTONOMY_PROTOCOL,mandateId:m.mandateId,paths:mandatePaths(run.directory,m.paths)}};
+  } else if(previous.state==='CANCELLED')fail('autonomy-request-cancelled');
+  return {...grant,autonomy:{protocol:AUTONOMY_PROTOCOL,mandateId:m.mandateId,paths:mandatePaths(run.directory,m.paths),executionKnown:!!previous&&previous.state!=='WAITING'}};
 }
 
 export function completeAutonomousCall(registry,runId,args) {
@@ -108,21 +121,35 @@ export function completeAutonomousCall(registry,runId,args) {
   if(call.state!=='INTENT'&&call.receipt!==receipt)fail('autonomy-completion-conflict');
   if(call.state!=='INTENT')return {status:'RECORDED',requestId:args.request_id};
   Object.assign(call,{state:args.status,receipt,receiptDigest:args.receiptDigest,exitCode:args.exitCode,
-    sourceRevision:sourceRevision(run.directory,m.paths)});registry.persist();
+    sourceRevision:sourceRevision(run.directory,m.paths)});
+  if(m.resourcePolicy==='operation-scoped-v1')for(const path of m.paths)registry.resourceState.revisions['file:'+path]=++registry.resourceState.sequence;
+  registry.grantWaiting?.();registry.persist();
   return {status:'RECORDED',requestId:args.request_id};
 }
 
 export function submitAutonomousWork(registry,runId,payload) {
   const {run,m}=current(registry,runId);
   const revision=sourceRevision(run.directory,m.paths);
-  if(!id(payload.submissionId)||!text(payload.summary)||!Array.isArray(payload.tests)||!payload.tests.length||
-    !payload.tests.every(t=>id(t.requestId)&&text(t.criterion)&&m.criteria.includes(t.criterion)&&
-      ['COMPLETED','TIMED_OUT','FAILED_TO_START'].includes(m.calls[t.requestId]?.state)&&m.calls[t.requestId].receiptDigest===t.receiptDigest&&
-      ['passed','failed','unavailable'].includes(t.outcome)&&!(t.outcome==='passed'&&(m.calls[t.requestId].state!=='COMPLETED'||m.calls[t.requestId].exitCode!==0||m.calls[t.requestId].sourceRevision!==revision)))||
-    !Array.isArray(payload.limits)||!payload.limits.every(text)||m.criteria.some(c=>!payload.tests.some(t=>t.criterion===c)))fail('autonomy-submission-invalid');
+  if(Object.values(run.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state)))fail('external-effects-unresolved');
+  const invalid=(reason,testIndex)=>{throw Object.assign(new Error('autonomy-submission-invalid'),{
+    code:'autonomy-submission-invalid',status:409,diagnostic:{error:'autonomy-submission-invalid',reason,...(testIndex===undefined?{}:{testIndex})}});};
+  if(!payload||!id(payload.submissionId)||!text(payload.summary)||!Array.isArray(payload.tests)||!payload.tests.length||
+     !Array.isArray(payload.limits)||!payload.limits.every(text))invalid('submission-shape-invalid');
+  const tests=payload.tests.map((test,index)=>{
+    if(!test||!id(test.requestId)||!text(test.criterion)||!m.criteria.includes(test.criterion))invalid('test-identity-or-criterion-invalid',index);
+    const call=m.calls[test.requestId];
+    if(!call||!['COMPLETED','TIMED_OUT','FAILED_TO_START'].includes(call.state))invalid('test-receipt-not-terminal',index);
+    if(test.receiptDigest!==undefined&&test.receiptDigest!==call.receiptDigest)invalid('receipt-digest-mismatch',index);
+    if(!['passed','failed','unavailable'].includes(test.outcome))invalid('test-outcome-invalid',index);
+    if(test.outcome==='passed'&&(call.state!=='COMPLETED'||call.exitCode!==0))invalid('test-did-not-pass',index);
+    if(test.outcome==='passed'&&call.sourceRevision!==revision)invalid('test-source-revision-stale',index);
+    return {...test,receiptDigest:call.receiptDigest};
+  });
+  if(m.criteria.some(c=>!tests.some(t=>t.criterion===c)))invalid('criterion-not-covered');
+  payload={...payload,tests};
   const inputDigest=mandateDigest(payload),prior=m.submissions.find(s=>s.submissionId===payload.submissionId);
   if(prior){if(prior.inputDigest!==inputDigest)fail('autonomy-submission-conflict');return structuredClone(prior);}
-  if(m.state!=='WORKING'||Object.values(m.calls).some(c=>c.state==='INTENT'))fail('autonomy-execution-pending');
+  if(m.state!=='WORKING'||Object.values(m.calls).some(c=>['INTENT','WAITING'].includes(c.state)))fail('autonomy-execution-pending');
   const submission={...payload,inputDigest,sourceRevision:revision,submittedAt:new Date().toISOString()};
   submission.digest=mandateDigest(submission);m.submissions.push(submission);m.state='REVIEW_PENDING';m.metrics.submissions++;
   registry.persist();return structuredClone(submission);
@@ -142,6 +169,7 @@ export function reviewAutonomousWork(registry,runId,payload) {
 export function requireAutonomousAcceptance(run) {
   if(!run?.autonomy)return;
   const m=run.autonomy,submission=m.submissions.at(-1);
+  if(Object.values(run.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state)))fail('external-effects-unresolved');
   if(run.state!=='RESERVED'||run.phase!=='WORK'||m.sessionId!==run.sessionId||m.contextId!==run.contextId||
      m.reservationVersion!==run.version||m.state!=='ACCEPTED'||sourceRevision(run.directory,m.paths)!==submission?.sourceRevision)fail('autonomy-final-acceptance-required');
 }
@@ -163,4 +191,26 @@ export function decideAutonomyException(registry,runId,payload) {
   if(!exception||!['approved','rejected'].includes(payload.decision)||!text(payload.scope))fail('autonomy-exception-decision-invalid');
   if(exception.decision&&mandateDigest(exception.decision)!==mandateDigest(payload))fail('autonomy-exception-decision-conflict');
   exception.decision=structuredClone(payload);registry.persist();return structuredClone(payload);
+}
+
+
+export function autonomousBlockers(registry,runId,requestId,order=Infinity) {
+ const run=registry.runs.get(runId),resources=autonomousResources(run),result=[];
+ const overlap=(a,b)=>a==='project:*'||b==='project:*'||a===b||a.startsWith(b+'/')||b.startsWith(a+'/');
+ const touches=other=>other.some(r=>resources.some(s=>(s.mode==='write'||r.mode==='write')&&overlap(s.key,r.key)));
+ for(const other of registry.runs.values()) {
+  if(other.state!=='RESERVED'||!other.autonomy)continue;
+  const relevant=other.runId===runId||touches(autonomousResources(other));
+  if(!relevant)continue;
+  for(const [id,call] of Object.entries(other.autonomy.calls))if(!(other.runId===runId&&id===requestId)&&
+   (call.state==='INTENT'||call.state==='WAITING'&&call.order<order))result.push({runId:other.runId,requestId:id});
+ }
+ for(const access of Object.values(registry.resourceState.accesses))if(access.runId!==runId&&
+  (['HELD','EXECUTING','UNKNOWN'].includes(access.state)||access.state==='WAITING'&&access.order<order)&&touches(access.resources))result.push({runId:access.runId,accessId:access.accessId});
+ return result;
+}
+
+export function autonomousResources(run) {
+ return [...(run?.resources||[]).filter(r=>r.mode==='read'&&r.key.startsWith('file:')),
+   ...(run?.autonomy?.paths||[]).map(path=>({key:'file:'+path,mode:'write'}))];
 }

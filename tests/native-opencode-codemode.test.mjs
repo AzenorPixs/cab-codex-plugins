@@ -1,8 +1,8 @@
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
+import { spawn, execFileSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, chmodSync, chownSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,7 +26,11 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
   { skip: !binary, timeout: 90000 }, async t => {
     const root = mkdtempSync(join(tmpdir(), 'cab-native-codemode-')), workspace = join(root, 'workspace');
     const brokerPidFile = join(root, 'broker-pid');
-    mkdirSync(workspace); const password = 'synthetic-codemode-test-password';
+    mkdirSync(workspace);
+    const brokerUid=process.env.CAB_TEST_BROKER_UID?Number(process.env.CAB_TEST_BROKER_UID):process.getuid();
+    if(brokerUid!==process.getuid()){chownSync(root,process.getuid(),brokerUid);chmodSync(root,0o2770);chownSync(workspace,process.getuid(),brokerUid);chmodSync(workspace,0o2770);}
+    const brokerHome=join(root,'broker-home');mkdirSync(brokerHome,{mode:0o770});
+    const password = 'synthetic-codemode-test-password';
     const passwordFile = join(root, 'password'); writeFileSync(passwordFile, password, { mode: 0o600 });
     const nativePort = await port(), controllerPort = await port();
     const base = 'http://127.0.0.1:' + nativePort, control = 'http://127.0.0.1:' + controllerPort;
@@ -67,11 +71,24 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
         assert.ok(Number.isSafeInteger(pid) && pid > 0);
         await until(async () => !existsSync('/proc/' + pid), 'broker process cleanup');
       }
-      rmSync(root, { recursive: true, force: true });
+      if(brokerUid!==process.getuid())execFileSync('sudo',['-n','rm','-rf','--',root]);
+      else rmSync(root, { recursive: true, force: true });
     });
     const source = fileURLToPath(new URL('../plugins/cab-approval-bridge/broker/', import.meta.url));
     const wrapper = join(root, 'broker.py');
     writeFileSync(wrapper, `import sys, os\nopen(${JSON.stringify(brokerPidFile)}, 'w').write(str(os.getpid()))\nsys.path.insert(0, ${JSON.stringify(source)})\nimport cgpt_approval_bridge_server as b\n# Reproduire le schema 2.1.9, sans affaiblir son validateur runtime.\nb.APPROVAL_REQUEST_PROPERTIES['access_id'] = {'type': 'string', 'maxLength': 100}\nraise SystemExit(b.main())\n`);
+    if(process.env.CAB_TEST_EXTERNAL==='1'&&!process.env.CAB_TEST_EXTERNAL_SSH_PORT) {
+      const extra=`
+import cgpt_approval_bridge_external as external
+import cgpt_approval_bridge_external_runner as runner
+from pathlib import Path
+remote=Path(${JSON.stringify(join(root,'remote-fixture'))});remote.mkdir(mode=0o700,exist_ok=True)
+def fixture_transport(cfg,packet,timeout):
+ return runner.handle(packet,state_root=remote,identity={'container':'lxc','fingerprint':'b'*64})
+external._call.__kwdefaults__['transport']=fixture_transport
+`;
+      const original=readFileSync(wrapper,'utf8');writeFileSync(wrapper,original.replace('raise SystemExit(b.main())',extra+'\nraise SystemExit(b.main())'));
+    }
     const config = { autoupdate: false, share: 'disabled', providers: { fixture: {
       package: 'aisdk:@ai-sdk/openai-compatible', settings: { baseURL: 'http://127.0.0.1:' + provider.address().port + '/v1',
         apiKey: 'synthetic-local-key' }, models: { fixture: { name: 'fixture', limit: { context: 262144, output: 4096 },
@@ -80,6 +97,11 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
         CGPT_CONTROLLER_URL: control, CGPT_APPROVAL_STORE: join(root, 'approvals.json'),
         CGPT_APPROVAL_JOURNAL: join(root, 'journal.ndjson'), CGPT_BROKER_INSTANCE_LOCK: join(root, 'broker.lock'),
         CGPT_JOURNAL_CHECKPOINT_PATH: join(root, 'checkpoint.json'), CGPT_AUTO_REMEDIATION_CB_STATE_PATH: join(root, 'circuit.json') } } } } };
+    if(brokerUid!==process.getuid()) {
+      const server=config.mcp.servers['cgpt-validation'];
+      server.command=['sudo','-n','-u','#'+brokerUid,'/usr/bin/env','HOME='+brokerHome,
+        ...Object.entries(server.environment).map(([k,v])=>k+'='+v),'/home/devops/python/current/bin/python3',wrapper];
+    }
     native = spawn(binary, ['serve', '--hostname', '127.0.0.1', '--port', String(nativePort)], {
       cwd: workspace, stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, HOME: root,
         XDG_CONFIG_HOME: join(root, 'config'), XDG_DATA_HOME: join(root, 'data'), XDG_CACHE_HOME: join(root, 'cache'),
@@ -203,8 +225,8 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     console.log('Catalogue natif synthétique :', JSON.stringify({ names: nativeTools.map(tool => tool.name), edit: nativeEdit.parameters,
       shell: nativeTools.find(tool => tool.name === 'shell')?.parameters }));
     // A new mission uses the existing isolated executor without per-operation decisions.
-    const autonomousDirectory=join(workspace,'autonomous-source');mkdirSync(autonomousDirectory);
-    writeFileSync(join(autonomousDirectory,'value.py'),'VALUE=0\n');
+    const autonomousDirectory=join(workspace,'autonomous-source');mkdirSync(autonomousDirectory,{mode:0o2770});
+    writeFileSync(join(autonomousDirectory,'value.py'),'VALUE=0\n',{mode:0o770});
     const autonomousSession=await makeSession('autonomous mission with final review');
     let autonomousRun;await until(async()=>{try{autonomousRun=await http('/runs/reserve',{runId:'native-autonomous',ownerId:'fixture-autonomous-owner',sessionId:autonomousSession.id,
       directory:workspace,changeId:'synthetic-autonomous',selectionKey:'synthetic-autonomous',dependsOn:[],
@@ -215,14 +237,15 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       version:autonomousRun.version,sessionId:autonomousSession.id,objective:'Set VALUE=2',criteria:['VALUE=2'],constraints:['Isolated network'],
       decisionsResolved:true,decisions:['Developer and orchestrator selected VALUE=2 before coding'],paths:['autonomous-source']});
     async function autonomousTool(name,args) {
+      const toolSession=args.session_id||autonomousSession.id;
       queue.push({tool:'execute',input:{code:'return await search('+JSON.stringify({query:name,namespace:'cgpt-validation',limit:20})+');'}});
-      await client.prompt(autonomousSession.id,'Discover only the requested autonomous tool.');
-      await until(async()=>!(await client.activeSessions())[autonomousSession.id]&&queue.length===0,'autonomous tool discovery');
+      await client.prompt(toolSession,'Discover only the requested autonomous tool.');
+      await until(async()=>!(await client.activeSessions())[toolSession]&&queue.length===0,'autonomous tool discovery');
       queue.push({tool:'execute',input:{code:'return await tools["cgpt-validation"].'+name+'('+JSON.stringify(args)+');'}});
-      await client.prompt(autonomousSession.id,'Execute only the queued action in the initial mandate.');
-      await until(async()=>{const p=(await client.messages(autonomousSession.id)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);return p&&['completed','error'].includes(p.state.status)&&!(await client.activeSessions())[autonomousSession.id]&&queue.length===0;},'autonomous action',async()=>({
-        status:await http('/runs/native-autonomous/status'),last:(await client.messages(autonomousSession.id)).slice(-2)}));
-      const part=(await client.messages(autonomousSession.id)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);
+      await client.prompt(toolSession,'Execute only the queued action in the initial mandate.');
+      await until(async()=>{const p=(await client.messages(toolSession)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);return p&&['completed','error'].includes(p.state.status)&&!(await client.activeSessions())[toolSession]&&queue.length===0;},'autonomous action',async()=>({
+        status:await http('/runs/native-autonomous/status'),last:(await client.messages(toolSession)).slice(-2)}));
+      const part=(await client.messages(toolSession)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);
       assert.ok(part,'native autonomous MCP part missing');assert.equal(part.state.status,'completed',JSON.stringify(part.state));
       return JSON.parse(part.state.output);
     }
@@ -249,6 +272,65 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       failedTests:2,passedTests:1,finalSubmissions:1,finalReviews:1,publicationAccepted:true}));
 
 
+    const coordinationIdentities={};
+    for(const name of ['producer','consumer']) {
+      const path='coordination-'+name;mkdirSync(join(workspace,path),{mode:0o2770});
+      const actor=await makeSession('coder coordination '+name);
+      const current=await http('/runs/reserve',{runId:'coord-'+name,ownerId:'owner-'+name,sessionId:actor.id,directory:workspace,
+        changeId:'change-'+name,selectionKey:'change-'+name,dependsOn:[],resources:[{key:'file:'+path,mode:'write'}],exclusiveResources:[]});
+      await http('/runs/'+current.runId+'/job/arm',{jobId:'job-'+name,sessionId:actor.id,directory:workspace,changeId:current.changeId,strictCommands:true,criteria:['candidate evidence']});
+      await http('/runs/'+current.runId+'/autonomy/mandate',{protocol:'autonomous-change-v1',mandateId:'coord-mandate-'+name,
+        version:current.version,sessionId:actor.id,objective:'Coordinate assigned change',criteria:['candidate evidence'],constraints:[],decisionsResolved:true,
+        decisions:['Developer selected the interface before coding'],paths:[path],coordination:true});
+      coordinationIdentities[name]={request_id:'unused',run_id:current.runId,session_id:actor.id,change_id:current.changeId,directory:workspace,reservation_version:current.version};
+    }
+    const proofText='Native producer candidate proof\n';writeFileSync(join(workspace,'coordination-producer/proof.md'),proofText,{mode:0o770});
+    await autonomousTool('session_coordinate',{...coordinationIdentities.consumer,request_id:'coord-native-subscribe',action:'subscribe',args:{dependency_id:'producer-ready',kind:'change',subject:'change-producer',criterion:'candidate-evidence'}});
+    await autonomousTool('session_coordinate',{...coordinationIdentities.producer,request_id:'coord-native-publish',action:'publish',args:{notice_id:'native-producer-ready',kind:'change',subject:'change-producer',stage:'tested',proof:'coordination-producer/proof.md',proof_sha256:createHash('sha256').update(proofText).digest('hex')}});
+    await until(async()=>!(await client.activeSessions())[coordinationIdentities.consumer.session_id],'consumer native notification handled');
+    const deliveredRows=await client.messages(coordinationIdentities.consumer.session_id);
+    const delivered=deliveredRows.filter(m=>m.info.role==='user'&&(m.parts||[]).some(p=>p.type==='text'&&p.text.startsWith('CAB_COORDINATION_AVIS native-producer-ready ')));
+    assert.equal(delivered.length,1,'one native notification, no orchestrator relay');
+    const received=await autonomousTool('session_coordinate',{...coordinationIdentities.consumer,request_id:'coord-native-inbox',action:'inbox',args:{}});
+    assert.equal(received.items[0].proof_state,'fresh');assert.equal(received.items[0].actor_session,coordinationIdentities.producer.session_id);
+    const ack=await autonomousTool('session_coordinate',{...coordinationIdentities.consumer,request_id:'coord-native-ack',action:'ack',args:{dependency_id:'producer-ready',notice_id:'native-producer-ready'}});
+    assert.equal(ack.dependency_verified,false);
+    const producerStatus=await http('/runs/coord-producer/status');assert.equal(producerStatus.autonomy.metrics.intermediateDecisions,0);
+    const brokerActualUid=Number(readFileSync('/proc/'+Number(readFileSync(brokerPidFile,'utf8'))+'/status','utf8').match(/^Uid:\s+(\d+)/m)[1]);
+    assert.equal(brokerActualUid,brokerUid);
+    console.log(JSON.stringify({coderCoordinationNative:true,brokerUid:brokerActualUid,controllerUid:process.getuid(),nativeNotifications:delivered.length,
+      producerPublished:true,consumerVerifiedAndAcknowledged:true,orchestratorIntermediateDecisions:0}));
+
+    if(process.env.CAB_TEST_EXTERNAL==='1') {
+      const area=join(workspace,'external-source');mkdirSync(area,{mode:0o2770});writeFileSync(join(area,'candidate.txt'),'42',{mode:0o770});
+      const realSsh=!!process.env.CAB_TEST_EXTERNAL_SSH_PORT,bankKind=realSsh?'docker':'lxc';
+      const bankKey=realSsh?'docker:fixture-100':'lxc:fixture/100';
+      writeFileSync(join(workspace,'project.env'),"SSH_FIXTURE_HOST='127.0.0.1'\nSSH_FIXTURE_USER='"+(realSsh?'root':'fixture')+"'\nSSH_FIXTURE_PASSWORD='fixture-private-password'\n"+(realSsh?"SSH_FIXTURE_PORT='"+process.env.CAB_TEST_EXTERNAL_SSH_PORT+"'\n":''),{mode:0o660});
+      const known=join(root,'known_hosts_fixture'),alg=Buffer.from('ssh-ed25519'),length=Buffer.alloc(4),publicLength=Buffer.alloc(4);length.writeUInt32BE(alg.length);publicLength.writeUInt32BE(32);
+      const key=Buffer.concat([length,alg,publicLength,Buffer.alloc(32)]).toString('base64'),knownData=realSsh?readFileSync(process.env.CAB_TEST_EXTERNAL_KNOWN_HOSTS,'utf8'):'127.0.0.1 ssh-ed25519 '+key+'\n';
+      if(brokerUid===process.getuid())writeFileSync(known,knownData,{mode:0o600});
+      else execFileSync('sudo',['-n','-u','#'+brokerUid,'/usr/bin/python3','-c','from pathlib import Path;import sys;p=Path(sys.argv[1]);p.write_text(sys.argv[2]);p.chmod(0o600)',known,knownData]);
+      const session=await makeSession('external execution candidate');
+      const r=await http('/runs/reserve',{runId:'external-native',ownerId:'external-owner',sessionId:session.id,directory:workspace,changeId:'external-change',selectionKey:'external-change',dependsOn:[],resources:[{key:'file:external-source',mode:'write'},{key:bankKey,mode:'write'}],exclusiveResources:[]});
+      await http('/runs/external-native/job/arm',{jobId:'external-job',sessionId:session.id,directory:workspace,changeId:r.changeId,strictCommands:true,criteria:['external-native-proof']});
+      await http('/runs/external-native/test-resources/acquire',{version:r.version,transactionId:'external-native-bank',resources:[{key:bankKey,mode:'write'}],evidence:['synthetic isolated test bank']});
+      const identity={run_id:r.runId,session_id:session.id,change_id:r.changeId,reservation_version:r.version,directory:workspace};
+      const described=await autonomousTool('external_describe',{...identity,request_id:'external-describe',profile:{id:'bank',kind:'ssh',resource_key:bankKey,host_key:'SSH_FIXTURE_HOST',user_key:'SSH_FIXTURE_USER',password_key:'SSH_FIXTURE_PASSWORD',container:bankKind,known_hosts:known,...(realSsh?{port_key:'SSH_FIXTURE_PORT'}:{})}});
+      assert.equal(described.status,'PROFILE_DESCRIBED');assert.ok(!JSON.stringify(described).includes('fixture-private-password'));
+      await http('/runs/external-native/autonomy/mandate',{protocol:'autonomous-change-v1',mandateId:'external-mission',version:r.version,sessionId:session.id,objective:'Qualify external receipt integration',criteria:['external-native-proof'],constraints:[],decisionsResolved:true,decisions:['Dedicated bank selected'],paths:['external-source'],externalAdapters:[described.profile]});
+      const result=await autonomousTool('external_execute',{...identity,request_id:'external-native-test',adapter_id:'bank',argv:['/usr/bin/python3','-B','-c','from pathlib import Path;assert Path("candidate.txt").read_text()=="42";print("EXTERNAL_NATIVE_OK")'],files:[{path:'external-source/candidate.txt',destination:'candidate.txt'}]});
+      assert.equal(result.status,'COMPLETED');assert.equal(result.exitCode,0);assert.match(result.output,/EXTERNAL_NATIVE_OK/);
+      const replay=await autonomousTool('external_status',{...identity,request_id:'external-native-test',adapter_id:'bank'});assert.equal(replay.receiptDigest,result.receiptDigest);
+      const remoteFile=result.workdir+'/candidate.txt';
+      await autonomousTool('external_execute',{...identity,request_id:'external-native-cleanup',adapter_id:'bank',phase:'cleanup',argv:['/usr/bin/python3','-c','from pathlib import Path;Path('+JSON.stringify(remoteFile)+').unlink()']});
+      await autonomousTool('external_execute',{...identity,request_id:'external-native-verify',adapter_id:'bank',phase:'verify-cleanup',argv:['/usr/bin/python3','-c','from pathlib import Path;assert not Path('+JSON.stringify(remoteFile)+').exists()']});
+      const released=await autonomousTool('external_release',{...identity,request_id:'external-native-release',cleanup_request_id:'external-native-cleanup',verification_request_id:'external-native-verify'});assert.equal(released.status,'RELEASED');assert.equal('token' in released,false);
+      const submitted=await autonomousTool('autonomy_submit',{...identity,request_id:'external-native-submit',submission:{submissionId:'external-native-result',summary:'External transport fixture passed',tests:[{requestId:'external-native-test',criterion:'external-native-proof',outcome:'passed'}],limits:realSsh?[]:['SSH transport simulated; native broker/controller and remote runner real']}});
+      assert.equal(submitted.tests[0].receiptDigest,result.receiptDigest);
+      await http('/runs/external-native/autonomy/review',{reviewId:'external-native-review',submissionDigest:submitted.digest,decision:'accept',reason:'Native receipt, source and cleanup verified on controlled transport fixture'});
+      await http('/runs/external-native/publish',{transactionId:'external-native-publication',version:r.version,submissionDigest:submitted.digest,evidence:['native external receipt and released fixture bank']});
+      console.log(JSON.stringify({externalExecutionNative:true,brokerUid,controllerUid:process.getuid(),transport:realSsh?'real SSH dedicated container':'controlled fixture',runner:'real process',fullReceiptResolved:true,cleanupAndVerification:true,bankReleased:true,finalReviewAndPublication:true,intermediateDecisions:0}));
+    }
     if(process.env.CAB_TEST_AUTONOMY_ONLY==='1')return;
     const usageSession = await makeSession('native usage counters only');
     for (let i = 0; i < 2; i++) {

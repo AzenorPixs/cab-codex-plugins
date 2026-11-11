@@ -13,7 +13,7 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.6.0";
+export const VERSION = "2.7.0";
 export function pendingReconciliationEffects({currentMandate,reconcilingCount,unmatchedCount,validations,decisionFor,ignoredRequestIds}){
   const ignored=new Set(ignoredRequestIds);
   return Boolean(currentMandate||reconcilingCount||unmatchedCount||validations.some(v=>{
@@ -3554,6 +3554,7 @@ const handle = async (request, response, url) => {
 return {
   handle, publicStatus, publicJob, inspectNotificationReconciliation, checkReconciledValidation, installReconciledValidation,
   inspectSessionHandoff, applySessionHandoff, sessionHandoffCheckpoint,
+  transportIsPaused: () => transportPaused,
   freezeTransport: () => { transportPaused = true; wakeDecisionWaiters(); },
   resumeTransport: () => { if (!closed) transportPaused = false; },
   transportHandoffReady: () => communicationStorageReady() && reconcilingPermissions.size === 0 &&

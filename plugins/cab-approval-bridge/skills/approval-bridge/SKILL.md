@@ -5,13 +5,29 @@ description: Piloter OpenCode par mandat autonome et revue finale ; reprendre le
 
 # CAB — Codex Approval Bridge
 
-Contrat 2.6.0 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
+Contrat 2.7.0 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
 et les références utiles. Transmettre les obligations au codeur avant son mandat.
 AGENTS.md résout ce contrat.
 
 Charger [autonomie et ateliers](references/autonomy-and-ateliers.md) au
 démarrage/reprise/update. Vérifier les versions actives, dont SGS/CCAB.
 Pour un incident, identifier le reçu avant toute récupération.
+
+À chaque invocation du skill, consulter la file CCAB et les sessions de codage
+accessibles. Traiter les incidents selon le contrat CCAB : qualifier sur preuves,
+réaliser les correctifs CAB par SCM et CI/CD, ou constater un faux positif ;
+coordonner les déclarants, les aider à reprendre et purger les entrées résolues
+après leur retour vérifié. Préserver les RUN et les effets incertains.
+Lorsqu'une session de codage transmet directement une déclaration CCAB,
+la prendre en charge sans attendre le contrôle périodique si aucun autre
+correctif n'est en cours ; respecter la file et les réservations existantes.
+
+Examiner les sessions de codage hors SCM et SCMP avant de conclure à un arrêt
+injustifié. Une fin de session, une pause ou une dépendance insatisfaite est un
+motif légitime. Pour une session arrêtée sans justification, inviter son
+responsable à reprendre le travail déjà autorisé jusqu'à son achèvement, sans
+dupliquer une session active ni contourner ses décisions ou protections. Une
+invocation effectue ce contrôle ; elle ne crée pas de planification récurrente.
 
 Avant codage, développeur et orchestrateur tranchent les choix nécessaires.
 Toute nouvelle mission suit [le mandat autonome](references/autonomous-mandates.md) :
@@ -21,16 +37,14 @@ Conserver les preuves ; une réponse perdue ne permet aucun rejeu.
 
 | Action | Références à lire |
 |---|---|
-| Atelier et visibilité SID | [autonomie et ateliers](references/autonomy-and-ateliers.md) ; bancs du cadrage initial |
-| Statistiques natives ou CAB direct | Skill SGS du même paquet, référence `runtime-collection.md` ; direct uniquement sur demande explicite |
-| Incident CAB | Skill/commande CCAB du même paquet ; déclaration autonome, traitement par l’orchestrateur désigné |
-| Mandat write/edit | [arguments natifs et digest](references/native-input-guard.md) ; calculateur distribué et objet exact |
-| Entrée/reprise | [monitor-service](references/monitor-service.md) d'abord, puis [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md) ; [PLLM](references/protocol-model.md) au seul démarrage initial |
-| Mandat et compte rendu | [mission autonome](references/autonomous-mandates.md), [session](references/protocol-session.md), [soumission](references/validation-submission.md), [concurrence](references/concurrent-runs.md), [cycle](references/run-lifecycle.md) |
-| Incident/reprise | [autonomie](references/owner-reconciliation.md), [grille](references/pilot-state-matrix.md) [triage](references/owner-diagnostics.md), [historique/infra](references/historical-owner-boundaries.md) |
-| Ressource ou incident natif | [récupération](references/protocol-recovery.md), [politique](references/recovery-policy.md), [accord ASK permanent](references/native-permission-grants.md), [incidents](references/coding-incidents.md) selon le diagnostic |
-| Mise à jour demandée | [component-update](references/component-update.md), [MCP](references/mcp-pending-recovery.md) ; script `scripts/cgpt-approval-bridge-update.mjs` du plugin |
-| Clôture | [gate](references/protocol-closure.md), [OC](references/protocol-lifecycle.md), [purge CAB](references/change-erasure.md), [lots](references/retired-run-cleanup.md) |
+| Mission/coordination | [mandat](references/autonomous-mandates.md), [codeurs](references/coder-coordination.md), [bancs](references/external-execution.md) |
+| Atelier | [autonomie](references/autonomy-and-ateliers.md), [DevOps](references/devops-resources.md) |
+| Statistiques/direct | Skill SGS et runtime-collection.md ; direct explicite |
+| Entrée/reprise | [monitor](references/monitor-service.md), [bootstrap](references/protocol-bootstrap.md), [préparation](references/technical-startup.md), [PLLM initial](references/protocol-model.md) |
+| Incident | Skill CCAB ; [triage](references/owner-diagnostics.md), [reprise](references/recovery-policy.md) |
+| Unité historique | [soumission](references/validation-submission.md), [input exact](references/native-input-guard.md) |
+| Mise à jour | [component-update](references/component-update.md), [MCP](references/mcp-pending-recovery.md), scripts/cgpt-approval-bridge-update.mjs |
+| Clôture | [gate](references/protocol-closure.md), [OC](references/protocol-lifecycle.md), [purge](references/change-erasure.md), [lots](references/retired-run-cleanup.md) |
 
 Les consultations `/CAB status`, `source` et `stats` suivent directement leur
 référence de commande sans charger ce skill ni initialiser de session. Les
@@ -38,13 +52,6 @@ versions du paquet, des fichiers et des processus sont rapportées séparément.
 La télémétrie ne prouve pas un effet métier. Les effets incertains restent
 protégés ; les travaux disjoints autorisés peuvent continuer.
 
-Pour le profil historique ou une exception, l’orchestrateur demande l’accès au contrôleur (locks/acquire), sauf admission
-exclusive prouvée. Le contrôleur seul lie l’accès, émet once et persiste INTENT/ACK.
-APPROVED ne vaut pas HELD. Jamais de once directe par le client HTTP, ni d’ACK
-externe transformé rétroactivement en reçu CAB.
-
-Atelier : [ressources DEVOPS](references/devops-resources.md), outils RO et
-catalogue actualisé ; accès externes par CAB, sans secrets ni socket hôte.
-Les reprises spécialisées sont dans l’index.
-
+Historique : accès HELD ou exclusivité prouvée ; contrôleur seul pour once et
+INTENT/ACK. APPROVED ne vaut pas HELD. Ni once directe ni ACK rétroactif ; détails : index.
 Dépendances : [OpenSpec](references/dependency-authority.md).

@@ -1,5 +1,11 @@
 # Adaptateur commun — cab-session-coordination-1
 
+Sous mandat autonome qualifié, [la coordination des codeurs](coder-coordination.md)
+prévaut sur les propriétaires et relais historiques ci-dessous. Transfert explicite,
+avis et provenance conservés ; aucun double opérateur. Vérifier la discovery du
+protocole cab-coder-coordination-1, pas seulement le numéro du paquet.
+
+
 Cette référence technique est commune aux modes direct et piloté. Le contrat
 métier demeure dans le projet prompts, `SESSION_COORDINATION.md`, résolu via
 DEVOPS.md ; le paquet CAB n'en embarque pas de copie.

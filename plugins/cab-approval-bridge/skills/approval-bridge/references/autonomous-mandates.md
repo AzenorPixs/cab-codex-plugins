@@ -22,6 +22,12 @@ réservations des pairs. Préparer des chemins suffisamment larges pour le chang
 sans élargir au projet entier. Refus avant travail si décisions non résolues,
 périmètre incohérent, effets en attente ou conflit. Aucun mandat implicite pendant CABU.
 
+## Coordination déléguée
+
+Les nouvelles missions utilisent coordination:true dans le mandat initial ;
+les RUN historiques suivent le transfert explicite de [coordination codeur](coder-coordination.md).
+Le codeur coordonne ses dépendances sans relais courant par le parent.
+
 ## Réalisation sans validation intermédiaire
 Le codeur utilise atelier_execute et atelier_status avec les identités du RUN.
 Le contrôleur applique le mandat initial ; aucun request_validation, décision LLM,
@@ -66,10 +72,16 @@ explicite. Une extension des chemins/réservations requiert un mandat révisé �
 frontière inactive. Une panne irrécupérable est un constat technique documenté,
 pas une cinquième validation métier récurrente.
 
+## Bancs externes
+
+Après cadrage initial ou exception approuvée, [le profil externe](external-execution.md)
+fournit une voie effective et des reçus corrélés aux tests, sans validation par commande.
+L’atelier isolé local ne reçoit aucun accès SSH ou credential par cette délégation.
+
 ## Soumission et revue finales
 Le codeur appelle autonomy_submit avec identités, request_id et submission :
 submissionId, summary, tests et limits. Chaque test fournit criterion (critère du
-mandat), requestId de l’essai, receiptDigest renvoyé par le broker et outcome
+mandat), requestId de l’essai, receiptDigest renvoyé par le broker (facultatif : résolu par requestId) et outcome
 passed/failed/unavailable. Tous les critères sont couverts, avec limites explicites.
 Un succès ne peut citer un essai échoué ou une révision antérieure. Le contrôleur
 conserve les reçus et l’empreinte des sources ; REVIEW_PENDING interdit les

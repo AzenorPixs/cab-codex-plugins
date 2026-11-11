@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 LOCK = threading.RLock()
 ACTIVE_PROCESSES={}
 SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$|^(?:\.npmrc|\.pypirc|opencode\.password|\.netrc)$)")
@@ -162,7 +162,7 @@ def sandbox_identity(command,home):
 
 def validate_args(args):
     expected={"request_id","run_id","reservation_version","session_id","change_id","directory","argv"}
-    if not isinstance(args,dict) or set(args)-{"timeout_ms"}!=expected:
+    if not isinstance(args,dict) or set(args)-{"timeout_ms","expected_revision"}!=expected:
         raise AtelierError("atelier-input-invalid")
     for key in ("request_id","run_id","session_id","change_id"):
         if not isinstance(args[key],str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,199}",args[key]):
@@ -173,6 +173,7 @@ def validate_args(args):
         raise AtelierError("atelier-project-invalid")
     if not isinstance(args["argv"],list) or not args["argv"] or any(not isinstance(v,str) or "\0" in v for v in args["argv"]):
         raise AtelierError("atelier-argv-invalid")
+    if "expected_revision" in args and (not isinstance(args["expected_revision"],str) or not re.fullmatch(r"[a-f0-9]{64}",args["expected_revision"])):raise AtelierError("atelier-revision-invalid")
     timeout=args.get("timeout_ms",60000)
     if type(timeout) is not int or not 1<=timeout<=2147483647:raise AtelierError("atelier-timeout-invalid")
 
@@ -201,7 +202,7 @@ def sandbox_command(args,grant):
     command += ["--ro-bind",str(workspace),str(workspace)]
     autonomy=grant.get('autonomy')
     if autonomy is not None:
-        if (not isinstance(autonomy,dict) or set(autonomy)!={'protocol','mandateId','paths'}
+        if (not isinstance(autonomy,dict) or set(autonomy)-{'executionKnown'}!={'protocol','mandateId','paths'}
                 or autonomy['protocol']!='autonomous-change-v1' or not isinstance(autonomy['paths'],list)
                 or not autonomy['paths']):raise AtelierError('atelier-autonomy-grant-invalid')
         for literal in autonomy['paths']:
@@ -353,6 +354,7 @@ def execute(args,authorize,*,job_home=None):
         if previous is not None:
             if previous["input_sha256"]!=fingerprint:raise AtelierError("atelier-request-conflict")
             return previous
+        if grant.get('autonomy',{}).get('executionKnown'):raise AtelierError('atelier-controller-receipt-reconciliation-required')
         plan=sandbox_command(args,grant);command=plan['argv']
         value={"requestId":args["request_id"],"runId":args["run_id"],"changeId":args["change_id"],"sessionId":args["session_id"],
                "input_sha256":fingerprint,"status":"INTENT","startedAt":datetime.now(timezone.utc).isoformat(),

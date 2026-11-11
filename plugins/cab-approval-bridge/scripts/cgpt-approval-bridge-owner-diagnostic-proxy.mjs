@@ -1,6 +1,6 @@
 import {createServer} from 'node:http';
 import {startOwnerProxy} from './cgpt-approval-bridge-owner-proxy.mjs';
-export const VERSION='2.6.0';
+export const VERSION='2.7.0';
 
 // Serveur temporaire exclusivement diagnostique : aucune route de commit.
 export async function startDiagnosticOwnerProxy(manager) {

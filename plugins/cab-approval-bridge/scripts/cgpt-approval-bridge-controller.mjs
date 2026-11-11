@@ -1,5 +1,7 @@
+import {ExternalExecution} from './cgpt-approval-bridge-external-execution.mjs';
+import {CoderCoordination,CODER_COORDINATION_PROTOCOL} from './cgpt-approval-bridge-coder-coordination.mjs';
 import {startOwnerProxy} from './cgpt-approval-bridge-owner-proxy.mjs';
-import {grantAutonomy,autonomousGrant,completeAutonomousCall,submitAutonomousWork,reviewAutonomousWork,requestAutonomyException,decideAutonomyException} from './cgpt-approval-bridge-autonomous-mandate.mjs';
+import {grantAutonomy,autonomousGrant,completeAutonomousCall,submitAutonomousWork,reviewAutonomousWork,requestAutonomyException,decideAutonomyException,sourceRevision} from './cgpt-approval-bridge-autonomous-mandate.mjs';
 import {ensureProjectTestRoot,authorizeAtelierCall} from './cgpt-approval-bridge-autonomy.mjs';
 import {migrationRegistryDigest,validateRuntimeMigration,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
 import { ChangeErasureManager,erasureMonitorEndpoint } from './cgpt-approval-bridge-erasure-manager.mjs';
@@ -39,7 +41,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.6.0";
+const version = "2.7.0";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION,DEPENDENCY_GATE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -178,6 +180,9 @@ const nativeInstances = new NativeInstances(workspace, join(stateDirectory, 'nat
 statistics.registry(registry.snapshot());
 const statisticsMaintenance = new StatisticsMaintenance(statistics, { referenced: () => registry.snapshot().runs });
 const contexts = new Map();
+const externalExecution=new ExternalExecution({registry,contexts});
+const coderCoordination=new CoderCoordination({registry,contexts,openCode,stateRoot:stateRootDirectory(homedir()),
+  dependencyGate,verifyNative:async runId=>!nativeRestartPending&&!nativeRestartUnsafeRuns.has(runId)&&await verifyFollowedNativeInstance(runId),controllerUrl:()=>`http://${host==='::1'?'[::1]':host}:${server.address().port}`,observe:(type,data)=>observations?.record(type,data)});
 const erasure = new ChangeErasureManager({workspace,stateDirectory,registry,openCode,broker:()=>broker,terminalProofs:()=>recovery.receipts,brokerIdentity:processOwnerIdentity,
   monitorIdentity:async()=>{
     const response=await fetch(erasureMonitorEndpoint(envValue('OC_Codex_MONITOR_HOST'),envValue('OC_Codex_MONITOR_PORT')),
@@ -433,11 +438,12 @@ function statusFor(runId, context) {
           : accesses.some((a) => a.state === 'UNKNOWN') ? 'resource-effects-unknown'
             : accesses.some((a) => ['HELD','EXECUTING'].includes(a.state) && registry.restoredAccesses.has(a.accessId))
               ? 'access-reconciliation-required'
+              : Object.values(run.autonomy?.calls||{}).some(call=>call.state==='WAITING')?'autonomy-resource-wait'
               : accesses.some((a) => a.state === 'STALE' && a.version === run.version) ? 'resource-revision-stale' : null;
   const unresolvedOperations = Object.values(registry.resourceState.operations).filter(op =>
     op.runId === runId && op.contextId === run.contextId && !['COMPLETED','CANCELLED'].includes(op.state));
-  return { ...status, autonomy:run.autonomy?{protocol:run.autonomy.protocol,state:run.autonomy.state,mandateId:run.autonomy.mandateId,
-      pendingExecution:Object.values(run.autonomy.calls).some(c=>c.state==='INTENT'),metrics:run.autonomy.metrics}:null,
+  return { ...status, coderCoordination:run.coderCoordination||null, autonomy:run.autonomy?{protocol:run.autonomy.protocol,state:run.autonomy.state,mandateId:run.autonomy.mandateId,
+      pendingExecution:Object.values(run.autonomy.calls).some(c=>['INTENT','WAITING'].includes(c.state)),metrics:run.autonomy.metrics}:null,
     runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), admission:admissionSnapshot(runId),
     nativeRestart:{state:nativeRestartPending?'WAITING':nativeRestartIdentityError?'IDENTITY_UNVERIFIED':nativeRestartUnsafeRuns.has(runId)?'SESSION_UNVERIFIED':'VERIFIED',pid:lifetime.snapshot().identity?.pid ?? null,diagnostic:nativeRestartRecheckError || lifetime.snapshot().diagnostic}, frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
     notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation() || unresolvedOperations.length > 0,
@@ -2290,6 +2296,10 @@ if(broker){
   for(const [runId,context] of activeContexts())await publishTo(context,scopedReadiness(runId,broker));
 }
 
+const coderCoordinationTimer=setInterval(()=>{
+  if(!handoffIntent&&runtimeMigration?.phase!=='PREPARED'&&[...registry.runs.values()].some(run=>run.state==='RESERVED'&&run.coderCoordination))
+    void coderCoordination.pump().catch(error=>observations?.record('coder-coordination-unavailable',{}));
+},5000);coderCoordinationTimer.unref();
 const requests = new Set();
 let ownerProxy=null,ownerProxyError=null;
 const server = createServer((request, response) => {
@@ -2315,11 +2325,12 @@ async function handleRequest(request, response) {
     const url = new URL(request.url, 'http://localhost');
     const restartRun = /^\/runs\/([^/]+)(?:\/|$)/.exec(url.pathname)?.[1];
     const restartSafeRoute = ['/broker/readiness','/transport/cancel'].includes(url.pathname);
+    const coderRoute=['/coordination/coder/op','/coordination/coder/pump','/external/owner/authorize','/external/owner/finish','/external/owner/release'].includes(url.pathname);
     if (request.method !== 'GET' && !restartSafeRoute &&
         (nativeRestartPending || restartRun && nativeRestartUnsafeRuns.has(restartRun) ||
-          !restartRun && (nativeRestartUnsafeLegacy || nativeRestartUnsafeRuns.size && url.pathname !== '/cleanup/simple-sgs') && url.pathname !== '/runs'))
+          !restartRun && !coderRoute && (nativeRestartUnsafeLegacy || nativeRestartUnsafeRuns.size && url.pathname !== '/cleanup/simple-sgs') && url.pathname !== '/runs'))
       throw new CoordinationError('opencode-restart-reconciliation-required',503);
-    if (request.method !== 'GET' && !restartSafeRoute &&
+    if (request.method !== 'GET' && !restartSafeRoute && !coderRoute &&
         !await verifyFollowedNativeInstance(restartRun ?? null))
       throw new CoordinationError('opencode-restart-reconciliation-required',503);
     const transportContexts = () => [legacy, ...contexts.values()];
@@ -2510,10 +2521,29 @@ async function handleRequest(request, response) {
       if(autonomousRun?.autonomy&&autonomousRun.phase==='WORK')throw new CoordinationError('autonomy-use-mandated-executor');
       checkCommandLength(payload?.approval, maxCommandLength);
     }
-    if(request.method==='POST'&&['/ccab/owner/report','/statistics/owner/checkpoint'].includes(url.pathname)) {
+    if(request.method==='POST'&&['/ccab/owner/report','/statistics/owner/checkpoint','/coordination/coder/op','/external/owner/authorize','/external/owner/finish','/external/owner/release'].includes(url.pathname)) {
       const peer=ownerProxy?.peer(request),sender=payload?.sender,identity=sender&&await processOwnerIdentity(sender.pid);
       if(!peer||peer.pid!==sender?.pid||peer.uid!==sender?.uid||sender.pid!==broker?.broker_process?.pid||
         sender.instanceId!==broker?.instance_id||identity?.uid!==peer.uid)throw new CoordinationError('broker-owner-identity-invalid',403);
+      if(url.pathname.startsWith('/external/owner/')) {
+        const packet=payload.packet,args=packet?.args||packet,run=registry.runs.get(args?.run_id),context=contexts.get(args?.run_id);
+        if(!run||!context)throw new CoordinationError('external-run-not-found');
+        if(url.pathname==='/external/owner/finish') {json(response,200,externalExecution.finish(packet));return;}
+        if(nativeRestartUnsafeRuns.has(run.runId)||!await verifyFollowedNativeInstance(run.runId))throw new CoordinationError('opencode-restart-reconciliation-required',503);
+        if(context.transportIsPaused?.()||handoffIntent||runtimeMigration?.phase==='PREPARED')throw new CoordinationError('external-transport-paused');
+        const method=url.pathname==='/external/owner/release'?'external_release':packet.method;
+        if(!['external_describe','external_execute','external_status','external_release'].includes(method))throw new CoordinationError('external-method-invalid');
+        authorizeAtelierCall(run,context.publicJob(),args,await openCode.messages(run.sessionId,run.directory),nativeToolInputDigest,[],method);
+        json(response,200,method==='external_release'?externalExecution.release(args):externalExecution.authorize(method,args));return;
+      }
+      if(url.pathname==='/coordination/coder/op') {
+        const args=payload.packet,run=registry.runs.get(args?.run_id),context=contexts.get(args?.run_id);
+        if(!run||!context)throw new CoordinationError('coordination-run-not-found');
+        if(nativeRestartUnsafeRuns.has(run.runId)||!await verifyFollowedNativeInstance(run.runId))throw new CoordinationError('opencode-restart-reconciliation-required',503);
+        if(context.transportIsPaused?.()||handoffIntent||runtimeMigration?.phase==='PREPARED')throw new CoordinationError('coordination-transport-paused');
+        authorizeAtelierCall(run,context.publicJob(),args,await openCode.messages(run.sessionId,run.directory),nativeToolInputDigest,[],'session_coordinate');
+        json(response,200,await coderCoordination.act(args));return;
+      }
       if(url.pathname==='/statistics/owner/checkpoint') {
         const packet=payload.packet;
         if(packet?.project!==workspace)throw new CoordinationError('broker-statistics-project-invalid',400);
@@ -2554,6 +2584,10 @@ async function handleRequest(request, response) {
         response.end(statistics.observations.markdown(selection, runId, contextId));
       } else json(response, 200, statistics.observations.view(selection, runId, contextId));
       return;
+    }
+    if(url.pathname==='/coordination/coder/pump'&&request.method==='POST') {
+      guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+      json(response,200,await coderCoordination.pump());return;
     }
     if (url.pathname === '/coordination/global' && request.method === 'GET') {
       json(response, 200, { protocol: registry.snapshot().coordinationProtocol,
@@ -2875,6 +2909,28 @@ async function handleRequest(request, response) {
         if(run.autonomy)grant=autonomousGrant(registry,runId,payload,grant,{snapshot:url.pathname==='/atelier/status-authorize'});
         json(response,200,grant);return;
       }
+      if(request.method==='POST'&&url.pathname==='/external/adapters') {
+        guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+        json(response,200,externalExecution.register(runId,payload));return;
+      }
+      if(request.method==='GET'&&url.pathname==='/external/status') {
+        json(response,200,{runId,adapters:run.externalAdapters||{},calls:Object.fromEntries(Object.entries(run.externalCalls||{}).map(([id,c])=>[id,{state:c.state,adapterId:c.adapterId,resourceKey:c.resourceKey,leaseId:c.leaseId,phase:c.phase,receiptDigest:c.receiptDigest||null}]))});return;
+      }
+      if(request.method==='POST'&&url.pathname==='/coordination/adopt') {
+        guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+        if(payload.protocol!==CODER_COORDINATION_PROTOCOL)throw new CoordinationError('coordination-coder-protocol-required');
+        json(response,200,await coderCoordination.adopt(runId,payload));return;
+      }
+      if(request.method==='GET'&&url.pathname==='/coordination/status') {
+        json(response,200,{runId,binding:run.coderCoordination||null});return;
+      }
+      if(request.method==='POST'&&url.pathname==='/coordination/activation-proof') {
+        guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+        if(!run.coderCoordination||!run.integrationCompleted||typeof payload.authorization!=='string'||!payload.authorization.trim()||
+          typeof payload.proof!=='string'||!/^[a-f0-9]{64}$/.test(payload.proof_sha256||''))throw new CoordinationError('coordination-activation-receipt-required');
+        run.coderCoordination.activationProof=createHash('sha256').update(JSON.stringify([payload.proof,payload.proof_sha256])).digest('hex');
+        registry.persist();json(response,200,{status:'RECORDED'});return;
+      }
       if(request.method==='GET'&&url.pathname==='/autonomy') {
         json(response,200,{runId,autonomy:run.autonomy||null});return;
       }
@@ -2884,7 +2940,13 @@ async function handleRequest(request, response) {
           guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
           const job=context.publicJob();
           if(!job?.armed||job.sessionId!==run.sessionId||job.currentCabMandate||job.recovery||context.pendingEffects())throw new CoordinationError('autonomy-job-not-ready');
-          json(response,200,grantAutonomy(registry,runId,payload));return;
+          const mandate=grantAutonomy(registry,runId,payload);
+          if(payload.externalAdapters!==undefined) {
+            if(!Array.isArray(payload.externalAdapters)||payload.externalAdapters.length>8)throw new CoordinationError('external-profiles-invalid');
+            for(const profile of payload.externalAdapters)externalExecution.register(runId,{version:run.version,profile},{initial:true});
+          }
+          if(payload.coordination)await coderCoordination.adopt(runId,{version:run.version,sessionId:run.sessionId,authorization:'Initial mandate '+mandate.inputDigest,...(run.coderCoordination?{expectedBindingDigest:createHash('sha256').update(JSON.stringify(run.coderCoordination)).digest('hex')}:{})});
+          json(response,200,mandate);return;
         }
         if(url.pathname==='/autonomy/complete') {
           json(response,200,completeAutonomousCall(registry,runId,payload));return;
@@ -2904,7 +2966,7 @@ async function handleRequest(request, response) {
           authorizeAtelierCall(run,context.publicJob(),payload,await openCode.messages(run.sessionId,run.directory),nativeToolInputDigest,[],method);
           if(method==='autonomy_status') {
             const m=run.autonomy;if(!m)throw new CoordinationError('autonomy-mandate-missing');
-            json(response,200,{state:m.state,mandateId:m.mandateId,metrics:m.metrics,exceptions:m.exceptions,reviews:m.reviews});return;
+            json(response,200,{state:m.state,mandateId:m.mandateId,metrics:m.metrics,exceptions:m.exceptions,reviews:m.reviews,sourceRevision:sourceRevision(run.directory,m.paths)});return;
           }
           if(method==='autonomy_submit') {
             const result=submitAutonomousWork(registry,runId,payload.submission);
@@ -3627,7 +3689,7 @@ async function handleRequest(request, response) {
     request.cabObserveHttpFailure(cause.code);
     observeStatistics(() => statistics.admissionFailure(attemptedReservation, cause.code));
     if (!response.headersSent) json(response, cause.status || 409,
-      cause.code === 'command-too-long' || cause.code === 'run-transition-in-flight' && cause.diagnostic
+      cause.code === 'command-too-long' || ['run-transition-in-flight','autonomy-submission-invalid'].includes(cause.code) && cause.diagnostic
         ? cause.diagnostic : { error: cause.code || cause.message });
     else response.destroy();
   } finally {

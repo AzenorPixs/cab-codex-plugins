@@ -306,7 +306,7 @@ test('déploiement complet puis deuxième invocation conforme sans nouvelle coup
   assert.equal(result.status, 'completed'); assert.equal(result.version, CURRENT_VERSION);
   assert.equal(await readFile(join(h.scripts, 'cab_sgs.py'), 'utf8'),
     await readFile(join(h.c.pluginRoot, 'scripts/cab_sgs.py'), 'utf8'));
-  for (const name of ['cab_session_dependencies.py', 'cgpt-approval-bridge-dependencies.py',
+  for (const name of ['cab_coder_coordination.py','cgpt-approval-bridge-coder-coordination.mjs','cab_session_dependencies.py', 'cgpt-approval-bridge-dependencies.py',
     'cgpt-approval-bridge-dependency-gate.mjs','cgpt-approval-bridge-dependency-gate.py']) {
     assert.equal(await readFile(join(h.scripts, name), 'utf8'),
       await readFile(join(h.c.pluginRoot, 'scripts', name), 'utf8'));
