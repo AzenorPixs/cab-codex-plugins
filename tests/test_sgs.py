@@ -41,6 +41,9 @@ class SGSTest(unittest.TestCase):
                                  'VERSION', '--file-mode', '0770'], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)['engine_format'], 'cab-sgs-1')
+        denied = subprocess.run([sys.executable, '-B', str(ROOT/'plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-sgs.py'),
+                                 'VERSION', '--file-mode', '0775'], capture_output=True, text=True)
+        self.assertNotEqual(denied.returncode,0)
 
     def test_missing_value_is_not_zero(self):
         c = sgs.extract('SCM directe.\n| Mesure | Valeur |\n|---|---|\n| Tokens d’entrée | N/A |\n| Appels web | 0 |\n')
@@ -111,13 +114,14 @@ class SGSTest(unittest.TestCase):
         report=self.root/sgs.REPORT;report.write_text('ancien');report.chmod(0o640)
         self.build()
         self.assertEqual(report.stat().st_mode&0o777,0o640)
-        self.assertEqual((self.root/sgs.REGISTER).stat().st_mode&0o777,0o600)
+        self.assertEqual((self.root/sgs.REGISTER).stat().st_mode&0o777,0o770)
 
     def test_explicit_project_mode_is_applied_to_both_files(self):
         self.source('SCM directe.\n')
-        with sgs.locked(self.root):sgs.rebuild(self.root,self.contract,['NONE'],{},file_mode=0o775)
-        for name in [sgs.REPORT,sgs.REGISTER]:self.assertEqual((self.root/name).stat().st_mode&0o777,0o775)
-        self.assertEqual((self.root/sgs.LOCK).stat().st_mode&0o777,0o600)
+        with self.assertRaises(sgs.SGSError):sgs.rebuild(self.root,self.contract,['NONE'],{},file_mode=0o775)
+        with sgs.locked(self.root):sgs.rebuild(self.root,self.contract,['NONE'],{},file_mode=0o770)
+        for name in [sgs.REPORT,sgs.REGISTER]:self.assertEqual((self.root/name).stat().st_mode&0o777,0o770)
+        self.assertEqual((self.root/sgs.LOCK).stat().st_mode&0o777,0o770)
 
     def test_explicit_rebuild_accepts_non_object_old_registry(self):
         self.source('SCM directe.\n')

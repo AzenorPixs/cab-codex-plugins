@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 
 
 def build(root):
@@ -29,7 +29,7 @@ def main():
     value=build(args.plugin_root);data=(json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))+'\n').encode()
     for group in ('broker','scripts'):
         path=args.plugin_root/group/'cgpt-approval-bridge-contract.json'
-        if args.write:path.write_bytes(data);path.chmod(0o775)
+        if args.write:path.write_bytes(data);path.chmod(0o770)
         elif not path.is_file() or path.read_bytes()!=data:raise ValueError('contract-bundle-divergent')
     print(json.dumps({'version':VERSION,'digest':value['digest'],'documents':len(value['documents']),'bytes':len(data)}))
 

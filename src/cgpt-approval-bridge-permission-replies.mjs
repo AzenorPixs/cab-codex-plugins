@@ -1,10 +1,11 @@
-import { constants, closeSync, existsSync, fstatSync, fsyncSync, mkdirSync, openSync,
+import { constants, closeSync, existsSync, fstatSync, fchmodSync, fsyncSync, openSync,
   readFileSync, readdirSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
+import {ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const protocol = 'cab-native-permission-reply-v1';
 const id = value => typeof value === 'string' && /^[A-Za-z0-9_.-]{1,200}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code }); };
@@ -34,7 +35,7 @@ export class PermissionReplyJournal {
     try {
       fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       const stat = fstatSync(fd);
-      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid() || (stat.mode & 0o077) || stat.size > 16384)
+      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid() || (stat.mode & 0o007) || stat.size > 16384)
         fail('permission-reply-receipt-unsafe');
       const envelope = JSON.parse(readFileSync(fd, 'utf8'));
       if (!valid(envelope.value) || digest(envelope.value) !== envelope.digest) fail('permission-reply-receipt-invalid');
@@ -52,7 +53,7 @@ export class PermissionReplyJournal {
   begin(identity) {
     const value = { ...identity, protocol, replyOrigin: 'CAB_CLIENT_PROGRAMMATIC', state: 'INTENT', createdAt: new Date().toISOString() };
     if (!valid(value)) fail('permission-reply-identity-invalid');
-    mkdirSync(this.directory, { recursive: true, mode: 0o700 });
+    ensurePrivateStateDirectory(this.directory);
     if (realpathSync(this.directory) !== this.directory) fail('permission-reply-directory-unsafe');
     const path = this.path(identity);
     const previous = this.read(path);
@@ -66,7 +67,8 @@ export class PermissionReplyJournal {
     }
     let fd;
     try {
-      fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      fd = openSync(path, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+      fchmodSync(fd,0o770);
       writeFileSync(fd, JSON.stringify({ value, digest: digest(value) }) + '\n'); fsyncSync(fd);
     } catch (cause) {
       if (cause.code === 'EEXIST') fail('opencode-permission-outcome-unverified');
@@ -80,7 +82,8 @@ export class PermissionReplyJournal {
     const value = { ...previous, state: 'ACKNOWLEDGED', httpStatus: 204, acknowledgedAt: new Date().toISOString() };
     const temp = path + '.candidate-' + randomUUID(); let fd;
     try {
-      fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      fd = openSync(temp, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+      fchmodSync(fd,0o770);
       writeFileSync(fd, JSON.stringify({ value, digest: digest(value) }) + '\n'); fsyncSync(fd); closeSync(fd); fd = undefined;
       renameSync(temp, path); this.syncDirectory(); return value;
     } finally {

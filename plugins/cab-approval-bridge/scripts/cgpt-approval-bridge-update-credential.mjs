@@ -2,7 +2,7 @@ import { constants } from 'node:fs';
 import { open, lstat, mkdir, unlink } from 'node:fs/promises';
 import { dirname, isAbsolute, join, resolve } from 'node:path';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 
 async function safeDirectories(path, create = false) {
@@ -10,7 +10,7 @@ async function safeDirectories(path, create = false) {
   for (const part of resolve(path).split('/').filter(Boolean)) {
     current = join(current, part);
     if (create) {
-      try { await mkdir(current, { mode: 0o700 }); }
+      try { await mkdir(current, { mode: 0o770 }); const fd=await open(current,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);try{await fd.chmod(0o770);}finally{await fd.close();} }
       catch (cause) { if (cause.code !== 'EEXIST') fail('update-credential-directory-unsafe'); }
     }
     const metadata = await lstat(current);
@@ -24,7 +24,7 @@ async function readBounded(path, privateFile) {
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const metadata = await handle.stat(), limit = privateFile ? 4096 : 1024 * 1024;
     if (!metadata.isFile() || metadata.nlink !== 1 || metadata.size > limit || metadata.size < 1 ||
-        (privateFile ? metadata.uid !== process.getuid() || (metadata.mode & 0o077) || !(metadata.mode & 0o400) : metadata.mode & 0o002)) {
+        (privateFile ? metadata.uid !== process.getuid() || (metadata.mode & 0o007) || !(metadata.mode & 0o400) : metadata.mode & 0o002)) {
       fail('update-credential-unsafe');
     }
     const bytes = Buffer.alloc(limit + 1);
@@ -82,11 +82,11 @@ export async function prepareUpdateCredential({ home, workspace, serviceWorkspac
   }
   await safeDirectories(dirname(target), true);
   const parent = await lstat(dirname(target));
-  if (parent.uid !== process.getuid() || (parent.mode & 0o022)) fail('update-credential-directory-unsafe');
+  if (parent.uid !== process.getuid() || (parent.mode & 0o002)) fail('update-credential-directory-unsafe');
   let handle, created = false;
   try {
-    handle = await open(target, 'wx', 0o600); created = true;
-    await handle.chmod(0o600); await handle.writeFile(supplied + '\n'); await handle.sync();
+    handle = await open(target, 'wx', 0o770); created = true;
+    await handle.chmod(0o770); await handle.writeFile(supplied + '\n'); await handle.sync();
   } catch (cause) {
     if (created) await unlink(target);
     if (cause.code === 'EEXIST') return prepareUpdateCredential({ home, workspace, serviceWorkspace, passwordEnvFile });

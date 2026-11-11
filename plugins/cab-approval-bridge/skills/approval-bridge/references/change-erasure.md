@@ -39,7 +39,7 @@ propriétaire, signature, fichier ordinaire, liens et scope restent inchangées.
 En APPLYING, les candidats déjà aux empreintes après sont reconnus sans
 réécriture ; APPLIED attend toujours la vérification d’absence. Un répertoire
 runtime privé hors projet doit rester privé sous son UID, contrairement aux
-fichiers projet0775. Rétablir cet invariant ne change ni propriétaire ni clés.
+fichiers projet en 0770. Les modes existants compatibles restent utilisables sans modifier propriétaire ni clés.
 
 Pendant une reprise d’un nettoyage déjà engagé, conserver le même reçu et le
 client de cleanup compatible avec les processus encore chargés. Distinguer
@@ -197,8 +197,7 @@ soumission, sans permission ni effet.
 
 Le périmètre certifié couvre les racines runtime résolues du contrôleur,
 superviseur, broker, moniteur, les sauvegardes CABU gérées et l’ancien runtime
-CAB du workspace. Les fichiers projet restent en 0775 et l’état privé hors
-projet en 0700/0600. Une racine non examinable, un ancien journal partagé
+CAB du workspace. Les nouveaux fichiers CAB et états hors projet sont en 0770 ; les anciens modes compatibles restent utilisables. Une racine non examinable, un ancien journal partagé
 sans adaptateur qualifiable, une référence nécessaire à un pair, un format
 signé non pris en charge ou une référence textuelle non attribuable empêche
 le faux succès total et fournit un diagnostic. Ne pas effacer les pairs pour
@@ -216,7 +215,7 @@ d’effacement ; leur lien disparaît avec le manifeste final. Le journal
 public d’observations adopte une nouvelle époque : un ancien curseur reçoit
 `gap` et recharge les vues courantes, sans collision entre les événements
 réindexés. Les identités métier des événements du broker restent conservées.
-Les permissions internes 0775 sont acceptées sous un ancêtre privé effectif ;
+Les permissions internes compatibles, notamment 0770 et les anciens modes, sont acceptées sous un ancêtre protégé ;
 le pilote ne modifie pas les droits des dossiers pour les normaliser.
 
 

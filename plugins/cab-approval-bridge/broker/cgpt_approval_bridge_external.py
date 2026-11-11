@@ -15,7 +15,7 @@ import tempfile
 from datetime import datetime,timezone
 import cgpt_approval_bridge_external_runner as runner
 
-VERSION='2.7.3'
+VERSION='2.7.4'
 PROTOCOL='cab-external-exec-v1'
 LOCK=threading.RLock()
 ACTIVE_PROCESSES={}
@@ -98,7 +98,7 @@ def connection(directory,profile):
     for binary in ('/usr/bin/ssh','/usr/bin/sshpass'):
         try:info=os.stat(binary)
         except OSError:fail('external-tool-unavailable')
-        if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o022 or not os.access(binary,os.X_OK):fail('external-tool-unavailable')
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=0 or info.st_mode&0o002 or not os.access(binary,os.X_OK):fail('external-tool-unavailable')
     return {'host':host,'user':user,'password':password,'port':int(port),'known':str(known),'fingerprint':fp,'known_data':public_data}
 
 def describe(args,authorize):
@@ -112,10 +112,16 @@ def set_new_directory_mode(path):
     try:os.fchmod(fd,0o770)
     finally:os.close(fd)
 
+def create_directories(path):
+    missing=[];current=path
+    while not current.exists():missing.append(current);current=current.parent
+    for item in reversed(missing):
+        try:item.mkdir(mode=0o770);set_new_directory_mode(item)
+        except FileExistsError:pass
+
 def private_root(directory,home=None):
     base=(Path(home) if home else Path.home())/'.local/state/cab-external-executions'
-    try:base.mkdir(parents=True,mode=0o770);set_new_directory_mode(base)
-    except FileExistsError:pass
+    create_directories(base)
     if base.resolve()!=base or not base.is_dir() or base.stat().st_uid!=os.getuid() or base.stat().st_mode&0o007:fail('external-state-unsafe')
     root=base/hashlib.sha256(directory.encode()).hexdigest()
     try:root.mkdir(mode=0o770);set_new_directory_mode(root)

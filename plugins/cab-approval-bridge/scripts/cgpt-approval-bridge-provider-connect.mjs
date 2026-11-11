@@ -1,12 +1,13 @@
 import { constants, realpathSync } from 'node:fs';
-import { mkdir, open, realpath, rename, rm, stat } from 'node:fs/promises';
+import { mkdir, open, realpath, rename, rm, rmdir, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createHash, randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createOpenCodeV2Client, VERSION as CLIENT_VERSION } from './cgpt-approval-bridge-opencode-client.mjs';
-export const VERSION = '2.7.3';
+import { createOpenCodeV2ClientFromEnv, VERSION as CLIENT_VERSION } from './cgpt-approval-bridge-opencode-client.mjs';
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
+export const VERSION = '2.7.4';
 if (CLIENT_VERSION !== VERSION) throw new Error('CAB provider component version mismatch');
 const fail = code => { throw Object.assign(new Error(code), { code }); };
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -57,14 +58,14 @@ export async function providerCohort(controllerUrl, fetchImpl = fetch) {
 }
 async function secureDirectory(directory) {
   if (!isAbsolute(directory)) fail('provider-state-invalid');
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  ensureCabDirectories(directory);
   const metadata = await stat(directory);
-  if (await realpath(directory) !== resolve(directory) || metadata.uid !== process.getuid?.() || (metadata.mode & 0o077)) fail('provider-state-invalid');
+  if (await realpath(directory) !== resolve(directory) || metadata.uid !== process.getuid?.() || (metadata.mode & 0o007)) fail('provider-state-invalid');
 }
 async function save(path, value) {
   const temporary = path + '.' + randomUUID() + '.tmp';
-  const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-  try { await handle.writeFile(JSON.stringify(value, null, 2) + '\n'); await handle.sync(); }
+  const handle = await open(temporary, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+  try { await handle.chmod(0o770); await handle.writeFile(JSON.stringify(value, null, 2) + '\n'); await handle.sync(); }
   finally { await handle.close(); }
   await rename(temporary, path);
 }
@@ -72,7 +73,7 @@ async function readState(path) {
   const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const metadata = await handle.stat();
-    if (!metadata.isFile() || metadata.nlink !== 1 || metadata.uid !== process.getuid?.() || metadata.mode & 0o077 || metadata.size > 2 * 1024 * 1024) fail('provider-state-invalid');
+    if (!metadata.isFile() || metadata.nlink !== 1 || metadata.uid !== process.getuid?.() || metadata.mode & 0o007 || metadata.size > 2 * 1024 * 1024) fail('provider-state-invalid');
     return JSON.parse(await handle.readFile('utf8'));
   } finally { await handle.close(); }
 }
@@ -106,7 +107,9 @@ export async function connectProviderAccount({ client, controllerUrl, integratio
     receipt = { ...receipt, phase: 'COMPLETED', credentialId: active.id, reconciledAt: new Date().toISOString(), requiresPreflight: true };
     await save(path, receipt); await release(); return receipt;
   }
-  try { await mkdir(lock, { mode: 0o700 }); } catch { fail('provider-transition-locked'); }
+  try { await mkdir(lock, { mode: 0o770 }); } catch { fail('provider-transition-locked'); }
+  try { const fd=await open(lock,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);try{await fd.chmod(0o770);}finally{await fd.close();} }
+  catch(cause){await rmdir(lock).catch(()=>{});throw cause;}
   await save(ownerPath, { transactionId });
   try {
     try { await stat(path); fail('provider-transaction-reused'); } catch (cause) { if (cause.code !== 'ENOENT') throw cause; }
@@ -149,7 +152,7 @@ async function main() {
     const key = process.argv[i].replace(/^--/, '');if (key === 'reconcile') { reconcile = true;continue; }
     if (!flags.has(key) || values[key] !== undefined || !process.argv[i+1]) fail('provider-cli-invalid');values[key] = process.argv[++i];
   }
-  const client = createOpenCodeV2Client({ baseUrl: values['opencode-url'], directory: values.directory });
+  const client = createOpenCodeV2ClientFromEnv({ baseUrl: values['opencode-url'], directory: values.directory });
   const receipt = await connectProviderAccount({ client, controllerUrl: values['controller-url'], integrationID: values.integration,
     transactionId: values.transaction, developerAuthorization: values['authorization-reference'], expectedPid: Number(values['expected-pid']),
     secretSource: () => secretFromFd(Number(values['secret-fd'])),

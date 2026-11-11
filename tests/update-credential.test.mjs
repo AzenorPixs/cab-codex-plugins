@@ -17,7 +17,7 @@ test('source explicite : seule la variable littérale est consommée et le crede
   await writeFile(c.passwordEnvFile,'OTHER=$(touch ignored-command)\nOPENCODE_PASSWORD="synthetic-test-value"\nANOTHER=ignored\n');
   assert.deepEqual(await prepareUpdateCredential(c),{status:'provisioned'});
   assert.equal(await readFile(c.target,'utf8'),'synthetic-test-value\n');
-  const metadata=await lstat(c.target);assert.equal(metadata.mode&0o777,0o600);assert.equal(metadata.uid,process.getuid());
+  const metadata=await lstat(c.target);assert.equal(metadata.mode&0o777,0o770);assert.equal(metadata.uid,process.getuid());
   assert.equal((await lstat(c.target)).isSymbolicLink(),false);
   assert.deepEqual(await prepareUpdateCredential(c),{status:'existing'});
 });

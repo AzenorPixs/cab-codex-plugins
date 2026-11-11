@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chmodSync, linkSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, linkSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { ContinuityStore, TransportHandoff, validHandoffBrokerState } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import { nativeSnapshotLookup } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-job-context.mjs';
 import { createObservationJournal } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-monitor-events.mjs';
 import { ResourceRunRegistry, COORDINATION_PROTOCOL } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
+import {ensurePrivateStateDirectory,readRuntimeJson,writeRuntimeJson} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
 
 function fixture(t) {
   const root = mkdtempSync(join(tmpdir(), 'cab-continuity-'));
@@ -29,6 +30,18 @@ test('communication : demandes, décisions et séquence survivent sans créer de
   restored.write({ requests: [{ id: 'request-1', state: 'REJECTED' }] });
   assert.equal(h.create().sequence, 2);
   assert.equal(h.create().snapshot().requests[0].state, 'REJECTED');
+});
+
+test('état et continuité : 0770, anciens modes et refus des autres comptes',t=>{
+  const h=fixture(t),directory=join(h.root,'group-state');ensurePrivateStateDirectory(directory);
+  assert.equal(statSync(directory).mode&0o777,0o770);
+  const path=join(directory,'state.json');writeRuntimeJson(path,{value:42});
+  assert.equal(statSync(path).mode&0o777,0o770);assert.equal(readRuntimeJson(path).value.value,42);
+  chmodSync(directory,0o2770);chmodSync(path,0o600);assert.equal(readRuntimeJson(path).value.value,42);
+  chmodSync(path,0o777);assert.throws(()=>readRuntimeJson(path),/runtime-state-file-unsafe/);
+  chmodSync(path,0o770);chmodSync(directory,0o707);assert.throws(()=>ensurePrivateStateDirectory(directory),/runtime-state-directory-unsafe/);
+  const store=h.create();store.write({requests:[]});assert.equal(statSync(h.path).mode&0o777,0o770);
+  assert.deepEqual(h.create().snapshot(),{requests:[]});chmodSync(h.path,0o600);assert.deepEqual(h.create().snapshot(),{requests:[]});
 });
 
 test('communication : altération, schéma, droits et alias sont refusés sans effacer la preuve', t => {

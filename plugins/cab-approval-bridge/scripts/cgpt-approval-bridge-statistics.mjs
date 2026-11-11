@@ -1,11 +1,12 @@
 import { normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 import { constants, closeSync, existsSync, fstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
-import { mkdir, open, rename, unlink } from 'node:fs/promises';
+import { open, rename, unlink } from 'node:fs/promises';
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 import { randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { ObservationStatistics, VERSION as OBSERVATION_VERSION } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = "2.7.3";
+export const VERSION = "2.7.4";
 if (OBSERVATION_VERSION !== VERSION) throw new Error('CAB statistics component version mismatch');
 const categories = ['reservation', 'changes', 'native', 'nativeChanges'];
 const bucket = () => ({ monoMs: 0, multiMs: 0, zeroMs: 0, unknownMs: 0, exactlyTwoMs: 0, threeOrMoreMs: 0 });
@@ -424,11 +425,11 @@ export class SessionStatistics {
       let candidate;
       try {
         safeParent(dirname(this.path));
-        await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+        ensureCabDirectories(dirname(this.path));
         if (realpathSync(dirname(this.path)) !== resolve(dirname(this.path))) throw new Error('invalid parent');
         candidate = `${this.path}.candidate-${randomUUID()}`;
-        const fd = await open(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-        try { await fd.writeFile(text, 'utf8'); await fd.sync(); } finally { await fd.close(); }
+        const fd = await open(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+        try { await fd.chmod(0o770);await fd.writeFile(text, 'utf8'); await fd.sync(); } finally { await fd.close(); }
         await rename(candidate, this.path); candidate = undefined; this.writeCount++;
         if (this.error === 'statistics-persistence-unavailable') this.error = null;
       } catch { this.error = 'statistics-persistence-unavailable'; this.dirty = true; }

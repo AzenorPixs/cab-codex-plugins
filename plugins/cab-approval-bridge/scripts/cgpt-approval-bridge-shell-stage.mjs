@@ -1,8 +1,8 @@
 import {createHash,randomUUID} from 'node:crypto';
-import {constants,openSync,closeSync,fstatSync,readFileSync,writeFileSync,fsyncSync,renameSync,unlinkSync} from 'node:fs';
+import {constants,openSync,closeSync,fstatSync,fchmodSync,readFileSync,writeFileSync,fsyncSync,renameSync,unlinkSync} from 'node:fs';
 import {dirname} from 'node:path';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 export const MAX_SHELL_PAYLOAD_BYTES = 65536;
 const MAX_STAGES = 512, MAX_STORE_BYTES = 16*1024*1024;
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
@@ -45,7 +45,7 @@ function persist(path,data) {
   if(bytes.length>MAX_STORE_BYTES)fail('shell-stage-store-limit');
   const temporary=path+'.'+randomUUID()+'.tmp';let fd,created=false;
   try {
-    fd=openSync(temporary,'wx',0o600);created=true;writeFileSync(fd,bytes);fsyncSync(fd);closeSync(fd);fd=undefined;
+    fd=openSync(temporary,'wx',0o770);created=true;fchmodSync(fd,0o770);writeFileSync(fd,bytes);fsyncSync(fd);closeSync(fd);fd=undefined;
     renameSync(temporary,path);const directory=openSync(dirname(path),'r');try{fsyncSync(directory)}finally{closeSync(directory)}
   }finally{if(fd!==undefined)closeSync(fd);if(created)try{unlinkSync(temporary)}catch(cause){if(cause.code!=='ENOENT')throw cause}}
 }
@@ -81,7 +81,7 @@ export class ShellStageStore {
     try {
       fd=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
       const stat=fstatSync(fd);
-      if(!stat.isFile() || stat.nlink!==1 || stat.uid!==process.getuid() || (stat.mode&0o077)!==0 || stat.size>MAX_STORE_BYTES)fail('shell-stage-store-unsafe');
+      if(!stat.isFile() || stat.nlink!==1 || stat.uid!==process.getuid() || (stat.mode&0o007)!==0 || stat.size>MAX_STORE_BYTES)fail('shell-stage-store-unsafe');
       const data=JSON.parse(readFileSync(fd,'utf8'));
       if(data.schemaVersion!==1 || !Array.isArray(data.stages) || data.stages.length>MAX_STAGES)fail('shell-stage-store-invalid');
       for(const stage of data.stages){

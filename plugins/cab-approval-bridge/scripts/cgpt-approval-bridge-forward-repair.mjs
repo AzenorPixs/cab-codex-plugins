@@ -1,6 +1,6 @@
-import {runtimeStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
+import {runtimeStateDirectory,ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 import { constants } from 'node:fs';
-import { lstat, open, writeFile, mkdir, rename, unlink, readlink, symlink } from 'node:fs/promises';
+import { lstat, open, rename, unlink, readlink, symlink } from 'node:fs/promises';
 import { join, resolve, dirname, relative, isAbsolute, basename } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn, execFile } from 'node:child_process';
@@ -12,7 +12,7 @@ import { ResourceRunRegistry } from './cgpt-approval-bridge-resource-coordinatio
 import { publicLifecycle } from './cgpt-approval-bridge-run-steps.mjs';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const exec = promisify(execFile);
 const hash = (value) => createHash('sha256').update(value).digest('hex');
 const fail = (code) => { throw Object.assign(new Error(code), { code }); };
@@ -22,17 +22,23 @@ const codeVersion = (data) => data.toString('utf8').match(/^(?:export )?(?:const
 async function directory(path, owned=false) {
   if(!isAbsolute(path)||resolve(path)!==path)fail('forward-path-invalid');
   let cursor='/';for(const part of path.split('/').filter(Boolean)){cursor=join(cursor,part);const s=await lstat(cursor);if(!s.isDirectory()||s.isSymbolicLink())fail('forward-path-unsafe');}
-  const s=await lstat(path);if(owned&&(s.uid!==process.getuid()||(s.mode&0o022)))fail('forward-owner-invalid');
+  const s=await lstat(path);if(owned&&(s.uid!==process.getuid()||(s.mode&0o002)))fail('forward-owner-invalid');
 }
 async function regular(path,limit=4*1024*1024,owned=false) {
   await directory(dirname(path));const fd=await open(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
-  try {const s=await fd.stat();if(!s.isFile()||s.nlink!==1||s.size>limit||(owned&&(s.uid!==process.getuid()||(s.mode&0o077))))fail('forward-file-unsafe');
+  try {const s=await fd.stat();if(!s.isFile()||s.nlink!==1||s.size>limit||(owned&&(s.uid!==process.getuid()||(s.mode&0o007))))fail('forward-file-unsafe');
     const data=await fd.readFile();if(data.length>limit)fail('forward-file-too-large');return {data,stat:s};
   } finally {await fd.close();}
 }
-async function atomic(path,data,mode=0o600) {
+async function createDirectory(path) {
+  ensureCabDirectories(path);
+}
+async function writeNew(path,data) {
+  const fd=await open(path,'wx',0o770);try{await fd.chmod(0o770);await fd.writeFile(data);await fd.sync();}finally{await fd.close();}
+}
+async function atomic(path,data,mode=0o770) {
   await directory(dirname(path),true);const tmp=join(dirname(path),'.forward-'+randomUUID());const fd=await open(tmp,'wx',mode);
-  try {await fd.writeFile(data);await fd.sync();}finally{await fd.close();}await rename(tmp,path);
+  try {await fd.chmod(mode);await fd.writeFile(data);await fd.sync();}finally{await fd.close();}await rename(tmp,path);
   const parent=await open(dirname(path),'r');try{await parent.sync();}finally{await parent.close();}
 }
 async function switchLink(path,link) {
@@ -163,14 +169,14 @@ export async function repairForwardRelease(input,options={}) {
     if(changes!==1)fail('forward-code-change-not-qualified');
     const repairId=hash(raw+candidate.find(x=>x.sha!==x.file.afterHash).sha+c.authorization).slice(0,24);
     const repairRoot=pending?.root||join(tx,'forward',repairId);
-    await mkdir(join(tx,'forward'),{recursive:true,mode:0o700});await mkdir(repairRoot,{recursive:true,mode:0o700});await directory(repairRoot,true);
-    await mkdir(join(repairRoot,'original-stage'),{recursive:true,mode:0o700});
-    async function preserve(path,data){try{const old=await regular(path,4*1024*1024,true);if(hash(old.data)!==hash(data))fail('forward-preserved-copy-changed');}catch(e){if(e.code!=='ENOENT')throw e;await writeFile(path,data,{flag:'wx',mode:0o600});}}
+    await createDirectory(join(tx,'forward'));await createDirectory(repairRoot);await directory(repairRoot,true);
+    await createDirectory(join(repairRoot,'original-stage'));
+    async function preserve(path,data){try{const old=await regular(path,4*1024*1024,true);if(hash(old.data)!==hash(data))fail('forward-preserved-copy-changed');}catch(e){if(e.code!=='ENOENT')throw e;await writeNew(path,data);}}
     await preserve(join(repairRoot,'original-receipt.json'),raw);
     for(const x of candidate){if(hash(x.oldStage)!==x.file.afterHash)fail('forward-original-stage-changed');await preserve(join(repairRoot,'original-stage',String(x.index)),x.oldStage);}
-    const check=join(repairRoot,'validation-state');await mkdir(check,{recursive:true,mode:0o700});
+    const check=join(repairRoot,'validation-state');await createDirectory(check);
     try{const previous=await regular(join(check,'controller-runs.json'),16*1024*1024,true);if(hash(previous.data)!==hash(registryRaw))fail('forward-validation-copy-changed');}
-    catch(e){if(e.code!=='ENOENT')throw e;await writeFile(join(check,'controller-runs.json'),registryRaw,{flag:'wx',mode:0o600});}
+    catch(e){if(e.code!=='ENOENT')throw e;await writeNew(join(check,'controller-runs.json'),registryRaw);}
     const reader=new ResourceRunRegistry(c.workspace,check);reader.close();
     if(!pending){
       try{
@@ -192,7 +198,7 @@ export async function repairForwardRelease(input,options={}) {
       amended.forwardRepair={id:repairId,authorizationDigest:hash(c.authorization),originalReceiptHash:hash(raw),registryHash:hash(registryRaw),sourceRoot:c.pluginRoot,changedFiles:['cgpt-approval-bridge-runs.mjs'],originalPlan:receipt.managed,preparedAt:new Date().toISOString()};
       amended.updatedAt=new Date().toISOString();
       plan={schema:1,id:repairId,transactionId:receipt.id,phase:'PREPARED',originalReceiptHash:hash(raw),amended,registryHash:hash(registryRaw)};
-      await writeFile(join(repairRoot,'plan.json'),JSON.stringify(plan,null,2)+'\n',{flag:'wx',mode:0o600});
+      await writeNew(join(repairRoot,'plan.json'),JSON.stringify(plan,null,2)+'\n');
     }
     await atomic(join(tx,'forward-current.json'),JSON.stringify({id:repairId,plan:join(repairRoot,'plan.json')})+'\n');
     if(options.onPrepared)await options.onPrepared({transactionId:receipt.id,repairId});
@@ -211,7 +217,7 @@ export async function repairForwardRelease(input,options={}) {
       if(![file.beforeHash,file.afterHash].includes(hash(actual)))fail('forward-installed-artifact-changed');
       if(file.originalKind==='link'){
         const original=resolve(dirname(target),file.originalLink);if(!within(oldPlan.root,original)||hash((await regular(original)).data)!==file.beforeHash)fail('forward-original-release-changed');await switchLink(target,file.originalLink);
-      }else if(file.beforeHash){const saved=(await regular(join(tx,'backup',String(x.index)),4*1024*1024,true)).data;if(hash(saved)!==file.beforeHash)fail('forward-backup-changed');await atomic(target,saved,file.mode);}
+      }else if(file.beforeHash){const saved=(await regular(join(tx,'backup',String(x.index)),4*1024*1024,true)).data;if(hash(saved)!==file.beforeHash)fail('forward-backup-changed');await atomic(target,saved,file.beforeMode??file.mode);}
       else await unlink(target);
     }
     for(const x of candidate)if(x.sha!==x.file.afterHash)await atomic(join(tx,'stage',String(x.index)),x.data);

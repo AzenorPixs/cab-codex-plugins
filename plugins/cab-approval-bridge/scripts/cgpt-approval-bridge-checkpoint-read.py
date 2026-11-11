@@ -7,7 +7,7 @@ from pathlib import Path
 import sqlite3
 import stat
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 
 
 def main():
@@ -16,7 +16,7 @@ def main():
     args=parser.parse_args();root=args.state_root/'cab-approval-bridge/sgs';path=root/'runtime.sqlite3'
     if not path.exists():print(json.dumps({'data':None,'sequence':0}));return
     info=path.lstat()
-    if root.resolve()!=root or not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:raise ValueError('sgs-checkpoint-not-private')
+    if root.resolve()!=root or not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o007:raise ValueError('sgs-checkpoint-not-private')
     connection=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)
     try:
         row=connection.execute('SELECT uid,sequence,body FROM component_checkpoints WHERE project=? AND component=?',(args.project,args.component)).fetchone()

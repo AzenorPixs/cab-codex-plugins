@@ -4,7 +4,7 @@ import { open, lstat, realpath, readlink } from 'node:fs/promises';
 import { dirname, join, resolve, isAbsolute } from 'node:path';
 import { homedir } from 'node:os';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 export const FROZEN_PROFILE = 'frozen-recovery-controller';
 export const FROZEN_CAPABILITY = 'frozen-recovery-v1';
 const object = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -30,7 +30,7 @@ export async function regularProofFile(path, privateFile = false) {
   try {
     const stat = await file.stat();
     if (!stat.isFile() || stat.nlink !== 1 || stat.size > 4 * 1024 * 1024 ||
-        (privateFile && (stat.uid !== process.getuid() || (stat.mode & 0o077)))) fail('maintenance-unsafe-file');
+        (privateFile && (stat.uid !== process.getuid() || (stat.mode & 0o007)))) fail('maintenance-unsafe-file');
     return { data: await file.readFile(), mode: stat.mode & 0o777 };
   } finally { await file.close(); }
 }
@@ -38,7 +38,7 @@ export async function regularProofFile(path, privateFile = false) {
 export async function readBootstrapJournal(root, transactionId) {
   if (!transactionValid(transactionId) || !isAbsolute(root) || await realpath(root) !== resolve(root)) fail('maintenance-journal-invalid');
   const stat = await lstat(root);
-  if (!stat.isDirectory() || stat.uid !== process.getuid() || (stat.mode & 0o077)) fail('maintenance-private-state-required');
+  if (!stat.isDirectory() || stat.uid !== process.getuid() || (stat.mode & 0o007)) fail('maintenance-private-state-required');
   let value;
   try { value = JSON.parse((await regularProofFile(join(root, transactionId + '.json'), true)).data); }
   catch { fail('maintenance-journal-invalid'); }
@@ -78,7 +78,7 @@ export async function inspectControllerInstallation(entry, layout = 'flat') {
     manifest: await moduleManifest(entry) };
   if (layout !== 'managed-release') fail('maintenance-installation-layout-invalid');
   const root = dirname(entry), rootStat = await lstat(root), leaf = await lstat(entry);
-  if (await realpath(root) !== root || rootStat.uid !== process.getuid() || (rootStat.mode & 0o022) ||
+  if (await realpath(root) !== root || rootStat.uid !== process.getuid() || (rootStat.mode & 0o002) ||
       !leaf.isSymbolicLink() || leaf.uid !== process.getuid() || leaf.nlink !== 1) fail('maintenance-managed-layout-invalid');
   const link = await readlink(entry);
   const match = link.match(/^releases\/([A-Za-z0-9][A-Za-z0-9_.+-]{0,99})\/scripts\/cgpt-approval-bridge-controller\.mjs$/);
@@ -89,7 +89,7 @@ export async function inspectControllerInstallation(entry, layout = 'flat') {
   for (const name of Object.keys(manifest)) {
     const s = await lstat(join(directory,name));
     // Une racine privée 0700 protège aussi les modes hérités de la release, sans les normaliser.
-    if (s.uid !== process.getuid() || ((rootStat.mode & 0o077) !== 0 && (s.mode & 0o022))) fail('maintenance-managed-owner-divergent');
+    if (s.uid !== process.getuid() || ((rootStat.mode & 0o007) !== 0 && (s.mode & 0o002))) fail('maintenance-managed-owner-divergent');
   }
   return { layout, entry, realEntry, directory, root, link, releaseId:match[1], manifest };
 }

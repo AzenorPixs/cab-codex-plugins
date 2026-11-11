@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,chmodSync,copyFileSync,rmSync,existsSync} from 'node:fs';
+import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,chmodSync,copyFileSync,rmSync,existsSync,statSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash,randomUUID} from 'node:crypto';
@@ -140,6 +140,7 @@ test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible 
  const candidate=users.find(row=>spawnSync('sudo',['-n','-u','#'+row[2],'test','-w',row[5]]).status===0&&
    spawnSync('sudo',['-n','-u','#'+row[2],'test','-x',process.execPath]).status===0);
  if(!candidate){t.skip('aucun UID distinct exécutable disponible');return;}
+ if(process.getuid()!==0&&!new Set([process.getgid(),...process.getgroups()]).has(Number(candidate[3]))){t.skip('aucun groupe commun pour le canal 0770');return;}
  const [,,uid,gid]=candidate,root=mkdtempSync(join(tmpdir(),'cab-owner-two-uids-'));chmodSync(root,0o755);
  const workspace=join(root,'project'),master=join(root,'master'),foreign=join(root,'foreign'),code=join(root,'code');
  for(const path of [workspace,master,code])mkdirSync(path,{mode:path===master?0o700:0o755});
@@ -163,7 +164,9 @@ test('deux UID réels : canal noyau authentifié, clé étrangère inaccessible 
   if(peer.pid!==sender.pid||peer.uid!==sender.uid)throw new Error('peer-divergent');
   const result=req.url.endsWith('/poll')?await manager.ownerPoll(input):await manager.ownerExchange(input);res.writeHead(200,{'content-type':'application/json'}).end(JSON.stringify(result));
  }catch(error){res.writeHead(403,{'content-type':'application/json'}).end(JSON.stringify({error:error.code||error.message}));}});
- await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));proxy=await startOwnerProxy('http://127.0.0.1:'+server.address().port);
+ await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));proxy=await startOwnerProxy('http://127.0.0.1:'+server.address().port,{groupId:Number(gid)});
+ assert.equal(statSync(dirname(proxy.identity.path)).mode&0o777,0o770);assert.equal(statSync(proxy.identity.path).mode&0o777,0o770);
+ assert.equal(statSync(proxy.identity.path).gid,Number(gid));
  t.after(async()=>{await proxy.stop();await new Promise(resolve=>server.close(resolve));});
  const childCode=`
 import sys,json,os

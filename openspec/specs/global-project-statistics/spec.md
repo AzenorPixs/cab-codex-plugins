@@ -114,14 +114,14 @@ récupérer une interruption avant toute nouvelle mutation globale. Le contrôle
 - **THEN** le prochain lecteur récupère ou refuse l'état ambigu avant tout delta ou succès
 
 ### Requirement: Modes de publication du projet
-Le moteur MUST préserver les modes des livrables existants. L'option
-`--file-mode` MAY préciser le mode applicable au projet pour les rapports
-et leur registre. Elle MUST refuser les modes non prévus et les permissions
-spéciales. Les verrous et journaux techniques MUST rester privés.
+Le moteur MUST lire et préserver les modes des livrables existants compatibles.
+L'option `--file-mode`, lorsqu'elle est fournie, MUST exiger 0770 pour les
+rapports et leur registre. Les nouveaux verrous et journaux techniques MUST
+être en 0770 ; les anciens modes compatibles restent utilisables.
 
 #### Scenario: Convention CAB
-- **WHEN** la publication demande explicitement le mode0775
-- **THEN** les rapports et le registre publiés utilisent0775 et le retour arrière conserve les modes initiaux
+- **WHEN** la publication demande explicitement le mode 0770
+- **THEN** les rapports et le registre publiés utilisent 0770 et le retour arrière conserve les modes initiaux
 
 ### Requirement: Utilisation et interrogation agnostiques
 Le moteur MUST être utilisable par toute session directe ou pilotée, par tout

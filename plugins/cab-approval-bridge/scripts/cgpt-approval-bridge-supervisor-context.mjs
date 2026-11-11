@@ -1,10 +1,11 @@
-import { readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { constants,readFileSync } from "node:fs";
+import { open,rename } from "node:fs/promises";
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 import { dirname, isAbsolute, join } from "node:path";
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.7.3";
+export const VERSION = "2.7.4";
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
@@ -14,7 +15,7 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "2.7.3";
+const version = "2.7.4";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -72,9 +73,10 @@ function persistState() {
   const snapshot = JSON.stringify(state, null, 2);
 
   statePersistence = statePersistence.catch(() => {}).then(async () => {
-    await mkdir(dirname(statePath), { recursive: true });
+    ensureCabDirectories(dirname(statePath));
     const temporaryPath = `${statePath}.tmp`;
-    await writeFile(temporaryPath, snapshot, "utf8");
+    const fd=await open(temporaryPath,constants.O_WRONLY|constants.O_CREAT|constants.O_TRUNC|constants.O_NOFOLLOW,0o770);
+    try{await fd.chmod(0o770);await fd.writeFile(snapshot,'utf8');}finally{await fd.close();}
     await rename(temporaryPath, statePath);
   });
 

@@ -41,11 +41,11 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.7.3";
+const version = "2.7.4";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION,DEPENDENCY_GATE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
-process.umask(process.umask() | 0o077);
+process.umask(process.umask() | 0o007);
 const envValue = (key) => process.env[key] || process.env[key.replace('OC_Codex_', 'OC_CGPT_')];
 const workspaceInput = envValue('OC_Codex_WORKSPACE');
 if (!workspaceInput || !workspaceInput.startsWith('/')) throw new Error('OC_Codex_WORKSPACE doit désigner une racine de projet absolue.');
@@ -570,7 +570,7 @@ async function observeLegacyExternalPreflight(run,context,requestId,sourceReceip
     throw new CoordinationError('opencode-restart-reconciliation-required');
   const updateRoot=join(homedir(),'.local/state/cab-approval-bridge-update'),transaction=join(updateRoot,sourceReceiptId);
   if(realpathSync(updateRoot)!==updateRoot||realpathSync(transaction)!==transaction)throw new CoordinationError('external-preflight-update-unsafe');
-  for(const path of [updateRoot,transaction]){const s=statSync(path);if(!s.isDirectory()||s.uid!==process.getuid()||s.mode&0o077)throw new CoordinationError('external-preflight-update-unsafe');}
+  for(const path of [updateRoot,transaction]){const s=statSync(path);if(!s.isDirectory()||s.uid!==process.getuid()||s.mode&0o007)throw new CoordinationError('external-preflight-update-unsafe');}
   const update=readRuntimeJson(join(transaction,'receipt.json')).value;
   if(update.id!==sourceReceiptId)throw new CoordinationError('external-preflight-update-divergent');
   const generation=nativeSessionGenerations.get(run.sessionId)||0,jobDigest=proofHash(job);
@@ -3753,7 +3753,9 @@ async function handleRequest(request, response) {
     if (lifecycleMutation) lifecycleMutations--;
   }
 }
-server.listen(port,host,()=>{void consumeEvents();void startOwnerProxy(`http://${host.includes(':')?'['+host+']':host}:${server.address().port}`).then(proxy=>{ownerProxy=proxy}).catch(()=>{ownerProxyError='erasure-owner-proxy-unavailable'});});
+server.listen(port,host,()=>{void consumeEvents();const projectGid=statSync(workspace).gid,groups=new Set([process.getgid(),...process.getgroups()]);
+  const groupId=process.getuid()===0||groups.has(projectGid)?projectGid:process.getgid();
+  void startOwnerProxy(`http://${host.includes(':')?'['+host+']':host}:${server.address().port}`,{groupId}).then(proxy=>{ownerProxy=proxy}).catch(()=>{ownerProxyError='erasure-owner-proxy-unavailable'});});
 
 async function consumeEvents() {
   if (closing) return;

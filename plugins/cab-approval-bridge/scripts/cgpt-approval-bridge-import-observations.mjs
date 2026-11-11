@@ -1,5 +1,6 @@
 import { constants, realpathSync } from 'node:fs';
-import { link, mkdir, open, unlink } from 'node:fs/promises';
+import { link, open, unlink } from 'node:fs/promises';
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -7,7 +8,7 @@ import { StringDecoder } from 'node:string_decoder';
 import { parseArgs } from 'node:util';
 import { appendSegment, digest, safeRead, validateBundle } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const validId = (value) => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,199}$/.test(value) &&
   !['constructor', 'prototype', '__proto__'].includes(value);
 const timestamp = (value) => typeof value === 'number' ? Math.round(value * 1000) : Date.parse(value);
@@ -178,12 +179,12 @@ async function main() {
     quotaFiles: values.quota, proofFiles: values.proof, sourceId: values['source-id'], datasetId: values['dataset-id'] });
   const path = resolve(values.output);
   if ([...values.samples,values.config,values.monitor,...(values.quota || []),...(values.proof || [])].some((p) => resolve(p) === path)) fail('audit-output-is-input');
-  await mkdir(dirname(path), { recursive: true, mode: 0o700 });
+  ensureCabDirectories(dirname(path));
   if (realpathSync(dirname(path)) !== dirname(path)) fail('audit-output-parent-invalid');
   try { safeRead(path); fail('audit-output-exists'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   const candidate = path + '.candidate-' + randomUUID();
-  const fd = await open(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-  try { await fd.writeFile(JSON.stringify(result.bundle) + '\n'); await fd.sync(); } finally { await fd.close(); }
+  const fd = await open(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+  try { await fd.chmod(0o770);await fd.writeFile(JSON.stringify(result.bundle) + '\n'); await fd.sync(); } finally { await fd.close(); }
   try { await link(candidate, path); } finally { await unlink(candidate); }
   const parent = await open(dirname(path), constants.O_RDONLY);
   try { await parent.sync(); } finally { await parent.close(); }

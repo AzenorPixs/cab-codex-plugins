@@ -1,5 +1,9 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+Les nouveaux fichiers et répertoires CAB utilisent le mode 0770. Les anciens
+modes restent utilisables lorsque les droits effectifs et les invariants du
+protocole le permettent ; CAB ne doit pas imposer une normalisation préalable.
+
 ## Coordination et bancs autonomes CAB 2.7.0
 
 Les codeurs opèrent les déclarations, avis, vérifications et acquittements dans leur
@@ -423,8 +427,8 @@ Les ambiguïtés établies complètent la documentation sous SCM ;la qualificati
 ne crée aucune autorisation métier et conserve les protections légitimes.
 
 Les états privés CAB2.2.39 résident dans le profil d’exécution hors projet.
-Les fichiers projet restent en0775 ; CABU vérifie et migre les identités,
-décisions et once, sans remettre les fichiers projet en0600. Le premier reçu
+Les fichiers projet conservent leurs modes compatibles ; CABU vérifie et migre les identités,
+décisions et once, sans modifier les droits des fichiers projet existants. Le premier reçu
 de migration est distingué du transfert certifié ordinaire.
 
 ## Récupération autonome 2.2.39

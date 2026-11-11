@@ -2,8 +2,8 @@ import {spawn} from 'node:child_process';
 import {randomBytes,timingSafeEqual} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import {once} from 'node:events';
-export const VERSION='2.7.3';
-export async function startOwnerProxy(controllerUrl,{spawnImpl=spawn}={}){
+export const VERSION='2.7.4';
+export async function startOwnerProxy(controllerUrl,{spawnImpl=spawn,groupId=process.getgid()}={}){
  const token=randomBytes(32).toString('hex');
  const child=spawnImpl('python3',['-B',fileURLToPath(new URL('./cgpt-approval-bridge-owner-proxy.py',import.meta.url))],{stdio:['pipe','pipe','pipe']});
  const ready=new Promise((resolve,reject)=>{
@@ -14,7 +14,8 @@ export async function startOwnerProxy(controllerUrl,{spawnImpl=spawn}={}){
   child.once('exit',()=>{clearTimeout(timer);reject(new Error('erasure-owner-proxy-exited'))});
  });
  child.stderr.on('data',()=>{});
- child.stdin.end(JSON.stringify({controllerUrl,token})+'\n');
+ if(!Number.isSafeInteger(groupId)||groupId<0||(process.getuid()!==0&&!new Set([process.getgid(),...process.getgroups()]).has(groupId))){child.kill('SIGTERM');throw new Error('erasure-owner-proxy-group-unavailable');}
+ child.stdin.end(JSON.stringify({controllerUrl,token,groupId})+'\n');
  let identity;
  try{identity=await ready;}catch(error){child.kill('SIGTERM');throw error;}
  if(identity.uid!==process.getuid()||identity.pid!==child.pid||typeof identity.path!=='string'||!identity.path.startsWith('/tmp/cab-owner-ipc-')){child.kill('SIGTERM');throw new Error('erasure-owner-proxy-identity-invalid');}

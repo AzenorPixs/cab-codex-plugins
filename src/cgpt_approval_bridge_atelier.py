@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 LOCK = threading.RLock()
 ACTIVE_PROCESSES={}
 SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$|^(?:\.npmrc|\.pypirc|opencode\.password|\.netrc)$)")
@@ -186,7 +186,7 @@ def sandbox_command(args,grant):
         raise AtelierError("atelier-grant-divergent")
     if expected.resolve()!=expected or not expected.is_dir():raise AtelierError("atelier-path-unsafe")
     binary=Path("/usr/bin/bwrap")
-    if not binary.is_file() or binary.stat().st_uid!=0 or binary.stat().st_mode&0o022:
+    if not binary.is_file() or binary.stat().st_uid!=0 or binary.stat().st_mode&0o002:
         raise AtelierError("atelier-isolation-unavailable")
     command=[str(binary),"--unshare-all","--die-with-parent","--new-session","--clearenv"]
     for source in ("/usr","/bin","/lib","/lib64"):
@@ -265,7 +265,7 @@ def sandbox_command(args,grant):
     # vue privée pointe uniquement vers le temporaire du RUN, jamais l'hôte.
     command += ['--bind',str(expected/'.tmp'),'/cab-tmp']
     fonts=Path('/etc/fonts')
-    if fonts.is_dir() and fonts.stat().st_uid==0 and not fonts.stat().st_mode&0o022:
+    if fonts.is_dir() and fonts.stat().st_uid==0 and not fonts.stat().st_mode&0o002:
         command += ['--ro-bind',str(fonts),str(fonts)]
     search=":".join(dict.fromkeys([*resources['binPaths'],*(str(Path(root).parent if Path(root).is_file() else Path(root)/"bin") for root in runtime_roots)]))
     command += ["--setenv","PATH",(search+":" if search else "")+"/usr/bin:/bin",
@@ -277,7 +277,14 @@ def sandbox_command(args,grant):
 def private_jobs(directory,home=None):
     root=(Path(home) if home else Path.home())/".local/state/cab-ateliers"/hashlib.sha256(directory.encode()).hexdigest()
     if root.parent.resolve()!=root.parent:raise AtelierError("atelier-jobs-not-private")
-    root.parent.mkdir(mode=0o770,parents=True,exist_ok=True)
+    missing=[];current=root.parent
+    while not current.exists():missing.append(current);current=current.parent
+    for item in reversed(missing):
+        try:
+            item.mkdir(mode=0o770);fd=os.open(item,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:os.fchmod(fd,0o770)
+            finally:os.close(fd)
+        except FileExistsError:pass
     parent=root.parent.lstat()
     groups=set(os.getgroups()) | {os.getgid()}
     if (root.parent.resolve()!=root.parent or not stat.S_ISDIR(parent.st_mode)

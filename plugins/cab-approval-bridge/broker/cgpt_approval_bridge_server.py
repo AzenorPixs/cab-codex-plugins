@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.7.3"
+SERVER_VERSION = "2.7.4"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -1285,10 +1285,14 @@ def ensure_parent(path):
     parent = os.path.dirname(path)
 
     if parent:
-        os.makedirs(
-            parent,
-            exist_ok=True,
-        )
+        missing=[];current=os.path.abspath(parent)
+        while not os.path.exists(current):missing.append(current);current=os.path.dirname(current)
+        for directory in reversed(missing):
+            try:
+                os.mkdir(directory,0o770);fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+                try:os.fchmod(fd,0o770)
+                finally:os.close(fd)
+            except FileExistsError:pass
 
 
 @contextmanager
@@ -1301,11 +1305,10 @@ def locked_store(path):
 
     with THREAD_STORE_LOCK:
         try:
-            lock_handle = open(
-                lock_path,
-                "a+",
-                encoding="utf-8",
-            )
+            try:
+                fd=os.open(lock_path,os.O_RDWR|os.O_APPEND|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o770);os.fchmod(fd,0o770)
+            except FileExistsError:fd=os.open(lock_path,os.O_RDWR|os.O_APPEND|os.O_NOFOLLOW)
+            lock_handle=os.fdopen(fd,"a+",encoding="utf-8")
 
         except OSError as exc:
             raise StoreError(
@@ -1653,7 +1656,7 @@ def save_store(
                 "\n"
             )
 
-            mode=(os.stat(path,follow_symlinks=False).st_mode & 0o777) if os.path.exists(path) else 0o600
+            mode=(os.stat(path,follow_symlinks=False).st_mode & 0o777) if os.path.exists(path) else 0o770
             os.fchmod(handle.fileno(),mode)
             handle.flush()
 
@@ -6659,7 +6662,9 @@ def save_auto_remediation_circuit_state():
     replaced = False
 
     try:
-        with open(tmp_path, "w", encoding="utf-8") as handle:
+        descriptor=os.open(tmp_path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o770)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(),0o770)
             json.dump(
                 payload,
                 handle,
@@ -8839,7 +8844,7 @@ def prepare_terminal_erasure(signed):
     try:
         info = os.fstat(fd)
         if (not stat.S_ISREG(info.st_mode) or info.st_nlink != 1
-                or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size != 32):
+                or info.st_uid != os.getuid() or info.st_mode & 0o007 or info.st_size != 32):
             raise ValidationError("erasure-control-key-unsafe")
         key = os.read(fd, 32)
     finally:
@@ -8946,7 +8951,7 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
             return False
         while True:
             metadata = os.stat(directory, follow_symlinks=False)
-            if stat.S_ISDIR(metadata.st_mode) and metadata.st_uid == os.getuid() and not metadata.st_mode & 0o077:
+            if stat.S_ISDIR(metadata.st_mode) and metadata.st_uid == os.getuid() and not metadata.st_mode & 0o007:
                 return True
             parent = os.path.dirname(directory)
             if parent == directory:
@@ -8970,7 +8975,7 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
         fd = os.open(control_path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         try:
             info = os.fstat(fd)
-            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size > 128 * 1024 * 1024:
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o007 or info.st_size > 128 * 1024 * 1024:
                 raise ValidationError("erasure-control-intent-unsafe")
             with os.fdopen(os.dup(fd), "r", encoding="utf-8") as handle:
                 intent = json.load(handle)
@@ -8980,7 +8985,7 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
         fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
         try:
             info = os.fstat(fd)
-            if info.st_size != 32 or info.st_mode & 0o077 or info.st_uid != os.getuid():
+            if info.st_size != 32 or info.st_mode & 0o007 or info.st_uid != os.getuid():
                 raise ValidationError("erasure-control-key-unsafe")
             control_key = os.read(fd, 32)
         finally:
@@ -8997,7 +9002,7 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
             return False
         info=os.stat(parent,follow_symlinks=False)
         legacy=os.path.join(scope["workspace"],".opencode","state","cgpt-approval-bridge")
-        return info.st_uid==os.getuid() and (not info.st_mode & 0o022 or parent==legacy or parent.startswith(legacy+os.sep))
+        return info.st_uid==os.getuid() and (not info.st_mode & 0o002 or parent==legacy or parent.startswith(legacy+os.sep))
     ids = set(scope["ids"])
     identity_keys = {"runId", "run_id", "changeId", "change_id", "sessionId", "session_id",
                      "requestId", "approval_id", "operation_id", "access_id"}
@@ -9126,7 +9131,7 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
     fd = os.open(os.path.join(value["controlRoot"], "change-erasure.key"), os.O_RDONLY | os.O_NOFOLLOW)
     try:
         info = os.fstat(fd)
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_size != 32:
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or info.st_uid != os.getuid() or info.st_mode & 0o007 or info.st_size != 32:
             raise ValidationError("erasure-control-key-unsafe")
         key = os.read(fd, 32)
     finally:
@@ -9137,7 +9142,7 @@ def prepare_terminal_erasure_bundle(_owner_command=None):
     save_store(bundle_path, bundle)
     fd = os.open(bundle_path, os.O_RDONLY | os.O_NOFOLLOW)
     try:
-        os.fchmod(fd, 0o600)
+        os.fchmod(fd, 0o770)
         os.fsync(fd)
     finally:
         os.close(fd)

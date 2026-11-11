@@ -2,11 +2,11 @@ import {externalPending} from './cgpt-approval-bridge-external-execution.mjs';
 import {verifyDependencies} from './cgpt-approval-bridge-dependency-authority.mjs';
 import {requireAutonomousAcceptance,autonomousResources} from './cgpt-approval-bridge-autonomous-mandate.mjs';
 import { createHash, randomUUID } from 'node:crypto';
-import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { constants, closeSync, fstatSync, fchmodSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -1963,14 +1963,15 @@ export class ResourceRunRegistry extends RunRegistry {
     let backup;
     try {
       backup = openSync(join(this.stateDirectory, backupFile),
-        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+      fchmodSync(backup,0o770);
       writeFileSync(backup, original); fsyncSync(backup);
     } catch (cause) {
       if (cause.code !== 'EEXIST') throw cause;
       const previous = openSync(join(this.stateDirectory, backupFile), constants.O_RDONLY | constants.O_NOFOLLOW);
       try {
         const stat = fstatSync(previous);
-        if (!stat.isFile() || stat.nlink !== 1 || (stat.mode & 0o777) !== 0o600 ||
+        if (!stat.isFile() || stat.nlink !== 1 || stat.uid!==process.getuid() || (stat.mode & 0o007) ||
             !readFileSync(previous).equals(original)) throw new CoordinationError('migration-backup-divergent');
       } finally { closeSync(previous); }
     } finally { if (backup !== undefined) closeSync(backup); }
@@ -2020,8 +2021,8 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('migration-backup-divergent');
     }
     const candidate = this.path + '.rollback-' + randomUUID();
-    const output = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-    try { writeFileSync(output, original); fsyncSync(output); } finally { closeSync(output); }
+    const output = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+    try { fchmodSync(output,0o770);writeFileSync(output, original); fsyncSync(output); } finally { closeSync(output); }
     renameSync(candidate, this.path);
     const parent = openSync(this.stateDirectory, constants.O_RDONLY);
     try { fsyncSync(parent); } finally { closeSync(parent); }
