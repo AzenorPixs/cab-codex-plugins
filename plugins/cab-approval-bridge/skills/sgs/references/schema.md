@@ -144,11 +144,10 @@ modifier ses rapports ni utiliser ses chiffres pour le projet CAB.
 
 ## Modes de publication
 
-`--file-mode` accepte0600,0640,0644,0660,0664ou0775 selon les règles du projet.
-Sans option, les modes existants sont conservés, y compris les métadonnées du
-rapport supprimé avant REBUILD ; un nouveau rapport utilise0644 et un nouveau
-registre0600. Les candidats/retours arrière conservent les modes des livrables ;
-le verrou et le journal restent0600. Pour CAB, passer explicitement0775.
+`--file-mode` exige 0770 lorsqu’il est fourni. Sans option, les modes existants sont
+conservés ; un nouveau rapport et un nouveau registre utilisent 0770. Les
+candidats et retours arrière conservent les modes des livrables ; les nouveaux
+verrous utilisent 0770. Pour CAB, passer explicitement 0770.
 
 Les `.STATISTICS.*` sont des fichiers techniques non versionnés. SGS ne modifie
 pas `.gitignore` ; leur exclusion relève du processus Git autorisé du projet.

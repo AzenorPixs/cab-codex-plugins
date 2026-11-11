@@ -1,9 +1,10 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { constants, closeSync, existsSync, fstatSync, fsyncSync, mkdirSync, openSync,
+import { constants, closeSync, existsSync, fstatSync, fchmodSync, fsyncSync, openSync,
   readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 export const CONTINUITY_PROTOCOL = 'cab-continuity-v1';
 export const continuityDigest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 export const canonicalContinuityDigest = value => createHash('sha256').update(JSON.stringify(value, (_, item) =>
@@ -58,7 +59,7 @@ export class ContinuityStore {
     try {
       fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
       const stat = fstatSync(fd);
-      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid() || (stat.mode & 0o077) ||
+      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid() || (stat.mode & 0o007) ||
           stat.size > maxBytes) fail('continuity-file-unsafe');
       let envelope;
       try { envelope = JSON.parse(readFileSync(fd, 'utf8')); }
@@ -86,11 +87,13 @@ export class ContinuityStore {
       instanceId: this.instanceId, sequence: this.sequence + 1, digest: continuityDigest(value), value };
     const data = JSON.stringify(envelope) + '\n';
     if (Buffer.byteLength(data) > this.maxBytes) fail('continuity-state-too-large');
-    mkdirSync(dirname(this.path), { recursive: true, mode: 0o700 }); this.checkDirectory();
+    ensureCabDirectories(dirname(this.path));
+    this.checkDirectory();
     const candidate = this.path + '.candidate-' + randomUUID();
     let fd;
     try {
-      fd = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+      fd = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+      fchmodSync(fd,0o770);
       writeFileSync(fd, data, 'utf8'); fsyncSync(fd); closeSync(fd); fd = undefined;
       renameSync(candidate, this.path);
       fd = openSync(dirname(this.path), constants.O_RDONLY); fsyncSync(fd); closeSync(fd); fd = undefined;

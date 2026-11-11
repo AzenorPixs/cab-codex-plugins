@@ -8,7 +8,7 @@ import { canonicalContinuityDigest, continuityDigest } from './cgpt-approval-bri
 import { ensurePrivateStateDirectory, readRuntimeJson, writeRuntimeJson } from './cgpt-approval-bridge-state-layout.mjs';
 import { PermissionReplyJournal, validPermissionReply } from './cgpt-approval-bridge-permission-replies.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 export const ERASURE_PROTOCOL = 'cab-change-erasure-v1';
 export const ERASURE_RECEIPT_MAX_BYTES = 128 * 1024 * 1024;
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -45,7 +45,7 @@ export function retentionOnlyRebind(before,after){
 }
 function privateAncestor(directory) {
   let current=directory;
-  while(true){const stat=lstatSync(current);if(stat.isDirectory()&&stat.uid===process.getuid()&&!(stat.mode&0o077))return true;
+  while(true){const stat=lstatSync(current);if(stat.isDirectory()&&stat.uid===process.getuid()&&!(stat.mode&0o007))return true;
     const parent=dirname(current);if(parent===current)return false;current=parent;}
 }
 const excludedStateName=name=>/\.(?:crt|cer|der|key|pem|p12|pfx|env)(?:\..*)?$/.test(name)||
@@ -482,8 +482,8 @@ function writeErasureBytes(path,data,{legacy=false,fileMode}={}) {
   if(!existsSync(dirname(path)))ensurePrivateStateDirectory(dirname(path));
   if(realpathSync(dirname(path))!==dirname(path))fail('erasure-symlink-refused');
   if(!legacy&&!privateAncestor(dirname(path)))fail('erasure-file-unsafe');
-  const temporary=path+'.candidate-'+randomUUID(),mode=fileMode??(legacy?0o775:0o600);
-  if(![0o600,0o775].includes(mode))fail('erasure-file-mode-invalid');
+  const temporary=path+'.candidate-'+randomUUID(),mode=fileMode??0o770;
+  if(![0o600,0o770,0o775].includes(mode))fail('erasure-file-mode-invalid');
   const fd=openSync(temporary,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,mode);
   try{writeFileSync(fd,data);fchmodSync(fd,mode);fsyncSync(fd)}finally{closeSync(fd)}
   renameSync(temporary,path);syncDirectory(dirname(path));
@@ -502,20 +502,20 @@ export class ErasureTransaction {
     if(readOnly){
       if(!existsSync(this.root)||realpathSync(this.root)!==this.root)fail('erasure-control-root-missing');
       const stat=lstatSync(this.root);
-      if(!stat.isDirectory()||stat.uid!==process.getuid()||(stat.mode&0o077))fail('erasure-control-root-unsafe');
+      if(!stat.isDirectory()||stat.uid!==process.getuid()||(stat.mode&0o007))fail('erasure-control-root-unsafe');
     }else ensurePrivateStateDirectory(this.root);
     this.path = join(this.root,'change-erasure.json');
     this.keyPath = join(this.root,'change-erasure.key');
     if (!existsSync(this.keyPath)) {
       if(!createKey||readOnly)fail('erasure-control-key-missing');
-      const fd = openSync(this.keyPath,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o600);
-      try { const key=randomBytes(32); writeRuntimeKey(fd,key); } finally { closeSync(fd); }
+      const fd = openSync(this.keyPath,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o770);
+      try { fchmodSync(fd,0o770);const key=randomBytes(32); writeRuntimeKey(fd,key); } finally { closeSync(fd); }
       syncDirectory(this.root);
     }
     const fd = openSync(this.keyPath,constants.O_RDONLY|constants.O_NOFOLLOW);
     try {
       const stat = fstatSync(fd);
-      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid() || stat.mode & 0o077 || stat.size !== 32) fail('erasure-key-unsafe');
+      if (!stat.isFile() || stat.nlink !== 1 || stat.uid !== process.getuid() || stat.mode & 0o007 || stat.size !== 32) fail('erasure-key-unsafe');
       this.key = readFileSync(fd);
     } finally { closeSync(fd); }
   }

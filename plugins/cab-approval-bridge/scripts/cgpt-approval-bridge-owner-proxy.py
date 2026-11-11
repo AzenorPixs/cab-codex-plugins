@@ -13,13 +13,14 @@ import tempfile
 import threading
 import urllib.request
 
-VERSION = '2.7.3'
+VERSION = '2.7.4'
 
 
 def serve(config):
     parent = os.getppid()
     directory = tempfile.mkdtemp(prefix='cab-owner-ipc-')
-    os.chmod(directory, 0o755)
+    os.chown(directory,-1,config['groupId'])
+    os.chmod(directory, 0o770)
     path = os.path.join(directory, 'owner.sock')
 
     class Handler(http.server.BaseHTTPRequestHandler):
@@ -56,7 +57,8 @@ def serve(config):
         daemon_threads = True
 
     server = Server(path, Handler)
-    os.chmod(path, 0o666)
+    os.chown(path,-1,config['groupId'])
+    os.chmod(path, 0o770)
     signal.signal(signal.SIGTERM, lambda *_args: threading.Thread(target=server.shutdown, daemon=True).start())
 
     def follow_parent():

@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {runtimeRequest,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
 import {projectErasure,erasureReferences} from './cgpt-approval-bridge-change-erasure.mjs';
 import {readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.7.3';
+export const VERSION='2.7.4';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 function removeCurrentErasureMarker(data,component,receiptId) {
   if(component!=='broker-statistics'||!data||typeof data!=='object'||Array.isArray(data)||data.erasure_prepared!==receiptId)return data;
@@ -21,7 +21,7 @@ export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),req
   if(existsSync(directory))for(const name of await readdir(directory)) {
     if(!/^(?:binding-|source-|checkpoint-)?[a-f0-9]{64}\.json(?:\.candidate-[a-f0-9-]{36})?$/.test(name))continue;
     const path=join(directory,name),info=await lstat(path);
-    if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o077)fail('sgs-outbox-owner-divergent');
+    if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o007)fail('sgs-outbox-owner-divergent');
     const value=readRuntimeJson(path).value;
     if(scope.closureAuthority!=='direct-session-v1'&&value.project===scope.workspace&&(scope.closureAuthority==='authoritative-retired-run-batch-v1'?scope.runIds.includes(value.run):value.change===scope.changeId)&&value.binding)bindingIds.add(value.binding);
     files.push({path,value});
@@ -32,7 +32,7 @@ export async function purgeStatistics(scope,branch,receiptId,{home=homedir(),req
     if(existsSync(directory))for(const name of await readdir(directory)) {
       if(!/^(?:binding-|source-)?[a-f0-9]{64}\.json(?:\.candidate-[a-f0-9-]{36})?$/.test(name))continue;
       const path=join(directory,name),info=await lstat(path);
-      if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o077)fail('sgs-outbox-owner-divergent');
+      if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o007)fail('sgs-outbox-owner-divergent');
       if(bindingIds.has(readRuntimeJson(path).value.binding))fail('sgs-direct-outbox-pending-after-purge');
     }
     return result;

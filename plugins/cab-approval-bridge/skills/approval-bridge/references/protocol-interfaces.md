@@ -200,7 +200,7 @@ Le broker utilise par défaut le home du processus OpenCode qui le lance :
 superviseur utilisent un espace privé hors projet, exposé par
 `runtimeStateDirectory` dans `/status` :
 `<home exécution>/.local/state/cab-approval-bridge/<SHA256 workspace>/cgpt-approval-bridge/`.
-Les fichiers du projet restent en0775 ; les checkpoints privés sont0600.
+Les nouveaux fichiers CAB et checkpoints sont en 0770 ; les anciens modes compatibles restent lisibles.
 Les chemins personnalisés doivent être réellement résolus ; ces exemples
 ne désignent pas un espace à purger automatiquement.
 

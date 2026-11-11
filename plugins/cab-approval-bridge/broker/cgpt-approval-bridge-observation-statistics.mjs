@@ -1,9 +1,10 @@
 import { constants, closeSync, existsSync, fstatSync, openSync, readFileSync, realpathSync } from 'node:fs';
-import { mkdir, open, rename, unlink } from 'node:fs/promises';
+import { open, rename, unlink } from 'node:fs/promises';
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 
-export const VERSION = "2.7.3";
+export const VERSION = "2.7.4";
 export const CATEGORIES = ['reservation', 'changes', 'native', 'nativeChanges'];
 const DAY = 86400000;
 const LIMIT = 64 * 1024 * 1024;
@@ -316,14 +317,14 @@ export class ObservationStatistics {
       let candidate;
       try {
         parentSafe(dirname(this.path));
-        await mkdir(dirname(this.path), { recursive: true, mode: 0o700 });
+        ensureCabDirectories(dirname(this.path));
         const text = canonical(this.data) + '\n';
         if (Buffer.byteLength(text) > LIMIT) fail('observation-store-full');
         try { safeRead(this.path); }
         catch (error) { if (error.code !== 'ENOENT') throw error; }
         candidate = this.path + '.candidate-' + randomUUID();
-        const fd = await open(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
-        try { await fd.writeFile(text, 'utf8'); await fd.sync(); } finally { await fd.close(); }
+        const fd = await open(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+        try { await fd.chmod(0o770);await fd.writeFile(text, 'utf8'); await fd.sync(); } finally { await fd.close(); }
         await rename(candidate, this.path); candidate = undefined;
         const parent = await open(dirname(this.path), constants.O_RDONLY);
         try { await parent.sync(); } finally { await parent.close(); }

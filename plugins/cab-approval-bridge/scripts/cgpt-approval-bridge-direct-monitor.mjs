@@ -2,12 +2,12 @@ import {execFile} from 'node:child_process';
 import {promisify} from 'node:util';
 import {createServer} from 'node:net';
 import {readFile} from 'node:fs/promises';
-import {existsSync} from 'node:fs';
+import {constants,existsSync} from 'node:fs';
 import {homedir} from 'node:os';
 import {join} from 'node:path';
 import {createHash} from 'node:crypto';
 import {ensurePrivateStateDirectory,writeRuntimeJson,readRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.7.3';
+export const VERSION='2.7.4';
 const execute=promisify(execFile);
 export async function startDirectMonitor(workspace,{home=homedir(),service=async args=>(await execute('systemctl',['--user',...args],{timeout:10000,maxBuffer:16384})).stdout}={}) {
   if(/[\r\n\0]/.test(workspace))throw new Error('direct-monitor-workspace-invalid');
@@ -29,7 +29,10 @@ export async function startDirectMonitor(workspace,{home=homedir(),service=async
   const port=reservation.address().port;await new Promise(resolve=>reservation.close(resolve));
   const config=join(home,'.config/cab-approval-bridge/direct',key);ensurePrivateStateDirectory(config);
   const file=await import('node:fs/promises');
-  await file.writeFile(join(config,'monitor.env'),'OC_Codex_WORKSPACE='+JSON.stringify(workspace)+'\nOC_Codex_MODE=direct\nOC_Codex_MONITOR_PORT='+port+'\n',{mode:0o600});
+  const target=join(config,'monitor.env');let handle,created=false;
+  try{handle=await file.open(target,constants.O_WRONLY|constants.O_CREAT|constants.O_EXCL|constants.O_NOFOLLOW,0o770);created=true;}
+  catch(error){if(error.code!=='EEXIST')throw error;handle=await file.open(target,constants.O_WRONLY|constants.O_TRUNC|constants.O_NOFOLLOW);}
+  try{if(created)await handle.chmod(0o770);await handle.writeFile('OC_Codex_WORKSPACE='+JSON.stringify(workspace)+'\nOC_Codex_MODE=direct\nOC_Codex_MONITOR_PORT='+port+'\n');}finally{await handle.close();}
   receipt={workspace,unit,url:'http://127.0.0.1:'+port,port,version:VERSION};writeRuntimeJson(receiptPath,receipt);
   await service(['daemon-reload']);await service(['start',unit]);
   for(let attempt=0;attempt<50;attempt++) {

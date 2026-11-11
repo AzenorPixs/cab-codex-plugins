@@ -6,7 +6,7 @@ import {createHash} from 'node:crypto';
 import {ErasureTransaction,erasureFilePlan,erasureReferences,removeErasureDirectories,readErasureBytes,retentionOnlyRebind,diagnoseErasureFilePlan} from './cgpt-approval-bridge-change-erasure.mjs';
 import {ensurePrivateStateDirectory} from './cgpt-approval-bridge-state-layout.mjs';
 import {canonicalContinuityDigest} from './cgpt-approval-bridge-continuity.mjs';
-export const VERSION='2.7.3';
+export const VERSION='2.7.4';
 const fail=code=>{throw Object.assign(new Error(code),{code})};
 export function ownerCleanup(input,{home=homedir()}={}) {
  const {action,scope,transactionId}=input;
@@ -83,7 +83,7 @@ export function ownerCleanup(input,{home=homedir()}={}) {
     if(existsSync(entry.path)&&lstatSync(entry.path).uid!==process.getuid())fail('erasure-owner-file-foreign');
     const legacy=entry.legacy===true||legacyRoots.some(root=>entry.path===root||entry.path.startsWith(root+'/'));
     const within=relative(scope.workspace,entry.path),project=!within||!within.startsWith('..')&&!isAbsolute(within);
-    return {...entry,legacy,...(legacy&&!project?{fileMode:0o600}:{})};
+    return {...entry,legacy,...(legacy&&!project?{fileMode:0o770}:{})};
    });
    value={...value,phase:'APPLYING',roots,effectiveScope:plan.scope,entries,journalPaths:bundle.journalPaths,legacyRoots};tx.save(value);
   }

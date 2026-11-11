@@ -1,10 +1,17 @@
 import {createHash,randomUUID} from 'node:crypto';
 import {homedir} from 'node:os';
 import {dirname,isAbsolute,join,relative,resolve} from 'node:path';
-import {constants,closeSync,existsSync,fstatSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync,chmodSync} from 'node:fs';
-export const VERSION='2.7.3';
+import {constants,closeSync,existsSync,fstatSync,fchmodSync,fsyncSync,lstatSync,mkdirSync,openSync,readFileSync,readdirSync,realpathSync,renameSync,writeFileSync} from 'node:fs';
+export const VERSION='2.7.4';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 const hash=b=>createHash('sha256').update(b).digest('hex');
+export function ensureCabDirectories(path) {
+ if(existsSync(path))return;
+ const parent=dirname(path);if(parent===path)fail('runtime-state-path-invalid');
+ ensureCabDirectories(parent);
+ try{mkdirSync(path,{mode:0o770});const fd=openSync(path,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);try{fchmodSync(fd,0o770);}finally{closeSync(fd);}}
+ catch(error){if(error.code!=='EEXIST')throw error;}
+}
 export function legacyStateDirectory(workspace){return join(workspace,'.opencode/state/cgpt-approval-bridge');}
 export function runtimeStateDirectory(workspace,{home=homedir(),stateHome=process.env.OC_Codex_RUNTIME_STATE_ROOT||process.env.OC_CGPT_RUNTIME_STATE_ROOT||join(home,'.local/state')}={}) {
  if(!isAbsolute(workspace)||!isAbsolute(stateHome))fail('runtime-state-path-invalid');
@@ -17,27 +24,27 @@ export function projectAuthorityPath(workspace) {
  let path=resolve(workspace);
  for(const part of ['.opencode','state','cgpt-approval-bridge']) {
   path=join(path,part);
-  if(!existsSync(path)){mkdirSync(path,{mode:0o775});chmodSync(path,0o775);}
+  if(!existsSync(path)){mkdirSync(path,{mode:0o770});const fd=openSync(path,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);try{fchmodSync(fd,0o770);}finally{closeSync(fd);}}
   if(realpathSync(path)!==path||!lstatSync(path).isDirectory())fail('runtime-authority-directory-invalid');
  }
  return join(path,'registry.instance.lock');
 }
 export function ensurePrivateStateDirectory(path) {
- mkdirSync(path,{recursive:true,mode:0o700});
+ ensureCabDirectories(path);
  if(realpathSync(path)!==resolve(path))fail('runtime-state-symlink');
- const s=lstatSync(path);if(!s.isDirectory()||s.uid!==process.getuid()||(s.mode&0o077))fail('runtime-state-directory-unsafe');
+ const s=lstatSync(path);if(!s.isDirectory()||s.uid!==process.getuid()||(s.mode&0o007))fail('runtime-state-directory-unsafe');
 }
 export function readRuntimeJson(path,{legacy=false,maxBytes=64*1024*1024}={}) {
  let fd;
  try {fd=openSync(path,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);const s=fstatSync(fd);
-  if(!s.isFile()||s.nlink!==1||s.size>maxBytes||!legacy&&(s.uid!==process.getuid()||(s.mode&0o077)))fail('runtime-state-file-unsafe');
+  if(!s.isFile()||s.nlink!==1||s.size>maxBytes||!legacy&&(s.uid!==process.getuid()||(s.mode&0o007)))fail('runtime-state-file-unsafe');
   const bytes=readFileSync(fd);if(!Buffer.from(bytes.toString('utf8')).equals(bytes))fail('runtime-state-encoding-invalid');
   return {value:JSON.parse(bytes.toString('utf8')),bytes,sha256:hash(bytes)};
  }finally{if(fd!==undefined)closeSync(fd);}
 }
 export function writeRuntimeJson(path,value) {
  ensurePrivateStateDirectory(dirname(path));const tmp=path+'.candidate-'+randomUUID();let fd;
- try{fd=openSync(tmp,'wx',0o600);writeFileSync(fd,JSON.stringify(value)+'\n');fsyncSync(fd);closeSync(fd);fd=undefined;renameSync(tmp,path);
+ try{fd=openSync(tmp,'wx',0o770);fchmodSync(fd,0o770);writeFileSync(fd,JSON.stringify(value)+'\n');fsyncSync(fd);closeSync(fd);fd=undefined;renameSync(tmp,path);
   fd=openSync(dirname(path),'r');fsyncSync(fd);
  }finally{if(fd!==undefined)closeSync(fd);}
 }
@@ -94,8 +101,8 @@ export function initializeRuntimeState(workspace,destination=runtimeStateDirecto
   const path=join(destination,file.name);ensurePrivateStateDirectory(dirname(path));
   if(existsSync(path)){const old=readRuntimeJson(path);if(old.sha256===file.sha256)continue;
    if(!existing)fail('runtime-state-migration-collision');}
-  const tmp=path+'.candidate-'+randomUUID();const fd=openSync(tmp,'wx',0o600);
-  try{writeFileSync(fd,file.bytes);fsyncSync(fd);}finally{closeSync(fd);}
+  const tmp=path+'.candidate-'+randomUUID();const fd=openSync(tmp,'wx',0o770);
+  try{fchmodSync(fd,0o770);writeFileSync(fd,file.bytes);fsyncSync(fd);}finally{closeSync(fd);}
   renameSync(tmp,path);const directoryFd=openSync(dirname(path),'r');try{fsyncSync(directoryFd);}finally{closeSync(directoryFd);}
  }
  const complete={...description,phase:'READY',copiedAt:new Date().toISOString()};writeRuntimeJson(marker,complete);return complete;

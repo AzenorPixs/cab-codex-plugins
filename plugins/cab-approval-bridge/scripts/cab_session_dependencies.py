@@ -18,7 +18,7 @@ import struct
 import time
 from urllib.parse import quote, urlencode, urlsplit
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/#-]{0,255}$")
 KINDS = frozenset(("change", "task", "capability"))
 
@@ -232,7 +232,7 @@ def codex_proxy_exchange(request, socket_path):
         parent=path.parent;info=parent.lstat()
         try:canonical=parent.resolve()==parent
         except (OSError,RuntimeError):canonical=False
-        return stat.S_ISDIR(info.st_mode) and info.st_uid==os.getuid() and not info.st_mode&0o077 and canonical
+        return stat.S_ISDIR(info.st_mode) and info.st_uid==os.getuid() and not info.st_mode&0o007 and canonical
     info=socket_path.lstat()
     if info.st_uid!=os.getuid() or not private_parent(socket_path):
         raise CoordinationError('coordination-native-socket-invalid')
@@ -391,7 +391,7 @@ def verify_direct_release(project, change, run, session, receipt_id, state_root)
     socket_path = Path(state_root) / 'cab-approval-bridge/sgs/sgs.sock'
     try:
         info = socket_path.lstat()
-        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007:
             raise CoordinationError('coordination-sgs-socket-invalid')
         connection = http.client.HTTPConnection('localhost', timeout=5)
         try:
@@ -450,7 +450,7 @@ def verify_pilot_binding(project, run, session, state_root, mode='piloted'):
     path = Path(state_root) / 'cab-approval-bridge/sgs/sgs.sock'
     try:
         info = path.lstat()
-        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007:
             raise CoordinationError('coordination-sgs-socket-invalid')
         connection = http.client.HTTPConnection('localhost', timeout=5)
         try:
@@ -487,19 +487,19 @@ def check_close(project, run, state_root, session=None):
         return {'status':'absent','pending':0}
     try:
         info=directory.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode & 0o077:
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode & 0o007:
             raise CoordinationError('coordination-storage-not-private')
         marker=directory/'store.enabled'
         if marker.exists() or marker.is_symlink():
             mi=marker.lstat()
-            if not stat.S_ISREG(mi.st_mode) or mi.st_uid!=os.getuid() or mi.st_mode & 0o077 or mi.st_nlink!=1:
+            if not stat.S_ISREG(mi.st_mode) or mi.st_uid!=os.getuid() or mi.st_mode & 0o007 or mi.st_nlink!=1:
                 raise CoordinationError('coordination-marker-invalid')
         if not path.exists() and not path.is_symlink() and marker.exists():
             raise CoordinationError('coordination-database-missing')
         if not path.exists() and not path.is_symlink():
             return {'status':'absent','pending':0}
         info=path.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode & 0o077:
+        if not stat.S_ISREG(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode & 0o007:
             raise CoordinationError('coordination-database-not-private')
         db=sqlite3.connect('file:'+quote(str(path),safe='/')+'?mode=ro',uri=True,timeout=5)
         try:
@@ -528,18 +528,27 @@ class DependencyStore:
 
     def __init__(self, directory):
         directory = Path(directory).absolute()
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        missing=[];current=directory
+        while not current.exists():missing.append(current);current=current.parent
+        for item in reversed(missing):
+            try:
+                item.mkdir(mode=0o770)
+                fd=os.open(item,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+                try:os.fchmod(fd,0o770)
+                finally:os.close(fd)
+            except FileExistsError:pass
         info = directory.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007:
             raise CoordinationError("coordination-storage-not-private")
         self.directory = directory
         path = directory / "dependencies.sqlite3"
         if path.exists() or path.is_symlink():
             info = path.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007:
                 raise CoordinationError("coordination-database-not-private")
         else:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
+            os.fchmod(fd,0o770)
             os.close(fd)
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
         self.db.row_factory = sqlite3.Row
@@ -636,10 +645,11 @@ class DependencyStore:
             raise
         marker = directory / 'store.enabled'
         try:
-            fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
+            os.fchmod(fd,0o770)
         except FileExistsError:
             info = marker.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_nlink != 1:
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007 or info.st_nlink != 1:
                 self.db.close()
                 raise CoordinationError('coordination-marker-invalid')
         else:
@@ -675,19 +685,27 @@ class DependencyStore:
     @contextmanager
     def _session_lock(self, identity):
         directory = self.directory / 'locks'
-        directory.mkdir(mode=0o700, exist_ok=True)
+        try:
+            directory.mkdir(mode=0o770)
+            fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:os.fchmod(fd,0o770)
+            finally:os.close(fd)
+        except FileExistsError:pass
         info = directory.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007:
             raise CoordinationError('coordination-lock-directory-invalid')
         paths = [(directory / ('global-' + hashlib.sha256(encoded([identity[0]]).encode()).hexdigest() + '.lock'), fcntl.LOCK_SH),
                  (directory / ('run-' + hashlib.sha256(encoded([identity[0], identity[2]]).encode()).hexdigest() + '.lock'), fcntl.LOCK_EX)]
         descriptors = []
         try:
             for path, mode in paths:
-                fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+                try:
+                    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
+                    os.fchmod(fd,0o770)
+                except FileExistsError:fd=os.open(path,os.O_RDWR|os.O_NOFOLLOW)
                 descriptors.append(fd)
                 info = os.fstat(fd)
-                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077 or info.st_nlink != 1:
+                if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007 or info.st_nlink != 1:
                     raise CoordinationError('coordination-lock-invalid')
                 try:
                     fcntl.flock(fd, mode | fcntl.LOCK_NB)

@@ -33,7 +33,7 @@ native_module = importlib.util.module_from_spec(NATIVE_SPEC)
 NATIVE_SPEC.loader.exec_module(native_module)
 EMITTER_SPEC=importlib.util.spec_from_file_location('cab_sgs_emitter',SCRIPT_DIRECTORY/'cgpt-approval-bridge-sgs-emitter.py')
 emitter_module=importlib.util.module_from_spec(EMITTER_SPEC);EMITTER_SPEC.loader.exec_module(emitter_module)
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 if store_module.VERSION != VERSION or native_module.VERSION != VERSION:
     raise RuntimeError("runtime-component-version-mismatch")
 MAX_BODY = 64 * 1024 * 1024
@@ -46,12 +46,12 @@ def ensure_project_test_root(workspace):
     root=project/'.cab-tests'
     metadata=project.stat()
     try:
-        root.mkdir(mode=0o775)
+        root.mkdir(mode=0o770)
     except FileExistsError:
         pass
     else:
         if root.stat().st_gid!=metadata.st_gid:os.chown(root,-1,metadata.st_gid)
-        root.chmod(0o775|(metadata.st_mode&stat.S_ISGID))
+        root.chmod(0o770|(metadata.st_mode&stat.S_ISGID))
     if root.resolve()!=root or not root.is_dir():raise store_module.RuntimeErrorCode('atelier-root-invalid')
     return root
 
@@ -89,7 +89,7 @@ class RuntimeServer(socketserver.UnixStreamServer):
                 probe.close()
         try:
             super().__init__(str(self.socket_path), RuntimeHandler)
-            os.chmod(self.socket_path, 0o600)
+            os.chmod(self.socket_path, 0o770)
         except BaseException:
             self.store.close()
             raise
@@ -113,7 +113,7 @@ class RuntimeServer(socketserver.UnixStreamServer):
         directory=self.socket_path.parent.parent/'sgs-outbox'
         if not directory.exists():return
         info=directory.lstat()
-        if not stat.S_ISDIR(info.st_mode) or info.st_uid!=self.owner or info.st_mode&0o077 or directory.resolve()!=directory:
+        if not stat.S_ISDIR(info.st_mode) or info.st_uid!=self.owner or info.st_mode&0o007 or directory.resolve()!=directory:
             self.store.cursor('outbox-diagnostic',{'reason':'sgs-outbox-not-private'});return
         def priority(path):return (0 if path.name.startswith('binding-') else 1 if path.name.startswith('source-') else 2,path.name)
         pending=sorted(directory.iterdir(),key=priority)
@@ -124,7 +124,7 @@ class RuntimeServer(socketserver.UnixStreamServer):
                 descriptor=os.open(path,os.O_RDONLY|os.O_NOFOLLOW|os.O_NONBLOCK)
                 with os.fdopen(descriptor,'rb') as handle:
                     info=os.fstat(handle.fileno())
-                    if not stat.S_ISREG(info.st_mode) or info.st_uid!=self.owner or info.st_mode&0o077 or info.st_nlink!=1 or info.st_size>MAX_BODY:
+                    if not stat.S_ISREG(info.st_mode) or info.st_uid!=self.owner or info.st_mode&0o007 or info.st_nlink!=1 or info.st_size>MAX_BODY:
                         raise store_module.RuntimeErrorCode('sgs-outbox-file-invalid')
                     raw=handle.read(MAX_BODY+1)
                 if len(raw)>MAX_BODY:raise store_module.RuntimeErrorCode('sgs-outbox-file-invalid')
@@ -357,7 +357,7 @@ def main():
     parser.add_argument("--version", action="version", version=VERSION)
     parser.add_argument('--no-external-collectors',action='store_true')
     args = parser.parse_args()
-    os.umask(0o077)
+    os.umask(0o007)
     state_root=Path(os.environ.get('OC_Codex_RUNTIME_STATE_ROOT') or os.environ.get('OC_CGPT_RUNTIME_STATE_ROOT') or str(Path.home()/'.local/state'))
     directory = args.state_directory or state_root/'cab-approval-bridge'/args.component
     server = RuntimeServer(directory, args.component,external_collectors=not args.no_external_collectors)

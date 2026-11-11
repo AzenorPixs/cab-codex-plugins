@@ -374,7 +374,7 @@ CABU MUST rapporter préparation, indisponibilité et durée totale. Le banc con
 - **THEN** les validations syntaxiques en cache sont réutilisées sans supprimer les contrôles d'intégrité ni le redémarrage
 
 ### Requirement: Credential contrôlé avant coupure
-L’updater MUST vérifier le credential privé avant toute coupure. L’option --opencode-password-env-file MAY le provisionner depuis la seule affectation littérale OPENCODE_PASSWORD du project.env source ou des services. Les sources ambiguës MUST être refusées sans arrêt. Le credential MUST être régulier, privé et détenu par l’utilisateur. Un credential existant différent MUST rester intact. Les valeurs secrètes MUST NOT figurer dans les reçus, empreintes, arguments, environnement ou sorties.
+Avant toute coupure, l’updater MUST vérifier le credential régulier, détenu par l’utilisateur et protégé des autres comptes ; 0770 est compatible. Il MAY le créer depuis la seule affectation littérale OPENCODE_PASSWORD du project.env source ou des services, avec l’option --opencode-password-env-file. Il MUST refuser une source ambiguë et préserver un credential existant différent. Les secrets MUST NOT figurer dans les reçus, empreintes, arguments, environnement ou sorties.
 
 #### Scenario: Credential absent sans source explicite
 - **WHEN** le credential est absent et aucune source explicite n’est fournie
@@ -382,7 +382,7 @@ L’updater MUST vérifier le credential privé avant toute coupure. L’option 
 
 #### Scenario: Source explicite valide
 - **WHEN** project.env contient une unique affectation littérale valide et le credential cible est absent ; les autres variables sont ignorées sans interprétation shell
-- **THEN** seul le processus local provisionne le credential en 0600 puis poursuit sans exposer sa valeur
+- **THEN** seul le processus local provisionne le credential en 0770 puis poursuit sans exposer sa valeur
 
 #### Scenario: Source ambiguë ou conflit
 - **WHEN** la source contient une clé dupliquée, une valeur vide, des échappements/interpolations, un chemin non autorisé ou une valeur différente d’un credential existant

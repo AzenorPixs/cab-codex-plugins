@@ -21,7 +21,7 @@ import unicodedata
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 FORMAT = "cab-sgs-1"
 # Bounded inputs below make this precision sufficient for all exact additive states.
 getcontext().prec = 100
@@ -179,7 +179,10 @@ def fingerprint(path):
 @contextmanager
 def locked(root):
     path = safe_path(root, LOCK)
-    fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    try:
+        fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
+        os.fchmod(fd,0o770)
+    except FileExistsError:fd=os.open(path,os.O_RDWR|os.O_NOFOLLOW)
     try:
         info = os.fstat(fd)
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -193,8 +196,8 @@ def locked(root):
         os.close(fd)
 
 
-def durable_write(path, data, mode=0o600):
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+def durable_write(path, data, mode=0o770):
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(data)
@@ -1276,7 +1279,7 @@ def publish(root, report, register, expected, modes=None):
         p = safe_path(root,name)
         old = read_file(p) if p.exists() else None
         old_mode=stat.S_IMODE(p.stat().st_mode) if old is not None else None
-        mode=(modes or {}).get(name) or old_mode or (0o644 if name==REPORT else 0o600)
+        mode=(modes or {}).get(name) or old_mode or 0o770
         candidate, backup = '.STATISTICS.'+name+'.candidate', '.STATISTICS.'+name+'.backup'
         for temporary in [candidate,backup]:
             if safe_path(root,temporary).exists():
@@ -1529,6 +1532,7 @@ def report_locked(directory):
 
 
 def change_report(root, relative, evidence_path, state, maintain=False, contract=None, code_roots=None, cab_export=None, file_mode=None, report=None):
+    if file_mode is not None and file_mode != 0o770:raise SGSError('Le mode de publication CAB doit être 0770')
     path=report_target(root,relative,report)
     with report_locked(path.parent):
         result=_change_report(root,relative,evidence_path,state,cab_export,file_mode,path)
@@ -1698,7 +1702,7 @@ def _change_report(root, relative, evidence_path, state, cab_export, file_mode, 
     if '-->' in dumps(ledger).decode():
         raise SGSError('Délimiteur interdit dans les preuves')
     temporary = path.with_name(path.name+'.sgs-candidate')
-    mode=file_mode or (stat.S_IMODE(path.stat().st_mode) if data is not None else 0o644)
+    mode=file_mode or (stat.S_IMODE(path.stat().st_mode) if data is not None else 0o770)
     durable_write(temporary,result.encode('utf-8'),mode)
     if fingerprint(path) != (sha(data) if data is not None else None):
         temporary.unlink(); raise SGSError('Rapport de change modifié concurremment')
@@ -1833,9 +1837,10 @@ def build_register(contract_hash,changes,code,generation):
 
 
 def rebuild(root,contract,code_roots,reviews,cab_export=None,file_mode=None):
+    if file_mode is not None and file_mode != 0o770:raise SGSError('Le mode de publication CAB doit être 0770')
     recover(root)
     report_path = safe_path(root,REPORT)
-    report_mode=file_mode or (stat.S_IMODE(report_path.stat().st_mode) if report_path.exists() else 0o644)
+    report_mode=file_mode or (stat.S_IMODE(report_path.stat().st_mode) if report_path.exists() else 0o770)
     if report_path.exists():
         info = report_path.lstat()
         if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
@@ -1882,6 +1887,7 @@ def rebuild(root,contract,code_roots,reviews,cab_export=None,file_mode=None):
 
 
 def delta(root,relative,contract,code_roots,reviews,cab_export,file_mode=None):
+    if file_mode is not None and file_mode != 0o770:raise SGSError('Le mode de publication CAB doit être 0770')
     recover(root)
     if not safe_path(root,REPORT).exists():
         return {'status':'absent','mutated':False}
@@ -1989,9 +1995,9 @@ def main(argv=None):
     def permission_mode(value):
         try:mode=int(value,8)
         except ValueError as exc:raise argparse.ArgumentTypeError('Mode octal attendu') from exc
-        if mode not in {0o600,0o640,0o644,0o660,0o664,0o770,0o775}:raise argparse.ArgumentTypeError('Mode de fichier non autorisé')
+        if mode != 0o770:raise argparse.ArgumentTypeError('Le mode de publication CAB doit être 0770')
         return mode
-    parser.add_argument('--file-mode',type=permission_mode,help='Mode de publication du projet (ex. 0775), sans modifier les temporaires techniques')
+    parser.add_argument('--file-mode',type=permission_mode,help='Mode de publication du projet : 0770')
     parser.add_argument('--code-root',action='append',default=[])
     parser.add_argument('--no-code',action='store_true')
     parser.add_argument('--sources',action='store_true')

@@ -304,6 +304,7 @@ test('déploiement complet puis deuxième invocation conforme sans nouvelle coup
   const before = await readFile(h.runtime, 'utf8');
   const result = await updateComponents(h.c, h.options);
   assert.equal(result.status, 'completed'); assert.equal(result.version, CURRENT_VERSION);
+  assert.equal((await lstat(h.entry('controller'))).mode&0o777,0o770);
   assert.equal(await readFile(join(h.scripts, 'cab_sgs.py'), 'utf8'),
     await readFile(join(h.c.pluginRoot, 'scripts/cab_sgs.py'), 'utf8'));
   for (const name of ['cab_coder_coordination.py','cgpt-approval-bridge-coder-coordination.mjs','cab_session_dependencies.py', 'cgpt-approval-bridge-dependencies.py',
@@ -541,9 +542,11 @@ test('paquet incomplet, import absent, downgrade et syntaxe invalide échouent a
 
 test('échec de démarrage déclenche le retour aux artefacts précédents et redémarre les trois unités', async (t) => {
   const h = await fixture(t); const before = await readFile(h.entry('controller'));
+  await chmod(h.entry('controller'),0o640);
   h.state.failStart = 'supervisor';
   await assert.rejects(updateComponents(h.c, h.options), /update-failed-rolled-back/);
   assert.deepEqual(await readFile(h.entry('controller')), before);
+  assert.equal((await lstat(h.entry('controller'))).mode&0o777,0o640);
   assert.deepEqual(h.state.versions, { controller: '1.7.0', supervisor: '1.7.0', monitor: '1.7.0' });
   assert.equal((await h.receipt()).phase, 'ROLLED_BACK');
   assert.deepEqual(h.state.services,{controller:true,supervisor:true,monitor:true});
@@ -843,7 +846,7 @@ test('cab-source mixte : services par liens gérés, broker ordinaire et ancienn
   assert.equal(result.status,'completed');
   assert.equal((await lstat(entry)).isSymbolicLink(),true);
   assert.deepEqual(await readFile(join(release,'cgpt-approval-bridge-controller.mjs')),old);
-  for(const name of BROKER_ARTIFACT_FILES) {const info=await lstat(join(broker,name));assert.equal(info.isSymbolicLink(),false);assert.equal(info.mode&0o777,0o775);}
+  for(const name of BROKER_ARTIFACT_FILES) {const info=await lstat(join(broker,name));assert.equal(info.isSymbolicLink(),false);assert.equal(info.mode&0o777,0o770);}
   const receipt=await h.receipt();assert.equal(receipt.managed.broker,undefined);
   // Reprise inchangée : les liens existants restent admissibles.
   assert.equal((await updateComponents(h.c,h.options)).status,'up-to-date');
@@ -1267,7 +1270,7 @@ test('CABU migration privée : copie0775 conservée, once et activation idempote
  assert.equal(result.status,'completed');assert.equal(result.runtimeMigration.state,'ACTIVE');assert.equal(result.transportContinuity.state,'LEGACY');
  assert.equal(await readFile(join(h.source,'controller-runs.json'),'utf8'),h.bytes);
  assert.equal((await lstat(join(h.source,'controller-runs.json'))).mode&0o777,0o775);
- const copied=join(result.runtimeMigration.destination,'controller-runs.json');assert.equal((await lstat(copied)).mode&0o777,0o600);
+ const copied=join(result.runtimeMigration.destination,'controller-runs.json');assert.equal((await lstat(copied)).mode&0o777,0o770);
  assert.equal(JSON.parse(await readFile(copied)).coordination.operations['once-old'].native.onceAcknowledged,true);
  assert.equal((await updateComponents(h.c,h.options)).status,'up-to-date');
 });

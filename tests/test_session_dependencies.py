@@ -78,6 +78,15 @@ class DependencyTests(unittest.TestCase):
         self.store.close()
         self.temp.cleanup()
 
+    def test_group_mode_and_legacy_database_remain_usable(self):
+        directory=self.base/'store';database=directory/'dependencies.sqlite3';marker=directory/'store.enabled'
+        self.assertEqual(directory.stat().st_mode&0o777,0o770)
+        self.assertEqual(database.stat().st_mode&0o777,0o770)
+        self.assertEqual(marker.stat().st_mode&0o777,0o770)
+        self.store.close();directory.chmod(0o2770);database.chmod(0o600);marker.chmod(0o600)
+        self.store=MODULE.DependencyStore(directory)
+        self.assertEqual(self.store.db.execute('SELECT count(*) FROM sessions').fetchone()[0],2)
+
     def test_persistence_dedup_ack_and_project_isolation(self):
         s = self.store
         s.register(self.other, "receiver", "run2", "direct")

@@ -4,7 +4,7 @@ import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {isAbsolute} from 'node:path';
 import {promisify} from 'node:util';
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const execFileAsync=promisify(execFile);
 
 export async function dependencyCloseCheck({stateRoot,project,run,session},runner=execFileAsync) {

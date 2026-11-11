@@ -1,5 +1,8 @@
 # Codex Approval Bridge — CAB
 
+CAB crée ses nouveaux fichiers et répertoires en `0770` et accepte les anciens
+modes compatibles avec les droits effectifs et les protections du protocole.
+
 ## Coordination et bancs autonomes CAB 2.7.0
 
 Les codeurs opèrent les déclarations, avis, vérifications et acquittements dans leur

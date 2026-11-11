@@ -1,5 +1,10 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+Les nouveaux états, reçus, verrous et fichiers de CAB sont créés en 0770.
+Les anciens modes compatibles restent lisibles sans changement de droits ;
+les contrôles de type, propriétaire, liens, intégrité et accès effectif restent
+applicables. Les canaux inter-UID utilisent un groupe POSIX commun vérifié.
+
 ## Coordination et bancs autonomes CAB 2.7.0
 
 Les codeurs opèrent les déclarations, avis, vérifications et acquittements dans leur
@@ -458,17 +463,17 @@ Voir [la procédure distribuée](plugins/cab-approval-bridge/skills/approval-bri
 Aucun changement du RUN métier par le correcteur ; qualification, publication
 et activation restent distinctes.
 
-## États privés CAB2.2.39 et fichiers projet0775
+## États CAB et fichiers projet
 
-Les fichiers de projet conservent leurs droits0775, y compris après DIU.
+Les fichiers de projet conservent leurs droits existants, notamment 0770 après DIU.
 Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
 `<home exécution>/.local/state/cab-approval-bridge/<SHA256 du workspace résolu>/cgpt-approval-bridge/`.
-Les répertoires privés sont0700 et les fichiers0600. La racine optionnelle
+Les nouveaux répertoires et fichiers CAB sont en 0770 ; les anciens modes compatibles restent utilisables. La racine optionnelle
 `OC_Codex_RUNTIME_STATE_ROOT` (alias historique `OC_CGPT_RUNTIME_STATE_ROOT`
 seulement si le nom principal est absent) remplace `.local/state` ; elle doit
 être absolue, hors projet et protégée. Le broker conserve son magasin de profil
 hors projet. `/status` expose `runtimeStateDirectory` ; ne pas deviner ce chemin.
-Seul le verrou public de coordination reste dans le projet en0775, pour
+Seul le verrou public de coordination reste dans le projet en 0770, pour
 exclure une ancienne instance ; il ne contient aucune décision ou secret.
 
 Le premier CABU depuis2.2.6 vérifie le registre source et le transcript des
@@ -1607,7 +1612,7 @@ origine identique et champs fermés ; corps limité à 4096 octets et une action
 Le catalogue utilise OC_Codex_MONITOR_STATE_DIR, répertoire parent absolu
 (alias OC_CGPT_), ou ~/.local/state/cab-approval-bridge-monitor par défaut,
 puis un sous-dossier SHA-256 du workspace. catalog.json est limité à 2 Mio et
-2000 lignes, schéma privé 1, fichiers 0600, dossiers créés 0700. Les écritures
+2000 lignes, schéma protégé 1, nouveaux fichiers et dossiers créés en 0770. Les écritures
 sont verrouillées par création exclusive, synchronisées et remplacées
 atomiquement. Liens, corruption et lecture impossible bloquent les mutations.
 Un verrou abandonné exige une réconciliation explicite ; il n'est pas effacé
@@ -1679,7 +1684,7 @@ et conserve job.recovery. Les autres usages de checkCohort restent stricts.
 
 OC_Codex_MAINTENANCE_STATE_DIR peut choisir cette racine absolue privée hors
 workspace ; défaut : ~/.local/state/cab-approval-bridge-update/frozen-controller.
-Dossiers 0700, fichiers 0600, propriétaire courant et absence de liens sont
+Modes 0770 ou anciens modes compatibles, propriétaire courant et absence de liens sont
 exigés. Un chemin fourni dans le corps HTTP n'est jamais suivi.
 
 Le profil exige des pairs sous PAUSE explicitement autorisée pendant toute
@@ -1857,7 +1862,7 @@ identiques. Cette évolution source 2.1.6 ne prouve pas une mise à jour active.
 
 Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
 
-Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0600 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
+Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0770 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
 
 Cette option est facultative : les projets sans OpenCode ou session pilotée n’ont pas à définir OPENCODE_PASSWORD. Sans option, le credential privé existant suffit et aucun project.env n’est lu. Cette préparation source ne provisionne rien dans le profil réel.
 

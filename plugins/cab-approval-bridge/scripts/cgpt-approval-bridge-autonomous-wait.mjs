@@ -1,6 +1,6 @@
 /** Wait mechanically for a final submission or exception; no periodic LLM turn. */
 import {pathToFileURL} from 'node:url';
-export const VERSION='2.7.3';
+export const VERSION='2.7.4';
 
 export async function waitForAutonomousWork({controller,runId,signal,fetchImpl=fetch}) {
   const base=new URL(controller);

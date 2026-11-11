@@ -24,17 +24,17 @@ et le contrat public du paquet cible, avec propriétaire/groupe, absence de lien
 et empreintes contrôlés. Le manifeste historique à trois fichiers reste lisible,
 mais ne dispense pas du contrôle complet avant une nouvelle activation.
 
-## États privés CAB2.2.40 et fichiers projet0775
+## États CAB et fichiers projet
 
-Les fichiers de projet conservent leurs droits0775, y compris après DIU.
+Les fichiers de projet conservent leurs droits, notamment 0770 après DIU.
 Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
 `<home exécution>/.local/state/cab-approval-bridge/<SHA256 du workspace résolu>/cgpt-approval-bridge/`.
-Les répertoires privés sont0700 et les fichiers0600. La racine optionnelle
+Les nouveaux répertoires et fichiers CAB sont en 0770 ; les anciens modes compatibles restent utilisables. La racine optionnelle
 `OC_Codex_RUNTIME_STATE_ROOT` (alias historique `OC_CGPT_RUNTIME_STATE_ROOT`
 seulement si le nom principal est absent) remplace `.local/state` ; elle doit
 être absolue, hors projet et protégée. Le broker conserve son magasin de profil
 hors projet. `/status` expose `runtimeStateDirectory` ; ne pas deviner ce chemin.
-Seul le verrou public de coordination reste dans le projet en0775, pour
+Seul le verrou public de coordination reste dans le projet en 0770, pour
 exclure une ancienne instance ; il ne contient aucune décision ou secret.
 
 Le premier CABU depuis2.2.6 vérifie le registre source et le transcript des
@@ -118,7 +118,7 @@ Le profil `frozen-recovery-controller` est une opération distincte de la mise
 à jour ordinaire. Son invocation exige l'accord spécifique de maintenance ;
 un mandat source SCM, une demande de version ou un statut READY ne l'autorise
 pas. Utiliser `--profile frozen-recovery-controller --frozen-proof-file` avec
-un fichier JSON privé 0600 contenant transactionId, authorization, target,
+un fichier JSON protégé en 0770 ou dans un mode historique compatible contenant transactionId, authorization, target,
 originalManifest, expectedBuildDigest et preservedProcesses. Le répertoire
 broker n'est pas requis pour ce profil puisqu'il n'y écrit rien.
 
@@ -216,7 +216,7 @@ En 1.10.7, `expectedUid` désigne les processus OpenCode/broker. Les champs priv
 Une demande orpheline du job courant en PAUSE utilise `recoveryId: null` dans `/runs/<run_id>/validation/reconcile`. Seule la décision rejected devient possible après preuve native de non-exécution ; la même approbation doit confirmer REJECTED avant clôture du mandat. Si l'ancien contrôleur ne connaît pas le propriétaire, l'orchestrateur peut transmettre sa décision explicite par l'outil manuel reject du broker existant, puis observer REJECTED sans réémettre la demande ou exécuter le métier.
 
 La politique ordinaire explicite `--broker-policy reuse-readonly` exige
-`--layout managed-release` et `--broker-proof-file` privé 0600, propriétaire
+`--layout managed-release` et `--broker-proof-file` protégé en 0770 ou dans un mode historique compatible, propriétaire
 de l'acteur. Le JSON contient exactement authorization, entry, expectedUid,
 expectedGid, manifest des trois modules, loadedVersion, instanceId,
 opencodeProcess et brokerProcess (pid/startTime/uid). La version des fichiers
@@ -410,7 +410,7 @@ x-opencode-directory. Ne pas créer un deuxième broker dans un projet distinct.
 
 Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
 
-Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0600 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
+Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0770 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
 
 Cette option est facultative : les projets sans OpenCode ou session pilotée n’ont pas à définir OPENCODE_PASSWORD. Sans option, le credential privé existant suffit et aucun project.env n’est lu. Cette préparation source ne provisionne rien dans le profil réel.
 
@@ -421,9 +421,12 @@ Un échec après coupure expose `failureCode`, `serviceFailures` (composant, Act
 
 ### Permissions réappliquées par DIU
 
-DIU peut remettre le répertoire `~/.config/cab-approval-bridge/` en `0770`. Dans CAB 2.1.32, la lecture du credential existant reste possible si `opencode.password` est un fichier ordinaire, sans lien, détenu par l’utilisateur du service et protégé en `0600`. Le passage du répertoire à `0770` ne prouve donc pas une panne de l’API OpenCode.
+Les fichiers et répertoires CAB nouvellement créés utilisent `0770`. Les
+anciens modes compatibles restent acceptés ; le groupe dispose des droits
+accordés par POSIX. Le credential doit être ordinaire, sans lien, détenu par
+l’utilisateur et protégé des autres comptes. Préserver sa valeur et ne jamais
+l’afficher ; aucun changement de mode n’est requis pour lire un ancien credential.
 
-Le provisionnement d’un credential absent exige en revanche un répertoire détenu par l’utilisateur et non modifiable par le groupe ou les autres. Si DIU a remis `0770` et que le fichier manque, rétablir les permissions sûres du seul répertoire CAB, par exemple `0700`, avant le raccord explicitement autorisé à OPENCODE_PASSWORD. Préserver le credential et son mode lors des mises à jour DIU ; ne jamais afficher sa valeur. La variable reste facultative pour les projets qui n’utilisent pas OpenCode.
 
 ### Arrêt technique 2.1.32
 

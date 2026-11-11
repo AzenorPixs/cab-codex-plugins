@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const execute = promisify(execFile);
 const hash = (value) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const fail = (code, status = 409) => Object.assign(new Error(code), { status });
@@ -56,7 +56,7 @@ async function safeDirectory(directory, create = false) {
   for (const part of relative(current, directory).split('/').filter(Boolean)) {
     current = join(current, part);
     if (create) {
-      try { await mkdir(current, { mode: 0o700 }); }
+      try { await mkdir(current, { mode: 0o770 });const fd=await open(current,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);try{await fd.chmod(0o770);}finally{await fd.close();} }
       catch (error) { if (error.code !== 'EEXIST') throw error; }
     }
     const stat = await lstat(current);
@@ -123,7 +123,7 @@ export class MonitorCatalog {
           !['archive', 'delete', 'restore'].includes(body.action) ||
           (body.action === 'delete' && body.confirm !== true)) throw fail('monitor-action-invalid', 400);
       await safeDirectory(this.directory, true);
-      lock = await open(join(this.directory, 'catalog.lock'), 'wx', 0o600);
+      lock = await open(join(this.directory, 'catalog.lock'), 'wx', 0o770);await lock.chmod(0o770);
       await this.load();
       if (this.error) throw fail(this.error, 503);
       const existing = this.entries.find((entry) => entry.kind === body.kind && entry.key === body.key);
@@ -141,8 +141,8 @@ export class MonitorCatalog {
       const data = JSON.stringify({ schema: 1, workspace: this.workspace, entries }) + '\n';
       if (entries.length > 2000 || Buffer.byteLength(data) > 2 * 1024 * 1024) throw fail('monitor-catalog-full');
       temporary = join(this.directory, 'catalog-' + randomUUID() + '.tmp');
-      const file = await open(temporary, 'wx', 0o600);
-      try { await file.writeFile(data); await file.sync(); } finally { await file.close(); }
+      const file = await open(temporary, 'wx', 0o770);
+      try { await file.chmod(0o770);await file.writeFile(data); await file.sync(); } finally { await file.close(); }
       await rename(temporary, join(this.directory, 'catalog.json')); temporary = null;
       const directory = await open(this.directory, 'r');
       try { await directory.sync(); } finally { await directory.close(); }

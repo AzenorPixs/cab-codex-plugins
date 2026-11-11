@@ -18,7 +18,7 @@ import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 import { activateRuntimeServices } from './cgpt-approval-bridge-runtime-install.mjs';
 import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -51,7 +51,7 @@ async function directories(path, create = false) {
   for (const part of resolve(path).split('/').filter(Boolean)) {
     cursor = join(cursor, part);
     if (create) {
-      try { await mkdir(cursor, { mode: 0o700 }); }
+      try { await mkdir(cursor, { mode: 0o770 });const fd=await open(cursor,constants.O_RDONLY|constants.O_DIRECTORY|constants.O_NOFOLLOW);try{await fd.chmod(0o770);}finally{await fd.close();} }
       catch (cause) { if (cause.code !== 'EEXIST') throw cause; }
     }
     const stat = await lstat(cursor);
@@ -70,7 +70,7 @@ async function regular(path, limit = 4 * 1024 * 1024) {
 async function optional(path) {
   try { return await regular(path); } catch (cause) { if (cause.code === 'ENOENT') return null; throw cause; }
 }
-async function atomic(path, data, mode = 0o600) {
+async function atomic(path, data, mode = 0o770) {
   await directories(dirname(path), true);
   await optional(path);
   const temporary = join(dirname(path), '.cab-update-' + randomUUID() + '.tmp');
@@ -221,7 +221,7 @@ export async function updateComponents(input, options = {}) {
       validatorIdentity = [process.execPath, process.version, python];
       if (!options.syntax) {
         const cached = await optional(syntaxCachePath);
-        if (cached && cached.uid === process.getuid() && !(cached.mode & 0o077)) {
+        if (cached && cached.uid === process.getuid() && !(cached.mode & 0o007)) {
           try { const value = JSON.parse(cached.data); if (value && typeof value === 'object' && !Array.isArray(value)) syntaxCache = value; } catch { syntaxCache = {}; }
         }
       }
@@ -242,7 +242,7 @@ export async function updateComponents(input, options = {}) {
     ...(readonlyBroker ? ['reuse-readonly',proofHash(input.brokerProof)] : [])]));
   await directories(c.workspace); await directories(c.pluginRoot); await directories(c.state, true);
   const stateStat = await lstat(c.state);
-  if (stateStat.uid !== process.getuid() || (stateStat.mode & 0o077)) throw error('update-private-state-required');
+  if (stateStat.uid !== process.getuid() || (stateStat.mode & 0o007)) throw error('update-private-state-required');
   const lock = await authority(join(c.state, 'update.lock'));
   let receipt;
   let receiptTrusted = false;
@@ -309,7 +309,7 @@ export async function updateComponents(input, options = {}) {
     const script=`
       import {pathToFileURL} from 'node:url';
       import {join} from 'node:path';
-      import {existsSync,mkdirSync} from 'node:fs';
+      import {existsSync,mkdirSync,chmodSync} from 'node:fs';
       try {
         const [modules,state,workspace]=process.argv.slice(1);
         const {ResourceRunRegistry}=await import(pathToFileURL(join(modules,'cgpt-approval-bridge-resource-coordination.mjs')));
@@ -322,7 +322,7 @@ export async function updateComponents(input, options = {}) {
         const snapshot=registry.snapshot(),runs={};
         for(const run of snapshot.runs.filter(run=>run.state==='RESERVED')){
           const directory=join(state,'runs',run.runId,String(run.contextId||run.version));
-          mkdirSync(directory,{recursive:true,mode:0o700});
+          mkdirSync(directory,{recursive:true,mode:0o770});chmodSync(directory,0o770);
           const context=createJobContext({workspace,stateDirectory:directory,run,openCodeClient:{}});
           const status=context.publicStatus();runs[run.runId]={job:context.publicJob(),activeValidations:status.activeValidations};
         }
@@ -627,7 +627,7 @@ export async function updateComponents(input, options = {}) {
   }
   async function requireStoredHeld() {
     const file = await regular(join(runtimeStateDirectory(c.workspace),'controller-runs.json'), REGISTRY_MAX_BYTES);
-    if (file.uid !== process.getuid() || (file.mode & 0o077)) throw error('update-broker-registry-untrusted');
+    if (file.uid !== process.getuid() || (file.mode & 0o007)) throw error('update-broker-registry-untrusted');
     const snapshot = JSON.parse(file.data), global=snapshot.coordination?.global;
     if (snapshot.schemaVersion !== 4 || snapshot.coordinationProtocol !== 'resource-scoped-v1' || snapshot.project !== c.workspace ||
         global?.state !== 'HELD' || global.transactionId !== receipt.id || global.generation !== receipt.maintenance?.generation ||
@@ -663,7 +663,7 @@ export async function updateComponents(input, options = {}) {
     }
     const root=group==='monitorScripts'||group==='web'||stat.isSymbolicLink()?dirname(logical):logical;
     await directories(root);const owner=await lstat(root);
-    if(owner.uid!==process.getuid()||(owner.mode&0o022)||logical.includes('/releases/'))throw error('update-managed-owner-divergent');
+    if(owner.uid!==process.getuid()||(owner.mode&0o002)||logical.includes('/releases/'))throw error('update-managed-owner-divergent');
     const section=group==='web'?'web-monitor':group==='broker'?'broker':'scripts';
     const releaseId=receipt.version+'+update.'+receipt.id.slice(7);
     const plan={root,logical,section,directory:join(root,'releases',releaseId,section),mode:'links'};
@@ -728,8 +728,8 @@ export async function updateComponents(input, options = {}) {
       const saved=await regular(join(transaction(),'backup',String(i)));
       if(hash(saved.data)!==file.beforeHash)throw error('update-backup-invalid');
       if(plan) {
-        const temp=join(dirname(path),'.cab-restore-'+randomUUID());await atomic(temp,saved.data,file.mode);await rename(temp,path);
-      } else await atomic(path,saved.data,file.mode);
+        const temp=join(dirname(path),'.cab-restore-'+randomUUID());await atomic(temp,saved.data,file.beforeMode??file.mode);await rename(temp,path);
+      } else await atomic(path,saved.data,file.beforeMode??file.mode);
     } else if(await lstat(path).catch((cause)=>{if(cause.code==='ENOENT')return null;throw cause;}))await unlink(path);
   }
   async function save(phase) {
@@ -1146,7 +1146,8 @@ export async function updateComponents(input, options = {}) {
       for (const file of receipt.files) {
         target(file);
         if ((file.beforeHash !== null && !/^[a-f0-9]{64}$/.test(file.beforeHash)) ||
-            !/^[a-f0-9]{64}$/.test(file.afterHash) || !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777) throw error('update-journal-invalid');
+            !/^[a-f0-9]{64}$/.test(file.afterHash) || !Number.isInteger(file.mode) || file.mode < 0 || file.mode > 0o777 ||
+            file.beforeMode != null && (!Number.isInteger(file.beforeMode)||file.beforeMode<0||file.beforeMode>0o777)) throw error('update-journal-invalid');
       }
       if(receipt.managed) {
         if(input.layout!=='managed-release'||receipt.layoutDigest!==proofHash(receipt.managed))throw error('update-journal-invalid');
@@ -1417,7 +1418,7 @@ export async function updateComponents(input, options = {}) {
               !source.split('\n').includes(start) || /^\[Install\]/m.test(source)) throw error('update-unit-invalid');
         }
         const file = { ...entry, afterHash: hash(content.data),
-          beforeHash: before ? hash(before.data) : null, mode: artifact.group==='broker'&&input.brokerPolicy==='cab-source'?0o775:before?.mode ?? content.mode };
+          beforeHash: before ? hash(before.data) : null, beforeMode: before?.mode ?? null, mode: 0o770 };
         if (before) await atomic(join(transaction(), 'backup', String(i)), before.data);
         await atomic(join(transaction(), 'stage', String(i)), content.data);
         receipt.files.push(file);
@@ -1665,7 +1666,7 @@ export async function maintainFrozenController(input, options = {}) {
     ...(options.openCodeFetch ? { fetchImpl: options.openCodeFetch } : {}) });
   const root = join(c.state, 'frozen-controller'), transactionId = spec.transactionId;
   await directories(c.state, true); await directories(root, true);
-  if ((await lstat(root)).uid !== process.getuid() || ((await lstat(root)).mode & 0o077)) throw error('update-private-state-required');
+  if ((await lstat(root)).uid !== process.getuid() || ((await lstat(root)).mode & 0o007)) throw error('update-private-state-required');
   const lock = await authority(join(c.state, 'update.lock'));
   const journalFile = join(root, transactionId + '.json'), work = join(root, transactionId);
   let journal, registryLock, journalTrusted = false;
@@ -1768,13 +1769,14 @@ export async function maintainFrozenController(input, options = {}) {
     if (old) {
       journal = JSON.parse(old.data);
       if (journal.profile !== FROZEN_PROFILE || journal.inputDigest !== proofHash({ ...c, frozenRecovery: spec }) ||
-          old.uid !== process.getuid() || (old.mode & 0o077) ||
+          old.uid !== process.getuid() || (old.mode & 0o007) ||
           journal.transactionId !== transactionId || !Array.isArray(journal.files) || !phases.includes(journal.phase) ||
           journal.files.length > 64 || journal.files.length !== Object.keys(journal.manifest || {}).length ||
           proofHash(journal.manifest) !== spec.expectedBuildDigest || proofHash(journal.originalManifest) !== proofHash(spec.originalManifest) ||
           new Set(journal.files.map((f) => f.name)).size !== journal.files.length || journal.files.some((f) =>
             !/^[a-zA-Z0-9_-]+\.(mjs|py)$/.test(f.name || '') || f.afterHash !== journal.manifest[f.name] ||
-            f.beforeHash !== (journal.originalManifest[f.name] || null) || !Number.isInteger(f.mode) || f.mode < 0 || f.mode > 0o777)) throw error('update-journal-invalid');
+            f.beforeHash !== (journal.originalManifest[f.name] || null) || !Number.isInteger(f.mode) || f.mode < 0 || f.mode > 0o777 ||
+            f.beforeMode != null && (!Number.isInteger(f.beforeMode)||f.beforeMode<0||f.beforeMode>0o777))) throw error('update-journal-invalid');
       if (reached('BOOTSTRAP_HELD')) await readBootstrapJournal(root, transactionId);
       journalTrusted = true;
       if (journal.seal && Date.now()>journal.seal.expiresAt) throw error('update-bootstrap-proof-expired');
@@ -1824,7 +1826,7 @@ export async function maintainFrozenController(input, options = {}) {
         const i = journal.files.length;
         if (before) await atomic(join(work,'backup-'+i), before.data);
         await atomic(join(work,'stage-'+i), source.data);
-        journal.files.push({ name, beforeHash: before ? hash(before.data) : null, afterHash, mode: before?.mode ?? source.mode });
+        journal.files.push({ name, beforeHash: before ? hash(before.data) : null, afterHash, beforeMode:before?.mode ?? null,mode:0o770 });
       }
       journalTrusted = true;
       await save('PREPARED');
@@ -1915,7 +1917,7 @@ export async function maintainFrozenController(input, options = {}) {
             if (file.beforeHash) {
               const backup=await regular(join(work,'backup-'+i));
               if (hash(backup.data) !== file.beforeHash) throw error('update-backup-invalid');
-              await atomic(destination(file),backup.data,file.mode);
+              await atomic(destination(file),backup.data,file.beforeMode??file.mode);
             } else await unlink(destination(file));
           }
         }
@@ -1949,12 +1951,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(await realpath(process.
     input.workspace = await realpath(input.workspace);
     if (input.brokerProofFile !== undefined) {
       const supplied=await regular(input.brokerProofFile);
-      if ((supplied.mode & 0o077) || supplied.uid !== process.getuid()) throw error('update-private-proof-required');
+      if ((supplied.mode & 0o007) || supplied.uid !== process.getuid()) throw error('update-private-proof-required');
       input.brokerProof=JSON.parse(supplied.data);delete input.brokerProofFile;
     }
     if (input.profile === FROZEN_PROFILE) {
       const supplied=await regular(input.frozenProofFile);
-      if ((supplied.mode & 0o077) || supplied.uid !== process.getuid()) throw error('update-private-proof-required');
+      if ((supplied.mode & 0o007) || supplied.uid !== process.getuid()) throw error('update-private-proof-required');
       input.frozenRecovery=JSON.parse(supplied.data); delete input.frozenProofFile;
     }
     const result = await updateComponents(input, { rollbackOnly,

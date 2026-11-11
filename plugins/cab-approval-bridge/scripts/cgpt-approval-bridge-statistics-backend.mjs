@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 import {readFileSync,existsSync,unlinkSync,lstatSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {runtimeRequest,queueComponentCheckpoint,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
-export const VERSION='2.7.3';
+export const VERSION='2.7.4';
 export class StatisticsBackend {
   constructor(project,component,{home=homedir(),legacyPath}={}) {this.project=project;this.component=component;this.home=home;this.legacyPath=legacyPath;this.sequence=0;this.pending=Promise.resolve();}
   child(component,legacyPath){return new StatisticsBackend(this.project,component,{home:this.home,legacyPath});}
@@ -19,7 +19,7 @@ export class StatisticsBackend {
     let queued;
     if(existsSync(path)) {
       const info=lstatSync(path);
-      if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o077)throw new Error('sgs-checkpoint-outbox-unsafe');
+      if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o007)throw new Error('sgs-checkpoint-outbox-unsafe');
       queued=JSON.parse(readFileSync(path,'utf8'));
     }
     if(queued&&queued.sequence>data.sequence){this.sequence=queued.sequence;return queued.data;}

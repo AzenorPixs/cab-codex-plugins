@@ -69,7 +69,7 @@ par le même canal ; aucune appartenance à une politique PLLM n’est imposée.
 Le client utilise reasoning en entrée ; variant est réservé aux lectures.
 
 Le reçu par défaut réside sous ~/.local/state/cab-provider-connect/, répertoire
-privé0700, fichiers0600. --state-directory permet une destination privée
+protégé en 0770, avec lecture des anciens modes compatibles. --state-directory permet une destination privée
 explicitement contrôlée. Un reçu COMPLETED contient l’identité opaque de la
 connexion et requiresPreflight:true ; il ne prouve aucune génération réelle.
 Une erreur après possibilité de POST laisse UNCONFIRMED et conserve le verrou.

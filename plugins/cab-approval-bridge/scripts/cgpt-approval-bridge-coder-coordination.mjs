@@ -2,7 +2,7 @@ import {execFile} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {requireAutonomousAcceptance} from './cgpt-approval-bridge-autonomous-mandate.mjs';
-export const VERSION='2.7.3';
+export const VERSION='2.7.4';
 export const CODER_COORDINATION_PROTOCOL='cab-coder-coordination-1';
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex');
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};

@@ -84,7 +84,9 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const wrapper = join(root, 'broker.py');
     writeFileSync(wrapper, `import sys, os\nopen(${JSON.stringify(brokerPidFile)}, 'w').write(str(os.getpid()))\nsys.path.insert(0, ${JSON.stringify(source)})\nimport cgpt_approval_bridge_server as b\n# Reproduire le schema 2.1.9, sans affaiblir son validateur runtime.\nb.APPROVAL_REQUEST_PROPERTIES['access_id'] = {'type': 'string', 'maxLength': 100}\nraise SystemExit(b.main())\n`);
     if(process.env.CAB_TEST_GROUP_REPORTING==='1') {
-      const original=readFileSync(wrapper,'utf8');writeFileSync(wrapper,original.replace('raise SystemExit(b.main())','b.READINESS_PUBLISH_INTERVAL_SECONDS = 1\nraise SystemExit(b.main())'));
+      const marker=join(root,'reporting-ready');
+      const setup=`b.READINESS_PUBLISH_INTERVAL_SECONDS = 1\nimport threading,time\ndef restore_interval():\n while not os.path.exists(${JSON.stringify(marker)}):time.sleep(0.05)\n b.READINESS_PUBLISH_INTERVAL_SECONDS = 30\nthreading.Thread(target=restore_interval,daemon=True).start()\n`;
+      const original=readFileSync(wrapper,'utf8');writeFileSync(wrapper,original.replace('raise SystemExit(b.main())',setup+'raise SystemExit(b.main())'));
     }
     if(process.env.CAB_TEST_EXTERNAL==='1'&&!process.env.CAB_TEST_EXTERNAL_SSH_PORT) {
       const extra=`
@@ -182,6 +184,7 @@ external.private_root=preflight_failure_once
     if(process.env.CAB_TEST_GROUP_REPORTING==='1') {
       await until(async()=>{const b=(await http('/status')).brokerReadiness;return b?.ccab_outbox?.count===0&&b?.reporting?.statistics==='stored';},
         'group reporting readiness',async()=>{const b=(await http('/status')).brokerReadiness;return {outbox:b?.ccab_outbox,reporting:b?.reporting};});
+      writeFileSync(join(root,'reporting-ready'),'ready',{mode:0o770});chmodSync(join(root,'reporting-ready'),0o770);
       console.log(JSON.stringify({brokerGroupReporting:true,mode:'2770',outboxAvailable:true,statistics:'stored'}));
     }
     // Une session temporaire partage le contexte MCP existant, même depuis un client technique.

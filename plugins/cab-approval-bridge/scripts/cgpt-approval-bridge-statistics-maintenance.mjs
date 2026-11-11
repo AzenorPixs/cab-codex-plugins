@@ -1,9 +1,9 @@
-import { constants, closeSync, fsyncSync, openSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
+import { constants, closeSync, fchmodSync, fsyncSync, openSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { digest, safeRead } from './cgpt-approval-bridge-observation-statistics.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 export const RETENTION_DAYS = [1, 3, 7, 30, 365];
 const selections = ['current', 'last', '24h', '7d', '30d'];
 const key = (c) => JSON.stringify([c.runId, c.contextId, c.changeId]);
@@ -71,7 +71,8 @@ export function writeRetentionSnapshot(path, data) {
   let descriptor;
   let renamed = false;
   try {
-    descriptor = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o600);
+    descriptor = openSync(candidate, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW, 0o770);
+    fchmodSync(descriptor,0o770);
     writeFileSync(descriptor, JSON.stringify(data) + '\n', 'utf8'); fsyncSync(descriptor);
     closeSync(descriptor); descriptor = undefined;
     renameSync(candidate, path); renamed = true;

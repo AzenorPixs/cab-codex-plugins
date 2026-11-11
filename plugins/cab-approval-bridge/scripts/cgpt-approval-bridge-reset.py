@@ -14,7 +14,7 @@ from pathlib import Path
 STATE_DIRECTORY = "cgpt-approval-bridge"
 INSTANCE_LOCK = "broker.instance.lock"
 REGISTRY_LOCK = "registry.instance.lock"
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 
 
 def validate_directory(value):
@@ -31,6 +31,15 @@ def validate_directory(value):
     return path
 
 
+def open_lock(path):
+    try:
+        descriptor=os.open(path,os.O_RDWR|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o770)
+        os.fchmod(descriptor,0o770)
+        return descriptor
+    except FileExistsError:
+        return os.open(path,os.O_RDWR|os.O_NOFOLLOW)
+
+
 def reset_directories(values):
     """Verrouille toutes les cibles avant d'effacer leur contenu sans le lire."""
     directories = list(dict.fromkeys(validate_directory(value) for value in values))
@@ -44,8 +53,7 @@ def reset_directories(values):
             if not directory.exists():
                 reports.append({"directory": str(directory), "removed_entries": 0})
                 continue
-            flags = os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW
-            descriptor = os.open(directory / INSTANCE_LOCK, flags, 0o600)
+            descriptor = open_lock(directory / INSTANCE_LOCK)
             handle = stack.enter_context(os.fdopen(descriptor, "r+b"))
             metadata = os.fstat(descriptor)
             if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:
@@ -61,7 +69,7 @@ def reset_directories(values):
         for directory, _ in locked:
             registry_path = directory / "controller-runs.json"
             if registry_path.exists() or (directory / REGISTRY_LOCK).exists():
-                descriptor = os.open(directory / REGISTRY_LOCK, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+                descriptor = open_lock(directory / REGISTRY_LOCK)
                 lock = stack.enter_context(os.fdopen(descriptor, "r+b"))
                 metadata = os.fstat(descriptor)
                 if not stat.S_ISREG(metadata.st_mode) or metadata.st_nlink != 1:

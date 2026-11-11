@@ -82,7 +82,7 @@ import stat
 import threading
 import uuid
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -163,10 +163,14 @@ def ensure_parent(path):
         return
 
     try:
-        os.makedirs(
-            parent,
-            exist_ok=True,
-        )
+        missing=[];current=os.path.abspath(parent)
+        while not os.path.exists(current):missing.append(current);current=os.path.dirname(current)
+        for directory in reversed(missing):
+            try:
+                os.mkdir(directory,0o770);fd=os.open(directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+                try:os.fchmod(fd,0o770)
+                finally:os.close(fd)
+            except FileExistsError:pass
 
     except OSError as exc:
         raise JournalError(
@@ -188,11 +192,10 @@ def locked_journal(path):
 
     with THREAD_JOURNAL_LOCK:
         try:
-            lock_handle = open(
-                lock_path,
-                "a+",
-                encoding="utf-8",
-            )
+            try:
+                fd=os.open(lock_path,os.O_RDWR|os.O_APPEND|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o770);os.fchmod(fd,0o770)
+            except FileExistsError:fd=os.open(lock_path,os.O_RDWR|os.O_APPEND|os.O_NOFOLLOW)
+            lock_handle=os.fdopen(fd,"a+",encoding="utf-8")
 
         except OSError as exc:
             raise JournalError(
@@ -568,11 +571,9 @@ def write_checkpoint_unlocked(sequence, chain_tip, journal_file_path):
     replaced = False
 
     try:
-        with open(
-            tmp_path,
-            "w",
-            encoding="utf-8",
-        ) as handle:
+        fd=os.open(tmp_path,os.O_WRONLY|os.O_CREAT|os.O_TRUNC|os.O_NOFOLLOW,0o770)
+        with os.fdopen(fd,"w",encoding="utf-8") as handle:
+            os.fchmod(handle.fileno(),0o770)
             json.dump(
                 payload,
                 handle,
@@ -1856,11 +1857,10 @@ def append_event(
         )
 
         try:
-            with open(
-                path,
-                "a",
-                encoding="utf-8",
-            ) as handle:
+            try:
+                fd=os.open(path,os.O_WRONLY|os.O_APPEND|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o770);os.fchmod(fd,0o770)
+            except FileExistsError:fd=os.open(path,os.O_WRONLY|os.O_APPEND|os.O_NOFOLLOW)
+            with os.fdopen(fd,"a",encoding="utf-8") as handle:
                 handle.write(
                     serialized
                 )

@@ -4,7 +4,8 @@
 
 `support-reporting-external-group-mode` : lot reporting et exécution externe
 archivé, qualifié localement ; livraison et activation à vérifier.
-`support-cab-permission-resilience` reste ouvert pour les autres briques.
+`support-cab-permission-resilience` : généralisation archivée et qualifiée en
+source ; livraison 2.7.4 et activation restent à vérifier.
 
 ## SCM — prévol externe et continuité SGS, 11 novembre 2026
 

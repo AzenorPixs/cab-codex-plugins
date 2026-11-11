@@ -1,4 +1,10 @@
-## ADDED Requirements
+# cab-file-permissions Specification
+
+## Purpose
+Définir les permissions de création et la compatibilité des fichiers utilisés
+par CAB, tout en préservant les invariants et les accès effectifs du protocole.
+
+## Requirements
 
 ### Requirement: Fonctionnement CAB avec permissions de groupe
 
@@ -19,3 +25,7 @@ nécessaires et MUST signaler les restrictions effectives des services tiers.
 #### Scenario: Accès ou intégrité impossibles
 - **WHEN** un accès effectif échoue ou un invariant de type, lien, identité ou intégrité est violé
 - **THEN** CAB retourne un diagnostic et conserve les protections et les effets incertains
+
+#### Scenario: Retour arrière d'une mise à jour
+- **WHEN** une mise à jour remplace un fichier existant de mode compatible puis doit être annulée
+- **THEN** le retour arrière vérifié restaure son contenu et son mode initial sans réémettre d'effet métier

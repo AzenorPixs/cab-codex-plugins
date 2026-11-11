@@ -1,12 +1,13 @@
 /** IPC local SGS/CCAB ; aucun secret ni payload métier dans la télémétrie. */
 import { request } from 'node:http';
-import { mkdir, open, readdir, readFile, unlink, lstat,rename } from 'node:fs/promises';
+import { open, readdir, readFile, unlink, lstat,rename } from 'node:fs/promises';
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 import { homedir } from 'node:os';
 import { join,isAbsolute } from 'node:path';
 import { createHash } from 'node:crypto';
 import {randomUUID} from 'node:crypto';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const key = /^[A-Za-z0-9][A-Za-z0-9_.:/+@-]{0,255}$/;
 export const stateRootDirectory=home=>{
   const root=process.env.OC_Codex_RUNTIME_STATE_ROOT||process.env.OC_CGPT_RUNTIME_STATE_ROOT||join(home||homedir(),'.local/state');
@@ -33,9 +34,9 @@ export function runtimeRequest(component, path, body, { home = homedir(), timeou
 
 async function outboxDirectory(home) {
   const directory = join(stateRootDirectory(home),'cab-approval-bridge/sgs-outbox');
-  await mkdir(directory, { recursive: true, mode: 0o700 });
+  ensureCabDirectories(directory);
   const info = await lstat(directory);
-  if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o077)) throw new Error('sgs-outbox-not-private');
+  if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o007)) throw new Error('sgs-outbox-not-private');
   return directory;
 }
 
@@ -45,14 +46,14 @@ async function queueStatistics(route,payload,{home=homedir(),maxBytes=32*1024*10
   const path=join(directory,(route==='/bindings'?'binding-':route==='/sources'?'source-':'')+id+'.json');
   try {
     const info=await lstat(path);
-    if(!info.isFile()||info.uid!==process.getuid()||(info.mode&0o077)||!bytes.equals(await readFile(path)))throw new Error('sgs-outbox-event-conflict');
+    if(!info.isFile()||info.uid!==process.getuid()||(info.mode&0o007)||!bytes.equals(await readFile(path)))throw new Error('sgs-outbox-event-conflict');
     return {status:'queued',event_id:payload.event_id};
   }catch(error){if(error.code!=='ENOENT')throw error;}
   let size=0;
   for(const name of await readdir(directory)){const info=await lstat(join(directory,name));if(info.isFile())size+=info.size;}
   if(bytes.length>1024*1024||size+bytes.length>maxBytes)return {status:'unavailable',reason:'sgs-outbox-capacity',event_id:payload.event_id};
   let file;
-  try{file=await open(path,'wx',0o600);await file.writeFile(bytes);await file.sync();}
+  try{file=await open(path,'wx',0o770);await file.chmod(0o770);await file.writeFile(bytes);await file.sync();}
   catch(error){if(error.code!=='EEXIST')throw error;if(!bytes.equals(await readFile(path)))throw new Error('sgs-outbox-event-conflict');}
   finally{await file?.close();}
   return {status:'queued',event_id:payload.event_id};
@@ -80,11 +81,11 @@ export async function queueComponentCheckpoint(body,{home=homedir()}={}) {
   const path=join(directory,'checkpoint-'+id+'.json'),bytes=Buffer.from(JSON.stringify(body));
   if(bytes.length>64*1024*1024)throw new Error('sgs-checkpoint-outbox-capacity');
   if(await lstat(path).catch(error=>{if(error.code==='ENOENT')return null;throw error;})) {
-    const info=await lstat(path);if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o077)throw new Error('sgs-checkpoint-outbox-unsafe');
+    const info=await lstat(path);if(!info.isFile()||info.uid!==process.getuid()||info.mode&0o007)throw new Error('sgs-checkpoint-outbox-unsafe');
     const old=JSON.parse(await readFile(path,'utf8'));if(old.sequence>body.sequence)return {status:'queued-newer'};
   }
-  const candidate=path+'.candidate-'+randomUUID(),file=await open(candidate,'wx',0o600);
-  try{await file.writeFile(bytes);await file.sync();}finally{await file.close();}
+  const candidate=path+'.candidate-'+randomUUID(),file=await open(candidate,'wx',0o770);
+  try{await file.chmod(0o770);await file.writeFile(bytes);await file.sync();}finally{await file.close();}
   await rename(candidate,path);
   const parent=await open(directory,'r');try{await parent.sync();}finally{await parent.close();}
   return {status:'queued'};
@@ -95,7 +96,7 @@ export async function flushStatistics({ home = homedir(), limit = 100 } = {}) {
   const priority=name=>name.startsWith('binding-')?0:name.startsWith('source-')?1:2;
   for (const name of (await readdir(directory)).filter(name => /^(?:binding-|source-|checkpoint-)?[a-f0-9]{64}\.json$/.test(name)).sort((a,b)=>priority(a)-priority(b)||a.localeCompare(b)).slice(0, limit)) {
     const path = join(directory, name), info = await lstat(path);
-    if (!info.isFile() || info.uid !== process.getuid() || (info.mode & 0o077) || info.size > (name.startsWith('checkpoint-')?64:1) * 1024 * 1024) throw new Error('sgs-outbox-file-invalid');
+    if (!info.isFile() || info.uid !== process.getuid() || (info.mode & 0o007) || info.size > (name.startsWith('checkpoint-')?64:1) * 1024 * 1024) throw new Error('sgs-outbox-file-invalid');
     const event = JSON.parse(await readFile(path, 'utf8'));
     try { await runtimeRequest('sgs', name.startsWith('binding-')?'/bindings':name.startsWith('source-')?'/sources':name.startsWith('checkpoint-')?'/component/checkpoint':'/events', event, { home }); }
     catch (error) { return { acknowledged, remaining: true, error: error.status ? error.message : 'sgs-unavailable' }; }

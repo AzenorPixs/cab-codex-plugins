@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime,timezone
 
-VERSION='2.7.3'
+VERSION='2.7.4'
 PROTOCOL='cab-external-exec-v1'
 LIMIT=1024*1024
 
@@ -124,7 +124,7 @@ def handle(p,*,state_root=None,identity=None):
     atomic(receipt,value);return {'found':True,**value}
 
 def main():
-    os.umask(0o077)
+    os.umask(0o007)
     p=None
     try:
         p=json.loads(sys.stdin.read(24*LIMIT));result=handle(p)

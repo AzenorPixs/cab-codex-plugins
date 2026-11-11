@@ -1,5 +1,10 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+La distribution CAB crée ses nouveaux fichiers et répertoires en 0770 et
+reste compatible avec les anciens modes lorsque les droits et les invariants
+du protocole le permettent. La qualification couvre notamment les canaux
+inter-UID, les états de continuité et les reçus sous umask restrictif.
+
 ## Coordination et bancs autonomes CAB 2.7.0
 
 Les codeurs opèrent les déclarations, avis, vérifications et acquittements dans leur
@@ -442,17 +447,17 @@ Voir [la procédure distribuée](plugins/cab-approval-bridge/skills/approval-bri
 Aucun changement du RUN métier par le correcteur ; qualification, publication
 et activation restent distinctes.
 
-## États privés CAB2.2.39 et fichiers projet0775
+## États CAB et fichiers projet
 
-Les fichiers de projet conservent leurs droits0775, y compris après DIU.
+Les fichiers de projet conservent leurs droits existants, notamment 0770 après DIU.
 Le contrôleur, le superviseur et les reçus de rejet utilisent désormais
 `<home exécution>/.local/state/cab-approval-bridge/<SHA256 du workspace résolu>/cgpt-approval-bridge/`.
-Les répertoires privés sont0700 et les fichiers0600. La racine optionnelle
+Les nouveaux répertoires et fichiers CAB sont en 0770 ; les anciens modes compatibles restent utilisables. La racine optionnelle
 `OC_Codex_RUNTIME_STATE_ROOT` (alias historique `OC_CGPT_RUNTIME_STATE_ROOT`
 seulement si le nom principal est absent) remplace `.local/state` ; elle doit
 être absolue, hors projet et protégée. Le broker conserve son magasin de profil
 hors projet. `/status` expose `runtimeStateDirectory` ; ne pas deviner ce chemin.
-Seul le verrou public de coordination reste dans le projet en0775, pour
+Seul le verrou public de coordination reste dans le projet en 0770, pour
 exclure une ancienne instance ; il ne contient aucune décision ou secret.
 
 Le premier CABU depuis2.2.6 vérifie le registre source et le transcript des
@@ -524,7 +529,7 @@ OpenCode V2 est la seule version prise en charge. Les appels HTTP utilisent
 serveur V2 avec `OPENCODE_PASSWORD`. Avant le démarrage des unités CAB, provisionner
 le même mot de passe configuré sur OpenCode dans
 `~/.config/cab-approval-bridge/opencode.password`, fichier régulier détenu
-par l'utilisateur et accessible uniquement à celui-ci (`0600`). Les unités
+par l'utilisateur et protégé des autres comptes (`0770` ou ancien mode compatible). Les unités
 le reçoivent par `LoadCredential`; le secret n'est pas une variable d'unité.
 Le client vise `127.0.0.1:4096` ; `0.0.0.0` est uniquement une adresse de
 bind du serveur.
@@ -1089,7 +1094,7 @@ README.md, section « Identifiants publics CAB 2.1.6 ».
 
 Avant toute coupure, l’updater vérifie le credential privé attendu par les trois unités. Un fichier absent, non régulier, lié ou insuffisamment protégé produit un diagnostic `update-credential-*` avant arrêt et remplacement. Aucun mot de passe n’est demandé au modèle.
 
-Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0600 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
+Si DEVOPS.md déclare OPENCODE_PASSWORD dans le project.env du projet concerné, le développeur peut autoriser le raccord en passant explicitement `--opencode-password-env-file <workspace>/project.env` (ou le project.env du workspace des services). Le processus local n’extrait que cette affectation littérale, ignore les autres clés et ne charge jamais le fichier dans le shell. Doublons, valeur vide, échappements et interpolations sont refusés. Un credential existant différent reste intact ; aucun remplacement implicite n’est permis. Le credential créé en 0770 reste conservé après repli et n’est pas copié dans les sauvegardes d’artefacts. Aucun secret ni empreinte du secret ne figure dans les sorties, arguments, environnement ou reçus.
 
 Cette option est facultative : les projets sans OpenCode ou session pilotée n’ont pas à définir OPENCODE_PASSWORD. Sans option, le credential privé existant suffit et aucun project.env n’est lu. Cette préparation source ne provisionne rien dans le profil réel.
 
