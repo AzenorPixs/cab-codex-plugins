@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {runtimeRequest,stateRootDirectory} from './cgpt-approval-bridge-runtime-client.mjs';
 import {projectErasure,erasureReferences} from './cgpt-approval-bridge-change-erasure.mjs';
 import {readRuntimeJson,writeRuntimeJson} from './cgpt-approval-bridge-state-layout.mjs';
-export const VERSION='2.7.0';
+export const VERSION='2.7.1';
 const fail=code=>{throw Object.assign(new Error(code),{code});};
 function removeCurrentErasureMarker(data,component,receiptId) {
   if(component!=='broker-statistics'||!data||typeof data!=='object'||Array.isArray(data)||data.erasure_prepared!==receiptId)return data;

@@ -5,7 +5,7 @@ description: Piloter OpenCode par mandat autonome et revue finale ; reprendre le
 
 # CAB — Codex Approval Bridge
 
-Contrat 2.7.0 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
+Contrat 2.7.1 : lire [le noyau](references/protocol-core.md), [l'index](references/protocol-index.md)
 et les références utiles. Transmettre les obligations au codeur avant son mandat.
 AGENTS.md résout ce contrat.
 

@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 2.7.1 — 2026-11-11
+
+- Compléter l’objectif de la spécification canonique external-test-execution générée
+  lors de l’archivage ; 25 spécifications validées en mode strict.
+- Comportements fonctionnels de la 2.7.0 conservés.
+
 ## 2.7.0 — 2026-11-11
 
 - Coordination courante déléguée aux codeurs, notifications ciblées, migration

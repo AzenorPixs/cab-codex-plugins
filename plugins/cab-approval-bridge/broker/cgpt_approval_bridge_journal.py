@@ -82,7 +82,7 @@ import stat
 import threading
 import uuid
 
-VERSION = "2.7.0"
+VERSION = "2.7.1"
 
 from contextlib import contextmanager
 from datetime import datetime, timezone
