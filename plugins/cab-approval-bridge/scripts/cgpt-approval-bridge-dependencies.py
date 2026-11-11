@@ -13,7 +13,7 @@ import urllib.request
 from cab_session_dependencies import (CoordinationError, DependencyStore, check_close, codex_proxy_exchange,
                                       codex_active_turn, codex_verified_sender, controller_admission, encoded, same_state_root, verify_pilot_binding)
 
-VERSION = '2.7.3'
+VERSION = '2.7.4'
 ADAPTER_PROTOCOL = 'cab-session-coordination-1'
 ACTIONS = ("version", "capabilities", "register", "state", "decide", "decisions", "subscribe", "publish", "inbox", "outbox", "discover-turn", "notify-all", "ack", "release-notice", "notify-piloted", "notify-direct", "reconcile-piloted", "reconcile-direct", "cancel-prepared", "check-close", "close-direct", "reopen-direct")
 

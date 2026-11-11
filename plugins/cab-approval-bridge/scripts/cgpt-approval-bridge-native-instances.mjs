@@ -5,7 +5,7 @@ import { homedir } from 'node:os';
 import { ContinuityStore, canonicalContinuityDigest as digest } from './cgpt-approval-bridge-continuity.mjs';
 import { processIdentity } from './cgpt-approval-bridge-process-lifecycle.mjs';
 
-export const VERSION = '2.7.3';
+export const VERSION = '2.7.4';
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const fail = code => { throw Object.assign(new Error(code), { code, status: 409 }); };
 function metadata(path) {
@@ -13,7 +13,7 @@ function metadata(path) {
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const stat = fstatSync(fd);
-    if (!stat.isFile() || stat.uid !== process.getuid() || stat.nlink !== 1 || stat.mode & 0o077 || stat.size > 16*1024*1024)
+    if (!stat.isFile() || stat.uid !== process.getuid() || stat.nlink !== 1 || stat.mode & 0o007 || stat.size > 16*1024*1024)
       fail('native-instance-metadata-unsafe');
     return JSON.parse(readFileSync(fd, 'utf8'));
   } finally { if (fd !== undefined) closeSync(fd); }

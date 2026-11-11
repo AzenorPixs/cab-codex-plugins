@@ -15,7 +15,7 @@ import stat
 import time
 from uuid import uuid4
 
-VERSION = "2.7.3"
+VERSION = "2.7.4"
 IDENTIFIER = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.:/+@-]{0,255}$")
 METRICS = frozenset(("tokens_input", "tokens_output", "tokens_reasoning",
                      "tokens_cache_read", "tokens_cache_write", "tokens_total",
@@ -106,9 +106,17 @@ def quantities(values):
 
 def private_directory(path):
     path = Path(path).absolute()
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    missing=[];current=path
+    while not current.exists():missing.append(current);current=current.parent
+    for item in reversed(missing):
+        try:
+            item.mkdir(mode=0o770)
+            fd=os.open(item,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:os.fchmod(fd,0o770)
+            finally:os.close(fd)
+        except FileExistsError:pass
     info = path.lstat()
-    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007:
         raise RuntimeErrorCode("runtime-storage-not-private")
     return path
 
@@ -121,10 +129,11 @@ class RuntimeStore:
         path = self.directory / "runtime.sqlite3"
         if path.exists() or path.is_symlink():
             info = path.lstat()
-            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o077:
+            if not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid() or info.st_mode & 0o007:
                 raise RuntimeErrorCode("runtime-database-not-private")
         else:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o770)
+            os.fchmod(fd,0o770)
             os.close(fd)
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
         self.db.row_factory = sqlite3.Row

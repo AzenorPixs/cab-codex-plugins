@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { constants, readFileSync } from "node:fs";
+import { open, rename } from "node:fs/promises";
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 import { dirname, isAbsolute, join } from "node:path";
 import readline from "node:readline";
 
@@ -13,7 +14,12 @@ import { ContinuityStore, validCommunicationState } from './cgpt-approval-bridge
 import { createModelTransition, modelContractHash, validModelTransitionState, MODEL_TRANSITION_PROTOCOL,
   VERSION as TRANSITION_VERSION } from './cgpt-approval-bridge-model-transition.mjs';
 
-export const VERSION = "2.7.3";
+export const VERSION = "2.7.4";
+async function writeCabTemporary(path,data) {
+  ensureCabDirectories(dirname(path));
+  const fd=await open(path,constants.O_WRONLY|constants.O_CREAT|constants.O_TRUNC|constants.O_NOFOLLOW,0o770);
+  try{await fd.chmod(0o770);await fd.writeFile(data,'utf8');}finally{await fd.close();}
+}
 export function pendingReconciliationEffects({currentMandate,reconcilingCount,unmatchedCount,validations,decisionFor,ignoredRequestIds}){
   const ignored=new Set(ignoredRequestIds);
   return Boolean(currentMandate||reconcilingCount||unmatchedCount||validations.some(v=>{
@@ -386,9 +392,8 @@ function persistJob(candidate = job) {
   const snapshot = JSON.stringify(candidate, null, 2);
 
   jobPersistence = jobPersistence.catch(() => {}).then(async () => {
-    await mkdir(dirname(jobStatePath), { recursive: true });
     const temporaryPath = `${jobStatePath}.tmp`;
-    await writeFile(temporaryPath, snapshot, "utf8");
+    await writeCabTemporary(temporaryPath,snapshot);
     await rename(temporaryPath, jobStatePath);
   });
 
@@ -2520,12 +2525,10 @@ async function persistReminderNotification(reminder, reason) {
     recordedAt: new Date().toISOString(),
   };
   reminderNotifications.set(reminder.requestId, notification);
-  await mkdir(dirname(reminderStatePath), { recursive: true });
   const temporaryPath = `${reminderStatePath}.tmp`;
-  await writeFile(
+  await writeCabTemporary(
     temporaryPath,
-    JSON.stringify(Object.fromEntries(reminderNotifications), null, 2),
-    "utf8"
+    JSON.stringify(Object.fromEntries(reminderNotifications), null, 2)
   );
   await rename(temporaryPath, reminderStatePath);
 }

@@ -1,12 +1,13 @@
 import {verifyDependencies} from './cgpt-approval-bridge-dependency-authority.mjs';
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { constants, closeSync, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync,
+import { constants, closeSync, existsSync, fstatSync, fchmodSync, fsyncSync, lstatSync, openSync,
   readFileSync, realpathSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import {ensureCabDirectories} from './cgpt-approval-bridge-state-layout.mjs';
 
-export const VERSION = "2.7.3";
+export const VERSION = "2.7.4";
 const id = (value) => typeof value === "string" && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const record = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
 const sha256 = (value) => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
@@ -210,7 +211,7 @@ export class RunRegistry {
 
   async acquireAuthority({additionalLockPath,beforeRestore}={}) {
     if (this.lock) return;
-    mkdirSync(this.stateDirectory, { recursive: true, mode: 0o700 });
+    ensureCabDirectories(this.stateDirectory);
     const helper = fileURLToPath(new URL("./cgpt-approval-bridge-registry-lock.py", import.meta.url));
     const child = spawn("python3", [helper, join(this.stateDirectory, "registry.instance.lock"), ...(additionalLockPath?[additionalLockPath]:[])],
       { stdio: ["pipe", "pipe", "ignore"] });
@@ -269,7 +270,8 @@ export class RunRegistry {
     let fd;
     try {
       const candidate = `${this.path}.candidate-${randomUUID()}`;
-      fd = openSync(candidate, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o600);
+      fd = openSync(candidate, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW, 0o770);
+      fchmodSync(fd,0o770);
       if (lstatSync(candidate).nlink !== 1) throw new Error("invalid candidate");
       writeFileSync(fd, `${JSON.stringify(this.snapshot(), null, 2)}\n`, "utf8");
       fsyncSync(fd);

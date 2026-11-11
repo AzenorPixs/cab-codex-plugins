@@ -2,10 +2,11 @@
 
 ## Non publié — compatibilité des permissions
 
+- Étendre la création en 0770 et la lecture des modes compatibles aux états,
+  verrous, credentials, communications inter-UID, statistiques et reprises CAB.
 - Accepter les permissions de groupe sur le reporting du broker, ses reçus
   externes et le fichier d'hôtes connus ; créer les nouveaux fichiers de ce
   périmètre en 0770 et conserver les anciens modes privés compatibles.
-- La généralisation aux autres briques reste suivie séparément.
 
 ## 2.7.1 — 2026-11-11
 

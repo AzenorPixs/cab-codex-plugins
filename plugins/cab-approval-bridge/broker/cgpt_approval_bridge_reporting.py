@@ -9,7 +9,7 @@ import threading
 import re
 from datetime import datetime,timezone
 
-VERSION='2.7.3'
+VERSION='2.7.4'
 LOCK=threading.RLock()
 ROOT=None
 
@@ -17,6 +17,13 @@ def set_new_directory_mode(path):
     fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
     try:os.fchmod(fd,0o770)
     finally:os.close(fd)
+
+def create_directories(path):
+    missing=[];current=path
+    while not current.exists():missing.append(current);current=current.parent
+    for item in reversed(missing):
+        try:item.mkdir(mode=0o770);set_new_directory_mode(item)
+        except FileExistsError:pass
 
 
 def configure(root):
@@ -27,8 +34,7 @@ def configure(root):
 def directory(workspace):
     if ROOT is None:raise ValueError('broker-reporting-not-configured')
     root=ROOT/hashlib.sha256(workspace.encode()).hexdigest()
-    try:ROOT.mkdir(mode=0o770,parents=True);set_new_directory_mode(ROOT)
-    except FileExistsError:pass
+    create_directories(ROOT)
     try:
         root.mkdir(mode=0o770)
         set_new_directory_mode(root)

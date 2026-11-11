@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawn,spawnSync} from 'node:child_process';
-import {mkdtemp,mkdir,readFile,rm,readdir} from 'node:fs/promises';
+import {mkdtemp,mkdir,readFile,rm,readdir,stat} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -19,6 +19,9 @@ test('SGS Unix réel : outbox acquittée, déduplication et arrêt propre sans O
   const event={binding:'fixture-binding',event_id:'fixture-event',source:'cab-component',stream:'fixture-stream',sequence:1,
     at:'2026-11-06T10:00:00Z',semantics:'delta',metrics:{commands:'1'}};
   assert.equal((await emitStatistics(event,{home})).status,'queued');
+  const outbox=join(home,'.local/state/cab-approval-bridge/sgs-outbox');
+  assert.equal((await stat(outbox)).mode&0o777,0o770);
+  assert.equal((await stat(join(outbox,(await readdir(outbox))[0]))).mode&0o777,0o770);
   const directory=join(home,'.local/state/cab-approval-bridge/sgs');
   await mkdir(directory,{recursive:true,mode:0o700});
   child=spawn('python3',['-B',fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-service.py',import.meta.url)),
@@ -31,6 +34,8 @@ test('SGS Unix réel : outbox acquittée, déduplication et arrêt propre sans O
     await new Promise(resolve=>setTimeout(resolve,25));
   }
   assert.equal(ready,true,stderr);
+  assert.equal((await stat(join(directory,'sgs.sock'))).mode&0o777,0o770);
+  assert.equal((await stat(join(directory,'runtime.sqlite3'))).mode&0o777,0o770);
   await runtimeRequest('sgs','/bindings',{binding:'fixture-binding',host:'fixture',instance:'fixture',project:home,change:'change',run:'run',session:'session',role:'coder',agent:'codex',mode:'direct',started_at:'2026-11-06T10:00:00Z'},{home});
   assert.equal((await flushStatistics({home})).acknowledged,1);
   assert.deepEqual(await readdir(join(home,'.local/state/cab-approval-bridge/sgs-outbox')),[]);

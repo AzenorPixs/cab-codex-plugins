@@ -91,7 +91,7 @@ Conserver ces deux dossiers frères : les imports et ressources sont résolus
 relativement aux modules. Vérifier la version de base attendue et la présence de chaque
 fichier avant publication du jeu. Provisionner le credential OpenCode partagé
 dans `~/.config/cab-approval-bridge/opencode.password` avec les permissions
-`0600`; l'unité le charge via `LoadCredential`. Aucune dépendance tierce n'est installée.
+`0770` pour un nouveau credential ; l'unité le charge via `LoadCredential`. Aucune dépendance tierce n'est installée.
 Refuser les destinations symboliques, étrangères ou sans propriété prouvée.
 Remplacer les seuls fichiers nécessaires de façon atomique ; conserver les
 anciens fichiers du périmètre pour un repli ciblé en cas d'échec. Ne pas
@@ -103,7 +103,7 @@ Installer le modèle distribué dans
 d'une actualisation de configuration explicitement validée. Préserver les
 valeurs existantes sinon. Ce fichier distinct de controller.env contient
 uniquement la configuration non secrète nécessaire, notamment le workspace.
-Écrire en UTF-8/LF, atomiquement, mode 0600 et répertoires privés. Protéger les
+Écrire en UTF-8/LF, atomiquement, mode 0770 et répertoires protégés. Protéger les
 valeurs littérales avec les règles EnvironmentFile de systemd, y compris les
 chemins avec espaces ou guillemets ; ne jamais utiliser source, eval ou une
 expansion shell pour charger ce fichier.

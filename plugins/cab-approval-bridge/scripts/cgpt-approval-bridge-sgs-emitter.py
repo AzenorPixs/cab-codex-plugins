@@ -10,12 +10,18 @@ import threading
 import time
 from datetime import datetime,timezone
 
-VERSION='2.7.3'
+VERSION='2.7.4'
 
 
 class Emitter:
     def __init__(self,directory,socket_path,producer,instance,started_at):
-        self.directory=Path(directory);self.directory.mkdir(mode=0o700,exist_ok=True)
+        self.directory=Path(directory)
+        try:
+            self.directory.mkdir(mode=0o770)
+            fd=os.open(self.directory,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+            try:os.fchmod(fd,0o770)
+            finally:os.close(fd)
+        except FileExistsError:pass
         self.socket_path=str(socket_path);self.producer=producer;self.instance=instance;self.started_at=started_at
         self.stop=threading.Event();self.wake=threading.Event();self.lock=threading.Lock();self.latest={};self.error=None
         self.thread=threading.Thread(target=self.work,daemon=True);self.thread.start()
@@ -48,6 +54,7 @@ class Emitter:
             try:
                 for binding,packet in pending.items():
                     fd,candidate=tempfile.mkstemp(prefix='.candidate-',dir=self.directory)
+                    os.fchmod(fd,0o770)
                     with os.fdopen(fd,'w') as stream:json.dump(packet,stream);stream.flush();os.fsync(stream.fileno())
                     os.replace(candidate,self.directory/(hashlib.sha256(binding.encode()).hexdigest()+'.json'))
                 for path in self.directory.glob('*.json'):

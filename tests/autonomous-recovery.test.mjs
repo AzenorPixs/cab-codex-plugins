@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync,writeFileSync,readFileSync,readdirSync,mkdirSync,symlinkSync} from 'node:fs';
+import {mkdtempSync,rmSync,writeFileSync,readFileSync,readdirSync,mkdirSync,symlinkSync,statSync,chmodSync} from 'node:fs';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {createHash} from 'node:crypto';
@@ -16,8 +16,10 @@ const identity={sessionId:'ses_review',permissionId:'per_review',directory:'/wor
 test('refus natif : intention indéterminée, ACK relisible et identité immuable',t=>{
  const root=directory(t),j=new PermissionReplyJournal(join(root,'receipts'));
  const first=j.begin(identity);assert.equal(first.value.state,'INTENT');
+ assert.equal(statSync(j.directory).mode&0o777,0o770);assert.equal(statSync(j.path(identity)).mode&0o777,0o770);
  assert.throws(()=>j.begin(identity),/outcome-unverified/);
  const ack=j.acknowledge(first.value);assert.equal(ack.httpStatus,204);
+ assert.equal(statSync(j.path(identity)).mode&0o777,0o770);chmodSync(j.path(identity),0o600);
  assert.equal(j.begin(identity).replay,true);
  assert.throws(()=>j.begin({...identity,callId:'different-call'}),/identity-divergent/);
  assert.equal(j.snapshot(identity.sessionId,identity.directory).receipts.length,1);

@@ -1,12 +1,12 @@
 import {mkdirSync,lstatSync,realpathSync,chmodSync,chownSync,existsSync,rmSync} from 'node:fs';
 import {isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {createHash} from 'node:crypto';
-export const VERSION='2.7.3';
+export const VERSION='2.7.4';
 const identity=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};
 function sharedDirectory(path,workspace) {
   if(existsSync(path))return;
-  const project=lstatSync(workspace),mode=0o775|(project.mode&0o2000);
+  const project=lstatSync(workspace),mode=0o770|(project.mode&0o2000);
   mkdirSync(path,{mode});
   if(lstatSync(path).gid!==project.gid)chownSync(path,process.getuid(),project.gid);
   chmodSync(path,mode);

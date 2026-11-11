@@ -12,7 +12,7 @@ const input=()=>({stageId:'stage-one',jobId:'job-one',sessionId:'ses_one',reserv
 const binding=()=>({runId:'run-one',contextId:1,directory:'/workspace',host:'127.0.0.1',port:8788,opencodePid:42});
 test('porte-mandat : octets immuables, idempotence, corps privé et restauration',t=>{
  const path=fixture(t),s=new ShellStageStore(path),i=input(),d=s.create(i,binding());
- assert.equal(d.payload,undefined);assert.ok(d.command.includes(i.payloadSha256));assert.equal(statSync(path).mode&0o777,0o600);
+ assert.equal(d.payload,undefined);assert.ok(d.command.includes(i.payloadSha256));assert.equal(statSync(path).mode&0o777,0o770);
  assert.deepEqual(s.create(Object.fromEntries(Object.entries(i).reverse()),binding()),d);assert.deepEqual(new ShellStageStore(path).describe(i.stageId),d);
  assert.equal(s.get(i.stageId).payload,i.payload);const b=readFileSync(path);
  const op={kind:'bash',runId:'run-one',sessionId:i.sessionId,directory:'/workspace',reservationVersion:1,operationId:i.operationId,target:d.command};
@@ -28,7 +28,7 @@ test('porte-mandat : valeurs/encodages/limites et lanceur étranger refusés',t=
 });
 test('porte-mandat : fichier lié, mode ouvert et contenu altéré ne se restaurent pas',t=>{
  const path=fixture(t),s=new ShellStageStore(path);s.create(input(),binding());const copy=path+'.link';symlinkSync(path,copy);assert.throws(()=>new ShellStageStore(copy));
- chmodSync(path,0o640);assert.throws(()=>new ShellStageStore(path),/store-unsafe/);chmodSync(path,0o600);
+ chmodSync(path,0o640);assert.doesNotThrow(()=>new ShellStageStore(path));chmodSync(path,0o644);assert.throws(()=>new ShellStageStore(path),/store-unsafe/);chmodSync(path,0o600);
  const raw=JSON.parse(readFileSync(path));raw.stages[0].payload+='x';writeFileSync(path,JSON.stringify(raw));assert.throws(()=>new ShellStageStore(path),/shell-stage-/);
 });
 function delivery(stage){return {run:{runId:stage.runId,contextId:1,version:1,state:'RESERVED'},job:{armed:true,strictCommands:true,jobId:stage.jobId,sessionId:stage.sessionId,directory:stage.directory},
