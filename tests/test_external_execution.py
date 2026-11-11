@@ -1,15 +1,19 @@
 import base64
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
+from urllib.error import HTTPError
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/'plugins/cab-approval-bridge/broker'))
 import cgpt_approval_bridge_external as external
 import cgpt_approval_bridge_external_runner as runner
+import cgpt_approval_bridge_server as bridge
 
 class ExternalExecutionTest(unittest.TestCase):
     def setUp(self):
@@ -27,6 +31,32 @@ class ExternalExecutionTest(unittest.TestCase):
         self.calls=[];self.remote=self.root/'remote';self.remote.mkdir(mode=0o700)
     def grant(self,args,known=False):return {'status':'AUTHORIZED_EXTERNAL','request_id':args['request_id'],'adapter':self.profile,'input_digest':external.digest(self.args),
         'source_revision':'a'*64,'lease_id':'lease','fencing':3,'read_roots':[str(self.project)],'target_fingerprint':None,'execution_known':known,'remote_allowed':True}
+    def test_autonomy_submission_exposes_only_the_known_external_guard(self):
+        for code,expected in (('external-effects-unresolved','external-effects-unresolved'),
+                              ('external-unexpected-detail','autonomy-controller-refused')):
+            with self.subTest(code=code):
+                failure=HTTPError('http://127.0.0.1/',409,'Conflict',{},io.BytesIO(json.dumps({'error':code}).encode()))
+                with patch.object(bridge.request,'urlopen',side_effect=failure),patch.object(bridge,'controller_url',return_value='http://127.0.0.1:1'):
+                    with self.assertRaisesRegex(bridge.ValidationError,'^'+expected+'$'):
+                        bridge.do_autonomy({'run_id':'run'},'submit')
+                failure.close()
+
+    def test_preflight_failure_after_first_grant_is_attested_without_transport(self):
+        for known,callback_fails in ((False,False),(True,False),(False,True)):
+            with self.subTest(known=known,callback_fails=callback_fails):
+                routes=[]
+                def owner(path,payload):
+                    routes.append(path)
+                    if path.endswith('/authorize'):return self.grant(self.args,known=known)
+                    if callback_fails:raise bridge.ValidationError('fixture-controller-unavailable')
+                    return {'status':'PREFLIGHT_FAILED'}
+                with patch.object(bridge,'owner_erasure_http',side_effect=owner),\
+                     patch.object(external,'private_root',side_effect=external.ExternalError('external-state-unsafe')):
+                    expected='external-preflight-attestation-unconfirmed' if callback_fails else 'external-state-unsafe'
+                    with self.assertRaisesRegex(bridge.ValidationError,'^'+expected+'$'):
+                        bridge.do_external(self.args,'external_execute')
+                self.assertEqual(routes.count('/external/owner/preflight-failure'),0 if known else 1)
+                self.assertEqual(self.calls,[])
     def transport(self,cfg,packet,timeout):
         self.calls.append(packet['action']);return runner.handle(packet,state_root=self.remote,identity={'container':'lxc','fingerprint':'b'*64})
     def test_execute_transfers_only_scoped_artifacts_and_replays_the_receipt(self):

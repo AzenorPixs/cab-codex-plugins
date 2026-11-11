@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime,timezone
 
-VERSION='2.7.1'
+VERSION='2.7.2'
 PROTOCOL='cab-external-exec-v1'
 LIMIT=1024*1024
 

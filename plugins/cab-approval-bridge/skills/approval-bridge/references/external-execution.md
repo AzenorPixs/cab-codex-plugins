@@ -58,6 +58,21 @@ absence de réponse ou de journal n’autorise un rejeu. Les unités locales
 indépendantes peuvent continuer. La soumission/publication finale reste bloquée
 si un effet externe est incertain. Les timeouts et échecs ne deviennent pas des succès.
 
+Après un premier grant, une erreur de prévol privé attestée par le broker
+authentifié avant transport est enregistrée automatiquement `PREFLIGHT_FAILED`.
+Ce statut ne constitue pas un reçu de test ; le bail et l’identité restent
+conservés. Le codeur peut poursuivre son mandat avec une nouvelle identité
+d’appel, sans rejouer celle qui a échoué. Une attestation non acquittée ou
+un grant antérieur conserve la protection d’un effet incertain.
+
+Pour une intention historique 2.7.1, le propriétaire peut examiner la preuve
+avec `GET /runs/<run>/external/preflight-evidence`, paramètres `requestId` et
+`sourceReceiptId`, puis utiliser `reconcile-external-preflight` dans la
+politique de reprise du RUN, avec les empreintes fraîches du plan et de la
+preuve. Le contrôleur contrôle deux observations cohérentes avant toute
+mutation. Une preuve incomplète refuse la réconciliation ; aucun reçu de test
+n’est fabriqué et le bail reste détenu.
+
 Les résultats terminaux vérifiés sont référencés directement dans autonomy_submit
 par requestId, criterion et outcome ; le contrôleur joint le receiptDigest complet.
 La révision testée doit rester celle soumise et les tests sont examinés à la revue

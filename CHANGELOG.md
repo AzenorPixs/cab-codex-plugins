@@ -27,6 +27,12 @@
 
 ## Non publié
 
+- Attester automatiquement les échecs de prévol externe avant transport et
+  permettre la réconciliation propriétaire des intentions historiques prouvées,
+  sans faux reçu ni rejeu ; exposer le refus d’effet externe non résolu.
+- Qualifier la collecte native SGS avant et après handoff avec un collecteur
+  isolé, en conservant les zéros et les mesures indisponibles sans double compte.
+
 ## 2.5.8 - 2026-11-11
 
 - Synchroniser les versions internes et contrats de distribution pour permettre l’activation du correctif publié en 2.5.7.
