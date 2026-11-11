@@ -12,7 +12,7 @@ import { lifecycleView, RUN_STEPS, VERSION as STEP_VERSION } from './cgpt-approv
 import { createOpenCodeV2ClientFromEnv } from './cgpt-approval-bridge-opencode-client.mjs';
 import {runtimeRequest} from './cgpt-approval-bridge-runtime-client.mjs';
 
-export const VERSION = '2.6.0';
+export const VERSION = '2.7.0';
 if ([EVENT_VERSION, STEP_VERSION].some((value) => value !== VERSION)) throw new Error('CAB monitor component version mismatch');
 const record = (value) => value && typeof value === 'object' && !Array.isArray(value) ? value : {};
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
@@ -224,8 +224,11 @@ export function normalizeRuns(controller = {}, registry = {}, supervisor = {}, s
     const gate = record(status.terminalGate || job.terminalGate);
     const coordination = record(status.coordination);
     const lifecycle = lifecycleView(job.lifecycle);
+    const coder=record(status.coderCoordination),metrics=record(coder.metrics);
+    const safeCount=key=>Number.isSafeInteger(metrics[key])&&metrics[key]>=0?metrics[key]:null;
     const causeCode = code(coordination.reason || status.brokerReadiness?.root_cause);
     return { runId, changeId: id(job.changeId) || id(reservation.changeId), sessionId: id(job.sessionId) || id(reservation.sessionId),
+      coderCoordination:coder.protocol==='cab-coder-coordination-1'?{owner:'coder',subscriptions:safeCount('subscriptions'),received:safeCount('received'),acknowledged:safeCount('acknowledged'),uncertain:safeCount('nativeUncertain')}:null,
       generation: Number.isSafeInteger(reservation.version) ? reservation.version : id(job.jobId),
       state: code(reservation.state), phase: code(coordination.phase || reservation.phase),
       step: lifecycle.current, stepHistory: lifecycle.history, stepSequence: lifecycle.sequence, stepHistoryTruncated: lifecycle.truncated,

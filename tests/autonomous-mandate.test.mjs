@@ -40,7 +40,7 @@ test('multiple edits, failing test, correction and final review need no intermed
   assert.throws(()=>autonomousGrant(f.registry,f.run.runId,f.args('parallel'),f.grant),/not-working/);
   writeFileSync(join(f.root,'src/a.py'),'VALUE='+i+'\n');
   completeAutonomousCall(f.registry,f.run.runId,{request_id:args.request_id,status:'COMPLETED',exitCode:i===0?1:0,receiptDigest:'receipt-'+i});
-  assert.deepEqual(autonomousGrant(f.registry,f.run.runId,args,f.grant),grant);
+  assert.deepEqual(autonomousGrant(f.registry,f.run.runId,args,f.grant),{...grant,autonomy:{...grant.autonomy,executionKnown:true}});
  }
  const payload={submissionId:'submission-1',summary:'Result and tests',tests:[{criterion:'value is 2',requestId:'call-3',receiptDigest:'receipt-3',outcome:'passed'}],limits:[]};
  const submission=submitAutonomousWork(f.registry,f.run.runId,payload);
@@ -134,4 +134,13 @@ test('orchestrator waits on one event stream, without polling or intermediate de
  }});
  assert.equal(result.submissionDigest,'final');assert.equal(checks,3);assert.equal(cancelled,true);
  await assert.rejects(waitForAutonomousWork({controller:'http://external.invalid',runId:'run'}),/input-invalid/);
+});
+
+test('submission resolves full receipts by request id and gives a closed diagnostic for a wrong digest',async t=>{
+ const f=await fixture(t);grantAutonomy(f.registry,f.run.runId,f.mandate);autonomousGrant(f.registry,f.run.runId,f.args('test-full'),f.grant);
+ completeAutonomousCall(f.registry,f.run.runId,{request_id:'test-full',status:'COMPLETED',exitCode:0,receiptDigest:'a'.repeat(64)});
+ const payload={submissionId:'full',summary:'Full native proof',tests:[{criterion:'value is 2',requestId:'test-full',outcome:'passed'}],limits:[]};
+ assert.throws(()=>submitAutonomousWork(f.registry,f.run.runId,{...payload,tests:[{...payload.tests[0],receiptDigest:'aaaa…'}]}),error=>error.code==='autonomy-submission-invalid'&&error.diagnostic.reason==='receipt-digest-mismatch'&&error.diagnostic.testIndex===0);
+ const result=submitAutonomousWork(f.registry,f.run.runId,payload);assert.equal(result.tests[0].receiptDigest,'a'.repeat(64));
+ assert.equal(Object.keys(f.registry.runs.get(f.run.runId).autonomy.calls).length,1);
 });

@@ -1,5 +1,15 @@
 # Historique des versions
 
+## 2.7.0 — 2026-11-11
+
+- Coordination courante déléguée aux codeurs, notifications ciblées, migration
+  explicite et transport broker/contrôleur inter-UID ; aucune décision intermédiaire.
+- Sérialisation des opérations partagées, attentes persistantes, cycles exposés.
+- Bancs externes SSH déclarés et réservés : exécution autonome, artefacts contrôlés,
+  credentials traités localement, reçus durables et restitution après nettoyage/vérification.
+- Reçus complets résolus depuis les requestId et diagnostics de soumission bornés.
+- Amendements CAB/CCAB préparés par la session CCAB intégrés sans réécriture.
+
 ## 2.6.0 — 2026-11-11
 
 - Mandat autonome du change : choix nécessaires tranchés avant codage, exécution

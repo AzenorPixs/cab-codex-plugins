@@ -18,7 +18,7 @@ import struct
 import time
 from urllib.parse import quote, urlencode, urlsplit
 
-VERSION = "2.6.0"
+VERSION = "2.7.0"
 TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/#-]{0,255}$")
 KINDS = frozenset(("change", "task", "capability"))
 
@@ -513,6 +513,9 @@ def check_close(project, run, state_root, session=None):
                 query+=' AND ((d.run=? AND d.session=?) OR (n.sender_run=? AND n.sender_session=?))'
                 params.extend([run,session,run,session])
             pending=db.execute(query,params).fetchone()[0]
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='coder_deliveries'").fetchone():
+                pending+=db.execute("SELECT count(*) FROM coder_deliveries d JOIN notices n USING(project,notice_id) WHERE d.project=? AND (d.run=? OR n.sender_run=?) AND d.state IN ('prepared','unknown')",(project,run,run)).fetchone()[0]
+
         finally:
             db.close()
     except (OSError, sqlite3.Error) as exc:
@@ -547,6 +550,27 @@ class DependencyStore:
         self.db.executescript('''
         CREATE TABLE IF NOT EXISTS sessions(project TEXT NOT NULL, session TEXT NOT NULL, run TEXT NOT NULL,
           mode TEXT NOT NULL, PRIMARY KEY(project,session,run));
+        CREATE TABLE IF NOT EXISTS coder_bindings(project TEXT NOT NULL,run TEXT NOT NULL,
+          storage_session TEXT NOT NULL,actor_session TEXT NOT NULL,generation INTEGER NOT NULL,
+          context_id INTEGER NOT NULL,change_id TEXT NOT NULL,PRIMARY KEY(project,run),
+          FOREIGN KEY(project,storage_session,run) REFERENCES sessions(project,session,run) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS coder_direct_transports(project TEXT NOT NULL,session TEXT NOT NULL,run TEXT NOT NULL,
+          socket_path TEXT NOT NULL,PRIMARY KEY(project,session,run),
+          FOREIGN KEY(project,session,run) REFERENCES sessions(project,session,run) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS coder_binding_history(project TEXT NOT NULL,run TEXT NOT NULL,generation INTEGER NOT NULL,
+          binding_json TEXT NOT NULL,PRIMARY KEY(project,run,generation),
+          FOREIGN KEY(project,run) REFERENCES coder_bindings(project,run) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS coder_requests(project TEXT NOT NULL,run TEXT NOT NULL,request_id TEXT NOT NULL,
+          payload_sha256 TEXT NOT NULL,result_json TEXT,PRIMARY KEY(project,run,request_id),
+          FOREIGN KEY(project,run) REFERENCES coder_bindings(project,run) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS coder_notice_states(project TEXT NOT NULL,notice_id TEXT NOT NULL,
+          actor_session TEXT NOT NULL,stage TEXT NOT NULL,PRIMARY KEY(project,notice_id),
+          FOREIGN KEY(project,notice_id) REFERENCES notices(project,notice_id) ON DELETE CASCADE);
+        CREATE TABLE IF NOT EXISTS coder_deliveries(project TEXT NOT NULL,session TEXT NOT NULL,run TEXT NOT NULL,
+          notice_id TEXT NOT NULL,attempt_id TEXT NOT NULL,state TEXT NOT NULL,
+          native_message_id TEXT,PRIMARY KEY(project,session,run,notice_id),
+          FOREIGN KEY(project,session,run) REFERENCES sessions(project,session,run) ON DELETE CASCADE,
+          FOREIGN KEY(project,notice_id) REFERENCES notices(project,notice_id) ON DELETE CASCADE);
         CREATE TABLE IF NOT EXISTS session_mandates(project TEXT NOT NULL, session TEXT NOT NULL, run TEXT NOT NULL,
           mandate TEXT NOT NULL CHECK(mandate IN ('SCM','other','unknown')),
           PRIMARY KEY(project,session,run),
@@ -746,8 +770,15 @@ class DependencyStore:
             return {"status": "registered", "native_notification": "unavailable"}
         return self._transaction(apply)
 
+    def require_actor(self, identity):
+        row=self.db.execute('SELECT actor_session FROM coder_bindings WHERE project=? AND run=?',
+                            (identity[0],identity[2])).fetchone()
+        if row and getattr(self,'actor_session',None)!=row['actor_session']:
+            raise CoordinationError('coordination-owner-delegated')
+
     def subscribe(self, project, session, run, dependency_id, kind, subject, criterion, batch_code=None, batch_change=None):
         identity = self._identity(project, session, run)
+        self.require_actor(identity)
         dependency_id, criterion = token(dependency_id), token(criterion)
         if kind not in KINDS:
             raise CoordinationError("coordination-kind-invalid")
@@ -843,6 +874,7 @@ class DependencyStore:
 
     def publish(self, project, session, run, notice_id, kind, subject, proof, proof_sha256=None):
         identity = self._identity(project, session, run)
+        self.require_actor(identity)
         notice_id, proof = token(notice_id), reference(proof)
         if kind not in KINDS:
             raise CoordinationError("coordination-kind-invalid")
@@ -1024,6 +1056,7 @@ class DependencyStore:
 
     def acknowledge(self, project, session, run, dependency_id, notice_id):
         identity = self._identity(project, session, run)
+        self.require_actor(identity)
         keys = (*identity, token(dependency_id), token(notice_id))
         def apply():
             cursor = self.db.execute('''UPDATE inbox SET acknowledged=1 WHERE project=? AND session=? AND run=?
