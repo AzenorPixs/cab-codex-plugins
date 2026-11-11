@@ -1529,10 +1529,13 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   const historicalRetirement = rejectedWithdrawal && (op.version !== run.version || op.sessionId !== run.sessionId);
   if(rejectedWithdrawal&&linked)throw new CoordinationError('rejected-withdrawal-access-linked');
   let releasedReference=null;
+  let cancelledUngranted=null;
   if(withdraw&&linked){try{releasedReference=registry.releasedReferenceWithdrawal(run.runId,op.operationId)}catch{/* La voie HELD conserve ses propres gardes. */}}
+  if(withdraw&&linked&&!releasedReference){try{cancelledUngranted=registry.cancelledUngrantedAccess(run.runId,op.operationId)}catch{/* Les autres voies conservent leurs gardes. */}}
   const releasedReferenceDigest=releasedReference?proofHash(releasedReference):null;
+  const cancelledUngrantedDigest=cancelledUngranted?proofHash(cancelledUngranted):null;
   const parent=terminal ? registry.terminalReviewAccessBoundary(run.runId,op.operationId) :
-    linked&&!releasedReference ? registry.attachedWithdrawalAccess(run.runId,op.operationId,{allowReference:true,allowSingleton:true}) : null;
+    linked&&!releasedReference&&!cancelledUngranted ? registry.attachedWithdrawalAccess(run.runId,op.operationId,{allowReference:true,allowSingleton:true}) : null;
   const parentDigest=parent ? proofHash(parent) : null;
   if(context.publicStatus().recoveryRequired || !context.publicJob()?.armed ||
       (context.publicJob().sessionId!==op.sessionId && !historicalRetirement) || context.publicJob().currentCabMandate &&
@@ -1602,6 +1605,8 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     }))throw new CoordinationError('not-admitted-withdrawal-decision-conflict');
     const terminalTurn = rejectedWithdrawal ? rejectedUnissuedTurnProof(first.messages,op,first.approval,first.parts[0],nativeNoEnvironmentObservation,same) : null;
     const isolated = terminalTurn ? {effects:[],excluded:[]} : withdrawalEffects(first,run,op), effects=isolated.effects;
+    if(cancelledUngranted&&(effects.length||first.view.journalError||first.view.callsTruncated||first.view.calls.length))
+      throw new CoordinationError('cancelled-ungranted-native-boundary-unverified');
     if(releasedReference&&effects.length)throw new CoordinationError('released-reference-native-effect-observed');
     if(!op.decision && (parent || effects.length))throw new CoordinationError('not-admitted-withdrawal-effect-or-access');
     observation=terminalTurn || (!op.decision ? notAdmittedWithdrawalProof(first.view,first.parts,first.approval,same) :
@@ -1610,6 +1615,8 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
       {kind:'UNISSUED_COORDINATION',executionOutcome:'COORDINATION_WITHDRAWN_BEFORE_ISSUANCE',evidenceAuthority:'OWNER_NATIVE_BOUNDARY_REVIEW'});
     observation.excludedIndependentCalls=isolated.excluded;
     if(releasedReference)observation.releasedReferenceDigest=releasedReferenceDigest;
+    if(cancelledUngranted){observation.cancelledUngrantedDigest=cancelledUngrantedDigest;
+      observation.replyJournal=first.view.replyError?'UNAVAILABLE_NOT_USED':'AVAILABLE';}
     if(parent && !['REJECTED_UNISSUED_SHELL','REJECTED_UNISSUED_EDIT'].includes(observation.kind))throw new CoordinationError('attached-withdrawal-shell-proof-required');
     context.verifyNativeCancelledValidation(first.approval,proofHash(payload),{allowRejected:rejectedWithdrawal,historicalRetirement});
   } else {
@@ -1629,6 +1636,9 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
   else if(withdraw) {
     const terminalTurn = rejectedWithdrawal ? rejectedUnissuedTurnProof(second.messages,op,second.approval,second.parts[0],nativeNoEnvironmentObservation,same) : null;
     const isolated = terminalTurn ? {effects:[],excluded:[]} : withdrawalEffects(second,run,op), effects=isolated.effects;
+    if(cancelledUngranted&&(effects.length||second.view.journalError||second.view.callsTruncated||second.view.calls.length||
+      Boolean(second.view.replyError)!==Boolean(first.view.replyError)))
+      throw new CoordinationError('cancelled-ungranted-native-boundary-unverified');
     if(proofHash(isolated.excluded)!==proofHash(observation.excludedIndependentCalls))throw new CoordinationError('withdraw-peer-boundary-changed');
     if(observation.kind==='REJECTED_UNISSUED_TERMINAL_TURN'){
       if(!terminalTurn)throw new CoordinationError('withdraw-terminal-turn-changed');
@@ -1657,6 +1667,8 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     throw new CoordinationError('attached-withdrawal-parent-changed');
   if(releasedReference&&proofHash(registry.releasedReferenceWithdrawal(run.runId,op.operationId))!==releasedReferenceDigest)
     throw new CoordinationError('released-reference-parent-changed');
+  if(cancelledUngranted&&proofHash(registry.cancelledUngrantedAccess(run.runId,op.operationId))!==cancelledUngrantedDigest)
+    throw new CoordinationError('cancelled-ungranted-access-changed');
   const proofDigest=proofHash(payload);
   recovery.observeAction(actionId,{...observation,approval:structuredClone(first.approval)});
   if(terminal) {
@@ -1667,7 +1679,7 @@ async function reconcileValidationBoundary(run,context,payload,actionId,terminal
     context.withdrawUnissuedValidation(first.approval,proofDigest,{allowRejected:rejectedWithdrawal,historicalRetirement});
     if(parent)registry.withdrawRejectedAttachedShell(run.runId,op.operationId,proofDigest,parentDigest,{allowReference:true,allowSingleton:true});
     else registry.recordNativeCancelledValidation(run.runId,op.operationId,proofDigest,
-      {allowRejected:rejectedWithdrawal,allowReleasedReference:Boolean(releasedReference)});
+      {allowRejected:rejectedWithdrawal,allowReleasedReference:Boolean(releasedReference),allowCancelledUngranted:Boolean(cancelledUngranted)});
     registry.withdrawnUnissuedOperations ||= new Set();registry.withdrawnUnissuedOperations.add(op.operationId);
   } else context.restorePendingValidation(first.approval,proofDigest);
   return {state:terminal?'COMPLETED':withdraw?'CANCELLED':'PENDING',operationState:terminal?'COMPLETED':withdraw?'CANCELLED':'PREPARED',

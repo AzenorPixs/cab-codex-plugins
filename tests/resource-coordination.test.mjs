@@ -1114,6 +1114,30 @@ for(const boundary of ['clean','access','native','once','rejected']) test(`annul
  await h.restart();assert.deepEqual(h.r.resourceState.operations[op.operationId].decision,decision);
 });
 
+for(const variant of ['valid','token','fencing','granted','native','once','members','version','digest','state']) test('accès annulé non attribué : '+variant,async t=>{
+ const h=await fixture(t),resources=[file('cancel-waiting')];
+ const holder=h.reserve('holder-cancel',resources,[]),run=h.reserve('target-cancel',resources,[]);
+ const held=h.prepare(holder,'held-cancel');h.acquire(holder,held);
+ const op=h.prepare(run,'target-cancel-op'),stored=h.r.resourceState.operations[op.operationId];
+ h.r.claimRequest(run.runId,stored.requestId,fingerprint('cancel-owner'),false);
+ h.r.recordDecision(run.runId,op.operationId,{status:'approved',requestId:stored.requestId,approvalId:'approval-cancel',changeId:run.changeId,
+  operationId:op.operationId,operationDigest:op.operationDigest,identityDigest:stored.identityDigest,runId:run.runId,version:run.version,sessionId:run.sessionId});
+ assert.equal(h.acquire(run,op).state,'WAITING');h.r.cancelAccess(run.runId,{version:run.version,operationId:op.operationId});
+ const access=h.r.resourceState.accesses[op.operationId];
+ if(variant==='token')access.token='unexpected';if(variant==='fencing')access.fencing=1;
+ if(variant==='granted')access.grantedAt=new Date().toISOString();if(variant==='native')stored.native={kind:'bash'};
+ if(variant==='once')stored.onceAcknowledged=true;if(variant==='members')access.operationIds.push('another-operation');
+ if(variant==='version')access.version++;if(variant==='digest')access.operationDigest=fingerprint('other');if(variant==='state')access.state='STALE';
+ const before=JSON.stringify(access),proof=fingerprint('cancel-proof');
+ if(variant!=='valid'){
+  assert.throws(()=>h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof,{allowCancelledUngranted:true}),/cancelled-ungranted-access-invalid/);
+  assert.equal(stored.state,'PREPARED');assert.equal(JSON.stringify(access),before);return;
+ }
+ assert.throws(()=>h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof),/native-cancellation-boundary-invalid/);
+ assert.equal(h.r.recordNativeCancelledValidation(run.runId,op.operationId,proof,{allowCancelledUngranted:true}).state,'CANCELLED');
+ assert.equal(stored.decision.status,'approved');assert.equal(JSON.stringify(access),before);
+});
+
 const handoffPayload = (run, overrides = {}) => ({handoffId:'handoff-1',ownerId:run.ownerId,version:run.version,
   jobId:'job-handoff',expectedSessionId:run.sessionId,sessionId:'ses_candidate',checkpointDigest:fingerprint('checkpoint'),
   boundaryDigest:fingerprint('native boundary'),reason:'Continue disjoint work with historical protection',evidence:['synthetic verified boundary'],...overrides});

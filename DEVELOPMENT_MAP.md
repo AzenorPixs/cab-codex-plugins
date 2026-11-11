@@ -1,5 +1,9 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## Retrait après annulation d’un accès non attribué — SCM
+
+[reconcile-ungranted-cancelled-access](openspec/changes/archive/2026-11-11-reconcile-ungranted-cancelled-access/) : correctif générique archivé ; tests ciblés réussis, campagne élargie 611/612 avec reprise isolée réussie du test de démarrage ; livraison et activation restent à vérifier.
+
 
 ## Annulation native après refus attestés — SCM
 
