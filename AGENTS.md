@@ -226,6 +226,15 @@ La demande explicite d'une des commandes suivantes autorise les écritures OpenS
 
 Lorsqu'un agent orchestrateur tel que CGPT pilote un agent de codage, il PEUT valider et autoriser les créations, modifications, corrections, synchronisations et archivages OpenSpec nécessaires à l'objectif demandé, à condition qu'ils respectent strictement les spécifications OpenSpec préalablement validées par le développeur.
 
+Lorsqu’un mandat autonome CAB validé couvre le cycle OpenSpec du change,
+l’agent de codage PEUT réaliser ces écritures sans validation intermédiaire ;
+les preuves et la conformité sont examinées à la revue finale. Les choix et
+décisions nécessaires au change DOIVENT être tranchés entre développeur et
+orchestrateur avant le début du codage. Toute décision imprévue hors cadrage,
+action hors change, outil nécessaire absent ou consultation web constitue
+une exception à soumettre à l’orchestrateur. Cette branche prévaut sur la
+procédure unitaire suivante, qui conserve les profils historiques.
+
 Avant toute écriture OpenSpec, l'agent de codage DOIT présenter à l'agent orchestrateur les fichiers concernés et les modifications proposées, puis attendre sa validation explicite. La validation de l'agent orchestrateur vaut alors autorisation d'écriture dans ce périmètre.
 
 L'agent de codage NE DOIT PAS valider seul ses modifications OpenSpec, étendre le périmètre validé, créer une évolution non demandée, ni effectuer un commit ou un push sans autorisation distincte.

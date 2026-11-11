@@ -1,4 +1,5 @@
 import {startOwnerProxy} from './cgpt-approval-bridge-owner-proxy.mjs';
+import {grantAutonomy,autonomousGrant,completeAutonomousCall,submitAutonomousWork,reviewAutonomousWork,requestAutonomyException,decideAutonomyException} from './cgpt-approval-bridge-autonomous-mandate.mjs';
 import {ensureProjectTestRoot,authorizeAtelierCall} from './cgpt-approval-bridge-autonomy.mjs';
 import {migrationRegistryDigest,validateRuntimeMigration,RUNTIME_MIGRATION_PROTOCOL} from './cgpt-approval-bridge-runtime-migration.mjs';
 import { ChangeErasureManager,erasureMonitorEndpoint } from './cgpt-approval-bridge-erasure-manager.mjs';
@@ -38,7 +39,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.5.8";
+const version = "2.6.0";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION,DEPENDENCY_GATE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -435,7 +436,9 @@ function statusFor(runId, context) {
               : accesses.some((a) => a.state === 'STALE' && a.version === run.version) ? 'resource-revision-stale' : null;
   const unresolvedOperations = Object.values(registry.resourceState.operations).filter(op =>
     op.runId === runId && op.contextId === run.contextId && !['COMPLETED','CANCELLED'].includes(op.state));
-  return { ...status, runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), admission:admissionSnapshot(runId),
+  return { ...status, autonomy:run.autonomy?{protocol:run.autonomy.protocol,state:run.autonomy.state,mandateId:run.autonomy.mandateId,
+      pendingExecution:Object.values(run.autonomy.calls).some(c=>c.state==='INTENT'),metrics:run.autonomy.metrics}:null,
+    runtimeStateDirectory:stateDirectory,runtimeMigration:migrationStatus(), admission:admissionSnapshot(runId),
     nativeRestart:{state:nativeRestartPending?'WAITING':nativeRestartIdentityError?'IDENTITY_UNVERIFIED':nativeRestartUnsafeRuns.has(runId)?'SESSION_UNVERIFIED':'VERIFIED',pid:lifetime.snapshot().identity?.pid ?? null,diagnostic:nativeRestartRecheckError || lifetime.snapshot().diagnostic}, frozenRecoveryMaintenance: FROZEN_CAPABILITY, maintenanceBuildDigest: loadedBuildDigest,
     notificationReconciliation: 'rejection-only-v1', hasUnresolvedOperation: context.hasUnresolvedValidation() || unresolvedOperations.length > 0,
     hasUnresolvedValidation: context.hasUnresolvedValidation(), unresolvedOperationCount: unresolvedOperations.length, coordination: { reason, integrationReady: run.integrationReady,
@@ -2503,6 +2506,8 @@ async function handleRequest(request, response) {
         throw new CoordinationError('erasure-change-frozen');
     }
     if (request.method === 'POST' && /^(?:\/runs\/[A-Za-z0-9][A-Za-z0-9_.-]{0,99})?\/validation\/(request|reminder)$/.test(url.pathname)) {
+      const autonomousRun=registry.runs.get(payload?.approval?.run_id);
+      if(autonomousRun?.autonomy&&autonomousRun.phase==='WORK')throw new CoordinationError('autonomy-use-mandated-executor');
       checkCommandLength(payload?.approval, maxCommandLength);
     }
     if(request.method==='POST'&&['/ccab/owner/report','/statistics/owner/checkpoint'].includes(url.pathname)) {
@@ -2865,10 +2870,55 @@ async function handleRequest(request, response) {
         registry.admission(runId);
         const messages=await openCode.messages(run.sessionId,run.directory);
         const roots=[realpathSync(process.execPath)];
-        json(response,200,authorizeAtelierCall(run,context.publicJob(),payload,messages,nativeToolInputDigest,roots,
-          url.pathname==='/atelier/authorize'?'atelier_execute':'atelier_status'));return;
+        let grant=authorizeAtelierCall(run,context.publicJob(),payload,messages,nativeToolInputDigest,roots,
+          url.pathname==='/atelier/authorize'?'atelier_execute':'atelier_status');
+        if(run.autonomy)grant=autonomousGrant(registry,runId,payload,grant,{snapshot:url.pathname==='/atelier/status-authorize'});
+        json(response,200,grant);return;
+      }
+      if(request.method==='GET'&&url.pathname==='/autonomy') {
+        json(response,200,{runId,autonomy:run.autonomy||null});return;
+      }
+      if(request.method==='POST'&&url.pathname.startsWith('/autonomy/')) {
+        registry.admission(runId);
+        if(url.pathname==='/autonomy/mandate') {
+          guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+          const job=context.publicJob();
+          if(!job?.armed||job.sessionId!==run.sessionId||job.currentCabMandate||job.recovery||context.pendingEffects())throw new CoordinationError('autonomy-job-not-ready');
+          json(response,200,grantAutonomy(registry,runId,payload));return;
+        }
+        if(url.pathname==='/autonomy/complete') {
+          json(response,200,completeAutonomousCall(registry,runId,payload));return;
+        }
+        if(url.pathname==='/autonomy/review') {
+          guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+          const result=reviewAutonomousWork(registry,runId,payload);
+          observations.record('autonomy-reviewed',{runId,changeId:run.changeId,sessionId:run.sessionId});
+          json(response,200,result);return;
+        }
+        if(url.pathname==='/autonomy/exception-decision') {
+          guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+          json(response,200,decideAutonomyException(registry,runId,payload));return;
+        }
+        if(['/autonomy/submit','/autonomy/exception','/autonomy/status'].includes(url.pathname)) {
+          const method=url.pathname==='/autonomy/submit'?'autonomy_submit':url.pathname==='/autonomy/status'?'autonomy_status':'autonomy_exception';
+          authorizeAtelierCall(run,context.publicJob(),payload,await openCode.messages(run.sessionId,run.directory),nativeToolInputDigest,[],method);
+          if(method==='autonomy_status') {
+            const m=run.autonomy;if(!m)throw new CoordinationError('autonomy-mandate-missing');
+            json(response,200,{state:m.state,mandateId:m.mandateId,metrics:m.metrics,exceptions:m.exceptions,reviews:m.reviews});return;
+          }
+          if(method==='autonomy_submit') {
+            const result=submitAutonomousWork(registry,runId,payload.submission);
+            observations.record('autonomy-review-requested',{runId,changeId:run.changeId,sessionId:run.sessionId});
+            json(response,200,result);return;
+          }
+          const result=requestAutonomyException(registry,runId,payload);
+          observations.record('autonomy-exception-requested',{runId,changeId:run.changeId,sessionId:run.sessionId,requestId:payload.request_id});
+          json(response,200,result);return;
+        }
+        throw new CoordinationError('autonomy-route-unknown',404);
       }
       if(request.method==='POST'&&url.pathname==='/validation/prepare') {
+        if(run.autonomy&&run.phase==='WORK')throw new CoordinationError('autonomy-use-mandated-executor');
         registry.admission(runId);const scoped=registry.scope(runId,run.version,payload.resources);
         if(payload.request_id&&registry.requestOwners[payload.request_id])throw new CoordinationError('validation-request-already-known');
         const prepared=prepareValidationData(run,payload,scoped.resources,registry.revisions(scoped.resources));
@@ -3333,6 +3383,11 @@ async function handleRequest(request, response) {
         const result=registry.quarantineTimedOutPortAccess(runId,payload,proof);
         context.invalidateOperation(operation.requestId);
         json(response,200,result);return;
+      }
+      if(request.method==='POST'&&url.pathname==='/publish'&&run.autonomy) {
+        guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);
+        if(context.pendingEffects())throw new CoordinationError('autonomy-native-effects-pending');
+        json(response,200,registry.publish(runId,payload));return;
       }
       if (request.method === 'POST' && ['/locks/release', '/publish'].includes(url.pathname)) {
         const receipt = url.pathname === '/publish' ? registry.resourceState.publications[payload.transactionId] : null;

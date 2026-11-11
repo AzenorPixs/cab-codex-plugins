@@ -23,7 +23,7 @@ async function until(check, label, diagnostic) {
 }
 
 test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus et recovery complete',
-  { skip: !binary, timeout: 45000 }, async t => {
+  { skip: !binary, timeout: 90000 }, async t => {
     const root = mkdtempSync(join(tmpdir(), 'cab-native-codemode-')), workspace = join(root, 'workspace');
     const brokerPidFile = join(root, 'broker-pid');
     mkdirSync(workspace); const password = 'synthetic-codemode-test-password';
@@ -33,7 +33,9 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const queue = []; const providerRequests=[]; let dispatched = 0, nativeLog = '', controlLog = '';
     let nativeTools = [];
     const provider = createServer(async (request, response) => {
+      if(request.method!=='POST'){response.writeHead(404).end();return;}
       let text = ''; for await (const chunk of request) text += chunk;
+      if(!text){response.writeHead(400).end();return;}
       providerRequests.push(text);const body = JSON.parse(text), main = body.tools?.some(tool => tool.function?.name === 'execute');
       if (main) nativeTools = body.tools.map(tool => tool.function);
       const action = main ? queue.shift() : null;
@@ -67,12 +69,12 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       }
       rmSync(root, { recursive: true, force: true });
     });
-    const source = fileURLToPath(new URL('../src/', import.meta.url));
+    const source = fileURLToPath(new URL('../plugins/cab-approval-bridge/broker/', import.meta.url));
     const wrapper = join(root, 'broker.py');
     writeFileSync(wrapper, `import sys, os\nopen(${JSON.stringify(brokerPidFile)}, 'w').write(str(os.getpid()))\nsys.path.insert(0, ${JSON.stringify(source)})\nimport cgpt_approval_bridge_server as b\n# Reproduire le schema 2.1.9, sans affaiblir son validateur runtime.\nb.APPROVAL_REQUEST_PROPERTIES['access_id'] = {'type': 'string', 'maxLength': 100}\nraise SystemExit(b.main())\n`);
     const config = { autoupdate: false, share: 'disabled', providers: { fixture: {
       package: 'aisdk:@ai-sdk/openai-compatible', settings: { baseURL: 'http://127.0.0.1:' + provider.address().port + '/v1',
-        apiKey: 'synthetic-local-key' }, models: { fixture: { name: 'fixture', limit: { context: 32000, output: 4096 },
+        apiKey: 'synthetic-local-key' }, models: { fixture: { name: 'fixture', limit: { context: 262144, output: 4096 },
         capabilities: { tools: true, input: ['text'], output: ['text'] } } } } },
       mcp: { servers: { 'cgpt-validation': { type: 'local', command: ['python3', wrapper], environment: {
         CGPT_CONTROLLER_URL: control, CGPT_APPROVAL_STORE: join(root, 'approvals.json'),
@@ -200,6 +202,54 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     assert.equal(nativeEdit.parameters.properties.replaceAll.type, 'boolean');
     console.log('Catalogue natif synthétique :', JSON.stringify({ names: nativeTools.map(tool => tool.name), edit: nativeEdit.parameters,
       shell: nativeTools.find(tool => tool.name === 'shell')?.parameters }));
+    // A new mission uses the existing isolated executor without per-operation decisions.
+    const autonomousDirectory=join(workspace,'autonomous-source');mkdirSync(autonomousDirectory);
+    writeFileSync(join(autonomousDirectory,'value.py'),'VALUE=0\n');
+    const autonomousSession=await makeSession('autonomous mission with final review');
+    let autonomousRun;await until(async()=>{try{autonomousRun=await http('/runs/reserve',{runId:'native-autonomous',ownerId:'fixture-autonomous-owner',sessionId:autonomousSession.id,
+      directory:workspace,changeId:'synthetic-autonomous',selectionKey:'synthetic-autonomous',dependsOn:[],
+      resources:[{key:'file:autonomous-source',mode:'write'}],exclusiveResources:[]});return true;}catch(error){if(error.message.includes('opencode-restart-reconciliation-required'))return false;throw error;}},'autonomous initial admission');
+    await http('/runs/native-autonomous/job/arm',{jobId:'job-autonomous',sessionId:autonomousSession.id,directory:workspace,
+      changeId:'synthetic-autonomous',strictCommands:true,criteria:['VALUE=2']});
+    await http('/runs/native-autonomous/autonomy/mandate',{protocol:'autonomous-change-v1',mandateId:'native-autonomous-mandate',
+      version:autonomousRun.version,sessionId:autonomousSession.id,objective:'Set VALUE=2',criteria:['VALUE=2'],constraints:['Isolated network'],
+      decisionsResolved:true,decisions:['Developer and orchestrator selected VALUE=2 before coding'],paths:['autonomous-source']});
+    async function autonomousTool(name,args) {
+      queue.push({tool:'execute',input:{code:'return await search('+JSON.stringify({query:name,namespace:'cgpt-validation',limit:20})+');'}});
+      await client.prompt(autonomousSession.id,'Discover only the requested autonomous tool.');
+      await until(async()=>!(await client.activeSessions())[autonomousSession.id]&&queue.length===0,'autonomous tool discovery');
+      queue.push({tool:'execute',input:{code:'return await tools["cgpt-validation"].'+name+'('+JSON.stringify(args)+');'}});
+      await client.prompt(autonomousSession.id,'Execute only the queued action in the initial mandate.');
+      await until(async()=>{const p=(await client.messages(autonomousSession.id)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);return p&&['completed','error'].includes(p.state.status)&&!(await client.activeSessions())[autonomousSession.id]&&queue.length===0;},'autonomous action',async()=>({
+        status:await http('/runs/native-autonomous/status'),last:(await client.messages(autonomousSession.id)).slice(-2)}));
+      const part=(await client.messages(autonomousSession.id)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);
+      assert.ok(part,'native autonomous MCP part missing');assert.equal(part.state.status,'completed',JSON.stringify(part.state));
+      return JSON.parse(part.state.output);
+    }
+    const autonomousIdentity={run_id:autonomousRun.runId,reservation_version:autonomousRun.version,session_id:autonomousSession.id,
+      change_id:'synthetic-autonomous',directory:workspace};
+    let autonomousLast;
+    for(let i=0;i<3;i++) {
+      const code=`from pathlib import Path\np=Path(${JSON.stringify(autonomousDirectory)})\n(p/'value.py').write_text('VALUE=${i}\\n')\nexec((p/'value.py').read_text());assert VALUE==2\nprint('AUTONOMOUS_NATIVE_OK')`;
+      autonomousLast=await autonomousTool('atelier_execute',{...autonomousIdentity,request_id:'autonomous-native-'+i,argv:['/usr/bin/python3','-c',code]});
+      assert.equal(autonomousLast.exitCode,i===2?0:1,JSON.stringify(autonomousLast));
+    }
+    const nativeSubmission=await autonomousTool('autonomy_submit',{...autonomousIdentity,request_id:'autonomous-final',submission:{
+      submissionId:'autonomous-native-final',summary:'Two failed trials then correction and passing test',tests:[{
+        criterion:'VALUE=2',requestId:'autonomous-native-2',receiptDigest:autonomousLast.receiptDigest,outcome:'passed'}],limits:[]}});
+    const beforeReview=await http('/runs/native-autonomous/autonomy');
+    assert.equal(beforeReview.autonomy.state,'REVIEW_PENDING');assert.equal(beforeReview.autonomy.metrics.intermediateDecisions,0);
+    await http('/runs/native-autonomous/autonomy/review',{reviewId:'autonomous-native-review',submissionDigest:nativeSubmission.digest,
+      decision:'accept',reason:'Reviewed real isolated writes, native test output and source revision'});
+    const published=await http('/runs/native-autonomous/publish',{transactionId:'autonomous-native-publication',version:autonomousRun.version,
+      submissionDigest:nativeSubmission.digest,evidence:['fixture final review and native executor receipts']});
+    assert.ok(published.referenceVersion>0);
+    assert.equal(readFileSync(join(autonomousDirectory,'value.py'),'utf8'),'VALUE=2\n');
+    console.log(JSON.stringify({autonomousNative:true,realOpenCode:true,initialMandates:1,intermediateDecisions:0,
+      failedTests:2,passedTests:1,finalSubmissions:1,finalReviews:1,publicationAccepted:true}));
+
+
+    if(process.env.CAB_TEST_AUTONOMY_ONLY==='1')return;
     const usageSession = await makeSession('native usage counters only');
     for (let i = 0; i < 2; i++) {
       const expected = dispatched + 1;
@@ -802,5 +852,6 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     await client.replyPermission(effectiveAskProbe.id,effectiveAskPending.id,'reject');
     await until(async()=>!(await client.activeSessions())[effectiveAskProbe.id],'restored ASK rejected without executing');
     console.log('Saved native grant detected behind nominal ASK; scoped API revocation restores an actual pending permission before the second command.');
+
 
   });

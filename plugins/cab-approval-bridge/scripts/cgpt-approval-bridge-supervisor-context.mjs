@@ -4,7 +4,7 @@ import { dirname, isAbsolute, join } from "node:path";
 import { validCodingModel, VERSION as MODEL_VERSION } from './cgpt-approval-bridge-model-policy.mjs';
 import { createOpenCodeV2ClientFromEnv, normalizeOpenCodeEvent } from './cgpt-approval-bridge-opencode-client.mjs';
 
-export const VERSION = "2.5.8";
+export const VERSION = "2.6.0";
 if (MODEL_VERSION !== VERSION) throw new Error('CAB model policy component version mismatch');
 
 export function createSupervisorContext({ workspace, controllerUrl, statePath, runId = null }) {
@@ -14,7 +14,7 @@ function envValue(name) {
   return process.env[name] || process.env[name.replace("OC_Codex_", "OC_CGPT_")];
 }
 
-const version = "2.5.8";
+const version = "2.6.0";
 
 const statusHost = envValue("OC_Codex_SUPERVISOR_STATUS_HOST") || "127.0.0.1";
 const statusPort = Number(envValue("OC_Codex_SUPERVISOR_STATUS_PORT") || "8789");
@@ -102,6 +102,7 @@ async function fetchJson(url, options = {}) {
 }
 
 function resumeAllowed(status, job) {
+  if(status.autonomy?.protocol==='autonomous-change-v1')return status.autonomy.pendingExecution?'autonomy-execution-pending':'autonomy-event-driven';
   if (job?.codingModel !== undefined && !validCodingModel(job.codingModel)) return 'model-selection-invalid';
   if (runId && status.coordination?.reason) return status.coordination.reason;
   if (runId && (status.hasUnresolvedOperation || status.coordination?.accesses?.some((a) =>

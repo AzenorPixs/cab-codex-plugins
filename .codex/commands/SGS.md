@@ -1,6 +1,6 @@
 ---
 description: Régénérer les statistiques globales du projet avec le moteur CAB
-version: 2.5.8
+version: 2.6.0
 ---
 
 Commande canonique `/SGS`, en MAJUSCULES. Répondre en français.

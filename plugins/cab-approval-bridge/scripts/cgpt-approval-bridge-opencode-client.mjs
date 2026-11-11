@@ -8,7 +8,7 @@ import { hasNativeAsk, nativeAskState, scopedNativeReadRules, VERSION as PERMISS
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 import { ContinuityStore } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.5.8';
+export const VERSION = '2.6.0';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -224,7 +224,10 @@ export function nativeCodingMandate(instruction) {
     'Dans le change validé, les lectures et explorations sont autonomes. Pour les essais libres dans votre atelier .cab-tests/<change>/<RUN>/, ' +
     'utiliser atelier_execute via Code Mode après discovery exacte, avec données littérales, sans demande de validation supplémentaire ; ' +
     'atelier_status consulte le même essai sans rejeu. Projet RO, atelier propre RW et réseau isolé ; ne pas remplacer ce profil par un shell hôte libre. ' +
-    'Toute écriture projet hors atelier et tout accès web exigent la validation préalable du pilote ; tous les résultats de tests lui sont soumis. ' +
+    'Si un mandat autonomous-change-v1 est actif, atelier_execute autorise aussi les chemins projet RW de ce mandat ; ' +
+    'travail et corrections sans validation intermédiaire, puis autonomy_submit pour la revue finale. Les décisions nécessaires sont tranchées développeur/pilote avant codage. ' +
+    'autonomy_exception ne concerne que hors change, hors cadrage, outil nécessaire absent ou consultation web. ' +
+    'Sans ce mandat, le profil historique conserve la validation des écritures hors atelier et des accès web ; les tests sont soumis au pilote. ' +
     'Toute action hors change ou allocation supplémentaire non autorisée relève du développeur. ' +
     'Pour request_validation, retourner directement await avec le payload littéral complet ; ne pas utiliser runtimeInput ou transformer le retour. ' +
     'Si execute ou la méthode découverte est indisponible, signaler le blocage sans appel direct ou repli. ' +
@@ -551,7 +554,7 @@ function codeModePart(content, part) {
   const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
   let call, requestIdBound = false;
   if (match) {
-    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject','atelier_execute','atelier_status','cab_contract','prepare_validation','ccab_report'].includes(match[2])) return null;
+    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject','atelier_execute','atelier_status','autonomy_submit','autonomy_exception','autonomy_status','cab_contract','prepare_validation','ccab_report'].includes(match[2])) return null;
     const literal = literalObject(code.slice(match[0].length), commandBinding,
       match[2] === 'request_validation' ? nativeRequestId : null);
     if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
@@ -560,7 +563,7 @@ function codeModePart(content, part) {
   } else if (code || !discovery) return null;
   if (assertedDiscoveryPath !== null && (!call || assertedDiscoveryPath !== 'tools["cgpt-validation"].' + match[2])) return null;
   const expected = [discovery, call].filter(Boolean);
-  const failureTool = ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status'].includes(call?.tool) ||
+  const failureTool = ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status'].includes(call?.tool) ||
     (!discovery && call?.tool === 'cgpt-validation.get_approval');
   const nativeFailure = part.state.status === 'completed' && part.state.metadata?.error === true && failureTool &&
     (!discovery || discovery.tool === 'search') && Array.isArray(observed) && observed.length === expected.length &&
@@ -578,9 +581,9 @@ function codeModePart(content, part) {
         !record(entry) || entry.tool !== expected[i].tool ||
         (canonical(entry.input) !== canonical(expected[i].input) && !omittedEmptyReadinessInput(entry)) ||
         !(['completed', 'error'].includes(entry.status) || part.state.status === 'running' &&
-          ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status'].includes(entry.tool) && i === expected.length - 1 && entry.status === 'running')) ||
+          ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status'].includes(entry.tool) && i === expected.length - 1 && entry.status === 'running')) ||
         (part.state.status === 'completed' && observed.some(entry => entry.status !== 'completed') && !nativeFailure)) return null;
-  } else if (!call || !['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status'].includes(call.tool)) return null;
+  } else if (!call || !['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status'].includes(call.tool)) return null;
   return { ...part, tool: call ? call.tool.replace('cgpt-validation.', 'cgpt-validation_') : 'cab_codemode_discovery',
     state: { ...part.state, input: call?.input || discovery.input,
       ...(nativeFailure ? { status: 'error', error: part.state.output } : {}),

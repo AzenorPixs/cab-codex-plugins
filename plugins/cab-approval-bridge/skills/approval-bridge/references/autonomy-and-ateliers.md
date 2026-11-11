@@ -1,5 +1,10 @@
 # Autonomie du change — cible CAB 2.4.0
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 Le développeur valide le change et ses ressources. Dans ce périmètre,
 l’orchestrateur décide, orchestre, contrôle et valide ; le codeur produit le
 travail. Une reprise technique déjà couverte ne nécessite pas un nouvel accord

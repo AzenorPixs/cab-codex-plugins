@@ -12,6 +12,7 @@ Après le nettoyage OC : [effacement ciblé des briques](change-erasure.md).
 
 | Besoin | Contrat et détails |
 |---|---|
+| Mission autonome, décisions préalables, exceptions et revue finale | [mandat autonome](autonomous-mandates.md) |
 | Autorité, permissions, durée, finalité | [protocol-core](protocol-core.md) |
 | Autonomie, ateliers, lectures et validation des résultats | [autonomie du change](autonomy-and-ateliers.md) |
 | Collecte permanente SGS et session Codex directe | [collecte SGS](../../sgs/references/runtime-collection.md) |

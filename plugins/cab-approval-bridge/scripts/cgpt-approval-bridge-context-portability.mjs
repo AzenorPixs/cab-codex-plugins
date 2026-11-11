@@ -1,4 +1,4 @@
-export const VERSION = '2.5.8';
+export const VERSION = '2.6.0';
 export const CONTEXT_PORTABILITY_ID = 'cab-context-portability';
 const fail = code => { throw Object.assign(new Error(code), {code}); };
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);

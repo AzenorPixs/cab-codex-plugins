@@ -1,7 +1,7 @@
 import {mkdirSync,lstatSync,realpathSync,chmodSync,chownSync,existsSync,rmSync} from 'node:fs';
 import {isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {createHash} from 'node:crypto';
-export const VERSION='2.5.8';
+export const VERSION='2.6.0';
 const identity=value=>typeof value==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(value);
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};
 function sharedDirectory(path,workspace) {
@@ -67,7 +67,7 @@ export function testResultDigest(result) {
 }
 
 export function authorizeAtelierCall(run,job,args,messages,inputDigest,runtimeRoots=[],method='atelier_execute') {
-  if(!['atelier_execute','atelier_status'].includes(method))fail('atelier-method-invalid');
+  if(!['atelier_execute','atelier_status','autonomy_submit','autonomy_exception','autonomy_status'].includes(method))fail('atelier-method-invalid');
   if(!run||run.state!=='RESERVED'||!job?.armed||job.changeId!==run.changeId||job.sessionId!==run.sessionId||
     args.run_id!==run.runId||args.reservation_version!==run.version||args.session_id!==run.sessionId||
     args.change_id!==run.changeId||args.directory!==run.directory)fail('atelier-run-divergent');

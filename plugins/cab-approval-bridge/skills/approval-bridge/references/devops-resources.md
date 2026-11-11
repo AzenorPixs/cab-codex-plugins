@@ -1,5 +1,10 @@
 # Ressources DevOps des ateliers — CAB2.4.4
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 DEVOPS.md décrit les ressources du projet sur la machine courante. Avant chaque
 nouvel atelier_execute, le broker lit localement ce seul document (UTF-8, fichier
 régulier sans lien, plafond1Mio/256déclarations), extrait les chemins déclarés,

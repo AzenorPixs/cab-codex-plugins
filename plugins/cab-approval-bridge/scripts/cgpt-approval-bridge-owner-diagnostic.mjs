@@ -8,7 +8,7 @@ import {processOwnerIdentity} from './cgpt-approval-bridge-process-lifecycle.mjs
 import {startDiagnosticOwnerProxy} from './cgpt-approval-bridge-owner-diagnostic-proxy.mjs';
 import {authority} from './cgpt-approval-bridge-update.mjs';
 import {homedir} from 'node:os';
-export const VERSION='2.5.8';
+export const VERSION='2.6.0';
 
 const exec=promisify(execFile);
 const fail=code=>{throw Object.assign(new Error(code),{code})};

@@ -1,10 +1,11 @@
 import {verifyDependencies} from './cgpt-approval-bridge-dependency-authority.mjs';
+import {requireAutonomousAcceptance} from './cgpt-approval-bridge-autonomous-mandate.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.5.8';
+export const VERSION = '2.6.0';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -695,6 +696,9 @@ export class ResourceRunRegistry extends RunRegistry {
     if (this.schemaVersion < 4) return super.checkConflicts(candidate, activeRuns);
     for (const other of activeRuns) {
       if (other.runId === candidate.runId) continue;
+      if ((other.autonomy || candidate.autonomy) && conflicts(candidate.resources,other.resources)) {
+        throw new CoordinationError('autonomy-peer-conflict');
+      }
       if (other.sessionId === candidate.sessionId) throw new CoordinationError('session-already-reserved');
       if (other.changeId === candidate.changeId || other.selectionKey === candidate.selectionKey) {
         throw new CoordinationError('change-already-reserved');
@@ -1629,7 +1633,8 @@ export class ResourceRunRegistry extends RunRegistry {
     this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
   }
   unresolvedAccess(runId, includeTests = true) {
-    return Object.values(this.resourceState.accesses).some((a) => a.runId === runId && (active(a) || a.state === 'WAITING')) ||
+    return Object.values(this.runs.get(runId)?.autonomy?.calls||{}).some(c=>c.state==='INTENT') ||
+      Object.values(this.resourceState.accesses).some((a) => a.runId === runId && (active(a) || a.state === 'WAITING')) ||
       (includeTests && Object.values(this.resourceState.testReservations || {}).some((r) => r.runId === runId && reservedTest(r)));
   }
   extend(runId, payload) {
@@ -1710,7 +1715,28 @@ export class ResourceRunRegistry extends RunRegistry {
       return copy(prior);
     }
     this.admission(runId);
+    requireAutonomousAcceptance(this.runs.get(runId));
     if (this.testReservations(runId).some(reservedTest)) throw new CoordinationError('run-test-resources-unresolved');
+    if(this.runs.get(runId)?.autonomy) {
+      const run=this.owned(runId,payload.version),m=run.autonomy;
+      if(payload.submissionDigest!==m.submissions.at(-1).digest||this.unresolvedAccess(runId)||
+         Object.values(m.calls).some(c=>c.state==='INTENT')||
+         Object.values(this.resourceState.operations).some(op=>op.runId===runId&&!['COMPLETED','CANCELLED'].includes(op.state)))
+        throw new CoordinationError('autonomy-publication-invalid');
+      const reportFile=payload.reportFile===undefined?undefined:this.reportTarget(run,payload.reportFile);
+      const reportResources=reportFile?this.reportResources(run,reportFile):undefined;
+      if(reportResources)this.checkConflicts({...run,resources:reportResources});
+      this.referenceVersion++;run.referenceVersion=this.referenceVersion;run.publishedReferenceVersion=this.referenceVersion;
+      run.integrationCompleted=true;run.integrationReady=false;run.pendingWrites={};
+      const resources=m.paths.map(path=>({key:'file:'+path,mode:'write'}));
+      for(const resource of resources)this.resourceState.revisions[resource.key]=++this.resourceState.sequence;
+      if(reportFile){run.phase='REPORT';run.reportFile=reportFile;run.resources=reportResources;run.exclusiveResources=reportResources.map(r=>r.key);}
+      run.version=++this.sequence;
+      const receipt={transactionId:payload.transactionId,runId,contextId:run.contextId,inputDigest,
+        referenceVersion:this.referenceVersion,version:run.version,reportFile:reportFile||null,
+        revisions:this.revisions(resources),evidenceDigest:digest(payload.evidence)};
+      this.resourceState.publications[receipt.transactionId]=receipt;this.persist();return copy(receipt);
+    }
     const access = this.held(runId, payload);
     const run = this.owned(runId, payload.version);
     if (run.phase !== 'WORK') throw new CoordinationError('report-phase-only');

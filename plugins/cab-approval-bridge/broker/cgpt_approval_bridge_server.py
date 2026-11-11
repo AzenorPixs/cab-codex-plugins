@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.5.8"
+SERVER_VERSION = "2.6.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -4187,8 +4187,34 @@ def do_atelier(args,*,snapshot=False):
             raise ValidationError(code if re.fullmatch(r'(?:atelier|run|coordination)-[a-z0-9-]{1,100}',code) else "atelier-controller-authorization-refused") from exc
         except (OSError,ValueError) as exc:
             raise ValidationError("atelier-controller-unavailable") from exc
-    try:return atelier.status(args,authorize) if snapshot else atelier.execute(args,authorize)
+    try:
+        result=atelier.status(args,authorize) if snapshot else atelier.execute(args,authorize)
+        if result.get('autonomousMandate') and result.get('status') in ('COMPLETED','TIMED_OUT','FAILED_TO_START'):
+            receipt_digest=hashlib.sha256(atelier.canonical(result).encode()).hexdigest()
+            complete={'request_id':args['request_id'],'status':result['status'],
+                      'exitCode':result.get('exitCode'),'receiptDigest':receipt_digest}
+            endpoint=controller_url()+"/runs/"+parse.quote(args['run_id'],safe='')+'/autonomy/complete'
+            http_request=request.Request(endpoint,data=json.dumps(complete).encode(),headers={'Content-Type':'application/json'},method='POST')
+            try:
+                with request.urlopen(http_request,timeout=10) as response:json.loads(response.read(65536))
+            except (OSError,ValueError) as exc:raise ValidationError('atelier-completion-unacknowledged-use-status') from exc
+            result={**result,'receiptDigest':receipt_digest}
+        return result
     except atelier.AtelierError as exc:raise ValidationError(str(exc)) from exc
+
+
+def do_autonomy(args,action):
+    if action not in ('submit','exception','status'):raise ValidationError('autonomy-action-invalid')
+    run_id=require_str(args,'run_id',100)
+    endpoint=controller_url()+'/runs/'+parse.quote(run_id,safe='')+'/autonomy/'+action
+    http_request=request.Request(endpoint,data=json.dumps(args,ensure_ascii=False).encode(),headers={'Content-Type':'application/json'},method='POST')
+    try:
+        with request.urlopen(http_request,timeout=30) as response:return json.loads(response.read(1024*1024))
+    except error.HTTPError as exc:
+        try:code=json.loads(exc.read(16384)).get('error','')
+        except (ValueError,AttributeError):code=''
+        raise ValidationError(code if re.fullmatch(r'autonomy-[a-z0-9-]{1,100}',code) else 'autonomy-controller-refused') from exc
+    except (OSError,ValueError) as exc:raise ValidationError('autonomy-controller-unavailable') from exc
 
 
 def do_lookup_validation(args):
@@ -9354,6 +9380,21 @@ APPROVAL_REQUEST_PROPERTIES = {
 
 
 TOOLS = [
+    {'name':'autonomy_status','description':'Consulte le mandat, les réponses aux exceptions et la revue finale sans créer de décision.',
+     'inputSchema':{'type':'object','properties':{
+       **{key:{'type':'string'} for key in ('request_id','run_id','session_id','change_id','directory')},
+       'reservation_version':{'type':'integer','minimum':1}},
+       'required':['request_id','run_id','session_id','change_id','directory','reservation_version'],'additionalProperties':False}},
+    {'name':'autonomy_submit','description':'Soumet une seule fois le travail et ses preuves à la revue finale. Aucun accord de publication implicite.',
+     'inputSchema':{'type':'object','properties':{
+       **{key:{'type':'string'} for key in ('request_id','run_id','session_id','change_id','directory')},
+       'reservation_version':{'type':'integer','minimum':1},'submission':{'type':'object'}},
+       'required':['request_id','run_id','session_id','change_id','directory','reservation_version','submission'],'additionalProperties':False}},
+    {'name':'autonomy_exception','description':'Sollicite exceptionnellement le pilote pour hors change, hors cadrage, outil absent ou consultation web. Les travaux indépendants continuent.',
+     'inputSchema':{'type':'object','properties':{
+       **{key:{'type':'string'} for key in ('request_id','run_id','session_id','change_id','directory','summary')},
+       'reservation_version':{'type':'integer','minimum':1},'category':{'enum':['outside-change','outside-framing','missing-tool','web-consultation']}},
+       'required':['request_id','run_id','session_id','change_id','directory','reservation_version','category','summary'],'additionalProperties':False}},
     {'name':'ccab_report','description':'Dépose un incident CAB en file CCAB, avec outbox locale si la liaison est indisponible. Ne décide pas d’un correctif et ne relance aucune opération.',
      'inputSchema':{'type':'object','properties':{**{key:{'type':'string'} for key in ('incident_id','session_id','directory','run_id','change_id','category','summary')},
          'evidence':{'type':'array','maxItems':32,'items':{'type':'object','properties':{'reference':{'type':'string','minLength':1,'maxLength':1000},'sha256':{'type':'string','pattern':'^[a-f0-9]{64}$'}},'required':['reference','sha256'],'additionalProperties':False}}},
@@ -10163,6 +10204,9 @@ def handle_request(
 
         elif name in ("atelier_execute","atelier_status"):
             payload=do_atelier(args,snapshot=name=="atelier_status")
+
+        elif name in ('autonomy_submit','autonomy_exception','autonomy_status'):
+            payload=do_autonomy(args,name.removeprefix('autonomy_'))
 
         elif name=="cab_contract":
             payload=do_contract(args)

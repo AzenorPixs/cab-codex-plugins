@@ -14,7 +14,7 @@ import threading
 import time
 from datetime import datetime, timezone
 
-VERSION = "2.5.8"
+VERSION = "2.6.0"
 LOCK = threading.RLock()
 ACTIVE_PROCESSES={}
 SECRET = re.compile(r"(?:\.env(?:\.|$)|\.(?:key|pem|p12|pfx|crt|cer|der)$|^(?:credentials|secrets)\.(?:json|yaml)$|^id_(?:rsa|ed25519)$|^(?:\.npmrc|\.pypirc|opencode\.password|\.netrc)$)")
@@ -181,7 +181,7 @@ def sandbox_command(args,grant):
     validate_args(args)
     workspace=Path(args["directory"])
     expected=workspace/".cab-tests"/args["change_id"]/args["run_id"]
-    if set(grant)!={"status","directory","atelier","runtimeRoots"} or grant["status"]!="AUTHORIZED_ATELIER" or grant["directory"]!=str(workspace) or grant["atelier"]!=str(expected):
+    if set(grant)-{"autonomy"}!={"status","directory","atelier","runtimeRoots"} or grant["status"]!="AUTHORIZED_ATELIER" or grant["directory"]!=str(workspace) or grant["atelier"]!=str(expected):
         raise AtelierError("atelier-grant-divergent")
     if expected.resolve()!=expected or not expected.is_dir():raise AtelierError("atelier-path-unsafe")
     binary=Path("/usr/bin/bwrap")
@@ -199,6 +199,29 @@ def sandbox_command(args,grant):
         if not os.access(source,os.R_OK|os.X_OK):raise AtelierError("atelier-runtime-root-unavailable")
         command += ["--ro-bind",source,source]
     command += ["--ro-bind",str(workspace),str(workspace)]
+    autonomy=grant.get('autonomy')
+    if autonomy is not None:
+        if (not isinstance(autonomy,dict) or set(autonomy)!={'protocol','mandateId','paths'}
+                or autonomy['protocol']!='autonomous-change-v1' or not isinstance(autonomy['paths'],list)
+                or not autonomy['paths']):raise AtelierError('atelier-autonomy-grant-invalid')
+        for literal in autonomy['paths']:
+            path=Path(literal)
+            if (not path.is_absolute() or path.resolve()!=path or path==workspace
+                    or not path.is_relative_to(workspace)
+                    or any(part in {'.git','.opencode','.cab-tests','.codex'} or SECRET.search(part)
+                           for part in path.relative_to(workspace).parts)):
+                raise AtelierError('atelier-autonomy-path-invalid')
+            candidates=[path]
+            if path.is_dir():
+                for directory,dirs,files in os.walk(path,followlinks=False):
+                    candidates.extend(Path(directory)/name for name in [*dirs,*files])
+            for candidate in candidates:
+                info=candidate.lstat()
+                if (stat.S_ISLNK(info.st_mode) or not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode))
+                        or stat.S_ISREG(info.st_mode) and info.st_nlink!=1
+                        or SECRET.search(candidate.name)):
+                    raise AtelierError('atelier-autonomy-source-unsafe')
+            command += ['--bind',literal,literal]
     resources=devops_resources(workspace)
     for mount in resources['mounts']:
         command += ['--ro-bind',mount['source'],mount['destination']]
@@ -246,7 +269,7 @@ def sandbox_command(args,grant):
     search=":".join(dict.fromkeys([*resources['binPaths'],*(str(Path(root).parent if Path(root).is_file() else Path(root)/"bin") for root in runtime_roots)]))
     command += ["--setenv","PATH",(search+":" if search else "")+"/usr/bin:/bin",
                 "--setenv","HOME",str(expected/".home"),"--setenv","TMPDIR","/cab-tmp",
-                "--setenv","PYTHONDONTWRITEBYTECODE","1","--setenv","LANG","C.UTF-8","--setenv","USER","cab","--chdir",str(expected),"--",*args["argv"]]
+                "--setenv","PYTHONDONTWRITEBYTECODE","1","--setenv","LANG","C.UTF-8","--setenv","USER","cab","--chdir",str(workspace if autonomy else expected),"--",*args["argv"]]
     return {'argv':command,'masked_shared_links':masked,'devops_resources':resources}
 
 
@@ -332,8 +355,12 @@ def execute(args,authorize,*,job_home=None):
             return previous
         plan=sandbox_command(args,grant);command=plan['argv']
         value={"requestId":args["request_id"],"runId":args["run_id"],"changeId":args["change_id"],"sessionId":args["session_id"],
-               "input_sha256":fingerprint,"status":"INTENT","startedAt":datetime.now(timezone.utc).isoformat(),"requires_orchestrator_validation":True,
-               'masked_shared_links':plan['masked_shared_links'],'devops_resources':plan['devops_resources']}
+               "input_sha256":fingerprint,"status":"INTENT","startedAt":datetime.now(timezone.utc).isoformat(),
+               "requires_orchestrator_validation":not bool(grant.get('autonomy')),
+               "requires_final_review":bool(grant.get('autonomy')),
+               'masked_shared_links':plan['masked_shared_links'],'devops_resources':plan['devops_resources'],
+               'autonomousMandate':grant.get('autonomy',{}).get('mandateId'),
+               'validationStage':'final-review' if grant.get('autonomy') else 'orchestrator'}
         save(path,value)
     output=Path(grant["atelier"])/(".cab-result-"+fingerprint+".log")
     if output.is_symlink():raise AtelierError("atelier-output-symlink")
