@@ -2,6 +2,12 @@
 
 ## Non publié
 
+## 2.5.8 - 2026-11-11
+
+- Synchroniser les versions internes et contrats de distribution pour permettre l’activation du correctif publié en 2.5.7.
+
+## 2.5.7 - 2026-11-11
+
 - Permettre le retrait contrôlé d’une opération approuvée lorsque son accès dédié a été annulé avant attribution, en conservant les preuves et les reçus incomplets.
 
 ## 2.5.6 - 2026-11-11
