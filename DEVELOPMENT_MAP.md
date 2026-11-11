@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — permissions CAB, 11 novembre 2026
+
+`support-reporting-external-group-mode` : lot reporting et exécution externe
+archivé, qualifié localement ; livraison et activation à vérifier.
+`support-cab-permission-resilience` reste ouvert pour les autres briques.
+
 ## SCM — prévol externe et continuité SGS, 11 novembre 2026
 
 `reconcile-external-preflight-failure`, code non attribué : ARCHIVÉ et testé

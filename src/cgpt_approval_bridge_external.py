@@ -15,7 +15,7 @@ import tempfile
 from datetime import datetime,timezone
 import cgpt_approval_bridge_external_runner as runner
 
-VERSION='2.7.2'
+VERSION='2.7.3'
 PROTOCOL='cab-external-exec-v1'
 LOCK=threading.RLock()
 ACTIVE_PROCESSES={}
@@ -75,7 +75,7 @@ def connection(directory,profile):
         fd=os.open(known,os.O_RDONLY|os.O_NOFOLLOW)
         with os.fdopen(fd,'rb') as f:
             info=os.fstat(f.fileno())
-            if not stat.S_ISREG(info.st_mode) or info.st_uid not in (0,os.getuid()) or info.st_mode&0o022 or info.st_size>1024*1024 or info.st_nlink!=1:fail('external-known-hosts-unsafe')
+            if not stat.S_ISREG(info.st_mode) or info.st_uid not in (0,os.getuid()) or info.st_mode&0o002 or info.st_size>1024*1024 or info.st_nlink!=1:fail('external-known-hosts-unsafe')
             data=f.read()
     except OSError:fail('external-known-hosts-unavailable')
     try:lines=[l.split() for l in data.decode('utf-8',errors='strict').splitlines() if l.strip() and not l.lstrip().startswith('#')]
@@ -107,13 +107,20 @@ def describe(args,authorize):
     cfg=connection(args['directory'],profile)
     return {'status':'PROFILE_DESCRIBED','profile':{**profile,'connection_fingerprint':cfg['fingerprint']},'credential_values_exposed':False}
 
+def set_new_directory_mode(path):
+    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:os.fchmod(fd,0o770)
+    finally:os.close(fd)
+
 def private_root(directory,home=None):
     base=(Path(home) if home else Path.home())/'.local/state/cab-external-executions'
-    base.mkdir(parents=True,mode=0o700,exist_ok=True)
-    if base.resolve()!=base or base.stat().st_uid!=os.getuid() or base.stat().st_mode&0o077:fail('external-state-unsafe')
+    try:base.mkdir(parents=True,mode=0o770);set_new_directory_mode(base)
+    except FileExistsError:pass
+    if base.resolve()!=base or not base.is_dir() or base.stat().st_uid!=os.getuid() or base.stat().st_mode&0o007:fail('external-state-unsafe')
     root=base/hashlib.sha256(directory.encode()).hexdigest()
-    if not root.exists():root.mkdir(mode=0o700)
-    if root.resolve()!=root or root.stat().st_uid!=os.getuid() or root.stat().st_mode&0o077:fail('external-state-unsafe')
+    try:root.mkdir(mode=0o770);set_new_directory_mode(root)
+    except FileExistsError:pass
+    if root.resolve()!=root or not root.is_dir() or root.stat().st_uid!=os.getuid() or root.stat().st_mode&0o007:fail('external-state-unsafe')
     return root
 
 def gather_files(directory,items,allowed):
@@ -141,6 +148,7 @@ def gather_files(directory,items,allowed):
 def ssh_transport(cfg,packet,timeout_ms):
     code=Path(runner.__file__).read_text(encoding='utf-8')
     known=tempfile.NamedTemporaryFile(prefix='cab-external-known-',mode='w+b')
+    os.fchmod(known.fileno(),0o770)
     known.write(cfg['known_data']);known.flush()
     rfd,wfd=os.pipe()
     argv=['/usr/bin/sshpass','-d',str(rfd),'/usr/bin/ssh','-F','/dev/null','-p',str(cfg['port']),
@@ -173,7 +181,10 @@ def _call(args,authorize,*,snapshot=False,transport=ssh_transport,home=None):
         if not isinstance(proof,dict) or proof.get('code')!='external-state-unsafe' or not re.fullmatch('[a-f0-9]{64}',proof.get('proofDigest','')):fail('external-preflight-proof-invalid')
         return {'found':True,'requestId':args['request_id'],'status':'PREFLIGHT_FAILED','coordinationOnly':True,'proofDigest':proof['proofDigest']}
     root=private_root(args['directory'],home);job_id=digest([args['run_id'],args['request_id']]);path=root/(job_id+'.json')
-    lockfd=os.open(root/(job_id+'.lock'),os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+    try:
+        lockfd=os.open(root/(job_id+'.lock'),os.O_CREAT|os.O_EXCL|os.O_RDWR|os.O_NOFOLLOW,0o770)
+        os.fchmod(lockfd,0o770)
+    except FileExistsError:lockfd=os.open(root/(job_id+'.lock'),os.O_RDWR|os.O_NOFOLLOW)
     try:
         fcntl.flock(lockfd,fcntl.LOCK_EX)
         value=runner.load(path)
