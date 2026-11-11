@@ -18,7 +18,7 @@ import { CONTINUITY_PROTOCOL } from './cgpt-approval-bridge-continuity.mjs';
 import { activateRuntimeServices } from './cgpt-approval-bridge-runtime-install.mjs';
 import {StatisticsBackend} from './cgpt-approval-bridge-statistics-backend.mjs';
 
-export const VERSION = '2.6.0';
+export const VERSION = '2.7.0';
 const REGISTRY_MAX_BYTES = 16 * 1024 * 1024;
 const exec = promisify(execFile);
 const hash = (data) => createHash('sha256').update(data).digest('hex');
@@ -259,7 +259,7 @@ export async function updateComponents(input, options = {}) {
     const allowed = file.group === 'broker' ? brokerPayloadFiles.includes(file.name) : file.group === 'units' ?
       ['controller', 'supervisor', 'monitor','sgs','ccab','monitor-direct@'].some((component) => file.name === unit(component)) : file.group === 'web' ?
         ['index.html', 'app.mjs', 'stats.mjs', 'style.css'].includes(file.name) :
-          (['scripts','monitorScripts'].includes(file.group) && ['cab_sgs.py','cab_session_dependencies.py','cgpt-approval-bridge-contract.json'].includes(file.name)) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(file.name);
+          (['scripts','monitorScripts'].includes(file.group) && ['cab_sgs.py','cab_session_dependencies.py','cab_coder_coordination.py','cgpt-approval-bridge-contract.json'].includes(file.name)) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(file.name);
     if (!allowed) throw error('update-journal-invalid');
     return join(c.roots[file.group], file.name);
   };
@@ -1126,7 +1126,7 @@ export async function updateComponents(input, options = {}) {
       else receiptProcessing: {
       if(input.recaptureMigration!==undefined&&!receipt.runtimeMigration)throw error('update-migration-recapture-boundary-invalid');
       if (receipt.schema !== 1 || (!complete.has(receipt.phase) && receipt.contextKey !== contextKey) || !/^update-[a-f0-9-]{36}$/.test(receipt.id) ||
-          !Array.isArray(receipt.files) || receipt.files.length > 128 || !receipt.active ||
+          !Array.isArray(receipt.files) || receipt.files.length > 256 || !receipt.active ||
           !['PREPARING', 'PREPARED', 'FREEZING', 'WAITING', 'STOPPING', 'INSTALLING', 'RESTARTING', 'VERIFYING',
             'RELEASING', 'ROLLING_BACK', 'ROLLBACK_RELEASING', 'ROLLBACK_FAILED', 'MCP_RECOVERY_REQUIRED', 'READONLY_RECOVERY_REQUIRED', ...complete].includes(receipt.phase) ||
           !['controller', 'supervisor', 'monitor'].every((component) => typeof receipt.active[component] === 'boolean') ||
@@ -1375,13 +1375,13 @@ export async function updateComponents(input, options = {}) {
         receipt.jobIdentity=jobsIdentity(status);
         for (const name of brokerFiles) await validate(join(c.pluginRoot,'broker',name),transaction());
       }
-      const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => ['cab_sgs.py','cab_session_dependencies.py','cgpt-approval-bridge-contract.json'].includes(name) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
+      const scripts = (await readdir(join(c.pluginRoot, 'scripts'))).filter((name) => ['cab_sgs.py','cab_session_dependencies.py','cab_coder_coordination.py','cgpt-approval-bridge-contract.json'].includes(name) || /^cgpt-approval-bridge-[a-z-]+\.(mjs|py)$/.test(name)).sort();
       const required = ['runtime-migration.mjs', 'state-layout.mjs', 'controller.mjs', 'job-context.mjs', 'continuity.mjs', 'recovery.mjs', 'recovery-evidence.mjs', 'port-recovery.mjs', 'native-instances.mjs', 'permission-replies.mjs', 'manifest-extensions.mjs', 'model-policy.mjs', 'model-transition.mjs', 'provider-connect.mjs', 'context-portability.mjs', 'shell-stage.mjs', 'permission-policy.mjs', 'runs.mjs', 'resource-coordination.mjs',
         'statistics.mjs', 'observation-statistics.mjs', 'statistics-maintenance.mjs', 'import-observations.mjs',
         'registry-lock.py', 'supervisor.mjs', 'supervisor-context.mjs', 'opencode-sse-client.mjs', 'healthcheck.mjs',
         'reset.py', 'prompts.py', 'sgs.py', 'monitor.mjs', 'monitor-data.mjs', 'monitor-events.mjs', 'monitor-management.mjs',
         'run-steps.mjs', 'process-lifecycle.mjs', 'source-read.mjs', 'update.mjs'];
-      if (scripts.length > 96 || !scripts.includes('cab_sgs.py') || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
+      if (scripts.length > 96 || !scripts.includes('cab_sgs.py') || !scripts.includes('cab_coder_coordination.py') || required.some((name) => !scripts.includes('cgpt-approval-bridge-' + name))) throw error('update-package-incomplete');
       const artifacts = [
         ...scripts.map((name) => ({ group: 'scripts', name, source: join(c.pluginRoot, 'scripts', name) })),
         ...['state-layout', 'monitor', 'monitor-data', 'monitor-events', 'continuity', 'permission-replies', 'monitor-management', 'run-steps', 'statistics-maintenance', 'observation-statistics', 'opencode-client', 'permission-policy', 'process-lifecycle','autonomy','runtime-client','archives']

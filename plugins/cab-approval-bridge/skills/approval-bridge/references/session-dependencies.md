@@ -1,5 +1,11 @@
 # Coordination de dépendances — cab-dependency-mailbox-1
 
+Sous mandat autonome qualifié, [la coordination des codeurs](coder-coordination.md)
+prévaut sur les propriétaires et relais historiques ci-dessous. Transfert explicite,
+avis et provenance conservés ; aucun double opérateur. Vérifier la discovery du
+protocole cab-coder-coordination-1, pas seulement le numéro du paquet.
+
+
 Le contrat du change archivé `coordinate-project-coding-sessions` est réalisé au niveau source. Le raccordement des clients suit l'[adaptateur commun](session-coordination-adapter.md). La présence de la CLI ne prouve pas la santé du runtime, l'adoption d'un prompt ou une notification native ; réservations, OpenSpec et protections restent applicables.
 
 Le script `scripts/cgpt-approval-bridge-dependencies.py` fournit le protocole `cab-dependency-mailbox-1` et les opérations documentées ci-dessous. Chaque appel, sauf `version` et `check-close`, requiert `--project` (racine réelle), `--session` et `--run`. Le magasin par défaut est `cab-approval-bridge/dependencies` sous la racine d'état runtime CAB existante ; `--store` le remplace pour un banc isolé. Ce répertoire doit appartenir à l'utilisateur et être privé, mode 0700. `register` prend `--mode direct|piloted` et éventuellement `--mandate SCM|other|unknown`. `state` prend `--state active|paused`, `--reason explicit|dependency` et `--generation` croissante ; il ne modifie ni ne constate lui-même la pause native. `subscribe` prend `--dependency-id`, `--kind change|task|capability`, `--subject` et `--criterion`, éventuellement `--batch-code` attesté et, pour une capacité, `--batch-change` identifiant le change associé. `publish` prend `--notice-id`, `--kind`, `--subject`, `--proof` (référence relative non sensible). `ack` prend `--dependency-id` et `--notice-id`.

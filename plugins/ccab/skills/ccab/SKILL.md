@@ -35,6 +35,12 @@ et son bail persistent ; après réponse perdue, reprendre le même action_id
 et le même payload. Une expiration permet une reprise contrôlée, pas un
 deuxième correctif concurrent. Vérifier le bail avant chaque résolution.
 
+Lorsqu’une session de codage transmet directement une déclaration CCAB et
+qu’aucun autre correctif n’est en cours, consulter la file et engager le
+traitement sans attendre le prochain contrôle périodique. Respecter la priorité
+FIFO et les réservations existantes ; se coordonner avec le déclarant pour
+qualifier l’incident et l’aider à reprendre dans son périmètre autorisé.
+
 Le développeur autorise les échanges nécessaires entre un déclarant CCAB et
 le correcteur désigné, y compris entre chats de projets différents. Vérifier
 le destinataire et son rôle ; partager seulement les preuves utiles, sans

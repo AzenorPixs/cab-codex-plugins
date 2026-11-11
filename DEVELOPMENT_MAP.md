@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — coordination autonome, 11 novembre 2026
+
+`enable-autonomous-session-coordination`, code non attribué : ARCHIVÉ, source2.7.0 qualifiée.
+Ownership codeur, transport natif, boîte durable, accès partagés et prompts alignés ;
+qualification source vérifiée ; livraison CAB2.7.0 et activation à constater séparément.
+
 ## SCM — autonomie du codeur, 11 novembre 2026
 
 Change `enable-autonomous-coding-mandates`, code non attribué : ARCHIVÉ, qualification source réalisée.

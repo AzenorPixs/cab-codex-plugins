@@ -1,5 +1,17 @@
 # Codex Approval Bridge — CAB
 
+## Coordination et bancs autonomes CAB 2.7.0
+
+Les codeurs opèrent les déclarations, avis, vérifications et acquittements dans leur
+mandat ; le parent traite les exceptions et la revue finale. Le transport cible les
+codeurs, avec IPC broker inter-UID, provenance historique et transfert explicite.
+Les accès partagés sont sérialisés par opération ; les pauses et effets incertains
+restent protégés. Voir [le contrat](plugins/cab-approval-bridge/skills/approval-bridge/references/coder-coordination.md).
+Le [profil SSH externe](plugins/cab-approval-bridge/skills/approval-bridge/references/external-execution.md)
+permet les essais autonomes sur banc conteneur réservé, credentials locaux et reçus
+sans rejeu, avec nettoyage vérifié avant restitution. Aucun shell hôte général.
+La présence source et la qualification ne prouvent pas l’activation.
+
 ## Mandat autonome CAB
 
 Les nouvelles missions pilotées suivent un cadrage initial et une revue finale.

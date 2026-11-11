@@ -13,7 +13,7 @@ import tempfile
 import threading
 import urllib.request
 
-VERSION = '2.6.0'
+VERSION = '2.7.0'
 
 
 def serve(config):
@@ -27,7 +27,7 @@ def serve(config):
             pass
 
         def do_POST(self):
-            if self.path not in ('/cleanup/owner/poll', '/cleanup/owner/exchange','/ccab/owner/report','/statistics/owner/checkpoint'):
+            if self.path not in ('/cleanup/owner/poll', '/cleanup/owner/exchange','/ccab/owner/report','/statistics/owner/checkpoint','/coordination/coder/op','/external/owner/authorize','/external/owner/finish','/external/owner/release'):
                 self.send_error(404)
                 return
             try:

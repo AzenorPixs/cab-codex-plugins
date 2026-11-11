@@ -1,11 +1,12 @@
+import {externalPending} from './cgpt-approval-bridge-external-execution.mjs';
 import {verifyDependencies} from './cgpt-approval-bridge-dependency-authority.mjs';
-import {requireAutonomousAcceptance} from './cgpt-approval-bridge-autonomous-mandate.mjs';
+import {requireAutonomousAcceptance,autonomousResources} from './cgpt-approval-bridge-autonomous-mandate.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.6.0';
+export const VERSION = '2.7.0';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -507,6 +508,7 @@ export class ResourceRunRegistry extends RunRegistry {
     return entry;
   }
   cancelTests(runId, payload) {
+    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
     this.mutable(); this.owned(runId, payload.version); evidence(payload.evidence);
     const entry = this.resourceState.testReservations?.[payload.transactionId];
     if (!entry || entry.runId !== runId || entry.version !== payload.version || !['WAITING','CANCELLED'].includes(entry.state)) {
@@ -602,6 +604,7 @@ export class ResourceRunRegistry extends RunRegistry {
     return copy(prior);
   }
   releaseUnusedTests(runId, payload, verifiedNativeProof, { lostTokenRecovery = false, validatedChangeScope = false } = {}) {
+    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
     this.mutable();
     const replay = this.unusedTestReplay(runId, payload);
     if (replay) return replay;
@@ -662,7 +665,18 @@ export class ResourceRunRegistry extends RunRegistry {
     if (lostTokenRecovery) { delete entry.token; this.restoredTests.delete(entry.transactionId); }
     this.grantTests(); this.persist(); return copy(entry);
   }
+  releaseExternalTests(runId,transactionId,proof) {
+    this.admission(runId);const run=this.runs.get(runId),entry=this.resourceState.testReservations?.[transactionId];
+    if(!entry||entry.runId!==runId||entry.contextId!==run.contextId||entry.version!==run.version||entry.state!=='HELD'||
+      this.restoredTests.has(transactionId)||!hash(proof?.digest)||!Array.isArray(proof.resources)||
+      entry.resources.length!==proof.resources.length||entry.resources.some(r=>!proof.resources.includes(r.key))||
+      Object.values(run.externalCalls||{}).some(c=>c.leaseId===transactionId&&!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(c.state))||
+      this.operationTests(entry).some(op=>!['COMPLETED','CANCELLED'].includes(op.state)))throw new CoordinationError('external-cleanup-proof-required');
+    entry.state='RELEASED';entry.finishedAt=now();entry.releaseDigest=digest(proof);entry.proofDigest=proof.digest;
+    this.grantTests();this.persist();return copy(entry);
+  }
   releaseTests(runId, payload) {
+    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
     this.mutable(); evidence(payload.evidence);
     const prior = this.resourceState.testReservations?.[payload.transactionId];
     if (prior?.state === 'RELEASED' && !prior.unusedReleaseReceipt && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);
@@ -696,7 +710,7 @@ export class ResourceRunRegistry extends RunRegistry {
     if (this.schemaVersion < 4) return super.checkConflicts(candidate, activeRuns);
     for (const other of activeRuns) {
       if (other.runId === candidate.runId) continue;
-      if ((other.autonomy || candidate.autonomy) && conflicts(candidate.resources,other.resources)) {
+      if ((other.autonomy || candidate.autonomy) && other.autonomy?.resourcePolicy!=='operation-scoped-v1' && candidate.autonomy?.resourcePolicy!=='operation-scoped-v1' && conflicts(candidate.resources,other.resources)) {
         throw new CoordinationError('autonomy-peer-conflict');
       }
       if (other.sessionId === candidate.sessionId) throw new CoordinationError('session-already-reserved');
@@ -1172,6 +1186,10 @@ export class ResourceRunRegistry extends RunRegistry {
   }
   blockers(access) {
     const result = [];
+    for(const run of this.runs.values())if(run.runId!==access.runId&&run.state==='RESERVED'&&
+      Object.values(run.autonomy?.calls||{}).some(c=>c.state==='INTENT'||c.state==='WAITING'&&c.order<access.order)&&
+      conflicts(access.resources,autonomousResources(run)))
+      result.push({runId:run.runId,reason:'autonomous-execution-active'});
     for (const other of Object.values(this.resourceState.accesses)) {
       if (other.accessId === access.accessId) continue;
       if ((active(other) || (other.state === 'WAITING' && other.order < access.order)) &&
@@ -1633,7 +1651,7 @@ export class ResourceRunRegistry extends RunRegistry {
     this.restoredAccesses.delete(access.accessId);this.persist();return copy(access);
   }
   unresolvedAccess(runId, includeTests = true) {
-    return Object.values(this.runs.get(runId)?.autonomy?.calls||{}).some(c=>c.state==='INTENT') ||
+    return externalPending(this.runs.get(runId)) || Object.values(this.runs.get(runId)?.autonomy?.calls||{}).some(c=>['INTENT','WAITING'].includes(c.state)) ||
       Object.values(this.resourceState.accesses).some((a) => a.runId === runId && (active(a) || a.state === 'WAITING')) ||
       (includeTests && Object.values(this.resourceState.testReservations || {}).some((r) => r.runId === runId && reservedTest(r)));
   }
@@ -1720,7 +1738,7 @@ export class ResourceRunRegistry extends RunRegistry {
     if(this.runs.get(runId)?.autonomy) {
       const run=this.owned(runId,payload.version),m=run.autonomy;
       if(payload.submissionDigest!==m.submissions.at(-1).digest||this.unresolvedAccess(runId)||
-         Object.values(m.calls).some(c=>c.state==='INTENT')||
+         Object.values(m.calls).some(c=>['INTENT','WAITING'].includes(c.state))||
          Object.values(this.resourceState.operations).some(op=>op.runId===runId&&!['COMPLETED','CANCELLED'].includes(op.state)))
         throw new CoordinationError('autonomy-publication-invalid');
       const reportFile=payload.reportFile===undefined?undefined:this.reportTarget(run,payload.reportFile);

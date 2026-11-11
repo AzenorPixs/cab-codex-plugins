@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.6.0"
+SERVER_VERSION = "2.7.0"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -411,6 +411,8 @@ BLOCKING_TOOLS = (
     "request_validation",
     "poll_approval",
     "atelier_execute",
+    "external_execute",
+    "external_status",
 )
 
 CONTROL_TOOLS = (
@@ -4177,16 +4179,18 @@ def do_atelier(args,*,snapshot=False):
     def authorize(value):
         endpoint=controller_url()+"/runs/"+parse.quote(value["run_id"],safe="")+("/atelier/status-authorize" if snapshot else "/atelier/authorize")
         payload=json.dumps(value,ensure_ascii=False).encode("utf-8")
-        http_request=request.Request(endpoint,data=payload,headers={"Content-Type":"application/json"},method="POST")
-        try:
-            with request.urlopen(http_request,timeout=10) as response:
-                return json.loads(response.read(1024*1024))
-        except error.HTTPError as exc:
-            try:code=json.loads(exc.read(16384)).get('error','')
-            except (ValueError,AttributeError):code=''
-            raise ValidationError(code if re.fullmatch(r'(?:atelier|run|coordination)-[a-z0-9-]{1,100}',code) else "atelier-controller-authorization-refused") from exc
-        except (OSError,ValueError) as exc:
-            raise ValidationError("atelier-controller-unavailable") from exc
+        deadline=time.monotonic()+min(args.get('timeout_ms',60000)/1000,300)
+        while True:
+            http_request=request.Request(endpoint,data=payload,headers={"Content-Type":"application/json"},method="POST")
+            try:
+                with request.urlopen(http_request,timeout=10) as response:return json.loads(response.read(1024*1024))
+            except error.HTTPError as exc:
+                try:code=json.loads(exc.read(16384)).get('error','')
+                except (ValueError,AttributeError):code=''
+                if code=='autonomy-resources-busy' and time.monotonic()<deadline:
+                    time.sleep(0.2);continue
+                raise ValidationError(code if re.fullmatch(r'(?:atelier|autonomy|run|coordination)-[a-z0-9-]{1,100}',code) else "atelier-controller-authorization-refused") from exc
+            except (OSError,ValueError) as exc:raise ValidationError("atelier-controller-unavailable") from exc
     try:
         result=atelier.status(args,authorize) if snapshot else atelier.execute(args,authorize)
         if result.get('autonomousMandate') and result.get('status') in ('COMPLETED','TIMED_OUT','FAILED_TO_START'):
@@ -4203,6 +4207,35 @@ def do_atelier(args,*,snapshot=False):
     except atelier.AtelierError as exc:raise ValidationError(str(exc)) from exc
 
 
+def do_external(args,method):
+    import cgpt_approval_bridge_external as external
+    if external.VERSION!=SERVER_VERSION:raise ValidationError('external-component-version-mismatch')
+    sender={'pid':os.getpid(),'uid':os.getuid(),'instanceId':INSTANCE_ID}
+    if method=='external_release':return owner_erasure_http('/external/owner/release',{'sender':sender,'packet':args})
+    def authorize(value):
+        deadline=time.monotonic()+min(value.get('timeout_ms',120000)/1000,300)
+        while True:
+            try:return owner_erasure_http('/external/owner/authorize',{'sender':sender,'packet':{'method':method,'args':value}})
+            except ValidationError as error:
+                if str(error)=='external-resource-busy' and time.monotonic()<deadline:time.sleep(0.2);continue
+                raise
+    try:
+        if method=='external_describe':return external.describe(args,authorize)
+        result=external.status(args,authorize) if method=='external_status' else external.execute(args,authorize)
+        if result.get('input_digest'):
+            sha=external.digest(result)
+            owner_erasure_http('/external/owner/finish',{'sender':sender,'packet':{'run_id':args['run_id'],'session_id':args['session_id'],
+              'request_id':args['request_id'],'receipt':result,'receipt_digest':sha}})
+            result={**result,'receiptDigest':sha}
+        return result
+    except external.ExternalError as error:raise ValidationError(str(error)) from error
+
+
+def do_session_coordinate(args):
+    return owner_erasure_http('/coordination/coder/op',{
+        'sender':{'pid':os.getpid(),'uid':os.getuid(),'instanceId':INSTANCE_ID},'packet':args})
+
+
 def do_autonomy(args,action):
     if action not in ('submit','exception','status'):raise ValidationError('autonomy-action-invalid')
     run_id=require_str(args,'run_id',100)
@@ -4211,9 +4244,15 @@ def do_autonomy(args,action):
     try:
         with request.urlopen(http_request,timeout=30) as response:return json.loads(response.read(1024*1024))
     except error.HTTPError as exc:
-        try:code=json.loads(exc.read(16384)).get('error','')
-        except (ValueError,AttributeError):code=''
-        raise ValidationError(code if re.fullmatch(r'autonomy-[a-z0-9-]{1,100}',code) else 'autonomy-controller-refused') from exc
+        try:diagnostic=json.loads(exc.read(16384));code=diagnostic.get('error','')
+        except (ValueError,AttributeError):diagnostic={};code=''
+        reason=diagnostic.get('reason')
+        allowed={'submission-shape-invalid','test-identity-or-criterion-invalid','test-receipt-not-terminal',
+                 'receipt-digest-mismatch','test-outcome-invalid','test-did-not-pass','test-source-revision-stale','criterion-not-covered'}
+        suffix=(':'+reason) if code=='autonomy-submission-invalid' and reason in allowed else ''
+        index=diagnostic.get('testIndex')
+        if suffix and type(index) is int and 0<=index<10000:suffix+=':testIndex='+str(index)
+        raise ValidationError((code if re.fullmatch(r'autonomy-[a-z0-9-]{1,100}',code) else 'autonomy-controller-refused')+suffix) from exc
     except (OSError,ValueError) as exc:raise ValidationError('autonomy-controller-unavailable') from exc
 
 
@@ -8475,6 +8514,9 @@ def do_readiness(args=None):
     if atelier is not None:
         with atelier.LOCK:snapshot['active_atelier_count']=len(atelier.ACTIVE_PROCESSES)
     else:snapshot['active_atelier_count']=0
+    external=sys.modules.get('cgpt_approval_bridge_external')
+    snapshot['active_external_count']=len(external.ACTIVE_PROCESSES) if external else 0
+    snapshot['active_atelier_count']+=snapshot['active_external_count']
     if REPORTING_WORKSPACE:
         try:snapshot['ccab_outbox']=reporting_module().pending(REPORTING_WORKSPACE)
         except (ImportError,OSError,ValueError):snapshot['ccab_outbox']={'count':None,'entries':[],'unavailable':True}
@@ -9380,6 +9422,26 @@ APPROVAL_REQUEST_PROPERTIES = {
 
 
 TOOLS = [
+    *[{'name':name,'description':description,'inputSchema':{'type':'object','properties':{
+       **{key:{'type':'string'} for key in ('request_id','run_id','session_id','change_id','directory')},
+       'reservation_version':{'type':'integer','minimum':1},**properties},
+       'required':['request_id','run_id','session_id','change_id','directory','reservation_version',*required],'additionalProperties':False}}
+      for name,description,properties,required in [
+       ('external_describe','Décrit un profil SSH de banc réservé et son empreinte de connexion sans exposer de credential.',{'profile':{'type':'object'}},['profile']),
+       ('external_execute','Exécute librement dans un profil externe approuvé et réservé, sans shell hôte général. Reçu durable, pas de rejeu.',
+        {'adapter_id':{'type':'string'},'argv':{'type':'array','minItems':1,'items':{'type':'string'}},'phase':{'enum':['test','cleanup','verify-cleanup']},
+         'timeout_ms':{'type':'integer','minimum':1,'maximum':2147483647},'files':{'type':'array','maxItems':128,'items':{'type':'object','properties':{'path':{'type':'string'},'destination':{'type':'string'},'sha256':{'type':'string'}},'required':['path'],'additionalProperties':False}}},['adapter_id','argv']),
+       ('external_status','Consulte le même reçu externe et réconcilie sa fin distante sans relancer la commande.',{'adapter_id':{'type':'string'}},['adapter_id']),
+       ('external_release','Restitue le banc après reçus distincts de nettoyage et vérification, tous deux réussis.',
+        {'cleanup_request_id':{'type':'string'},'verification_request_id':{'type':'string'},'proofs':{'type':'array','maxItems':8,'items':{'type':'object','properties':{'cleanup_request_id':{'type':'string'},'verification_request_id':{'type':'string'}},'required':['cleanup_request_id','verification_request_id'],'additionalProperties':False}}},[]) ]],
+
+    {'name':'session_coordinate','description':'Coordination autonome dans le mandat : déclarer une dépendance, publier une preuve, lire ou acquitter un avis. Aucun accord intermédiaire du pilote.',
+     'inputSchema':{'type':'object','properties':{
+       **{key:{'type':'string'} for key in ('request_id','run_id','session_id','change_id','directory')},
+       'reservation_version':{'type':'integer','minimum':1},
+       'action':{'enum':['subscribe','publish','inbox','ack','outbox','status','cancel-wait']},'args':{'type':'object'}},
+       'required':['request_id','run_id','session_id','change_id','directory','reservation_version','action','args'],'additionalProperties':False}},
+
     {'name':'autonomy_status','description':'Consulte le mandat, les réponses aux exceptions et la revue finale sans créer de décision.',
      'inputSchema':{'type':'object','properties':{
        **{key:{'type':'string'} for key in ('request_id','run_id','session_id','change_id','directory')},
@@ -9411,7 +9473,7 @@ TOOLS = [
      "inputSchema":{"type":"object","properties":{
          **{key:{"type":"string"} for key in ("request_id","run_id","session_id","change_id","directory")},
          "reservation_version":{"type":"integer","minimum":1},"argv":{"type":"array","minItems":1,"items":{"type":"string"}},
-         "timeout_ms":{"type":"integer","minimum":1,"maximum":2147483647}},
+         "timeout_ms":{"type":"integer","minimum":1,"maximum":2147483647},"expected_revision":{"type":"string","pattern":"^[a-f0-9]{64}$"}},
          "required":["request_id","run_id","session_id","change_id","directory","reservation_version","argv"],"additionalProperties":False}},
     {"name":"atelier_status","description":"Relit le reçu du même essai sans le rejouer, y compris après perte de réponse.",
      "inputSchema":{"type":"object","properties":{
@@ -10204,6 +10266,12 @@ def handle_request(
 
         elif name in ("atelier_execute","atelier_status"):
             payload=do_atelier(args,snapshot=name=="atelier_status")
+
+        elif name in ('external_describe','external_execute','external_status','external_release'):
+            payload=do_external(args,name)
+
+        elif name=='session_coordinate':
+            payload=do_session_coordinate(args)
 
         elif name in ('autonomy_submit','autonomy_exception','autonomy_status'):
             payload=do_autonomy(args,name.removeprefix('autonomy_'))

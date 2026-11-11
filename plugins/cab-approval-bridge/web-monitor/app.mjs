@@ -291,7 +291,11 @@ function renderDetail() {
     detailLine('Mandat courant', run.currentMandate || (run.hasMandate ? 'Mandat actif · détail non public' : 'Aucun mandat observé')),
     detailLine('Gate terminal', run.gate.status), detailLine('Demandes indécises', number(run.pending)),
     detailLine('Dernier jalon prouvé', run.lastProvenMilestone), detailLine('Cause / attente', run.cause),
-    detailLine('RUN bloquant(s)', run.blockers.join(', ') || null), cycleDetails(run), taskDetails(change));
+    detailLine('RUN bloquant(s)', run.blockers.join(', ') || null),
+    ...(run.coderCoordination?[detailLine('Coordination', 'Codeur autonome'),
+      detailLine('Dépendances déclarées',number(run.coderCoordination.subscriptions)),
+      detailLine('Avis reçus / acquittés',number(run.coderCoordination.received)+' / '+number(run.coderCoordination.acknowledged)),
+      detailLine('Envois à réconcilier',number(run.coderCoordination.uncertain))]:[]),cycleDetails(run), taskDetails(change));
 }
 function renderTimeline() {
   const filter = $('#timeline-filter');

@@ -8,7 +8,7 @@ import { hasNativeAsk, nativeAskState, scopedNativeReadRules, VERSION as PERMISS
 import { PermissionReplyJournal } from './cgpt-approval-bridge-permission-replies.mjs';
 import { ContinuityStore } from './cgpt-approval-bridge-continuity.mjs';
 
-export const VERSION = '2.6.0';
+export const VERSION = '2.7.0';
 if (PERMISSION_VERSION !== VERSION) throw new Error('CAB native permission component version mismatch');
 const RESPONSE_LIMIT = 2 * 1024 * 1024;
 const SESSION_LOG_LIMIT = 8 * 1024 * 1024;
@@ -554,7 +554,7 @@ function codeModePart(content, part) {
   const match = /^return\s+await\s+tools\[(["'])cgpt-validation\1\]\.([a-z_]+)\s*\(\s*/.exec(code);
   let call, requestIdBound = false;
   if (match) {
-    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject','atelier_execute','atelier_status','autonomy_submit','autonomy_exception','autonomy_status','cab_contract','prepare_validation','ccab_report'].includes(match[2])) return null;
+    if (!['broker_readiness', 'request_validation', 'lookup_validation', 'poll_approval', 'get_approval', 'reject','atelier_execute','atelier_status','autonomy_submit','autonomy_exception','autonomy_status','session_coordinate','external_describe','external_execute','external_status','external_release','cab_contract','prepare_validation','ccab_report'].includes(match[2])) return null;
     const literal = literalObject(code.slice(match[0].length), commandBinding,
       match[2] === 'request_validation' ? nativeRequestId : null);
     if (!literal || !/^\)\s*;?$/.test(literal.rest)) return null;
@@ -563,7 +563,7 @@ function codeModePart(content, part) {
   } else if (code || !discovery) return null;
   if (assertedDiscoveryPath !== null && (!call || assertedDiscoveryPath !== 'tools["cgpt-validation"].' + match[2])) return null;
   const expected = [discovery, call].filter(Boolean);
-  const failureTool = ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status'].includes(call?.tool) ||
+  const failureTool = ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status','cgpt-validation.session_coordinate','cgpt-validation.external_describe','cgpt-validation.external_execute','cgpt-validation.external_status','cgpt-validation.external_release'].includes(call?.tool) ||
     (!discovery && call?.tool === 'cgpt-validation.get_approval');
   const nativeFailure = part.state.status === 'completed' && part.state.metadata?.error === true && failureTool &&
     (!discovery || discovery.tool === 'search') && Array.isArray(observed) && observed.length === expected.length &&
@@ -581,9 +581,9 @@ function codeModePart(content, part) {
         !record(entry) || entry.tool !== expected[i].tool ||
         (canonical(entry.input) !== canonical(expected[i].input) && !omittedEmptyReadinessInput(entry)) ||
         !(['completed', 'error'].includes(entry.status) || part.state.status === 'running' &&
-          ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status'].includes(entry.tool) && i === expected.length - 1 && entry.status === 'running')) ||
+          ['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status','cgpt-validation.session_coordinate','cgpt-validation.external_describe','cgpt-validation.external_execute','cgpt-validation.external_status','cgpt-validation.external_release'].includes(entry.tool) && i === expected.length - 1 && entry.status === 'running')) ||
         (part.state.status === 'completed' && observed.some(entry => entry.status !== 'completed') && !nativeFailure)) return null;
-  } else if (!call || !['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status'].includes(call.tool)) return null;
+  } else if (!call || !['cgpt-validation.request_validation','cgpt-validation.atelier_execute','cgpt-validation.atelier_status','cgpt-validation.autonomy_submit','cgpt-validation.autonomy_exception','cgpt-validation.autonomy_status','cgpt-validation.session_coordinate','cgpt-validation.external_describe','cgpt-validation.external_execute','cgpt-validation.external_status','cgpt-validation.external_release'].includes(call.tool)) return null;
   return { ...part, tool: call ? call.tool.replace('cgpt-validation.', 'cgpt-validation_') : 'cab_codemode_discovery',
     state: { ...part.state, input: call?.input || discovery.input,
       ...(nativeFailure ? { status: 'error', error: part.state.output } : {}),

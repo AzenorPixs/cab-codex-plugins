@@ -8,13 +8,23 @@ import os
 from pathlib import Path
 import sqlite3
 import sys
+import urllib.request
 
 from cab_session_dependencies import (CoordinationError, DependencyStore, check_close, codex_proxy_exchange,
                                       codex_active_turn, codex_verified_sender, controller_admission, encoded, same_state_root, verify_pilot_binding)
 
-VERSION = '2.6.0'
+VERSION = '2.7.0'
 ADAPTER_PROTOCOL = 'cab-session-coordination-1'
 ACTIONS = ("version", "capabilities", "register", "state", "decide", "decisions", "subscribe", "publish", "inbox", "outbox", "discover-turn", "notify-all", "ack", "release-notice", "notify-piloted", "notify-direct", "reconcile-piloted", "reconcile-direct", "cancel-prepared", "check-close", "close-direct", "reopen-direct")
+
+
+def request_coder_pump(project,base):
+    gate=controller_admission(base)
+    if gate.get('workspace')!=project_root(project) or gate.get('protocol')!='dependency-pause-gate-v1':
+        raise CoordinationError('coordination-native-barrier-unavailable')
+    request=urllib.request.Request(base.rstrip('/')+'/coordination/coder/pump',data=b'{}',method='POST',
+        headers={'content-type':'application/json','x-cab-continuity':'cab-continuity-v1'})
+    with urllib.request.urlopen(request,timeout=15) as response:return json.loads(response.read(65536))
 
 
 def discover_target(store, project, session, run, notice_id, target, state_root, controller_url, codex_socket):
@@ -27,6 +37,12 @@ def discover_target(store, project, session, run, notice_id, target, state_root,
         reason={'paused':'recipient-paused','closed':'recipient-closed'}.get(target['session_state'],'recipient-not-active')
         return {'status':'waiting','reason':reason}
     mode=target['mode'];recipient=target['recipient_session'];recipient_run=target['recipient_run']
+    binding=store.db.execute('SELECT actor_session FROM coder_bindings WHERE project=? AND run=?',(project,recipient_run)).fetchone()
+    if binding:
+        request_coder_pump(project,controller_url)
+        delivery=store.db.execute('SELECT state FROM coder_deliveries WHERE project=? AND session=? AND run=? AND notice_id=?',(project,recipient,recipient_run,notice_id)).fetchone()
+        return {'status':delivery['state'] if delivery else 'queued','actor_session':binding['actor_session']}
+
     verify_pilot_binding(project,recipient_run,recipient,state_root,mode)
     control=controller_admission(controller_url,recipient_run if mode=='piloted' else None)
     if (not isinstance(control,dict) or control.get('protocol')!='dependency-pause-gate-v1' or
@@ -88,6 +104,7 @@ def main():
     parser.add_argument("--notice-id")
     parser.add_argument("--proof")
     parser.add_argument("--proof-sha256")
+    parser.add_argument("--stage",choices=("candidate","tested"))
     parser.add_argument("--release-evidence")
     parser.add_argument("--recipient-session")
     parser.add_argument("--recipient-run")
@@ -109,6 +126,9 @@ def main():
                           "mandate_mapping": {"SCM": "SCM", "SCMP": "SCM",
                                               "CISM": "other", "CISMP": "other",
                                               "ISM": "other", "ISMP": "other"},
+                          "coder_protocol":"cab-coder-coordination-1",
+                          "autonomous_mode_owners":{"direct":"coder","piloted":"coder"},
+                          "delegated_transport":"verified-broker-owner-ipc",
                           "scope": "same-project-same-uid", "passive_mailbox": True,
                           "native_delivery": "per-attempt-verification", "automatic_resume": False},
                          sort_keys=True))
@@ -164,6 +184,11 @@ def main():
             identity = (args.project, args.session, args.run)
             if args.action == "register":
                 result = store.register(*identity, args.mode, args.mandate)
+                if args.mode=='direct' and args.codex_socket:
+                    socket_path=Path(args.codex_socket)
+                    if not socket_path.is_absolute() or socket_path.lstat().st_uid!=os.getuid():raise CoordinationError('coordination-native-socket-invalid')
+                    store.db.execute('INSERT OR REPLACE INTO coder_direct_transports VALUES(?,?,?,?)',(*store._identity(*identity),str(socket_path)))
+
             elif args.action == "state":
                 result = store.set_session_state(*identity, args.state, args.generation, args.reason, args.resume_evidence,args.decision_evidence)
             elif args.action == 'decide':
@@ -177,7 +202,18 @@ def main():
             elif args.action == "subscribe":
                 result = store.subscribe(*identity, args.dependency_id, args.kind, args.subject, args.criterion, args.batch_code, args.batch_change)
             elif args.action == "publish":
+                if args.stage:
+                    from cab_coder_coordination import proof_state
+                    if proof_state(args.project,args.proof,args.proof_sha256)!='fresh':raise CoordinationError('coordination-proof-not-fresh')
                 result = store.publish(*identity, args.notice_id, args.kind, args.subject, args.proof, args.proof_sha256)
+                if args.stage:
+                    old=store.db.execute('SELECT stage,actor_session FROM coder_notice_states WHERE project=? AND notice_id=?',(str(Path(args.project).resolve()),args.notice_id)).fetchone()
+                    if old and (old['stage']!=args.stage or old['actor_session']!=args.session):raise CoordinationError('coordination-notice-conflict')
+                    store.db.execute('INSERT OR IGNORE INTO coder_notice_states VALUES(?,?,?,?)',(str(Path(args.project).resolve()),args.notice_id,args.session,args.stage))
+                if args.controller_url:
+                    try:result['coder_delivery']=request_coder_pump(str(Path(args.project).resolve()),args.controller_url)
+                    except (CoordinationError,OSError,ValueError):result['native_notification']='unavailable'
+
             elif args.action == "inbox":
                 result = store.inbox(*identity)
             elif args.action == 'outbox':
@@ -206,6 +242,9 @@ def main():
                     if not pending:
                         results.append({'session':recipient,'run':recipient_run,'status':'acknowledged'});continue
                     target=pending[0]
+                    binding=store.db.execute('SELECT actor_session FROM coder_bindings WHERE project=? AND run=?',(project,recipient_run)).fetchone()
+                    if binding:
+                        results.append({'session':binding['actor_session'],'run':recipient_run,**discover_target(store,project,session,run,args.notice_id,target,state_root,args.controller_url,args.codex_socket)});continue
                     if target['delivery_state']!='not-attempted':
                         results.append({'session':recipient,'run':recipient_run,'status':target['delivery_state'],
                                         'attempt_id':target['attempt_id'],'turn_id':target['turn_id'],

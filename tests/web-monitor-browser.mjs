@@ -31,7 +31,7 @@ let upstream;
 let browserClose;
 const results = [];
 const unit = process.env.CAB_MONITOR_BROWSER_UNIT;
-if (unit && !['header', 'manual', 'order', 'catalog','240'].includes(unit)) throw new Error('Unité navigateur inconnue');
+if (unit && !['header', 'manual', 'order', 'catalog','240','coordination'].includes(unit)) throw new Error('Unité navigateur inconnue');
 async function finishUnit(browser, passed) {
   results.push({ browser: browser.name, version: browser.version, passed });
   await browser.close(); browserClose = null;
@@ -173,6 +173,7 @@ try {
       runs: Object.fromEntries((managementMode ? [] : runIds).map((runId, i) => [runId, { job: { changeId: changeIds[i], sessionId: 'ses_' + i, armed: true,
         lifecycle: i === 0 ? lifecycle : nextLifecycle(undefined, i === 1 ? 'IMPLEMENTATION' : 'STATISTICS', undefined, 0),
         lastProvenMilestone: ['Contrat d’observation validé', 'Reprise préparée', 'Événements corrélés'][i], currentCabMandate: 'mandat-' + i },
+      coderCoordination:i===0?{protocol:'cab-coder-coordination-1',metrics:{subscriptions:2,received:3,acknowledged:2,nativeUncertain:0}}:null,
       terminalGate: { status: 'OPEN' }, undecidedValidationCount: i === 1 ? 1 : 0,
       coordination: { phase: ['WORK', 'WORK', 'REPORT'][i], ...(i === 1 ? { reason: recoveryBlocked ? 'resource-effects-unknown' : 'resource-conflict', blockers: [{ runId: 'RUN-WEB' }] }
         : i === 2 ? { reason: stopped ? 'run-stop' : 'resource-effects-unknown' } : {}) } }])) }
@@ -256,6 +257,15 @@ try {
       await wait(()=>browser.evaluate("document.querySelector('#archives-retained').textContent.includes('copie complétée')&&document.querySelector('#archives-retained').textContent.includes('copie antérieure')"),browser.name+' copies identifiées');
       repository.remove(beforeRevision.archiveId,beforeRevision.fingerprint);repository.remove(afterRevision.archiveId,afterRevision.fingerprint);
       await finishUnit(browser,['SGS_ONLY','CCAB','ARCHIVE_CONTENT','DEVELOPER_DELETE_SOURCE_PRESERVED']);continue;
+    }
+    if(unit==='coordination') {
+      await browser.evaluate("document.querySelector('[data-run=RUN-WEB]').click();true");
+      await wait(()=>browser.evaluate("document.querySelector('#detail').textContent.includes('Codeur autonome')"),browser.name+' coordination autonome');
+      assert.equal(await browser.evaluate("document.querySelector('#detail').textContent.includes('Dépendances déclarées') && document.querySelector('#detail').textContent.includes('Avis reçus / acquittés')"),true);
+      await browser.screenshot('web-monitor-'+browser.name.toLowerCase()+'-coordination.png');
+      await browser.viewport(390,844);
+      assert.equal(await browser.evaluate("document.documentElement.scrollWidth<=innerWidth+1"),true);
+      await finishUnit(browser,['coordination autonome','compteurs de boîte','reçus distincts']);continue;
     }
     assert.equal(await browser.evaluate("document.querySelector('#metrics').textContent.includes('4 096')"), true);
     const initialStatisticsProbe=monitor.state.statisticsProbe;
