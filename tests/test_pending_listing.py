@@ -116,10 +116,10 @@ class PendingListingTest(unittest.TestCase):
         original = bridge.repair_journal_for_item
         indexes = []
 
-        def repair_twice(item, event_index=None):
+        def repair_twice(item, event_index=None, *, reconstructed=False):
             indexes.append(event_index)
-            original(item, event_index=event_index)
-            original(item, event_index=event_index)
+            original(item, event_index=event_index, reconstructed=reconstructed)
+            original(item, event_index=event_index, reconstructed=reconstructed)
 
         with patch.object(bridge, "repair_journal_for_item", side_effect=repair_twice):
             bridge.do_list({})
@@ -168,9 +168,9 @@ class PendingListingTest(unittest.TestCase):
         original = bridge.repair_journal_for_item
         indexes = []
 
-        def capture(item, event_index=None):
+        def capture(item, event_index=None, *, reconstructed=False):
             indexes.append(event_index)
-            return original(item, event_index=event_index)
+            return original(item, event_index=event_index, reconstructed=reconstructed)
 
         with (patch.object(bridge, "repair_journal_for_item", side_effect=capture),
               patch.object(bridge.journal, "append_event",
@@ -252,10 +252,10 @@ class PendingListingTest(unittest.TestCase):
         original = bridge.repair_journal_for_item
         indexes = []
 
-        def repair_twice(item, event_index=None):
+        def repair_twice(item, event_index=None, *, reconstructed=False):
             indexes.append(event_index)
-            original(item, event_index=event_index)
-            original(item, event_index=event_index)
+            original(item, event_index=event_index, reconstructed=reconstructed)
+            original(item, event_index=event_index, reconstructed=reconstructed)
 
         with patch.object(bridge, "repair_journal_for_item", side_effect=repair_twice):
             bridge.reconcile_pending_approvals()
@@ -292,9 +292,9 @@ class PendingListingTest(unittest.TestCase):
         original = bridge.repair_journal_for_item
         indexes = []
 
-        def capture(item, event_index=None):
+        def capture(item, event_index=None, *, reconstructed=False):
             indexes.append(event_index)
-            return original(item, event_index=event_index)
+            return original(item, event_index=event_index, reconstructed=reconstructed)
 
         with (patch.object(bridge, "repair_journal_for_item", side_effect=capture),
               patch.object(bridge.journal, "append_event",

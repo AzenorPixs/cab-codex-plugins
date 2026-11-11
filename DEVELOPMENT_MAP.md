@@ -1,5 +1,14 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — autonomie du codeur, 11 novembre 2026
+
+Change `enable-autonomous-coding-mandates`, code non attribué : ARCHIVÉ, qualification source réalisée.
+Preuves : `openspec/changes/archive/2026-11-11-enable-autonomous-coding-mandates/VALIDATION.md` ;
+limites historiques explicites, publication et activation encore à vérifier.
+Mandat initial, décisions préalables développeur/orchestrateur, quatre exceptions,
+exécution isolée et revue finale liée aux sources/tests. Qualification et activation
+restent distinctes ; aucun autre change ni RUN n’est clôturé par cette évolution.
+
 ## Retrait après annulation d’un accès non attribué — SCM
 
 [reconcile-ungranted-cancelled-access](openspec/changes/archive/2026-11-11-reconcile-ungranted-cancelled-access/) : correctif générique archivé ; tests ciblés réussis, campagne élargie 611/612 avec reprise isolée réussie du test de démarrage ; livraison et activation restent à vérifier.

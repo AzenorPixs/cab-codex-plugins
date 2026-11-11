@@ -1,5 +1,10 @@
 # Noyau du contrat — CAB 2.4.28
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 Dans le change validé, le codeur lit, explore et utilise ses outils de façon
 autonome. Son atelier propre `.cab-tests/<change>/<RUN>/` autorise aussi les
 écritures et copies du projet sans décision supplémentaire. Toute écriture

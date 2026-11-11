@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 2.6.0 — 2026-11-11
+
+- Mandat autonome du change : choix nécessaires tranchés avant codage, exécution
+  et corrections sans validation intermédiaire, quatre exceptions explicites.
+- Commandes isolées avec chemins réservés RW, reçus persistants sans rejeu et
+  revue finale liant critères, tests et révision avant intégration.
+- Supervision passive du profil autonome ; compatibilité des RUN historiques.
+
+
 ## Non publié
 
 ## 2.5.8 - 2026-11-11

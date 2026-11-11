@@ -1,5 +1,18 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+## Mandat autonome CAB
+
+Les nouvelles missions pilotées suivent un cadrage initial et une revue finale.
+Développeur et orchestrateur tranchent les choix nécessaires avant le codage.
+Dans le mandat, le codeur réalise et teste sans validation intermédiaire.
+Exceptions : hors change, hors cadrage, outil nécessaire absent, consultation web.
+Les sources et tests sont liés par empreinte à l’acceptation finale ; la publication
+requiert cette acceptation. Identités, isolation, réservations et reçus restent contrôlés.
+Les anciennes descriptions unitaires concernent les RUN historiques ; le contrat
+[autonome distribué](plugins/cab-approval-bridge/skills/approval-bridge/references/autonomous-mandates.md)
+prévaut pour les nouvelles missions. Une présence source ne prouve pas l’activation.
+
+
 
 La réconciliation d’une annulation native accepte certains refus ultérieurs uniquement sur preuves complètes et frontière sans effet ; les autres appels restent bloquants.
 
