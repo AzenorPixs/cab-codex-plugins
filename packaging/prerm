@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+case "$1" in
+    remove|deconfigure)
+        if systemctl is-active --quiet cab.service; then
+            cab maintenance prepare --transaction debian-remove
+            systemctl stop cab.service
+        fi
+        ;;
+esac

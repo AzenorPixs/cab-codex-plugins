@@ -1,5 +1,22 @@
 # Codex Approval Bridge — CAB
 
+## CAB 3.0.0
+
+Plateforme système Debian pour les sessions de codage directes et pilotées.
+Un seul cab.service, PostgreSQL indépendant, API Django/OpenAPI, suivi Web
+TanStack/Electric sur8790. L’agent de codage réalise et coordonne en autonomie ;
+l’orchestrateur traite le cadrage initial, les exceptions et la revue finale.
+
+Le paquet fournit le moteur et les clients `/usr/bin/cab`, les plugins légers
+CAB/CCAB/CABU et les commandes. Après installation, ouvrir le parcours Web
+local sur http://127.0.0.1:8790 et utiliser le code local obtenu par
+`sudo cab bootstrap-token`. Aucune base CAB n’est créée avant validation Web.
+Ne pas communiquer le code ou les mots de passe dans une conversation.
+
+Documentation d’administration : [docs/platform-operations.md](docs/platform-operations.md).
+L’architecture et les contrats 2.x ci-dessous sont conservés pour l’historique ;
+ils ne constituent pas la procédure d’installation de la plateforme3.0.0.
+
 CAB crée ses nouveaux fichiers et répertoires en `0770` et accepte les anciens
 modes compatibles avec les droits effectifs et les protections du protocole.
 

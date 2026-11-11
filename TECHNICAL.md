@@ -1,5 +1,30 @@
 # TECHNICAL.md — Codex Approval Bridge (CAB)
 
+## Architecture CAB 3.0.0
+
+Cible Debian13 amd64, Python3.13 système (contrat Python>=3.12), Django6.1.3,
+PostgreSQL17 dédié. Les dépendances exactes sont dans pyproject.toml et
+packaging/python-lock.txt ; frontend React/TanStack/TypeScript et Electric
+sont verrouillés dans frontend/package-lock.json et le manifeste de runtime.
+
+Un superviseur root porte l’API ASGI, workers, collecteurs, CCAB et Electric.
+Les exécutions sont préparées et lancées sous l’UID du codeur, avec isolation
+et autorisations du mandat ; aucun droit root n’est donné au client MCP.
+Identités de pair Unix et jeton local authentifient les clients. Web : session
+administrateur, CSRF et code local pour l’amorçage. Django porte les transactions
+et règles ; Electric expose seulement une projection de sessions autorisée.
+
+Les opérations passent par WAITING/INTENT/RUNNING et reçu durable corrélé.
+Une réponse perdue demeure UNKNOWN avec ses baux ; aucun rejeu automatique.
+Les reçus sont fsync en spool privé avant réconciliation SQL. Les ateliers
+pilotés se créent à chaud dans /tmp/cab/<projet>/.cab-tests/<change>/<RUN>, les
+preuves durables restent hors /tmp. Le profil direct conserve .cab-tests local.
+
+Configuration /etc/cab/cab.json root0600, état /var/lib/cab root0700,
+socket /run/cab/cab.sock ; journald expurgé, niveaux configurables et SIGHUP
+sans interruption de session. Voir docs/platform-operations.md. Les contraintes
+2.x qui suivent restent des références historiques, pas des services à installer.
+
 Les nouveaux états, reçus, verrous et fichiers de CAB sont créés en 0770.
 Les anciens modes compatibles restent lisibles sans changement de droits ;
 les contrôles de type, propriétaire, liens, intégrité et accès effectif restent

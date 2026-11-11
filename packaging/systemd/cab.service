@@ -1,0 +1,29 @@
+[Unit]
+Description=Plateforme Codex Approval Bridge
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/cab serve
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=3s
+TimeoutStopSec=90s
+KillMode=mixed
+UMask=0077
+RuntimeDirectory=cab
+RuntimeDirectoryMode=0711
+StateDirectory=cab
+StateDirectoryMode=0700
+ConfigurationDirectory=cab
+ConfigurationDirectoryMode=0700
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cab
+SyslogLevelPrefix=yes
+
+[Install]
+WantedBy=multi-user.target
