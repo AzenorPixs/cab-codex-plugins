@@ -1,0 +1,38 @@
+---
+name: CAB
+description: Piloter les sessions CAB directes ou pilotées avec mandat autonome et revue finale.
+---
+
+# CAB 3.0.0
+
+Utiliser le serveur MCP `cab` installé par `/usr/bin/cab mcp`. Appeler `cab_status`
+puis `cab_contract` avant cadrage ou reprise. Si CAB est non initialisé, le
+parcours Web sur http://127.0.0.1:8790 appartient à l’administrateur ; ne lancer
+aucun RUN ni créer la base hors de ce parcours.
+
+En direct, enregistrer le projet et son RUN sans orchestrateur fictif. En
+piloté, développeur et orchestrateur résolvent les choix avant `run_begin` et
+transmettent chemins, critères, ressources et décisions au codeur. Le codeur
+réalise, corrige, teste et coordonne en autonomie avec `atelier_execute`,
+`external_execute` et `session_coordinate`. L’orchestrateur intervient seulement
+sur les quatre exceptions ou à la revue finale. Aucune validation par commande.
+
+Conserver SID/RUN/génération/request_id ; après réponse perdue, lire le même
+reçu. UNKNOWN conserve ses protections et interdit tout rejeu. Les ateliers
+pilotés sont sous /tmp et propres au projet ; les preuves durables restent en
+base. Déclarer les incidents par `incident_report`, avec preuves, sans réparer
+un autre change implicitement. Lire le mandat et ses critères avant reprise.
+
+`autonomy_submit` lie code et reçus de tests ; `autonomy_review` accepte ou
+redemande un travail. Publier seulement après acceptation finale applicable.
+Les sources, qualification, livraison et activation sont des états distincts.
+
+Le paquet fournit la logique métier, les clients et leurs dépendances ; ce
+skill ne porte aucun contrôleur, stockage, script d’exécution ou secret.
+
+Après transmission du mandat piloté, utiliser `wait_for_handoff` en conservant
+son curseur : l’attente et les lectures sont mécaniques, sans tours LLM de suivi.
+Le retour intervient pour exception ou revue finale ; ne pas demander de compte
+rendu périodique au codeur. L’intégration Codex configure le délai du serveur
+pour cette attente. Chaque agent utilise son profil privé distinct ; aucun
+jeton SQL ou root n’est transmis au client.

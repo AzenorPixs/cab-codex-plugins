@@ -1,0 +1,71 @@
+{
+  "source_target": "CAB 3.0.0",
+  "python_unit_tests": {
+    "domain": 10,
+    "logging": 3,
+    "passed": 13
+  },
+  "package_scenarios": {
+    "no_cab_database_before_web": true,
+    "real_local_postgresql_web_bootstrap": true,
+    "electric_ready": true,
+    "openapi_31_authentication": true,
+    "mcp_real_direct_execution_and_no_replay": true,
+    "piloted_workshop_tmp_per_project": true,
+    "autonomous_direct_piloted_coordination": true,
+    "final_review_on_test_receipts": true,
+    "reload_without_restart": true,
+    "maintenance_same_run_after_restart": true,
+    "systemd_fixture": "hooks simulés dans conteneur ; unité réelle qualifiée séparément sur hôte"
+  },
+  "browsers": [
+    {
+      "browser": "Chromium",
+      "version": "156.0.8078.79",
+      "login": true,
+      "electric_sessions": true,
+      "responsive": true,
+      "route": true
+    },
+    {
+      "browser": "Firefox",
+      "version": "153.6.0",
+      "login": true,
+      "electric_sessions": true,
+      "responsive": true,
+      "route": true
+    }
+  ],
+  "electric": {
+    "engine": "Electric 1.8.1",
+    "snapshot": true,
+    "live_committed_pause": true,
+    "reconnection_single_row": true,
+    "unauthenticated_denied": true,
+    "writes_via_django": true
+  },
+  "journald": {
+    "unit": "cab-300-journal-qualification.service",
+    "journal_priority": "7",
+    "message": {
+      "level": "DEBUG",
+      "component": "cab.service",
+      "message": "diagnostic logging enabled"
+    },
+    "same_main_pid": true,
+    "initialized": false,
+    "production_service_touched": false
+  },
+  "upgrade": {
+    "same_sid_run_generation": true,
+    "same_test_receipts_review": true,
+    "cycle_seconds": 5.18
+  },
+  "diu": {
+    "installed": "1.3.10",
+    "tests": 37,
+    "openspec_items": 134
+  },
+  "native_session_metrics": "N/A : instantané SGS observé vide pour la liaison de cette session",
+  "delivery_and_activation": "à constater après CI/CD et CABU, reçus locaux séparés"
+}

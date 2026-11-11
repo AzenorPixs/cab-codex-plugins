@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+if [ "$1" = upgrade ] && command -v cab >/dev/null 2>&1 && systemctl is-active --quiet cab.service; then
+    cab maintenance prepare --transaction "debian-upgrade-${3:-3.0.0}-$(date +%s%N)"
+    systemctl stop cab.service
+fi

@@ -1,5 +1,13 @@
 # Historique des versions
 
+## 3.0.0 — plateforme système
+
+- Service root unique, PostgreSQL17 indépendant, domaine Django et contrat OpenAPI.
+- Initialisation Web exclusive sur8790, frontend TanStack et suivi Electric.
+- Mandats et coordination autonomes, ateliers pilotés sous/tmp, reçus durables.
+- Paquet Debian DIU, intégrations Codex minimes, journald configurable et reload.
+- Migration historique protégée et mise à jour sans réarmement des effets.
+
 ## Non publié — compatibilité des permissions
 
 - Étendre la création en 0770 et la lecture des modes compatibles aux états,

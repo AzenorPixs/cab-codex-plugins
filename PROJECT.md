@@ -1,5 +1,23 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
+## Plateforme CAB 3.0.0
+
+CAB est livré comme paquet Debian : un service système root `cab.service`,
+PostgreSQL indépendant, autorité métier Django et API OpenAPI `/api/v1`.
+Le Web TanStack sur 8790 utilise Electric pour le suivi temps réel autorisé.
+Les clients MCP/CLI et les plugins minimes partagent le moteur du paquet.
+
+Les sessions pilotées sont autonomes après cadrage : choix tranchés avant
+codage, réalisation/tests/coordination par le codeur, quatre exceptions et revue
+finale par le parent. Les sessions directes utilisent les briques utiles sans
+orchestrateur fictif. SID/RUN et preuves sont conservés, sans rejeu d’effet.
+
+Une installation neuve attend la validation du premier parcours Web ; elle
+n’initialise aucune base CAB ni collecte avant ce parcours. Les fichiers privés
+système et profils SSH suivent leurs permissions propres, hors des règles de
+mode des projets. Les descriptions 2.x ci-dessous sont historiques ; le contrat
+OpenSpec `system-platform` porte la plateforme 3.0.0.
+
 Les nouveaux fichiers et répertoires CAB utilisent le mode 0770. Les anciens
 modes restent utilisables lorsque les droits effectifs et les invariants du
 protocole le permettent ; CAB ne doit pas imposer une normalisation préalable.
