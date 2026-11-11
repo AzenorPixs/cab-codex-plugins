@@ -2,6 +2,8 @@
 
 ## Non publié
 
+- Permettre le retrait contrôlé d’une opération approuvée lorsque son accès dédié a été annulé avant attribution, en conservant les preuves et les reçus incomplets.
+
 ## 2.5.6 - 2026-11-11
 
 - Réconcilier une annulation native après des refus ultérieurs strictement prouvés, sans rejouer de permission ni modifier les autres demandes.
