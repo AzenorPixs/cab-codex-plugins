@@ -1,5 +1,10 @@
 # ASK effectif et permissions sauvegardées — CAB 2.2.40
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 Une règle de session `shell ask` ou `edit ask` ne suffit pas à prouver qu’une
 permission sera demandée : OpenCode2.2 conserve aussi des grants par projet.
 Un ancien `always` peut les faire accepter sans nouvel événement de permission.

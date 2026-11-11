@@ -1,5 +1,10 @@
 # Précisions startup — CAB 2.2.40
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 ## Bootstrap prioritaire du monitoring
 
 Dès la résolution du workspace absolu canonique, appliquer intégralement

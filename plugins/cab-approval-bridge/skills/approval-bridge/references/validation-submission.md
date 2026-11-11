@@ -1,5 +1,10 @@
 # Soumettre, décider et acquérir — CAB 2.2.40
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 ## Révisions effectives et scripts composés
 
 Avant request_validation, lire les révisions courantes de /runs/<run>/locks.

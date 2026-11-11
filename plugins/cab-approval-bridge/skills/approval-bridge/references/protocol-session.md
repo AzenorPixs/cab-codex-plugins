@@ -1,5 +1,10 @@
 # Mandats et rapports — CAB 2.2.40
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 ## Protocole de communication OpenCode ↔ CGPT via CAB
 
 Ce protocole s'applique à tout agent de codage OpenCode piloté par CGPT pendant

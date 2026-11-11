@@ -1,5 +1,10 @@
 # Cycle du RUN — CAB 2.1.32
 
+Pour les nouvelles missions, appliquer [le mandat autonome et la revue finale](autonomous-mandates.md).
+Cette branche prévaut sur les décisions unitaires décrites ci-dessous, conservées
+pour les RUN historiques et les exceptions explicites. Les choix nécessaires sont
+tranchés entre développeur et orchestrateur avant le codage.
+
 Le catalogue partagé est distribué dans `cgpt-approval-bridge-run-steps.mjs`.
 L'étape représente le cycle du change. La phase technique WORK/REPORT reste
 distincte. ETAT décrit la situation observée, notamment WAITING pendant une
