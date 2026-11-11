@@ -8,7 +8,7 @@ import re
 import sys
 from cab_session_dependencies import DependencyStore, CoordinationError, project_root, token, encoded, codex_active_turn, codex_proxy_exchange, codex_verified_sender, controller_admission, verify_pilot_binding
 
-VERSION='2.7.0'
+VERSION='2.7.1'
 PROTOCOL='cab-coder-coordination-1'
 STAGES=('candidate','tested','accepted','delivered','activated')
 

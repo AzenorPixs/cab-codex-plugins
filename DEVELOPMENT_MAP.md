@@ -1496,3 +1496,7 @@ flowchart LR
     classDef provisional stroke-dasharray: 4 4
     class coordinateSessions provisional
 ```
+
+Révision documentaire2.7.1 autorisée après livraison2.7.0 : objectif canonique
+external-test-execution complété,25/25spécifications strictes vérifiées ;
+publication et activation2.7.1 à constater dans les reçus de livraison.

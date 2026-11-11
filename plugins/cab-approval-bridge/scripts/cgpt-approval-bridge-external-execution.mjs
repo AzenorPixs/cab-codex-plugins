@@ -1,6 +1,6 @@
 import {sourceRevision,mandateDigest} from './cgpt-approval-bridge-autonomous-mandate.mjs';
 import {resolve,isAbsolute} from 'node:path';
-export const VERSION='2.7.0';
+export const VERSION='2.7.1';
 export const EXTERNAL_PROTOCOL='cab-external-exec-v1';
 const id=v=>typeof v==='string'&&/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(v)&&!['constructor','__proto__','prototype'].includes(v);
 const hash=v=>typeof v==='string'&&/^[a-f0-9]{64}$/.test(v);
