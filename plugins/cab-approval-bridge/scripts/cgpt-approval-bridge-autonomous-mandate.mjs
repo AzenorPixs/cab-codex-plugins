@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {lstatSync,readdirSync,readFileSync,realpathSync} from 'node:fs';
 import {join,relative,resolve,sep} from 'node:path';
 
-export const VERSION='2.7.1';
+export const VERSION='2.7.2';
 export const AUTONOMY_PROTOCOL='autonomous-change-v1';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};
 const text=value=>typeof value==='string'&&value.trim().length>0&&value.length<=4000;
@@ -49,7 +49,7 @@ export function sourceRevision(directory,paths) {
 
 export function grantAutonomy(registry,runId,payload) {
   registry.admission(runId);
-  if(Object.values(registry.runs.get(runId)?.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state)))fail('external-effects-unresolved');
+  if(Object.values(registry.runs.get(runId)?.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START','PREFLIGHT_FAILED'].includes(call.state)))fail('external-effects-unresolved');
   const run=registry.owned(runId,payload.version);
   if(payload.protocol!==AUTONOMY_PROTOCOL||!id(payload.mandateId)||payload.sessionId!==run.sessionId||
     payload.decisionsResolved!==true||!Array.isArray(payload.decisions)||!payload.decisions.every(text)||
@@ -130,7 +130,7 @@ export function completeAutonomousCall(registry,runId,args) {
 export function submitAutonomousWork(registry,runId,payload) {
   const {run,m}=current(registry,runId);
   const revision=sourceRevision(run.directory,m.paths);
-  if(Object.values(run.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state)))fail('external-effects-unresolved');
+  if(Object.values(run.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START','PREFLIGHT_FAILED'].includes(call.state)))fail('external-effects-unresolved');
   const invalid=(reason,testIndex)=>{throw Object.assign(new Error('autonomy-submission-invalid'),{
     code:'autonomy-submission-invalid',status:409,diagnostic:{error:'autonomy-submission-invalid',reason,...(testIndex===undefined?{}:{testIndex})}});};
   if(!payload||!id(payload.submissionId)||!text(payload.summary)||!Array.isArray(payload.tests)||!payload.tests.length||
@@ -169,7 +169,7 @@ export function reviewAutonomousWork(registry,runId,payload) {
 export function requireAutonomousAcceptance(run) {
   if(!run?.autonomy)return;
   const m=run.autonomy,submission=m.submissions.at(-1);
-  if(Object.values(run.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state)))fail('external-effects-unresolved');
+  if(Object.values(run.externalCalls||{}).some(call=>!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START','PREFLIGHT_FAILED'].includes(call.state)))fail('external-effects-unresolved');
   if(run.state!=='RESERVED'||run.phase!=='WORK'||m.sessionId!==run.sessionId||m.contextId!==run.contextId||
      m.reservationVersion!==run.version||m.state!=='ACCEPTED'||sourceRevision(run.directory,m.paths)!==submission?.sourceRevision)fail('autonomy-final-acceptance-required');
 }

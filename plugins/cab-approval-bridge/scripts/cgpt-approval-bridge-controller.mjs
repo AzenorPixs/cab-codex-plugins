@@ -1,4 +1,4 @@
-import {ExternalExecution} from './cgpt-approval-bridge-external-execution.mjs';
+import {ExternalExecution,legacyExternalPreflightProof} from './cgpt-approval-bridge-external-execution.mjs';
 import {CoderCoordination,CODER_COORDINATION_PROTOCOL} from './cgpt-approval-bridge-coder-coordination.mjs';
 import {startOwnerProxy} from './cgpt-approval-bridge-owner-proxy.mjs';
 import {grantAutonomy,autonomousGrant,completeAutonomousCall,submitAutonomousWork,reviewAutonomousWork,requestAutonomyException,decideAutonomyException,sourceRevision} from './cgpt-approval-bridge-autonomous-mandate.mjs';
@@ -41,7 +41,7 @@ import { ManifestExtensions } from './cgpt-approval-bridge-manifest-extensions.m
 import { nativeEvidenceView, rejectedUnissuedTurnProof, correlateWithdrawalEffects, rejectedEditWithdrawalProof, rejectedShellWithdrawalProof, notAdmittedWithdrawalProof, validateReadOnlyReview, reviewedValidationProjection, pendingValidationProof, reviewedTerminalProof, excludeClosedValidationParts } from './cgpt-approval-bridge-recovery-evidence.mjs';
 import { portProbeCommand, portProbeDescription, parsePortCapture, validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 
-const version = "2.7.1";
+const version = "2.7.2";
 if ([VERSION, STATISTICS_VERSION, JOB_CONTEXT_VERSION, RESOURCE_VERSION, OBSERVATION_VERSION, MAINTENANCE_VERSION, MODEL_VERSION, LIFECYCLE_VERSION,SHELL_STAGE_VERSION,DEPENDENCY_GATE_VERSION].some((value) => value !== version)) throw new Error('CAB component version mismatch');
 
 // Private checkpoints must not inherit a group-writable shell umask.
@@ -554,6 +554,40 @@ function proofReferences(payload) {
       !payload.evidence.every((e) => typeof e === 'string' && e.length > 0 && e.length <= 500)) {
     throw new CoordinationError('evidence-references-required');
   }
+}
+async function observeLegacyExternalPreflight(run,context,requestId,sourceReceiptId) {
+  if(!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,199}$/.test(requestId||'')||
+    !/^update-[a-f0-9-]{36}$/.test(sourceReceiptId||''))throw new CoordinationError('external-preflight-review-invalid');
+  const call=run.externalCalls?.[requestId],lease=call&&registry.resourceState.testReservations?.[call.leaseId];
+  if(!call||!lease||lease.runId!==run.runId||lease.contextId!==run.contextId||lease.version!==run.version||
+    lease.state!=='HELD'||lease.fencing!==call.fencing||!lease.resources.some(r=>r.key===call.resourceKey&&r.mode==='write'))
+    throw new CoordinationError('external-lease-divergent');
+  const job=context.publicJob();
+  if(!job?.armed||job.sessionId!==run.sessionId||job.currentCabMandate||job.recovery||context.publicStatus().recoveryRequired||
+    context.transportIsPaused?.()||handoffIntent||runtimeMigration?.phase==='PREPARED'||run.autonomy?.state!=='WORKING')
+    throw new CoordinationError('external-preflight-context-divergent');
+  if(nativeRestartUnsafeRuns.has(run.runId)||!await verifyFollowedNativeInstance(run.runId))
+    throw new CoordinationError('opencode-restart-reconciliation-required');
+  const updateRoot=join(homedir(),'.local/state/cab-approval-bridge-update'),transaction=join(updateRoot,sourceReceiptId);
+  if(realpathSync(updateRoot)!==updateRoot||realpathSync(transaction)!==transaction)throw new CoordinationError('external-preflight-update-unsafe');
+  for(const path of [updateRoot,transaction]){const s=statSync(path);if(!s.isDirectory()||s.uid!==process.getuid()||s.mode&0o077)throw new CoordinationError('external-preflight-update-unsafe');}
+  const update=readRuntimeJson(join(transaction,'receipt.json')).value;
+  if(update.id!==sourceReceiptId)throw new CoordinationError('external-preflight-update-divergent');
+  const generation=nativeSessionGenerations.get(run.sessionId)||0,jobDigest=proofHash(job);
+  const native=await openCode.info(true);
+  const [session,messages,permissions,active]=await Promise.all([openCode.session(run.sessionId,run.directory),
+    openCode.messages(run.sessionId,run.directory),openCode.permissions(run.directory,{sessionIds:[run.sessionId]}),openCode.sessionStatus(run.directory)]);
+  if(session.id!==run.sessionId||session.directory!==run.directory||!Array.isArray(messages)||!Array.isArray(permissions)||
+    permissions.some(p=>p.sessionID===run.sessionId)||Object.hasOwn(active,run.sessionId)||
+    generation!==(nativeSessionGenerations.get(run.sessionId)||0)||jobDigest!==proofHash(context.publicJob()))
+    throw new CoordinationError('external-preflight-native-boundary-changed');
+  const parts=messages.flatMap(m=>Array.isArray(m.parts)?m.parts:[]),matches=parts.filter(p=>
+    p.tool==='cgpt-validation_external_execute'&&p.state?.input?.request_id===requestId);
+  const nativeProof=matches.length===1?await nativeInstances.proof(native,matches[0].state?.time?.start):null;
+  const proof=legacyExternalPreflightProof({run,call,parts,update,nativeProof});
+  const observed={...proof,updateDigest:proofHash(update),jobDigest,leaseDigest:proofHash({transactionId:lease.transactionId,
+    runId:lease.runId,contextId:lease.contextId,version:lease.version,state:lease.state,fencing:lease.fencing,resources:lease.resources}),generation};
+  return {...observed,boundaryDigest:proofHash(observed)};
 }
 function scopedReadiness(runId, payload) {
   const scoped = payload.by_run?.[runId] || { pending_count: 0, stalled_count: 0 };
@@ -2325,7 +2359,7 @@ async function handleRequest(request, response) {
     const url = new URL(request.url, 'http://localhost');
     const restartRun = /^\/runs\/([^/]+)(?:\/|$)/.exec(url.pathname)?.[1];
     const restartSafeRoute = ['/broker/readiness','/transport/cancel'].includes(url.pathname);
-    const coderRoute=['/coordination/coder/op','/coordination/coder/pump','/external/owner/authorize','/external/owner/finish','/external/owner/release'].includes(url.pathname);
+    const coderRoute=['/coordination/coder/op','/coordination/coder/pump','/external/owner/authorize','/external/owner/finish','/external/owner/preflight-failure','/external/owner/release'].includes(url.pathname);
     if (request.method !== 'GET' && !restartSafeRoute &&
         (nativeRestartPending || restartRun && nativeRestartUnsafeRuns.has(restartRun) ||
           !restartRun && !coderRoute && (nativeRestartUnsafeLegacy || nativeRestartUnsafeRuns.size && url.pathname !== '/cleanup/simple-sgs') && url.pathname !== '/runs'))
@@ -2521,7 +2555,7 @@ async function handleRequest(request, response) {
       if(autonomousRun?.autonomy&&autonomousRun.phase==='WORK')throw new CoordinationError('autonomy-use-mandated-executor');
       checkCommandLength(payload?.approval, maxCommandLength);
     }
-    if(request.method==='POST'&&['/ccab/owner/report','/statistics/owner/checkpoint','/coordination/coder/op','/external/owner/authorize','/external/owner/finish','/external/owner/release'].includes(url.pathname)) {
+    if(request.method==='POST'&&['/ccab/owner/report','/statistics/owner/checkpoint','/coordination/coder/op','/external/owner/authorize','/external/owner/finish','/external/owner/preflight-failure','/external/owner/release'].includes(url.pathname)) {
       const peer=ownerProxy?.peer(request),sender=payload?.sender,identity=sender&&await processOwnerIdentity(sender.pid);
       if(!peer||peer.pid!==sender?.pid||peer.uid!==sender?.uid||sender.pid!==broker?.broker_process?.pid||
         sender.instanceId!==broker?.instance_id||identity?.uid!==peer.uid)throw new CoordinationError('broker-owner-identity-invalid',403);
@@ -2531,6 +2565,10 @@ async function handleRequest(request, response) {
         if(url.pathname==='/external/owner/finish') {json(response,200,externalExecution.finish(packet));return;}
         if(nativeRestartUnsafeRuns.has(run.runId)||!await verifyFollowedNativeInstance(run.runId))throw new CoordinationError('opencode-restart-reconciliation-required',503);
         if(context.transportIsPaused?.()||handoffIntent||runtimeMigration?.phase==='PREPARED')throw new CoordinationError('external-transport-paused');
+        if(url.pathname==='/external/owner/preflight-failure') {
+          authorizeAtelierCall(run,context.publicJob(),args,await openCode.messages(run.sessionId,run.directory),nativeToolInputDigest,[],'external_execute');
+          json(response,200,externalExecution.preflightFailed(args,packet.grant,packet.code));return;
+        }
         const method=url.pathname==='/external/owner/release'?'external_release':packet.method;
         if(!['external_describe','external_execute','external_status','external_release'].includes(method))throw new CoordinationError('external-method-invalid');
         authorizeAtelierCall(run,context.publicJob(),args,await openCode.messages(run.sessionId,run.directory),nativeToolInputDigest,[],method);
@@ -2882,7 +2920,7 @@ async function handleRequest(request, response) {
         }
         throw cause;
       }
-      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/recovery/port-probe-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile', '/validation/cancel-reviewed', '/validation/restore-pending', '/validation/withdraw-unissued', '/validation/reconcile-reviewed-terminal', '/locks/reconcile-quiescent-port'].includes(url.pathname)) {
+      if (request.method === 'POST' && ['/release', '/ready', '/reconcile', '/integration', '/integration-request', '/resources', '/closing', '/job/model-transition', '/job/recover', '/job/terminal-gate', '/job/disarm', '/shell-stage', '/recovery/port-probe-stage', '/locks/acquire', '/locks/release', '/locks/cancel', '/locks/attach', '/locks/reconcile', '/locks/reconcile-restored', '/locks/quarantine-timeout', '/test-resources/acquire', '/test-resources/release', '/test-resources/release-unused', '/test-resources/release-unused-lost-token', '/test-resources/cancel', '/test-resources/reconcile', '/test-resources/reconcile-restored', '/publish', '/suspend', '/validation/request', '/validation/reminder', '/validation/reconcile', '/validation/cancel-reviewed', '/validation/restore-pending', '/validation/withdraw-unissued', '/validation/reconcile-reviewed-terminal', '/locks/reconcile-quiescent-port','/external/reconcile-preflight'].includes(url.pathname)) {
         transitions.add(runId);
         transitionRun = runId;
       }
@@ -2914,7 +2952,24 @@ async function handleRequest(request, response) {
         json(response,200,externalExecution.register(runId,payload));return;
       }
       if(request.method==='GET'&&url.pathname==='/external/status') {
-        json(response,200,{runId,adapters:run.externalAdapters||{},calls:Object.fromEntries(Object.entries(run.externalCalls||{}).map(([id,c])=>[id,{state:c.state,adapterId:c.adapterId,resourceKey:c.resourceKey,leaseId:c.leaseId,phase:c.phase,receiptDigest:c.receiptDigest||null}]))});return;
+        json(response,200,{runId,adapters:run.externalAdapters||{},calls:Object.fromEntries(Object.entries(run.externalCalls||{}).map(([id,c])=>[id,{state:c.state,adapterId:c.adapterId,resourceKey:c.resourceKey,leaseId:c.leaseId,phase:c.phase,receiptDigest:c.receiptDigest||null,...(c.preflightFailure?{preflightProofDigest:c.preflightFailure.proofDigest}: {})}]))});return;
+      }
+      if(request.method==='GET'&&url.pathname==='/external/preflight-evidence') {
+        if([...url.searchParams.keys()].some(key=>!['requestId','sourceReceiptId'].includes(key))||
+          url.searchParams.getAll('requestId').length!==1||url.searchParams.getAll('sourceReceiptId').length!==1)
+          throw new CoordinationError('external-preflight-review-invalid',400);
+        json(response,200,await observeLegacyExternalPreflight(run,context,url.searchParams.get('requestId'),url.searchParams.get('sourceReceiptId')));return;
+      }
+      if(request.method==='POST'&&url.pathname==='/external/reconcile-preflight') {
+        if(!response.cabRecoveryActionId)throw new CoordinationError('recovery-policy-required',403);
+        proofReferences(payload);registry.admission(runId);
+        const first=await observeLegacyExternalPreflight(run,context,payload.requestId,payload.sourceReceiptId);
+        if(first.boundaryDigest!==payload.nativeBoundaryDigest)throw new CoordinationError('external-preflight-native-boundary-changed');
+        const second=await observeLegacyExternalPreflight(run,context,payload.requestId,payload.sourceReceiptId);
+        if(first.boundaryDigest!==second.boundaryDigest||second.generation!==(nativeSessionGenerations.get(run.sessionId)||0)||
+          second.jobDigest!==proofHash(context.publicJob()))throw new CoordinationError('external-preflight-native-boundary-changed');
+        json(response,200,externalExecution.reconcileLegacyPreflight(runId,{actionId:response.cabRecoveryActionId,ownerId:run.ownerId,
+          version:run.version,requestId:payload.requestId,previewDigest:payload.nativeBoundaryDigest,evidence:payload.evidence},second,proofHash(payload)));return;
       }
       if(request.method==='POST'&&url.pathname==='/coordination/adopt') {
         guardContinuityRequest(request,new URL(request.url,'http://'+request.headers.host),server.address().port);

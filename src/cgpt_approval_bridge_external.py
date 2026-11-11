@@ -15,7 +15,7 @@ import tempfile
 from datetime import datetime,timezone
 import cgpt_approval_bridge_external_runner as runner
 
-VERSION='2.7.1'
+VERSION='2.7.2'
 PROTOCOL='cab-external-exec-v1'
 LOCK=threading.RLock()
 ACTIVE_PROCESSES={}
@@ -168,6 +168,10 @@ def ssh_transport(cfg,packet,timeout_ms):
 def _call(args,authorize,*,snapshot=False,transport=ssh_transport,home=None):
     identity(args);grant=authorize(args)
     if grant.get('status')!='AUTHORIZED_EXTERNAL' or grant.get('request_id')!=args['request_id']:fail('external-grant-invalid')
+    if snapshot and grant.get('preflight_failure'):
+        proof=grant['preflight_failure']
+        if not isinstance(proof,dict) or proof.get('code')!='external-state-unsafe' or not re.fullmatch('[a-f0-9]{64}',proof.get('proofDigest','')):fail('external-preflight-proof-invalid')
+        return {'found':True,'requestId':args['request_id'],'status':'PREFLIGHT_FAILED','coordinationOnly':True,'proofDigest':proof['proofDigest']}
     root=private_root(args['directory'],home);job_id=digest([args['run_id'],args['request_id']]);path=root/(job_id+'.json')
     lockfd=os.open(root/(job_id+'.lock'),os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
     try:

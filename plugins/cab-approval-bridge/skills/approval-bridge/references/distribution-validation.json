@@ -1,8 +1,8 @@
 {
   "files": {
-    ".codex/commands/CAB.md": "5113f4da386fae7297d19315ed46372a666ba7468b0500030abb9183306688ec",
-    ".codex/commands/SGS.md": "da7184d1d9de3e8f21ebbd495dd11979ad645cd6277c241abd173b17d18f3df0",
-    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "11066185d4430a3ef3b8fbb59238515a9828105bfbcb65e7c853607ec3944a01",
+    ".codex/commands/CAB.md": "93e933a0a7d86ac8180115b9a2814f9642e3214e8c4d30751a9a2f51cdd7d222",
+    ".codex/commands/SGS.md": "a71df89f61e750b0b1a21482f0c5a9a3798efc01174e68b44b5bfbb55f27e7c2",
+    "plugins/cab-approval-bridge/skills/approval-bridge/SKILL.md": "481894064fd612ecc19557bf4186fc884f5a18a044c4edd9a41f444fbff55f15",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-incidents.md": "c3aec695133f3a6f350fa9b16e207807aaefbefd7b7f04d92369962c115a9164",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-native.md": "23aaad156cacee2625e72d649fadbbf78fd1e4da7a451a11209f45e90cd09eba",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/command-overview.md": "09c1405c8b58f62652fba48fbe2fd0dfdcc5ab8109082f50b16c10adb535fc5c",
@@ -41,10 +41,10 @@
     "plugins/cab-approval-bridge/skills/approval-bridge/references/session-coordination-adapter.md": "612a552feb2b670acfcfedca60e873bfc18b7e91669d1f1949dd5f991f1f2df9",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/autonomous-mandates.md": "abdb7162ae96241e50d801b11bbb5a92c8017f0e8ab2e261b5971c671c6447ab",
     "plugins/cab-approval-bridge/skills/approval-bridge/references/coder-coordination.md": "f857fa72086f009ba71d3dfc80c548f17593e1f8bbf5a48d6384044f6899d423",
-    "plugins/cab-approval-bridge/skills/approval-bridge/references/external-execution.md": "7fc118f58f24b6a2c9e792c2024280036ab1d30fdcb14c8a4f503447bc580385"
+    "plugins/cab-approval-bridge/skills/approval-bridge/references/external-execution.md": "4d4db285d55d7a4a945592ab0a2944f657618ce6ca2b1a9777d38f134c4eeeae"
   },
   "historical_manifest_sha256": "d104bb5edabe3eeeaacc5c024708f55e0640972379b56fd2b2d36bbb902eaf8c",
   "schema_version": 1,
   "scope": "Empreintes du routage et des destinations courantes après revue ; preuve historique de migration conservée sans réécriture.",
-  "version": "2.7.1"
+  "version": "2.7.2"
 }

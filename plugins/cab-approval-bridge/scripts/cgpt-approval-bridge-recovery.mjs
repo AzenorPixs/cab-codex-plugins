@@ -2,13 +2,14 @@ import { ContinuityStore, canonicalContinuityDigest } from './cgpt-approval-brid
 import { validatePortReview } from './cgpt-approval-bridge-port-recovery.mjs';
 import { validateReviewStructure, validateTerminalReview } from './cgpt-approval-bridge-recovery-evidence.mjs';
 
-export const VERSION = '2.7.1';
+export const VERSION = '2.7.2';
 export const RECOVERY_PROTOCOL = 'cab-recovery-v1';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const id = value => typeof value === 'string' && /^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/.test(value);
 const fail = (code, status = 409) => { throw Object.assign(new Error(code), { code, status }); };
 const validationBoundaryActions = new Set(['restore-pending-validation','reconcile-reviewed-terminal','withdraw-unissued-validation']);
 const actions = {
+  'reconcile-external-preflight': '/external/reconcile-preflight',
   'withdraw-unissued-validation': '/validation/withdraw-unissued',
   'restore-pending-validation': '/validation/restore-pending',
   'reconcile-reviewed-terminal': '/validation/reconcile-reviewed-terminal',
@@ -30,8 +31,9 @@ const covered = (scope, resource) => (scope.mode === 'write' || resource.mode ==
 export function projectRecoveryReceipt(value) {
   if (!record(value)) return { snapshot_only: true };
   const result = {};
-  if (['HELD', 'WAITING', 'EXECUTING', 'UNKNOWN', 'STALE', 'RELEASED', 'CANCELLED', 'PENDING', 'COMPLETED'].includes(value.state)) result.state = value.state;
-  for (const key of ['runId', 'transactionId', 'operationId', 'accessId']) if (id(value[key])) result[key] = value[key];
+  if (['HELD', 'WAITING', 'EXECUTING', 'UNKNOWN', 'STALE', 'RELEASED', 'CANCELLED', 'PENDING', 'COMPLETED','PREFLIGHT_FAILED'].includes(value.state)) result.state = value.state;
+  for (const key of ['runId', 'transactionId', 'operationId', 'accessId','requestId']) if (id(value[key])) result[key] = value[key];
+  if(value.coordinationOnly===true)result.coordinationOnly=true;
   for (const key of ['contextId', 'version', 'fencing']) if (Number.isSafeInteger(value[key]) && value[key] >= 0) result[key] = value[key];
   for (const key of ['proofDigest', 'releaseDigest']) if (/^[a-f0-9]{64}$/.test(value[key] || '')) result[key] = value[key];
   if (typeof value.finishedAt === 'string' && Number.isFinite(Date.parse(value.finishedAt))) result.finishedAt = value.finishedAt;
@@ -136,6 +138,7 @@ export class RecoveryCoordinator {
       operations: Object.values(state.operations).filter(own),
       accesses: Object.values(state.accesses).filter(own),
       tests: Object.values(state.testReservations || {}).filter(own),
+      externalCalls: Object.values(run.externalCalls||{}).filter(call=>call.contextId===run.contextId),
       revisions: this.registry.revisions(run.resources), policy: this.policy(run)?.inputDigest || null };
   }
   plan(runId) {
@@ -175,6 +178,9 @@ export class RecoveryCoordinator {
         '/test-resources/reconcile-preview?transactionId=' + encodeURIComponent(lease.transactionId));
       else offer('release-test', lease.transactionId, lease.resources);
     }
+    for(const call of boundary.externalCalls)if(call.state==='INTENT'&&call.executionIssued===true&&!call.receiptDigest&&call.dispatched!==true)
+      offer('reconcile-external-preflight',call.requestId,[{key:call.resourceKey,mode:'write'}],
+        '/external/preflight-evidence?requestId='+encodeURIComponent(call.requestId));
     for (const op of boundary.operations) if (op.state === 'PREPARED' && op.decision?.status === 'approved' && !op.native &&
       !boundary.accesses.some(access => access.accessId === op.accessId || access.operationIds.includes(op.operationId)))
       offer('cancel-reviewed-validation', op.operationId, op.resources,
@@ -237,7 +243,7 @@ export class RecoveryCoordinator {
       if (previous.runId !== runId || previous.ownerId !== run.ownerId || previous.contextId !== run.contextId ||
           previous.inputDigest !== inputDigest) fail('recovery-action-id-reused');
       const replay=this.replay(previous);
-      if(previous.state==='PREPARED' && validationBoundaryActions.has(previous.action) && replay.status===409) {
+      if(previous.state==='PREPARED' && (validationBoundaryActions.has(previous.action)||previous.action==='reconcile-external-preflight') && replay.status===409) {
         if(!previous.requestBody || !this.policy(run)?.actions.includes(previous.action)) fail('recovery-action-not-authorized',403);
         return {path:actions[previous.action],payload:structuredClone(previous.requestBody),policyId:previous.policyId,actionId:previous.actionId};
       }
@@ -250,28 +256,30 @@ export class RecoveryCoordinator {
       action.authority === 'orchestrator');
     if (!offered || !record(input.input)) fail('recovery-action-not-authorized', 403);
     const body = { ...input.input };
+    const externalAction=input.action==='reconcile-external-preflight';
     const boundaryAction = validationBoundaryActions.has(input.action);
     const terminalAction = input.action === 'reconcile-reviewed-terminal';
     const reviewAction = input.action === 'cancel-reviewed-validation', portAction = input.action === 'reconcile-quarantined-port';
     if (terminalAction) validateTerminalReview(body.review,run.ownerId);
     if (portAction) validatePortReview(body.review, run.ownerId);
     if (reviewAction) validateReviewStructure(body.review, run.ownerId);
-    if ((reviewAction || portAction || boundaryAction) && !/^[a-f0-9]{64}$/.test(body.nativeBoundaryDigest || '')) fail('recovery-input-divergent');
+    if ((reviewAction || portAction || boundaryAction || externalAction) && !/^[a-f0-9]{64}$/.test(body.nativeBoundaryDigest || '')) fail('recovery-input-divergent');
+    if(externalAction&&!/^update-[a-f0-9-]{36}$/.test(body.sourceReceiptId||''))fail('recovery-input-divergent');
     if (body.permissionId !== undefined && (input.action !== 'withdraw-unissued-validation' || !id(body.permissionId))) fail('recovery-input-divergent');
     if (portAction && (!Array.isArray(body.probeOperationIds) || body.probeOperationIds.length !== 2 ||
         body.probeOperationIds[0] === body.probeOperationIds[1] || body.probeOperationIds.some(value => !id(value)))) fail('recovery-input-divergent');
     if (Object.keys(body).some(key => !['version', 'fencing', 'transactionId', 'operationId', 'evidence',
-      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest', ...(input.action === 'release-access' ? ['outcome'] : []), ...(input.action === 'withdraw-unissued-validation' ? ['permissionId'] : []), ...(reviewAction || portAction || boundaryAction ? ['review','nativeBoundaryDigest'] : []), ...(portAction ? ['probeOperationIds'] : [])].includes(key))) fail('recovery-input-divergent');
+      'cleanup', 'reconciliationId', 'quarantineId', 'boundaryDigest', ...(input.action === 'release-access' ? ['outcome'] : []), ...(input.action === 'withdraw-unissued-validation' ? ['permissionId'] : []), ...(reviewAction || portAction || boundaryAction ? ['review','nativeBoundaryDigest'] : []), ...(externalAction?['requestId','sourceReceiptId','nativeBoundaryDigest']:[]), ...(portAction ? ['probeOperationIds'] : [])].includes(key))) fail('recovery-input-divergent');
     if (Object.hasOwn(body, 'token') || body.version !== undefined && body.version !== run.version) fail('recovery-input-divergent');
     if (input.action === 'release-access' && !['COMPLETED','RECONCILED'].includes(body.outcome)) fail('recovery-input-divergent');
     body.version = run.version;
     const leaseAction = ['reconcile-test', 'release-test', 'cancel-waiting-test'].includes(input.action);
-    const entity = reviewAction || portAction || boundaryAction ? this.registry.resourceState.operations[input.targetId] : leaseAction ? this.registry.resourceState.testReservations[input.targetId] :
+    const entity = externalAction ? run.externalCalls?.[input.targetId] : reviewAction || portAction || boundaryAction ? this.registry.resourceState.operations[input.targetId] : leaseAction ? this.registry.resourceState.testReservations[input.targetId] :
       this.registry.resourceState.accesses[input.action === 'quarantine-port'
         ? this.registry.resourceState.operations[input.targetId]?.accessId : input.targetId];
     if(input.action==='release-access'&&body.outcome!=='RECONCILED'&&entity?.operationIds?.some(id=>this.registry.resourceState.operations[id]?.state==='PREPARED'))fail('recovery-input-divergent');
-    if (!entity || entity.runId !== runId || entity.contextId !== run.contextId) fail('recovery-target-divergent');
-    const identityKey = leaseAction ? 'transactionId' : 'operationId';
+    if (!entity || (!externalAction&&entity.runId !== runId) || entity.contextId !== run.contextId) fail('recovery-target-divergent');
+    const identityKey = externalAction?'requestId':leaseAction ? 'transactionId' : 'operationId';
     if (body[identityKey] !== undefined && body[identityKey] !== input.targetId ||
         body.fencing !== undefined && body.fencing !== entity.fencing) fail('recovery-input-divergent');
     body[identityKey] = input.targetId;
@@ -280,10 +288,10 @@ export class RecoveryCoordinator {
     if (['release-access', 'release-test', 'cancel-waiting-test', 'cancel-waiting-access'].includes(input.action) && entity.token) body.token = entity.token;
     const receipt = { actionId: input.actionId, runId, contextId: run.contextId, ownerId: run.ownerId,
       policyId: policy.policyId, action: input.action, targetId: input.targetId,
-      entityId: reviewAction || portAction || boundaryAction ? entity.operationId : leaseAction ? entity.transactionId : entity.accessId,
+      entityId: externalAction?entity.requestId:reviewAction || portAction || boundaryAction ? entity.operationId : leaseAction ? entity.transactionId : entity.accessId,
       ...(reviewAction || portAction ? { review: structuredClone(body.review), nativeBoundaryDigest: body.nativeBoundaryDigest } : {}),
       receiptId: body.reconciliationId || body.quarantineId || null,
-      ...(boundaryAction ? {requestBody:structuredClone(body)} : {}),
+      ...(boundaryAction||externalAction ? {requestBody:structuredClone(body)} : {}),
       state: 'PREPARED', inputDigest, effectDigest: canonicalContinuityDigest(body) };
     this.persist(this.policies, [...this.receipts, receipt]);
     return { path: actions[input.action], payload: body, policyId: policy.policyId, actionId: input.actionId };
@@ -306,6 +314,14 @@ export class RecoveryCoordinator {
   }
   replay(receipt) {
     if (receipt.state === 'DONE') return { replay: true, status: receipt.httpStatus, result: publicActionResult(receipt.result) };
+    if(receipt.action==='reconcile-external-preflight') {
+      const run=this.registry.runs.get(receipt.runId),call=run?.externalCalls?.[receipt.entityId],review=call?.preflightFailure;
+      if(run?.contextId===receipt.contextId&&call?.state==='PREFLIGHT_FAILED'&&review?.actionId===receipt.actionId&&
+        review.effectDigest===receipt.effectDigest&&/^[a-f0-9]{64}$/.test(review.proofDigest||''))
+        return {replay:true,status:200,result:this.complete(receipt.actionId,200,{state:'PREFLIGHT_FAILED',runId:receipt.runId,
+          requestId:receipt.targetId,coordinationOnly:true,proofDigest:review.proofDigest},'qualified-receipt')};
+      return {replay:true,status:409,result:{error:'recovery-action-outcome-unverified',recoveryActionId:receipt.actionId,nextAction:'inspect-current-authoritative-state'}};
+    }
     const lease = this.registry.resourceState.testReservations?.[receipt.entityId];
     const access = this.registry.resourceState.accesses[receipt.entityId];
     const entity = ['cancel-reviewed-validation','reconcile-quarantined-port',...validationBoundaryActions].includes(receipt.action) ? this.registry.resourceState.operations[receipt.entityId] :

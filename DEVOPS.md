@@ -3,7 +3,7 @@
 Version : 0.8
 
 Généré automatiquement par Debian Installeur Unifié (DIU).
-Début du relevé (UTC) : 2026-11-11T08:52:00Z
+Début du relevé (UTC) : 2026-11-11T13:32:04Z
 Environnement d'exécution DIU : PROXMOX
 
 ## Configuration locale — project.env
@@ -87,7 +87,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Docker-Compose
 
-  * 5.7.0
+  * 5.7.1
   * /usr/local/bin/docker-compose
 
 
@@ -99,7 +99,7 @@ Cet inventaire ne constitue pas une qualification fonctionnelle ni une preuve de
 
 # Go
 
-  * 1.27.3
+  * 1.27.4
   * /home/devops/go/current/bin/go
 
 
