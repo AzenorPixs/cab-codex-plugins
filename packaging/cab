@@ -1,0 +1,5 @@
+#!/bin/sh
+set -eu
+export PYTHONDONTWRITEBYTECODE=1
+export PYTHONPATH=/usr/lib/cab/python:/usr/lib/cab/python-vendor
+exec /usr/bin/python3.13 -m cab_platform.cli "$@"

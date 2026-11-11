@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+case "$1" in
+    remove|purge) systemctl daemon-reload ;;
+esac
+# Les données et configurations privées ne sont jamais purgées implicitement.

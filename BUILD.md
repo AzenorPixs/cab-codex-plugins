@@ -1,5 +1,36 @@
 # BUILD.md — Codex Approval Bridge (CAB)
 
+## Livraison CAB 3.0.0 — Debian et clients légers
+
+Préparer le frontend avec `npm ci` puis `npm run build` dans frontend.
+Préparer les dépendances Python3.13 selon packaging/python-lock.txt et extraire
+l’image publique Electric figée par digest dans output/package/electric-public.
+`python3 packaging/prepare.py` produit les payloads publics vérifiés, le code et
+les plugins sous output/package. Aucun secret de compte ni état local n’entre
+dans ces payloads. Les archives de runtime contiennent des dépendances publiques,
+licences et certificats CA publics ; les sources privées du projet restent exclues.
+
+Le constructeur est `diu projects build debian cab`, recette build/debian-package.json.
+DIU>=1.3.9 prend en charge les scripts Debian déclarés, sans les exécuter au
+build. La CI/CD finale est `diu projects cicd cab 3.0.0` ; PROJECT_VERSION est
+alors mis à jour par DIU avant commit/tag et construction du paquet exact.
+Le paquet qualifié avant ce cycle peut conserver le numéro courant local ; ce
+prépaquet ne constitue pas la release 3.0.0.
+
+Le paquet installe /usr/bin/cab, /usr/lib/cab (moteur, clients, Electric et
+plugins), l’unique unité cab.service et la documentation. PostgreSQL17 est une
+dépendance indépendante ; les runtimes publics sont vérifiés et extraits hors
+réseau à l’installation. Les scripts de maintenance arrêtent à frontière sûre,
+migrent uniquement une base déjà initialisée, redémarrent et vérifient le même
+reçu. Un effet incertain n’est pas réémis. Une première installation reste en
+mode Web bootstrap ; le parcours authentifié crée la base et ses tables.
+
+Les plugins CAB/CCAB/CABU distribués par le catalogue viennent désormais de
+integrations/codex ; commandes minimes sous integrations/commands. Les anciens
+plugins du répertoire plugins restent sources historiques et ne sont plus les
+payloads distribués par ce catalogue. La présence de source ou d’un .deb ne
+prouve pas l’activation ; qualifier séparément paquet, API, MCP et systemd.
+
 La distribution CAB crée ses nouveaux fichiers et répertoires en 0770 et
 reste compatible avec les anciens modes lorsque les droits et les invariants
 du protocole le permettent. La qualification couvre notamment les canaux

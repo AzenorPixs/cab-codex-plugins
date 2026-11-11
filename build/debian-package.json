@@ -1,0 +1,21 @@
+{
+  "package":"cab",
+  "architecture":"amd64",
+  "maintainer":"Anthony DEMARD <postmaster@pixs.fr>",
+  "description":"Codex Approval Bridge - plateforme autonome Django et Electric",
+  "depends":["python3.13","postgresql-17","postgresql-client-17","postgresql-common","bubblewrap","openssh-client","sshpass","libtinfo6","libstdc++6","libgcc-s1","ca-certificates"],
+  "maintainer_scripts":{"preinst":"packaging/preinst","postinst":"packaging/postinst","prerm":"packaging/prerm","postrm":"packaging/postrm"},
+  "files":[
+    {"source":"output/package/python","destination":"/usr/lib/cab/python"},
+    {"source":"output/package/web","destination":"/usr/lib/cab/web"},
+    {"source":"output/package/python-vendor.tar.xz","destination":"/usr/lib/cab/python-vendor.tar.xz","mode":"0644"},
+    {"source":"output/package/electric.tar.xz","destination":"/usr/lib/cab/electric.tar.xz","mode":"0644"},
+    {"source":"output/package/runtime-manifest.json","destination":"/usr/lib/cab/runtime-manifest.json","mode":"0644"},
+    {"source":"packaging/cab","destination":"/usr/bin/cab","mode":"0755"},
+    {"source":"packaging/systemd/cab.service","destination":"/usr/lib/systemd/system/cab.service","mode":"0644"},
+    {"source":"output/package/docs","destination":"/usr/share/doc/cab"},
+    {"source":"output/package/plugins","destination":"/usr/lib/cab/plugins"},
+    {"source":"output/package/commands","destination":"/usr/lib/cab/commands"},
+    {"source":"output/package/marketplace.json","destination":"/usr/lib/cab/.agents/plugins/marketplace.json","mode":"0644"}
+  ]
+}

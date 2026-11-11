@@ -1,0 +1,10 @@
+#!/bin/sh
+set -eu
+if [ "$1" != configure ]; then exit 0; fi
+install -d -o root -g root -m 0700 /etc/cab /var/lib/cab
+/usr/bin/python3.13 /usr/lib/cab/python/cab_platform/package_install.py
+PYTHONPATH=/usr/lib/cab/python:/usr/lib/cab/python-vendor /usr/bin/python3.13 -m cab_platform.maintenance installed
+systemctl daemon-reload
+systemctl enable cab.service
+systemctl start cab.service
+cab maintenance verify --transaction debian-upgrade
