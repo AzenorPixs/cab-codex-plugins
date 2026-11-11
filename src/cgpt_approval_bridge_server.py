@@ -74,7 +74,7 @@ import cgpt_approval_bridge_journal as journal
 
 
 SERVER_NAME = "cgpt-approval-bridge"
-SERVER_VERSION = "2.7.1"
+SERVER_VERSION = "2.7.2"
 MCP_PROTOCOL_VERSION = "2024-11-05"
 MCP_SERVER_INSTRUCTIONS = (
     "En session de codage (hors sonde technique), au demarrage, a la reprise "
@@ -4212,10 +4212,15 @@ def do_external(args,method):
     if external.VERSION!=SERVER_VERSION:raise ValidationError('external-component-version-mismatch')
     sender={'pid':os.getpid(),'uid':os.getuid(),'instanceId':INSTANCE_ID}
     if method=='external_release':return owner_erasure_http('/external/owner/release',{'sender':sender,'packet':args})
+    first_grant=None
     def authorize(value):
+        nonlocal first_grant
         deadline=time.monotonic()+min(value.get('timeout_ms',120000)/1000,300)
         while True:
-            try:return owner_erasure_http('/external/owner/authorize',{'sender':sender,'packet':{'method':method,'args':value}})
+            try:
+                grant=owner_erasure_http('/external/owner/authorize',{'sender':sender,'packet':{'method':method,'args':value}})
+                if method=='external_execute' and grant.get('execution_known') is False:first_grant=grant
+                return grant
             except ValidationError as error:
                 if str(error)=='external-resource-busy' and time.monotonic()<deadline:time.sleep(0.2);continue
                 raise
@@ -4228,7 +4233,16 @@ def do_external(args,method):
               'request_id':args['request_id'],'receipt':result,'receipt_digest':sha}})
             result={**result,'receiptDigest':sha}
         return result
-    except external.ExternalError as error:raise ValidationError(str(error)) from error
+    except external.ExternalError as error:
+        if str(error)=='external-state-unsafe' and first_grant is not None:
+            try:
+                result=owner_erasure_http('/external/owner/preflight-failure',{'sender':sender,'packet':{'args':args,'grant':first_grant,'code':str(error)}})
+                if result.get('status')!='PREFLIGHT_FAILED':raise ValidationError('external-preflight-attestation-unconfirmed')
+            except (ValidationError,OSError,ValueError) as cause:
+                detail=str(cause)
+                suffix=(':'+detail) if re.fullmatch(r'(?:external|broker|atelier|opencode|run|coordination|erasure)-[a-z0-9-]{1,100}',detail) else ''
+                raise ValidationError('external-preflight-attestation-unconfirmed'+suffix) from cause
+        raise ValidationError(str(error)) from error
 
 
 def do_session_coordinate(args):
@@ -4252,7 +4266,8 @@ def do_autonomy(args,action):
         suffix=(':'+reason) if code=='autonomy-submission-invalid' and reason in allowed else ''
         index=diagnostic.get('testIndex')
         if suffix and type(index) is int and 0<=index<10000:suffix+=':testIndex='+str(index)
-        raise ValidationError((code if re.fullmatch(r'autonomy-[a-z0-9-]{1,100}',code) else 'autonomy-controller-refused')+suffix) from exc
+        public_code=code if code=='external-effects-unresolved' or re.fullmatch(r'autonomy-[a-z0-9-]{1,100}',code) else 'autonomy-controller-refused'
+        raise ValidationError(public_code+suffix) from exc
     except (OSError,ValueError) as exc:raise ValidationError('autonomy-controller-unavailable') from exc
 
 

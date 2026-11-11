@@ -6,7 +6,7 @@ import { constants, closeSync, fstatSync, fsyncSync, lstatSync, openSync, readFi
 import { join, resolve } from 'node:path';
 import { RunRegistry, CoordinationError, canonicalResource } from './cgpt-approval-bridge-runs.mjs';
 
-export const VERSION = '2.7.1';
+export const VERSION = '2.7.2';
 export const COORDINATION_PROTOCOL = 'resource-scoped-v1';
 export const TEST_RESOURCE_PROTOCOL = 'test-resources-v1';
 export const GLOBAL_CAUSES = ['GLOBAL_RECONCILIATION', 'SHARED_MAINTENANCE', 'GLOBAL_PAUSE', 'GLOBAL_STOP'];
@@ -508,7 +508,7 @@ export class ResourceRunRegistry extends RunRegistry {
     return entry;
   }
   cancelTests(runId, payload) {
-    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
+    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START','PREFLIGHT_FAILED'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
     this.mutable(); this.owned(runId, payload.version); evidence(payload.evidence);
     const entry = this.resourceState.testReservations?.[payload.transactionId];
     if (!entry || entry.runId !== runId || entry.version !== payload.version || !['WAITING','CANCELLED'].includes(entry.state)) {
@@ -604,7 +604,7 @@ export class ResourceRunRegistry extends RunRegistry {
     return copy(prior);
   }
   releaseUnusedTests(runId, payload, verifiedNativeProof, { lostTokenRecovery = false, validatedChangeScope = false } = {}) {
-    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
+    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START','PREFLIGHT_FAILED'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
     this.mutable();
     const replay = this.unusedTestReplay(runId, payload);
     if (replay) return replay;
@@ -670,13 +670,13 @@ export class ResourceRunRegistry extends RunRegistry {
     if(!entry||entry.runId!==runId||entry.contextId!==run.contextId||entry.version!==run.version||entry.state!=='HELD'||
       this.restoredTests.has(transactionId)||!hash(proof?.digest)||!Array.isArray(proof.resources)||
       entry.resources.length!==proof.resources.length||entry.resources.some(r=>!proof.resources.includes(r.key))||
-      Object.values(run.externalCalls||{}).some(c=>c.leaseId===transactionId&&!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(c.state))||
+      Object.values(run.externalCalls||{}).some(c=>c.leaseId===transactionId&&!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START','PREFLIGHT_FAILED'].includes(c.state))||
       this.operationTests(entry).some(op=>!['COMPLETED','CANCELLED'].includes(op.state)))throw new CoordinationError('external-cleanup-proof-required');
     entry.state='RELEASED';entry.finishedAt=now();entry.releaseDigest=digest(proof);entry.proofDigest=proof.digest;
     this.grantTests();this.persist();return copy(entry);
   }
   releaseTests(runId, payload) {
-    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
+    if(Object.values(this.runs.get(runId)?.externalCalls||{}).some(call=>call.leaseId===payload.transactionId&&(call.dispatched||!['COMPLETED','TIMED_OUT','OUTPUT_LIMIT','FAILED_TO_START','PREFLIGHT_FAILED'].includes(call.state))))throw new CoordinationError('external-effects-require-scoped-cleanup');
     this.mutable(); evidence(payload.evidence);
     const prior = this.resourceState.testReservations?.[payload.transactionId];
     if (prior?.state === 'RELEASED' && !prior.unusedReleaseReceipt && prior.runId === runId && prior.releaseDigest === digest(payload)) return copy(prior);

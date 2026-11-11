@@ -1,5 +1,11 @@
 # DEVELOPMENT_MAP.md - Codex Approval Bridge
 
+## SCM — prévol externe et continuité SGS, 11 novembre 2026
+
+`reconcile-external-preflight-failure`, code non attribué : ARCHIVÉ et testé
+en source ; recette OpenCode/collecteur/SGS isolée réussie après handoff.
+La livraison, l’activation CABU et la reprise de l’appel historique restent à vérifier.
+
 ## SCM — coordination autonome, 11 novembre 2026
 
 `enable-autonomous-session-coordination`, code non attribué : ARCHIVÉ, source2.7.0 qualifiée.

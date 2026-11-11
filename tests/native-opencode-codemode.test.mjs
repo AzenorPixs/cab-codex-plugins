@@ -10,6 +10,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { createOpenCodeV2Client, nativeToolInputDigest, nativeCodingMandate, diagnoseCodingTurn } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-opencode-client.mjs';
 import {runtimeStateDirectory} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-state-layout.mjs';
+import {runtimeRequest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-client.mjs';
 
 const binary = process.env.CAB_TEST_OPENCODE;
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -57,12 +58,12 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
       response.end('data: [DONE]\n\n');
     });
     await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
-    let native, controller, eventReader, eventTask;
+    let native, controller, sgs, eventReader, eventTask;
     const eventSamples = new Map();
     t.after(async () => {
       if (eventReader) await eventReader.cancel();
       if (eventTask) await eventTask;
-      for (const child of [controller, native]) if (child && child.exitCode === null && child.signalCode === null) {
+      for (const child of [controller, sgs, native]) if (child && child.exitCode === null && child.signalCode === null) {
         const done = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGTERM'); await done;
       }
       await new Promise(resolve => provider.close(resolve));
@@ -86,6 +87,20 @@ remote=Path(${JSON.stringify(join(root,'remote-fixture'))});remote.mkdir(mode=0o
 def fixture_transport(cfg,packet,timeout):
  return runner.handle(packet,state_root=remote,identity={'container':'lxc','fingerprint':'b'*64})
 external._call.__kwdefaults__['transport']=fixture_transport
+`;
+      const original=readFileSync(wrapper,'utf8');writeFileSync(wrapper,original.replace('raise SystemExit(b.main())',extra+'\nraise SystemExit(b.main())'));
+    }
+    if(process.env.CAB_TEST_PREFLIGHT_FAILURE==='1') {
+      const extra=`
+import cgpt_approval_bridge_external as external
+original_private_root=external.private_root
+fail_once=[True]
+def preflight_failure_once(*args,**kwargs):
+ if fail_once[0]:
+  fail_once[0]=False
+  raise external.ExternalError('external-state-unsafe')
+ return original_private_root(*args,**kwargs)
+external.private_root=preflight_failure_once
 `;
       const original=readFileSync(wrapper,'utf8');writeFileSync(wrapper,original.replace('raise SystemExit(b.main())',extra+'\nraise SystemExit(b.main())'));
     }
@@ -126,13 +141,22 @@ external._call.__kwdefaults__['transport']=fixture_transport
         }
       }
     })();
+    const stateRoot=join(root,'private-state'),sgsDirectory=join(stateRoot,'cab-approval-bridge','sgs'),sgsSocket=join(sgsDirectory,'sgs.sock');
+    mkdirSync(sgsDirectory,{recursive:true,mode:0o700});
+    const sgsEnvironment={PATH:'/home/devops/node/current/bin:'+process.env.PATH,HOME:root,OC_Codex_RUNTIME_STATE_ROOT:stateRoot,
+      OC_Codex_OPENCODE_URL:base,OC_Codex_OPENCODE_PASSWORD_FILE:passwordFile};
+    sgs=spawn('/home/devops/python/current/bin/python3',['-B',fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-service.py',import.meta.url)),
+      'sgs','--state-directory',sgsDirectory],{env:sgsEnvironment,stdio:['ignore','ignore','pipe']});
+    let sgsLog='';sgs.stderr.on('data',chunk=>sgsLog+=chunk);
+    const sgsCall=(path,body)=>runtimeRequest('sgs',path,body,{socketPath:sgsSocket,timeout:1000});
+    await until(async()=>{if(sgs.exitCode!==null)throw Error('SGS fixture: '+sgsLog);try{return (await sgsCall('/status')).status==='READY';}catch{return false;}},'isolated SGS');
     const controllerEntry=fileURLToPath(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs',import.meta.url));
     const stageEntry=new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-shell-stage.mjs',import.meta.url).href;
     const controllerWrapper=join(root,'controller-wrapper.mjs');
     writeFileSync(controllerWrapper,`import {ShellStageStore} from ${JSON.stringify(stageEntry)};const original=ShellStageStore.prototype.get;ShellStageStore.prototype.get=function(id){const s=original.call(this,id);return id==='stage-corrupt-fixture'&&s?{...s,payload:s.payload.replace('CAB_LONG_EXACT_OK','CAB_LONG_WRONG_OK')}:s};await import(${JSON.stringify(new URL('../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-controller.mjs',import.meta.url).href)});`);
     function startController() {
       controller = spawn(process.execPath, [controllerWrapper],
-      { stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, OC_Codex_WORKSPACE: workspace, OC_Codex_RUNTIME_STATE_ROOT:join(root,'private-state'),
+      { stdio: ['ignore', 'ignore', 'pipe'], env: { PATH: process.env.PATH, HOME:root, OC_Codex_WORKSPACE: workspace, OC_Codex_RUNTIME_STATE_ROOT:stateRoot,
         OC_Codex_OUTSIDE_SANDBOX: '1', OC_Codex_OPENCODE_URL: base, OC_Codex_OPENCODE_PASSWORD_FILE: passwordFile,
         OC_Codex_STATUS_PORT: String(controllerPort), OC_Codex_DECISION_MODE: 'manual', CODEX_COMMAND: 'cab-test-unused' } });
       controller.stderr.on('data', chunk => controlLog += chunk);
@@ -236,7 +260,7 @@ external._call.__kwdefaults__['transport']=fixture_transport
     await http('/runs/native-autonomous/autonomy/mandate',{protocol:'autonomous-change-v1',mandateId:'native-autonomous-mandate',
       version:autonomousRun.version,sessionId:autonomousSession.id,objective:'Set VALUE=2',criteria:['VALUE=2'],constraints:['Isolated network'],
       decisionsResolved:true,decisions:['Developer and orchestrator selected VALUE=2 before coding'],paths:['autonomous-source']});
-    async function autonomousTool(name,args) {
+    async function autonomousTool(name,args,{expectedError}={}) {
       const toolSession=args.session_id||autonomousSession.id;
       queue.push({tool:'execute',input:{code:'return await search('+JSON.stringify({query:name,namespace:'cgpt-validation',limit:20})+');'}});
       await client.prompt(toolSession,'Discover only the requested autonomous tool.');
@@ -246,7 +270,9 @@ external._call.__kwdefaults__['transport']=fixture_transport
       await until(async()=>{const p=(await client.messages(toolSession)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);return p&&['completed','error'].includes(p.state.status)&&!(await client.activeSessions())[toolSession]&&queue.length===0;},'autonomous action',async()=>({
         status:await http('/runs/native-autonomous/status'),last:(await client.messages(toolSession)).slice(-2)}));
       const part=(await client.messages(toolSession)).flatMap(m=>m.parts||[]).findLast(p=>p.tool==='cgpt-validation_'+name&&p.state.input?.request_id===args.request_id);
-      assert.ok(part,'native autonomous MCP part missing');assert.equal(part.state.status,'completed',JSON.stringify(part.state));
+      assert.ok(part,'native autonomous MCP part missing');
+      if(expectedError){assert.equal(part.state.status,'error');assert.ok(String(part.state.error).includes(expectedError),String(part.state.error));return;}
+      assert.equal(part.state.status,'completed',JSON.stringify(part.state));
       return JSON.parse(part.state.output);
     }
     const autonomousIdentity={run_id:autonomousRun.runId,reservation_version:autonomousRun.version,session_id:autonomousSession.id,
@@ -318,6 +344,19 @@ external._call.__kwdefaults__['transport']=fixture_transport
       const described=await autonomousTool('external_describe',{...identity,request_id:'external-describe',profile:{id:'bank',kind:'ssh',resource_key:bankKey,host_key:'SSH_FIXTURE_HOST',user_key:'SSH_FIXTURE_USER',password_key:'SSH_FIXTURE_PASSWORD',container:bankKind,known_hosts:known,...(realSsh?{port_key:'SSH_FIXTURE_PORT'}:{})}});
       assert.equal(described.status,'PROFILE_DESCRIBED');assert.ok(!JSON.stringify(described).includes('fixture-private-password'));
       await http('/runs/external-native/autonomy/mandate',{protocol:'autonomous-change-v1',mandateId:'external-mission',version:r.version,sessionId:session.id,objective:'Qualify external receipt integration',criteria:['external-native-proof'],constraints:[],decisionsResolved:true,decisions:['Dedicated bank selected'],paths:['external-source'],externalAdapters:[described.profile]});
+      if(process.env.CAB_TEST_PREFLIGHT_FAILURE==='1') {
+        const failed={...identity,request_id:'external-native-preflight',adapter_id:'bank',argv:['/usr/bin/true']};
+        await autonomousTool('external_execute',failed,{expectedError:'external-state-unsafe'});
+        const status=await http('/runs/external-native/external/status');
+        assert.equal(status.calls['external-native-preflight'].state,'PREFLIGHT_FAILED');
+        assert.equal(status.calls['external-native-preflight'].receiptDigest,null);
+        assert.match(status.calls['external-native-preflight'].preflightProofDigest,/^[a-f0-9]{64}$/);
+        const failedStatus=await autonomousTool('external_status',{...identity,request_id:'external-native-preflight',adapter_id:'bank'});
+        assert.equal(failedStatus.status,'PREFLIGHT_FAILED');assert.equal(failedStatus.coordinationOnly,true);
+        assert.equal(failedStatus.proofDigest,status.calls['external-native-preflight'].preflightProofDigest);
+        assert.equal(failedStatus.receiptDigest,undefined);
+        await autonomousTool('external_execute',failed,{expectedError:'external-request-terminal'});
+      }
       const result=await autonomousTool('external_execute',{...identity,request_id:'external-native-test',adapter_id:'bank',argv:['/usr/bin/python3','-B','-c','from pathlib import Path;assert Path("candidate.txt").read_text()=="42";print("EXTERNAL_NATIVE_OK")'],files:[{path:'external-source/candidate.txt',destination:'candidate.txt'}]});
       assert.equal(result.status,'COMPLETED');assert.equal(result.exitCode,0);assert.match(result.output,/EXTERNAL_NATIVE_OK/);
       const replay=await autonomousTool('external_status',{...identity,request_id:'external-native-test',adapter_id:'bank'});assert.equal(replay.receiptDigest,result.receiptDigest);
@@ -709,6 +748,19 @@ external._call.__kwdefaults__['transport']=fixture_transport
     await http('/runs/native-singleton/job/arm',{jobId:'job-singleton',sessionId:singletonSession.id,directory:workspace,
       changeId:'synthetic-singleton',strictCommands:true,criteria:['reject divergent edit then withdraw only dedicated member']});
 
+    // Une réponse à compteurs connus est collectée par SGS avant le handoff.
+    const measuredEnd=dispatched+1;
+    queue.push({text:'synthetic handoff usage',usage:{prompt_tokens:12,completion_tokens:5,total_tokens:17,prompt_tokens_details:{cached_tokens:4}}});
+    await client.prompt(retryCandidate.id,'Réponse synthétique mesurée avant handoff, sans outil.');
+    await until(async()=>!(await client.activeSessions())[retryCandidate.id]&&dispatched===measuredEnd,'controlled native usage');
+    const measuredNative=(await client.messages(retryCandidate.id)).filter(m=>m.info.role==='assistant'&&m.info.tokens?.output===5);
+    assert.ok(measuredNative.length>0);assert.equal(measuredNative.at(-1).info.tokens.cache.read,4);
+    const sgsSnapshot=async()=>(await sgsCall('/stats?project='+encodeURIComponent(workspace))).sessions.find(s=>s.run==='native-code'&&s.session===retryCandidate.id);
+    await until(async()=>{const s=await sgsSnapshot();return s?.collector?.status==='collecting'&&Number(s.metrics.tokens_output)>=5;},'SGS native usage before handoff',async()=>await sgsSnapshot());
+    const usageBefore=await sgsSnapshot();
+    assert.equal(usageBefore.collector.source,'opencode-native');assert.equal(usageBefore.coverage.tokens_output,'native');
+    assert.ok(Number(usageBefore.metrics.tokens_cache_read)>=4);
+
     // Background sous CAB : le start retourne, le port reste EXECUTING jusqu'à Shell.Info terminal.
     current=(await http('/runs')).runs.find(r=>r.runId===run.runId);
     const backgroundInput={command:'/usr/bin/sleep 2',background:true,timeout:5000};
@@ -754,10 +806,24 @@ external._call.__kwdefaults__['transport']=fixture_transport
       token:backgroundAccess.token,fencing:backgroundAccess.fencing,outcome:'COMPLETED',evidence:['native Shell.Info exact, explicit effects review']});
     console.log(JSON.stringify({backgroundCab:true,startNotCompletion:true,onceAcknowledged:true,terminalNativeShell:true,explicitRelease:true,realCompatibleHandoff:true,nativeAndBrokerPidPreserved:true,peerLeasePreserved:true,handoffUpperBoundMs,measurement:'kill-to-observed-adoption-upper-bound'}));
 
-    await until(async()=>(await http('/runs/native-code/efficiency')).messageCount>0,'native usage collection');
-    const nativeUsage=await http('/runs/native-code/efficiency');
-    assert.equal(nativeUsage.source,'opencode-v2-message');assert.equal(nativeUsage.metrics.costUsd.observed,0);
-    assert.ok(nativeUsage.metrics.output.available>0);assert.equal(nativeUsage.billingSavings.observed,null);
+    await until(async()=>{const s=await sgsSnapshot();return s?.collector?.status==='collecting'&&Number(s.metrics.tokens_output)>=Number(usageBefore.metrics.tokens_output);},'SGS native usage after handoff',async()=>await sgsSnapshot());
+    const usageAfter=await sgsSnapshot();
+    assert.equal(usageAfter.binding,usageBefore.binding);assert.equal(usageAfter.instance,usageBefore.instance);
+    assert.equal(usageAfter.collector.source,'opencode-native');assert.equal(usageAfter.coverage.tokens_output,'native');
+    assert.ok(Number(usageAfter.metrics.tokens_cache_read)>=Number(usageBefore.metrics.tokens_cache_read));
+    await until(async()=>!(await client.activeSessions())[retryCandidate.id],'native usage settled');
+    const finalNative=await client.messages(retryCandidate.id);
+    const expectedOutput=finalNative.reduce((sum,m)=>sum+(m.info.role==='assistant'&&Number.isSafeInteger(m.info.tokens?.output)?m.info.tokens.output:0),0);
+    const expectedCache=finalNative.reduce((sum,m)=>sum+(m.info.role==='assistant'&&Number.isSafeInteger(m.info.tokens?.cache?.read)?m.info.tokens.cache.read:0),0);
+    await until(async()=>{const s=await sgsSnapshot();return Number(s?.metrics.tokens_output)===expectedOutput&&Number(s?.metrics.tokens_cache_read)===expectedCache;},
+      'SGS exact native totals',async()=>({expectedOutput,expectedCache,sgs:await sgsSnapshot()}));
+    const settled=await sgsSnapshot();assert.equal(Number(settled.metrics.cost_usd),0);assert.equal(settled.coverage.cost_usd,'native');
+    const unavailable=Object.keys(settled.coverage).find(key=>settled.coverage[key]==='unavailable'&&!(key in settled.metrics));assert.ok(unavailable);
+    await delay(31000); // Dépasse l'intervalle de relecture du collecteur, sans nouveau message.
+    const reread=await sgsSnapshot();
+    assert.equal(Number(reread.metrics.tokens_output),expectedOutput);assert.equal(Number(reread.metrics.tokens_cache_read),expectedCache);
+    assert.equal(Number(reread.metrics.cost_usd),0);assert.equal(reread.coverage[unavailable],'unavailable');
+    console.log(JSON.stringify({nativeSgsHandoff:true,binding:usageAfter.binding,before:usageBefore.metrics.tokens_output,after:usageAfter.metrics.tokens_output,collector:usageAfter.collector.status}));
 
     // Même cible et APPROVED, mais arguments divergents : aucune once ni écriture.
     current=(await http('/runs')).runs.find(r=>r.runId===run.runId);
@@ -790,7 +856,9 @@ external._call.__kwdefaults__['transport']=fixture_transport
     let split;
     await until(async()=>{const data=await client.request('/api/permission/request',{query:{directory:workspace}});split=data.data.find(p=>p.sessionID===splitSession.id);return Boolean(split);},'multipart native permission');
     assert.equal(split.resources.length,3);assert.equal(existsSync(splitTarget),false);
-    await assert.rejects(client.permissions(workspace,{sessionIds:[splitSession.id]}),{code:'opencode-permission-target-invalid'});
+    const splitVerified=await client.permissions(workspace,{sessionIds:[splitSession.id],verifyInputs:true});
+    assert.equal(splitVerified.length,1);assert.equal(splitVerified[0].metadata.nativeShellResourceCount,3);
+    assert.equal(splitVerified[0].metadata.command,'/usr/bin/touch '+splitTarget+' && /usr/bin/printf CAB_SPLIT_NOT_EXECUTED && /usr/bin/test -f '+splitTarget);
     await client.replyPermission(splitSession.id,split.id,'reject');
     await until(async()=>!(await client.activeSessions())[splitSession.id],'multipart rejection terminal');
     assert.equal(existsSync(splitTarget),false);

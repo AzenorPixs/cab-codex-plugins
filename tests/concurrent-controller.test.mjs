@@ -19,6 +19,8 @@ import { proofHash } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-
 import { portProbeCommand } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-port-recovery.mjs';
 import { processIdentity } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-process-lifecycle.mjs';
 import { ResourceRunRegistry, VERSION as CAB_VERSION } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-resource-coordination.mjs';
+import {ExternalExecution} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-external-execution.mjs';
+import {grantAutonomy} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-autonomous-mandate.mjs';
 import { ContinuityStore } from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-continuity.mjs';
 import {ErasureTransaction} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-change-erasure.mjs';
 import {runtimeRequest} from '../plugins/cab-approval-bridge/scripts/cgpt-approval-bridge-runtime-client.mjs';
@@ -4347,6 +4349,56 @@ test('accès annulé avant attribution : reprise après redémarrage du contrôl
  const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
  const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];
  assert.equal(op.state,'CANCELLED');assert.equal(op.access.state,'CANCELLED');assert.equal(op.decision.status,'approved');
+});
+async function legacyExternalPreflightHttpFixture(t) {
+ const home=mkdtempSync(join(tmpdir(),'cab-preflight-home-'));chmodSync(home,0o700);t.after(()=>rmSync(home,{recursive:true,force:true}));
+ const h=await setup(t,{environment:{HOME:home}});mkdirSync(join(h.directory,'src'));writeFileSync(join(h.directory,'src','value.py'),'VALUE=1\n');
+ const resource={key:'lxc:fixture/100',mode:'write'},run=await h.reserve('legacy-external',{resources:[{key:'file:src',mode:'write'},resource]});
+ await h.stop();const state=runtimeStateDirectory(h.directory),registry=new ResourceRunRegistry(h.directory,state);await registry.acquireAuthority();
+ const lease=registry.acquireTests(run.runId,{version:run.version,transactionId:'legacy-bank',resources:[resource],evidence:['fixture bank']});
+ grantAutonomy(registry,run.runId,{protocol:'autonomous-change-v1',mandateId:'legacy-mission',version:run.version,sessionId:run.sessionId,
+  objective:'Review historical preflight',criteria:['bank test'],constraints:[],decisionsResolved:true,decisions:['fixture'],paths:['src']});
+ const external=new ExternalExecution({registry,contexts:new Map([[run.runId,{publicJob:()=>({armed:true,sessionId:run.sessionId})}]])});
+ const profile={id:'bank',kind:'ssh',resource_key:resource.key,host_key:'TEST_HOST',user_key:'TEST_USER',password_key:'TEST_PASSWORD',container:'lxc',connection_fingerprint:'a'.repeat(64)};
+ external.register(run.runId,{version:run.version,profile},{initial:true});
+ const args={request_id:'legacy-preflight',run_id:run.runId,session_id:run.sessionId,change_id:run.changeId,directory:h.directory,reservation_version:run.version,adapter_id:'bank',argv:['/usr/bin/true']};
+ external.authorize('external_execute',args);await registry.close();
+ await delay(1300);const start=Date.now()-800,receiptId='update-00000000-0000-4000-8000-000000000000',startedAt=new Date(start-500).toISOString();
+ const ready=(callID,at)=>({type:'tool',tool:'cgpt-validation_broker_readiness',callID,state:{status:'completed',time:{start:at-1,end:at},input:{},output:JSON.stringify({status:'READY',ready:true,server_version:'2.7.1',instance_id:'inst-fixture',checked_at:new Date(at).toISOString(),broker_process:{pid:222,started_at:startedAt}})}});
+ const error='MCP tool "external_execute" on server "cgpt-validation" failed: external-state-unsafe';
+ const part={type:'tool',tool:'execute',callID:'legacy-call',executed:false,state:{status:'completed',input:{code:'return await tools["cgpt-validation"].external_execute('+JSON.stringify(args)+');'},output:error,time:{start,end:start+100},metadata:{truncated:false,error:true,toolCalls:[{tool:'cgpt-validation.external_execute',status:'error',input:args}]}}};
+ h.native.messages[run.sessionId]=[{parts:[ready('ready-before',start-100),part,ready('ready-after',start+200)]}];
+ const updateRoot=join(home,'.local/state/cab-approval-bridge-update'),tx=join(updateRoot,receiptId);mkdirSync(tx,{recursive:true,mode:0o700});
+ const update={id:receiptId,phase:'COMPLETED',version:'2.7.1',brokerConnected:true,updatedAt:new Date(start-200).toISOString(),brokerReconnectedAt:start-600,nativeIdentity:{pid:process.pid,version:'2.2.0',sharedDirectory:h.directory},files:[
+  {group:'broker',name:'cgpt_approval_bridge_server.py',afterHash:'5f96a6f947512c56c38d3666b17e69069b7747f7041add947404fdac897801ad'},
+  {group:'broker',name:'cgpt_approval_bridge_external.py',afterHash:'291025f739b8bc2fb1b671d94346f369151317910150379a81086aca744f389e'}]};
+ writeFileSync(join(tx,'receipt.json'),JSON.stringify(update),{mode:0o600});
+ const identity=await processIdentity(process.pid),instances=new ContinuityStore(join(state,'native-instances.json'),'native-instances',()=>true);
+ instances.write([{workspace:h.directory,pid:process.pid,version:'2.2.0',startTime:identity.startTime,uid:process.getuid(),
+  cgroupDigest:createHash('sha256').update(readFileSync('/proc/'+process.pid+'/cgroup')).digest('hex'),observedAt:start-300}]);
+ await h.start();return {h,run,lease,receiptId,args,part,resource};
+}
+test('HTTP recovery reviews a historical preflight with fresh proofs and retains the lease',async t=>{
+ const {h,run,receiptId,args,resource}=await legacyExternalPreflightHttpFixture(t),base='/runs/'+run.runId;
+ const policy={policyId:'legacy-preflight-policy',ownerId:run.ownerId,version:run.version,actions:['reconcile-external-preflight'],resources:[resource],authorization:'Review the exact historical preflight boundary'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const preview=await h.get(base+'/external/preflight-evidence?requestId='+args.request_id+'&sourceReceiptId='+receiptId);assert.equal(preview.status,200,JSON.stringify(preview));
+ const plan=(await h.get(base+'/recovery')).body;assert.ok(plan.actions.some(a=>a.action==='reconcile-external-preflight'&&a.targetId===args.request_id));
+ const request={actionId:'legacy-preflight-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'reconcile-external-preflight',targetId:args.request_id,input:{sourceReceiptId:receiptId,nativeBoundaryDigest:preview.body.boundaryDigest,evidence:['native and update receipt reviewed']}};
+ const result=await h.post(base+'/recovery/action',request);assert.equal(result.status,200,JSON.stringify(result));assert.equal(result.body.state,'PREFLIGHT_FAILED');assert.equal(result.body.coordinationOnly,true);
+ assert.deepEqual((await h.post(base+'/recovery/action',request)).body,result.body);
+ const status=(await h.get(base+'/external/status')).body;assert.equal(status.calls[args.request_id].state,'PREFLIGHT_FAILED');assert.equal(status.calls[args.request_id].receiptDigest,null);
+ assert.equal((await h.get(base+'/test-resources')).body.reservations.find(v=>v.transactionId==='legacy-bank').state,'HELD');
+ await h.stop();await h.start();assert.deepEqual((await h.post(base+'/recovery/action',request)).body,result.body);
+});
+test('HTTP recovery refuses changed historical evidence without changing intent',async t=>{
+ const {h,run,receiptId,args,part,resource}=await legacyExternalPreflightHttpFixture(t),base='/runs/'+run.runId;
+ const policy={policyId:'legacy-preflight-policy',ownerId:run.ownerId,version:run.version,actions:['reconcile-external-preflight'],resources:[resource],authorization:'Review the exact historical preflight boundary'};
+ assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
+ const preview=await h.get(base+'/external/preflight-evidence?requestId='+args.request_id+'&sourceReceiptId='+receiptId);assert.equal(preview.status,200,JSON.stringify(preview));
+ const plan=(await h.get(base+'/recovery')).body;part.state.output='divergent error';
+ const result=await h.post(base+'/recovery/action',{actionId:'legacy-divergent',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'reconcile-external-preflight',targetId:args.request_id,input:{sourceReceiptId:receiptId,nativeBoundaryDigest:preview.body.boundaryDigest,evidence:['native and update receipt reviewed']}});
+ assert.notEqual(result.status,200);assert.equal((await h.get(base+'/external/status')).body.calls[args.request_id].state,'INTENT');
 });
 for(const variant of ['effect','permission','busy','boundary'])test('accès annulé avant attribution : refuse '+variant,async t=>{
  const {h,run,approval,base,payload}=await unissuedWithdrawalFixture(t,'approved',true);
