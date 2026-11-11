@@ -1,7 +1,9 @@
 # external-test-execution Specification
 
 ## Purpose
-TBD - created by archiving change enable-autonomous-session-coordination. Update Purpose after archive.
+Permettre aux agents de codage de réaliser leurs tests en autonomie sur un banc
+conteneur externe déclaré, approuvé et réservé, avec credentials locaux, reçus
+durables sans rejeu et revue finale corrélée aux sources.
 
 ## Requirements
 

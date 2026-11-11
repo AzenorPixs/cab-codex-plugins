@@ -15,7 +15,7 @@ import tempfile
 from datetime import datetime,timezone
 import cgpt_approval_bridge_external_runner as runner
 
-VERSION='2.7.0'
+VERSION='2.7.1'
 PROTOCOL='cab-external-exec-v1'
 LOCK=threading.RLock()
 ACTIVE_PROCESSES={}

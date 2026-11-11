@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {lstatSync,readdirSync,readFileSync,realpathSync} from 'node:fs';
 import {join,relative,resolve,sep} from 'node:path';
 
-export const VERSION='2.7.0';
+export const VERSION='2.7.1';
 export const AUTONOMY_PROTOCOL='autonomous-change-v1';
 const fail=code=>{throw Object.assign(new Error(code),{code,status:409});};
 const text=value=>typeof value==='string'&&value.trim().length>0&&value.length<=4000;
