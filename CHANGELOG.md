@@ -1,5 +1,12 @@
 # Historique des versions
 
+## Non publié — compatibilité des permissions
+
+- Accepter les permissions de groupe sur le reporting du broker, ses reçus
+  externes et le fichier d'hôtes connus ; créer les nouveaux fichiers de ce
+  périmètre en 0770 et conserver les anciens modes privés compatibles.
+- La généralisation aux autres briques reste suivie séparément.
+
 ## 2.7.1 — 2026-11-11
 
 - Compléter l’objectif de la spécification canonique external-test-execution générée

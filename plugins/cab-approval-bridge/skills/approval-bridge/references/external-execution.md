@@ -51,6 +51,8 @@ il n’obtient aucun droit supplémentaire sur les sources hôtes.
 
 Le résultat expose état, exitCode, sortie expurgée, empreinte, artefacts et
 révision source. Les receipts locaux et distants sont persistants et privés.
+Les états en 0770/2770 détenus par l'utilisateur sont compatibles ; les
+anciennes permissions privées restent acceptées, sans normalisation forcée.
 Une identité connue n’exécute jamais à nouveau la commande. external_status
 avec le même request_id/adapter_id relit le reçu puis, si nécessaire, consulte
 seulement le journal distant. UNKNOWN garde sa protection et son bail : aucune
