@@ -940,13 +940,29 @@ export class ResourceRunRegistry extends RunRegistry {
       throw new CoordinationError('released-reference-withdrawal-invalid');
     return copy(parent);
   }
-  recordNativeCancelledValidation(runId, operationId, proofDigest, {allowRejected=false,allowReleasedReference=false}={}) {
+  cancelledUngrantedAccess(runId,operationId) {
+    const run=this.runs.get(runId),op=this.resourceState.operations[operationId];
+    const linked=op&&Object.values(this.resourceState.accesses).filter(a=>a.accessId===op.accessId||a.operationIds.includes(operationId));
+    const access=linked?.[0];
+    if(!run||!op||op.runId!==runId||op.contextId!==run.contextId||op.version!==run.version||op.sessionId!==run.sessionId||
+      op.state!=='PREPARED'||op.decision?.status!=='approved'||op.native||op.nativeResult||op.onceAcknowledged===true||
+      linked.length!==1||access.accessId!==operationId||op.accessId!==operationId||access.operationIds.length!==1||
+      access.operationIds[0]!==operationId||access.runId!==runId||access.contextId!==run.contextId||access.version!==run.version||
+      access.operationDigest!==op.operationDigest||
+      access.state!=='CANCELLED'||access.token!=null||access.fencing!=null||access.grantedAt!=null||access.outcome!=null||
+      access.releaseDigest!=null||access.timeoutQuarantine||this.restoredAccesses.has(access.accessId)||
+      !Number.isFinite(Date.parse(access.finishedAt))||op.resources.some(r=>!access.resources.some(a=>covers(a,r))))
+      throw new CoordinationError('cancelled-ungranted-access-invalid');
+    return copy(access);
+  }
+  recordNativeCancelledValidation(runId, operationId, proofDigest, {allowRejected=false,allowReleasedReference=false,allowCancelledUngranted=false}={}) {
     this.mutable();
     const op = this.resourceState.operations[operationId];
     const run = this.runs.get(runId);
     let linkedAccess = op && Object.values(this.resourceState.accesses).some((access) =>
       access.accessId === op.accessId || access.operationIds.includes(operationId));
     if(linkedAccess&&allowReleasedReference){this.releasedReferenceWithdrawal(runId,operationId);linkedAccess=false;}
+    if(linkedAccess&&allowCancelledUngranted){this.cancelledUngrantedAccess(runId,operationId);linkedAccess=false;}
     if (!hash(proofDigest) || !op || !run || op.runId !== runId || op.contextId !== run.contextId ||
         op.native || op.nativeResult || (op.decision && op.decision.status !== 'approved'&&
           !(allowRejected&&op.decision.status==='rejected')) || linkedAccess) {

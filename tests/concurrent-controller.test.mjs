@@ -4297,12 +4297,19 @@ for(const variant of ['unknown-call','changed-command','no-aborted','duplicate',
  const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,409,JSON.stringify(result));
  assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'PREPARED');assert.equal(h.native.replies.length,0);
 });
-async function unissuedWithdrawalFixture(t,decision='approved') {
- const h=await setup(t),run=await h.reserve('withdraw-unissued'),approval=h.approval(run,'withdraw-future-server'),base='/runs/'+run.runId;
+async function unissuedWithdrawalFixture(t,decision='approved',withCancelledAccess=false) {
+ const h=await setup(t),resources=[{key:'file:shared-withdrawal',mode:'write'}];
+ if(withCancelledAccess){const holder=await h.reserve('withdraw-holder',{resources});await h.approvedAccess(holder,'withdraw-holder');}
+ const run=await h.reserve('withdraw-unissued',withCancelledAccess?{resources}:{}),approval=h.approval(run,'withdraw-future-server'),base='/runs/'+run.runId;
  approval.commands=['node future-server.js'];h.native.messages[run.sessionId].at(-1).parts[0].state.input=structuredClone(approval);
  assert.equal((await h.post(base+'/validation/request',{approval})).status,202);
  assert.equal((await h.post(base+'/decision/'+approval.requestId,{decision})).status,201);
  const source=h.native.messages[run.sessionId].at(-1).parts[0];source.state.status='completed';source.state.output=JSON.stringify({...approval,status:decision.toUpperCase(),reviewer:'CGPT'});
+ if(withCancelledAccess){
+  const waiting=await h.post(base+'/locks/acquire',{version:run.version,operationId:approval.operation_id,operationDigest:approval.operation_digest,resources:approval.resources,expectedRevisions:approval.expected_revisions});
+  assert.equal(waiting.status,202,JSON.stringify(waiting));assert.equal(waiting.body.state,'WAITING');
+  const cancelled=await h.post(base+'/locks/cancel',{version:run.version,operationId:approval.operation_id});assert.equal(cancelled.status,200,JSON.stringify(cancelled));
+ }
  const policy={policyId:'withdraw-policy',ownerId:run.ownerId,version:run.version,actions:['withdraw-unissued-validation'],resources:run.resources,authorization:'same change; replace future server before issuing any native command'};
  assert.equal((await h.post(base+'/recovery/policy',policy)).status,201);
  const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body,plan=(await h.get(base+'/recovery')).body;
@@ -4310,6 +4317,46 @@ async function unissuedWithdrawalFixture(t,decision='approved') {
  const payload={actionId:'withdraw-action',ownerId:run.ownerId,policyId:policy.policyId,boundaryDigest:plan.boundaryDigest,action:'withdraw-unissued-validation',targetId:approval.operation_id,input:{nativeBoundaryDigest:evidence.nativeBoundaryDigest,evidence:['audit/future-server-withdrawal']}};
  return{h,run,approval,base,payload};
 }
+test('accès annulé avant attribution : retrait sûr conserve décision et accès',async t=>{
+ const {h,approval,base,payload}=await unissuedWithdrawalFixture(t,'approved',true);
+ const before=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(before.access.state,'CANCELLED');
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ const after=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(after.state,'CANCELLED');assert.equal(after.decision.status,'approved');assert.deepEqual(after.access,before.access);
+ assert.equal(after.native,null);assert.equal(after.nativeResult,null);assert.equal(h.native.replies.length,0);
+ assert.deepEqual((await h.post(base+'/recovery/action',payload)).body,result.body);
+});
+test('accès annulé avant attribution : journal incomplet conservé et non utilisé',async t=>{
+ const {h,run,approval,base,payload}=await unissuedWithdrawalFixture(t,'approved',true);
+ const dir=join(runtimeStateDirectory(h.directory),'permission-replies');mkdirSync(dir,{recursive:true,mode:0o770});
+ const receipt=join(dir,'a'.repeat(64)+'.json'),content=JSON.stringify({digest:'b'.repeat(64)});writeFileSync(receipt,content,{mode:0o770});
+ const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body;
+ assert.equal(evidence.replyError,'permission-reply-journal-unavailable');assert.deepEqual(evidence.calls,[]);
+ payload.input.nativeBoundaryDigest=evidence.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ assert.equal(readFileSync(receipt,'utf8'),content);assert.equal(h.native.replies.length,0);
+ const store=JSON.parse(readFileSync(join(runtimeStateDirectory(h.directory),'recovery-policies.json'),'utf8'));
+ assert.equal(store.value.receipts.find(r=>r.actionId===payload.actionId).observation.replyJournal,'UNAVAILABLE_NOT_USED');
+});
+test('accès annulé avant attribution : reprise après redémarrage du contrôleur',async t=>{
+ const {h,approval,base,payload}=await unissuedWithdrawalFixture(t,'approved',true);
+ await h.stop();await h.start();
+ payload.boundaryDigest=(await h.get(base+'/recovery')).body.boundaryDigest;
+ payload.input.nativeBoundaryDigest=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.equal(result.status,200,JSON.stringify(result));
+ const op=(await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0];
+ assert.equal(op.state,'CANCELLED');assert.equal(op.access.state,'CANCELLED');assert.equal(op.decision.status,'approved');
+});
+for(const variant of ['effect','permission','busy','boundary'])test('accès annulé avant attribution : refuse '+variant,async t=>{
+ const {h,run,approval,base,payload}=await unissuedWithdrawalFixture(t,'approved',true);
+ if(variant==='effect')h.native.messages[run.sessionId].push({parts:[{type:'tool',tool:'bash',callID:'unexpected-effect',state:{status:'completed',input:{command:approval.commands[0]},metadata:{exit:0},output:'started'}}]});
+ if(variant==='permission')h.native.permissions.push({id:'pending',sessionID:run.sessionId,permission:'bash',metadata:{command:'/usr/bin/false'}});
+ if(variant==='busy')h.native.busy[run.sessionId]={type:'busy'};
+ payload.input.nativeBoundaryDigest=variant==='boundary'?'0'.repeat(64):(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id)).body.nativeBoundaryDigest;
+ const result=await h.post(base+'/recovery/action',payload);assert.notEqual(result.status,200,JSON.stringify(result));
+ assert.equal((await h.get(base+'/operations?operationId='+approval.operation_id)).body.operations[0].state,'PREPARED');assert.equal(h.native.replies.length,0);
+});
 test('retrait ciblé : reçu absent refuse le retrait sans modifier opération ou accès',async t=>{
  const {h,approval,base,payload}=await unissuedWithdrawalFixture(t,'approved');
  const evidence=(await h.get(base+'/recovery/native-evidence?operationId='+approval.operation_id+'&permissionId=per_missing')).body;

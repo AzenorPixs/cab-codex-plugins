@@ -201,6 +201,9 @@ export class RecoveryCoordinator {
         '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));
     }
     for(const op of boundary.operations) {
+      try {this.registry.cancelledUngrantedAccess(runId,op.operationId);
+        offer('withdraw-unissued-validation',op.operationId,op.resources,
+          '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));}catch{/* Acces non qualifie. */}
       try {this.registry.releasedReferenceWithdrawal(runId,op.operationId);
         offer('withdraw-unissued-validation',op.operationId,op.resources,
           '/recovery/native-evidence?operationId='+encodeURIComponent(op.operationId));}catch{/* Aucun droit de retrait sur une reference non qualifiee. */}
