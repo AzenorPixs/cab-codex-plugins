@@ -15,7 +15,7 @@ import sys
 import time
 from datetime import datetime,timezone
 
-VERSION='2.7.2'
+VERSION='2.7.3'
 PROTOCOL='cab-external-exec-v1'
 LIMIT=1024*1024
 
@@ -33,17 +33,24 @@ def target_identity():
     except FileNotFoundError:pass
     machine=Path('/etc/machine-id').read_text().strip() if Path('/etc/machine-id').is_file() else ''
     return {'container':kind,'fingerprint':digest([kind,socket.gethostname(),os.getuid(),machine])}
+def set_new_directory_mode(path):
+    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:os.fchmod(fd,0o770)
+    finally:os.close(fd)
+
 def private_directory(path):
     path=Path(path)
-    if not path.exists():path.mkdir(mode=0o700)
+    try:path.mkdir(mode=0o770);set_new_directory_mode(path)
+    except FileExistsError:pass
     info=path.lstat()
-    if not stat.S_ISDIR(info.st_mode) or path.resolve()!=path or info.st_uid!=os.getuid() or info.st_mode&0o077:raise ValueError('REMOTE_STATE_UNSAFE')
+    if not stat.S_ISDIR(info.st_mode) or path.resolve()!=path or info.st_uid!=os.getuid() or info.st_mode&0o007:raise ValueError('REMOTE_STATE_UNSAFE')
     return path
 
 def atomic(path,value):
     candidate=path.with_name(path.name+'.candidate')
-    fd=os.open(candidate,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
+    fd=os.open(candidate,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o770)
     try:
+        os.fchmod(fd,0o770)
         with os.fdopen(fd,'w',encoding='utf-8') as f:json.dump(value,f,ensure_ascii=False);f.flush();os.fsync(f.fileno())
         os.replace(candidate,path)
     finally:
@@ -53,7 +60,7 @@ def load(path):
     except FileNotFoundError:return None
     with os.fdopen(fd,'r',encoding='utf-8') as f:
         info=os.fstat(f.fileno())
-        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=os.getuid() or info.st_mode&0o077 or info.st_size>2*LIMIT:raise ValueError('REMOTE_RECEIPT_UNSAFE')
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink!=1 or info.st_uid!=os.getuid() or info.st_mode&0o007 or info.st_size>2*LIMIT:raise ValueError('REMOTE_RECEIPT_UNSAFE')
         return json.load(f)
 
 def handle(p,*,state_root=None,identity=None):
@@ -79,9 +86,15 @@ def handle(p,*,state_root=None,identity=None):
     for item in files:
         path=Path(item['path']);data=base64.b64decode(item['data'],validate=True);size+=len(data)
         if path.is_absolute() or str(path)!=item['path'] or any(x in ('.','..') for x in path.parts) or size>16*LIMIT or hashlib.sha256(data).hexdigest()!=item['sha256']:raise ValueError('REMOTE_ARTIFACT_INVALID')
-        target=work/path;target.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+        target=work/path
+        parent=work
+        for component in path.parts[:-1]:
+            parent=parent/component
+            try:parent.mkdir(mode=0o770);set_new_directory_mode(parent)
+            except FileExistsError:pass
         if target.parent.resolve()!=target.parent or target.exists() or target.is_symlink():raise ValueError('REMOTE_ARTIFACT_UNSAFE')
-        fd=os.open(target,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
+        fd=os.open(target,os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o770)
+        os.fchmod(fd,0o770)
         with os.fdopen(fd,'wb') as f:f.write(data)
         artifacts.append({'path':str(path),'sha256':item['sha256']})
     value={'protocol':PROTOCOL,'job_id':p['job_id'],'input_digest':p['input_digest'],'status':'INTENT','target_fingerprint':identity['fingerprint'],

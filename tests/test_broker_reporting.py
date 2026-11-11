@@ -9,6 +9,23 @@ reporting=importlib.util.module_from_spec(spec);spec.loader.exec_module(reportin
 
 
 class BrokerReportingTest(unittest.TestCase):
+    def test_group_mode_reporting_and_legacy_private_mode(self):
+        with tempfile.TemporaryDirectory(prefix='cab-reporting-fixture-') as temporary:
+            reporting.configure(Path(temporary)/'owned-reporting')
+            root=reporting.directory(temporary)
+            self.assertEqual(root.stat().st_mode & 0o777,0o770)
+            root.chmod(0o2770)
+            pending=root/'ccab-pending';pending.mkdir(mode=0o770);pending.chmod(0o2770)
+            args={'incident_id':'group','session_id':'ses_fixture','directory':temporary,'summary':'Incident','category':'protocol','evidence':[]}
+            def down(*_):raise ValueError('transport-unavailable')
+            self.assertEqual(reporting.enqueue_incident(args,down)['status'],'QUEUED_LOCALLY')
+            receipt=next(pending.iterdir());self.assertEqual(receipt.stat().st_mode & 0o777,0o770)
+            self.assertEqual(reporting.pending(temporary)['count'],1)
+            root.chmod(0o700);pending.chmod(0o700)
+            self.assertEqual(reporting.pending(temporary)['count'],1)
+            root.chmod(0o707)
+            with self.assertRaisesRegex(ValueError,'broker-reporting-storage-unsafe'):reporting.pending(temporary)
+
     def test_invalid_new_evidence_is_refused_before_outbox_creation(self):
         with tempfile.TemporaryDirectory(prefix='cab-reporting-fixture-') as temporary:
             reporting.configure(Path(temporary)/'owned-reporting')

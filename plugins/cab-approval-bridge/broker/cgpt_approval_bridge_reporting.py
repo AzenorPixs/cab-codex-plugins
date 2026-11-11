@@ -9,9 +9,14 @@ import threading
 import re
 from datetime import datetime,timezone
 
-VERSION='2.7.2'
+VERSION='2.7.3'
 LOCK=threading.RLock()
 ROOT=None
+
+def set_new_directory_mode(path):
+    fd=os.open(path,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:os.fchmod(fd,0o770)
+    finally:os.close(fd)
 
 
 def configure(root):
@@ -22,15 +27,21 @@ def configure(root):
 def directory(workspace):
     if ROOT is None:raise ValueError('broker-reporting-not-configured')
     root=ROOT/hashlib.sha256(workspace.encode()).hexdigest()
-    root.mkdir(mode=0o700,parents=True,exist_ok=True)
+    try:ROOT.mkdir(mode=0o770,parents=True);set_new_directory_mode(ROOT)
+    except FileExistsError:pass
+    try:
+        root.mkdir(mode=0o770)
+        set_new_directory_mode(root)
+    except FileExistsError:pass
     info=root.lstat()
-    if root.resolve()!=root or not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o077:raise ValueError('broker-reporting-storage-unsafe')
+    if root.resolve()!=root or not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o007:raise ValueError('broker-reporting-storage-unsafe')
     return root
 
 
 def write(path,value):
     fd,candidate=tempfile.mkstemp(prefix='.reporting-',dir=path.parent)
     try:
+        os.fchmod(fd,0o770)
         with os.fdopen(fd,'w') as stream:
             json.dump(value,stream,ensure_ascii=False);stream.flush();os.fsync(stream.fileno())
         os.replace(candidate,path)
@@ -57,7 +68,11 @@ def enqueue_incident(args,relay):
     for key in ('incident_id','session_id','category'):
         if not isinstance(args[key],str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.:/+@-]{0,255}',args[key]):raise ValueError('ccab-identity-invalid')
     if not valid_evidence(args['evidence']):raise ValueError('ccab-evidence-invalid')
-    root=directory(args['directory'])/'ccab-pending';root.mkdir(mode=0o700,exist_ok=True)
+    root=directory(args['directory'])/'ccab-pending'
+    try:root.mkdir(mode=0o770);set_new_directory_mode(root)
+    except FileExistsError:pass
+    info=root.lstat()
+    if root.resolve()!=root or not stat.S_ISDIR(info.st_mode) or info.st_uid!=os.getuid() or info.st_mode&0o007:raise ValueError('broker-reporting-storage-unsafe')
     key=hashlib.sha256(args['incident_id'].encode()).hexdigest();path=root/('incident-'+key+'.json')
     with LOCK:
         if path.exists():

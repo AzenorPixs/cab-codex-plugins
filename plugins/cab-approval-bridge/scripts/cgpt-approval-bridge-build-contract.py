@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-VERSION = "2.7.2"
+VERSION = "2.7.3"
 
 
 def build(root):

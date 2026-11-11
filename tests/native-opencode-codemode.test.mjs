@@ -31,6 +31,11 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const brokerUid=process.env.CAB_TEST_BROKER_UID?Number(process.env.CAB_TEST_BROKER_UID):process.getuid();
     if(brokerUid!==process.getuid()){chownSync(root,process.getuid(),brokerUid);chmodSync(root,0o2770);chownSync(workspace,process.getuid(),brokerUid);chmodSync(workspace,0o2770);}
     const brokerHome=join(root,'broker-home');mkdirSync(brokerHome,{mode:0o770});
+    if(process.env.CAB_TEST_GROUP_REPORTING==='1') {
+      const setup='from pathlib import Path;import hashlib,sys;p=Path(sys.argv[1])/".opencode/state/cgpt-approval-bridge/reporting"/hashlib.sha256(sys.argv[2].encode()).hexdigest();p.mkdir(parents=True);p.chmod(0o2770);q=p/"ccab-pending";q.mkdir();q.chmod(0o2770)';
+      if(brokerUid!==process.getuid())execFileSync('sudo',['-n','-u','#'+brokerUid,'/home/devops/python/current/bin/python3','-c',setup,brokerHome,workspace]);
+      else execFileSync('/home/devops/python/current/bin/python3',['-c',setup,brokerHome,workspace]);
+    }
     const password = 'synthetic-codemode-test-password';
     const passwordFile = join(root, 'password'); writeFileSync(passwordFile, password, { mode: 0o600 });
     const nativePort = await port(), controllerPort = await port();
@@ -78,6 +83,9 @@ test('OpenCode 2.2 réel : catalogue natif, édition partielle ask/once, refus e
     const source = fileURLToPath(new URL('../plugins/cab-approval-bridge/broker/', import.meta.url));
     const wrapper = join(root, 'broker.py');
     writeFileSync(wrapper, `import sys, os\nopen(${JSON.stringify(brokerPidFile)}, 'w').write(str(os.getpid()))\nsys.path.insert(0, ${JSON.stringify(source)})\nimport cgpt_approval_bridge_server as b\n# Reproduire le schema 2.1.9, sans affaiblir son validateur runtime.\nb.APPROVAL_REQUEST_PROPERTIES['access_id'] = {'type': 'string', 'maxLength': 100}\nraise SystemExit(b.main())\n`);
+    if(process.env.CAB_TEST_GROUP_REPORTING==='1') {
+      const original=readFileSync(wrapper,'utf8');writeFileSync(wrapper,original.replace('raise SystemExit(b.main())','b.READINESS_PUBLISH_INTERVAL_SECONDS = 1\nraise SystemExit(b.main())'));
+    }
     if(process.env.CAB_TEST_EXTERNAL==='1'&&!process.env.CAB_TEST_EXTERNAL_SSH_PORT) {
       const extra=`
 import cgpt_approval_bridge_external as external
@@ -171,6 +179,11 @@ external.private_root=preflight_failure_once
     const version = readFileSync(new URL('../pyproject.toml', import.meta.url), 'utf8').match(/^version = "([^"]+)"/m)[1];
     await until(async () => { if (controller.exitCode !== null) throw Error('controller startup: ' + controlLog);
       try { return (await http('/status')).brokerReadiness?.server_version === version; } catch { return false; } }, 'broker readiness');
+    if(process.env.CAB_TEST_GROUP_REPORTING==='1') {
+      await until(async()=>{const b=(await http('/status')).brokerReadiness;return b?.ccab_outbox?.count===0&&b?.reporting?.statistics==='stored';},
+        'group reporting readiness',async()=>{const b=(await http('/status')).brokerReadiness;return {outbox:b?.ccab_outbox,reporting:b?.reporting};});
+      console.log(JSON.stringify({brokerGroupReporting:true,mode:'2770',outboxAvailable:true,statistics:'stored'}));
+    }
     // Une session temporaire partage le contexte MCP existant, même depuis un client technique.
     const probeClient = createOpenCodeV2Client({ baseUrl: base, directory: join(root, 'technical-probe'), passwordFile });
     const serverPidBeforeProbe = (await client.info(true)).pid;

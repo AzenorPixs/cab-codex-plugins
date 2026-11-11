@@ -59,6 +59,22 @@ class ExternalExecutionTest(unittest.TestCase):
                 self.assertEqual(self.calls,[])
     def transport(self,cfg,packet,timeout):
         self.calls.append(packet['action']);return runner.handle(packet,state_root=self.remote,identity={'container':'lxc','fingerprint':'b'*64})
+    def test_group_permissions_allow_external_execution_and_preserve_old_modes(self):
+        base=self.home/'.local/state/cab-external-executions';base.mkdir(parents=True);base.chmod(0o2770)
+        workspace=base/hashlib.sha256(str(self.project).encode()).hexdigest();workspace.mkdir();workspace.chmod(0o2770)
+        self.remote.chmod(0o2770);self.known.chmod(0o770)
+        result=external.execute(self.args,self.grant,transport=self.transport,home=self.home)
+        self.assertEqual(result['status'],'COMPLETED');self.assertEqual(result['exitCode'],0)
+        local=list(workspace.iterdir());self.assertTrue(local)
+        self.assertTrue(all(p.stat().st_mode & 0o777==0o770 for p in local))
+        self.assertEqual(self.calls,['execute'])
+        self.known.chmod(0o600);workspace.chmod(0o700);base.chmod(0o700)
+        self.assertEqual(external.execute(self.args,lambda a:self.grant(a,known=True),transport=self.transport,home=self.home),result)
+        self.assertEqual(self.calls,['execute'])
+        workspace.chmod(0o707)
+        with self.assertRaisesRegex(external.ExternalError,'external-state-unsafe'):external.private_root(str(self.project),home=self.home)
+        workspace.chmod(0o700);self.known.chmod(0o777)
+        with self.assertRaisesRegex(external.ExternalError,'external-known-hosts-unsafe'):external.connection(str(self.project),self.profile)
     def test_execute_transfers_only_scoped_artifacts_and_replays_the_receipt(self):
         first=external.execute(self.args,self.grant,transport=self.transport,home=self.home)
         self.assertEqual(first['status'],'COMPLETED');self.assertEqual(first['exitCode'],0);self.assertIn('VALUE=42',first['output']);self.assertNotIn('TOKEN=fixture',first['output'])
