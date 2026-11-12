@@ -1,6 +1,6 @@
 # PROJECT.md — Codex Approval Bridge (CAB)
 
-## Plateforme CAB 3.0.0
+## Plateforme CAB 3.0.1
 
 CAB est livré comme paquet Debian : un service système root `cab.service`,
 PostgreSQL indépendant, autorité métier Django et API OpenAPI `/api/v1`.
@@ -1344,3 +1344,10 @@ Sans état CAB utilisé, le nettoyage est déclaré non applicable.
 ## Documentation de présentation
 
 Le README décrit le projet et son utilisation courante, sans journal de versions ni accumulation de correctifs. L’historique des versions relève exclusivement du CHANGELOG ; les procédures détaillées sont distribuées dans les références du protocole.
+
+## Réconciliation après archivage
+Le propriétaire d’un RUN direct WORKING utilise la commande publique
+`run.reconcile_archive` pour substituer le chemin actif disparu par son archive
+datée. Digest optimiste, frontière sans effet protégé et audit sont obligatoires.
+SID, RUN, génération, gel natif et reçus restent conservés ; aucun test n’est rejoué.
+La procédure détaillée est dans docs/platform-operations.md.

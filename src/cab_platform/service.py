@@ -14,7 +14,7 @@ import threading
 import time
 import uvicorn
 from uvicorn.protocols.http.h11_impl import H11Protocol
-from .paths import CONFIG,RUNTIME,STATE,config,private_dir,read_json
+from .paths import CONFIG,RUNTIME,STATE,runtime_config as config,private_dir,read_json
 from .logging import configure,redact
 log=logging.getLogger('cab.service')
 

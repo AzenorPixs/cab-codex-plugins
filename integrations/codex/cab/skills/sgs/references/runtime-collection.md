@@ -1,4 +1,4 @@
-# Collecte native CAB 3.0.0
+# Collecte native CAB 3.0.1
 
 Le service cab.service collecte dans PostgreSQL ; aucun daemon de plugin ni
 moniteur direct séparé. Après cab_status et cab_contract, utiliser project_register

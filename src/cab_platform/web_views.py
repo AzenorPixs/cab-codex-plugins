@@ -5,7 +5,7 @@ from django.http import FileResponse,HttpResponse,JsonResponse,StreamingHttpResp
 from .core.auth import principal
 from .core.commands import Refused,scope
 from .core.models import Project
-from .paths import config
+from .paths import runtime_config as config
 import os
 
 WEB=Path(os.environ.get('CAB_WEB_ROOT','/usr/lib/cab/web'))

@@ -3,7 +3,7 @@ import hashlib
 import json
 import secrets
 from pathlib import Path
-from typing import Any
+from typing import Any,Literal
 from django.contrib.auth import authenticate,login,logout
 from django.db import transaction
 from django.http import HttpResponse,JsonResponse
@@ -13,12 +13,13 @@ from django.db import IntegrityError
 from django.utils import timezone
 from ninja import NinjaAPI,Schema
 from ninja.security import HttpBearer,APIKeyHeader,APIKeyCookie
+from pydantic import Field
 from cab_platform import __version__
 from cab_platform import bootstrap
 from cab_platform.paths import config
 from . import commands
 from .auth import principal
-from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection
+from .models import Actor,Event,Incident,Lease,Maintenance,Metric,Operation,Project,Run,SessionProjection,Configuration
 
 class LocalBearer(HttpBearer):
     def authenticate(self,request,token):return principal(request)
@@ -42,6 +43,16 @@ class Bootstrap(Schema):
 class Login(Schema):
     username:str
     password:str
+class InterfacePreferences(Schema):
+    font_scale:int=Field(ge=80,le=160)
+    theme:Literal['light','dark']
+class ServiceConfiguration(Schema):
+    revision:str
+    configuration:dict[str,Any]
+class NewProject(Schema):
+    name:str
+    folder:str
+    request_id:str
 
 @api.exception_handler(commands.Refused)
 def refused(request,error):return api.create_response(request,{'error':error.code},status=error.status)
@@ -68,6 +79,45 @@ def invalid_input(request,error):return api.create_response(request,{'error':'co
 @api.get('/health',auth=None)
 def health(request):return {**bootstrap.status(),'csrf_token':get_token(request)}
 
+@api.get('/interface/preferences',auth=None)
+def interface_preferences(request):
+    from cab_platform.paths import runtime_config
+    initialized=bool(runtime_config().get('initialized'));value={'font_scale':100,'theme':'light'}
+    if initialized:
+        record=Configuration.objects.filter(pk='interface').first()
+        if record:value=InterfacePreferences.model_validate(record.value).model_dump()
+    return {**value,'persistent':initialized,'csrf_token':get_token(request)}
+
+@api.post('/interface/preferences',auth=None)
+def save_interface_preferences(request,body:InterfacePreferences):
+    csrf_check(request)
+    from cab_platform.paths import runtime_config
+    commands.require(runtime_config().get('initialized'),'initialization-required',503)
+    Configuration.objects.update_or_create(pk='interface',defaults={'value':body.model_dump()})
+    return {**body.model_dump(),'persistent':True}
+
+@api.get('/administration/agents')
+def administration_agents(request):
+    principal(request,admin=True)
+    from cab_platform.agent_binaries import inventory
+    return inventory()
+
+@api.get('/administration/configuration')
+def administration_configuration(request):
+    principal(request,admin=True)
+    from cab_platform.administration import view
+    return view()
+
+@api.post('/administration/configuration')
+def save_administration_configuration(request,body:ServiceConfiguration):
+    principal(request,admin=True)
+    from cab_platform.administration import save
+    result=save(body.revision,body.configuration)
+    if result['logging_reload']:
+        import os,signal
+        os.kill(os.getppid(),signal.SIGHUP)
+    return result
+
 @api.post('/bootstrap',auth=None)
 def initialize(request,body:Bootstrap):
     csrf_check(request)
@@ -93,7 +143,21 @@ def operation_data(op):
 @api.get('/projects')
 def projects(request):
     actor=principal(request);rows=Project.objects.all() if actor.role=='admin' else actor.projects.all()
-    return {'projects':[{'id':p.pk,'root':p.root} for p in rows]}
+    from cab_platform.projects import project_data
+    return {'projects':[project_data(p) for p in rows.order_by('name','root')]}
+
+@api.get('/projects/settings')
+def projects_settings(request):
+    principal(request,admin=True)
+    from cab_platform.projects import settings_view
+    return settings_view()
+
+@api.post('/projects')
+def new_project(request,body:NewProject):
+    actor=principal(request,admin=True)
+    from cab_platform.projects import create_project,project_data
+    project,created=create_project(actor,body.name,body.folder,body.request_id)
+    return {**project_data(project),'created':created}
 
 @api.get('/sessions')
 def sessions(request,project_id:str):
@@ -150,6 +214,7 @@ def command(request,body:Command):
         for key in data.get('projects',[]):a.projects.add(Project.objects.get(pk=key))
         return {'actor_id':a.pk,'token':token}
     if name=='run.begin':return run_data(commands.begin_run(actor,data))
+    if name=='run.reconcile_archive':return commands.reconcile_archive(actor,data)
     if name=='run.adopt':
         with transaction.atomic():
             r=commands.run_scope(actor,data['run_id'],data['project_id'],lock=True,owner=False)

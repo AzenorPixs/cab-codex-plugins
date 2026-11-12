@@ -1,5 +1,32 @@
 # Historique des versions
 
+## 3.0.1 — delta depuis 3.0.0
+
+- Réconcilier publiquement le mandat d’un RUN direct après archivage OpenSpec,
+  avec contrôle propriétaire, digest optimiste, idempotence et audit ; conserver
+  SID/RUN/génération, gel, métriques et reçus, sans rejeu d’effet.
+- Rendre les erreurs d’admission et les reçus absents lisibles dans les clients
+  MCP, sans assimiler une réponse perdue à une absence d’effet.
+- Ajouter la navigation horizontale Accueil/Administration/Projets, un accueil
+  vide et des menus latéraux au bord gauche, avec cinq sections d’administration.
+- Afficher les chemins, états et versions d’OpenCode/Codex CLI et les déclarations
+  MCP sans exposer les secrets ; distinguer déclaration et connexion non sondée.
+- Persister thème clair/sombre et taille des polices dans la table configuration ;
+  déplacer le zoom dans Administration/Interface et conserver le thème au bandeau.
+- Administrer cab.json avec secrets masqués, sauvegarde privée et révision ;
+  recharger la journalisation à chaud et différer les paramètres techniques au redémarrage.
+- Ajouter le catalogue projects, la création POSIX idempotente et les pages par ID,
+  sans déplacer les projets existants ; configurer racine, compte et groupe dans /etc/cab.
+- Sérialiser le premier amorçage CSRF du client Web pour éviter les refus de connexion lors des chargements parallèles.
+- Corriger l’authentification via proxy par des hôtes et origines CSRF configurables,
+  sans couplage à une machine ; conserver cookies, jetons et contrôle des origines.
+- Clarifier le parcours bootstrap et accepter le mot de passe choisi sans politique
+  additionnelle, selon la configuration validée de cette interface administrateur.
+- Corriger les parents d’ateliers directs sous umask privée : groupe du projet,
+  permissions 0770 et accès des codeurs, sans modifier les dossiers RUN existants.
+- Inclure les migrations non destructives des tables configuration et projects,
+  ainsi que les intégrations, skills, commandes et paquet Debian correspondants.
+
 ## 3.0.0 — plateforme système
 
 - Service root unique, PostgreSQL17 indépendant, domaine Django et contrat OpenAPI.
